@@ -4,7 +4,18 @@
  * Types for portal user management operations.
  */
 
-import type { PrincipalId, StatusId } from '@quackback/ids'
+import type { PrincipalId, StatusId, SegmentId } from '@quackback/ids'
+
+// ============================================
+// Segment summary (embedded in user records)
+// ============================================
+
+export interface UserSegmentSummary {
+  id: SegmentId
+  name: string
+  color: string
+  type: 'manual' | 'dynamic'
+}
 
 /**
  * Portal user list item with activity counts
@@ -23,6 +34,7 @@ export interface PortalUserListItem {
   postCount: number
   commentCount: number
   voteCount: number
+  segments: UserSegmentSummary[]
 }
 
 /**
@@ -39,6 +51,7 @@ export interface PortalUserListItemView {
   postCount: number
   commentCount: number
   voteCount: number
+  segments: UserSegmentSummary[]
 }
 
 /**
@@ -52,6 +65,8 @@ export interface PortalUserListParams {
   sort?: 'newest' | 'oldest' | 'most_active' | 'name'
   page?: number
   limit?: number
+  /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
+  segmentIds?: import('@quackback/ids').SegmentId[]
 }
 
 /**
@@ -100,7 +115,7 @@ export interface EngagedPost {
 }
 
 /**
- * Full portal user detail with engaged posts
+ * Full portal user detail with engaged posts and segments
  */
 export interface PortalUserDetail extends PortalUserListItem {
   createdAt: Date // user.createdAt (account creation)

@@ -86,6 +86,8 @@ export type {
   NotifPrefId,
   UnsubTokenId,
   NotificationId,
+  // User segmentation
+  SegmentId,
   // AI entities
   SentimentId,
   // Auth entities
@@ -145,7 +147,9 @@ export {
   subscriptionIdSchema,
   invoiceIdSchema,
   domainIdSchema,
+  segmentIdSchema,
   // Pre-built flexible schemas
+  flexibleSegmentIdSchema,
   flexiblePostIdSchema,
   flexibleBoardIdSchema,
   flexibleCommentIdSchema,

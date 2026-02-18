@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { generateId, type InviteId, type UserId, type PrincipalId } from '@quackback/ids'
+import { generateId, type InviteId, type UserId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import type { BoardId, TagId } from '@quackback/ids'
 import {
   isOnboardingComplete as checkComplete,
@@ -25,6 +25,19 @@ import {
   getPortalUserDetail,
   removePortalUser,
 } from '@/lib/server/domains/users/user.service'
+import {
+  listSegments,
+  getSegment,
+  createSegment,
+  updateSegment,
+  deleteSegment,
+  assignUsersToSegment,
+  removeUsersFromSegment,
+  getUserSegments,
+  evaluateDynamicSegment,
+  evaluateAllDynamicSegments,
+} from '@/lib/server/domains/segments/segment.service'
+import type { CreateSegmentInput, UpdateSegmentInput } from '@/lib/server/domains/segments'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
@@ -60,6 +73,7 @@ const listPortalUsersSchema = z.object({
   sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional(),
   page: z.number().optional(),
   limit: z.number().optional(),
+  segmentIds: z.array(z.string()).optional(),
 })
 
 const portalUserByIdSchema = z.object({
@@ -488,6 +502,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         sort: data.sort,
         page: data.page,
         limit: data.limit,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
       })
 
       console.log(`[fn:admin] listPortalUsersFn: count=${result.items.length}`)
@@ -803,3 +818,220 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       throw error
     }
   })
+
+// ============================================
+// Segment Operations
+// ============================================
+
+const segmentByIdSchema = z.object({
+  segmentId: z.string(),
+})
+
+const createSegmentSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  type: z.enum(['manual', 'dynamic']),
+  color: z.string().optional(),
+  rules: z
+    .object({
+      match: z.enum(['all', 'any']),
+      conditions: z.array(
+        z.object({
+          attribute: z.enum([
+            'email_domain',
+            'email_verified',
+            'created_at_days_ago',
+            'post_count',
+            'vote_count',
+            'comment_count',
+            'plan',
+            'metadata_key',
+          ]),
+          operator: z.enum(['eq', 'neq', 'lt', 'lte', 'gt', 'gte', 'contains', 'starts_with', 'ends_with', 'in']),
+          value: z.union([z.string(), z.number(), z.boolean()]),
+          metadataKey: z.string().optional(),
+        })
+      ),
+    })
+    .optional(),
+})
+
+const updateSegmentSchema = z.object({
+  segmentId: z.string(),
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  color: z.string().optional(),
+  rules: z
+    .object({
+      match: z.enum(['all', 'any']),
+      conditions: z.array(
+        z.object({
+          attribute: z.enum([
+            'email_domain',
+            'email_verified',
+            'created_at_days_ago',
+            'post_count',
+            'vote_count',
+            'comment_count',
+            'plan',
+            'metadata_key',
+          ]),
+          operator: z.enum(['eq', 'neq', 'lt', 'lte', 'gt', 'gte', 'contains', 'starts_with', 'ends_with', 'in']),
+          value: z.union([z.string(), z.number(), z.boolean()]),
+          metadataKey: z.string().optional(),
+        })
+      ),
+    })
+    .nullable()
+    .optional(),
+})
+
+const assignUsersSchema = z.object({
+  segmentId: z.string(),
+  principalIds: z.array(z.string()).min(1),
+})
+
+/**
+ * List all segments with member counts.
+ */
+export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  console.log(`[fn:admin] listSegmentsFn`)
+  try {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const result = await listSegments()
+    console.log(`[fn:admin] listSegmentsFn: count=${result.length}`)
+    return result.map((seg) => ({
+      ...seg,
+      createdAt: seg.createdAt.toISOString(),
+      updatedAt: seg.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:admin] ❌ listSegmentsFn failed:`, error)
+    throw error
+  }
+})
+
+/**
+ * Create a new segment.
+ */
+export const createSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(createSegmentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] createSegmentFn: name=${data.name}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const segment = await createSegment(data as CreateSegmentInput)
+      console.log(`[fn:admin] createSegmentFn: created id=${segment.id}`)
+      return { ...segment, createdAt: segment.createdAt.toISOString(), updatedAt: segment.updatedAt.toISOString() }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ createSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Update an existing segment.
+ */
+export const updateSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateSegmentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] updateSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const { segmentId, ...updates } = data
+      const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
+      console.log(`[fn:admin] updateSegmentFn: updated`)
+      return { ...segment, createdAt: segment.createdAt.toISOString(), updatedAt: segment.updatedAt.toISOString() }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ updateSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Delete a segment.
+ */
+export const deleteSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(segmentByIdSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] deleteSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      await deleteSegment(data.segmentId as SegmentId)
+      console.log(`[fn:admin] deleteSegmentFn: deleted`)
+      return { segmentId: data.segmentId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ deleteSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Assign users to a manual segment.
+ */
+export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(assignUsersSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] assignUsersToSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      await assignUsersToSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
+      console.log(`[fn:admin] assignUsersToSegmentFn: assigned`)
+      return { segmentId: data.segmentId, assigned: data.principalIds.length }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ assignUsersToSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Remove users from a manual segment.
+ */
+export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(assignUsersSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] removeUsersFromSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      await removeUsersFromSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
+      console.log(`[fn:admin] removeUsersFromSegmentFn: removed`)
+      return { segmentId: data.segmentId, removed: data.principalIds.length }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ removeUsersFromSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Trigger re-evaluation of a dynamic segment.
+ */
+export const evaluateSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(segmentByIdSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] evaluateSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
+      console.log(`[fn:admin] evaluateSegmentFn: added=${result.added}, removed=${result.removed}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:admin] ❌ evaluateSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Trigger re-evaluation of all dynamic segments.
+ */
+export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(async () => {
+  console.log(`[fn:admin] evaluateAllSegmentsFn`)
+  try {
+    await requireAuth({ roles: ['admin'] })
+    const results = await evaluateAllDynamicSegments()
+    console.log(`[fn:admin] evaluateAllSegmentsFn: evaluated ${results.length} segments`)
+    return results
+  } catch (error) {
+    console.error(`[fn:admin] ❌ evaluateAllSegmentsFn failed:`, error)
+    throw error
+  }
+})

@@ -83,3 +83,14 @@ export { useRemovePortalUser } from './users'
 
 // Avatar mutations
 export { useUploadAvatar, useDeleteAvatar } from './avatar'
+
+// Segment mutations
+export {
+  useCreateSegment,
+  useUpdateSegment,
+  useDeleteSegment,
+  useAssignUsersToSegment,
+  useRemoveUsersFromSegment,
+  useEvaluateSegment,
+  useEvaluateAllSegments,
+} from './segments'

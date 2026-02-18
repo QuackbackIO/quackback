@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import type { PortalUserListItemView } from '@/lib/server/domains/users'
+import { CompactSegmentBadges } from '@/components/admin/users/user-segments'
 
 interface UserCardProps {
   user: PortalUserListItemView
@@ -71,6 +72,13 @@ export function UserCard({ user, isSelected, onClick }: UserCardProps) {
                 {user.voteCount}
               </span>
             )}
+          </div>
+        )}
+
+        {/* Segment badges */}
+        {user.segments.length > 0 && (
+          <div className="mt-1.5">
+            <CompactSegmentBadges segments={user.segments} maxVisible={3} />
           </div>
         )}
       </div>

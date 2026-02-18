@@ -14,6 +14,8 @@ const searchSchema = z.object({
   dateTo: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional().default('newest'),
   selected: z.string().optional(),
+  /** Comma-separated segment IDs for filtering */
+  segments: z.string().optional(),
 })
 
 export const Route = createFileRoute('/admin/users')({
@@ -24,6 +26,7 @@ export const Route = createFileRoute('/admin/users')({
     dateFrom: search.dateFrom,
     dateTo: search.dateTo,
     sort: search.sort,
+    segments: search.segments,
   }),
   errorComponent: UsersErrorComponent,
   loader: async ({ deps, context }) => {
@@ -35,19 +38,24 @@ export const Route = createFileRoute('/admin/users')({
 
     // Parse verified param
     const verified = deps.verified === 'true' ? true : deps.verified === 'false' ? false : undefined
+    const segmentIds = deps.segments ? deps.segments.split(',').filter(Boolean) : undefined
 
-    // Pre-fetch users data using React Query
-    await queryClient.ensureQueryData(
-      adminQueries.portalUsers({
-        search: deps.search,
-        verified,
-        dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-        dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-        sort: deps.sort,
-        page: 1,
-        limit: 20,
-      })
-    )
+    // Pre-fetch users and segments data using React Query
+    await Promise.all([
+      queryClient.ensureQueryData(
+        adminQueries.portalUsers({
+          search: deps.search,
+          verified,
+          dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
+          dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+          sort: deps.sort,
+          page: 1,
+          limit: 20,
+          segmentIds,
+        })
+      ),
+      queryClient.ensureQueryData(adminQueries.segments()),
+    ])
 
     return {
       currentMemberRole: principal.role,
@@ -81,6 +89,8 @@ function UsersPage() {
   const verified =
     search.verified === 'true' ? true : search.verified === 'false' ? false : undefined
 
+  const segmentIds = search.segments ? search.segments.split(',').filter(Boolean) : undefined
+
   // Read pre-fetched data from React Query cache
   const usersQuery = useSuspenseQuery(
     adminQueries.portalUsers({
@@ -91,6 +101,7 @@ function UsersPage() {
       sort: search.sort,
       page: 1,
       limit: 20,
+      segmentIds,
     })
   )
 

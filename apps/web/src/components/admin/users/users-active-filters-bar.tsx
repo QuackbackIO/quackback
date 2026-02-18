@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { EnvelopeIcon, CalendarIcon, PlusIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
+import { EnvelopeIcon, CalendarIcon, PlusIcon, ChevronRightIcon, TagIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
@@ -7,7 +7,7 @@ import type { UsersFilters } from '@/components/admin/users/use-users-filters'
 
 interface ActiveFilter {
   key: string
-  type: 'verified' | 'dateFrom' | 'dateTo' | 'dateRange'
+  type: 'verified' | 'dateFrom' | 'dateTo' | 'dateRange' | 'segments'
   label: string
   value: string
   valueId: string
@@ -181,6 +181,7 @@ function getFilterIcon(type: ActiveFilter['type']) {
     dateFrom: CalendarIcon,
     dateTo: CalendarIcon,
     dateRange: CalendarIcon,
+    segments: TagIcon,
   }
   return icons[type]
 }
@@ -263,6 +264,19 @@ function computeActiveFilters(
       value: formatDate(filters.dateTo),
       valueId: filters.dateTo,
       onRemove: () => onFiltersChange({ dateTo: undefined }),
+    })
+  }
+
+  // Segment filters
+  if (filters.segmentIds && filters.segmentIds.length > 0) {
+    const count = filters.segmentIds.length
+    result.push({
+      key: 'segments',
+      type: 'segments',
+      label: 'Segment:',
+      value: count === 1 ? '1 segment' : `${count} segments`,
+      valueId: 'segments',
+      onRemove: () => onFiltersChange({ segmentIds: undefined }),
     })
   }
 

@@ -187,6 +187,11 @@ export {
   // Schema tables - webhooks
   webhooks,
   webhooksRelations,
+  // Schema tables - segments
+  segments,
+  segmentsRelations,
+  userSegments,
+  userSegmentsRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

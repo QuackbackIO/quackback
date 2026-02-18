@@ -28,8 +28,10 @@ import {
   votes,
   postStatuses,
   boards,
+  userSegments,
+  segments,
 } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type {
   PortalUserListParams,
@@ -38,7 +40,47 @@ import type {
   PortalUserDetail,
   EngagedPost,
   EngagementType,
+  UserSegmentSummary,
 } from './user.types'
+
+/**
+ * Fetch segment summaries for a set of principal IDs in a single batch query.
+ */
+async function fetchSegmentsForPrincipals(
+  principalIds: string[]
+): Promise<Map<string, UserSegmentSummary[]>> {
+  if (principalIds.length === 0) return new Map()
+
+  const rows = await db
+    .select({
+      principalId: userSegments.principalId,
+      segmentId: segments.id,
+      segmentName: segments.name,
+      segmentColor: segments.color,
+      segmentType: segments.type,
+    })
+    .from(userSegments)
+    .innerJoin(segments, eq(userSegments.segmentId, segments.id))
+    .where(
+      and(
+        inArray(userSegments.principalId, principalIds as PrincipalId[]),
+        isNull(segments.deletedAt)
+      )
+    )
+    .orderBy(asc(segments.name))
+
+  const map = new Map<string, UserSegmentSummary[]>()
+  for (const row of rows) {
+    if (!map.has(row.principalId)) map.set(row.principalId, [])
+    map.get(row.principalId)!.push({
+      id: row.segmentId as SegmentId,
+      name: row.segmentName,
+      color: row.segmentColor,
+      type: row.segmentType as 'manual' | 'dynamic',
+    })
+  }
+  return map
+}
 
 /**
  * List portal users for an organization with activity counts
@@ -46,12 +88,14 @@ import type {
  * Queries principal table for role='user'.
  * Activity counts are computed via efficient LEFT JOINs with pre-aggregated subqueries,
  * using the indexed principal_id columns on posts, comments, and votes tables.
+ *
+ * Supports optional filtering by segment IDs (OR logic — users in ANY selected segment).
  */
 export async function listPortalUsers(
   params: PortalUserListParams = {}
 ): Promise<PortalUserListResult> {
   try {
-    const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20 } = params
+    const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20, segmentIds } = params
 
     // Pre-aggregate activity counts in subqueries (executed once, not per-row)
     // These use the indexed principal_id columns for efficient lookups
@@ -110,6 +154,28 @@ export async function listPortalUsers(
       conditions.push(sql`${principal.createdAt} <= ${dateTo}`)
     }
 
+    // Segment filter — OR logic: users in ANY of the selected segments
+    if (segmentIds && segmentIds.length > 0) {
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM user_segments us
+          WHERE us.principal_id = ${principal.id}
+            AND us.segment_id = ANY(${sql.raw(`ARRAY[${segmentIds.map(() => '?').join(',')}]`)}::text[])
+        )`
+      )
+      // Use inArray subquery instead for proper parameterization
+      conditions.pop()
+      conditions.push(
+        inArray(
+          principal.id,
+          db
+            .select({ principalId: userSegments.principalId })
+            .from(userSegments)
+            .where(inArray(userSegments.segmentId, segmentIds as SegmentId[]))
+        )
+      )
+    }
+
     const whereClause = and(...conditions)
 
     // Build sort order - now references the joined count columns
@@ -166,6 +232,10 @@ export async function listPortalUsers(
     const rawUsers = usersResult
     const total = Number(countResult[0]?.count ?? 0)
 
+    // Batch-fetch segments for the returned users
+    const principalIdList = rawUsers.map((r) => r.principalId)
+    const segmentMap = await fetchSegmentsForPrincipals(principalIdList)
+
     const items: PortalUserListItem[] = rawUsers.map((row) => ({
       principalId: row.principalId,
       userId: row.userId,
@@ -177,6 +247,7 @@ export async function listPortalUsers(
       postCount: Number(row.postCount),
       commentCount: Number(row.commentCount),
       voteCount: Number(row.voteCount),
+      segments: segmentMap.get(row.principalId) ?? [],
     }))
 
     return {
@@ -436,6 +507,10 @@ export async function getPortalUserDetail(
     const commentCount = engagementData.commentedPostIds.length
     const voteCount = engagementData.votedPostIds.length
 
+    // Fetch segments for this user
+    const segmentMap = await fetchSegmentsForPrincipals([principalData.principalId])
+    const userSegmentList = segmentMap.get(principalData.principalId) ?? []
+
     return {
       principalId: principalData.principalId,
       userId: principalData.userId,
@@ -449,6 +524,7 @@ export async function getPortalUserDetail(
       commentCount,
       voteCount,
       engagedPosts,
+      segments: userSegmentList,
     }
   } catch (error) {
     console.error('Error getting portal user detail:', error)
