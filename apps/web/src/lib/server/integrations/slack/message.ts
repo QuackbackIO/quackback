@@ -102,6 +102,33 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       }
     }
 
+    case 'post.deleted': {
+      const { post } = event.data
+      const actor = event.actor.email || 'System'
+
+      return {
+        text: `Post deleted by ${actor}: ${post.title}`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `🗑️ Post deleted by *${escapeSlackMrkdwn(actor)}*`,
+              },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *${escapeSlackMrkdwn(post.title)}*`,
+            },
+          },
+        ],
+      }
+    }
+
     case 'comment.created': {
       const { comment, post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`

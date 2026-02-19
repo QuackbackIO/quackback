@@ -9,6 +9,7 @@
 export const EVENT_TYPES = [
   'post.created',
   'post.status_changed',
+  'post.deleted',
   'comment.created',
   'changelog.published',
 ] as const
@@ -82,6 +83,11 @@ export interface CommentCreatedPayload {
   post: EventPostRef
 }
 
+export interface PostDeletedPayload {
+  post: EventPostRef
+  deletedBy?: string
+}
+
 export interface ChangelogPublishedPayload {
   changelog: {
     id: string
@@ -115,6 +121,10 @@ export interface CommentCreatedEvent extends EventBase<'comment.created'> {
   data: CommentCreatedPayload
 }
 
+export interface PostDeletedEvent extends EventBase<'post.deleted'> {
+  data: PostDeletedPayload
+}
+
 export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
   data: ChangelogPublishedPayload
 }
@@ -131,5 +141,6 @@ export interface ChangelogPublishedEvent extends EventBase<'changelog.published'
 export type EventData =
   | PostCreatedEvent
   | PostStatusChangedEvent
+  | PostDeletedEvent
   | CommentCreatedEvent
   | ChangelogPublishedEvent

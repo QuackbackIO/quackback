@@ -93,6 +93,22 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       }
     }
 
+    case 'post.deleted': {
+      const { post } = event.data
+      const actor = event.actor.email || 'System'
+
+      return {
+        embeds: [
+          {
+            title: truncateTitle(post.title),
+            color: COLORS.grey,
+            author: { name: `🗑️ Post deleted by ${actor}` },
+            timestamp: event.timestamp,
+          },
+        ],
+      }
+    }
+
     case 'comment.created': {
       const { comment, post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`

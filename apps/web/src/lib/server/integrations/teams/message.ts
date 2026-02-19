@@ -91,6 +91,16 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
       )
     }
 
+    case 'post.deleted': {
+      const { post } = event.data
+      const actor = event.actor.email || 'System'
+
+      return buildCard([
+        textBlock(`🗑️ Post deleted by ${actor}`, { weight: 'Bolder', size: 'Small' }),
+        textBlock(post.title, { weight: 'Bolder', size: 'Medium' }),
+      ])
+    }
+
     case 'comment.created': {
       const { comment, post } = event.data
       const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
