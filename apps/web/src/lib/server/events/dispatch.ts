@@ -127,6 +127,27 @@ export async function dispatchCommentCreated(
   })
 }
 
+export interface PostDeletedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostDeleted(
+  actor: EventActor,
+  post: PostDeletedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.deleted',
+    data: {
+      post,
+      deletedBy: actor.email || actor.displayName,
+    },
+  })
+}
+
 export interface ChangelogPublishedInput {
   id: ChangelogId
   title: string

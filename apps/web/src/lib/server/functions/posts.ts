@@ -25,6 +25,11 @@ import {
 } from '@/lib/server/domains/posts/post.query'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
+import {
+  getPostExternalLinks,
+  executeCascadeDelete,
+} from '@/lib/server/domains/posts/post.cascade-delete'
+import { buildEventActor, dispatchPostDeleted } from '@/lib/server/events/dispatch'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
 import { getPostVoters } from '@/lib/server/domains/posts/post.voting'
@@ -127,6 +132,17 @@ const updatePostSchema = z.object({
 
 const deletePostSchema = z.object({
   id: z.string(),
+  cascadeChoices: z
+    .array(
+      z.object({
+        linkId: z.string(),
+        integrationType: z.string(),
+        externalId: z.string(),
+        externalUrl: z.string().nullable().optional(),
+        shouldArchive: z.boolean(),
+      })
+    )
+    .optional(),
 })
 
 const changeStatusSchema = z.object({
@@ -363,7 +379,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Delete a post (soft delete)
+ * Delete a post (soft delete) with optional cascade archive/close of linked issues
  */
 export const deletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePostSchema)
@@ -371,15 +387,83 @@ export const deletePostFn = createServerFn({ method: 'POST' })
     console.log(`[fn:posts] deletePostFn: id=${data.id}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const postId = data.id as PostId
 
-      await softDeletePost(data.id as PostId, {
+      // Fetch post info before deletion (needed for event dispatch)
+      const post = await db.query.posts.findFirst({
+        where: eq(posts.id, postId),
+        columns: { id: true, title: true, boardId: true },
+        with: { board: { columns: { slug: true } } },
+      })
+
+      // Soft delete the post (always succeeds or throws)
+      await softDeletePost(postId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
       console.log(`[fn:posts] deletePostFn: deleted id=${data.id}`)
-      return { id: data.id }
+
+      // Cascade archive/close linked issues (never blocks post delete)
+      let cascadeResults: Array<{
+        linkId: string
+        integrationType: string
+        externalId: string
+        success: boolean
+        error?: string
+      }> = []
+      if (data.cascadeChoices && data.cascadeChoices.length > 0) {
+        try {
+          cascadeResults = await executeCascadeDelete(data.cascadeChoices)
+          const failed = cascadeResults.filter((r) => !r.success)
+          if (failed.length > 0) {
+            console.warn(
+              `[fn:posts] deletePostFn: ${failed.length} cascade archive(s) failed`,
+              failed
+            )
+          }
+        } catch (err) {
+          console.error(`[fn:posts] deletePostFn: cascade archive error (non-blocking)`, err)
+        }
+      }
+
+      // Dispatch post.deleted event for notifications (non-blocking)
+      if (post) {
+        const actor = buildEventActor({
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+        })
+        dispatchPostDeleted(actor, {
+          id: postId,
+          title: post.title,
+          boardId: post.boardId,
+          boardSlug: post.board?.slug ?? '',
+        }).catch((err) =>
+          console.error(`[fn:posts] deletePostFn: event dispatch error (non-blocking)`, err)
+        )
+      }
+
+      return { id: data.id, cascadeResults }
     } catch (error) {
       console.error(`[fn:posts] ❌ deletePostFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Fetch external links for a post (for cascade delete dialog)
+ */
+export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    console.log(`[fn:posts] fetchPostExternalLinksFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      const links = await getPostExternalLinks(data.id as PostId)
+      console.log(`[fn:posts] fetchPostExternalLinksFn: found ${links.length} links`)
+      return links
+    } catch (error) {
+      console.error(`[fn:posts] ❌ fetchPostExternalLinksFn failed:`, error)
       throw error
     }
   })

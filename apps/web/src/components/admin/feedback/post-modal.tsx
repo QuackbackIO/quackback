@@ -44,7 +44,11 @@ import {
   useDeletePost,
   useRestorePost,
 } from '@/lib/client/mutations'
-import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
+import {
+  DeletePostDialog,
+  type CascadeChoice,
+} from '@/components/public/post-detail/delete-post-dialog'
+import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { useRouterState } from '@tanstack/react-router'
@@ -147,6 +151,9 @@ function PostModalContent({
   const toggleCommentsLock = useToggleCommentsLock()
   const deletePost = useDeletePost()
   const restorePostMutation = useRestorePost()
+
+  // External links for cascade delete
+  const externalLinksQuery = usePostExternalLinks(post.id as PostId, showDeleteDialog)
 
   // Initialize form with post data
   useEffect(() => {
@@ -509,16 +516,37 @@ function PostModalContent({
         onOpenChange={setShowDeleteDialog}
         postTitle={post.title}
         isPending={deletePost.isPending}
+        externalLinks={externalLinksQuery.data}
         description={
           <>
             This will delete &ldquo;{post.title}&rdquo; from the portal. You can restore it within
             30 days, after which it will be permanently deleted.
           </>
         }
-        onConfirm={async () => {
+        onConfirm={async (cascadeChoices: CascadeChoice[]) => {
           try {
-            await deletePost.mutateAsync(post.id as PostId)
+            const result = await deletePost.mutateAsync({
+              postId: post.id as PostId,
+              cascadeChoices,
+            })
             toast.success('Post deleted')
+            // Show warnings for failed cascade operations
+            const cascadeResults = (
+              result as {
+                cascadeResults?: Array<{
+                  success: boolean
+                  integrationType: string
+                  error?: string
+                }>
+              }
+            ).cascadeResults
+            if (cascadeResults) {
+              for (const r of cascadeResults) {
+                if (!r.success) {
+                  toast.warning(`Failed to close ${r.integrationType} issue: ${r.error}`)
+                }
+              }
+            }
             setShowDeleteDialog(false)
             onClose()
           } catch (err) {

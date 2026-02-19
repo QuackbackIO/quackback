@@ -54,6 +54,7 @@
     {
       "idx": 7,
       "version": "7",
+<<<<<<< HEAD
       "when": 1771862934682,
       "tag": "0007_awesome_next_avengers",
       "breakpoints": true
@@ -168,6 +169,13 @@
       "version": "7",
       "when": 1772360000000,
       "tag": "0023_merge_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1772360000001,
+      "tag": "0024_bored_human_cannonball",
       "breakpoints": true
     }
   ]

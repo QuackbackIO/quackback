@@ -1,0 +1,2 @@
+ALTER TABLE "post_external_links" ADD COLUMN "status" varchar(20) DEFAULT 'active' NOT NULL;--> statement-breakpoint
+CREATE INDEX "post_external_links_post_status_idx" ON "post_external_links" USING btree ("post_id","status");

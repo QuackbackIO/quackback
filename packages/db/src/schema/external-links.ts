@@ -20,6 +20,7 @@ export const postExternalLinks = pgTable(
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     externalId: text('external_id').notNull(),
     externalUrl: text('external_url'),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -41,6 +42,7 @@ export const postExternalLinks = pgTable(
     ),
     index('post_external_links_post_id_idx').on(table.postId),
     index('post_external_links_type_external_id_idx').on(table.integrationType, table.externalId),
+    index('post_external_links_post_status_idx').on(table.postId, table.status),
   ]
 )
 

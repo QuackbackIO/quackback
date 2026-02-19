@@ -18,6 +18,7 @@ import {
   StatusSyncConfig,
   type ExternalStatus,
 } from '@/components/admin/settings/integrations/status-sync-config'
+import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 import {
   fetchAzureDevOpsProjectsFn,
   fetchAzureDevOpsWorkItemTypesFn,
@@ -310,6 +311,13 @@ export function AzureDevOpsConfig({
         enabled={integrationEnabled}
         externalStatuses={externalStatuses}
         isManual={true}
+      />
+
+      <OnDeleteConfig
+        integrationId={integrationId}
+        integrationType="azure_devops"
+        config={initialConfig}
+        enabled={integrationEnabled}
       />
     </div>
   )
