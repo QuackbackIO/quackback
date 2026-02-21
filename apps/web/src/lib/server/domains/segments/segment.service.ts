@@ -488,7 +488,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
     const matchingSet = new Set(matchingIds)
 
     // Diff: to add = in matching but not current; to remove = in current but not matching
-    const toAdd = matchingIds.filter((id) => !currentIds.has(id)) as PrincipalId[]
+    const toAdd = matchingIds.filter((id) => !currentIds.has(id as PrincipalId)) as PrincipalId[]
     const toRemove = [...currentIds].filter(
       (id) => !matchingSet.has(id)
     ) as unknown as PrincipalId[]
