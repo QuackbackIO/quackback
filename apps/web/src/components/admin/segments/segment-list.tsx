@@ -1,19 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  ArrowPathIcon,
-  BoltIcon,
-} from '@heroicons/react/24/solid'
+import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, BoltIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
-import type { SegmentFormValues } from '@/components/admin/segments/segment-form'
+import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
+import type { SegmentCondition } from '@quackback/db/schema'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import {
   useCreateSegment,
@@ -219,7 +214,9 @@ export function SegmentList() {
               onClick={() => evaluateAll.mutate()}
               disabled={evaluateAll.isPending}
             >
-              <ArrowPathIcon className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`} />
+              <ArrowPathIcon
+                className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`}
+              />
               Re-evaluate all
             </Button>
           )}
@@ -284,12 +281,12 @@ export function SegmentList() {
                 rules: editTarget.rules
                   ? {
                       match: editTarget.rules.match,
-                      conditions: editTarget.rules.conditions.map((c) => ({
+                      conditions: editTarget.rules.conditions.map((c: SegmentCondition) => ({
                         attribute: c.attribute as string,
                         operator: c.operator as string,
                         value: String(c.value),
                         metadataKey: c.metadataKey,
-                      })) as Parameters<typeof SegmentFormDialog>[0]['initialValues']['rules']['conditions'],
+                      })) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
               }
@@ -318,10 +315,7 @@ export function SegmentList() {
 // Helpers
 // ============================================
 
-function parseConditionValue(
-  attribute: string,
-  value: string
-): string | number | boolean {
+function parseConditionValue(attribute: string, value: string): string | number | boolean {
   const numericAttributes = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']
   if (numericAttributes.includes(attribute)) return Number(value) || 0
   if (attribute === 'email_verified') return value === 'true'

@@ -8,19 +8,7 @@
  * rather than loading all users into memory.
  */
 
-import {
-  db,
-  eq,
-  and,
-  inArray,
-  isNull,
-  sql,
-  asc,
-  segments,
-  userSegments,
-  principal,
-  user,
-} from '@/lib/server/db'
+import { db, eq, and, inArray, isNull, sql, asc, segments, userSegments } from '@/lib/server/db'
 import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError, InternalError } from '@/lib/shared/errors'
@@ -146,7 +134,7 @@ export async function createSegment(input: CreateSegmentInput): Promise<Segment>
         description: input.description?.trim() || null,
         type: input.type,
         color: input.color ?? '#6b7280',
-        rules: input.type === 'dynamic' ? input.rules ?? null : null,
+        rules: input.type === 'dynamic' ? (input.rules ?? null) : null,
       })
       .returning()
 
@@ -207,10 +195,7 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
 
     // Remove all memberships first, then soft-delete the segment
     await db.delete(userSegments).where(eq(userSegments.segmentId, segmentId))
-    await db
-      .update(segments)
-      .set({ deletedAt: new Date() })
-      .where(eq(segments.id, segmentId))
+    await db.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     console.error('Error deleting segment:', error)
@@ -283,10 +268,7 @@ export async function removeUsersFromSegment(
     await db
       .delete(userSegments)
       .where(
-        and(
-          eq(userSegments.segmentId, segmentId),
-          inArray(userSegments.principalId, principalIds)
-        )
+        and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, principalIds))
       )
   } catch (error) {
     if (error instanceof NotFoundError || error instanceof ForbiddenError) throw error
@@ -313,12 +295,7 @@ export async function getUserSegments(principalId: PrincipalId): Promise<Segment
       })
       .from(userSegments)
       .innerJoin(segments, eq(userSegments.segmentId, segments.id))
-      .where(
-        and(
-          eq(userSegments.principalId, principalId),
-          isNull(segments.deletedAt)
-        )
-      )
+      .where(and(eq(userSegments.principalId, principalId), isNull(segments.deletedAt)))
       .orderBy(asc(segments.name))
 
     return rows.map((row) => ({
@@ -473,7 +450,7 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
       AND (${combinedWhere})
   `)
 
-  return (rows as Array<{ id: string }>).map((r) => r.id)
+  return (rows as unknown as Array<{ id: string }>).map((r) => r.id)
 }
 
 /**
@@ -493,9 +470,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
       // No rules: remove all dynamic members
       const deleted = await db
         .delete(userSegments)
-        .where(
-          and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic'))
-        )
+        .where(and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic')))
         .returning()
       return { segmentId, added: 0, removed: deleted.length }
     }
@@ -504,9 +479,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
     const currentMembers = await db
       .select({ principalId: userSegments.principalId })
       .from(userSegments)
-      .where(
-        and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic'))
-      )
+      .where(and(eq(userSegments.segmentId, segmentId), eq(userSegments.addedBy, 'dynamic')))
 
     const currentIds = new Set(currentMembers.map((r) => r.principalId))
 
@@ -516,7 +489,9 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
 
     // Diff: to add = in matching but not current; to remove = in current but not matching
     const toAdd = matchingIds.filter((id) => !currentIds.has(id)) as PrincipalId[]
-    const toRemove = [...currentIds].filter((id) => !matchingSet.has(id)) as PrincipalId[]
+    const toRemove = [...currentIds].filter(
+      (id) => !matchingSet.has(id)
+    ) as unknown as PrincipalId[]
 
     // Apply changes in a transaction
     await db.transaction(async (tx) => {
@@ -536,10 +511,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
         await tx
           .delete(userSegments)
           .where(
-            and(
-              eq(userSegments.segmentId, segmentId),
-              inArray(userSegments.principalId, toRemove)
-            )
+            and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, toRemove))
           )
       }
     })

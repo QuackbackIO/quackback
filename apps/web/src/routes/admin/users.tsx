@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import type { SegmentId } from '@quackback/ids'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { UsersContainer } from '@/components/admin/users/users-container'
@@ -38,7 +39,9 @@ export const Route = createFileRoute('/admin/users')({
 
     // Parse verified param
     const verified = deps.verified === 'true' ? true : deps.verified === 'false' ? false : undefined
-    const segmentIds = deps.segments ? deps.segments.split(',').filter(Boolean) : undefined
+    const segmentIds = deps.segments
+      ? (deps.segments.split(',').filter(Boolean) as SegmentId[])
+      : undefined
 
     // Pre-fetch users and segments data using React Query
     await Promise.all([

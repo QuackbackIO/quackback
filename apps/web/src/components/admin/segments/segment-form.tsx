@@ -53,9 +53,18 @@ type RuleAttribute =
   | 'plan'
   | 'metadata_key'
 
-type RuleOperator = 'eq' | 'neq' | 'lt' | 'lte' | 'gt' | 'gte' | 'contains' | 'starts_with' | 'ends_with'
+type RuleOperator =
+  | 'eq'
+  | 'neq'
+  | 'lt'
+  | 'lte'
+  | 'gt'
+  | 'gte'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with'
 
-interface RuleCondition {
+export interface RuleCondition {
   attribute: RuleAttribute
   operator: RuleOperator
   value: string
@@ -79,9 +88,7 @@ const OPERATOR_OPTIONS: Record<RuleAttribute, { value: RuleOperator; label: stri
     { value: 'neq', label: 'not equals' },
     { value: 'ends_with', label: 'ends with' },
   ],
-  email_verified: [
-    { value: 'eq', label: 'is' },
-  ],
+  email_verified: [{ value: 'eq', label: 'is' }],
   created_at_days_ago: [
     { value: 'gt', label: 'more than (days ago)' },
     { value: 'lt', label: 'less than (days ago)' },
@@ -202,8 +209,12 @@ function RuleConditionRow({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="true" className="text-xs">True</SelectItem>
-            <SelectItem value="false" className="text-xs">False</SelectItem>
+            <SelectItem value="true" className="text-xs">
+              True
+            </SelectItem>
+            <SelectItem value="false" className="text-xs">
+              False
+            </SelectItem>
           </SelectContent>
         </Select>
       ) : (
@@ -246,10 +257,7 @@ function RuleBuilder({
   onConditionsChange: (v: RuleCondition[]) => void
 }) {
   const handleAdd = () => {
-    onConditionsChange([
-      ...conditions,
-      { attribute: 'email_domain', operator: 'eq', value: '' },
-    ])
+    onConditionsChange([...conditions, { attribute: 'email_domain', operator: 'eq', value: '' }])
   }
 
   const handleChange = (idx: number, updated: RuleCondition) => {
@@ -272,8 +280,12 @@ function RuleBuilder({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all" className="text-xs">ALL</SelectItem>
-            <SelectItem value="any" className="text-xs">ANY</SelectItem>
+            <SelectItem value="all" className="text-xs">
+              ALL
+            </SelectItem>
+            <SelectItem value="any" className="text-xs">
+              ANY
+            </SelectItem>
           </SelectContent>
         </Select>
         <span>of these conditions:</span>
@@ -291,13 +303,7 @@ function RuleBuilder({
         ))}
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 text-xs"
-        onClick={handleAdd}
-      >
+      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={handleAdd}>
         <PlusIcon className="h-3.5 w-3.5 mr-1" />
         Add condition
       </Button>
@@ -341,9 +347,7 @@ export function SegmentFormDialog({
   const [description, setDescription] = useState(initialValues?.description ?? '')
   const [type, setType] = useState<'manual' | 'dynamic'>(initialValues?.type ?? 'manual')
   const [color, setColor] = useState(initialValues?.color ?? '#6366f1')
-  const [ruleMatch, setRuleMatch] = useState<'all' | 'any'>(
-    initialValues?.rules?.match ?? 'all'
-  )
+  const [ruleMatch, setRuleMatch] = useState<'all' | 'any'>(initialValues?.rules?.match ?? 'all')
   const [conditions, setConditions] = useState<RuleCondition[]>(
     (initialValues?.rules?.conditions as RuleCondition[]) ?? []
   )
@@ -358,7 +362,6 @@ export function SegmentFormDialog({
       setRuleMatch(initialValues?.rules?.match ?? 'all')
       setConditions((initialValues?.rules?.conditions as RuleCondition[]) ?? [])
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -375,8 +378,7 @@ export function SegmentFormDialog({
     })
   }
 
-  const canSubmit =
-    name.trim().length > 0 && (type === 'manual' || conditions.length > 0)
+  const canSubmit = name.trim().length > 0 && (type === 'manual' || conditions.length > 0)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -396,7 +398,9 @@ export function SegmentFormDialog({
                   onClick={() => setType(t)}
                   className={cn(
                     'flex-1 px-4 py-3 rounded-lg border-2 text-left transition-colors',
-                    type === t ? 'border-primary bg-primary/5' : 'border-border hover:border-border/80'
+                    type === t
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-border/80'
                   )}
                 >
                   <div className="font-medium text-sm capitalize">{t}</div>
@@ -424,7 +428,9 @@ export function SegmentFormDialog({
 
           {/* Description */}
           <div className="space-y-1.5">
-            <Label htmlFor="seg-desc">Description <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Label htmlFor="seg-desc">
+              Description <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
             <Input
               id="seg-desc"
               value={description}
@@ -458,7 +464,8 @@ export function SegmentFormDialog({
             <div className="space-y-2 border border-border/50 rounded-lg p-4 bg-muted/20">
               <Label className="text-sm font-medium">Rules</Label>
               <p className="text-xs text-muted-foreground">
-                Define conditions to automatically match users. Membership is refreshed when you trigger evaluation.
+                Define conditions to automatically match users. Membership is refreshed when you
+                trigger evaluation.
               </p>
               <RuleBuilder
                 match={ruleMatch}
