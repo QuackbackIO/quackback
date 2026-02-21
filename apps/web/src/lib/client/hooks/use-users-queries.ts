@@ -44,6 +44,7 @@ async function fetchPortalUsers(
       sort: (filters.sort || 'newest') as 'newest' | 'oldest' | 'most_active',
       page,
       limit: 20,
+      segmentIds: filters.segmentIds,
     },
   })) as PortalUserListResultView
 }
@@ -68,7 +69,8 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
     filters.search ||
     filters.verified !== undefined ||
     filters.dateFrom ||
-    filters.dateTo
+    filters.dateTo ||
+    (filters.segmentIds && filters.segmentIds.length > 0)
   )
   const useInitialData = initialData && !hasActiveFilters
 

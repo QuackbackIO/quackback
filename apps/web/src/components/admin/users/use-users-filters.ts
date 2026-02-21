@@ -17,12 +17,17 @@ export function useUsersFilters() {
       verified = false
     }
 
+    const segmentIds = (search as { segments?: string }).segments
+      ? (search as { segments?: string }).segments!.split(',').filter(Boolean)
+      : undefined
+
     return {
       search: search.search,
       verified,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
       sort: search.sort,
+      segmentIds,
     }
   }, [search])
 
@@ -40,6 +45,14 @@ export function useUsersFilters() {
         }
       }
 
+      // Convert segmentIds array to comma-separated string for URL
+      const segmentsParam =
+        'segmentIds' in updates
+          ? updates.segmentIds && updates.segmentIds.length > 0
+            ? updates.segmentIds.join(',')
+            : undefined
+          : undefined
+
       void navigate({
         to: '/admin/users',
         search: {
@@ -49,6 +62,7 @@ export function useUsersFilters() {
           ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
           ...('dateTo' in updates && { dateTo: updates.dateTo }),
           ...('sort' in updates && { sort: updates.sort }),
+          ...('segmentIds' in updates && { segments: segmentsParam }),
         },
         replace: true,
       })
@@ -86,7 +100,8 @@ export function useUsersFilters() {
       filters.search ||
       filters.verified !== undefined ||
       filters.dateFrom ||
-      filters.dateTo
+      filters.dateTo ||
+      (filters.segmentIds && filters.segmentIds.length > 0)
     )
   }, [filters])
 

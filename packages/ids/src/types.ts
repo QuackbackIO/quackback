@@ -85,6 +85,9 @@ export type CommentEditId = TypeId<'comment_edit'>
 /** Internal staff note ID - e.g., note_01h455vb4pex5vsknk084sn02q */
 export type NoteId = TypeId<'note'>
 
+/** Segment ID - e.g., segment_01h455vb4pex5vsknk084sn02q */
+export type SegmentId = TypeId<'segment'>
+
 // ============================================
 // AI Entity IDs
 // ============================================
@@ -162,6 +165,7 @@ export interface EntityIdMap {
   post_edit: PostEditId
   comment_edit: CommentEditId
   note: NoteId
+  segment: SegmentId
   sentiment: SentimentId
   roadmap: RoadmapId
   changelog: ChangelogId

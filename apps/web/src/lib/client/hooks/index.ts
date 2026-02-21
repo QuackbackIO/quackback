@@ -45,6 +45,9 @@ export {
 // Settings queries
 export { useWorkspaceLogo, useWorkspaceHeaderLogo } from './use-settings-queries'
 
+// Segment queries
+export { useSegments, useSuspenseSegments } from './use-segments-queries'
+
 // ============================================================================
 // Mutation Hooks (re-exported from lib/mutations for convenience)
 // ============================================================================

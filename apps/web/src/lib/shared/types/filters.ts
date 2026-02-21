@@ -44,4 +44,6 @@ export interface UsersFilters {
   dateFrom?: string
   dateTo?: string
   sort?: 'newest' | 'oldest' | 'most_active' | 'name'
+  /** Filter by segment IDs (OR logic — users in ANY selected segment) */
+  segmentIds?: string[]
 }

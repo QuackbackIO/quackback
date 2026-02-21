@@ -40,6 +40,9 @@ export const ID_PREFIXES = {
   unsub_token: 'unsub_token',
   notification: 'notification',
 
+  // Users
+  segment: 'segment',
+
   // AI
   sentiment: 'sentiment',
 
