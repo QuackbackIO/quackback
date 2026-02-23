@@ -104,10 +104,10 @@ export async function listPortalUsers(
 
     // Date range filters (on principal.createdAt = join date)
     if (dateFrom) {
-      conditions.push(sql`${principal.createdAt} >= ${dateFrom}`)
+      conditions.push(sql`${principal.createdAt} >= ${dateFrom.toISOString()}`)
     }
     if (dateTo) {
-      conditions.push(sql`${principal.createdAt} <= ${dateTo}`)
+      conditions.push(sql`${principal.createdAt} <= ${dateTo.toISOString()}`)
     }
 
     const whereClause = and(...conditions)

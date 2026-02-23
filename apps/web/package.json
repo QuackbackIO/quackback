@@ -1,6 +1,6 @@
 {
   "name": "@quackback/web",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "license": "AGPL-3.0",
   "type": "module",
