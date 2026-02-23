@@ -201,6 +201,8 @@ export {
   type UserAttributeDefinition,
   type UserAttributeType,
   type CurrencyCode,
+  // Schema tables - user attributes
+  userAttributeDefinitions,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

@@ -450,6 +450,10 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         return sql`(u.metadata::jsonb->>${key}) ILIKE ${'%' + String(value)}`
       const sqlOp = opMap[operator]
       if (!sqlOp) return null
+      // If the value is numeric, cast the JSONB text to numeric for correct comparison
+      if (typeof value === 'number') {
+        return sql`(u.metadata::jsonb->>${key})::numeric ${sql.raw(sqlOp)} ${value}`
+      }
       return sql`(u.metadata::jsonb->>${key}) ${sql.raw(sqlOp)} ${String(value)}`
     }
 

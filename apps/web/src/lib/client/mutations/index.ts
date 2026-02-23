@@ -94,3 +94,10 @@ export {
   useEvaluateSegment,
   useEvaluateAllSegments,
 } from './segments'
+
+// User attribute mutations
+export {
+  useCreateUserAttribute,
+  useUpdateUserAttribute,
+  useDeleteUserAttribute,
+} from './user-attributes'

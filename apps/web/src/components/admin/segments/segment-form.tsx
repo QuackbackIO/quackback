@@ -15,7 +15,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -67,13 +70,22 @@ type RuleOperator =
   | 'is_not_set'
 
 export interface RuleCondition {
-  attribute: RuleAttribute
+  attribute: string
   operator: RuleOperator
   value: string
   metadataKey?: string
 }
 
-const ATTRIBUTE_OPTIONS: { value: RuleAttribute; label: string }[] = [
+export interface CustomAttrDef {
+  id: string
+  key: string
+  label: string
+  type: 'string' | 'number' | 'boolean' | 'date' | 'currency'
+  currencyCode?: string | null
+  description?: string | null
+}
+
+const BUILT_IN_ATTRIBUTE_OPTIONS: { value: RuleAttribute; label: string }[] = [
   { value: 'email_domain', label: 'Email Domain' },
   { value: 'email_verified', label: 'Email Verified' },
   { value: 'created_at_days_ago', label: 'Days Since Joined' },
@@ -83,6 +95,54 @@ const ATTRIBUTE_OPTIONS: { value: RuleAttribute; label: string }[] = [
   { value: 'plan', label: 'Plan (metadata)' },
   { value: 'metadata_key', label: 'Custom Metadata Key' },
 ]
+
+const CUSTOM_ATTR_OPERATORS: Record<
+  'string' | 'number' | 'boolean' | 'date' | 'currency',
+  { value: RuleOperator; label: string }[]
+> = {
+  string: [
+    { value: 'eq', label: 'equals' },
+    { value: 'neq', label: 'not equals' },
+    { value: 'contains', label: 'contains' },
+    { value: 'starts_with', label: 'starts with' },
+    { value: 'ends_with', label: 'ends with' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ],
+  number: [
+    { value: 'gt', label: 'greater than' },
+    { value: 'gte', label: 'at least' },
+    { value: 'lt', label: 'less than' },
+    { value: 'lte', label: 'at most' },
+    { value: 'eq', label: 'equals' },
+    { value: 'neq', label: 'not equals' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ],
+  boolean: [
+    { value: 'eq', label: 'is' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ],
+  date: [
+    { value: 'gt', label: 'before (days ago)' },
+    { value: 'lt', label: 'after (days ago)' },
+    { value: 'gte', label: 'at least (days ago)' },
+    { value: 'lte', label: 'at most (days ago)' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ],
+  currency: [
+    { value: 'gt', label: 'greater than' },
+    { value: 'gte', label: 'at least' },
+    { value: 'lt', label: 'less than' },
+    { value: 'lte', label: 'at most' },
+    { value: 'eq', label: 'equals' },
+    { value: 'neq', label: 'not equals' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ],
+}
 
 const OPERATOR_OPTIONS: Record<RuleAttribute, { value: RuleOperator; label: string }[]> = {
   email_domain: [
@@ -153,17 +213,49 @@ function RuleConditionRow({
   condition,
   onChange,
   onRemove,
+  customAttributes,
 }: {
   condition: RuleCondition
   onChange: (updated: RuleCondition) => void
   onRemove: () => void
+  customAttributes?: CustomAttrDef[]
 }) {
-  const operators = OPERATOR_OPTIONS[condition.attribute] ?? []
-  const isNumeric = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count'].includes(
-    condition.attribute
-  )
-  const isBoolean = condition.attribute === 'email_verified'
+  const isCustomAttr = condition.attribute.startsWith('__custom__')
+  const customAttrKey = isCustomAttr ? condition.attribute.slice(10) : null
+  const customAttrDef = customAttrKey
+    ? (customAttributes?.find((a) => a.key === customAttrKey) ?? null)
+    : null
+
+  const operators = isCustomAttr
+    ? customAttrDef
+      ? CUSTOM_ATTR_OPERATORS[customAttrDef.type]
+      : CUSTOM_ATTR_OPERATORS.string
+    : (OPERATOR_OPTIONS[condition.attribute as RuleAttribute] ?? [])
+
+  const isNumericBuiltIn = [
+    'created_at_days_ago',
+    'post_count',
+    'vote_count',
+    'comment_count',
+  ].includes(condition.attribute)
+  const isCustomNumeric = customAttrDef?.type === 'number' || customAttrDef?.type === 'currency'
+  const isCustomDate = customAttrDef?.type === 'date'
+  const isNumeric = isNumericBuiltIn || isCustomNumeric || isCustomDate
+
+  const isBooleanBuiltIn = condition.attribute === 'email_verified'
+  const isCustomBoolean = customAttrDef?.type === 'boolean'
+  const isBoolean = isBooleanBuiltIn || isCustomBoolean
+
   const isPresenceOp = condition.operator === 'is_set' || condition.operator === 'is_not_set'
+
+  const getFirstOperator = (attr: string) => {
+    if (attr.startsWith('__custom__')) {
+      const key = attr.slice(10)
+      const def = customAttributes?.find((a) => a.key === key)
+      return (def ? CUSTOM_ATTR_OPERATORS[def.type][0]?.value : 'eq') as RuleOperator
+    }
+    return (OPERATOR_OPTIONS[attr as RuleAttribute]?.[0]?.value ?? 'eq') as RuleOperator
+  }
 
   return (
     <div className="flex items-start gap-2">
@@ -173,9 +265,10 @@ function RuleConditionRow({
         onValueChange={(val) =>
           onChange({
             ...condition,
-            attribute: val as RuleAttribute,
-            operator: (OPERATOR_OPTIONS[val as RuleAttribute]?.[0]?.value ?? 'eq') as RuleOperator,
+            attribute: val,
+            operator: getFirstOperator(val),
             value: '',
+            metadataKey: val.startsWith('__custom__') ? val.slice(10) : undefined,
           })
         }
       >
@@ -183,11 +276,32 @@ function RuleConditionRow({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {ATTRIBUTE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-xs">
-              {opt.label}
-            </SelectItem>
-          ))}
+          <SelectGroup>
+            {BUILT_IN_ATTRIBUTE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+          {customAttributes && customAttributes.length > 0 && (
+            <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel className="text-[10px] uppercase tracking-wider px-2 py-1.5">
+                  Custom attributes
+                </SelectLabel>
+                {customAttributes.map((attr) => (
+                  <SelectItem
+                    key={`__custom__${attr.key}`}
+                    value={`__custom__${attr.key}`}
+                    className="text-xs"
+                  >
+                    {attr.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </>
+          )}
         </SelectContent>
       </Select>
 
@@ -208,8 +322,8 @@ function RuleConditionRow({
         </SelectContent>
       </Select>
 
-      {/* Metadata key (only for metadata_key attribute) */}
-      {condition.attribute === 'metadata_key' && (
+      {/* Metadata key (only for raw metadata_key attribute — custom attrs have key auto-set) */}
+      {condition.attribute === 'metadata_key' && !isCustomAttr && (
         <Input
           className="h-8 text-xs w-[100px] shrink-0"
           placeholder="key"
@@ -274,11 +388,13 @@ function RuleBuilder({
   conditions,
   onMatchChange,
   onConditionsChange,
+  customAttributes,
 }: {
   match: 'all' | 'any'
   conditions: RuleCondition[]
   onMatchChange: (v: 'all' | 'any') => void
   onConditionsChange: (v: RuleCondition[]) => void
+  customAttributes?: CustomAttrDef[]
 }) {
   const handleAdd = () => {
     onConditionsChange([...conditions, { attribute: 'email_domain', operator: 'eq', value: '' }])
@@ -323,6 +439,7 @@ function RuleBuilder({
             condition={cond}
             onChange={(updated) => handleChange(idx, updated)}
             onRemove={() => handleRemove(idx)}
+            customAttributes={customAttributes}
           />
         ))}
       </div>
@@ -382,6 +499,7 @@ interface SegmentFormDialogProps {
   initialValues?: Partial<SegmentFormValues> & { id?: SegmentId }
   onSubmit: (values: SegmentFormValues) => Promise<void>
   isPending?: boolean
+  customAttributes?: CustomAttrDef[]
 }
 
 export function SegmentFormDialog({
@@ -390,6 +508,7 @@ export function SegmentFormDialog({
   initialValues,
   onSubmit,
   isPending,
+  customAttributes,
 }: SegmentFormDialogProps) {
   const isEditing = !!initialValues?.id
 
@@ -568,6 +687,7 @@ export function SegmentFormDialog({
                 conditions={conditions}
                 onMatchChange={setRuleMatch}
                 onConditionsChange={setConditions}
+                customAttributes={customAttributes}
               />
             </div>
           )}

@@ -88,6 +88,9 @@ export type NoteId = TypeId<'note'>
 /** Segment ID - e.g., segment_01h455vb4pex5vsknk084sn02q */
 export type SegmentId = TypeId<'segment'>
 
+/** User attribute definition ID - e.g., user_attr_01h455vb4pex5vsknk084sn02q */
+export type UserAttributeId = TypeId<'user_attr'>
+
 // ============================================
 // AI Entity IDs
 // ============================================
@@ -166,6 +169,7 @@ export interface EntityIdMap {
   comment_edit: CommentEditId
   note: NoteId
   segment: SegmentId
+  user_attr: UserAttributeId
   sentiment: SentimentId
   roadmap: RoadmapId
   changelog: ChangelogId

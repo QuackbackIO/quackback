@@ -88,6 +88,7 @@ export type {
   NotificationId,
   // User segmentation
   SegmentId,
+  UserAttributeId,
   // AI entities
   SentimentId,
   // Auth entities

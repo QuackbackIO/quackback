@@ -46,6 +46,13 @@ import {
   removeSegmentEvaluationSchedule,
 } from '@/lib/server/events/segment-scheduler'
 import type { CreateSegmentInput, UpdateSegmentInput } from '@/lib/server/domains/segments'
+import {
+  listUserAttributes,
+  createUserAttribute,
+  updateUserAttribute,
+  deleteUserAttribute,
+} from '@/lib/server/domains/user-attributes/user-attribute.service'
+import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
@@ -1101,3 +1108,102 @@ export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(
     throw error
   }
 })
+
+// ============================================
+// User Attribute Definitions
+// ============================================
+
+const userAttributeIdSchema = z.object({
+  id: z.string().min(1),
+})
+
+const createUserAttributeSchema = z.object({
+  key: z.string().min(1).max(64),
+  label: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional(),
+})
+
+const updateUserAttributeSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(128).optional(),
+  description: z.string().max(512).optional().nullable(),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']).optional(),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional()
+    .nullable(),
+})
+
+/**
+ * List all user attribute definitions.
+ */
+export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  try {
+    await requireAuth({ roles: ['admin', 'member'] })
+    return listUserAttributes()
+  } catch (error) {
+    console.error('[fn:admin] ❌ listUserAttributesFn failed:', error)
+    throw error
+  }
+})
+
+/**
+ * Create a new user attribute definition.
+ */
+export const createUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(createUserAttributeSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      return createUserAttribute({
+        key: data.key,
+        label: data.label,
+        description: data.description,
+        type: data.type,
+        currencyCode: data.currencyCode,
+      })
+    } catch (error) {
+      console.error('[fn:admin] ❌ createUserAttributeFn failed:', error)
+      throw error
+    }
+  })
+
+/**
+ * Update an existing user attribute definition.
+ */
+export const updateUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateUserAttributeSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      return updateUserAttribute(data.id as UserAttributeId, {
+        label: data.label,
+        description: data.description,
+        type: data.type,
+        currencyCode: data.currencyCode,
+      })
+    } catch (error) {
+      console.error('[fn:admin] ❌ updateUserAttributeFn failed:', error)
+      throw error
+    }
+  })
+
+/**
+ * Delete a user attribute definition.
+ */
+export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(userAttributeIdSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      await deleteUserAttribute(data.id as UserAttributeId)
+      return { deleted: true }
+    } catch (error) {
+      console.error('[fn:admin] ❌ deleteUserAttributeFn failed:', error)
+      throw error
+    }
+  })

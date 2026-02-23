@@ -71,6 +71,13 @@
       "when": 1772006400000,
       "tag": "0009_segment_scheduling",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772092800000,
+      "tag": "0010_user_attribute_definitions",
+      "breakpoints": true
     }
   ]
 }

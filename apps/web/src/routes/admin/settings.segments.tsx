@@ -8,7 +8,10 @@ import { adminQueries } from '@/lib/client/queries/admin'
 export const Route = createFileRoute('/admin/settings/segments')({
   loader: async ({ context }) => {
     const { queryClient } = context
-    await queryClient.ensureQueryData(adminQueries.segments())
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.segments()),
+      queryClient.ensureQueryData(adminQueries.userAttributes()),
+    ])
     return {}
   },
   component: SegmentsPage,

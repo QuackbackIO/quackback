@@ -14,6 +14,7 @@ import {
   CommandLineIcon,
   ChatBubbleLeftRightIcon,
   TagIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -45,6 +46,11 @@ const navSections: NavSection[] = [
       { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
       { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
       { label: 'Segments', to: '/admin/settings/segments', icon: TagIcon },
+      {
+        label: 'User Attributes',
+        to: '/admin/settings/user-attributes',
+        icon: AdjustmentsHorizontalIcon,
+      },
     ],
   },
   {

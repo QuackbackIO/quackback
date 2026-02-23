@@ -12,6 +12,7 @@ import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { principal } from './auth'
+import type { UserAttributeType, CurrencyCode } from './user-attributes'
 
 // ============================================
 // Rule types (stored as JSON in dynamic segments)
@@ -60,23 +61,7 @@ export interface SegmentRules {
 // User attribute types (for segment weighting)
 // ============================================
 
-/** Supported data types for user attributes used in segment weighting */
-export type UserAttributeType = 'string' | 'number' | 'boolean' | 'date' | 'currency'
-
-/** Currency code (ISO 4217) for currency-type attributes */
-export type CurrencyCode =
-  | 'USD'
-  | 'EUR'
-  | 'GBP'
-  | 'JPY'
-  | 'CAD'
-  | 'AUD'
-  | 'CHF'
-  | 'CNY'
-  | 'INR'
-  | 'BRL'
-
-/** Definition for a user attribute used in segment weighting */
+/** Inline attribute reference stored in segment weight config JSON */
 export interface UserAttributeDefinition {
   /** The metadata key to read from user.metadata */
   key: string

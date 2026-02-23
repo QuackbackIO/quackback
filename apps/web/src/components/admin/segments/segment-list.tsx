@@ -17,6 +17,8 @@ import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
+import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
 import {
   useCreateSegment,
   useUpdateSegment,
@@ -128,6 +130,7 @@ function SegmentRow({
 
 export function SegmentList() {
   const { data: segments, isLoading } = useSegments()
+  const { data: customAttributes } = useUserAttributes()
   const createSegment = useCreateSegment()
   const updateSegment = useUpdateSegment()
   const deleteSegment = useDeleteSegment()
@@ -149,12 +152,9 @@ export function SegmentList() {
         values.type === 'dynamic' && values.rules.conditions.length > 0
           ? {
               match: values.rules.match,
-              conditions: values.rules.conditions.map((c) => ({
-                attribute: c.attribute,
-                operator: c.operator,
-                value: parseConditionValue(c.attribute, c.value, c.operator),
-                metadataKey: c.metadataKey,
-              })),
+              conditions: values.rules.conditions.map((c) =>
+                serializeCondition(c, customAttributes)
+              ),
             }
           : undefined,
       evaluationSchedule:
@@ -190,12 +190,9 @@ export function SegmentList() {
           ? values.rules.conditions.length > 0
             ? {
                 match: values.rules.match,
-                conditions: values.rules.conditions.map((c) => ({
-                  attribute: c.attribute,
-                  operator: c.operator,
-                  value: parseConditionValue(c.attribute, c.value, c.operator),
-                  metadataKey: c.metadataKey,
-                })),
+                conditions: values.rules.conditions.map((c) =>
+                  serializeCondition(c, customAttributes)
+                ),
               }
             : null
           : undefined,
@@ -313,6 +310,7 @@ export function SegmentList() {
         onOpenChange={setCreateOpen}
         onSubmit={handleCreate}
         isPending={createSegment.isPending}
+        customAttributes={customAttributes}
       />
 
       {/* Edit dialog */}
@@ -330,12 +328,9 @@ export function SegmentList() {
                 rules: editTarget.rules
                   ? {
                       match: editTarget.rules.match,
-                      conditions: editTarget.rules.conditions.map((c: SegmentCondition) => ({
-                        attribute: c.attribute as string,
-                        operator: c.operator as string,
-                        value: c.value != null ? String(c.value) : '',
-                        metadataKey: c.metadataKey,
-                      })) as unknown as RuleCondition[],
+                      conditions: editTarget.rules.conditions.map((c: SegmentCondition) =>
+                        deserializeCondition(c, customAttributes)
+                      ) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
                 evaluationSchedule: (() => {
@@ -384,6 +379,7 @@ export function SegmentList() {
         }
         onSubmit={handleUpdate}
         isPending={updateSegment.isPending}
+        customAttributes={customAttributes}
       />
 
       {/* Delete confirm */}
@@ -416,12 +412,70 @@ function hasEvaluationSchedule(segment: SegmentItem): boolean {
 function parseConditionValue(
   attribute: string,
   value: string,
-  operator?: string
+  operator?: string,
+  customAttributes?: UserAttributeItem[]
 ): string | number | boolean | undefined {
-  // is_set / is_not_set have no value
   if (operator === 'is_set' || operator === 'is_not_set') return undefined
+  if (attribute.startsWith('__custom__') && customAttributes) {
+    const key = attribute.slice(10)
+    const attr = customAttributes.find((a) => a.key === key)
+    if (attr) {
+      if (attr.type === 'number' || attr.type === 'currency') return Number(value) || 0
+      if (attr.type === 'boolean') return value === 'true'
+    }
+    return value
+  }
   const numericAttributes = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']
   if (numericAttributes.includes(attribute)) return Number(value) || 0
   if (attribute === 'email_verified') return value === 'true'
   return value
+}
+
+function serializeCondition(
+  c: RuleCondition,
+  customAttributes?: UserAttributeItem[]
+): {
+  attribute: string
+  operator: string
+  value?: string | number | boolean
+  metadataKey?: string
+} {
+  if (c.attribute.startsWith('__custom__')) {
+    const key = c.attribute.slice(10)
+    return {
+      attribute: 'metadata_key',
+      operator: c.operator,
+      value: parseConditionValue(c.attribute, c.value, c.operator, customAttributes),
+      metadataKey: key,
+    }
+  }
+  return {
+    attribute: c.attribute,
+    operator: c.operator,
+    value: parseConditionValue(c.attribute, c.value, c.operator, customAttributes),
+    metadataKey: c.metadataKey,
+  }
+}
+
+function deserializeCondition(
+  c: SegmentCondition,
+  customAttributes?: UserAttributeItem[]
+): { attribute: string; operator: string; value: string; metadataKey?: string } {
+  if (c.attribute === 'metadata_key' && c.metadataKey && customAttributes) {
+    const known = customAttributes.find((a) => a.key === c.metadataKey)
+    if (known) {
+      return {
+        attribute: `__custom__${c.metadataKey}`,
+        operator: c.operator as string,
+        value: c.value != null ? String(c.value) : '',
+        metadataKey: c.metadataKey,
+      }
+    }
+  }
+  return {
+    attribute: c.attribute as string,
+    operator: c.operator as string,
+    value: c.value != null ? String(c.value) : '',
+    metadataKey: c.metadataKey,
+  }
 }

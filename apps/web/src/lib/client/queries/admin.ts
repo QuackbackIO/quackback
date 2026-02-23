@@ -13,6 +13,7 @@ import {
   fetchIntegrationByType,
   listPortalUsersFn,
   listSegmentsFn,
+  listUserAttributesFn,
 } from '@/lib/server/functions/admin'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import {
@@ -333,6 +334,16 @@ export const adminQueries = {
       queryKey: ['admin', 'authProviderCredentials', credentialType],
       queryFn: () => fetchAuthProviderCredentialsMaskedFn({ data: { credentialType } }),
       staleTime: 5 * 60 * 1000,
+    }),
+
+  /**
+   * List all user attribute definitions
+   */
+  userAttributes: () =>
+    queryOptions({
+      queryKey: ['admin', 'userAttributes'],
+      queryFn: () => listUserAttributesFn(),
+      staleTime: 60 * 1000,
     }),
 }
 

@@ -42,6 +42,7 @@ export const ID_PREFIXES = {
 
   // Users
   segment: 'segment',
+  user_attr: 'user_attr',
 
   // AI
   sentiment: 'sentiment',
