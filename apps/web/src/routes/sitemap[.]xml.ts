@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { config } from '@/lib/server/config'
-import { db, changelogEntries, desc, isNotNull, lte } from '@/lib/server/db'
+import { db, changelogEntries, desc, eq, isNotNull, lte } from '@/lib/server/db'
 
 export const Route = createFileRoute('/sitemap.xml')({
   server: {
@@ -31,9 +31,9 @@ export const Route = createFileRoute('/sitemap.xml')({
           })
         }
 
-        // Published, non-merged posts with their board slugs
+        // Published, non-merged posts on public, non-deleted boards
         const publicPosts = await db.query.posts.findMany({
-          where: (table, { and, isNull, eq }) =>
+          where: (table, { and, isNull }) =>
             and(
               isNull(table.deletedAt),
               eq(table.moderationState, 'published'),
@@ -41,13 +41,14 @@ export const Route = createFileRoute('/sitemap.xml')({
             ),
           columns: { id: true },
           with: {
-            board: { columns: { slug: true } },
+            board: {
+              columns: { slug: true, isPublic: true, deletedAt: true },
+            },
           },
-          limit: 5000,
         })
 
         for (const post of publicPosts) {
-          if (post.board?.slug) {
+          if (post.board?.slug && post.board.isPublic && !post.board.deletedAt) {
             urls.push({
               loc: `${baseUrl}/b/${post.board.slug}/posts/${post.id}`,
               changefreq: 'weekly',
