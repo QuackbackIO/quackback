@@ -74,6 +74,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
           // Parse date filters (ISO 8601 strings)
           const dateFrom = dateFromParam ? new Date(dateFromParam) : undefined
           const dateTo = dateToParam ? new Date(dateToParam) : undefined
+          // Treat date-only dateTo (e.g. "2024-06-30") as end-of-day so the full day is included
+          if (dateTo && dateToParam && /^\d{4}-\d{2}-\d{2}$/.test(dateToParam)) {
+            dateTo.setUTCHours(23, 59, 59, 999)
+          }
 
           const result = await listInboxPosts({
             boardIds: boardId ? [boardId] : undefined,

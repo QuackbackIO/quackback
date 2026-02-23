@@ -972,7 +972,13 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as TagId[] | undefined,
     dateFrom: args.dateFrom ? new Date(args.dateFrom) : undefined,
-    dateTo: args.dateTo ? new Date(args.dateTo) : undefined,
+    dateTo: (() => {
+      if (!args.dateTo) return undefined
+      const d = new Date(args.dateTo)
+      // Treat date-only dateTo (e.g. "2024-06-30") as end-of-day so the full day is included
+      if (/^\d{4}-\d{2}-\d{2}$/.test(args.dateTo)) d.setUTCHours(23, 59, 59, 999)
+      return d
+    })(),
     showDeleted: args.showDeleted || undefined,
     sort: args.sort,
     cursor: cursorValue,
