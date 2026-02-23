@@ -50,6 +50,13 @@
       "when": 1771260577775,
       "tag": "0006_thick_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771862934682,
+      "tag": "0007_awesome_next_avengers",
+      "breakpoints": true
     }
   ]
 }

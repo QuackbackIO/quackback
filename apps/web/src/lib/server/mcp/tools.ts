@@ -170,6 +170,18 @@ const searchSchema = {
     .boolean()
     .default(false)
     .describe('Show only soft-deleted posts instead of active ones (team only, last 30 days)'),
+  dateFrom: z
+    .string()
+    .optional()
+    .describe(
+      'ISO 8601 date string for filtering posts created on or after this date (e.g. "2024-06-01")'
+    ),
+  dateTo: z
+    .string()
+    .optional()
+    .describe(
+      'ISO 8601 date string for filtering posts created on or before this date (e.g. "2024-06-30")'
+    ),
   limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
 }
@@ -292,6 +304,8 @@ type SearchArgs = {
   boardId?: string
   status?: string
   tagIds?: string[]
+  dateFrom?: string
+  dateTo?: string
   showDeleted: boolean
   sort: 'newest' | 'oldest' | 'votes'
   limit: number
@@ -957,6 +971,8 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
     tagIds: args.tagIds as TagId[] | undefined,
+    dateFrom: args.dateFrom ? new Date(args.dateFrom) : undefined,
+    dateTo: args.dateTo ? new Date(args.dateTo) : undefined,
     showDeleted: args.showDeleted || undefined,
     sort: args.sort,
     cursor: cursorValue,

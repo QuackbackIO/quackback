@@ -50,6 +50,8 @@ export const Route = createFileRoute('/api/v1/posts/')({
           const statusSlug = url.searchParams.get('status') ?? undefined
           const tagIdsParam = url.searchParams.get('tagIds') ?? undefined
           const search = url.searchParams.get('search') ?? undefined
+          const dateFromParam = url.searchParams.get('dateFrom') ?? undefined
+          const dateToParam = url.searchParams.get('dateTo') ?? undefined
           const sort = (url.searchParams.get('sort') as 'newest' | 'oldest' | 'votes') ?? 'newest'
           const showDeleted = url.searchParams.get('showDeleted') === 'true'
 
@@ -69,11 +71,17 @@ export const Route = createFileRoute('/api/v1/posts/')({
             : undefined
 
           // Fetch posts
+          // Parse date filters (ISO 8601 strings)
+          const dateFrom = dateFromParam ? new Date(dateFromParam) : undefined
+          const dateTo = dateToParam ? new Date(dateToParam) : undefined
+
           const result = await listInboxPosts({
             boardIds: boardId ? [boardId] : undefined,
             statusSlugs: statusSlug ? [statusSlug] : undefined,
             tagIds: tagIdArray,
             search,
+            dateFrom: dateFrom && !isNaN(dateFrom.getTime()) ? dateFrom : undefined,
+            dateTo: dateTo && !isNaN(dateTo.getTime()) ? dateTo : undefined,
             sort,
             showDeleted: showDeleted || undefined,
             limit,

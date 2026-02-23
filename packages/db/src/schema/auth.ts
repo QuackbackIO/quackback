@@ -251,6 +251,8 @@ export const principal = pgTable(
     index('principal_role_idx').on(table.role),
     // Index for filtering by principal type
     index('principal_type_idx').on(table.type),
+    // Composite index for date-filtered user listings (e.g. portal users by join date)
+    index('principal_role_created_at_idx').on(table.role, table.createdAt),
   ]
 )
 

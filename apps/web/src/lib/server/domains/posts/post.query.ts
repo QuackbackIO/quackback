@@ -23,7 +23,7 @@ import {
   isNotNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
-import type { PostId, BoardId, PrincipalId } from '@quackback/ids'
+import { toUuid, type PostId, type BoardId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
 import type {
@@ -270,10 +270,10 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Date range filters
   if (dateFrom) {
-    conditions.push(sql`${posts.createdAt} >= ${dateFrom}`)
+    conditions.push(sql`${posts.createdAt} >= ${dateFrom.toISOString()}`)
   }
   if (dateTo) {
-    conditions.push(sql`${posts.createdAt} <= ${dateTo}`)
+    conditions.push(sql`${posts.createdAt} <= ${dateTo.toISOString()}`)
   }
 
   // Min votes filter
@@ -307,7 +307,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Updated before filter (for "stale" view)
   if (updatedBefore) {
-    conditions.push(sql`${posts.updatedAt} < ${updatedBefore}`)
+    conditions.push(sql`${posts.updatedAt} < ${updatedBefore.toISOString()}`)
   }
 
   // Cursor-based keyset pagination: resolve cursor to sort-field values
@@ -317,18 +317,20 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
       columns: { id: true, createdAt: true, voteCount: true },
     })
     if (cursorPost) {
+      const cursorDate = cursorPost.createdAt.toISOString()
+      const cursorUuid = toUuid(cursorPost.id)
       if (sort === 'votes') {
         conditions.push(
-          sql`(${posts.voteCount}, ${posts.createdAt}, ${posts.id}) < (${cursorPost.voteCount}, ${cursorPost.createdAt}, ${cursorPost.id})`
+          sql`(${posts.voteCount}, ${posts.createdAt}, ${posts.id}) < (${cursorPost.voteCount}, ${cursorDate}, ${cursorUuid}::uuid)`
         )
       } else if (sort === 'oldest') {
         conditions.push(
-          sql`(${posts.createdAt}, ${posts.id}) > (${cursorPost.createdAt}, ${cursorPost.id})`
+          sql`(${posts.createdAt}, ${posts.id}) > (${cursorDate}, ${cursorUuid}::uuid)`
         )
       } else {
         // newest (default)
         conditions.push(
-          sql`(${posts.createdAt}, ${posts.id}) < (${cursorPost.createdAt}, ${cursorPost.id})`
+          sql`(${posts.createdAt}, ${posts.id}) < (${cursorDate}, ${cursorUuid}::uuid)`
         )
       }
     }
