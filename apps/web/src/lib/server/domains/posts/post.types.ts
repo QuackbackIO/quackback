@@ -2,7 +2,7 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, Tag, TiptapContent } from '@quackback/db/types'
+import type { Post, Board, Tag, TiptapContent } from '@/lib/server/db'
 import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 

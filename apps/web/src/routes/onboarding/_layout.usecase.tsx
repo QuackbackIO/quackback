@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { saveUseCaseFn } from '@/lib/server/functions/onboarding'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
-import type { UseCaseType } from '@quackback/db/types'
+import type { UseCaseType } from '@/lib/shared/db-types'
 
 export const Route = createFileRoute('/onboarding/_layout/usecase')({
   loader: async ({ context }) => {

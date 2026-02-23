@@ -7,7 +7,7 @@ import { BackLink } from '@/components/ui/back-link'
 import { CalendarIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
-import type { TiptapContent } from '@quackback/db/types'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 interface LinkedPost {
   id: PostId

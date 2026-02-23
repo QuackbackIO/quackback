@@ -2,7 +2,7 @@
  * Input/Output types for Changelog Service operations
  */
 
-import type { TiptapContent } from '@quackback/db/types'
+import type { TiptapContent } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 

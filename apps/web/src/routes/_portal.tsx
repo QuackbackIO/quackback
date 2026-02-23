@@ -8,7 +8,7 @@ import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
-    const { session, settings, userRole } = context
+    const { session, settings, userRole, baseUrl } = context
 
     const org = settings?.settings
     if (!org) {
@@ -55,6 +55,7 @@ export const Route = createFileRoute('/_portal')({
 
     return {
       org,
+      baseUrl: baseUrl ?? '',
       userRole,
       session,
       brandingData,
@@ -73,9 +74,21 @@ export const Route = createFileRoute('/_portal')({
       loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
 
     const themeMode = loaderData?.themeMode ?? 'user'
+    const workspaceName = loaderData?.org?.name ?? 'Quackback'
+    const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
+    const logoUrl = loaderData?.brandingData?.logoUrl || '/logo.png'
 
     // Add meta tag for forced theme - read by root's systemThemeScript before hydration
-    const meta: Array<Record<string, string>> = [{ title: loaderData?.org?.name ?? '' }]
+    const meta: Array<Record<string, string>> = [
+      { title: workspaceName },
+      { name: 'description', content: description },
+      { property: 'og:site_name', content: workspaceName },
+      { property: 'og:title', content: workspaceName },
+      { property: 'og:description', content: description },
+      { property: 'og:image', content: logoUrl },
+      { name: 'twitter:title', content: workspaceName },
+      { name: 'twitter:description', content: description },
+    ]
     if (themeMode !== 'user') {
       meta.push({ name: 'theme-forced', content: themeMode })
     }

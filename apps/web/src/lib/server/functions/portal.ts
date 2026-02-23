@@ -8,7 +8,7 @@ import {
   type TagId,
   type UserId,
 } from '@quackback/ids'
-import type { BoardSettings } from '@quackback/db/types'
+import type { BoardSettings } from '@/lib/server/db'
 import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'

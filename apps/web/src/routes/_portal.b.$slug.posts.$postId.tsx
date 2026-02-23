@@ -62,7 +62,33 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     // Prefetch similar posts now that we have the title (non-blocking)
     queryClient.prefetchQuery(similarPostsQuery(post.title))
 
-    return { settings, postId, slug }
+    return {
+      settings,
+      postId,
+      slug,
+      postTitle: post.title,
+      boardName: post.board.name,
+      baseUrl: context.baseUrl ?? '',
+    }
+  },
+  head: ({ loaderData }) => {
+    if (!loaderData) return {}
+    const { postTitle, boardName, slug, postId, baseUrl } = loaderData
+    const title = `${postTitle} - ${boardName}`
+    const description = `${postTitle}. Vote and comment on this ${boardName} post.`
+    const canonicalUrl = baseUrl ? `${baseUrl}/b/${slug}/posts/${postId}` : ''
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
+    }
   },
   component: PostDetailPage,
 })
