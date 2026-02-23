@@ -196,6 +196,11 @@ export {
   type SegmentCondition,
   type SegmentRuleOperator,
   type SegmentRuleAttribute,
+  type EvaluationSchedule,
+  type SegmentWeightConfig,
+  type UserAttributeDefinition,
+  type UserAttributeType,
+  type CurrencyCode,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

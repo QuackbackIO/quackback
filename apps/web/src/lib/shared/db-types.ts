@@ -19,4 +19,9 @@ export type {
   SegmentCondition,
   SegmentRuleOperator,
   SegmentRuleAttribute,
+  EvaluationSchedule,
+  SegmentWeightConfig,
+  UserAttributeDefinition,
+  UserAttributeType,
+  CurrencyCode,
 } from '@quackback/db/schema'

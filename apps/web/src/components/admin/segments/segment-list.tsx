@@ -1,7 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon, ArrowPathIcon, BoltIcon } from '@heroicons/react/24/solid'
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  ArrowPathIcon,
+  BoltIcon,
+  ClockIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -58,6 +65,12 @@ function SegmentRow({
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
                 <BoltIcon className="h-2.5 w-2.5" />
                 Auto
+              </Badge>
+            )}
+            {segment.type === 'dynamic' && hasEvaluationSchedule(segment) && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                <ClockIcon className="h-2.5 w-2.5" />
+                Scheduled
               </Badge>
             )}
           </div>
@@ -139,11 +152,28 @@ export function SegmentList() {
               conditions: values.rules.conditions.map((c) => ({
                 attribute: c.attribute,
                 operator: c.operator,
-                value: parseConditionValue(c.attribute, c.value),
+                value: parseConditionValue(c.attribute, c.value, c.operator),
                 metadataKey: c.metadataKey,
               })),
             }
           : undefined,
+      evaluationSchedule:
+        values.type === 'dynamic' && values.evaluationSchedule.enabled
+          ? { enabled: true, pattern: values.evaluationSchedule.pattern }
+          : undefined,
+      weightConfig: values.weightConfig.enabled
+        ? {
+            attribute: {
+              key: values.weightConfig.attributeKey,
+              label: values.weightConfig.attributeLabel,
+              type: values.weightConfig.attributeType,
+              ...(values.weightConfig.attributeType === 'currency'
+                ? { currencyCode: values.weightConfig.currencyCode }
+                : {}),
+            },
+            aggregation: values.weightConfig.aggregation,
+          }
+        : undefined,
     })
     setCreateOpen(false)
   }
@@ -163,12 +193,31 @@ export function SegmentList() {
                 conditions: values.rules.conditions.map((c) => ({
                   attribute: c.attribute,
                   operator: c.operator,
-                  value: parseConditionValue(c.attribute, c.value),
+                  value: parseConditionValue(c.attribute, c.value, c.operator),
                   metadataKey: c.metadataKey,
                 })),
               }
             : null
           : undefined,
+      evaluationSchedule:
+        editTarget.type === 'dynamic'
+          ? values.evaluationSchedule.enabled
+            ? { enabled: true, pattern: values.evaluationSchedule.pattern }
+            : { enabled: false, pattern: values.evaluationSchedule.pattern }
+          : undefined,
+      weightConfig: values.weightConfig.enabled
+        ? {
+            attribute: {
+              key: values.weightConfig.attributeKey,
+              label: values.weightConfig.attributeLabel,
+              type: values.weightConfig.attributeType,
+              ...(values.weightConfig.attributeType === 'currency'
+                ? { currencyCode: values.weightConfig.currencyCode }
+                : {}),
+            },
+            aggregation: values.weightConfig.aggregation,
+          }
+        : null,
     })
     setEditTarget(null)
   }
@@ -289,6 +338,47 @@ export function SegmentList() {
                       })) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
+                evaluationSchedule: (() => {
+                  const sched = (editTarget as Record<string, unknown>).evaluationSchedule as
+                    | { enabled?: boolean; pattern?: string }
+                    | null
+                    | undefined
+                  return {
+                    enabled: sched?.enabled ?? false,
+                    pattern: sched?.pattern ?? '0 0 * * *',
+                  }
+                })(),
+                weightConfig: (() => {
+                  const wc = (editTarget as Record<string, unknown>).weightConfig as
+                    | {
+                        attribute?: {
+                          key?: string
+                          label?: string
+                          type?: string
+                          currencyCode?: string
+                        }
+                        aggregation?: string
+                      }
+                    | null
+                    | undefined
+                  return {
+                    enabled: !!wc,
+                    attributeKey: wc?.attribute?.key ?? 'mrr',
+                    attributeLabel: wc?.attribute?.label ?? 'MRR',
+                    attributeType: (wc?.attribute?.type ?? 'currency') as
+                      | 'string'
+                      | 'number'
+                      | 'boolean'
+                      | 'date'
+                      | 'currency',
+                    currencyCode: wc?.attribute?.currencyCode ?? 'USD',
+                    aggregation: (wc?.aggregation ?? 'sum') as
+                      | 'sum'
+                      | 'average'
+                      | 'count'
+                      | 'median',
+                  }
+                })(),
               }
             : undefined
         }
@@ -315,7 +405,21 @@ export function SegmentList() {
 // Helpers
 // ============================================
 
-function parseConditionValue(attribute: string, value: string): string | number | boolean {
+function hasEvaluationSchedule(segment: SegmentItem): boolean {
+  const sched = (segment as Record<string, unknown>).evaluationSchedule as
+    | { enabled?: boolean }
+    | null
+    | undefined
+  return !!sched?.enabled
+}
+
+function parseConditionValue(
+  attribute: string,
+  value: string,
+  operator?: string
+): string | number | boolean {
+  // is_set / is_not_set don't use the value — return a sentinel
+  if (operator === 'is_set' || operator === 'is_not_set') return true
   const numericAttributes = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']
   if (numericAttributes.includes(attribute)) return Number(value) || 0
   if (attribute === 'email_verified') return value === 'true'

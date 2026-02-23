@@ -41,6 +41,10 @@ import {
   evaluateDynamicSegment,
   evaluateAllDynamicSegments,
 } from '@/lib/server/domains/segments/segment.service'
+import {
+  upsertSegmentEvaluationSchedule,
+  removeSegmentEvaluationSchedule,
+} from '@/lib/server/events/segment-scheduler'
 import type { CreateSegmentInput, UpdateSegmentInput } from '@/lib/server/domains/segments'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
@@ -831,44 +835,68 @@ const segmentByIdSchema = z.object({
   segmentId: z.string(),
 })
 
+// Shared condition schema used by both create and update
+const segmentConditionSchema = z.object({
+  attribute: z.enum([
+    'email_domain',
+    'email_verified',
+    'created_at_days_ago',
+    'post_count',
+    'vote_count',
+    'comment_count',
+    'plan',
+    'metadata_key',
+  ]),
+  operator: z.enum([
+    'eq',
+    'neq',
+    'lt',
+    'lte',
+    'gt',
+    'gte',
+    'contains',
+    'starts_with',
+    'ends_with',
+    'in',
+    'is_set',
+    'is_not_set',
+  ]),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  metadataKey: z.string().optional(),
+})
+
+const segmentRulesSchema = z.object({
+  match: z.enum(['all', 'any']),
+  conditions: z.array(segmentConditionSchema),
+})
+
+const evaluationScheduleSchema = z.object({
+  enabled: z.boolean(),
+  pattern: z.string().min(1),
+})
+
+const userAttributeDefinitionSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional(),
+})
+
+const weightConfigSchema = z.object({
+  attribute: userAttributeDefinitionSchema,
+  aggregation: z.enum(['sum', 'average', 'count', 'median']),
+})
+
 const createSegmentSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   type: z.enum(['manual', 'dynamic']),
   color: z.string().optional(),
-  rules: z
-    .object({
-      match: z.enum(['all', 'any']),
-      conditions: z.array(
-        z.object({
-          attribute: z.enum([
-            'email_domain',
-            'email_verified',
-            'created_at_days_ago',
-            'post_count',
-            'vote_count',
-            'comment_count',
-            'plan',
-            'metadata_key',
-          ]),
-          operator: z.enum([
-            'eq',
-            'neq',
-            'lt',
-            'lte',
-            'gt',
-            'gte',
-            'contains',
-            'starts_with',
-            'ends_with',
-            'in',
-          ]),
-          value: z.union([z.string(), z.number(), z.boolean()]),
-          metadataKey: z.string().optional(),
-        })
-      ),
-    })
-    .optional(),
+  rules: segmentRulesSchema.optional(),
+  evaluationSchedule: evaluationScheduleSchema.optional(),
+  weightConfig: weightConfigSchema.optional(),
 })
 
 const updateSegmentSchema = z.object({
@@ -876,40 +904,9 @@ const updateSegmentSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
   color: z.string().optional(),
-  rules: z
-    .object({
-      match: z.enum(['all', 'any']),
-      conditions: z.array(
-        z.object({
-          attribute: z.enum([
-            'email_domain',
-            'email_verified',
-            'created_at_days_ago',
-            'post_count',
-            'vote_count',
-            'comment_count',
-            'plan',
-            'metadata_key',
-          ]),
-          operator: z.enum([
-            'eq',
-            'neq',
-            'lt',
-            'lte',
-            'gt',
-            'gte',
-            'contains',
-            'starts_with',
-            'ends_with',
-            'in',
-          ]),
-          value: z.union([z.string(), z.number(), z.boolean()]),
-          metadataKey: z.string().optional(),
-        })
-      ),
-    })
-    .nullable()
-    .optional(),
+  rules: segmentRulesSchema.nullable().optional(),
+  evaluationSchedule: evaluationScheduleSchema.nullable().optional(),
+  weightConfig: weightConfigSchema.nullable().optional(),
 })
 
 const assignUsersSchema = z.object({
@@ -947,6 +944,15 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin'] })
       const segment = await createSegment(data as CreateSegmentInput)
+
+      // Set up auto-evaluation schedule if configured
+      if (segment.type === 'dynamic' && segment.evaluationSchedule?.enabled) {
+        await upsertSegmentEvaluationSchedule(
+          segment.id as SegmentId,
+          segment.evaluationSchedule
+        ).catch((err) => console.error(`[fn:admin] Failed to set up evaluation schedule:`, err))
+      }
+
       console.log(`[fn:admin] createSegmentFn: created id=${segment.id}`)
       return {
         ...segment,
@@ -970,6 +976,21 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
       await requireAuth({ roles: ['admin'] })
       const { segmentId, ...updates } = data
       const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
+
+      // Update evaluation schedule
+      if (updates.evaluationSchedule !== undefined) {
+        if (segment.evaluationSchedule?.enabled) {
+          await upsertSegmentEvaluationSchedule(
+            segmentId as SegmentId,
+            segment.evaluationSchedule
+          ).catch((err) => console.error(`[fn:admin] Failed to update evaluation schedule:`, err))
+        } else {
+          await removeSegmentEvaluationSchedule(segmentId as SegmentId).catch((err) =>
+            console.error(`[fn:admin] Failed to remove evaluation schedule:`, err)
+          )
+        }
+      }
+
       console.log(`[fn:admin] updateSegmentFn: updated`)
       return {
         ...segment,
@@ -991,6 +1012,12 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
     console.log(`[fn:admin] deleteSegmentFn: segmentId=${data.segmentId}`)
     try {
       await requireAuth({ roles: ['admin'] })
+
+      // Clean up evaluation schedule before deleting
+      await removeSegmentEvaluationSchedule(data.segmentId as SegmentId).catch((err) =>
+        console.error(`[fn:admin] Failed to remove evaluation schedule:`, err)
+      )
+
       await deleteSegment(data.segmentId as SegmentId)
       console.log(`[fn:admin] deleteSegmentFn: deleted`)
       return { segmentId: data.segmentId }

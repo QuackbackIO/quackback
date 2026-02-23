@@ -3,7 +3,7 @@
  */
 
 import type { SegmentId, PrincipalId } from '@quackback/ids'
-import type { SegmentRules } from '@/lib/server/db'
+import type { SegmentRules, EvaluationSchedule, SegmentWeightConfig } from '@/lib/server/db'
 
 // ============================================
 // Core types
@@ -16,6 +16,8 @@ export interface Segment {
   type: 'manual' | 'dynamic'
   color: string
   rules: SegmentRules | null
+  evaluationSchedule: EvaluationSchedule | null
+  weightConfig: SegmentWeightConfig | null
   createdAt: Date
   updatedAt: Date
 }
@@ -43,6 +45,8 @@ export interface CreateSegmentInput {
   type: 'manual' | 'dynamic'
   color?: string
   rules?: SegmentRules
+  evaluationSchedule?: EvaluationSchedule
+  weightConfig?: SegmentWeightConfig
 }
 
 export interface UpdateSegmentInput {
@@ -50,6 +54,8 @@ export interface UpdateSegmentInput {
   description?: string | null
   color?: string
   rules?: SegmentRules | null
+  evaluationSchedule?: EvaluationSchedule | null
+  weightConfig?: SegmentWeightConfig | null
 }
 
 export interface AssignUsersInput {

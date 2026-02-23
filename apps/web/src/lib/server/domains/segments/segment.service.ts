@@ -20,7 +20,12 @@ import type {
   UpdateSegmentInput,
   EvaluationResult,
 } from './segment.types'
-import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
+import type {
+  SegmentRules,
+  SegmentCondition,
+  EvaluationSchedule,
+  SegmentWeightConfig,
+} from '@/lib/server/db'
 
 // ============================================
 // Helpers
@@ -33,6 +38,8 @@ function rowToSegment(row: {
   type: string
   color: string
   rules: unknown
+  evaluationSchedule?: unknown
+  weightConfig?: unknown
   createdAt: Date
   updatedAt: Date
 }): Segment {
@@ -43,6 +50,8 @@ function rowToSegment(row: {
     type: row.type as 'manual' | 'dynamic',
     color: row.color,
     rules: (row.rules as SegmentRules) ?? null,
+    evaluationSchedule: (row.evaluationSchedule as EvaluationSchedule) ?? null,
+    weightConfig: (row.weightConfig as SegmentWeightConfig) ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -74,6 +83,8 @@ export async function listSegments(): Promise<SegmentWithCount[]> {
         type: segments.type,
         color: segments.color,
         rules: segments.rules,
+        evaluationSchedule: segments.evaluationSchedule,
+        weightConfig: segments.weightConfig,
         createdAt: segments.createdAt,
         updatedAt: segments.updatedAt,
         memberCount: sql<number>`COALESCE(${memberCounts.count}, 0)`,
@@ -135,6 +146,8 @@ export async function createSegment(input: CreateSegmentInput): Promise<Segment>
         type: input.type,
         color: input.color ?? '#6b7280',
         rules: input.type === 'dynamic' ? (input.rules ?? null) : null,
+        evaluationSchedule: input.type === 'dynamic' ? (input.evaluationSchedule ?? null) : null,
+        weightConfig: input.weightConfig ?? null,
       })
       .returning()
 
@@ -164,6 +177,9 @@ export async function updateSegment(
     if (input.description !== undefined) updates.description = input.description
     if (input.color !== undefined) updates.color = input.color
     if (input.rules !== undefined) updates.rules = input.rules
+    if (input.evaluationSchedule !== undefined)
+      updates.evaluationSchedule = input.evaluationSchedule
+    if (input.weightConfig !== undefined) updates.weightConfig = input.weightConfig
 
     if (Object.keys(updates).length === 0) {
       return existing
@@ -351,6 +367,42 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
     lte: '<=',
     gt: '>',
     gte: '>=',
+  }
+
+  // Handle is_set / is_not_set for metadata-backed attributes
+  if (operator === 'is_set' || operator === 'is_not_set') {
+    const isSet = operator === 'is_set'
+    switch (attribute) {
+      case 'email_domain':
+        return isSet ? sql`u.email IS NOT NULL` : sql`u.email IS NULL`
+      case 'email_verified':
+        return isSet ? sql`u.email_verified IS NOT NULL` : sql`u.email_verified IS NULL`
+      case 'plan':
+        return isSet
+          ? sql`(u.metadata::jsonb->>'plan') IS NOT NULL`
+          : sql`(u.metadata::jsonb->>'plan') IS NULL`
+      case 'metadata_key': {
+        const key = condition.metadataKey
+        if (!key) return null
+        return isSet
+          ? sql`(u.metadata::jsonb->>${key}) IS NOT NULL`
+          : sql`(u.metadata::jsonb->>${key}) IS NULL`
+      }
+      case 'post_count':
+        return isSet
+          ? sql`(SELECT COUNT(*)::int FROM posts WHERE posts.principal_id = p.id AND posts.deleted_at IS NULL) > 0`
+          : sql`(SELECT COUNT(*)::int FROM posts WHERE posts.principal_id = p.id AND posts.deleted_at IS NULL) = 0`
+      case 'vote_count':
+        return isSet
+          ? sql`(SELECT COUNT(*)::int FROM votes WHERE votes.principal_id = p.id) > 0`
+          : sql`(SELECT COUNT(*)::int FROM votes WHERE votes.principal_id = p.id) = 0`
+      case 'comment_count':
+        return isSet
+          ? sql`(SELECT COUNT(*)::int FROM comments WHERE comments.principal_id = p.id AND comments.deleted_at IS NULL) > 0`
+          : sql`(SELECT COUNT(*)::int FROM comments WHERE comments.principal_id = p.id AND comments.deleted_at IS NULL) = 0`
+      default:
+        return null
+    }
   }
 
   switch (attribute) {

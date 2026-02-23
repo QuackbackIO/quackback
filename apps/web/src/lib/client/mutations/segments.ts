@@ -45,6 +45,16 @@ export function useCreateSegment() {
           metadataKey?: string
         }>
       }
+      evaluationSchedule?: { enabled: boolean; pattern: string }
+      weightConfig?: {
+        attribute: {
+          key: string
+          label: string
+          type: 'string' | 'number' | 'boolean' | 'date' | 'currency'
+          currencyCode?: string
+        }
+        aggregation: 'sum' | 'average' | 'count' | 'median'
+      }
     }) => createSegmentFn({ data: input as Parameters<typeof createSegmentFn>[0]['data'] }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
@@ -70,6 +80,16 @@ export function useUpdateSegment() {
           metadataKey?: string
         }>
       } | null
+      evaluationSchedule?: { enabled: boolean; pattern: string } | null
+      weightConfig?: {
+        attribute: {
+          key: string
+          label: string
+          type: 'string' | 'number' | 'boolean' | 'date' | 'currency'
+          currencyCode?: string
+        }
+        aggregation: 'sum' | 'average' | 'count' | 'median'
+      } | null
     }) =>
       updateSegmentFn({
         data: input as Parameters<typeof updateSegmentFn>[0]['data'],
@@ -85,8 +105,7 @@ export function useUpdateSegment() {
 export function useDeleteSegment() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (segmentId: SegmentId) =>
-      deleteSegmentFn({ data: { segmentId } }),
+    mutationFn: (segmentId: SegmentId) => deleteSegmentFn({ data: { segmentId } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
       void queryClient.invalidateQueries({ queryKey: USERS_KEY })
@@ -98,8 +117,13 @@ export function useDeleteSegment() {
 export function useAssignUsersToSegment() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ segmentId, principalIds }: { segmentId: SegmentId; principalIds: PrincipalId[] }) =>
-      assignUsersToSegmentFn({ data: { segmentId, principalIds } }),
+    mutationFn: ({
+      segmentId,
+      principalIds,
+    }: {
+      segmentId: SegmentId
+      principalIds: PrincipalId[]
+    }) => assignUsersToSegmentFn({ data: { segmentId, principalIds } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
       void queryClient.invalidateQueries({ queryKey: USERS_KEY })
@@ -111,8 +135,13 @@ export function useAssignUsersToSegment() {
 export function useRemoveUsersFromSegment() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ segmentId, principalIds }: { segmentId: SegmentId; principalIds: PrincipalId[] }) =>
-      removeUsersFromSegmentFn({ data: { segmentId, principalIds } }),
+    mutationFn: ({
+      segmentId,
+      principalIds,
+    }: {
+      segmentId: SegmentId
+      principalIds: PrincipalId[]
+    }) => removeUsersFromSegmentFn({ data: { segmentId, principalIds } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
       void queryClient.invalidateQueries({ queryKey: USERS_KEY })
@@ -124,8 +153,7 @@ export function useRemoveUsersFromSegment() {
 export function useEvaluateSegment() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (segmentId: SegmentId) =>
-      evaluateSegmentFn({ data: { segmentId } }),
+    mutationFn: (segmentId: SegmentId) => evaluateSegmentFn({ data: { segmentId } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
       void queryClient.invalidateQueries({ queryKey: USERS_KEY })

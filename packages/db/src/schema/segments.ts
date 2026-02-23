@@ -28,6 +28,8 @@ export type SegmentRuleOperator =
   | 'starts_with'
   | 'ends_with'
   | 'in'
+  | 'is_set'
+  | 'is_not_set'
 
 export type SegmentRuleAttribute =
   | 'email_domain'
@@ -54,6 +56,58 @@ export interface SegmentRules {
 }
 
 // ============================================
+// User attribute types (for segment weighting)
+// ============================================
+
+/** Supported data types for user attributes used in segment weighting */
+export type UserAttributeType = 'string' | 'number' | 'boolean' | 'date' | 'currency'
+
+/** Currency code (ISO 4217) for currency-type attributes */
+export type CurrencyCode =
+  | 'USD'
+  | 'EUR'
+  | 'GBP'
+  | 'JPY'
+  | 'CAD'
+  | 'AUD'
+  | 'CHF'
+  | 'CNY'
+  | 'INR'
+  | 'BRL'
+
+/** Definition for a user attribute used in segment weighting */
+export interface UserAttributeDefinition {
+  /** The metadata key to read from user.metadata */
+  key: string
+  /** Human-readable label */
+  label: string
+  /** Data type — determines parsing and display */
+  type: UserAttributeType
+  /** For currency type: the ISO 4217 currency code (e.g. 'USD') */
+  currencyCode?: CurrencyCode
+}
+
+/** Weighting configuration for a segment */
+export interface SegmentWeightConfig {
+  /** The user attribute to weight by */
+  attribute: UserAttributeDefinition
+  /** Aggregation method for the attribute across segment members */
+  aggregation: 'sum' | 'average' | 'count' | 'median'
+}
+
+// ============================================
+// Evaluation schedule types
+// ============================================
+
+/** Schedule for automatic re-evaluation of dynamic segments */
+export interface EvaluationSchedule {
+  /** Whether auto-evaluation is enabled */
+  enabled: boolean
+  /** Cron pattern (e.g. '0 * * * *' for hourly, '0 0 * * *' for daily) */
+  pattern: string
+}
+
+// ============================================
 // Tables
 // ============================================
 
@@ -70,11 +124,17 @@ export const segments = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     /** 'manual' | 'dynamic' */
-    type: text('type', { enum: ['manual', 'dynamic'] }).notNull().default('manual'),
+    type: text('type', { enum: ['manual', 'dynamic'] })
+      .notNull()
+      .default('manual'),
     /** Optional hex color for UI display (e.g. '#6366f1') */
     color: text('color').default('#6b7280').notNull(),
     /** Rule definition for dynamic segments (null for manual) */
     rules: jsonb('rules').$type<SegmentRules | null>(),
+    /** Auto-evaluation schedule for dynamic segments (null = manual only) */
+    evaluationSchedule: jsonb('evaluation_schedule').$type<EvaluationSchedule | null>(),
+    /** Weighting config for segment-level analytics (e.g. weight by MRR) */
+    weightConfig: jsonb('weight_config').$type<SegmentWeightConfig | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -106,7 +166,9 @@ export const userSegments = pgTable(
       .notNull()
       .references(() => segments.id, { onDelete: 'cascade' }),
     /** 'manual' = explicitly assigned; 'dynamic' = computed by evaluator */
-    addedBy: text('added_by', { enum: ['manual', 'dynamic'] }).notNull().default('manual'),
+    addedBy: text('added_by', { enum: ['manual', 'dynamic'] })
+      .notNull()
+      .default('manual'),
     addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
