@@ -54,8 +54,15 @@
     {
       "idx": 7,
       "version": "7",
+      "when": 1771862934682,
+      "tag": "0007_awesome_next_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
       "when": 1771453965087,
-      "tag": "0007_user_segments",
+      "tag": "0008_user_segments",
       "breakpoints": true
     }
   ]

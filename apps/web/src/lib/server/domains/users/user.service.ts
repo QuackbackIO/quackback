@@ -95,7 +95,16 @@ export async function listPortalUsers(
   params: PortalUserListParams = {}
 ): Promise<PortalUserListResult> {
   try {
-    const { search, verified, dateFrom, dateTo, sort = 'newest', page = 1, limit = 20, segmentIds } = params
+    const {
+      search,
+      verified,
+      dateFrom,
+      dateTo,
+      sort = 'newest',
+      page = 1,
+      limit = 20,
+      segmentIds,
+    } = params
 
     // Pre-aggregate activity counts in subqueries (executed once, not per-row)
     // These use the indexed principal_id columns for efficient lookups
@@ -148,10 +157,10 @@ export async function listPortalUsers(
 
     // Date range filters (on principal.createdAt = join date)
     if (dateFrom) {
-      conditions.push(sql`${principal.createdAt} >= ${dateFrom}`)
+      conditions.push(sql`${principal.createdAt} >= ${dateFrom.toISOString()}`)
     }
     if (dateTo) {
-      conditions.push(sql`${principal.createdAt} <= ${dateTo}`)
+      conditions.push(sql`${principal.createdAt} <= ${dateTo.toISOString()}`)
     }
 
     // Segment filter — OR logic: users in ANY of the selected segments

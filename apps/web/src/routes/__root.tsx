@@ -9,7 +9,7 @@ import {
   redirect,
   useRouterState,
 } from '@tanstack/react-router'
-import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
+import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/server/domains/settings'
@@ -105,6 +105,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         name: 'description',
         content: 'Open-source customer feedback platform',
+      },
+      {
+        property: 'og:type',
+        content: 'website',
+      },
+      {
+        name: 'twitter:card',
+        content: 'summary',
       },
     ],
     links: [

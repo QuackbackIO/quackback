@@ -11,7 +11,7 @@ import {
   getBoardOptionsForUseCase,
   getUseCaseLabel,
 } from '@/components/onboarding/default-boards'
-import type { UseCaseType } from '@quackback/db/types'
+import type { UseCaseType } from '@/lib/shared/db-types'
 
 export const Route = createFileRoute('/onboarding/_layout/boards')({
   loader: async ({ context }) => {

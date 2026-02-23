@@ -47,8 +47,28 @@ export const Route = createFileRoute('/_portal/')({
 
     return {
       org,
+      baseUrl: context.baseUrl ?? '',
       isEmpty: portalData.boards.length === 0,
       session,
+    }
+  },
+  head: ({ loaderData }) => {
+    if (!loaderData) return {}
+    const workspaceName = loaderData.org.name
+    const { baseUrl } = loaderData
+    const title = `Feedback - ${workspaceName}`
+    const description = `Submit and vote on feature requests for ${workspaceName}. Help shape what gets built next.`
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        ...(baseUrl ? [{ property: 'og:url', content: baseUrl }] : []),
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      links: baseUrl ? [{ rel: 'canonical', href: baseUrl }] : [],
     }
   },
   component: PublicPortalPage,

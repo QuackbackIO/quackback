@@ -10,14 +10,39 @@ export const Route = createFileRoute('/_portal/changelog/$entryId')({
     const { queryClient } = context
     const entryId = params.entryId as ChangelogId
 
+    let entry
     try {
-      await queryClient.ensureQueryData(publicChangelogQueries.detail(entryId))
+      entry = await queryClient.ensureQueryData(publicChangelogQueries.detail(entryId))
     } catch {
       // If entry not found or not published, throw 404
       throw notFound()
     }
 
-    return { entryId }
+    return {
+      entryId,
+      entryTitle: entry.title,
+      workspaceName: context.settings?.name ?? 'Quackback',
+      baseUrl: context.baseUrl ?? '',
+    }
+  },
+  head: ({ loaderData }) => {
+    if (!loaderData) return {}
+    const { entryTitle, entryId, workspaceName, baseUrl } = loaderData
+    const title = `${entryTitle} - ${workspaceName} Changelog`
+    const description = `${entryTitle}. A product update from ${workspaceName}.`
+    const canonicalUrl = baseUrl ? `${baseUrl}/changelog/${entryId}` : ''
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
+    }
   },
   notFoundComponent: ChangelogNotFound,
   component: ChangelogEntryPage,

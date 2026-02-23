@@ -11,14 +11,37 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { queryClient } = context
+    const { queryClient, settings, baseUrl } = context
 
     const [roadmaps] = await Promise.all([
       queryClient.ensureQueryData(portalQueries.roadmaps()),
       queryClient.ensureQueryData(portalQueries.statuses()),
     ])
 
-    return { firstRoadmapId: roadmaps[0]?.id ?? null }
+    return {
+      firstRoadmapId: roadmaps[0]?.id ?? null,
+      workspaceName: settings?.name ?? 'Quackback',
+      baseUrl: baseUrl ?? '',
+    }
+  },
+  head: ({ loaderData }) => {
+    if (!loaderData) return {}
+    const { workspaceName, baseUrl } = loaderData
+    const title = `Roadmap - ${workspaceName}`
+    const description = `See what ${workspaceName} is working on and what's coming next.`
+    const canonicalUrl = baseUrl ? `${baseUrl}/roadmap` : ''
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        ...(canonicalUrl ? [{ property: 'og:url', content: canonicalUrl }] : []),
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      links: canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : [],
+    }
   },
   component: RoadmapPage,
 })
