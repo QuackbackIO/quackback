@@ -3,7 +3,7 @@
  */
 
 import type { SegmentId, PrincipalId } from '@quackback/ids'
-import type { SegmentRules } from '@quackback/db/schema'
+import type { SegmentRules } from '@/lib/server/db'
 
 // ============================================
 // Core types

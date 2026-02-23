@@ -8,7 +8,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
-import type { SegmentCondition } from '@quackback/db/schema'
+import type { SegmentCondition } from '@/lib/shared/db-types'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import {
   useCreateSegment,

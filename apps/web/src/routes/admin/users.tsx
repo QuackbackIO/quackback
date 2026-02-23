@@ -92,7 +92,9 @@ function UsersPage() {
   const verified =
     search.verified === 'true' ? true : search.verified === 'false' ? false : undefined
 
-  const segmentIds = search.segments ? search.segments.split(',').filter(Boolean) : undefined
+  const segmentIds = search.segments
+    ? (search.segments.split(',').filter(Boolean) as SegmentId[])
+    : undefined
 
   // Read pre-fetched data from React Query cache
   const usersQuery = useSuspenseQuery(

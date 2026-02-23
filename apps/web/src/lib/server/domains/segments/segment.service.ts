@@ -20,7 +20,7 @@ import type {
   UpdateSegmentInput,
   EvaluationResult,
 } from './segment.types'
-import type { SegmentRules, SegmentCondition } from '@quackback/db/schema'
+import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
 
 // ============================================
 // Helpers
