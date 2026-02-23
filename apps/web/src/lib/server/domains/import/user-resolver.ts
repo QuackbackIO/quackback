@@ -8,8 +8,7 @@
  * use within the in-app CSV import flow.
  */
 
-import { db, eq } from '@/lib/server/db'
-import { user, principal } from '@quackback/db'
+import { db, eq, user, principal } from '@/lib/server/db'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
 
 interface PendingUser {

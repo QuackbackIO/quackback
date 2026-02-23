@@ -2,7 +2,7 @@
  * Input/Output types for RoadmapService operations
  */
 
-import type { PostRoadmap } from '@quackback/db/types'
+import type { PostRoadmap } from '@/lib/server/db'
 import type { PostId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
 
 /**

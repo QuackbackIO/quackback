@@ -5,7 +5,7 @@
  */
 
 import { db, eq, and, sql, principal, user, type Principal } from '@/lib/server/db'
-import type { ServiceMetadata } from '@quackback/db'
+import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import type { TeamMember } from './principal.types'

@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
-import { getSetupState, isOnboardingComplete } from '@quackback/db/types'
+import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
 
 const ONBOARDING_STEPS = [

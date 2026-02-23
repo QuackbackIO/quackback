@@ -2,7 +2,7 @@
  * Input/Output types for StatusService operations
  */
 
-import type { PostStatusEntity, StatusCategory } from '@quackback/db/types'
+import type { PostStatusEntity, StatusCategory } from '@/lib/server/db'
 import type { StatusId } from '@quackback/ids'
 
 /**

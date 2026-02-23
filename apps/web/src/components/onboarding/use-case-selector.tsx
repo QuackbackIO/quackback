@@ -6,7 +6,7 @@ import {
   BuildingStorefrontIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/outline'
-import type { UseCaseType } from '@quackback/db/types'
+import type { UseCaseType } from '@/lib/shared/db-types'
 import type { ComponentType } from 'react'
 
 interface UseCaseOption {

@@ -2,7 +2,7 @@
  * Input/Output types for BoardService operations
  */
 
-import type { Board, BoardSettings } from '@quackback/db/types'
+import type { Board, BoardSettings } from '@/lib/server/db'
 
 /**
  * Input for creating a new board

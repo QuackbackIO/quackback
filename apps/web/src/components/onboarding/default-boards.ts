@@ -9,7 +9,7 @@ import {
   SparklesIcon,
 } from '@heroicons/react/24/solid'
 import type { ComponentType } from 'react'
-import type { UseCaseType } from '@quackback/db/types'
+import type { UseCaseType } from '@/lib/shared/db-types'
 
 export interface DefaultBoardOption {
   id: string

@@ -6,7 +6,7 @@ import {
   isOnboardingComplete as checkComplete,
   type BoardSettings,
   type SetupState,
-} from '@quackback/db/types'
+} from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
