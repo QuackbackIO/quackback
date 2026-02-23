@@ -333,7 +333,7 @@ export function SegmentList() {
                       conditions: editTarget.rules.conditions.map((c: SegmentCondition) => ({
                         attribute: c.attribute as string,
                         operator: c.operator as string,
-                        value: String(c.value),
+                        value: c.value != null ? String(c.value) : '',
                         metadataKey: c.metadataKey,
                       })) as unknown as RuleCondition[],
                     }
@@ -417,9 +417,9 @@ function parseConditionValue(
   attribute: string,
   value: string,
   operator?: string
-): string | number | boolean {
-  // is_set / is_not_set don't use the value — return a sentinel
-  if (operator === 'is_set' || operator === 'is_not_set') return true
+): string | number | boolean | undefined {
+  // is_set / is_not_set have no value
+  if (operator === 'is_set' || operator === 'is_not_set') return undefined
   const numericAttributes = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']
   if (numericAttributes.includes(attribute)) return Number(value) || 0
   if (attribute === 'email_verified') return value === 'true'

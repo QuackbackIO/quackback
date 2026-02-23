@@ -376,7 +376,8 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       case 'email_domain':
         return isSet ? sql`u.email IS NOT NULL` : sql`u.email IS NULL`
       case 'email_verified':
-        return isSet ? sql`u.email_verified IS NOT NULL` : sql`u.email_verified IS NULL`
+        // email_verified is boolean NOT NULL — use = true / = false, not IS NULL
+        return isSet ? sql`u.email_verified = true` : sql`u.email_verified = false`
       case 'plan':
         return isSet
           ? sql`(u.metadata::jsonb->>'plan') IS NOT NULL`
@@ -427,6 +428,12 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
 
     case 'plan': {
       // user.metadata is a text column storing JSON
+      if (operator === 'contains')
+        return sql`(u.metadata::jsonb->>'plan') ILIKE ${'%' + String(value) + '%'}`
+      if (operator === 'starts_with')
+        return sql`(u.metadata::jsonb->>'plan') ILIKE ${String(value) + '%'}`
+      if (operator === 'ends_with')
+        return sql`(u.metadata::jsonb->>'plan') ILIKE ${'%' + String(value)}`
       const sqlOp = opMap[operator]
       if (!sqlOp) return null
       return sql`(u.metadata::jsonb->>'plan') ${sql.raw(sqlOp)} ${String(value)}`
@@ -435,6 +442,12 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
     case 'metadata_key': {
       const key = condition.metadataKey
       if (!key) return null
+      if (operator === 'contains')
+        return sql`(u.metadata::jsonb->>${key}) ILIKE ${'%' + String(value) + '%'}`
+      if (operator === 'starts_with')
+        return sql`(u.metadata::jsonb->>${key}) ILIKE ${String(value) + '%'}`
+      if (operator === 'ends_with')
+        return sql`(u.metadata::jsonb->>${key}) ILIKE ${'%' + String(value)}`
       const sqlOp = opMap[operator]
       if (!sqlOp) return null
       return sql`(u.metadata::jsonb->>${key}) ${sql.raw(sqlOp)} ${String(value)}`

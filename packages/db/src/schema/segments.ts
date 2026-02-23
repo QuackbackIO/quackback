@@ -44,7 +44,8 @@ export type SegmentRuleAttribute =
 export interface SegmentCondition {
   attribute: SegmentRuleAttribute
   operator: SegmentRuleOperator
-  value: string | number | boolean
+  /** Required for value-based operators; omit for is_set / is_not_set */
+  value?: string | number | boolean
   /** For metadata_key attribute: the key to look up in user.metadata JSON */
   metadataKey?: string
 }

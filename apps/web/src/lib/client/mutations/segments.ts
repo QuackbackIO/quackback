@@ -41,7 +41,7 @@ export function useCreateSegment() {
         conditions: Array<{
           attribute: string
           operator: string
-          value: string | number | boolean
+          value?: string | number | boolean
           metadataKey?: string
         }>
       }
@@ -76,7 +76,7 @@ export function useUpdateSegment() {
         conditions: Array<{
           attribute: string
           operator: string
-          value: string | number | boolean
+          value?: string | number | boolean
           metadataKey?: string
         }>
       } | null

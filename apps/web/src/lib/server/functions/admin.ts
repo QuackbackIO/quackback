@@ -861,7 +861,8 @@ const segmentConditionSchema = z.object({
     'is_set',
     'is_not_set',
   ]),
-  value: z.union([z.string(), z.number(), z.boolean()]),
+  // value is optional for presence operators (is_set / is_not_set)
+  value: z.union([z.string(), z.number(), z.boolean()]).optional(),
   metadataKey: z.string().optional(),
 })
 
