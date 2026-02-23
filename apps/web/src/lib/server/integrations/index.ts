@@ -1,5 +1,6 @@
 import type { IntegrationDefinition, IntegrationCatalogEntry } from './types'
 import type { HookHandler } from '../events/hook-types'
+import type { UserSyncHandler } from './user-sync-types'
 import { slackIntegration } from './slack'
 import { discordIntegration } from './discord'
 import { linearIntegration } from './linear'
@@ -23,6 +24,7 @@ import { freshdeskIntegration } from './freshdesk'
 import { salesforceIntegration } from './salesforce'
 import { n8nIntegration } from './n8n'
 import { makeIntegration } from './make'
+import { segmentIntegration } from './segment'
 
 const registry = new Map<string, IntegrationDefinition>([
   [slackIntegration.id, slackIntegration],
@@ -48,6 +50,7 @@ const registry = new Map<string, IntegrationDefinition>([
   [salesforceIntegration.id, salesforceIntegration],
   [n8nIntegration.id, n8nIntegration],
   [makeIntegration.id, makeIntegration],
+  [segmentIntegration.id, segmentIntegration],
 ])
 
 export function getIntegration(type: string): IntegrationDefinition | undefined {
@@ -72,4 +75,18 @@ export function getIntegrationHook(type: string): HookHandler | undefined {
 
 export function getIntegrationInbound(type: string) {
   return registry.get(type)?.inbound
+}
+
+export function getIntegrationUserSync(type: string): UserSyncHandler | undefined {
+  return registry.get(type)?.userSync
+}
+
+/**
+ * Returns all integration type IDs that have a userSync handler with
+ * syncSegmentMembership. Used by segment evaluation to fan out outgoing syncs.
+ */
+export function getIntegrationTypesWithSegmentSync(): string[] {
+  return Array.from(registry.values())
+    .filter((i) => i.userSync?.syncSegmentMembership)
+    .map((i) => i.id)
 }

@@ -8,6 +8,8 @@ export interface UserAttribute {
   description: string | null
   type: UserAttributeType
   currencyCode: CurrencyCode | null
+  /** External key for CDP trait mapping (e.g. Segment trait name). Falls back to `key` if null. */
+  externalKey: string | null
   createdAt: Date
   updatedAt: Date
 }
@@ -18,6 +20,7 @@ export interface CreateUserAttributeInput {
   description?: string | null
   type: UserAttributeType
   currencyCode?: CurrencyCode | null
+  externalKey?: string | null
 }
 
 export interface UpdateUserAttributeInput {
@@ -25,4 +28,5 @@ export interface UpdateUserAttributeInput {
   description?: string | null
   type?: UserAttributeType
   currencyCode?: CurrencyCode | null
+  externalKey?: string | null
 }

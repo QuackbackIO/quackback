@@ -585,6 +585,15 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
       }
     })
 
+    // Fire-and-forget: notify user-sync integrations (Segment, HubSpot, etc.)
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      import('@/lib/server/integrations/user-sync-notify')
+        .then(({ notifyUserSyncIntegrations }) =>
+          notifyUserSyncIntegrations(segment.name, toAdd, toRemove)
+        )
+        .catch((err) => console.error('[UserSync] notifyUserSyncIntegrations failed:', err))
+    }
+
     return { segmentId, added: toAdd.length, removed: toRemove.length }
   } catch (error) {
     if (error instanceof NotFoundError || error instanceof ValidationError) throw error

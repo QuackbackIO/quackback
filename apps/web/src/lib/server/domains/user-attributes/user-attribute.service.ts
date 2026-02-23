@@ -16,6 +16,7 @@ function rowToUserAttribute(row: typeof userAttributeDefinitions.$inferSelect): 
     description: row.description,
     type: row.type,
     currencyCode: row.currencyCode,
+    externalKey: row.externalKey ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -60,6 +61,7 @@ export async function createUserAttribute(input: CreateUserAttributeInput): Prom
         description: input.description?.trim() || null,
         type: input.type,
         currencyCode: input.type === 'currency' ? (input.currencyCode ?? null) : null,
+        externalKey: input.externalKey?.trim() || null,
       })
       .returning()
 
@@ -98,6 +100,7 @@ export async function updateUserAttribute(
       }
     }
     if (input.currencyCode !== undefined) updates.currencyCode = input.currencyCode
+    if (input.externalKey !== undefined) updates.externalKey = input.externalKey?.trim() || null
 
     if (Object.keys(updates).length === 0) return rowToUserAttribute(existing)
 

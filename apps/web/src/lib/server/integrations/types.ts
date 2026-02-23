@@ -1,5 +1,6 @@
 import type { HookHandler } from '../events/hook-types'
 import type { InboundWebhookHandler } from './inbound-types'
+import type { UserSyncHandler } from './user-sync-types'
 
 /**
  * A field collected from the user before starting the OAuth flow.
@@ -84,6 +85,10 @@ export const INTEGRATION_CATEGORIES = {
     label: 'Support & CRM',
     description: 'Enrich feedback with customer data',
   },
+  user_data: {
+    label: 'User Data',
+    description: 'Sync user attributes and segment membership',
+  },
   automation: {
     label: 'Automation',
     description: 'Connect to anything',
@@ -127,6 +132,12 @@ export interface IntegrationDefinition {
   hook?: HookHandler
   /** Inbound webhook handler for receiving status changes from the external platform */
   inbound?: InboundWebhookHandler
+  /**
+   * User data sync handler for CDP-style integrations.
+   * Supports inbound identify events (CDP → user.metadata) and outbound
+   * segment membership sync (evaluation → external platform).
+   */
+  userSync?: UserSyncHandler
   /** Platform-level credential fields required to enable this integration. Use `[]` if none needed. */
   platformCredentials: PlatformCredentialField[]
   /** Called before an integration is deleted. Receives decrypted secrets, config, and platform credentials to revoke tokens or clean up. */

@@ -24,6 +24,7 @@ export function useCreateUserAttribute() {
       description?: string
       type: 'string' | 'number' | 'boolean' | 'date' | 'currency'
       currencyCode?: 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CAD' | 'AUD' | 'CHF' | 'CNY' | 'INR' | 'BRL'
+      externalKey?: string | null
     }) => createUserAttributeFn({ data: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: USER_ATTRIBUTES_KEY })
@@ -52,6 +53,7 @@ export function useUpdateUserAttribute() {
         | 'INR'
         | 'BRL'
         | null
+      externalKey?: string | null
     }) => updateUserAttributeFn({ data: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: USER_ATTRIBUTES_KEY })

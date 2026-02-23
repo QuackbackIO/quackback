@@ -1125,6 +1125,7 @@ const createUserAttributeSchema = z.object({
   currencyCode: z
     .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
     .optional(),
+  externalKey: z.string().max(256).optional().nullable(),
 })
 
 const updateUserAttributeSchema = z.object({
@@ -1136,6 +1137,7 @@ const updateUserAttributeSchema = z.object({
     .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
     .optional()
     .nullable(),
+  externalKey: z.string().max(256).optional().nullable(),
 })
 
 /**
@@ -1165,6 +1167,7 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
         description: data.description,
         type: data.type,
         currencyCode: data.currencyCode,
+        externalKey: data.externalKey,
       })
     } catch (error) {
       console.error('[fn:admin] ❌ createUserAttributeFn failed:', error)
@@ -1185,6 +1188,7 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
         description: data.description,
         type: data.type,
         currencyCode: data.currencyCode,
+        externalKey: data.externalKey,
       })
     } catch (error) {
       console.error('[fn:admin] ❌ updateUserAttributeFn failed:', error)

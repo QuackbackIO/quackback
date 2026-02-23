@@ -67,6 +67,7 @@ interface AttributeFormValues {
   description: string
   type: AttributeType
   currencyCode: string
+  externalKey: string
 }
 
 interface AttributeFormDialogProps {
@@ -91,6 +92,7 @@ function AttributeFormDialog({
   const [description, setDescription] = useState(initialValues?.description ?? '')
   const [type, setType] = useState<AttributeType>(initialValues?.type ?? 'string')
   const [currencyCode, setCurrencyCode] = useState(initialValues?.currencyCode ?? 'USD')
+  const [externalKey, setExternalKey] = useState(initialValues?.externalKey ?? '')
 
   useEffect(() => {
     if (open) {
@@ -99,12 +101,13 @@ function AttributeFormDialog({
       setDescription(initialValues?.description ?? '')
       setType(initialValues?.type ?? 'string')
       setCurrencyCode(initialValues?.currencyCode ?? 'USD')
+      setExternalKey(initialValues?.externalKey ?? '')
     }
   }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    await onSubmit({ key, label, description, type, currencyCode })
+    await onSubmit({ key, label, description, type, currencyCode, externalKey })
   }
 
   const canSubmit = key.trim().length > 0 && label.trim().length > 0
@@ -202,6 +205,24 @@ function AttributeFormDialog({
               rows={2}
               className="resize-none text-sm"
             />
+          </div>
+
+          {/* External key — CDP trait name mapping */}
+          <div className="space-y-1.5">
+            <Label htmlFor="attr-external-key">
+              CDP trait name{' '}
+              <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+            </Label>
+            <Input
+              id="attr-external-key"
+              value={externalKey}
+              onChange={(e) => setExternalKey(e.target.value)}
+              placeholder="monthly_recurring_revenue"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Maps an external trait name (e.g. from Segment) to this attribute&apos;s internal key.
+              Leave blank to use the key above.
+            </p>
           </div>
 
           <DialogFooter>
@@ -314,6 +335,7 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
         values.type === 'currency'
           ? (values.currencyCode as Parameters<typeof createAttr.mutateAsync>[0]['currencyCode'])
           : undefined,
+      externalKey: values.externalKey || null,
     })
     setAttributes((prev) => [...prev, created].sort((a, b) => a.label.localeCompare(b.label)))
     setCreateOpen(false)
@@ -330,6 +352,7 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
         values.type === 'currency'
           ? (values.currencyCode as Parameters<typeof updateAttr.mutateAsync>[0]['currencyCode'])
           : null,
+      externalKey: values.externalKey || null,
     })
     setAttributes((prev) =>
       prev
@@ -404,6 +427,7 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
                 description: editTarget.description ?? '',
                 type: editTarget.type as AttributeType,
                 currencyCode: editTarget.currencyCode ?? 'USD',
+                externalKey: editTarget.externalKey ?? '',
               }
             : undefined
         }

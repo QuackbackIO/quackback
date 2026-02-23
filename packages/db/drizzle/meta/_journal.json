@@ -78,6 +78,13 @@
       "when": 1772092800000,
       "tag": "0010_user_attribute_definitions",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772179200000,
+      "tag": "0011_user_attr_external_key",
+      "breakpoints": true
     }
   ]
 }

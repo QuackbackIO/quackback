@@ -42,6 +42,12 @@ export const userAttributeDefinitions = pgTable(
       .$type<UserAttributeType>(),
     /** ISO 4217 code — only populated when type = 'currency' */
     currencyCode: text('currency_code').$type<CurrencyCode | null>(),
+    /**
+     * Optional external key for CDP integrations (e.g. Segment trait name).
+     * When set, the inbound CDP handler maps this external name → the internal `key`.
+     * Falls back to `key` if not provided.
+     */
+    externalKey: text('external_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
