@@ -192,6 +192,10 @@ export {
   segmentsRelations,
   userSegments,
   userSegmentsRelations,
+  type SegmentRules,
+  type SegmentCondition,
+  type SegmentRuleOperator,
+  type SegmentRuleAttribute,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
