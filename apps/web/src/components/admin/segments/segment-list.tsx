@@ -7,19 +7,22 @@ import {
   TrashIcon,
   ArrowPathIcon,
   BoltIcon,
-  ClockIcon,
   TagIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
-import { SegmentFormDialog, CUSTOM_ATTR_PREFIX } from '@/components/admin/segments/segment-form'
+import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
+import {
+  getAutoColor,
+  serializeCondition,
+  deserializeCondition,
+} from '@/components/admin/segments/segment-utils'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
-import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
 import {
   useCreateSegment,
   useUpdateSegment,
@@ -59,12 +62,6 @@ function SegmentRow({
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
                 <BoltIcon className="h-2.5 w-2.5" />
                 Auto
-              </Badge>
-            )}
-            {segment.type === 'dynamic' && hasEvaluationSchedule(segment) && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
-                <ClockIcon className="h-2.5 w-2.5" />
-                Scheduled
               </Badge>
             )}
           </div>
@@ -116,41 +113,6 @@ function SegmentRow({
   )
 }
 
-type EvaluationScheduleRaw = { enabled?: boolean; pattern?: string } | null | undefined
-
-type WeightConfigRaw =
-  | {
-      attribute?: { key?: string; label?: string; type?: string; currencyCode?: string }
-      aggregation?: string
-    }
-  | null
-  | undefined
-
-function toEvaluationScheduleFormValues(segment: SegmentItem) {
-  const sched = (segment as Record<string, unknown>).evaluationSchedule as EvaluationScheduleRaw
-  return {
-    enabled: sched?.enabled ?? false,
-    pattern: sched?.pattern ?? '0 0 * * *',
-  }
-}
-
-function toWeightConfigFormValues(segment: SegmentItem) {
-  const wc = (segment as Record<string, unknown>).weightConfig as WeightConfigRaw
-  return {
-    enabled: !!wc,
-    attributeKey: wc?.attribute?.key ?? 'mrr',
-    attributeLabel: wc?.attribute?.label ?? 'MRR',
-    attributeType: (wc?.attribute?.type ?? 'currency') as
-      | 'string'
-      | 'number'
-      | 'boolean'
-      | 'date'
-      | 'currency',
-    currencyCode: wc?.attribute?.currencyCode ?? 'USD',
-    aggregation: (wc?.aggregation ?? 'sum') as 'sum' | 'average' | 'count' | 'median',
-  }
-}
-
 export function SegmentList() {
   const { data: segments, isLoading } = useSegments()
   const { data: customAttributes } = useUserAttributes()
@@ -166,11 +128,12 @@ export function SegmentList() {
   const [evaluatingId, setEvaluatingId] = useState<SegmentId | null>(null)
 
   const handleCreate = async (values: SegmentFormValues) => {
+    const segmentIndex = segments?.length ?? 0
     await createSegment.mutateAsync({
       name: values.name,
       description: values.description || undefined,
       type: values.type,
-      color: values.color,
+      color: getAutoColor(segmentIndex),
       rules:
         values.type === 'dynamic' && values.rules.conditions.length > 0
           ? {
@@ -181,22 +144,7 @@ export function SegmentList() {
             }
           : undefined,
       evaluationSchedule:
-        values.type === 'dynamic' && values.evaluationSchedule.enabled
-          ? { enabled: true, pattern: values.evaluationSchedule.pattern }
-          : undefined,
-      weightConfig: values.weightConfig.enabled
-        ? {
-            attribute: {
-              key: values.weightConfig.attributeKey,
-              label: values.weightConfig.attributeLabel,
-              type: values.weightConfig.attributeType,
-              ...(values.weightConfig.attributeType === 'currency'
-                ? { currencyCode: values.weightConfig.currencyCode }
-                : {}),
-            },
-            aggregation: values.weightConfig.aggregation,
-          }
-        : undefined,
+        values.type === 'dynamic' ? { enabled: true, pattern: '0 * * * *' } : undefined,
     })
     setCreateOpen(false)
   }
@@ -207,7 +155,6 @@ export function SegmentList() {
       segmentId: editTarget.id as SegmentId,
       name: values.name,
       description: values.description || null,
-      color: values.color,
       rules:
         editTarget.type === 'dynamic'
           ? values.rules.conditions.length > 0
@@ -220,24 +167,7 @@ export function SegmentList() {
             : null
           : undefined,
       evaluationSchedule:
-        editTarget.type === 'dynamic'
-          ? values.evaluationSchedule.enabled
-            ? { enabled: true, pattern: values.evaluationSchedule.pattern }
-            : { enabled: false, pattern: values.evaluationSchedule.pattern }
-          : undefined,
-      weightConfig: values.weightConfig.enabled
-        ? {
-            attribute: {
-              key: values.weightConfig.attributeKey,
-              label: values.weightConfig.attributeLabel,
-              type: values.weightConfig.attributeType,
-              ...(values.weightConfig.attributeType === 'currency'
-                ? { currencyCode: values.weightConfig.currencyCode }
-                : {}),
-            },
-            aggregation: values.weightConfig.aggregation,
-          }
-        : null,
+        editTarget.type === 'dynamic' ? { enabled: true, pattern: '0 * * * *' } : undefined,
     })
     setEditTarget(null)
   }
@@ -347,7 +277,6 @@ export function SegmentList() {
                 name: editTarget.name,
                 description: editTarget.description ?? '',
                 type: editTarget.type as 'manual' | 'dynamic',
-                color: editTarget.color,
                 rules: editTarget.rules
                   ? {
                       match: editTarget.rules.match,
@@ -356,8 +285,6 @@ export function SegmentList() {
                       ) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
-                evaluationSchedule: toEvaluationScheduleFormValues(editTarget),
-                weightConfig: toWeightConfigFormValues(editTarget),
               }
             : undefined
         }
@@ -379,80 +306,4 @@ export function SegmentList() {
       />
     </div>
   )
-}
-
-function hasEvaluationSchedule(segment: SegmentItem): boolean {
-  const sched = (segment as Record<string, unknown>).evaluationSchedule as EvaluationScheduleRaw
-  return sched?.enabled === true
-}
-
-function parseConditionValue(
-  attribute: string,
-  value: string,
-  operator?: string,
-  customAttributes?: UserAttributeItem[]
-): string | number | boolean | undefined {
-  if (operator === 'is_set' || operator === 'is_not_set') return undefined
-  if (attribute.startsWith(CUSTOM_ATTR_PREFIX) && customAttributes) {
-    const key = attribute.slice(CUSTOM_ATTR_PREFIX.length)
-    const attr = customAttributes.find((a) => a.key === key)
-    if (attr) {
-      if (attr.type === 'number' || attr.type === 'currency') return Number(value) || 0
-      if (attr.type === 'boolean') return value === 'true'
-    }
-    return value
-  }
-  const numericAttributes = ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']
-  if (numericAttributes.includes(attribute)) return Number(value) || 0
-  if (attribute === 'email_verified') return value === 'true'
-  return value
-}
-
-function serializeCondition(
-  c: RuleCondition,
-  customAttributes?: UserAttributeItem[]
-): {
-  attribute: string
-  operator: string
-  value?: string | number | boolean
-  metadataKey?: string
-} {
-  if (c.attribute.startsWith(CUSTOM_ATTR_PREFIX)) {
-    const key = c.attribute.slice(CUSTOM_ATTR_PREFIX.length)
-    return {
-      attribute: 'metadata_key',
-      operator: c.operator,
-      value: parseConditionValue(c.attribute, c.value, c.operator, customAttributes),
-      metadataKey: key,
-    }
-  }
-  return {
-    attribute: c.attribute,
-    operator: c.operator,
-    value: parseConditionValue(c.attribute, c.value, c.operator, customAttributes),
-    metadataKey: c.metadataKey,
-  }
-}
-
-function deserializeCondition(
-  c: SegmentCondition,
-  customAttributes?: UserAttributeItem[]
-): { attribute: string; operator: string; value: string; metadataKey?: string } {
-  if (c.attribute === 'metadata_key' && c.metadataKey && customAttributes) {
-    const known = customAttributes.find((a) => a.key === c.metadataKey)
-    if (known) {
-      return {
-        attribute: `${CUSTOM_ATTR_PREFIX}${c.metadataKey}`,
-        operator: c.operator as string,
-        value: c.value != null ? String(c.value) : '',
-        metadataKey: c.metadataKey,
-      }
-    }
-  }
-  return {
-    attribute: c.attribute as string,
-    operator: c.operator as string,
-    value: c.value != null ? String(c.value) : '',
-    metadataKey: c.metadataKey,
-  }
 }

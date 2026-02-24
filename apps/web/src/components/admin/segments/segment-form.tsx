@@ -27,19 +27,6 @@ import type { SegmentId } from '@quackback/ids'
 
 export const CUSTOM_ATTR_PREFIX = '__custom__'
 
-const PRESET_COLORS = [
-  '#6366f1', // indigo
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#ef4444', // red
-  '#f97316', // orange
-  '#eab308', // yellow
-  '#22c55e', // green
-  '#06b6d4', // cyan
-  '#3b82f6', // blue
-  '#6b7280', // gray
-]
-
 type RuleAttribute =
   | 'email_domain'
   | 'email_verified'
@@ -47,7 +34,6 @@ type RuleAttribute =
   | 'post_count'
   | 'vote_count'
   | 'comment_count'
-  | 'plan'
   | 'metadata_key'
 
 type RuleOperator =
@@ -86,7 +72,6 @@ const BUILT_IN_ATTRIBUTE_OPTIONS: { value: RuleAttribute; label: string }[] = [
   { value: 'post_count', label: 'Post Count' },
   { value: 'vote_count', label: 'Vote Count' },
   { value: 'comment_count', label: 'Comment Count' },
-  { value: 'plan', label: 'Plan (metadata)' },
   { value: 'metadata_key', label: 'Custom Metadata Key' },
 ]
 
@@ -183,12 +168,6 @@ const OPERATOR_OPTIONS: Record<RuleAttribute, { value: RuleOperator; label: stri
     { value: 'eq', label: 'equals' },
     { value: 'is_set', label: 'has any' },
     { value: 'is_not_set', label: 'has none' },
-  ],
-  plan: [
-    { value: 'eq', label: 'equals' },
-    { value: 'neq', label: 'not equals' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
   ],
   metadata_key: [
     { value: 'eq', label: 'equals' },
@@ -439,36 +418,13 @@ function RuleBuilder({
   )
 }
 
-const SCHEDULE_PRESETS: { label: string; value: string }[] = [
-  { label: 'Every hour', value: '0 * * * *' },
-  { label: 'Every 6 hours', value: '0 */6 * * *' },
-  { label: 'Daily (midnight)', value: '0 0 * * *' },
-  { label: 'Daily (6 AM)', value: '0 6 * * *' },
-  { label: 'Weekly (Monday)', value: '0 0 * * 1' },
-]
-
-const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL']
-
 export interface SegmentFormValues {
   name: string
   description: string
   type: 'manual' | 'dynamic'
-  color: string
   rules: {
     match: 'all' | 'any'
     conditions: RuleCondition[]
-  }
-  evaluationSchedule: {
-    enabled: boolean
-    pattern: string
-  }
-  weightConfig: {
-    enabled: boolean
-    attributeKey: string
-    attributeLabel: string
-    attributeType: 'string' | 'number' | 'boolean' | 'date' | 'currency'
-    currencyCode: string
-    aggregation: 'sum' | 'average' | 'count' | 'median'
   }
 }
 
@@ -494,37 +450,10 @@ export function SegmentFormDialog({
   const [name, setName] = useState(initialValues?.name ?? '')
   const [description, setDescription] = useState(initialValues?.description ?? '')
   const [type, setType] = useState<'manual' | 'dynamic'>(initialValues?.type ?? 'manual')
-  const [color, setColor] = useState(initialValues?.color ?? '#6366f1')
   const [ruleMatch, setRuleMatch] = useState<'all' | 'any'>(initialValues?.rules?.match ?? 'all')
   const [conditions, setConditions] = useState<RuleCondition[]>(
     (initialValues?.rules?.conditions as RuleCondition[]) ?? []
   )
-
-  // Evaluation schedule state
-  const [scheduleEnabled, setScheduleEnabled] = useState(
-    initialValues?.evaluationSchedule?.enabled ?? false
-  )
-  const [schedulePattern, setSchedulePattern] = useState(
-    initialValues?.evaluationSchedule?.pattern ?? '0 0 * * *'
-  )
-
-  // Weight config state
-  const [weightEnabled, setWeightEnabled] = useState(initialValues?.weightConfig?.enabled ?? false)
-  const [weightAttrKey, setWeightAttrKey] = useState(
-    initialValues?.weightConfig?.attributeKey ?? 'mrr'
-  )
-  const [weightAttrLabel, setWeightAttrLabel] = useState(
-    initialValues?.weightConfig?.attributeLabel ?? 'MRR'
-  )
-  const [weightAttrType, setWeightAttrType] = useState<
-    'string' | 'number' | 'boolean' | 'date' | 'currency'
-  >(initialValues?.weightConfig?.attributeType ?? 'currency')
-  const [weightCurrencyCode, setWeightCurrencyCode] = useState(
-    initialValues?.weightConfig?.currencyCode ?? 'USD'
-  )
-  const [weightAggregation, setWeightAggregation] = useState<
-    'sum' | 'average' | 'count' | 'median'
-  >(initialValues?.weightConfig?.aggregation ?? 'sum')
 
   // Reset when dialog opens with new initial values
   useEffect(() => {
@@ -532,17 +461,8 @@ export function SegmentFormDialog({
       setName(initialValues?.name ?? '')
       setDescription(initialValues?.description ?? '')
       setType(initialValues?.type ?? 'manual')
-      setColor(initialValues?.color ?? '#6366f1')
       setRuleMatch(initialValues?.rules?.match ?? 'all')
       setConditions((initialValues?.rules?.conditions as RuleCondition[]) ?? [])
-      setScheduleEnabled(initialValues?.evaluationSchedule?.enabled ?? false)
-      setSchedulePattern(initialValues?.evaluationSchedule?.pattern ?? '0 0 * * *')
-      setWeightEnabled(initialValues?.weightConfig?.enabled ?? false)
-      setWeightAttrKey(initialValues?.weightConfig?.attributeKey ?? 'mrr')
-      setWeightAttrLabel(initialValues?.weightConfig?.attributeLabel ?? 'MRR')
-      setWeightAttrType(initialValues?.weightConfig?.attributeType ?? 'currency')
-      setWeightCurrencyCode(initialValues?.weightConfig?.currencyCode ?? 'USD')
-      setWeightAggregation(initialValues?.weightConfig?.aggregation ?? 'sum')
     }
   }, [open])
 
@@ -552,22 +472,9 @@ export function SegmentFormDialog({
       name: name.trim(),
       description: description.trim(),
       type,
-      color,
       rules: {
         match: ruleMatch,
         conditions,
-      },
-      evaluationSchedule: {
-        enabled: scheduleEnabled,
-        pattern: schedulePattern,
-      },
-      weightConfig: {
-        enabled: weightEnabled,
-        attributeKey: weightAttrKey,
-        attributeLabel: weightAttrLabel,
-        attributeType: weightAttrType,
-        currencyCode: weightCurrencyCode,
-        aggregation: weightAggregation,
       },
     })
   }
@@ -629,28 +536,8 @@ export function SegmentFormDialog({
               id="seg-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Users on an enterprise plan"
+              placeholder="High-activity users with 10+ posts"
             />
-          </div>
-
-          {/* Color */}
-          <div className="space-y-1.5">
-            <Label>Color</Label>
-            <div className="flex flex-wrap gap-2">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={cn(
-                    'h-6 w-6 rounded-full transition-all ring-offset-2',
-                    color === c ? 'ring-2 ring-ring' : 'hover:scale-110'
-                  )}
-                  style={{ backgroundColor: c }}
-                  title={c}
-                />
-              ))}
-            </div>
           </div>
 
           {/* Rules (dynamic only) */}
@@ -670,184 +557,6 @@ export function SegmentFormDialog({
               />
             </div>
           )}
-
-          {/* Auto-evaluation schedule (dynamic only) */}
-          {type === 'dynamic' && (
-            <div className="space-y-3 border border-border/50 rounded-lg p-4 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Auto-evaluate</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Automatically re-evaluate membership on a schedule
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={scheduleEnabled}
-                  onClick={() => setScheduleEnabled(!scheduleEnabled)}
-                  className={cn(
-                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                    scheduleEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-sm transition-transform',
-                      scheduleEnabled ? 'translate-x-4' : 'translate-x-0'
-                    )}
-                  />
-                </button>
-              </div>
-              {scheduleEnabled && (
-                <div className="space-y-2">
-                  <Label htmlFor="schedule-pattern" className="text-xs">
-                    Schedule
-                  </Label>
-                  <Select value={schedulePattern} onValueChange={setSchedulePattern}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SCHEDULE_PRESETS.map((preset) => (
-                        <SelectItem key={preset.value} value={preset.value} className="text-xs">
-                          {preset.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] text-muted-foreground">
-                    Cron: <code className="bg-muted px-1 py-0.5 rounded">{schedulePattern}</code>
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Weight config */}
-          <div className="space-y-3 border border-border/50 rounded-lg p-4 bg-muted/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-medium">Weight by attribute</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Weight this segment's feedback by a user attribute (e.g. MRR)
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={weightEnabled}
-                onClick={() => setWeightEnabled(!weightEnabled)}
-                className={cn(
-                  'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
-                  weightEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                )}
-              >
-                <span
-                  className={cn(
-                    'pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-sm transition-transform',
-                    weightEnabled ? 'translate-x-4' : 'translate-x-0'
-                  )}
-                />
-              </button>
-            </div>
-            {weightEnabled && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Metadata key</Label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="mrr"
-                      value={weightAttrKey}
-                      onChange={(e) => setWeightAttrKey(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Display label</Label>
-                    <Input
-                      className="h-8 text-xs"
-                      placeholder="MRR"
-                      value={weightAttrLabel}
-                      onChange={(e) => setWeightAttrLabel(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Attribute type</Label>
-                    <Select
-                      value={weightAttrType}
-                      onValueChange={(v) => setWeightAttrType(v as typeof weightAttrType)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="number" className="text-xs">
-                          Number
-                        </SelectItem>
-                        <SelectItem value="currency" className="text-xs">
-                          Currency
-                        </SelectItem>
-                        <SelectItem value="string" className="text-xs">
-                          String
-                        </SelectItem>
-                        <SelectItem value="boolean" className="text-xs">
-                          Boolean
-                        </SelectItem>
-                        <SelectItem value="date" className="text-xs">
-                          Date
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Aggregation</Label>
-                    <Select
-                      value={weightAggregation}
-                      onValueChange={(v) => setWeightAggregation(v as typeof weightAggregation)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sum" className="text-xs">
-                          Sum
-                        </SelectItem>
-                        <SelectItem value="average" className="text-xs">
-                          Average
-                        </SelectItem>
-                        <SelectItem value="count" className="text-xs">
-                          Count
-                        </SelectItem>
-                        <SelectItem value="median" className="text-xs">
-                          Median
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {weightAttrType === 'currency' && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Currency</Label>
-                    <Select value={weightCurrencyCode} onValueChange={setWeightCurrencyCode}>
-                      <SelectTrigger className="h-8 text-xs w-[120px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CURRENCY_OPTIONS.map((code) => (
-                          <SelectItem key={code} value={code} className="text-xs">
-                            {code}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
 
           <DialogFooter>
             <Button

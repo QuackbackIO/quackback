@@ -10,7 +10,7 @@
 
 import { db, eq, and, inArray, isNull, sql, asc, segments, userSegments } from '@/lib/server/db'
 import type { SegmentId, PrincipalId } from '@quackback/ids'
-import { createId } from '@quackback/ids'
+import { createId, fromUuid } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import type {
   Segment,
@@ -487,7 +487,13 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
       AND (${combinedWhere})
   `)
 
-  return (rows as unknown as Array<{ id: string }>).map((r) => r.id)
+  // db.execute() returns raw UUIDs from PostgreSQL, but the rest of the
+  // evaluation logic uses Drizzle query builder which converts UUIDs to TypeIDs
+  // via the typeIdColumn custom type. We must convert here to ensure the
+  // Set-based diff in evaluateDynamicSegment compares like with like.
+  return (rows as unknown as Array<{ id: string }>).map(
+    (r) => fromUuid('principal', r.id) as string
+  )
 }
 
 /**
