@@ -26,6 +26,7 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
             scopes_supported: [
               'openid',
               'profile',
+              'email',
               'offline_access',
               'read:feedback',
               'write:feedback',
