@@ -2,7 +2,7 @@
  * Segment domain types
  */
 
-import type { SegmentId, PrincipalId } from '@quackback/ids'
+import type { SegmentId } from '@quackback/ids'
 import type { SegmentRules, EvaluationSchedule, SegmentWeightConfig } from '@/lib/server/db'
 
 // ============================================
@@ -56,16 +56,6 @@ export interface UpdateSegmentInput {
   rules?: SegmentRules | null
   evaluationSchedule?: EvaluationSchedule | null
   weightConfig?: SegmentWeightConfig | null
-}
-
-export interface AssignUsersInput {
-  segmentId: SegmentId
-  principalIds: PrincipalId[]
-}
-
-export interface RemoveUsersInput {
-  segmentId: SegmentId
-  principalIds: PrincipalId[]
 }
 
 // ============================================
