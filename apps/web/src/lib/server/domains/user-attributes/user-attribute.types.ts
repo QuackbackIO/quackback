@@ -8,7 +8,7 @@ export interface UserAttribute {
   description: string | null
   type: UserAttributeType
   currencyCode: CurrencyCode | null
-  /** External key for CDP trait mapping (e.g. Segment trait name). Falls back to `key` if null. */
+  /** External key for CDP attribute mapping (e.g. Segment attribute name). Falls back to `key` if null. */
   externalKey: string | null
   createdAt: Date
   updatedAt: Date

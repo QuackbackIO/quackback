@@ -85,7 +85,9 @@ const listPortalUsersSchema = z.object({
   verified: z.boolean().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional(),
+  sort: z
+    .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
+    .optional(),
   page: z.number().optional(),
   limit: z.number().optional(),
   segmentIds: z.array(z.string()).optional(),
@@ -869,7 +871,9 @@ const segmentConditionSchema = z.object({
     'is_not_set',
   ]),
   // value is optional for presence operators (is_set / is_not_set)
-  value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))])
+    .optional(),
   metadataKey: z.string().optional(),
 })
 
@@ -878,9 +882,12 @@ const segmentRulesSchema = z.object({
   conditions: z.array(segmentConditionSchema),
 })
 
+const CRON_REGEX =
+  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
+
 const evaluationScheduleSchema = z.object({
   enabled: z.boolean(),
-  pattern: z.string().min(1),
+  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
 })
 
 const userAttributeDefinitionSchema = z.object({
@@ -1020,11 +1027,6 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
     console.log(`[fn:admin] deleteSegmentFn: segmentId=${data.segmentId}`)
     try {
       await requireAuth({ roles: ['admin'] })
-
-      // Clean up evaluation schedule before deleting
-      await removeSegmentEvaluationSchedule(data.segmentId as SegmentId).catch((err) =>
-        console.error(`[fn:admin] Failed to remove evaluation schedule:`, err)
-      )
 
       await deleteSegment(data.segmentId as SegmentId)
       console.log(`[fn:admin] deleteSegmentFn: deleted`)

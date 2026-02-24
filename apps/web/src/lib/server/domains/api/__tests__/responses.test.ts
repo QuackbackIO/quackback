@@ -16,6 +16,8 @@ import {
   internalErrorResponse,
   handleDomainError,
   parsePaginationParams,
+  encodeCursor,
+  decodeCursor,
 } from '../responses'
 
 describe('API Responses', () => {
@@ -217,11 +219,36 @@ describe('API Responses', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR')
     })
 
+    it('should propagate VALIDATION_ERROR cause as details', async () => {
+      const error = {
+        code: 'VALIDATION_ERROR',
+        message: 'One or more user attributes are invalid',
+        cause: { invalidAttributes: [{ key: 'mrr', reason: 'not a number' }] },
+      }
+      const response = handleDomainError(error)
+
+      expect(response.status).toBe(400)
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(body.error.details).toEqual({
+        invalidAttributes: [{ key: 'mrr', reason: 'not a number' }],
+      })
+    })
+
     it('should handle DUPLICATE_SLUG as conflict', async () => {
       const error = { code: 'DUPLICATE_SLUG', message: 'Slug already exists' }
       const response = handleDomainError(error)
 
       expect(response.status).toBe(409)
+    })
+
+    it('should handle DUPLICATE_KEY as conflict', async () => {
+      const error = { code: 'DUPLICATE_KEY', message: 'Key already exists' }
+      const response = handleDomainError(error)
+
+      expect(response.status).toBe(409)
+      const body = (await response.json()) as ErrorBody
+      expect(body.error.code).toBe('CONFLICT')
     })
 
     it('should handle FORBIDDEN errors', async () => {
@@ -296,6 +323,47 @@ describe('API Responses', () => {
       const result = parsePaginationParams(url)
 
       expect(result.limit).toBe(20)
+    })
+  })
+
+  describe('encodeCursor / decodeCursor', () => {
+    it('should round-trip an offset value', () => {
+      const cursor = encodeCursor(40)
+      const offset = decodeCursor(cursor)
+      expect(offset).toBe(40)
+    })
+
+    it('should encode offset 0', () => {
+      const cursor = encodeCursor(0)
+      const offset = decodeCursor(cursor)
+      expect(offset).toBe(0)
+    })
+
+    it('should return 0 for undefined cursor', () => {
+      expect(decodeCursor(undefined)).toBe(0)
+    })
+
+    it('should return 0 for empty string cursor', () => {
+      expect(decodeCursor('')).toBe(0)
+    })
+
+    it('should return 0 for invalid base64', () => {
+      expect(decodeCursor('not-valid-base64!!!')).toBe(0)
+    })
+
+    it('should return 0 for valid base64 but invalid JSON', () => {
+      const invalid = Buffer.from('not-json').toString('base64url')
+      expect(decodeCursor(invalid)).toBe(0)
+    })
+
+    it('should return 0 for negative offset in cursor', () => {
+      const cursor = Buffer.from(JSON.stringify({ offset: -5 })).toString('base64url')
+      expect(decodeCursor(cursor)).toBe(0)
+    })
+
+    it('should handle large offset values', () => {
+      const cursor = encodeCursor(999999)
+      expect(decodeCursor(cursor)).toBe(999999)
     })
   })
 })

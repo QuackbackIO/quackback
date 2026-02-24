@@ -156,6 +156,7 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   ROADMAP_NOT_FOUND: 'Roadmap',
   CHANGELOG_NOT_FOUND: 'Changelog entry',
   API_KEY_NOT_FOUND: 'API key',
+  SEGMENT_NOT_FOUND: 'Segment',
 }
 
 /**
@@ -173,10 +174,16 @@ export function handleDomainError(error: unknown): Response {
     }
 
     switch (domainError.code) {
-      case 'VALIDATION_ERROR':
-        return validationErrorResponse(domainError.message)
+      case 'VALIDATION_ERROR': {
+        const details =
+          'cause' in domainError && domainError.cause && typeof domainError.cause === 'object'
+            ? (domainError.cause as Record<string, unknown>)
+            : undefined
+        return validationErrorResponse(domainError.message, details)
+      }
 
       case 'DUPLICATE_SLUG':
+      case 'DUPLICATE_KEY':
       case 'CONFLICT':
         return conflictResponse(domainError.message)
 

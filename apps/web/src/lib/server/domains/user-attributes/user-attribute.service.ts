@@ -1,7 +1,7 @@
 import { db, eq, asc, userAttributeDefinitions } from '@/lib/server/db'
 import type { UserAttributeId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
-import { NotFoundError, ValidationError, InternalError } from '@/lib/shared/errors'
+import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type {
   UserAttribute,
   CreateUserAttributeInput,
@@ -16,7 +16,7 @@ function rowToUserAttribute(row: typeof userAttributeDefinitions.$inferSelect): 
     description: row.description,
     type: row.type,
     currencyCode: row.currencyCode,
-    externalKey: row.externalKey ?? null,
+    externalKey: row.externalKey,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -68,9 +68,8 @@ export async function createUserAttribute(input: CreateUserAttributeInput): Prom
     return rowToUserAttribute(row)
   } catch (error) {
     if (error instanceof ValidationError) throw error
-    // Unique key violation
     if ((error as { code?: string }).code === '23505') {
-      throw new ValidationError('DUPLICATE_KEY', `An attribute with that key already exists`)
+      throw new ConflictError('DUPLICATE_KEY', `An attribute with that key already exists`)
     }
     console.error('Error creating user attribute:', error)
     throw new InternalError('DATABASE_ERROR', 'Failed to create user attribute', error)
