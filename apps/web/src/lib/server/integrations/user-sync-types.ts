@@ -5,19 +5,19 @@
  * bidirectional user data sync:
  *
  *   Inbound:  External platform → Quackback
- *     Receives user identify/update events and writes traits to user.metadata.
+ *     Receives user identify/update events and writes attributes to user.metadata.
  *     Example: Segment or RudderStack sends an `identify` call when a user's
  *     plan changes; Quackback updates user.metadata and re-evaluates segments.
  *
  *   Outbound: Quackback → External platform
  *     After dynamic segment evaluation, pushes membership changes back as user
- *     traits/properties so the external platform knows which segments each user
+ *     attributes so the external platform knows which segments each user
  *     belongs to.
  *     Example: a user joins the "Enterprise" segment → Segment receives an
  *     `identify` call with `{ traits: { enterprise: true } }`.
  *
  * Both methods are optional. An integration may implement either or both:
- *   - Inbound only:  CDP sends identify events; we update user.metadata
+ *   - Inbound only:  CDP sends identify events; we update user attributes
  *   - Outbound only: Push segment membership to a CRM after evaluation
  *   - Bidirectional: Full two-way sync
  */
@@ -31,8 +31,13 @@ export interface UserIdentifyPayload {
   email: string
   /** The platform's userId, stored for future cross-system identity linking. */
   externalUserId?: string
-  /** Raw traits/properties from the external platform. */
-  traits: Record<string, unknown>
+  /** Raw attributes from the external platform. */
+  attributes: Record<string, unknown>
+  /**
+   * Legacy alias for `attributes`.
+   * Some handlers historically returned `traits`; orchestrator normalizes either.
+   */
+  traits?: Record<string, unknown>
 }
 
 export interface UserSyncHandler {
@@ -40,7 +45,7 @@ export interface UserSyncHandler {
    * Verify and parse an inbound user identify/update event.
    *
    * Return a `UserIdentifyPayload` to have the orchestrator merge matching
-   * traits into `user.metadata`. Return a `Response` to short-circuit:
+   * attributes into `user.metadata`. Return a `Response` to short-circuit:
    *   - 401 on bad signature
    *   - 200 for recognised-but-ignored event types (e.g. `track`, `page`)
    */

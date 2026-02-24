@@ -5,7 +5,7 @@
  *           Signature: HMAC-SHA1 of the raw body using the shared secret, base64-encoded,
  *           in the `x-signature` header.
  *
- * Outbound: Calls Segment's HTTP Tracking API to identify users with segment traits.
+ * Outbound: Calls Segment's HTTP Tracking API to identify users with segment attributes.
  *           Requires `writeKey` stored in integration secrets.
  *
  * Config fields (stored in integration.config):
@@ -23,6 +23,7 @@ const SEGMENT_TRACKING_API = 'https://api.segment.io/v1'
 
 /** Number of identify calls to fire in parallel per batch. */
 const OUTBOUND_BATCH_SIZE = 10
+const MAX_ERROR_BODY_LENGTH = 300
 
 export const segmentUserSync: UserSyncHandler = {
   async handleIdentify(request, body, config, _secrets): Promise<UserIdentifyPayload | Response> {
@@ -59,24 +60,19 @@ export const segmentUserSync: UserSyncHandler = {
       return new Response('OK', { status: 200 })
     }
 
-    const traits = (payload.traits as Record<string, unknown>) ?? {}
-
-    // Email comes from traits (standard Segment field) or context.traits
-    const contextTraits =
-      ((payload.context as Record<string, unknown> | undefined)?.traits as
-        | Record<string, unknown>
-        | undefined) ?? {}
+    const traits = (payload.traits ?? {}) as Record<string, unknown>
+    const context = (payload.context ?? {}) as Record<string, unknown>
+    const contextTraits = (context.traits ?? {}) as Record<string, unknown>
     const email = (traits.email ?? contextTraits.email) as string | undefined
 
-    if (!email || typeof email !== 'string') {
-      // No email — cannot map to a Quackback user; ack and move on
+    if (typeof email !== 'string' || !email) {
       return new Response('OK', { status: 200 })
     }
 
     return {
       email,
       externalUserId: payload.userId as string | undefined,
-      traits: { ...contextTraits, ...traits },
+      attributes: { ...contextTraits, ...traits },
     }
   },
 
@@ -87,16 +83,16 @@ export const segmentUserSync: UserSyncHandler = {
     const writeKey = secrets.writeKey as string | undefined
     if (!writeKey || users.length === 0) return
 
-    // Segment trait key: snake_case from segment name
-    const traitKey = segmentName.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    // Segment attribute key: snake_case from segment name
+    const attributeKey = segmentName.toLowerCase().replace(/[^a-z0-9]+/g, '_')
     const encoded = Buffer.from(`${writeKey}:`).toString('base64')
+    let totalFailures = 0
 
-    // Fire identify calls in parallel batches
     for (let i = 0; i < users.length; i += OUTBOUND_BATCH_SIZE) {
       const batch = users.slice(i, i + OUTBOUND_BATCH_SIZE)
-      await Promise.allSettled(
-        batch.map((u) =>
-          fetch(`${SEGMENT_TRACKING_API}/identify`, {
+      const results = await Promise.allSettled(
+        batch.map(async (u) => {
+          const response = await fetch(`${SEGMENT_TRACKING_API}/identify`, {
             method: 'POST',
             headers: {
               Authorization: `Basic ${encoded}`,
@@ -104,14 +100,36 @@ export const segmentUserSync: UserSyncHandler = {
             },
             body: JSON.stringify({
               userId: u.externalUserId ?? u.email,
-              traits: { [traitKey]: joined },
-              // context.active: false tells Segment this is a server-side call
+              traits: { [attributeKey]: joined },
               context: { active: false },
             }),
-          }).catch((err) => {
-            console.error(`[Segment] Failed to sync user ${u.email}:`, err)
           })
-        )
+
+          if (!response.ok) {
+            const errorBody = await response
+              .text()
+              .then((text) => text.trim().slice(0, MAX_ERROR_BODY_LENGTH))
+              .catch(() => '')
+            const detail = errorBody ? `: ${errorBody}` : ''
+            throw new Error(`HTTP ${response.status} ${response.statusText}${detail}`)
+          }
+        })
+      )
+
+      let batchFailures = 0
+      for (let j = 0; j < results.length; j++) {
+        const r = results[j]
+        if (r.status === 'rejected') {
+          batchFailures++
+          console.error(`[Segment] Failed to sync user ${batch[j].email}:`, r.reason)
+        }
+      }
+      totalFailures += batchFailures
+    }
+
+    if (totalFailures > 0) {
+      throw new Error(
+        `[Segment] Failed to sync ${totalFailures}/${users.length} users for segment "${segmentName}"`
       )
     }
   },

@@ -7,7 +7,7 @@
  */
 
 import type { PrincipalId } from '@quackback/ids'
-import { db, integrations, principal, user, eq, inArray } from '@/lib/server/db'
+import { db, integrations, principal, user, eq, and, inArray } from '@/lib/server/db'
 import { getIntegration, getIntegrationTypesWithSegmentSync } from './index'
 import { decryptSecrets } from './encryption'
 
@@ -16,10 +16,6 @@ interface UserRef {
   externalUserId?: string
 }
 
-/**
- * Notify all active user-sync integrations of segment membership changes.
- * Should be called fire-and-forget — errors are logged, not propagated.
- */
 export async function notifyUserSyncIntegrations(
   segmentName: string,
   addedPrincipalIds: PrincipalId[],
@@ -29,19 +25,16 @@ export async function notifyUserSyncIntegrations(
   if (syncTypes.length === 0) return
   if (addedPrincipalIds.length === 0 && removedPrincipalIds.length === 0) return
 
-  // Load all active integrations with segment sync capability in one query
-  const activeIntegrations = await db.query.integrations
-    .findMany({
-      where: eq(integrations.status, 'active'),
-      columns: { integrationType: true, config: true, secrets: true },
-    })
-    .then((rows) => rows.filter((r) => syncTypes.includes(r.integrationType)))
-
+  const activeIntegrations = await db.query.integrations.findMany({
+    where: and(eq(integrations.status, 'active'), inArray(integrations.integrationType, syncTypes)),
+    columns: { integrationType: true, config: true, secrets: true },
+  })
   if (activeIntegrations.length === 0) return
 
-  // Resolve user emails for added + removed (lazy — only if needed)
-  let addedUsers: UserRef[] | null = null
-  let removedUsers: UserRef[] | null = null
+  const [addedUsers, removedUsers] = await Promise.all([
+    resolveUserRefs(addedPrincipalIds),
+    resolveUserRefs(removedPrincipalIds),
+  ])
 
   for (const integration of activeIntegrations) {
     const def = getIntegration(integration.integrationType)
@@ -49,66 +42,50 @@ export async function notifyUserSyncIntegrations(
 
     const config = (integration.config ?? {}) as Record<string, unknown>
     const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
+    const sync = def.userSync.syncSegmentMembership
 
-    if (addedPrincipalIds.length > 0) {
-      if (!addedUsers) addedUsers = await resolveUserRefs(addedPrincipalIds)
-      if (addedUsers.length > 0) {
-        await def.userSync
-          .syncSegmentMembership(addedUsers, segmentName, true, config, secrets)
-          .catch((err) =>
-            console.error(
-              `[UserSync] ${integration.integrationType} syncSegmentMembership(joined) failed:`,
-              err
-            )
-          )
-      }
+    const calls: Promise<void>[] = []
+    if (addedUsers.length > 0) {
+      calls.push(sync(addedUsers, segmentName, true, config, secrets))
+    }
+    if (removedUsers.length > 0) {
+      calls.push(sync(removedUsers, segmentName, false, config, secrets))
     }
 
-    if (removedPrincipalIds.length > 0) {
-      if (!removedUsers) removedUsers = await resolveUserRefs(removedPrincipalIds)
-      if (removedUsers.length > 0) {
-        await def.userSync
-          .syncSegmentMembership(removedUsers, segmentName, false, config, secrets)
-          .catch((err) =>
-            console.error(
-              `[UserSync] ${integration.integrationType} syncSegmentMembership(left) failed:`,
-              err
-            )
+    await Promise.allSettled(calls).then((results) => {
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          console.error(
+            `[UserSync] ${integration.integrationType} syncSegmentMembership failed:`,
+            r.reason
           )
+        }
       }
-    }
+    })
   }
 }
 
-/**
- * Resolve user email (and stored externalUserId) for a set of principal IDs.
- * Joins principal → user to get the email address.
- */
 async function resolveUserRefs(principalIds: PrincipalId[]): Promise<UserRef[]> {
   if (principalIds.length === 0) return []
 
   const rows = await db
-    .select({
-      email: user.email,
-      metadata: user.metadata,
-    })
+    .select({ email: user.email, metadata: user.metadata })
     .from(principal)
     .innerJoin(user, eq(principal.userId, user.id))
     .where(inArray(principal.id, principalIds))
 
-  return rows.map((r) => {
-    // externalUserId may be stored in metadata under a conventional key
-    let externalUserId: string | undefined
-    if (r.metadata) {
-      try {
-        const meta = JSON.parse(r.metadata) as Record<string, unknown>
-        if (typeof meta._externalUserId === 'string') {
-          externalUserId = meta._externalUserId
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return { email: r.email, externalUserId }
-  })
+  return rows.map((r) => ({
+    email: r.email,
+    externalUserId: parseExternalUserId(r.metadata),
+  }))
+}
+
+function parseExternalUserId(metadata: string | null): string | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as Record<string, unknown>
+    return typeof meta._externalUserId === 'string' ? meta._externalUserId : undefined
+  } catch {
+    return undefined
+  }
 }
