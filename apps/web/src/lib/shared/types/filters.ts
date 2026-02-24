@@ -43,7 +43,14 @@ export interface UsersFilters {
   verified?: boolean
   dateFrom?: string
   dateTo?: string
-  sort?: 'newest' | 'oldest' | 'most_active' | 'name'
+  sort?:
+    | 'newest'
+    | 'oldest'
+    | 'most_active'
+    | 'most_posts'
+    | 'most_comments'
+    | 'most_votes'
+    | 'name'
   /** Filter by segment IDs (OR logic — users in ANY selected segment) */
   segmentIds?: string[]
 }

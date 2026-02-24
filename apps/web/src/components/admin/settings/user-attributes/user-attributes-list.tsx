@@ -1,7 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  AdjustmentsHorizontalIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,7 +27,6 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
-
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import {
   useCreateUserAttribute,
@@ -31,11 +35,6 @@ import {
 } from '@/lib/client/mutations'
 import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { UserAttributeId } from '@quackback/ids'
-import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/solid'
-
-// ============================================
-// Constants
-// ============================================
 
 const ATTRIBUTE_TYPES = [
   { value: 'string', label: 'Text' },
@@ -56,10 +55,6 @@ const TYPE_BADGE_COLORS: Record<AttributeType, string> = {
   date: 'bg-orange-50 text-orange-700 border-orange-200',
   currency: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 }
-
-// ============================================
-// Create / Edit dialog
-// ============================================
 
 interface AttributeFormValues {
   key: string
@@ -207,10 +202,10 @@ function AttributeFormDialog({
             />
           </div>
 
-          {/* External key — CDP trait name mapping */}
+          {/* External key — CDP attribute name mapping */}
           <div className="space-y-1.5">
             <Label htmlFor="attr-external-key">
-              CDP trait name{' '}
+              CDP attribute name{' '}
               <span className="text-muted-foreground font-normal text-xs">(optional)</span>
             </Label>
             <Input
@@ -220,8 +215,8 @@ function AttributeFormDialog({
               placeholder="monthly_recurring_revenue"
             />
             <p className="text-[11px] text-muted-foreground">
-              Maps an external trait name (e.g. from Segment) to this attribute&apos;s internal key.
-              Leave blank to use the key above.
+              Maps an external attribute name (e.g. from Segment) to this attribute&apos;s internal
+              key. Leave blank to use the key above.
             </p>
           </div>
 
@@ -243,10 +238,6 @@ function AttributeFormDialog({
     </Dialog>
   )
 }
-
-// ============================================
-// Attribute row
-// ============================================
 
 function AttributeRow({
   attribute,
@@ -305,10 +296,6 @@ function AttributeRow({
     </div>
   )
 }
-
-// ============================================
-// Main component
-// ============================================
 
 interface UserAttributesListProps {
   initialAttributes: UserAttributeItem[]

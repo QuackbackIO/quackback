@@ -25,9 +25,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 import type { SegmentId } from '@quackback/ids'
 
-// ============================================
-// Preset colors
-// ============================================
+export const CUSTOM_ATTR_PREFIX = '__custom__'
 
 const PRESET_COLORS = [
   '#6366f1', // indigo
@@ -41,10 +39,6 @@ const PRESET_COLORS = [
   '#3b82f6', // blue
   '#6b7280', // gray
 ]
-
-// ============================================
-// Rule types
-// ============================================
 
 type RuleAttribute =
   | 'email_domain'
@@ -205,9 +199,11 @@ const OPERATOR_OPTIONS: Record<RuleAttribute, { value: RuleOperator; label: stri
   ],
 }
 
-// ============================================
-// Rule condition row
-// ============================================
+function getCustomAttrKey(attribute: string): string | null {
+  return attribute.startsWith(CUSTOM_ATTR_PREFIX)
+    ? attribute.slice(CUSTOM_ATTR_PREFIX.length)
+    : null
+}
 
 function RuleConditionRow({
   condition,
@@ -220,8 +216,8 @@ function RuleConditionRow({
   onRemove: () => void
   customAttributes?: CustomAttrDef[]
 }) {
-  const isCustomAttr = condition.attribute.startsWith('__custom__')
-  const customAttrKey = isCustomAttr ? condition.attribute.slice(10) : null
+  const customAttrKey = getCustomAttrKey(condition.attribute)
+  const isCustomAttr = customAttrKey !== null
   const customAttrDef = customAttrKey
     ? (customAttributes?.find((a) => a.key === customAttrKey) ?? null)
     : null
@@ -248,9 +244,9 @@ function RuleConditionRow({
 
   const isPresenceOp = condition.operator === 'is_set' || condition.operator === 'is_not_set'
 
-  const getFirstOperator = (attr: string) => {
-    if (attr.startsWith('__custom__')) {
-      const key = attr.slice(10)
+  const getFirstOperator = (attr: string): RuleOperator => {
+    const key = getCustomAttrKey(attr)
+    if (key) {
       const def = customAttributes?.find((a) => a.key === key)
       return (def ? CUSTOM_ATTR_OPERATORS[def.type][0]?.value : 'eq') as RuleOperator
     }
@@ -268,7 +264,7 @@ function RuleConditionRow({
             attribute: val,
             operator: getFirstOperator(val),
             value: '',
-            metadataKey: val.startsWith('__custom__') ? val.slice(10) : undefined,
+            metadataKey: getCustomAttrKey(val) ?? undefined,
           })
         }
       >
@@ -292,8 +288,8 @@ function RuleConditionRow({
                 </SelectLabel>
                 {customAttributes.map((attr) => (
                   <SelectItem
-                    key={`__custom__${attr.key}`}
-                    value={`__custom__${attr.key}`}
+                    key={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
+                    value={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
                     className="text-xs"
                   >
                     {attr.label}
@@ -322,8 +318,7 @@ function RuleConditionRow({
         </SelectContent>
       </Select>
 
-      {/* Metadata key (only for raw metadata_key attribute — custom attrs have key auto-set) */}
-      {condition.attribute === 'metadata_key' && !isCustomAttr && (
+      {condition.attribute === 'metadata_key' && (
         <Input
           className="h-8 text-xs w-[100px] shrink-0"
           placeholder="key"
@@ -332,36 +327,32 @@ function RuleConditionRow({
         />
       )}
 
-      {/* Value — hidden for is_set / is_not_set operators */}
-      {!isPresenceOp && (
-        <>
-          {isBoolean ? (
-            <Select
-              value={condition.value || 'true'}
-              onValueChange={(val) => onChange({ ...condition, value: val })}
-            >
-              <SelectTrigger className="h-8 text-xs flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="true" className="text-xs">
-                  True
-                </SelectItem>
-                <SelectItem value="false" className="text-xs">
-                  False
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          ) : (
-            <Input
-              className="h-8 text-xs flex-1"
-              type={isNumeric ? 'number' : 'text'}
-              placeholder={isNumeric ? '0' : 'value'}
-              value={condition.value}
-              onChange={(e) => onChange({ ...condition, value: e.target.value })}
-            />
-          )}
-        </>
+      {!isPresenceOp && isBoolean && (
+        <Select
+          value={condition.value || 'true'}
+          onValueChange={(val) => onChange({ ...condition, value: val })}
+        >
+          <SelectTrigger className="h-8 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true" className="text-xs">
+              True
+            </SelectItem>
+            <SelectItem value="false" className="text-xs">
+              False
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      {!isPresenceOp && !isBoolean && (
+        <Input
+          className="h-8 text-xs flex-1"
+          type={isNumeric ? 'number' : 'text'}
+          placeholder={isNumeric ? '0' : 'value'}
+          value={condition.value}
+          onChange={(e) => onChange({ ...condition, value: e.target.value })}
+        />
       )}
       {isPresenceOp && <div className="flex-1" />}
 
@@ -378,10 +369,6 @@ function RuleConditionRow({
     </div>
   )
 }
-
-// ============================================
-// Rule builder
-// ============================================
 
 function RuleBuilder({
   match,
@@ -452,10 +439,6 @@ function RuleBuilder({
   )
 }
 
-// ============================================
-// Schedule presets
-// ============================================
-
 const SCHEDULE_PRESETS: { label: string; value: string }[] = [
   { label: 'Every hour', value: '0 * * * *' },
   { label: 'Every 6 hours', value: '0 */6 * * *' },
@@ -465,10 +448,6 @@ const SCHEDULE_PRESETS: { label: string; value: string }[] = [
 ]
 
 const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL']
-
-// ============================================
-// Segment form dialog
-// ============================================
 
 export interface SegmentFormValues {
   name: string

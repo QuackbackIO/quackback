@@ -16,16 +16,13 @@ import {
   evaluateAllSegmentsFn,
 } from '@/lib/server/functions/admin'
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
 const SEGMENTS_KEY = ['admin', 'segments']
-const USERS_KEY = ['users']
+const USERS_KEY = ['admin', 'users']
 
-// ============================================================================
-// Mutations
-// ============================================================================
+function invalidateSegmentQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
+  void queryClient.invalidateQueries({ queryKey: USERS_KEY })
+}
 
 /** Create a new segment. */
 export function useCreateSegment() {
@@ -94,10 +91,7 @@ export function useUpdateSegment() {
       updateSegmentFn({
         data: input as Parameters<typeof updateSegmentFn>[0]['data'],
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }
 
@@ -106,10 +100,7 @@ export function useDeleteSegment() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (segmentId: SegmentId) => deleteSegmentFn({ data: { segmentId } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }
 
@@ -124,10 +115,7 @@ export function useAssignUsersToSegment() {
       segmentId: SegmentId
       principalIds: PrincipalId[]
     }) => assignUsersToSegmentFn({ data: { segmentId, principalIds } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }
 
@@ -142,10 +130,7 @@ export function useRemoveUsersFromSegment() {
       segmentId: SegmentId
       principalIds: PrincipalId[]
     }) => removeUsersFromSegmentFn({ data: { segmentId, principalIds } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }
 
@@ -154,10 +139,7 @@ export function useEvaluateSegment() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (segmentId: SegmentId) => evaluateSegmentFn({ data: { segmentId } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }
 
@@ -166,9 +148,6 @@ export function useEvaluateAllSegments() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => evaluateAllSegmentsFn(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: SEGMENTS_KEY })
-      void queryClient.invalidateQueries({ queryKey: USERS_KEY })
-    },
+    onSuccess: () => invalidateSegmentQueries(queryClient),
   })
 }

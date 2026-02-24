@@ -8,15 +8,9 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 
-// ============================================================================
-// Types (re-exported for consumer convenience)
-// ============================================================================
-
-export type SegmentListItem = Awaited<ReturnType<typeof import('@/lib/server/functions/admin').listSegmentsFn>>[number]
-
-// ============================================================================
-// Query Hooks
-// ============================================================================
+export type SegmentListItem = Awaited<
+  ReturnType<typeof import('@/lib/server/functions/admin').listSegmentsFn>
+>[number]
 
 /** Fetch all segments with member counts. */
 export function useSegments() {

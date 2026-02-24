@@ -8,12 +8,13 @@ import {
   ArrowPathIcon,
   BoltIcon,
   ClockIcon,
+  TagIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
-import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
+import { SegmentFormDialog, CUSTOM_ATTR_PREFIX } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
@@ -27,17 +28,8 @@ import {
   useEvaluateAllSegments,
 } from '@/lib/client/mutations'
 import type { SegmentId } from '@quackback/ids'
-import { TagIcon } from '@heroicons/react/24/solid'
-
-// ============================================
-// Types
-// ============================================
 
 type SegmentItem = NonNullable<ReturnType<typeof useSegments>['data']>[number]
-
-// ============================================
-// Segment row
-// ============================================
 
 function SegmentRow({
   segment,
@@ -124,9 +116,40 @@ function SegmentRow({
   )
 }
 
-// ============================================
-// Segment list (main component)
-// ============================================
+type EvaluationScheduleRaw = { enabled?: boolean; pattern?: string } | null | undefined
+
+type WeightConfigRaw =
+  | {
+      attribute?: { key?: string; label?: string; type?: string; currencyCode?: string }
+      aggregation?: string
+    }
+  | null
+  | undefined
+
+function toEvaluationScheduleFormValues(segment: SegmentItem) {
+  const sched = (segment as Record<string, unknown>).evaluationSchedule as EvaluationScheduleRaw
+  return {
+    enabled: sched?.enabled ?? false,
+    pattern: sched?.pattern ?? '0 0 * * *',
+  }
+}
+
+function toWeightConfigFormValues(segment: SegmentItem) {
+  const wc = (segment as Record<string, unknown>).weightConfig as WeightConfigRaw
+  return {
+    enabled: !!wc,
+    attributeKey: wc?.attribute?.key ?? 'mrr',
+    attributeLabel: wc?.attribute?.label ?? 'MRR',
+    attributeType: (wc?.attribute?.type ?? 'currency') as
+      | 'string'
+      | 'number'
+      | 'boolean'
+      | 'date'
+      | 'currency',
+    currencyCode: wc?.attribute?.currencyCode ?? 'USD',
+    aggregation: (wc?.aggregation ?? 'sum') as 'sum' | 'average' | 'count' | 'median',
+  }
+}
 
 export function SegmentList() {
   const { data: segments, isLoading } = useSegments()
@@ -333,47 +356,8 @@ export function SegmentList() {
                       ) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
-                evaluationSchedule: (() => {
-                  const sched = (editTarget as Record<string, unknown>).evaluationSchedule as
-                    | { enabled?: boolean; pattern?: string }
-                    | null
-                    | undefined
-                  return {
-                    enabled: sched?.enabled ?? false,
-                    pattern: sched?.pattern ?? '0 0 * * *',
-                  }
-                })(),
-                weightConfig: (() => {
-                  const wc = (editTarget as Record<string, unknown>).weightConfig as
-                    | {
-                        attribute?: {
-                          key?: string
-                          label?: string
-                          type?: string
-                          currencyCode?: string
-                        }
-                        aggregation?: string
-                      }
-                    | null
-                    | undefined
-                  return {
-                    enabled: !!wc,
-                    attributeKey: wc?.attribute?.key ?? 'mrr',
-                    attributeLabel: wc?.attribute?.label ?? 'MRR',
-                    attributeType: (wc?.attribute?.type ?? 'currency') as
-                      | 'string'
-                      | 'number'
-                      | 'boolean'
-                      | 'date'
-                      | 'currency',
-                    currencyCode: wc?.attribute?.currencyCode ?? 'USD',
-                    aggregation: (wc?.aggregation ?? 'sum') as
-                      | 'sum'
-                      | 'average'
-                      | 'count'
-                      | 'median',
-                  }
-                })(),
+                evaluationSchedule: toEvaluationScheduleFormValues(editTarget),
+                weightConfig: toWeightConfigFormValues(editTarget),
               }
             : undefined
         }
@@ -397,16 +381,9 @@ export function SegmentList() {
   )
 }
 
-// ============================================
-// Helpers
-// ============================================
-
 function hasEvaluationSchedule(segment: SegmentItem): boolean {
-  const sched = (segment as Record<string, unknown>).evaluationSchedule as
-    | { enabled?: boolean }
-    | null
-    | undefined
-  return !!sched?.enabled
+  const sched = (segment as Record<string, unknown>).evaluationSchedule as EvaluationScheduleRaw
+  return sched?.enabled === true
 }
 
 function parseConditionValue(
@@ -416,8 +393,8 @@ function parseConditionValue(
   customAttributes?: UserAttributeItem[]
 ): string | number | boolean | undefined {
   if (operator === 'is_set' || operator === 'is_not_set') return undefined
-  if (attribute.startsWith('__custom__') && customAttributes) {
-    const key = attribute.slice(10)
+  if (attribute.startsWith(CUSTOM_ATTR_PREFIX) && customAttributes) {
+    const key = attribute.slice(CUSTOM_ATTR_PREFIX.length)
     const attr = customAttributes.find((a) => a.key === key)
     if (attr) {
       if (attr.type === 'number' || attr.type === 'currency') return Number(value) || 0
@@ -440,8 +417,8 @@ function serializeCondition(
   value?: string | number | boolean
   metadataKey?: string
 } {
-  if (c.attribute.startsWith('__custom__')) {
-    const key = c.attribute.slice(10)
+  if (c.attribute.startsWith(CUSTOM_ATTR_PREFIX)) {
+    const key = c.attribute.slice(CUSTOM_ATTR_PREFIX.length)
     return {
       attribute: 'metadata_key',
       operator: c.operator,
@@ -465,7 +442,7 @@ function deserializeCondition(
     const known = customAttributes.find((a) => a.key === c.metadataKey)
     if (known) {
       return {
-        attribute: `__custom__${c.metadataKey}`,
+        attribute: `${CUSTOM_ATTR_PREFIX}${c.metadataKey}`,
         operator: c.operator as string,
         value: c.value != null ? String(c.value) : '',
         metadataKey: c.metadataKey,

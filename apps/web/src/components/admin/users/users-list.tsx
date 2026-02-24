@@ -171,17 +171,18 @@ export function UsersList({
         />
         <Select
           value={filters.sort || 'newest'}
-          onValueChange={(value) =>
-            handleSortChange(value as 'newest' | 'oldest' | 'most_active' | 'name')
-          }
+          onValueChange={(value) => handleSortChange(value as UsersFilters['sort'])}
         >
-          <SelectTrigger className="h-8 w-[110px] text-xs border-border/50">
+          <SelectTrigger className="h-8 w-[130px] text-xs border-border/50">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="newest">Newest</SelectItem>
             <SelectItem value="oldest">Oldest</SelectItem>
             <SelectItem value="most_active">Most Active</SelectItem>
+            <SelectItem value="most_posts">Most Posts</SelectItem>
+            <SelectItem value="most_comments">Most Comments</SelectItem>
+            <SelectItem value="most_votes">Most Votes</SelectItem>
             <SelectItem value="name">Name A-Z</SelectItem>
           </SelectContent>
         </Select>

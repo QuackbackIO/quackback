@@ -1,27 +1,14 @@
-/**
- * UserSegmentBadges — shows a user's segments as compact colored badges.
- * Dynamic segments are read-only; manual segments show remove button on hover.
- */
 'use client'
 
 import { useState } from 'react'
-import { XMarkIcon, BoltIcon } from '@heroicons/react/24/solid'
+import { XMarkIcon, BoltIcon, PlusIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { UserSegmentSummary } from '@/lib/server/domains/users/user.types'
 import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { useRemoveUsersFromSegment, useAssignUsersToSegment } from '@/lib/client/mutations'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
-import { PlusIcon } from '@heroicons/react/24/solid'
-
-// ============================================
-// Segment badge
-// ============================================
 
 interface SegmentBadgeProps {
   segment: UserSegmentSummary
@@ -46,9 +33,7 @@ export function SegmentBadge({ segment, onRemove, isRemoving, readOnly }: Segmen
       }}
       title={segment.type === 'dynamic' ? 'Auto-managed segment' : segment.name}
     >
-      {segment.type === 'dynamic' && (
-        <BoltIcon className="h-2.5 w-2.5 shrink-0 opacity-70" />
-      )}
+      {segment.type === 'dynamic' && <BoltIcon className="h-2.5 w-2.5 shrink-0 opacity-70" />}
       <span>{segment.name}</span>
       {canRemove && (
         <button
@@ -67,10 +52,6 @@ export function SegmentBadge({ segment, onRemove, isRemoving, readOnly }: Segmen
     </span>
   )
 }
-
-// ============================================
-// User segments list with assign popover
-// ============================================
 
 interface UserSegmentBadgesProps {
   principalId: PrincipalId
@@ -166,10 +147,6 @@ export function UserSegmentBadges({
   )
 }
 
-// ============================================
-// Compact badge list (for user cards)
-// ============================================
-
 interface CompactSegmentBadgesProps {
   segments: UserSegmentSummary[]
   maxVisible?: number
@@ -198,9 +175,7 @@ export function CompactSegmentBadges({ segments, maxVisible = 2 }: CompactSegmen
           {seg.name}
         </span>
       ))}
-      {overflow > 0 && (
-        <span className="text-[10px] text-muted-foreground">+{overflow}</span>
-      )}
+      {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow}</span>}
     </div>
   )
 }
