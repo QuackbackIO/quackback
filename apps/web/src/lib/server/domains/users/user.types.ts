@@ -35,6 +35,8 @@ export interface PortalUserListItem {
   commentCount: number
   voteCount: number
   segments: UserSegmentSummary[]
+  /** Raw metadata JSON string — parsed at the route layer into `attributes` */
+  metadata: string | null
 }
 
 /**
@@ -52,6 +54,7 @@ export interface PortalUserListItemView {
   commentCount: number
   voteCount: number
   segments: UserSegmentSummary[]
+  metadata: string | null
 }
 
 /**
@@ -62,7 +65,14 @@ export interface PortalUserListParams {
   verified?: boolean
   dateFrom?: Date
   dateTo?: Date
-  sort?: 'newest' | 'oldest' | 'most_active' | 'name'
+  sort?:
+    | 'newest'
+    | 'oldest'
+    | 'most_active'
+    | 'most_posts'
+    | 'most_comments'
+    | 'most_votes'
+    | 'name'
   page?: number
   limit?: number
   /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
@@ -121,4 +131,66 @@ export interface PortalUserDetail extends PortalUserListItem {
   createdAt: Date // user.createdAt (account creation)
   /** All posts this user has engaged with (authored, commented, or voted on) */
   engagedPosts: EngagedPost[]
+}
+
+// ============================================
+// API input/result types for user CRUD
+// ============================================
+
+/**
+ * Input for the identify (upsert) endpoint.
+ * Creates a new user or updates an existing one by email.
+ */
+export interface IdentifyPortalUserInput {
+  email: string
+  name?: string
+  image?: string
+  emailVerified?: boolean
+  /** Customer-provided external user ID (e.g. from your own system) */
+  externalId?: string
+  attributes?: Record<string, unknown>
+}
+
+/**
+ * Result of the identify operation.
+ */
+export interface IdentifyPortalUserResult {
+  principalId: PrincipalId
+  userId: string
+  name: string
+  email: string
+  image: string | null
+  emailVerified: boolean
+  externalId: string | null
+  attributes: Record<string, unknown>
+  createdAt: Date
+  /** true if a new user was created, false if an existing user was updated */
+  created: boolean
+}
+
+/**
+ * Input for the PATCH update endpoint.
+ */
+export interface UpdatePortalUserInput {
+  name?: string
+  image?: string | null
+  emailVerified?: boolean
+  /** Customer-provided external user ID (e.g. from your own system) */
+  externalId?: string | null
+  attributes?: Record<string, unknown>
+}
+
+/**
+ * Result of the update operation.
+ */
+export interface UpdatePortalUserResult {
+  principalId: PrincipalId
+  userId: string
+  name: string
+  email: string
+  image: string | null
+  emailVerified: boolean
+  externalId: string | null
+  attributes: Record<string, unknown>
+  createdAt: Date
 }

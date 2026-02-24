@@ -19,4 +19,8 @@ export type {
   PortalUserDetail,
   EngagedPost,
   EngagementType,
+  IdentifyPortalUserInput,
+  IdentifyPortalUserResult,
+  UpdatePortalUserInput,
+  UpdatePortalUserResult,
 } from './user.types'
