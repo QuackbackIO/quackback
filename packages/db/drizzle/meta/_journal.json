@@ -85,6 +85,13 @@
       "when": 1772179200000,
       "tag": "0011_user_attr_external_key",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1771924607203,
+      "tag": "0012_green_northstar",
+      "breakpoints": true
     }
   ]
 }

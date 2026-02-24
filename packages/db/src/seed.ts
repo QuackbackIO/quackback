@@ -27,6 +27,8 @@ import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 import { changelogEntries, changelogEntryPosts } from './schema/changelog'
+import { segments } from './schema/segments'
+import type { SegmentRules } from './schema/segments'
 
 const connectionString = process.env.DATABASE_URL!
 const client = postgres(connectionString)
@@ -649,6 +651,42 @@ async function seed() {
   console.log(
     `Created ${changelogInserts.length} changelog entries (${changelogPostInserts.length} linked to posts)`
   )
+
+  // Create default segments
+  const existingSegments = await db.select({ id: segments.id }).from(segments).limit(1)
+  if (existingSegments.length === 0) {
+    const newUsersRules: SegmentRules = {
+      match: 'all',
+      conditions: [{ attribute: 'created_at_days_ago', operator: 'lt', value: 7 }],
+    }
+    const activeUsersRules: SegmentRules = {
+      match: 'any',
+      conditions: [
+        { attribute: 'post_count', operator: 'gt', value: 0 },
+        { attribute: 'comment_count', operator: 'gt', value: 0 },
+        { attribute: 'vote_count', operator: 'gt', value: 0 },
+      ],
+    }
+    await db.insert(segments).values([
+      {
+        id: generateId('segment'),
+        name: 'New Users',
+        description: 'Users who joined within the last 7 days',
+        type: 'dynamic',
+        color: '#3b82f6',
+        rules: newUsersRules,
+      },
+      {
+        id: generateId('segment'),
+        name: 'Active Users',
+        description: 'Users with at least one post, comment, or vote',
+        type: 'dynamic',
+        color: '#10b981',
+        rules: activeUsersRules,
+      },
+    ])
+    console.log('Created 2 default segments (New Users, Active Users)')
+  }
 
   console.log('\n✅ Seed complete!\n')
   console.log('Demo account:')

@@ -143,12 +143,10 @@ export async function upsertSegmentEvaluationSchedule(
   const queue = await ensureQueue()
   const jobKey = `segment-eval:${segmentId}`
 
-  // Remove existing repeatable job for this segment first
   await removeSegmentEvaluationSchedule(segmentId)
 
   if (!schedule.enabled) return
 
-  // Add repeatable job with cron pattern
   await queue.add(
     jobKey,
     { segmentId },
@@ -172,8 +170,6 @@ export async function upsertSegmentEvaluationSchedule(
 export async function removeSegmentEvaluationSchedule(segmentId: SegmentId): Promise<void> {
   const queue = await ensureQueue()
   const jobKey = `segment-eval:${segmentId}`
-
-  // Get all repeatable jobs and find the one for this segment
   const repeatableJobs = await queue.getRepeatableJobs()
   for (const job of repeatableJobs) {
     if (job.name === jobKey) {
@@ -232,7 +228,7 @@ export async function listEvaluationSchedules(): Promise<
     .map((j) => ({
       segmentId: j.name.replace('segment-eval:', ''),
       pattern: j.pattern ?? '',
-      next: j.next !== undefined ? j.next : undefined,
+      next: j.next,
     }))
 }
 
@@ -244,14 +240,6 @@ export async function closeSegmentScheduler(): Promise<void> {
   const { worker, queue } = await initPromise
   initPromise = null
 
-  try {
-    await worker.close()
-  } catch (e) {
-    console.error('[SegmentScheduler] Worker close error:', e)
-  }
-  try {
-    await queue.close()
-  } catch (e) {
-    console.error('[SegmentScheduler] Queue close error:', e)
-  }
+  await worker.close().catch((e) => console.error('[SegmentScheduler] Worker close error:', e))
+  await queue.close().catch((e) => console.error('[SegmentScheduler] Queue close error:', e))
 }
