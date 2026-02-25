@@ -8,6 +8,11 @@ import { RoadmapModal } from '@/components/admin/roadmap-modal'
 const searchSchema = z.object({
   roadmap: z.string().optional(),
   post: z.string().optional(), // Post ID for modal view
+  search: z.string().optional(),
+  board: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  segments: z.array(z.string()).optional(),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
 })
 
 export const Route = createFileRoute('/admin/roadmap')({
@@ -23,8 +28,13 @@ export const Route = createFileRoute('/admin/roadmap')({
       queryClient: typeof context.queryClient
     }
 
-    // Pre-fetch roadmap statuses using React Query
-    await queryClient.ensureQueryData(adminQueries.roadmapStatuses())
+    // Pre-fetch roadmap statuses and filter reference data
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.roadmapStatuses()),
+      queryClient.ensureQueryData(adminQueries.boards()),
+      queryClient.ensureQueryData(adminQueries.tags()),
+      queryClient.ensureQueryData(adminQueries.segments()),
+    ])
 
     return {
       currentUser: {

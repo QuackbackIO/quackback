@@ -4,7 +4,14 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type RoadmapId, type PostId, type StatusId } from '@quackback/ids'
+import {
+  type RoadmapId,
+  type PostId,
+  type StatusId,
+  type BoardId,
+  type TagId,
+  type SegmentId,
+} from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   addPostToRoadmap,
@@ -63,6 +70,11 @@ const getRoadmapPostsSchema = z.object({
   statusId: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
+  search: z.string().optional(),
+  boardIds: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
+  segmentIds: z.array(z.string()).optional(),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
 })
 
 // ============================================
@@ -244,6 +256,11 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
       statusId: data.statusId as StatusId | undefined,
       limit: data.limit,
       offset: data.offset,
+      search: data.search,
+      boardIds: data.boardIds as BoardId[] | undefined,
+      tagIds: data.tagIds as TagId[] | undefined,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+      sort: data.sort,
     })
 
     // Serialize branded types to plain strings for turbo-stream
