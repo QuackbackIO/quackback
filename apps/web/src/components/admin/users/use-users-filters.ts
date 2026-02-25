@@ -26,6 +26,11 @@ export function useUsersFilters() {
       verified,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
+      emailDomain: search.emailDomain,
+      postCount: search.postCount,
+      voteCount: search.voteCount,
+      commentCount: search.commentCount,
+      customAttrs: search.customAttrs,
       sort: search.sort,
       segmentIds,
     }
@@ -61,6 +66,12 @@ export function useUsersFilters() {
           ...('verified' in updates && { verified: verifiedParam }),
           ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
           ...('dateTo' in updates && { dateTo: updates.dateTo }),
+          ...('emailDomain' in updates && { emailDomain: updates.emailDomain }),
+
+          ...('postCount' in updates && { postCount: updates.postCount }),
+          ...('voteCount' in updates && { voteCount: updates.voteCount }),
+          ...('commentCount' in updates && { commentCount: updates.commentCount }),
+          ...('customAttrs' in updates && { customAttrs: updates.customAttrs }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('segmentIds' in updates && { segments: segmentsParam }),
         },
@@ -90,6 +101,8 @@ export function useUsersFilters() {
       search: {
         sort: search.sort,
         selected: search.selected,
+        // Preserve segment selection when clearing filters
+        segments: (search as { segments?: string }).segments,
       },
       replace: true,
     })
@@ -101,7 +114,11 @@ export function useUsersFilters() {
       filters.verified !== undefined ||
       filters.dateFrom ||
       filters.dateTo ||
-      (filters.segmentIds && filters.segmentIds.length > 0)
+      filters.emailDomain ||
+      filters.postCount ||
+      filters.voteCount ||
+      filters.commentCount ||
+      filters.customAttrs
     )
   }, [filters])
 

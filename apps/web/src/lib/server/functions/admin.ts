@@ -72,6 +72,7 @@ const inboxPostListSchema = z.object({
   statusSlugs: z.array(z.string()).optional(),
   boardIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
+  segmentIds: z.array(z.string()).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   minVotes: z.number().optional(),
@@ -80,11 +81,27 @@ const inboxPostListSchema = z.object({
   showDeleted: z.boolean().optional(),
 })
 
+const activityCountFilterSchema = z.object({
+  op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']),
+  value: z.number(),
+})
+
+const customAttrFilterSchema = z.object({
+  key: z.string(),
+  op: z.string(),
+  value: z.string(),
+})
+
 const listPortalUsersSchema = z.object({
   search: z.string().optional(),
   verified: z.boolean().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  emailDomain: z.string().optional(),
+  postCount: activityCountFilterSchema.optional(),
+  voteCount: activityCountFilterSchema.optional(),
+  commentCount: activityCountFilterSchema.optional(),
+  customAttrs: z.array(customAttrFilterSchema).optional(),
   sort: z
     .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
     .optional(),
@@ -111,6 +128,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         boardIds: data.boardIds as BoardId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as TagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
         ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
@@ -516,6 +534,11 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         verified: data.verified,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        emailDomain: data.emailDomain,
+        postCount: data.postCount,
+        voteCount: data.voteCount,
+        commentCount: data.commentCount,
+        customAttrs: data.customAttrs,
         sort: data.sort,
         page: data.page,
         limit: data.limit,
@@ -853,7 +876,6 @@ const segmentConditionSchema = z.object({
     'post_count',
     'vote_count',
     'comment_count',
-    'plan',
     'metadata_key',
   ]),
   operator: z.enum([

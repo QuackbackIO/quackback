@@ -23,6 +23,7 @@ export const usersKeys = {
   all: ['users'] as const,
   lists: () => [...usersKeys.all, 'list'] as const,
   list: (filters: UsersFilters) => [...usersKeys.lists(), filters] as const,
+  totalCount: () => [...usersKeys.all, 'totalCount'] as const,
   details: () => [...usersKeys.all, 'detail'] as const,
   detail: (principalId: PrincipalId) => [...usersKeys.details(), principalId] as const,
 }
@@ -30,6 +31,26 @@ export const usersKeys = {
 // ============================================================================
 // Fetch Functions
 // ============================================================================
+
+/** Parse "op:value" format into { op, value } */
+function parseActivityFilter(raw?: string) {
+  if (!raw) return undefined
+  const [op, val] = raw.split(':')
+  if (!op || val === undefined) return undefined
+  return { op: op as 'gt' | 'gte' | 'lt' | 'lte' | 'eq', value: Number(val) }
+}
+
+/** Parse "key:op:value,key2:op:value2" into CustomAttrFilter[] */
+function parseCustomAttrs(raw?: string) {
+  if (!raw) return undefined
+  return raw
+    .split(',')
+    .map((part) => {
+      const [key, op, ...rest] = part.split(':')
+      return key && op ? { key, op, value: rest.join(':') } : null
+    })
+    .filter(Boolean) as { key: string; op: string; value: string }[]
+}
 
 async function fetchPortalUsers(
   filters: UsersFilters,
@@ -41,7 +62,12 @@ async function fetchPortalUsers(
       verified: filters.verified,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
-      sort: (filters.sort || 'newest') as 'newest' | 'oldest' | 'most_active',
+      emailDomain: filters.emailDomain,
+      postCount: parseActivityFilter(filters.postCount),
+      voteCount: parseActivityFilter(filters.voteCount),
+      commentCount: parseActivityFilter(filters.commentCount),
+      customAttrs: parseCustomAttrs(filters.customAttrs),
+      sort: filters.sort || 'newest',
       page,
       limit: 20,
       segmentIds: filters.segmentIds,
@@ -70,6 +96,11 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
     filters.verified !== undefined ||
     filters.dateFrom ||
     filters.dateTo ||
+    filters.emailDomain ||
+    filters.postCount ||
+    filters.voteCount ||
+    filters.commentCount ||
+    filters.customAttrs ||
     (filters.segmentIds && filters.segmentIds.length > 0)
   )
   const useInitialData = initialData && !hasActiveFilters
@@ -95,6 +126,20 @@ export function useUserDetail({ principalId, enabled = true }: UseUserDetailOpti
     queryFn: () => fetchUserDetail(principalId!),
     enabled: enabled && !!principalId,
     staleTime: 30 * 1000,
+  })
+}
+
+/** Total user count (unfiltered) for the "All users" sidebar label */
+export function useTotalUserCount() {
+  return useQuery({
+    queryKey: usersKeys.totalCount(),
+    queryFn: async () => {
+      const result = (await listPortalUsersFn({
+        data: { sort: 'newest', page: 1, limit: 1 },
+      })) as PortalUserListResultView
+      return result.total
+    },
+    staleTime: 60 * 1000,
   })
 }
 

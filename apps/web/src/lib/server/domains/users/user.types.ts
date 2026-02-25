@@ -58,6 +58,23 @@ export interface PortalUserListItemView {
 }
 
 /**
+ * Parsed activity count filter (e.g. "gte:5" → { op: 'gte', value: 5 })
+ */
+export interface ActivityCountFilter {
+  op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'
+  value: number
+}
+
+/**
+ * Parsed custom attribute filter
+ */
+export interface CustomAttrFilter {
+  key: string
+  op: string
+  value: string
+}
+
+/**
  * Parameters for listing portal users
  */
 export interface PortalUserListParams {
@@ -65,6 +82,14 @@ export interface PortalUserListParams {
   verified?: boolean
   dateFrom?: Date
   dateTo?: Date
+  /** Email domain filter (e.g. "example.com") */
+  emailDomain?: string
+  /** Activity count filters */
+  postCount?: ActivityCountFilter
+  voteCount?: ActivityCountFilter
+  commentCount?: ActivityCountFilter
+  /** Custom attribute filters */
+  customAttrs?: CustomAttrFilter[]
   sort?:
     | 'newest'
     | 'oldest'
@@ -147,7 +172,7 @@ export interface IdentifyPortalUserInput {
   image?: string
   emailVerified?: boolean
   /** Customer-provided external user ID (e.g. from your own system) */
-  externalId?: string
+  externalId?: string | null
   attributes?: Record<string, unknown>
 }
 

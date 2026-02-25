@@ -1,53 +1,23 @@
-import { useState } from 'react'
-import { FunnelIcon } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface UsersLayoutProps {
-  filters: React.ReactNode
+  segmentNav: React.ReactNode
   userList: React.ReactNode
   userDetail: React.ReactNode
-  hasActiveFilters?: boolean
 }
 
-export function UsersLayout({ filters, userList, userDetail, hasActiveFilters }: UsersLayoutProps) {
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-
+export function UsersLayout({ segmentNav, userList, userDetail }: UsersLayoutProps) {
   return (
     <div className="flex h-full bg-background">
-      {/* Filters - Desktop */}
+      {/* Segment Nav - Desktop */}
       <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-5">{filters}</div>
+          <div className="p-5">{segmentNav}</div>
         </ScrollArea>
       </aside>
 
-      {/* Mobile filter button */}
-      <div className="lg:hidden fixed bottom-4 left-4 z-50">
-        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-          <SheetTrigger asChild>
-            <Button size="lg" className="rounded-full shadow-md">
-              <FunnelIcon className="h-4 w-4 mr-2" />
-              Filters
-              {hasActiveFilters && (
-                <span className="ml-2 h-2 w-2 rounded-full bg-primary-foreground" />
-              )}
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-80 p-0">
-            <SheetHeader className="px-4 py-3 border-b border-border/50">
-              <SheetTitle>Filters</SheetTitle>
-            </SheetHeader>
-            <ScrollArea className="h-[calc(100vh-60px)]">
-              <div className="p-5">{filters}</div>
-            </ScrollArea>
-          </SheetContent>
-        </Sheet>
-      </div>
-
       {/* User List */}
-      <main className="w-[420px] lg:w-[540px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
+      <main className="flex-1 lg:flex-none lg:w-[540px] shrink-0 flex flex-col border-r border-border/50 bg-card overflow-hidden">
         <ScrollArea className="h-full">{userList}</ScrollArea>
       </main>
 

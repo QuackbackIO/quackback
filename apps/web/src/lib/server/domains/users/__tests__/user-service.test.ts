@@ -13,8 +13,8 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 
 // --- Mock tracking ---
 
-const insertValuesCalls: unknown[] = []
-const updateSetCalls: unknown[] = []
+const insertValuesCalls: unknown[][] = []
+const updateSetCalls: unknown[][] = []
 
 function createInsertChain() {
   const chain: Record<string, unknown> = {}

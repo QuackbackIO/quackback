@@ -258,6 +258,7 @@ async function createAuth() {
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
+          'email',
           'read:feedback',
           'offline_access',
           'write:feedback',

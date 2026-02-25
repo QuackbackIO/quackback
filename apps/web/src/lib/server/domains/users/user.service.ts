@@ -91,6 +91,26 @@ async function fetchSegmentsForPrincipals(
 }
 
 /**
+ * Build a SQL comparison for activity count filters.
+ */
+function buildCountCondition(countExpr: ReturnType<typeof sql>, op: string, value: number) {
+  switch (op) {
+    case 'gt':
+      return sql`${countExpr} > ${value}`
+    case 'gte':
+      return sql`${countExpr} >= ${value}`
+    case 'lt':
+      return sql`${countExpr} < ${value}`
+    case 'lte':
+      return sql`${countExpr} <= ${value}`
+    case 'eq':
+      return sql`${countExpr} = ${value}`
+    default:
+      return sql`${countExpr} >= ${value}`
+  }
+}
+
+/**
  * List portal users for an organization with activity counts
  *
  * Queries principal table for role='user'.
@@ -108,6 +128,11 @@ export async function listPortalUsers(
       verified,
       dateFrom,
       dateTo,
+      emailDomain,
+      postCount: postCountFilter,
+      voteCount: voteCountFilter,
+      commentCount: commentCountFilter,
+      customAttrs,
       sort = 'newest',
       page = 1,
       limit = 20,
@@ -169,6 +194,70 @@ export async function listPortalUsers(
     }
     if (dateTo) {
       conditions.push(sql`${principal.createdAt} <= ${dateTo.toISOString()}`)
+    }
+
+    // Email domain filter (ILIKE on the domain part of the email)
+    if (emailDomain) {
+      conditions.push(ilike(user.email, `%@${emailDomain}`))
+    }
+
+    // Activity count filters (use HAVING-style conditions on the pre-aggregated CTEs)
+    if (postCountFilter) {
+      const { op, value } = postCountFilter
+      const countExpr = sql`COALESCE(${postCounts.postCount}, 0)`
+      conditions.push(buildCountCondition(countExpr, op, value))
+    }
+    if (voteCountFilter) {
+      const { op, value } = voteCountFilter
+      const countExpr = sql`COALESCE(${voteCounts.voteCount}, 0)`
+      conditions.push(buildCountCondition(countExpr, op, value))
+    }
+    if (commentCountFilter) {
+      const { op, value } = commentCountFilter
+      const countExpr = sql`COALESCE(${commentCounts.commentCount}, 0)`
+      conditions.push(buildCountCondition(countExpr, op, value))
+    }
+
+    // Custom attribute filters (metadata JSON fields)
+    if (customAttrs && customAttrs.length > 0) {
+      for (const attr of customAttrs) {
+        const jsonVal = sql`(${user.metadata}::jsonb->>${attr.key})`
+        switch (attr.op) {
+          case 'eq':
+            conditions.push(sql`${jsonVal} = ${attr.value}`)
+            break
+          case 'neq':
+            conditions.push(sql`${jsonVal} != ${attr.value}`)
+            break
+          case 'contains':
+            conditions.push(sql`${jsonVal} ILIKE ${'%' + attr.value + '%'}`)
+            break
+          case 'starts_with':
+            conditions.push(sql`${jsonVal} ILIKE ${attr.value + '%'}`)
+            break
+          case 'ends_with':
+            conditions.push(sql`${jsonVal} ILIKE ${'%' + attr.value}`)
+            break
+          case 'gt':
+            conditions.push(sql`(${jsonVal})::numeric > ${Number(attr.value)}`)
+            break
+          case 'gte':
+            conditions.push(sql`(${jsonVal})::numeric >= ${Number(attr.value)}`)
+            break
+          case 'lt':
+            conditions.push(sql`(${jsonVal})::numeric < ${Number(attr.value)}`)
+            break
+          case 'lte':
+            conditions.push(sql`(${jsonVal})::numeric <= ${Number(attr.value)}`)
+            break
+          case 'is_set':
+            conditions.push(sql`${jsonVal} IS NOT NULL`)
+            break
+          case 'is_not_set':
+            conditions.push(sql`${jsonVal} IS NULL`)
+            break
+        }
+      }
     }
 
     // Segment filter — OR logic: users in ANY of the selected segments
@@ -240,11 +329,21 @@ export async function listPortalUsers(
         .orderBy(orderBy)
         .limit(limit)
         .offset((page - 1) * limit),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(principal)
-        .innerJoin(user, eq(principal.userId, user.id))
-        .where(whereClause),
+      // Count query needs the same JOINs when activity count filters are used
+      postCountFilter || voteCountFilter || commentCountFilter
+        ? db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(principal)
+            .innerJoin(user, eq(principal.userId, user.id))
+            .leftJoin(postCounts, eq(postCounts.principalId, principal.id))
+            .leftJoin(commentCounts, eq(commentCounts.principalId, principal.id))
+            .leftJoin(voteCounts, eq(voteCounts.principalId, principal.id))
+            .where(whereClause)
+        : db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(principal)
+            .innerJoin(user, eq(principal.userId, user.id))
+            .where(whereClause),
     ])
 
     const total = Number(countResult[0]?.count ?? 0)
@@ -621,9 +720,7 @@ function extractExternalId(metadata: string | null): string | null {
  *
  * Returns validated attributes and any errors encountered.
  */
-export async function validateAndCoerceAttributes(
-  attributes: Record<string, unknown>
-): Promise<{
+export async function validateAndCoerceAttributes(attributes: Record<string, unknown>): Promise<{
   valid: Record<string, unknown>
   removals: string[]
   errors: Array<{ key: string; reason: string }>

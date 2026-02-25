@@ -13,6 +13,11 @@ const searchSchema = z.object({
   verified: z.enum(['true', 'false']).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  emailDomain: z.string().optional(),
+  postCount: z.string().optional(),
+  voteCount: z.string().optional(),
+  commentCount: z.string().optional(),
+  customAttrs: z.string().optional(),
   sort: z
     .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
     .optional()
@@ -32,11 +37,36 @@ function parseSearchToQueryParams(deps: SearchParams) {
     ? (deps.segments.split(',').filter(Boolean) as SegmentId[])
     : undefined
 
+  // Parse activity count filter "op:value" format
+  function parseActivityFilter(raw?: string) {
+    if (!raw) return undefined
+    const [op, val] = raw.split(':')
+    if (!op || val === undefined) return undefined
+    return { op: op as 'gt' | 'gte' | 'lt' | 'lte' | 'eq', value: Number(val) }
+  }
+
+  // Parse custom attrs "key:op:value,key2:op:value2" format
+  function parseCustomAttrs(raw?: string) {
+    if (!raw) return undefined
+    return raw
+      .split(',')
+      .map((part) => {
+        const [key, op, ...rest] = part.split(':')
+        return key && op ? { key, op, value: rest.join(':') } : null
+      })
+      .filter(Boolean) as { key: string; op: string; value: string }[]
+  }
+
   return {
     search: deps.search,
     verified,
     dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
     dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+    emailDomain: deps.emailDomain,
+    postCount: parseActivityFilter(deps.postCount),
+    voteCount: parseActivityFilter(deps.voteCount),
+    commentCount: parseActivityFilter(deps.commentCount),
+    customAttrs: parseCustomAttrs(deps.customAttrs),
     sort: deps.sort,
     page: 1,
     limit: 20,
@@ -46,11 +76,30 @@ function parseSearchToQueryParams(deps: SearchParams) {
 
 export const Route = createFileRoute('/admin/users')({
   validateSearch: searchSchema,
-  loaderDeps: ({ search: { search, verified, dateFrom, dateTo, sort, segments } }) => ({
+  loaderDeps: ({
+    search: {
+      search,
+      verified,
+      dateFrom,
+      dateTo,
+      emailDomain,
+      postCount,
+      voteCount,
+      commentCount,
+      customAttrs,
+      sort,
+      segments,
+    },
+  }) => ({
     search,
     verified,
     dateFrom,
     dateTo,
+    emailDomain,
+    postCount,
+    voteCount,
+    commentCount,
+    customAttrs,
     sort,
     segments,
   }),
