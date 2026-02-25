@@ -14,6 +14,8 @@ export interface InboxFilters {
   status?: string[]
   board?: string[]
   tags?: string[]
+  /** Segment IDs - filter posts whose author is in any of these segments */
+  segmentIds?: string[]
   owner?: string | 'unassigned'
   dateFrom?: string
   dateTo?: string
@@ -36,13 +38,37 @@ export interface PublicFeedbackFilters {
 }
 
 /**
+ * Filters for roadmap views (admin and public portal).
+ * Both views share the same filter shape. On the public portal, segmentIds
+ * is only populated when the viewer is an admin/member.
+ */
+export interface RoadmapFilters {
+  search?: string
+  board?: string[]
+  tags?: string[]
+  /** Segment IDs - filter posts whose author is in any of these segments */
+  segmentIds?: string[]
+  sort?: 'votes' | 'newest' | 'oldest'
+}
+
+/**
  * Filters for the admin users list.
  */
 export interface UsersFilters {
   search?: string
+  /** Segment selection from sidebar (multi-select, like statuses for posts) */
+  segmentIds?: string[]
   verified?: boolean
   dateFrom?: string
   dateTo?: string
+  /** Email domain filter (e.g. "example.com") */
+  emailDomain?: string
+  /** Activity count filters: "operator:value" format (e.g. "gte:5") */
+  postCount?: string
+  voteCount?: string
+  commentCount?: string
+  /** Custom attribute filters: "key:op:value,key2:op:value2" */
+  customAttrs?: string
   sort?:
     | 'newest'
     | 'oldest'
@@ -51,6 +77,4 @@ export interface UsersFilters {
     | 'most_comments'
     | 'most_votes'
     | 'name'
-  /** Filter by segment IDs (OR logic — users in ANY selected segment) */
-  segmentIds?: string[]
 }

@@ -13,8 +13,8 @@ export type SegmentListItem = Awaited<
 >[number]
 
 /** Fetch all segments with member counts. */
-export function useSegments() {
-  return useQuery(adminQueries.segments())
+export function useSegments(options?: { enabled?: boolean }) {
+  return useQuery({ ...adminQueries.segments(), enabled: options?.enabled })
 }
 
 /** Fetch all segments, suspending while loading. */
