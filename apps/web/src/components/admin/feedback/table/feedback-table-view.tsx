@@ -10,6 +10,7 @@ import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
+import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 
 interface FeedbackTableViewProps {
@@ -18,6 +19,7 @@ interface FeedbackTableViewProps {
   boards: Board[]
   tags: Tag[]
   members: TeamMember[]
+  segments?: SegmentListItem[]
   filters: InboxFilters
   onFiltersChange: (updates: Partial<InboxFilters>) => void
   hasMore: boolean
@@ -30,6 +32,7 @@ interface FeedbackTableViewProps {
   headerAction?: React.ReactNode
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
+  onToggleSegment?: (id: string) => void
 }
 
 function TableSkeleton() {
@@ -74,6 +77,7 @@ export function FeedbackTableView({
   boards,
   tags,
   members,
+  segments,
   filters,
   onFiltersChange,
   hasMore,
@@ -86,6 +90,7 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
+  onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
   const search = filters.search
@@ -183,8 +188,10 @@ export function FeedbackTableView({
           tags={tags}
           statuses={statuses}
           members={members}
+          segments={segments}
           onToggleStatus={onToggleStatus}
           onToggleBoard={onToggleBoard}
+          onToggleSegment={onToggleSegment}
         />
       </div>
     </div>

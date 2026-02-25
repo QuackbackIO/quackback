@@ -108,6 +108,8 @@ export interface InboxPostListParams {
   /** Filter by status slugs - uses indexed lookup */
   statusSlugs?: string[]
   tagIds?: TagId[]
+  /** Filter by segment IDs - posts whose author is in any of these segments */
+  segmentIds?: import('@quackback/ids').SegmentId[]
   ownerId?: string | null
   search?: string
   dateFrom?: Date

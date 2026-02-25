@@ -8,6 +8,7 @@ import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
@@ -34,8 +35,18 @@ export function InboxContainer({
   const search = Route.useSearch()
 
   // URL-based filter state
-  const { filters, setFilters, clearFilters, hasActiveFilters, toggleBoard, toggleStatus } =
-    useInboxFilters()
+  const {
+    filters,
+    setFilters,
+    clearFilters,
+    hasActiveFilters,
+    toggleBoard,
+    toggleStatus,
+    toggleSegment,
+  } = useInboxFilters()
+
+  // Segments data for filter UI
+  const { data: segments } = useSegments()
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -106,6 +117,7 @@ export function InboxContainer({
           boards={boards}
           tags={tags}
           statuses={statuses}
+          segments={segments}
         />
       }
     >
@@ -115,6 +127,7 @@ export function InboxContainer({
         boards={boards}
         tags={tags}
         members={members}
+        segments={segments}
         filters={filters}
         onFiltersChange={setFilters}
         hasMore={!!hasMore}
@@ -126,6 +139,7 @@ export function InboxContainer({
         onClearFilters={clearFilters}
         onToggleStatus={toggleStatus}
         onToggleBoard={toggleBoard}
+        onToggleSegment={toggleSegment}
         headerAction={
           <CreatePostDialog
             boards={boards}

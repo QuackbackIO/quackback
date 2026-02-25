@@ -16,6 +16,7 @@ export function useInboxFilters() {
       status: search.status?.length ? search.status : undefined,
       board: search.board?.length ? search.board : undefined,
       tags: search.tags?.length ? search.tags : undefined,
+      segmentIds: search.segments?.length ? search.segments : undefined,
       owner: search.owner,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
@@ -39,6 +40,7 @@ export function useInboxFilters() {
           ...('status' in updates && { status: updates.status }),
           ...('board' in updates && { board: updates.board }),
           ...('tags' in updates && { tags: updates.tags }),
+          ...('segmentIds' in updates && { segments: updates.segmentIds }),
           ...('owner' in updates && { owner: updates.owner }),
           ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
           ...('dateTo' in updates && { dateTo: updates.dateTo }),
@@ -70,6 +72,7 @@ export function useInboxFilters() {
       filters.status?.length ||
       filters.board?.length ||
       filters.tags?.length ||
+      filters.segmentIds?.length ||
       filters.owner ||
       filters.dateFrom ||
       filters.dateTo ||
@@ -96,6 +99,14 @@ export function useInboxFilters() {
     [filters.status, setFilters]
   )
 
+  const toggleSegment = useCallback(
+    (segmentId: string) => {
+      const newSegments = toggleItem(filters.segmentIds, segmentId)
+      setFilters({ segmentIds: newSegments })
+    },
+    [filters.segmentIds, setFilters]
+  )
+
   const isBoardSelected = useCallback(
     (boardId: string) => isItemSelected(boardId, filters.board),
     [filters.board]
@@ -113,6 +124,7 @@ export function useInboxFilters() {
     hasActiveFilters,
     toggleBoard,
     toggleStatus,
+    toggleSegment,
     isBoardSelected,
     isStatusSelected,
   }

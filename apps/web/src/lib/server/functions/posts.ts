@@ -9,6 +9,7 @@ import {
   type BoardId,
   type StatusId,
   type TagId,
+  type SegmentId,
   type PrincipalId,
   type UserId,
 } from '@quackback/ids'
@@ -87,6 +88,7 @@ const listInboxPostsSchema = z.object({
   statusIds: z.array(z.string()).optional(),
   statusSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
+  segmentIds: z.array(z.string()).optional(),
   ownerId: z.union([z.string(), z.null()]).optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),
@@ -176,6 +178,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         statusIds: data.statusIds as StatusId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as TagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
         ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
