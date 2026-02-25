@@ -13,8 +13,10 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { UserCard } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
+import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
 import type { PortalUserListItemView } from '@/lib/server/domains/users'
-import type { UsersFilters } from '@/components/admin/users/use-users-filters'
+import type { UsersFilters } from '@/lib/shared/types'
+import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
 interface UsersListProps {
   users: PortalUserListItemView[]
@@ -29,6 +31,11 @@ interface UsersListProps {
   hasActiveFilters: boolean
   onClearFilters: () => void
   total: number
+  // Segment props for mobile selector
+  segments?: SegmentListItem[]
+  selectedSegmentIds: string[]
+  onSelectSegment: (segmentId: string, shiftKey: boolean) => void
+  onClearSegments: () => void
 }
 
 function UserListSkeleton() {
@@ -94,6 +101,10 @@ export function UsersList({
   hasActiveFilters,
   onClearFilters,
   total,
+  segments,
+  selectedSegmentIds,
+  onSelectSegment,
+  onClearSegments,
 }: UsersListProps) {
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -161,6 +172,16 @@ export function UsersList({
 
   const headerContent = (
     <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+      {/* Mobile segment selector - only visible below lg */}
+      <div className="lg:hidden mb-2">
+        <MobileSegmentSelector
+          segments={segments}
+          selectedSegmentIds={selectedSegmentIds}
+          onSelectSegment={onSelectSegment}
+          onClearSegments={onClearSegments}
+        />
+      </div>
+
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
@@ -171,17 +192,18 @@ export function UsersList({
         />
         <Select
           value={filters.sort || 'newest'}
-          onValueChange={(value) =>
-            handleSortChange(value as 'newest' | 'oldest' | 'most_active' | 'name')
-          }
+          onValueChange={(value) => handleSortChange(value as UsersFilters['sort'])}
         >
-          <SelectTrigger className="h-8 w-[110px] text-xs border-border/50">
+          <SelectTrigger className="h-8 w-[130px] text-xs border-border/50">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="newest">Newest</SelectItem>
             <SelectItem value="oldest">Oldest</SelectItem>
             <SelectItem value="most_active">Most Active</SelectItem>
+            <SelectItem value="most_posts">Most Posts</SelectItem>
+            <SelectItem value="most_comments">Most Comments</SelectItem>
+            <SelectItem value="most_votes">Most Votes</SelectItem>
             <SelectItem value="name">Name A-Z</SelectItem>
           </SelectContent>
         </Select>

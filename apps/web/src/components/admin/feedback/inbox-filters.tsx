@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
 import { toggleItem } from './filter-utils'
+import { FilterSection } from '@/components/shared/filter-section'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
 interface InboxFiltersProps {
   filters: InboxFilters
@@ -11,39 +11,7 @@ interface InboxFiltersProps {
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
-}
-
-function FilterSection({
-  title,
-  children,
-  hint,
-  defaultOpen = true,
-}: {
-  title: string
-  children: React.ReactNode
-  hint?: string
-  defaultOpen?: boolean
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-
-  return (
-    <div className="pb-4 last:pb-0">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {title}
-        {isOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
-      </button>
-      {isOpen && (
-        <div className="mt-2">
-          {children}
-          {hint && <p className="mt-2 text-[10px] text-muted-foreground/60">{hint}</p>}
-        </div>
-      )}
-    </div>
-  )
+  segments?: SegmentListItem[]
 }
 
 export function InboxFiltersPanel({
@@ -52,11 +20,12 @@ export function InboxFiltersPanel({
   boards,
   tags,
   statuses,
+  segments,
 }: InboxFiltersProps) {
   // Handle filter selection with multi-select support
   // - Regular click: select only this item (replace), or clear if already the only one selected
   // - Ctrl/Cmd+click: add/remove from selection (toggle)
-  function handleFilterSelect<K extends 'status' | 'board'>(
+  function handleFilterSelect<K extends 'status' | 'board' | 'segmentIds'>(
     key: K,
     current: string[] | undefined,
     id: string,
@@ -81,6 +50,9 @@ export function InboxFiltersPanel({
     const newTags = toggleItem(filters.tags, tagId)
     onFiltersChange({ tags: newTags })
   }
+
+  const handleSegmentSelect = (id: string, addToSelection: boolean) =>
+    handleFilterSelect('segmentIds', filters.segmentIds, id, addToSelection)
 
   return (
     <div className="space-y-0">
@@ -122,6 +94,40 @@ export function InboxFiltersPanel({
                   }`}
                 >
                   {tag.name}
+                </button>
+              )
+            })}
+          </div>
+        </FilterSection>
+      )}
+
+      {/* Segments Filter */}
+      {segments && segments.length > 0 && (
+        <FilterSection title="Segments" defaultOpen={false}>
+          <div className="space-y-0.5">
+            {segments.map((segment) => {
+              const isSelected = filters.segmentIds?.includes(segment.id)
+              return (
+                <button
+                  key={segment.id}
+                  type="button"
+                  onClick={(e) => handleSegmentSelect(segment.id, e.ctrlKey || e.metaKey)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                    isSelected
+                      ? 'bg-foreground/10 text-foreground font-medium'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                  }`}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: segment.color }}
+                  />
+                  <span className="truncate">{segment.name}</span>
+                  {segment.memberCount != null && (
+                    <span className="ml-auto text-[10px] text-muted-foreground">
+                      {segment.memberCount}
+                    </span>
+                  )}
                 </button>
               )
             })}

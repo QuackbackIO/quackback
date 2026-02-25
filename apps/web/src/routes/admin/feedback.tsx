@@ -7,6 +7,7 @@ const searchSchema = z.object({
   board: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   status: z.array(z.string()).optional(),
+  segments: z.array(z.string()).optional(),
   owner: z.string().optional(),
   search: z.string().optional(),
   dateFrom: z.string().optional(),

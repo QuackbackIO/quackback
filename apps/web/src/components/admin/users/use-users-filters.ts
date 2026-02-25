@@ -17,12 +17,22 @@ export function useUsersFilters() {
       verified = false
     }
 
+    const segmentIds = (search as { segments?: string }).segments
+      ? (search as { segments?: string }).segments!.split(',').filter(Boolean)
+      : undefined
+
     return {
       search: search.search,
       verified,
       dateFrom: search.dateFrom,
       dateTo: search.dateTo,
+      emailDomain: search.emailDomain,
+      postCount: search.postCount,
+      voteCount: search.voteCount,
+      commentCount: search.commentCount,
+      customAttrs: search.customAttrs,
       sort: search.sort,
+      segmentIds,
     }
   }, [search])
 
@@ -40,6 +50,14 @@ export function useUsersFilters() {
         }
       }
 
+      // Convert segmentIds array to comma-separated string for URL
+      const segmentsParam =
+        'segmentIds' in updates
+          ? updates.segmentIds && updates.segmentIds.length > 0
+            ? updates.segmentIds.join(',')
+            : undefined
+          : undefined
+
       void navigate({
         to: '/admin/users',
         search: {
@@ -48,7 +66,14 @@ export function useUsersFilters() {
           ...('verified' in updates && { verified: verifiedParam }),
           ...('dateFrom' in updates && { dateFrom: updates.dateFrom }),
           ...('dateTo' in updates && { dateTo: updates.dateTo }),
+          ...('emailDomain' in updates && { emailDomain: updates.emailDomain }),
+
+          ...('postCount' in updates && { postCount: updates.postCount }),
+          ...('voteCount' in updates && { voteCount: updates.voteCount }),
+          ...('commentCount' in updates && { commentCount: updates.commentCount }),
+          ...('customAttrs' in updates && { customAttrs: updates.customAttrs }),
           ...('sort' in updates && { sort: updates.sort }),
+          ...('segmentIds' in updates && { segments: segmentsParam }),
         },
         replace: true,
       })
@@ -76,6 +101,8 @@ export function useUsersFilters() {
       search: {
         sort: search.sort,
         selected: search.selected,
+        // Preserve segment selection when clearing filters
+        segments: (search as { segments?: string }).segments,
       },
       replace: true,
     })
@@ -86,7 +113,12 @@ export function useUsersFilters() {
       filters.search ||
       filters.verified !== undefined ||
       filters.dateFrom ||
-      filters.dateTo
+      filters.dateTo ||
+      filters.emailDomain ||
+      filters.postCount ||
+      filters.voteCount ||
+      filters.commentCount ||
+      filters.customAttrs
     )
   }, [filters])
 

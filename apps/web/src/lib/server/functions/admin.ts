@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { generateId, type InviteId, type UserId, type PrincipalId } from '@quackback/ids'
+import {
+  generateId,
+  type InviteId,
+  type UserId,
+  type PrincipalId,
+  type SegmentId,
+} from '@quackback/ids'
 import type { BoardId, TagId } from '@quackback/ids'
 import {
   isOnboardingComplete as checkComplete,
@@ -25,6 +31,28 @@ import {
   getPortalUserDetail,
   removePortalUser,
 } from '@/lib/server/domains/users/user.service'
+import {
+  listSegments,
+  createSegment,
+  updateSegment,
+  deleteSegment,
+  assignUsersToSegment,
+  removeUsersFromSegment,
+  evaluateDynamicSegment,
+  evaluateAllDynamicSegments,
+} from '@/lib/server/domains/segments/segment.service'
+import {
+  upsertSegmentEvaluationSchedule,
+  removeSegmentEvaluationSchedule,
+} from '@/lib/server/events/segment-scheduler'
+import type { CreateSegmentInput, UpdateSegmentInput } from '@/lib/server/domains/segments'
+import {
+  listUserAttributes,
+  createUserAttribute,
+  updateUserAttribute,
+  deleteUserAttribute,
+} from '@/lib/server/domains/user-attributes/user-attribute.service'
+import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
@@ -44,6 +72,7 @@ const inboxPostListSchema = z.object({
   statusSlugs: z.array(z.string()).optional(),
   boardIds: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
+  segmentIds: z.array(z.string()).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   minVotes: z.number().optional(),
@@ -52,14 +81,33 @@ const inboxPostListSchema = z.object({
   showDeleted: z.boolean().optional(),
 })
 
+const activityCountFilterSchema = z.object({
+  op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']),
+  value: z.number(),
+})
+
+const customAttrFilterSchema = z.object({
+  key: z.string(),
+  op: z.string(),
+  value: z.string(),
+})
+
 const listPortalUsersSchema = z.object({
   search: z.string().optional(),
   verified: z.boolean().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional(),
+  emailDomain: z.string().optional(),
+  postCount: activityCountFilterSchema.optional(),
+  voteCount: activityCountFilterSchema.optional(),
+  commentCount: activityCountFilterSchema.optional(),
+  customAttrs: z.array(customAttrFilterSchema).optional(),
+  sort: z
+    .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
+    .optional(),
   page: z.number().optional(),
   limit: z.number().optional(),
+  segmentIds: z.array(z.string()).optional(),
 })
 
 const portalUserByIdSchema = z.object({
@@ -80,6 +128,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         boardIds: data.boardIds as BoardId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as TagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
         ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
@@ -485,9 +534,15 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         verified: data.verified,
         dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
         dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+        emailDomain: data.emailDomain,
+        postCount: data.postCount,
+        voteCount: data.voteCount,
+        commentCount: data.commentCount,
+        customAttrs: data.customAttrs,
         sort: data.sort,
         page: data.page,
         limit: data.limit,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
       })
 
       console.log(`[fn:admin] listPortalUsersFn: count=${result.items.length}`)
@@ -800,6 +855,383 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ resendInvitationFn failed:`, error)
+      throw error
+    }
+  })
+
+// ============================================
+// Segment Operations
+// ============================================
+
+const segmentByIdSchema = z.object({
+  segmentId: z.string(),
+})
+
+// Shared condition schema used by both create and update
+const segmentConditionSchema = z.object({
+  attribute: z.enum([
+    'email_domain',
+    'email_verified',
+    'created_at_days_ago',
+    'post_count',
+    'vote_count',
+    'comment_count',
+    'metadata_key',
+  ]),
+  operator: z.enum([
+    'eq',
+    'neq',
+    'lt',
+    'lte',
+    'gt',
+    'gte',
+    'contains',
+    'starts_with',
+    'ends_with',
+    'in',
+    'is_set',
+    'is_not_set',
+  ]),
+  // value is optional for presence operators (is_set / is_not_set)
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))])
+    .optional(),
+  metadataKey: z.string().optional(),
+})
+
+const segmentRulesSchema = z.object({
+  match: z.enum(['all', 'any']),
+  conditions: z.array(segmentConditionSchema),
+})
+
+const CRON_REGEX =
+  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
+
+const evaluationScheduleSchema = z.object({
+  enabled: z.boolean(),
+  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
+})
+
+const userAttributeDefinitionSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional(),
+})
+
+const weightConfigSchema = z.object({
+  attribute: userAttributeDefinitionSchema,
+  aggregation: z.enum(['sum', 'average', 'count', 'median']),
+})
+
+const createSegmentSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  type: z.enum(['manual', 'dynamic']),
+  color: z.string().optional(),
+  rules: segmentRulesSchema.optional(),
+  evaluationSchedule: evaluationScheduleSchema.optional(),
+  weightConfig: weightConfigSchema.optional(),
+})
+
+const updateSegmentSchema = z.object({
+  segmentId: z.string(),
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  color: z.string().optional(),
+  rules: segmentRulesSchema.nullable().optional(),
+  evaluationSchedule: evaluationScheduleSchema.nullable().optional(),
+  weightConfig: weightConfigSchema.nullable().optional(),
+})
+
+const assignUsersSchema = z.object({
+  segmentId: z.string(),
+  principalIds: z.array(z.string()).min(1),
+})
+
+/**
+ * List all segments with member counts.
+ */
+export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  console.log(`[fn:admin] listSegmentsFn`)
+  try {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const result = await listSegments()
+    console.log(`[fn:admin] listSegmentsFn: count=${result.length}`)
+    return result.map((seg) => ({
+      ...seg,
+      createdAt: seg.createdAt.toISOString(),
+      updatedAt: seg.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:admin] ❌ listSegmentsFn failed:`, error)
+    throw error
+  }
+})
+
+/**
+ * Create a new segment.
+ */
+export const createSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(createSegmentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] createSegmentFn: name=${data.name}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const segment = await createSegment(data as CreateSegmentInput)
+
+      // Set up auto-evaluation schedule if configured
+      if (segment.type === 'dynamic' && segment.evaluationSchedule?.enabled) {
+        await upsertSegmentEvaluationSchedule(
+          segment.id as SegmentId,
+          segment.evaluationSchedule
+        ).catch((err) => console.error(`[fn:admin] Failed to set up evaluation schedule:`, err))
+      }
+
+      console.log(`[fn:admin] createSegmentFn: created id=${segment.id}`)
+      return {
+        ...segment,
+        createdAt: segment.createdAt.toISOString(),
+        updatedAt: segment.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ createSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Update an existing segment.
+ */
+export const updateSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateSegmentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] updateSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const { segmentId, ...updates } = data
+      const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
+
+      // Update evaluation schedule
+      if (updates.evaluationSchedule !== undefined) {
+        if (segment.evaluationSchedule?.enabled) {
+          await upsertSegmentEvaluationSchedule(
+            segmentId as SegmentId,
+            segment.evaluationSchedule
+          ).catch((err) => console.error(`[fn:admin] Failed to update evaluation schedule:`, err))
+        } else {
+          await removeSegmentEvaluationSchedule(segmentId as SegmentId).catch((err) =>
+            console.error(`[fn:admin] Failed to remove evaluation schedule:`, err)
+          )
+        }
+      }
+
+      console.log(`[fn:admin] updateSegmentFn: updated`)
+      return {
+        ...segment,
+        createdAt: segment.createdAt.toISOString(),
+        updatedAt: segment.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ updateSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Delete a segment.
+ */
+export const deleteSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(segmentByIdSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] deleteSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      await deleteSegment(data.segmentId as SegmentId)
+      console.log(`[fn:admin] deleteSegmentFn: deleted`)
+      return { segmentId: data.segmentId }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ deleteSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Assign users to a manual segment.
+ */
+export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(assignUsersSchema)
+  .handler(async ({ data }) => {
+    console.log(
+      `[fn:admin] assignUsersToSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`
+    )
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      await assignUsersToSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
+      console.log(`[fn:admin] assignUsersToSegmentFn: assigned`)
+      return { segmentId: data.segmentId, assigned: data.principalIds.length }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ assignUsersToSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Remove users from a manual segment.
+ */
+export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(assignUsersSchema)
+  .handler(async ({ data }) => {
+    console.log(
+      `[fn:admin] removeUsersFromSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`
+    )
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      await removeUsersFromSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
+      console.log(`[fn:admin] removeUsersFromSegmentFn: removed`)
+      return { segmentId: data.segmentId, removed: data.principalIds.length }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ removeUsersFromSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Trigger re-evaluation of a dynamic segment.
+ */
+export const evaluateSegmentFn = createServerFn({ method: 'POST' })
+  .inputValidator(segmentByIdSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] evaluateSegmentFn: segmentId=${data.segmentId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+      const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
+      console.log(`[fn:admin] evaluateSegmentFn: added=${result.added}, removed=${result.removed}`)
+      return result
+    } catch (error) {
+      console.error(`[fn:admin] ❌ evaluateSegmentFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Trigger re-evaluation of all dynamic segments.
+ */
+export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(async () => {
+  console.log(`[fn:admin] evaluateAllSegmentsFn`)
+  try {
+    await requireAuth({ roles: ['admin'] })
+    const results = await evaluateAllDynamicSegments()
+    console.log(`[fn:admin] evaluateAllSegmentsFn: evaluated ${results.length} segments`)
+    return results
+  } catch (error) {
+    console.error(`[fn:admin] ❌ evaluateAllSegmentsFn failed:`, error)
+    throw error
+  }
+})
+
+// ============================================
+// User Attribute Definitions
+// ============================================
+
+const userAttributeIdSchema = z.object({
+  id: z.string().min(1),
+})
+
+const createUserAttributeSchema = z.object({
+  key: z.string().min(1).max(64),
+  label: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional(),
+  externalKey: z.string().max(256).optional().nullable(),
+})
+
+const updateUserAttributeSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(128).optional(),
+  description: z.string().max(512).optional().nullable(),
+  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']).optional(),
+  currencyCode: z
+    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+    .optional()
+    .nullable(),
+  externalKey: z.string().max(256).optional().nullable(),
+})
+
+/**
+ * List all user attribute definitions.
+ */
+export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  try {
+    await requireAuth({ roles: ['admin', 'member'] })
+    return listUserAttributes()
+  } catch (error) {
+    console.error('[fn:admin] ❌ listUserAttributesFn failed:', error)
+    throw error
+  }
+})
+
+/**
+ * Create a new user attribute definition.
+ */
+export const createUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(createUserAttributeSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      return createUserAttribute({
+        key: data.key,
+        label: data.label,
+        description: data.description,
+        type: data.type,
+        currencyCode: data.currencyCode,
+        externalKey: data.externalKey,
+      })
+    } catch (error) {
+      console.error('[fn:admin] ❌ createUserAttributeFn failed:', error)
+      throw error
+    }
+  })
+
+/**
+ * Update an existing user attribute definition.
+ */
+export const updateUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateUserAttributeSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      return updateUserAttribute(data.id as UserAttributeId, {
+        label: data.label,
+        description: data.description,
+        type: data.type,
+        currencyCode: data.currencyCode,
+        externalKey: data.externalKey,
+      })
+    } catch (error) {
+      console.error('[fn:admin] ❌ updateUserAttributeFn failed:', error)
+      throw error
+    }
+  })
+
+/**
+ * Delete a user attribute definition.
+ */
+export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
+  .inputValidator(userAttributeIdSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin'] })
+      await deleteUserAttribute(data.id as UserAttributeId)
+      return { deleted: true }
+    } catch (error) {
+      console.error('[fn:admin] ❌ deleteUserAttributeFn failed:', error)
       throw error
     }
   })

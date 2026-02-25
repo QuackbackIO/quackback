@@ -22,6 +22,8 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/server/domains/users'
+import { UserSegmentBadges } from '@/components/admin/users/user-segments'
+import type { PrincipalId } from '@quackback/ids'
 
 interface UserDetailProps {
   user: PortalUserDetail | null
@@ -245,6 +247,49 @@ export function UserDetail({
             <div className="text-xs text-muted-foreground">Votes</div>
           </div>
         </div>
+
+        {/* User Attributes */}
+        {user.metadata &&
+          (() => {
+            try {
+              const attrs = JSON.parse(user.metadata as string) as Record<string, unknown>
+              const entries = Object.entries(attrs).filter(([key]) => !key.startsWith('_'))
+              if (entries.length === 0) return null
+              return (
+                <div className="border-t border-border/50 pt-4">
+                  <h3 className="text-sm font-medium mb-3">Attributes</h3>
+                  <div className="space-y-1.5">
+                    {entries.map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{key}</span>
+                        <span className="font-mono text-xs truncate max-w-[60%] text-right">
+                          {value === null ? (
+                            <span className="text-muted-foreground/50 italic">null</span>
+                          ) : (
+                            String(value)
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            } catch {
+              return null
+            }
+          })()}
+
+        {/* Segments */}
+        {(user.segments.length > 0 || canManageUsers) && (
+          <div className="border-t border-border/50 pt-4">
+            <h3 className="text-sm font-medium mb-3">Segments</h3>
+            <UserSegmentBadges
+              principalId={user.principalId as PrincipalId}
+              segments={user.segments}
+              canManage={canManageUsers}
+            />
+          </div>
+        )}
 
         {/* Engaged Posts */}
         <div>

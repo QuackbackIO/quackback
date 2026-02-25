@@ -29,4 +29,11 @@ export function logStartupBanner(): void {
   ]
 
   console.log(lines.join('\n'))
+
+  // Restore any dynamic segment evaluation schedules that were persisted in the
+  // DB but may be absent from Redis (e.g. after a Redis wipe in dev). BullMQ
+  // repeatable jobs survive normal app restarts, but this is a safety net.
+  import('@/lib/server/events/segment-scheduler')
+    .then(({ restoreAllEvaluationSchedules }) => restoreAllEvaluationSchedules())
+    .catch((err) => console.error('[Startup] Failed to restore segment schedules:', err))
 }

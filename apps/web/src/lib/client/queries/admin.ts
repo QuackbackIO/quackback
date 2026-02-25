@@ -12,6 +12,8 @@ import {
   fetchIntegrationCatalog,
   fetchIntegrationByType,
   listPortalUsersFn,
+  listSegmentsFn,
+  listUserAttributesFn,
 } from '@/lib/server/functions/admin'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import {
@@ -164,8 +166,19 @@ export const adminQueries = {
             sort: filters.sort,
             page: filters.page,
             limit: filters.limit,
+            segmentIds: filters.segmentIds,
           },
         }),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * List all segments with member counts
+   */
+  segments: () =>
+    queryOptions({
+      queryKey: ['admin', 'segments'],
+      queryFn: () => listSegmentsFn(),
       staleTime: 30 * 1000,
     }),
 
@@ -321,6 +334,16 @@ export const adminQueries = {
       queryKey: ['admin', 'authProviderCredentials', credentialType],
       queryFn: () => fetchAuthProviderCredentialsMaskedFn({ data: { credentialType } }),
       staleTime: 5 * 60 * 1000,
+    }),
+
+  /**
+   * List all user attribute definitions
+   */
+  userAttributes: () =>
+    queryOptions({
+      queryKey: ['admin', 'userAttributes'],
+      queryFn: () => listUserAttributesFn(),
+      staleTime: 60 * 1000,
     }),
 }
 

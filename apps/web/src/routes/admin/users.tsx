@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import type { SegmentId } from '@quackback/ids'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { UsersContainer } from '@/components/admin/users/users-container'
@@ -12,18 +13,95 @@ const searchSchema = z.object({
   verified: z.enum(['true', 'false']).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'most_active', 'name']).optional().default('newest'),
+  emailDomain: z.string().optional(),
+  postCount: z.string().optional(),
+  voteCount: z.string().optional(),
+  commentCount: z.string().optional(),
+  customAttrs: z.string().optional(),
+  sort: z
+    .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
+    .optional()
+    .default('newest'),
   selected: z.string().optional(),
+  segments: z.string().optional(),
 })
+
+type SearchParams = z.infer<typeof searchSchema>
+
+function parseSearchToQueryParams(deps: SearchParams) {
+  let verified: boolean | undefined
+  if (deps.verified === 'true') verified = true
+  else if (deps.verified === 'false') verified = false
+
+  const segmentIds = deps.segments
+    ? (deps.segments.split(',').filter(Boolean) as SegmentId[])
+    : undefined
+
+  // Parse activity count filter "op:value" format
+  function parseActivityFilter(raw?: string) {
+    if (!raw) return undefined
+    const [op, val] = raw.split(':')
+    if (!op || val === undefined) return undefined
+    return { op: op as 'gt' | 'gte' | 'lt' | 'lte' | 'eq', value: Number(val) }
+  }
+
+  // Parse custom attrs "key:op:value,key2:op:value2" format
+  function parseCustomAttrs(raw?: string) {
+    if (!raw) return undefined
+    return raw
+      .split(',')
+      .map((part) => {
+        const [key, op, ...rest] = part.split(':')
+        return key && op ? { key, op, value: rest.join(':') } : null
+      })
+      .filter(Boolean) as { key: string; op: string; value: string }[]
+  }
+
+  return {
+    search: deps.search,
+    verified,
+    dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
+    dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
+    emailDomain: deps.emailDomain,
+    postCount: parseActivityFilter(deps.postCount),
+    voteCount: parseActivityFilter(deps.voteCount),
+    commentCount: parseActivityFilter(deps.commentCount),
+    customAttrs: parseCustomAttrs(deps.customAttrs),
+    sort: deps.sort,
+    page: 1,
+    limit: 20,
+    segmentIds,
+  }
+}
 
 export const Route = createFileRoute('/admin/users')({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => ({
-    search: search.search,
-    verified: search.verified,
-    dateFrom: search.dateFrom,
-    dateTo: search.dateTo,
-    sort: search.sort,
+  loaderDeps: ({
+    search: {
+      search,
+      verified,
+      dateFrom,
+      dateTo,
+      emailDomain,
+      postCount,
+      voteCount,
+      commentCount,
+      customAttrs,
+      sort,
+      segments,
+    },
+  }) => ({
+    search,
+    verified,
+    dateFrom,
+    dateTo,
+    emailDomain,
+    postCount,
+    voteCount,
+    commentCount,
+    customAttrs,
+    sort,
+    segments,
   }),
   errorComponent: UsersErrorComponent,
   loader: async ({ deps, context }) => {
@@ -33,21 +111,10 @@ export const Route = createFileRoute('/admin/users')({
       queryClient: typeof context.queryClient
     }
 
-    // Parse verified param
-    const verified = deps.verified === 'true' ? true : deps.verified === 'false' ? false : undefined
-
-    // Pre-fetch users data using React Query
-    await queryClient.ensureQueryData(
-      adminQueries.portalUsers({
-        search: deps.search,
-        verified,
-        dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-        dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-        sort: deps.sort,
-        page: 1,
-        limit: 20,
-      })
-    )
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.portalUsers(parseSearchToQueryParams(deps))),
+      queryClient.ensureQueryData(adminQueries.segments()),
+    ])
 
     return {
       currentMemberRole: principal.role,
@@ -76,26 +143,7 @@ function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void
 function UsersPage() {
   const { currentMemberRole } = Route.useLoaderData()
   const search = Route.useSearch()
+  const usersQuery = useSuspenseQuery(adminQueries.portalUsers(parseSearchToQueryParams(search)))
 
-  // Parse verified param (same logic as in loader)
-  const verified =
-    search.verified === 'true' ? true : search.verified === 'false' ? false : undefined
-
-  // Read pre-fetched data from React Query cache
-  const usersQuery = useSuspenseQuery(
-    adminQueries.portalUsers({
-      search: search.search,
-      verified,
-      dateFrom: search.dateFrom ? new Date(search.dateFrom) : undefined,
-      dateTo: search.dateTo ? new Date(search.dateTo) : undefined,
-      sort: search.sort,
-      page: 1,
-      limit: 20,
-    })
-  )
-
-  // Server function already returns the unwrapped result (not Result type)
-  const initialUsers = usersQuery.data
-
-  return <UsersContainer initialUsers={initialUsers} currentMemberRole={currentMemberRole} />
+  return <UsersContainer initialUsers={usersQuery.data} currentMemberRole={currentMemberRole} />
 }

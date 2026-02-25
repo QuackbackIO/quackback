@@ -13,6 +13,7 @@ import {
   postRoadmaps,
   tags,
   comments,
+  userSegments,
   eq,
   and,
   inArray,
@@ -209,6 +210,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     statusIds,
     statusSlugs,
     tagIds,
+    segmentIds,
     ownerId,
     search,
     dateFrom,
@@ -288,6 +290,19 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
       .from(postTags)
       .where(inArray(postTags.tagId, tagIds))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
+  }
+
+  // Segment filter - posts authored by users in any of the selected segments
+  if (segmentIds && segmentIds.length > 0) {
+    conditions.push(
+      inArray(
+        posts.principalId,
+        db
+          .select({ principalId: userSegments.principalId })
+          .from(userSegments)
+          .where(inArray(userSegments.segmentId, segmentIds))
+      )
+    )
   }
 
   // Responded filter - filter by whether any team member has commented

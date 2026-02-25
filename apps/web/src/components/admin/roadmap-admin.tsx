@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import {
   DndContext,
   DragOverlay,
@@ -14,9 +15,13 @@ import { MapIcon } from '@heroicons/react/24/solid'
 import { RoadmapSidebar } from './roadmap-sidebar'
 import { RoadmapColumn } from './roadmap-column'
 import { RoadmapCardOverlay } from './roadmap-card'
+import { RoadmapFiltersBar } from './roadmap/roadmap-filters-bar'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapSelection } from './use-roadmap-selection'
+import { useRoadmapFilters } from './roadmap/use-roadmap-filters'
 import { useChangePostStatusId } from '@/lib/client/mutations/posts'
+import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { Route } from '@/routes/admin/roadmap'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
@@ -29,6 +34,15 @@ interface RoadmapAdminProps {
 export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
+
+  // Filter state (URL-driven)
+  const { filters, setFilters, clearFilters, toggleBoard, toggleTag, toggleSegment } =
+    useRoadmapFilters()
+
+  // Reference data for filter UI (pre-fetched in route loader)
+  const { data: boards } = useSuspenseQuery(adminQueries.boards())
+  const { data: tags } = useSuspenseQuery(adminQueries.tags())
+  const { data: segments } = useSegments()
   const { selectedRoadmapId, setSelectedRoadmap } = useRoadmapSelection()
   const { data: roadmaps } = useRoadmaps()
   const changeStatus = useChangePostStatusId()
@@ -90,13 +104,26 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {selectedRoadmap ? (
           <>
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border/50 bg-card/50">
-              <h2 className="text-lg font-semibold">{selectedRoadmap.name}</h2>
-              {selectedRoadmap.description && (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {selectedRoadmap.description}
-                </p>
-              )}
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border/50 bg-card/50 space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold">{selectedRoadmap.name}</h2>
+                {selectedRoadmap.description && (
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {selectedRoadmap.description}
+                  </p>
+                )}
+              </div>
+              <RoadmapFiltersBar
+                filters={filters}
+                onFiltersChange={setFilters}
+                onClearAll={clearFilters}
+                boards={boards}
+                tags={tags}
+                segments={segments}
+                onToggleBoard={toggleBoard}
+                onToggleTag={toggleTag}
+                onToggleSegment={toggleSegment}
+              />
             </div>
 
             <DndContext
@@ -114,6 +141,7 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
                       statusId={status.id}
                       title={status.name}
                       color={status.color}
+                      filters={filters}
                       onCardClick={handleCardClick}
                     />
                   ))}

@@ -10,12 +10,14 @@ import {
   flattenRoadmapPostEntries,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapFilters } from '@/lib/shared/types'
 
 interface RoadmapColumnProps {
   roadmapId: RoadmapId
   statusId: StatusId
   title: string
   color: string
+  filters?: RoadmapFilters
   onCardClick?: (postId: string) => void
 }
 
@@ -24,6 +26,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   statusId,
   title,
   color,
+  filters,
   onCardClick,
 }: RoadmapColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -32,7 +35,7 @@ export const RoadmapColumn = memo(function RoadmapColumn({
   })
 
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } =
-    useRoadmapPostsByRoadmap({ roadmapId, statusId })
+    useRoadmapPostsByRoadmap({ roadmapId, statusId, filters })
 
   const posts = flattenRoadmapPostEntries(data)
   const total = data?.pages[0]?.total ?? 0

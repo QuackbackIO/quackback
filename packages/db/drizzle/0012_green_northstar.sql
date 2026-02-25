@@ -1,0 +1,2 @@
+-- No-op migration.
+-- Keeps Drizzle metadata snapshots in sync after prior manual migrations (0008-0011).

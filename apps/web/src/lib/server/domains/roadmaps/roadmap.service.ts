@@ -13,13 +13,16 @@ import {
   eq,
   and,
   isNull,
+  inArray,
   asc,
   desc,
   sql,
   roadmaps,
   posts,
   postRoadmaps,
+  postTags,
   boards,
+  userSegments,
   type Roadmap,
 } from '@/lib/server/db'
 import { toUuid, type RoadmapId, type PostId } from '@quackback/ids'
@@ -294,6 +297,63 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
 // QUERYING POSTS
 // ==========================================================================
 
+/** Build filter conditions and sort order for roadmap post queries */
+function buildRoadmapFilterConditions(
+  options: RoadmapPostsQueryOptions,
+  baseConditions: ReturnType<typeof eq>[]
+) {
+  const conditions = [...baseConditions]
+
+  if (options.search) {
+    conditions.push(
+      sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${options.search})`
+    )
+  }
+
+  if (options.boardIds && options.boardIds.length > 0) {
+    conditions.push(inArray(posts.boardId, options.boardIds))
+  }
+
+  if (options.tagIds && options.tagIds.length > 0) {
+    conditions.push(
+      inArray(
+        posts.id,
+        db
+          .selectDistinct({ postId: postTags.postId })
+          .from(postTags)
+          .where(inArray(postTags.tagId, options.tagIds))
+      )
+    )
+  }
+
+  if (options.segmentIds && options.segmentIds.length > 0) {
+    conditions.push(
+      inArray(
+        posts.principalId,
+        db
+          .select({ principalId: userSegments.principalId })
+          .from(userSegments)
+          .where(inArray(userSegments.segmentId, options.segmentIds))
+      )
+    )
+  }
+
+  let orderBy
+  switch (options.sort) {
+    case 'newest':
+      orderBy = desc(posts.createdAt)
+      break
+    case 'oldest':
+      orderBy = asc(posts.createdAt)
+      break
+    default:
+      orderBy = desc(posts.voteCount)
+      break
+  }
+
+  return { conditions, orderBy }
+}
+
 /**
  * Get posts for a roadmap, optionally filtered by status
  */
@@ -309,11 +369,15 @@ export async function getRoadmapPosts(
 
   const { statusId, limit = 20, offset = 0 } = options
 
-  // Build conditions
-  const conditions = [eq(postRoadmaps.roadmapId, roadmapId), isNull(posts.deletedAt)]
+  // Build base conditions + filter conditions
+  const baseConditions: ReturnType<typeof eq>[] = [
+    eq(postRoadmaps.roadmapId, roadmapId),
+    isNull(posts.deletedAt),
+  ]
   if (statusId) {
-    conditions.push(eq(posts.statusId, statusId))
+    baseConditions.push(eq(posts.statusId, statusId))
   }
+  const { conditions, orderBy } = buildRoadmapFilterConditions(options, baseConditions)
 
   // Run data and count queries in parallel
   const [results, countResult] = await Promise.all([
@@ -336,7 +400,7 @@ export async function getRoadmapPosts(
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions))
-      .orderBy(desc(posts.voteCount))
+      .orderBy(orderBy)
       .limit(limit + 1)
       .offset(offset),
     db
@@ -383,11 +447,15 @@ export async function getPublicRoadmapPosts(
 
   const { statusId, limit = 20, offset = 0 } = options
 
-  // Build conditions
-  const conditions = [eq(postRoadmaps.roadmapId, roadmapId), isNull(posts.deletedAt)]
+  // Build base conditions + filter conditions
+  const baseConditions: ReturnType<typeof eq>[] = [
+    eq(postRoadmaps.roadmapId, roadmapId),
+    isNull(posts.deletedAt),
+  ]
   if (statusId) {
-    conditions.push(eq(posts.statusId, statusId))
+    baseConditions.push(eq(posts.statusId, statusId))
   }
+  const { conditions, orderBy } = buildRoadmapFilterConditions(options, baseConditions)
 
   // Run data and count queries in parallel
   const [results, countResult] = await Promise.all([
@@ -410,7 +478,7 @@ export async function getPublicRoadmapPosts(
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
       .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions))
-      .orderBy(desc(posts.voteCount))
+      .orderBy(orderBy)
       .limit(limit + 1)
       .offset(offset),
     db

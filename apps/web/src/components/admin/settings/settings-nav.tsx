@@ -13,6 +13,7 @@ import {
   BoltIcon,
   CommandLineIcon,
   ChatBubbleLeftRightIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -36,13 +37,28 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Portal',
+    label: 'Feedback',
     items: [
       { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
-      { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
       { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
-      { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
+    ],
+  },
+  {
+    label: 'Appearance',
+    items: [
+      { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
       { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
+    ],
+  },
+  {
+    label: 'Users',
+    items: [
+      { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
+      {
+        label: 'User Attributes',
+        to: '/admin/settings/user-attributes',
+        icon: AdjustmentsHorizontalIcon,
+      },
     ],
   },
   {

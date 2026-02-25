@@ -7,7 +7,7 @@ import {
   ArrowRightOnRectangleIcon,
   Cog6ToothIcon,
   Bars3Icon,
-  ArrowTopRightOnSquareIcon,
+  GlobeAltIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -39,7 +39,6 @@ const navItems = [
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
-  { label: 'Settings', href: '/admin/settings', icon: Cog6ToothIcon },
 ]
 
 function isNavActive(pathname: string, href: string) {
@@ -130,6 +129,14 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
 
           {/* Bottom Section */}
           <div className="flex flex-col items-center gap-3">
+            {/* Settings */}
+            <NavItem
+              href="/admin/settings"
+              icon={Cog6ToothIcon}
+              label="Settings"
+              isActive={isNavActive(pathname, '/admin/settings')}
+            />
+
             {/* Notifications */}
             <NotificationBell />
 
@@ -140,7 +147,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                   to="/"
                   className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
                 >
-                  <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                  <GlobeAltIcon className="h-5 w-5" />
                   <span className="sr-only">View Portal</span>
                 </Link>
               </TooltipTrigger>
@@ -227,11 +234,24 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
               })}
               <div className="h-px bg-border/40 my-4" />
               <Link
+                to="/admin/settings"
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
+                  'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
+                  isNavActive(pathname, '/admin/settings') &&
+                    'bg-muted/80 text-foreground font-medium'
+                )}
+              >
+                <Cog6ToothIcon className="h-5 w-5" />
+                Settings
+              </Link>
+              <Link
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
-                <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                <GlobeAltIcon className="h-5 w-5" />
                 View Portal
               </Link>
             </nav>

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { toggleItem } from './filter-utils'
 import {
   Squares2X2Icon,
   TagIcon,
   UserIcon,
+  UserGroupIcon,
   CalendarIcon,
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
@@ -16,10 +18,20 @@ import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { InboxFilters } from './use-inbox-filters'
 import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
+import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
 interface ActiveFilter {
   key: string
-  type: 'status' | 'board' | 'tags' | 'owner' | 'date' | 'minVotes' | 'responded' | 'deleted'
+  type:
+    | 'status'
+    | 'board'
+    | 'tags'
+    | 'segment'
+    | 'owner'
+    | 'date'
+    | 'minVotes'
+    | 'responded'
+    | 'deleted'
   label: string
   value: string
   valueId: string
@@ -37,11 +49,21 @@ interface ActiveFiltersBarProps {
   tags: TagType[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
+  segments?: SegmentListItem[]
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
+  onToggleSegment?: (id: string) => void
 }
 
-type FilterCategory = 'status' | 'board' | 'tags' | 'owner' | 'date' | 'votes' | 'response'
+type FilterCategory =
+  | 'status'
+  | 'board'
+  | 'tags'
+  | 'segment'
+  | 'owner'
+  | 'date'
+  | 'votes'
+  | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -53,6 +75,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'status', label: 'Status', icon: CircleIcon },
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
   { key: 'tags', label: 'Tag', icon: TagIcon },
+  { key: 'segment', label: 'Segment', icon: UserGroupIcon },
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
   { key: 'date', label: 'Created date', icon: CalendarIcon },
   { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
@@ -102,20 +125,26 @@ function MenuButton({ onClick, children, className }: MenuButtonProps) {
 }
 
 function AddFilterButton({
+  filters,
   boards,
   tags,
   statuses,
   members,
+  segments,
   onToggleStatus,
   onToggleBoard,
+  onToggleSegment,
   onFiltersChange,
 }: {
+  filters: InboxFilters
   boards: Board[]
   tags: TagType[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
+  segments?: SegmentListItem[]
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
+  onToggleSegment?: (id: string) => void
   onFiltersChange: (updates: Partial<InboxFilters>) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -137,7 +166,12 @@ function AddFilterButton({
   }
 
   const handleSelectTag = (tagId: string) => {
-    onFiltersChange({ tags: [tagId] })
+    onFiltersChange({ tags: toggleItem(filters.tags, tagId) })
+    closePopover()
+  }
+
+  const handleSelectSegment = (segmentId: string) => {
+    onToggleSegment?.(segmentId)
     closePopover()
   }
 
@@ -246,6 +280,17 @@ function AddFilterButton({
                   </MenuButton>
                 ))}
 
+              {activeCategory === 'segment' &&
+                segments?.map((segment) => (
+                  <MenuButton key={segment.id} onClick={() => handleSelectSegment(segment.id)}>
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0"
+                      style={{ backgroundColor: segment.color }}
+                    />
+                    {segment.name}
+                  </MenuButton>
+                ))}
+
               {activeCategory === 'owner' && (
                 <>
                   <MenuButton
@@ -302,6 +347,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     status: CircleIcon,
     board: Squares2X2Icon,
     tags: TagIcon,
+    segment: UserGroupIcon,
     owner: UserIcon,
     date: CalendarIcon,
     minVotes: ArrowTrendingUpIcon,
@@ -326,6 +372,7 @@ function computeActiveFilters(
   tags: TagType[],
   statuses: PostStatusEntity[],
   members: TeamMember[],
+  segments: SegmentListItem[] | undefined,
   onFiltersChange: (updates: Partial<InboxFilters>) => void
 ): ActiveFilter[] {
   const result: ActiveFilter[] = []
@@ -450,6 +497,38 @@ function computeActiveFilters(
     }
   }
 
+  // Segment filters
+  if (filters.segmentIds?.length && segments) {
+    const segmentOptions: FilterOption[] = segments.map((s) => ({
+      id: s.id,
+      label: s.name,
+      color: s.color,
+    }))
+
+    filters.segmentIds.forEach((id) => {
+      const segment = segments.find((s) => s.id === id)
+      if (segment) {
+        result.push({
+          key: `segment-${id}`,
+          type: 'segment',
+          label: 'Segment:',
+          value: segment.name,
+          valueId: id,
+          color: segment.color,
+          options: segmentOptions,
+          onChange: (newId) => {
+            const otherSegments = filters.segmentIds?.filter((s) => s !== id) || []
+            onFiltersChange({ segmentIds: [...otherSegments, newId] })
+          },
+          onRemove: () => {
+            const newSegments = filters.segmentIds?.filter((s) => s !== id)
+            onFiltersChange({ segmentIds: newSegments?.length ? newSegments : undefined })
+          },
+        })
+      }
+    })
+  }
+
   // Owner filter
   if (filters.owner) {
     const ownerName =
@@ -562,12 +641,14 @@ export function ActiveFiltersBar({
   tags,
   statuses,
   members,
+  segments,
   onToggleStatus,
   onToggleBoard,
+  onToggleSegment,
 }: ActiveFiltersBarProps) {
   const activeFilters = useMemo(
-    () => computeActiveFilters(filters, boards, tags, statuses, members, onFiltersChange),
-    [filters, boards, tags, statuses, members, onFiltersChange]
+    () => computeActiveFilters(filters, boards, tags, statuses, members, segments, onFiltersChange),
+    [filters, boards, tags, statuses, members, segments, onFiltersChange]
   )
 
   return (
@@ -578,12 +659,15 @@ export function ActiveFiltersBar({
         ))}
 
         <AddFilterButton
+          filters={filters}
           boards={boards}
           tags={tags}
           statuses={statuses}
           members={members}
+          segments={segments}
           onToggleStatus={onToggleStatus}
           onToggleBoard={onToggleBoard}
+          onToggleSegment={onToggleSegment}
           onFiltersChange={onFiltersChange}
         />
 

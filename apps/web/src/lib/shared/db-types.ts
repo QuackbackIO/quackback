@@ -12,3 +12,16 @@
 
 // Re-export types and constants (no side effects)
 export * from '@quackback/db/types'
+
+// Schema types needed by client components (type-only = no side effects)
+export type {
+  SegmentRules,
+  SegmentCondition,
+  SegmentRuleOperator,
+  SegmentRuleAttribute,
+  EvaluationSchedule,
+  SegmentWeightConfig,
+  UserAttributeDefinition,
+  UserAttributeType,
+  CurrencyCode,
+} from '@quackback/db/schema'

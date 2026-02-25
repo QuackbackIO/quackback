@@ -57,6 +57,41 @@
       "when": 1771862934682,
       "tag": "0007_awesome_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771843195150,
+      "tag": "0008_user_segments",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1772006400000,
+      "tag": "0009_segment_scheduling",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772092800000,
+      "tag": "0010_user_attribute_definitions",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772179200000,
+      "tag": "0011_user_attr_external_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1771924607203,
+      "tag": "0012_green_northstar",
+      "breakpoints": true
     }
   ]
 }
