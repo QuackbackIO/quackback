@@ -6,22 +6,30 @@ import { portalQueries } from '@/lib/client/queries/portal'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),
+  search: z.string().optional(),
+  board: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  segments: z.array(z.string()).optional(),
+  sort: z.enum(['votes', 'newest', 'oldest']).optional(),
 })
 
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { queryClient, settings, baseUrl } = context
+    const { queryClient, settings, baseUrl, userRole } = context
 
     const [roadmaps] = await Promise.all([
       queryClient.ensureQueryData(portalQueries.roadmaps()),
       queryClient.ensureQueryData(portalQueries.statuses()),
+      queryClient.ensureQueryData(portalQueries.boards()),
+      queryClient.ensureQueryData(portalQueries.tags()),
     ])
 
     return {
       firstRoadmapId: roadmaps[0]?.id ?? null,
       workspaceName: settings?.name ?? 'Quackback',
       baseUrl: baseUrl ?? '',
+      userRole: userRole ?? null,
     }
   },
   head: ({ loaderData }) => {
@@ -47,7 +55,7 @@ export const Route = createFileRoute('/_portal/roadmap/')({
 })
 
 function RoadmapPage() {
-  const { firstRoadmapId } = Route.useLoaderData()
+  const { firstRoadmapId, userRole } = Route.useLoaderData()
   const { roadmap: selectedRoadmapFromUrl } = Route.useSearch()
 
   const { data: roadmaps } = useSuspenseQuery(portalQueries.roadmaps())
@@ -57,6 +65,8 @@ function RoadmapPage() {
 
   // Use URL param if present, otherwise fall back to first roadmap
   const initialSelectedId = selectedRoadmapFromUrl ?? firstRoadmapId
+
+  const isTeamMember = userRole === 'admin' || userRole === 'member'
 
   return (
     <div className="py-8">
@@ -73,6 +83,7 @@ function RoadmapPage() {
           statuses={roadmapStatuses}
           initialRoadmaps={roadmaps}
           initialSelectedRoadmapId={initialSelectedId}
+          isTeamMember={isTeamMember}
         />
       </div>
     </div>

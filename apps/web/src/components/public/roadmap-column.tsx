@@ -9,19 +9,22 @@ import {
   flattenRoadmapPostEntries,
 } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapFilters } from '@/lib/shared/types'
 
 interface RoadmapColumnProps {
   roadmapId: RoadmapId
   statusId: StatusId
   title: string
   color: string
+  filters?: RoadmapFilters
 }
 
-export function RoadmapColumn({ roadmapId, statusId, title, color }: RoadmapColumnProps) {
+export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: RoadmapColumnProps) {
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
       roadmapId,
       statusId,
+      filters,
     }
   )
 

@@ -1,26 +1,44 @@
 import { useEffect } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { MapIcon } from '@heroicons/react/24/solid'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePublicRoadmaps, type RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
+import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { portalQueries } from '@/lib/client/queries/portal'
 import { RoadmapColumn } from './roadmap-column'
+import { RoadmapFiltersBar } from '@/components/admin/roadmap/roadmap-filters-bar'
+import { usePublicRoadmapFilters } from './use-public-roadmap-filters'
 import { usePublicRoadmapSelection } from './use-public-roadmap-selection'
 
 interface RoadmapBoardProps {
   statuses: PostStatusEntity[]
   initialRoadmaps?: RoadmapView[]
   initialSelectedRoadmapId?: string | null
+  isTeamMember?: boolean
 }
 
 export function RoadmapBoard({
   statuses,
   initialRoadmaps,
   initialSelectedRoadmapId,
+  isTeamMember,
 }: RoadmapBoardProps): React.ReactElement {
   const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
   const { data: roadmaps } = usePublicRoadmaps({ enabled: !initialRoadmaps })
+
+  // Filter state
+  const { filters, setFilters, clearFilters, toggleBoard, toggleTag, toggleSegment } =
+    usePublicRoadmapFilters()
+
+  // Reference data for filter bar (pre-fetched in route loader)
+  const { data: boards } = useSuspenseQuery(portalQueries.boards())
+  const { data: tags } = useSuspenseQuery(portalQueries.tags())
+
+  // Segments only available for team members
+  const { data: segments } = useSegments({ enabled: !!isTeamMember })
 
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []
   const effectiveSelectedId = selectedRoadmapId ?? initialSelectedRoadmapId
@@ -69,6 +87,18 @@ export function RoadmapBoard({
         </div>
       )}
 
+      <RoadmapFiltersBar
+        filters={filters}
+        onFiltersChange={setFilters}
+        onClearAll={clearFilters}
+        boards={boards}
+        tags={tags}
+        segments={isTeamMember ? segments : undefined}
+        onToggleBoard={toggleBoard}
+        onToggleTag={toggleTag}
+        onToggleSegment={isTeamMember ? toggleSegment : undefined}
+      />
+
       {effectiveSelectedId && (
         <ScrollArea
           className="w-full"
@@ -86,6 +116,7 @@ export function RoadmapBoard({
                   statusId={status.id}
                   title={status.name}
                   color={status.color}
+                  filters={filters}
                 />
               </div>
             ))}

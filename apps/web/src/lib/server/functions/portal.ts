@@ -3,7 +3,9 @@ import { createServerFn } from '@tanstack/react-start'
 import {
   type PostId,
   type PrincipalId,
+  type BoardId,
   type RoadmapId,
+  type SegmentId,
   type StatusId,
   type TagId,
   type UserId,
@@ -275,13 +277,33 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       statusId: z.string().optional(),
       limit: z.number().int().min(1).max(100).optional(),
       offset: z.number().int().min(0).optional(),
+      search: z.string().optional(),
+      boardIds: z.array(z.string()).optional(),
+      tagIds: z.array(z.string()).optional(),
+      segmentIds: z.array(z.string()).optional(),
+      sort: z.enum(['votes', 'newest', 'oldest']).optional(),
     })
   )
   .handler(async ({ data }) => {
+    // Segment filtering requires admin/member role
+    let segmentIds: SegmentId[] | undefined
+    if (data.segmentIds?.length && hasSessionCookie()) {
+      const auth = await getOptionalAuth()
+      if (auth && (auth.principal.role === 'admin' || auth.principal.role === 'member')) {
+        segmentIds = data.segmentIds as SegmentId[]
+      }
+      // Non-admin callers silently ignore segmentIds
+    }
+
     const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
       statusId: data.statusId as StatusId | undefined,
       limit: data.limit ?? 20,
       offset: data.offset ?? 0,
+      search: data.search,
+      boardIds: data.boardIds as BoardId[] | undefined,
+      tagIds: data.tagIds as TagId[] | undefined,
+      segmentIds,
+      sort: data.sort,
     })
 
     return {
