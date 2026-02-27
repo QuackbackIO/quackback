@@ -1,8 +1,83 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { z } from 'zod'
 import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
-import { db, invitation, principal, eq } from '@/lib/server/db'
+import { db, invitation, principal, user, account, and, eq } from '@/lib/server/db'
 import { getSession } from './auth'
+
+/**
+ * Get invitation details for the accept-invitation page.
+ * Returns invite info + whether password auth is enabled.
+ *
+ * Note: Uses createServerFn directly instead of withAuth because this needs to be
+ * accessible to newly authenticated users who may not yet have a member record.
+ */
+export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
+  .inputValidator((invitationId: string) => invitationId)
+  .handler(async ({ data: invitationId }) => {
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Not authenticated')
+    }
+
+    const [inv, settings, authConfig, credentialAccount] = await Promise.all([
+      db.query.invitation.findFirst({
+        where: eq(invitation.id, invitationId as InviteId),
+        with: { inviter: true },
+      }),
+      db.query.settings.findFirst(),
+      import('@/lib/server/domains/settings/settings.service').then((m) => m.getPublicAuthConfig()),
+      db.query.account.findFirst({
+        where: and(
+          eq(account.userId, session.user.id as UserId),
+          eq(account.providerId, 'credential')
+        ),
+        columns: { password: true },
+      }),
+    ])
+
+    if (!inv) {
+      throw new Error('Invitation not found')
+    }
+
+    if (inv.status !== 'pending') {
+      throw new Error(
+        inv.status === 'accepted'
+          ? 'This invitation has already been accepted'
+          : 'This invitation is no longer valid'
+      )
+    }
+
+    if (new Date(inv.expiresAt) < new Date()) {
+      throw new Error('This invitation has expired')
+    }
+
+    // Verify the authenticated user's email matches the invitation
+    if (inv.email.toLowerCase() !== session.user.email?.toLowerCase()) {
+      throw new Error('This invitation was sent to a different email address')
+    }
+
+    const passwordEnabled = authConfig.oauth.password ?? true
+    const requiresPasswordSetup = passwordEnabled && !credentialAccount?.password
+
+    return {
+      invite: {
+        name: inv.name,
+        email: inv.email,
+        role: inv.role,
+        workspaceName: settings?.name ?? 'Quackback',
+        inviterName: inv.inviter?.name ?? null,
+      },
+      passwordEnabled,
+      requiresPasswordSetup,
+    }
+  })
+
+const acceptInvitationSchema = z.object({
+  invitationId: z.string(),
+  name: z.string().min(2).optional(),
+})
 
 /**
  * Accept a team invitation.
@@ -15,8 +90,9 @@ import { getSession } from './auth'
  * accessible to newly authenticated users who may not yet have a member record.
  */
 export const acceptInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator((invitationId: string) => invitationId)
-  .handler(async ({ data: invitationId }) => {
+  .inputValidator(acceptInvitationSchema)
+  .handler(async ({ data }) => {
+    const { invitationId, name } = data
     console.log(`[fn:invitations] acceptInvitationFn: invitationId=${invitationId}`)
     try {
       // Get current session
@@ -32,22 +108,20 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('User email not found')
       }
 
-      // Parallelize invitation and member queries - they're independent
-      const [inv, existingPrincipal] = await Promise.all([
-        db.query.invitation.findFirst({
+      // Atomically claim the invitation with a conditional update to prevent
+      // double-accept race conditions (e.g., double-click, network retry).
+      const [claimed] = await db
+        .update(invitation)
+        .set({ status: 'accepted' })
+        .where(and(eq(invitation.id, invitationId as InviteId), eq(invitation.status, 'pending')))
+        .returning()
+
+      if (!claimed) {
+        // Either doesn't exist, already accepted, cancelled, or expired
+        const inv = await db.query.invitation.findFirst({
           where: eq(invitation.id, invitationId as InviteId),
-        }),
-        db.query.principal.findFirst({
-          where: eq(principal.userId, userId),
-        }),
-      ])
-
-      if (!inv) {
-        throw new Error('Invitation not found')
-      }
-
-      // Verify invitation is pending
-      if (inv.status !== 'pending') {
+        })
+        if (!inv) throw new Error('Invitation not found')
         throw new Error(
           inv.status === 'accepted'
             ? 'This invitation has already been accepted'
@@ -55,17 +129,28 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         )
       }
 
-      // Verify invitation hasn't expired
-      if (new Date(inv.expiresAt) < new Date()) {
-        throw new Error('This invitation has expired')
+      async function rollbackAndThrow(message: string): Promise<never> {
+        await db
+          .update(invitation)
+          .set({ status: 'pending' })
+          .where(eq(invitation.id, invitationId as InviteId))
+        throw new Error(message)
       }
 
-      // Verify email matches
-      if (inv.email.toLowerCase() !== userEmail) {
-        throw new Error('This invitation was sent to a different email address')
+      if (new Date(claimed.expiresAt) < new Date()) {
+        await rollbackAndThrow('This invitation has expired')
       }
 
-      const role = inv.role || 'member'
+      if (claimed.email.toLowerCase() !== userEmail) {
+        await rollbackAndThrow('This invitation was sent to a different email address')
+      }
+
+      const role = claimed.role || 'member'
+      const displayName = name?.trim() || undefined
+
+      const existingPrincipal = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId),
+      })
 
       if (existingPrincipal) {
         // Update existing principal's role if the invitation grants a higher role
@@ -73,10 +158,14 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         const existingRoleIndex = roleHierarchy.indexOf(existingPrincipal.role)
         const newRoleIndex = roleHierarchy.indexOf(role)
 
-        if (newRoleIndex > existingRoleIndex) {
+        const updates: Record<string, unknown> = {}
+        if (newRoleIndex > existingRoleIndex) updates.role = role
+        if (displayName) updates.displayName = displayName
+
+        if (Object.keys(updates).length > 0) {
           await db
             .update(principal)
-            .set({ role })
+            .set(updates)
             .where(eq(principal.id, existingPrincipal.id as PrincipalId))
         }
       } else {
@@ -85,15 +174,15 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
           id: generateId('principal'),
           userId,
           role,
+          displayName,
           createdAt: new Date(),
         })
       }
 
-      // Mark invitation as accepted
-      await db
-        .update(invitation)
-        .set({ status: 'accepted' })
-        .where(eq(invitation.id, invitationId as InviteId))
+      // Update user name if provided
+      if (displayName) {
+        await db.update(user).set({ name: displayName }).where(eq(user.id, userId))
+      }
 
       console.log(`[fn:invitations] acceptInvitationFn: accepted`)
       return { invitationId: invitationId as InviteId }
@@ -101,4 +190,21 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       console.error(`[fn:invitations] ❌ acceptInvitationFn failed:`, error)
       throw error
     }
+  })
+
+/**
+ * Set a password for the current user via Better Auth's internal API.
+ *
+ * Better Auth's setPassword endpoint has no HTTP path (server-side only),
+ * so we must call auth.api.setPassword() from a server function.
+ */
+export const setPasswordFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ newPassword: z.string().min(8) }))
+  .handler(async ({ data }) => {
+    const { auth } = await import('@/lib/server/auth')
+    await auth.api.setPassword({
+      body: { newPassword: data.newPassword },
+      headers: getRequestHeaders(),
+    })
+    return { status: true }
   })

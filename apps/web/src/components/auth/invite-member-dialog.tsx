@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { CheckCircleIcon, LinkIcon } from '@heroicons/react/24/solid'
+import { CheckCircleIcon, CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/solid'
 import { inviteSchema, type InviteInput } from '@/lib/shared/schemas/auth'
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
-import { CopyButton } from '@/components/shared/copy-button'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import {
   Select,
   SelectContent,
@@ -30,6 +30,52 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { sendInvitationFn } from '@/lib/server/functions/admin'
+
+function InviteLinkView({
+  inviteLink,
+  email,
+  onClose,
+}: {
+  inviteLink: string
+  email: string
+  onClose: () => void
+}) {
+  const { copied, copy } = useCopyToClipboard()
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Email delivery is not configured. Copy the invitation link below and share it with{' '}
+        <span className="font-medium text-foreground">{email}</span>.
+      </p>
+
+      <div className="rounded-lg border bg-muted/50 p-3">
+        <code className="block break-all font-mono text-xs text-muted-foreground leading-relaxed">
+          {inviteLink}
+        </code>
+      </div>
+
+      <div className="flex gap-2">
+        <Button className="flex-1" onClick={() => copy(inviteLink)}>
+          {copied ? (
+            <>
+              <CheckIcon className="h-4 w-4" />
+              Copied!
+            </>
+          ) : (
+            <>
+              <ClipboardDocumentIcon className="h-4 w-4" />
+              Copy invitation link
+            </>
+          )}
+        </Button>
+        <Button variant="outline" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 interface InviteMemberDialogProps {
   open: boolean
@@ -55,13 +101,7 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
     setError('')
 
     try {
-      const result = await sendInvitationFn({
-        data: {
-          email: data.email,
-          name: data.name || undefined,
-          role: data.role,
-        },
-      })
+      const result = await sendInvitationFn({ data })
 
       setSuccess(true)
       onSuccess?.()
@@ -98,34 +138,23 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
         </DialogHeader>
 
         {success ? (
-          <div className="py-8 flex flex-col items-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
-              {inviteLink ? (
-                <LinkIcon className="h-6 w-6 text-primary" />
-              ) : (
+          inviteLink ? (
+            <InviteLinkView
+              inviteLink={inviteLink}
+              email={form.getValues('email')}
+              onClose={() => handleOpenChange(false)}
+            />
+          ) : (
+            <div className="py-8 flex flex-col items-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
                 <CheckCircleIcon className="h-6 w-6 text-primary" />
-              )}
+              </div>
+              <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
+              <p className="mt-2 text-sm text-muted-foreground text-center">
+                {form.getValues('email')} will receive an email with instructions to join.
+              </p>
             </div>
-            {inviteLink ? (
-              <>
-                <div className="text-lg font-semibold text-foreground">Invitation created</div>
-                <p className="mt-2 text-sm text-muted-foreground text-center">
-                  Email is not configured. Share this link with {form.getValues('email')}:
-                </p>
-                <div className="mt-3 flex w-full items-center gap-2 rounded-lg border bg-muted/50 p-2">
-                  <code className="flex-1 truncate text-xs">{inviteLink}</code>
-                  <CopyButton value={inviteLink} variant="ghost" size="sm" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-lg font-semibold text-foreground">Invitation sent!</div>
-                <p className="mt-2 text-sm text-muted-foreground text-center">
-                  {form.getValues('email')} will receive an email with instructions to join.
-                </p>
-              </>
-            )}
-          </div>
+          )
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
