@@ -36,6 +36,26 @@ export function PostContentSectionSkeleton(): React.ReactElement {
   )
 }
 
+/** Convert plain text to TipTap JSON format for posts without contentJson */
+function getInitialContentJson(post: {
+  contentJson: unknown
+  content: string
+}): JSONContent | null {
+  if (post.contentJson) {
+    return post.contentJson as JSONContent
+  }
+  if (post.content) {
+    return {
+      type: 'doc',
+      content: post.content.split('\n').map((line) => ({
+        type: 'paragraph',
+        content: line ? [{ type: 'text', text: line }] : [],
+      })),
+    }
+  }
+  return null
+}
+
 interface PostContentSectionProps {
   post: PublicPostDetailView
   currentStatus?: { name: string; color: string | null }
@@ -88,13 +108,13 @@ export function PostContentSection({
 }: PostContentSectionProps): React.ReactElement {
   const [editTitle, setEditTitle] = useState(post.title)
   const [editContentJson, setEditContentJson] = useState<JSONContent | null>(
-    (post.contentJson as JSONContent) ?? null
+    getInitialContentJson(post)
   )
 
   useEffect(() => {
     if (isEditing) {
       setEditTitle(post.title)
-      setEditContentJson((post.contentJson as JSONContent) ?? null)
+      setEditContentJson(getInitialContentJson(post))
     }
   }, [isEditing, post.title, post.contentJson])
 

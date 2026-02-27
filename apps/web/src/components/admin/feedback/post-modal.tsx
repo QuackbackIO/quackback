@@ -86,6 +86,26 @@ function toPortalComments(post: PostDetails): PublicCommentView[] {
   return post.comments.map(mapComment)
 }
 
+/** Convert plain text to TipTap JSON format for posts without contentJson */
+function getInitialContentJson(post: {
+  contentJson?: unknown
+  content: string
+}): JSONContent | null {
+  if (post.contentJson) {
+    return post.contentJson as JSONContent
+  }
+  if (post.content) {
+    return {
+      type: 'doc',
+      content: post.content.split('\n').map((line) => ({
+        type: 'paragraph',
+        content: line ? [{ type: 'text', text: line }] : [],
+      })),
+    }
+  }
+  return null
+}
+
 function PostModalContent({
   postId,
   currentUser,
@@ -104,9 +124,7 @@ function PostModalContent({
 
   // Form state - always in edit mode
   const [title, setTitle] = useState(post.title)
-  const [contentJson, setContentJson] = useState<JSONContent | null>(
-    (post.contentJson as JSONContent) ?? null
-  )
+  const [contentJson, setContentJson] = useState<JSONContent | null>(getInitialContentJson(post))
   const [hasInitialized, setHasInitialized] = useState(false)
 
   // UI state
@@ -132,7 +150,7 @@ function PostModalContent({
   useEffect(() => {
     if (post && !hasInitialized) {
       setTitle(post.title)
-      setContentJson((post.contentJson as JSONContent) ?? null)
+      setContentJson(getInitialContentJson(post))
       setHasInitialized(true)
     }
   }, [post, hasInitialized])
@@ -140,7 +158,7 @@ function PostModalContent({
   // Reset when navigating to different post
   useEffect(() => {
     setTitle(post.title)
-    setContentJson((post.contentJson as JSONContent) ?? null)
+    setContentJson(getInitialContentJson(post))
     setShowMergeDialog(false)
   }, [post.id, post.title, post.contentJson])
 
