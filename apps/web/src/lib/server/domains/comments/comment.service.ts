@@ -149,16 +149,17 @@ export async function createComment(
   // Determine if user is a team member
   const isTeamMember = ['admin', 'member'].includes(author.role)
 
-  // Enforce team-only for private comments
-  if (input.isPrivate && !isTeamMember) {
+  // Inherit privacy from parent: replies to private comments are always private
+  const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
+
+  // Enforce team-only for private comments (after inheritance, so replying to
+  // a private parent with isPrivate omitted is also caught)
+  if (isPrivate && !isTeamMember) {
     throw new ForbiddenError(
       'PRIVATE_COMMENT_FORBIDDEN',
       'Only team members can post private comments'
     )
   }
-
-  // Inherit privacy from parent: replies to private comments are always private
-  const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
