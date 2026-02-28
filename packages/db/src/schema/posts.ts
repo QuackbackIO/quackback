@@ -225,6 +225,7 @@ export const comments = pgTable(
       .references(() => principal.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
+    isPrivate: boolean('is_private').default(false).notNull(),
     // Status change tracking: records which status transition occurred with this comment
     statusChangeFromId: typeIdColumnNullable('status')('status_change_from_id').references(
       () => postStatuses.id,

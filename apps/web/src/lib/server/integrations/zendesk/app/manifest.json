@@ -1,0 +1,36 @@
+{
+  "name": "Quackback",
+  "author": {
+    "name": "Quackback",
+    "email": "support@quackback.io",
+    "url": "https://quackback.io"
+  },
+  "defaultLocale": "en",
+  "private": true,
+  "version": "1.0.0",
+  "frameworkVersion": "2.0",
+  "location": {
+    "support": {
+      "ticket_sidebar": {
+        "url": "assets/iframe.html",
+        "flexible": true
+      }
+    }
+  },
+  "parameters": [
+    {
+      "name": "quackback_url",
+      "type": "text",
+      "required": true,
+      "label": "Quackback URL",
+      "helpText": "Your Quackback instance URL (e.g. https://feedback.yourcompany.com)"
+    },
+    {
+      "name": "api_key",
+      "type": "text",
+      "required": true,
+      "label": "API Key",
+      "helpText": "Your Quackback API key (starts with qb_)"
+    }
+  ]
+}

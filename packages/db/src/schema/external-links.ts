@@ -1,12 +1,13 @@
 import { pgTable, text, timestamp, varchar, index, unique, foreignKey } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { posts } from './posts'
 import { integrations } from './integrations'
 
 /**
- * External links between posts and external platform issues.
- * Created when an outbound hook successfully creates an issue in an external tracker.
+ * External links between posts and external platform issues/tickets.
+ * Created when an outbound hook creates an issue in an external tracker,
+ * or when a support agent links a ticket to a post via the sidebar app.
  * Used for reverse lookups when inbound webhooks report status changes.
  */
 export const postExternalLinks = pgTable(
@@ -14,7 +15,8 @@ export const postExternalLinks = pgTable(
   {
     id: typeIdWithDefault('linked_entity')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id').notNull(),
-    integrationId: typeIdColumn('integration')('integration_id').notNull(),
+    // Nullable: sidebar-created links don't require a full integration record
+    integrationId: typeIdColumnNullable('integration')('integration_id'),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     externalId: text('external_id').notNull(),
     externalUrl: text('external_url'),
@@ -31,7 +33,12 @@ export const postExternalLinks = pgTable(
       columns: [table.integrationId],
       foreignColumns: [integrations.id],
     }).onDelete('cascade'),
-    unique('post_external_links_type_external_id').on(table.integrationType, table.externalId),
+    // Allow one ticket to link to multiple posts (unique per type+externalId+postId)
+    unique('post_external_links_type_external_post_unique').on(
+      table.integrationType,
+      table.externalId,
+      table.postId
+    ),
     index('post_external_links_post_id_idx').on(table.postId),
     index('post_external_links_type_external_id_idx').on(table.integrationType, table.externalId),
   ]

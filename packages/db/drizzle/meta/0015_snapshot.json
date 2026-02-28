@@ -1,6 +1,6 @@
 {
-  "id": "7f710803-8dff-440e-ae01-8c12556b68bb",
-  "prevId": "e6bfb055-b0b4-45b1-b3ee-2495dcc676eb",
+  "id": "baa0cd53-e822-432b-8644-191c5781b25e",
+  "prevId": "cb9745ad-fd1e-428b-b728-420f49cce931",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2750,6 +2750,12 @@
             "type": "stored"
           }
         },
+        "promoted_from_theme_id": {
+          "name": "promoted_from_theme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "embedding": {
           "name": "embedding",
           "type": "vector(1536)",
@@ -5175,94 +5181,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.dismissed_merge_pairs": {
-      "name": "dismissed_merge_pairs",
-      "schema": "",
-      "columns": {
-        "theme_a_id": {
-          "name": "theme_a_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "theme_b_id": {
-          "name": "theme_b_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dismissed_at": {
-          "name": "dismissed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "dismissed_by_principal_id": {
-          "name": "dismissed_by_principal_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "dismissed_merge_pairs_unique_idx": {
-          "name": "dismissed_merge_pairs_unique_idx",
-          "columns": [
-            {
-              "expression": "theme_a_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "theme_b_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "dismissed_merge_pairs_theme_a_id_feedback_themes_id_fk": {
-          "name": "dismissed_merge_pairs_theme_a_id_feedback_themes_id_fk",
-          "tableFrom": "dismissed_merge_pairs",
-          "tableTo": "feedback_themes",
-          "columnsFrom": ["theme_a_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "dismissed_merge_pairs_theme_b_id_feedback_themes_id_fk": {
-          "name": "dismissed_merge_pairs_theme_b_id_feedback_themes_id_fk",
-          "tableFrom": "dismissed_merge_pairs",
-          "tableTo": "feedback_themes",
-          "columnsFrom": ["theme_b_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "dismissed_merge_pairs_dismissed_by_principal_id_principal_id_fk": {
-          "name": "dismissed_merge_pairs_dismissed_by_principal_id_principal_id_fk",
-          "tableFrom": "dismissed_merge_pairs",
-          "tableTo": "principal",
-          "columnsFrom": ["dismissed_by_principal_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.external_user_mappings": {
       "name": "external_user_mappings",
       "schema": "",
@@ -5918,7 +5836,7 @@
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'under_review'"
+          "default": "'active'"
         },
         "merged_into_theme_id": {
           "name": "merged_into_theme_id",
@@ -5977,43 +5895,11 @@
           "primaryKey": false,
           "notNull": false
         },
-        "reviewed_at": {
-          "name": "reviewed_at",
-          "type": "timestamp with time zone",
+        "promoted_to_post_id": {
+          "name": "promoted_to_post_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "planned_at": {
-          "name": "planned_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "in_progress_at": {
-          "name": "in_progress_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipped_at": {
-          "name": "shipped_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "signals_this_week": {
-          "name": "signals_this_week",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "signals_last_week": {
-          "name": "signals_last_week",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "first_signal_at": {
           "name": "first_signal_at",
@@ -6058,21 +5944,6 @@
           "method": "btree",
           "with": {}
         },
-        "feedback_themes_status_idx": {
-          "name": "feedback_themes_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "feedback_themes_strength_idx": {
           "name": "feedback_themes_strength_idx",
           "columns": [
@@ -6102,22 +5973,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "feedback_themes_active_title_idx": {
-          "name": "feedback_themes_active_title_idx",
-          "columns": [
-            {
-              "expression": "LOWER(TRIM(\"title\"))",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"feedback_themes\".\"status\" IN ('under_review', 'planned', 'in_progress')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -6126,137 +5981,6 @@
           "tableFrom": "feedback_themes",
           "tableTo": "boards",
           "columnsFrom": ["board_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.idea_post_links": {
-      "name": "idea_post_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "theme_id": {
-          "name": "theme_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "post_id": {
-          "name": "post_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "link_type": {
-          "name": "link_type",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'auto'"
-        },
-        "linked_at": {
-          "name": "linked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "linked_by_principal_id": {
-          "name": "linked_by_principal_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idea_post_links_unique_idx": {
-          "name": "idea_post_links_unique_idx",
-          "columns": [
-            {
-              "expression": "theme_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idea_post_links_theme_idx": {
-          "name": "idea_post_links_theme_idx",
-          "columns": [
-            {
-              "expression": "theme_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idea_post_links_post_idx": {
-          "name": "idea_post_links_post_idx",
-          "columns": [
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "idea_post_links_theme_id_feedback_themes_id_fk": {
-          "name": "idea_post_links_theme_id_feedback_themes_id_fk",
-          "tableFrom": "idea_post_links",
-          "tableTo": "feedback_themes",
-          "columnsFrom": ["theme_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "idea_post_links_post_id_posts_id_fk": {
-          "name": "idea_post_links_post_id_posts_id_fk",
-          "tableFrom": "idea_post_links",
-          "tableTo": "posts",
-          "columnsFrom": ["post_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "idea_post_links_linked_by_principal_id_principal_id_fk": {
-          "name": "idea_post_links_linked_by_principal_id_principal_id_fk",
-          "tableFrom": "idea_post_links",
-          "tableTo": "principal",
-          "columnsFrom": ["linked_by_principal_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"

@@ -1,6 +1,6 @@
 {
-  "id": "54bcecb9-6ca0-4a92-8cb3-74027677e93c",
-  "prevId": "7f710803-8dff-440e-ae01-8c12556b68bb",
+  "id": "e6bfb055-b0b4-45b1-b3ee-2495dcc676eb",
+  "prevId": "baa0cd53-e822-432b-8644-191c5781b25e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2749,6 +2749,12 @@
             "as": "setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(content, '')), 'B')",
             "type": "stored"
           }
+        },
+        "promoted_from_theme_id": {
+          "name": "promoted_from_theme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "embedding": {
           "name": "embedding",
@@ -5923,12 +5929,6 @@
         "merged_into_theme_id": {
           "name": "merged_into_theme_id",
           "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "merge_snapshot": {
-          "name": "merge_snapshot",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

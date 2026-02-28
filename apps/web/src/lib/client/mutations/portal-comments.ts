@@ -31,6 +31,7 @@ interface OptimisticComment {
   createdAt: string
   parentId: string | null
   isTeamMember: boolean
+  isPrivate?: boolean
   replies: OptimisticComment[]
   reactions: Array<{ emoji: string; count: number; hasReacted: boolean }>
 }
@@ -43,6 +44,7 @@ interface CreateCommentInput {
   authorEmail?: string | null
   principalId?: string | null
   statusId?: string | null
+  isPrivate?: boolean
 }
 
 interface UseCreateCommentOptions {
@@ -157,6 +159,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           content: input.content,
           parentId: (input.parentId || undefined) as CommentId | undefined,
           statusId: input.statusId || undefined,
+          isPrivate: input.isPrivate,
         },
       }),
     onMutate: async (input) => {

@@ -1,6 +1,6 @@
 {
-  "id": "0020_odd_kabuki",
-  "prevId": "0019_notification_channels",
+  "id": "9c1ba54d-d1af-43fc-b2a3-84dc6ae522f2",
+  "prevId": "a7328b46-e54c-428b-a5dd-9553e6cd39c7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2767,30 +2767,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "summary_json": {
-          "name": "summary_json",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "summary_model": {
-          "name": "summary_model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "summary_updated_at": {
-          "name": "summary_updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "summary_comment_count": {
-          "name": "summary_comment_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -3180,18 +3156,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "source_type": {
-          "name": "source_type",
-          "type": "varchar(40)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_external_url": {
-          "name": "source_external_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3279,22 +3243,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "votes_source_type_idx": {
-          "name": "votes_source_type_idx",
-          "columns": [
-            {
-              "expression": "source_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "source_type IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3364,13 +3312,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "target_key": {
-          "name": "target_key",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'default'"
-        },
         "enabled": {
           "name": "enabled",
           "type": "boolean",
@@ -3438,7 +3379,7 @@
         "mapping_unique": {
           "name": "mapping_unique",
           "nullsNotDistinct": false,
-          "columns": ["integration_id", "event_type", "action_type", "target_key"]
+          "columns": ["integration_id", "event_type", "action_type"]
         }
       },
       "policies": {},
@@ -4827,7 +4768,7 @@
           "name": "integration_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "integration_type": {
           "name": "integration_type",
@@ -4915,10 +4856,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "post_external_links_type_external_post_unique": {
-          "name": "post_external_links_type_external_post_unique",
+        "post_external_links_type_external_id": {
+          "name": "post_external_links_type_external_id",
           "nullsNotDistinct": false,
-          "columns": ["integration_type", "external_id", "post_id"]
+          "columns": ["integration_type", "external_id"]
         }
       },
       "policies": {},

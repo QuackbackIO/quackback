@@ -103,6 +103,7 @@ export const integrationEventMappings = pgTable(
     actionType: varchar('action_type', { length: 50 }).notNull(),
     actionConfig: jsonb('action_config').$type<EventMappingActionConfig>().notNull().default({}),
     filters: jsonb('filters').$type<EventMappingFilters>(),
+    /** Discriminator for multiple mappings of the same event+action (e.g. per-board targets) */
     targetKey: varchar('target_key', { length: 100 }).notNull().default('default'),
     enabled: boolean('enabled').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quackback</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    .loading { display: flex; align-items: center; justify-content: center; height: 100vh; color: #666; font-size: 14px; }
+    .error { padding: 16px; color: #d32f2f; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="app" class="loading">Loading...</div>
+
+  <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+  <script>
+    (function() {
+      var client = ZAFClient.init();
+
+      client.metadata().then(function(metadata) {
+        var baseUrl = metadata.settings.quackback_url;
+        if (!baseUrl) {
+          document.getElementById('app').className = 'error';
+          document.getElementById('app').textContent = 'Quackback URL not configured. Go to app settings.';
+          return;
+        }
+
+        // Remove trailing slash
+        baseUrl = baseUrl.replace(/\/+$/, '');
+
+        // Redirect the iframe to the Quackback sidebar route.
+        // Pass app_guid and origin so ZAFClient.init() works in the new page.
+        var params = new URLSearchParams(window.location.search);
+        var sidebarUrl = baseUrl + '/apps/zendesk/sidebar'
+          + '?app_guid=' + encodeURIComponent(params.get('app_guid') || '')
+          + '&origin=' + encodeURIComponent(params.get('origin') || '');
+
+        window.location.replace(sidebarUrl);
+      }).catch(function(err) {
+        document.getElementById('app').className = 'error';
+        document.getElementById('app').textContent = 'Failed to load settings: ' + err.message;
+      });
+    })();
+  </script>
+</body>
+</html>

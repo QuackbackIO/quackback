@@ -1,5 +1,5 @@
 {
-  "id": "baa0cd53-e822-432b-8644-191c5781b25e",
+  "id": "b22b5a94-7e05-4fab-b030-01a9c85e436f",
   "prevId": "cb9745ad-fd1e-428b-b728-420f49cce931",
   "version": "7",
   "dialect": "postgresql",
@@ -2750,12 +2750,6 @@
             "type": "stored"
           }
         },
-        "promoted_from_theme_id": {
-          "name": "promoted_from_theme_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "embedding": {
           "name": "embedding",
           "type": "vector(1536)",
@@ -3162,6 +3156,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source_type": {
+          "name": "source_type",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_external_url": {
+          "name": "source_external_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3249,6 +3255,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "votes_source_type_idx": {
+          "name": "votes_source_type_idx",
+          "columns": [
+            {
+              "expression": "source_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "source_type IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3318,6 +3340,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_key": {
+          "name": "target_key",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'default'"
+        },
         "enabled": {
           "name": "enabled",
           "type": "boolean",
@@ -3385,7 +3414,7 @@
         "mapping_unique": {
           "name": "mapping_unique",
           "nullsNotDistinct": false,
-          "columns": ["integration_id", "event_type", "action_type"]
+          "columns": ["integration_id", "event_type", "action_type", "target_key"]
         }
       },
       "policies": {},
@@ -4774,7 +4803,7 @@
           "name": "integration_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "integration_type": {
           "name": "integration_type",
@@ -4862,10 +4891,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "post_external_links_type_external_id": {
-          "name": "post_external_links_type_external_id",
+        "post_external_links_type_external_post_unique": {
+          "name": "post_external_links_type_external_post_unique",
           "nullsNotDistinct": false,
-          "columns": ["integration_type", "external_id"]
+          "columns": ["integration_type", "external_id", "post_id"]
         }
       },
       "policies": {},
@@ -5447,12 +5476,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "theme_id": {
-          "name": "theme_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "extraction_confidence": {
           "name": "extraction_confidence",
           "type": "real",
@@ -5557,21 +5580,6 @@
           "method": "btree",
           "with": {}
         },
-        "feedback_signals_theme_idx": {
-          "name": "feedback_signals_theme_idx",
-          "columns": [
-            {
-              "expression": "theme_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "feedback_signals_board_idx": {
           "name": "feedback_signals_board_idx",
           "columns": [
@@ -5618,15 +5626,6 @@
           "tableFrom": "feedback_signals",
           "tableTo": "boards",
           "columnsFrom": ["board_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "feedback_signals_theme_id_feedback_themes_id_fk": {
-          "name": "feedback_signals_theme_id_feedback_themes_id_fk",
-          "tableFrom": "feedback_signals",
-          "tableTo": "feedback_themes",
-          "columnsFrom": ["theme_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
@@ -5797,8 +5796,8 @@
       },
       "isRLSEnabled": false
     },
-    "public.feedback_themes": {
-      "name": "feedback_themes",
+    "public.feedback_suggestions": {
+      "name": "feedback_suggestions",
       "schema": "",
       "columns": {
         "id": {
@@ -5807,20 +5806,27 @@
           "primaryKey": true,
           "notNull": true
         },
-        "title": {
-          "name": "title",
-          "type": "text",
+        "suggestion_type": {
+          "name": "suggestion_type",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
         },
-        "summary": {
-          "name": "summary",
-          "type": "text",
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "raw_feedback_item_id": {
+          "name": "raw_feedback_item_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "parent_theme_id": {
-          "name": "parent_theme_id",
+        "signal_id": {
+          "name": "signal_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -5831,85 +5837,57 @@
           "primaryKey": false,
           "notNull": false
         },
-        "status": {
-          "name": "status",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "merged_into_theme_id": {
-          "name": "merged_into_theme_id",
+        "target_post_id": {
+          "name": "target_post_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "strength": {
-          "name": "strength",
+        "similarity_score": {
+          "name": "similarity_score",
           "type": "real",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "signal_count": {
-          "name": "signal_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "unique_author_count": {
-          "name": "unique_author_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "centroid_embedding": {
-          "name": "centroid_embedding",
-          "type": "vector(1536)",
           "primaryKey": false,
           "notNull": false
         },
-        "centroid_model": {
-          "name": "centroid_model",
+        "suggested_title": {
+          "name": "suggested_title",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "centroid_updated_at": {
-          "name": "centroid_updated_at",
-          "type": "timestamp with time zone",
+        "suggested_body": {
+          "name": "suggested_body",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "sentiment_distribution": {
-          "name": "sentiment_distribution",
-          "type": "jsonb",
+        "reasoning": {
+          "name": "reasoning",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "urgency_distribution": {
-          "name": "urgency_distribution",
-          "type": "jsonb",
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1536)",
           "primaryKey": false,
           "notNull": false
         },
-        "promoted_to_post_id": {
-          "name": "promoted_to_post_id",
+        "result_post_id": {
+          "name": "result_post_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "first_signal_at": {
-          "name": "first_signal_at",
+        "resolved_at": {
+          "name": "resolved_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
-        "last_signal_at": {
-          "name": "last_signal_at",
-          "type": "timestamp with time zone",
+        "resolved_by_principal_id": {
+          "name": "resolved_by_principal_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -5929,11 +5907,11 @@
         }
       },
       "indexes": {
-        "feedback_themes_board_idx": {
-          "name": "feedback_themes_board_idx",
+        "feedback_suggestions_status_idx": {
+          "name": "feedback_suggestions_status_idx",
           "columns": [
             {
-              "expression": "board_id",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5944,11 +5922,11 @@
           "method": "btree",
           "with": {}
         },
-        "feedback_themes_strength_idx": {
-          "name": "feedback_themes_strength_idx",
+        "feedback_suggestions_type_idx": {
+          "name": "feedback_suggestions_type_idx",
           "columns": [
             {
-              "expression": "strength",
+              "expression": "suggestion_type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5959,28 +5937,125 @@
           "method": "btree",
           "with": {}
         },
-        "feedback_themes_last_signal_idx": {
-          "name": "feedback_themes_last_signal_idx",
+        "feedback_suggestions_raw_item_idx": {
+          "name": "feedback_suggestions_raw_item_idx",
           "columns": [
             {
-              "expression": "last_signal_at",
+              "expression": "raw_feedback_item_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedback_suggestions_target_post_idx": {
+          "name": "feedback_suggestions_target_post_idx",
+          "columns": [
+            {
+              "expression": "target_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedback_suggestions_created_idx": {
+          "name": "feedback_suggestions_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedback_suggestions_pending_merge_idx": {
+          "name": "feedback_suggestions_pending_merge_idx",
+          "columns": [
+            {
+              "expression": "raw_feedback_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"feedback_suggestions\".\"status\" = 'pending' AND \"feedback_suggestions\".\"target_post_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "feedback_themes_board_id_boards_id_fk": {
-          "name": "feedback_themes_board_id_boards_id_fk",
-          "tableFrom": "feedback_themes",
+        "feedback_suggestions_raw_feedback_item_id_raw_feedback_items_id_fk": {
+          "name": "feedback_suggestions_raw_feedback_item_id_raw_feedback_items_id_fk",
+          "tableFrom": "feedback_suggestions",
+          "tableTo": "raw_feedback_items",
+          "columnsFrom": ["raw_feedback_item_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "feedback_suggestions_signal_id_feedback_signals_id_fk": {
+          "name": "feedback_suggestions_signal_id_feedback_signals_id_fk",
+          "tableFrom": "feedback_suggestions",
+          "tableTo": "feedback_signals",
+          "columnsFrom": ["signal_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "feedback_suggestions_board_id_boards_id_fk": {
+          "name": "feedback_suggestions_board_id_boards_id_fk",
+          "tableFrom": "feedback_suggestions",
           "tableTo": "boards",
           "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "feedback_suggestions_target_post_id_posts_id_fk": {
+          "name": "feedback_suggestions_target_post_id_posts_id_fk",
+          "tableFrom": "feedback_suggestions",
+          "tableTo": "posts",
+          "columnsFrom": ["target_post_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "feedback_suggestions_result_post_id_posts_id_fk": {
+          "name": "feedback_suggestions_result_post_id_posts_id_fk",
+          "tableFrom": "feedback_suggestions",
+          "tableTo": "posts",
+          "columnsFrom": ["result_post_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "feedback_suggestions_resolved_by_principal_id_principal_id_fk": {
+          "name": "feedback_suggestions_resolved_by_principal_id_principal_id_fk",
+          "tableFrom": "feedback_suggestions",
+          "tableTo": "principal",
+          "columnsFrom": ["resolved_by_principal_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"

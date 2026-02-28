@@ -42,7 +42,8 @@ export const asanaInboundHandler: InboundWebhookHandler = {
 
   async parseStatusChange(
     body: string,
-    config: Record<string, unknown>
+    _config: Record<string, unknown>,
+    secrets: Record<string, unknown>
   ): Promise<InboundWebhookResult | null> {
     const payload = JSON.parse(body)
     const events = payload.events
@@ -59,9 +60,9 @@ export const asanaInboundHandler: InboundWebhookHandler = {
     if (!taskGid) return null
 
     // Asana compact events don't include the actual data — must fetch the task
-    const accessToken = config.accessToken as string | undefined
+    const accessToken = secrets.accessToken as string | undefined
     if (!accessToken) {
-      console.error('[Asana Inbound] No access token in config for API fetch')
+      console.error('[Asana Inbound] No access token in secrets for API fetch')
       return null
     }
 

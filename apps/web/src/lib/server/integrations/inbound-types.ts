@@ -34,6 +34,7 @@ export interface InboundWebhookHandler {
    */
   parseStatusChange(
     body: string,
-    config: Record<string, unknown>
+    config: Record<string, unknown>,
+    secrets: Record<string, unknown>
   ): Promise<InboundWebhookResult | null>
 }

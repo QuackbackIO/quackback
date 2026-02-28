@@ -177,6 +177,7 @@ export function WidgetHome({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId }),
         })
+        if (!res.ok) throw new Error(`Vote failed: ${res.status}`)
         const json = await res.json()
         if (json.data) {
           setVoteCountOverrides((prev) => {

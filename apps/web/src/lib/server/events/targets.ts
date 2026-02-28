@@ -10,6 +10,7 @@ import {
   integrationEventMappings,
   eq,
   and,
+  inArray,
   isNull,
   principal,
   webhooks,
@@ -138,6 +139,11 @@ async function getIntegrationTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
+  // Never forward private comments to external integrations
+  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+    return []
+  }
+
   // Single query: get active, enabled mappings with integration data
   const mappings = await db
     .select({
@@ -228,10 +234,16 @@ async function getSubscriberTargets(event: EventData, context: HookContext): Pro
   if (subscribers.length === 0) return []
 
   // Filter out the actor (don't notify yourself)
-  const nonActorSubscribers = subscribers.filter(
+  let nonActorSubscribers = subscribers.filter(
     (subscriber) => !isActorSubscriber(subscriber, event.actor)
   )
   if (nonActorSubscribers.length === 0) return []
+
+  // For private comments, only notify team member subscribers
+  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+    nonActorSubscribers = await filterToTeamMembers(nonActorSubscribers)
+    if (nonActorSubscribers.length === 0) return []
+  }
 
   const targets: HookTarget[] = []
 
@@ -328,6 +340,24 @@ function shouldSendEmail(
   if (prefs.emailMuted) return false
   const prefKey = EVENT_EMAIL_PREF_MAP[eventType]
   return prefKey ? prefs[prefKey] : false
+}
+
+/**
+ * Filter subscribers to only team members (admin/member roles).
+ * Batch queries the principal table for efficiency.
+ */
+async function filterToTeamMembers(subscribers: Subscriber[]): Promise<Subscriber[]> {
+  if (subscribers.length === 0) return []
+
+  const principalIds = subscribers.map((s) => s.principalId)
+  const principals = await db.query.principal.findMany({
+    where: inArray(principal.id, principalIds as PrincipalId[]),
+    columns: { id: true, role: true },
+  })
+
+  const teamPrincipalIds = new Set(principals.filter((p) => p.role !== 'user').map((p) => p.id))
+
+  return subscribers.filter((s) => teamPrincipalIds.has(s.principalId as PrincipalId))
 }
 
 /**
@@ -577,6 +607,11 @@ async function getChangelogSubscriberTargets(
  * Queries active webhooks subscribed to this event type and filters by board.
  */
 async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
+  // Never deliver private comments to external webhooks
+  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+    return []
+  }
+
   try {
     // Get all active, non-deleted webhooks (we filter in JS for simplicity)
     const activeWebhooks = await db.query.webhooks.findMany({

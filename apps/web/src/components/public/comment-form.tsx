@@ -13,8 +13,9 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { CheckIcon } from '@heroicons/react/24/solid'
+import { CheckIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/server/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -33,6 +34,7 @@ export type CreateCommentMutation = UseMutationResult<
     authorEmail?: string | null
     principalId?: string | null
     statusId?: string | null
+    isPrivate?: boolean
   }
 >
 
@@ -48,8 +50,10 @@ interface CommentFormProps {
   statuses?: Array<{ id: string; name: string; color: string }>
   /** Current post status ID */
   currentStatusId?: string | null
-  /** Whether the current user is a team member (enables status selector) */
+  /** Whether the current user is a team member (enables status selector and private toggle) */
   isTeamMember?: boolean
+  /** Force comment to be private (for replies to private comments) */
+  forcePrivate?: boolean
 }
 
 export function CommentForm({
@@ -62,12 +66,15 @@ export function CommentForm({
   statuses,
   currentStatusId,
   isTeamMember,
+  forcePrivate,
 }: CommentFormProps) {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const effectiveIsPrivate = forcePrivate || isPrivate
 
   const authPopover = useAuthPopoverSafe()
 
@@ -97,6 +104,12 @@ export function CommentForm({
   const currentStatus = statuses?.find((s) => s.id === currentStatusId) ?? null
   const showStatusSelector = isTeamMember && !parentId && statuses && statuses.length > 0
 
+  function privateTooltipText(): string {
+    if (forcePrivate) return 'Replies to private comments are always private'
+    if (effectiveIsPrivate) return 'Only visible to team members'
+    return 'Make this comment private (team-only)'
+  }
+
   function onSubmit(data: CommentInput) {
     setError(null)
 
@@ -114,6 +127,7 @@ export function CommentForm({
         authorEmail: effectiveUser?.email || null,
         principalId: effectiveUser?.principalId || null,
         statusId: selectedStatusId,
+        isPrivate: effectiveIsPrivate,
       },
       {
         onSuccess: () => {
@@ -360,6 +374,35 @@ export function CommentForm({
             >
               Cancel
             </Button>
+          )}
+          {/* Private toggle for team members */}
+          {isTeamMember && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={effectiveIsPrivate ? 'default' : 'ghost'}
+                    size="sm"
+                    disabled={forcePrivate}
+                    onClick={() => setIsPrivate(!isPrivate)}
+                    className={
+                      effectiveIsPrivate
+                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
+                        : 'text-muted-foreground gap-1.5'
+                    }
+                  >
+                    {effectiveIsPrivate ? (
+                      <LockClosedIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <LockOpenIcon className="h-3.5 w-3.5" />
+                    )}
+                    Private
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{privateTooltipText()}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           <Button type="submit" size="sm" disabled={isSubmitting}>
             {isSubmitting ? 'Posting...' : parentId ? 'Reply' : 'Comment'}

@@ -41,6 +41,9 @@ const CommentListItemSchema: z.ZodType = z.lazy(() =>
     isTeamMember: z
       .boolean()
       .meta({ description: 'Whether the author is a team member', example: false }),
+    isPrivate: z
+      .boolean()
+      .meta({ description: 'Whether the comment is only visible to team members', example: false }),
     createdAt: TimestampSchema,
     reactions: z.array(ReactionCountSchema).meta({ description: 'Aggregated reaction counts' }),
     replies: z.array(CommentListItemSchema).meta({ description: 'Nested reply comments' }),
@@ -59,6 +62,9 @@ const CommentDetailSchema = z.object({
   isTeamMember: z
     .boolean()
     .meta({ description: 'Whether the author is a team member', example: false }),
+  isPrivate: z
+    .boolean()
+    .meta({ description: 'Whether the comment is only visible to team members', example: false }),
   createdAt: TimestampSchema,
   deletedAt: NullableTimestampSchema.meta({
     description: 'When the comment was deleted, null if active',
@@ -74,6 +80,7 @@ const CommentResponseSchema = z.object({
   authorName: z.string().nullable(),
   principalId: TypeIdSchema.nullable(),
   isTeamMember: z.boolean(),
+  isPrivate: z.boolean(),
   createdAt: TimestampSchema,
 })
 
@@ -84,6 +91,10 @@ const CreateCommentSchema = z
     parentId: TypeIdSchema.optional()
       .nullable()
       .meta({ description: 'Parent comment ID for replies' }),
+    isPrivate: z
+      .boolean()
+      .optional()
+      .meta({ description: 'Mark comment as private (team-only). Defaults to false.' }),
   })
   .meta({ description: 'Create comment request body' })
 
