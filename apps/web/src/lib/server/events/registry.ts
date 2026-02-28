@@ -25,11 +25,30 @@ const builtinHooks = new Map<string, HookHandler>([
 ])
 
 /**
- * Get a registered hook by type.
- * Checks built-in hooks first, then falls through to integration hooks.
+ * Lazy-loaded hooks resolved via dynamic import to avoid circular dependencies.
+ * (feedback-pipeline → db → ... → events → registry)
  */
-export function getHook(type: string): HookHandler | undefined {
-  return builtinHooks.get(type) ?? getIntegrationHook(type)
+const lazyHooks: Record<string, () => Promise<HookHandler>> = {
+  feedback_pipeline: () =>
+    import('./handlers/feedback-pipeline').then((m) => m.feedbackPipelineHook),
+}
+
+/**
+ * Get a registered hook by type.
+ * Checks built-in hooks first, then lazy hooks, then integration hooks.
+ */
+export async function getHook(type: string): Promise<HookHandler | undefined> {
+  const builtin = builtinHooks.get(type)
+  if (builtin) return builtin
+
+  const lazyLoader = lazyHooks[type]
+  if (lazyLoader) {
+    const hook = await lazyLoader()
+    builtinHooks.set(type, hook) // cache for next call
+    return hook
+  }
+
+  return getIntegrationHook(type)
 }
 
 /**

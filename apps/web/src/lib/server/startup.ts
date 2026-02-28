@@ -36,4 +36,25 @@ export function logStartupBanner(): void {
   import('@/lib/server/events/segment-scheduler')
     .then(({ restoreAllEvaluationSchedules }) => restoreAllEvaluationSchedules())
     .catch((err) => console.error('[Startup] Failed to restore segment schedules:', err))
+
+  // Initialize feedback AI worker eagerly so it processes jobs from any source
+  import('./domains/feedback/queues/feedback-ai-queue')
+    .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
+    .catch((err) => console.error('[Startup] Failed to init feedback AI worker:', err))
+
+  // Restore feedback pipeline schedules (lazy import to avoid eager queue init)
+  import('./domains/feedback/queues/feedback-maintenance-queue')
+    .then(({ restoreAllFeedbackSchedules }) => restoreAllFeedbackSchedules())
+    .catch((err) => console.error('[Startup] Failed to restore feedback schedules:', err))
+
+  // Ensure quackback feedback source exists (idempotent, creates on first startup)
+  import('./domains/feedback/sources/quackback.source')
+    .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())
+    .then(() =>
+      // Reset the hook handler's cache so it picks up the newly-created source
+      import('./events/handlers/feedback-pipeline').then(({ resetQuackbackSourceCache }) =>
+        resetQuackbackSourceCache()
+      )
+    )
+    .catch((err) => console.error('[Startup] Failed to ensure quackback feedback source:', err))
 }

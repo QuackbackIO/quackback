@@ -92,6 +92,55 @@
       "when": 1772179200001,
       "tag": "0012_green_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1772004302257,
+      "tag": "0013_curious_warstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1772265600000,
+      "tag": "0014_ideas_redesign",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1772095539395,
+      "tag": "0015_aromatic_zodiak",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1772096123794,
+      "tag": "0016_safe_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1772222401202,
+      "tag": "0017_large_earthquake",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1772223732724,
+      "tag": "0018_lovely_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772323200000,
+      "tag": "0019_notification_channels",
+      "breakpoints": true
     }
   ]
 }

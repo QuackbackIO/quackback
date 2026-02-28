@@ -12,12 +12,32 @@
  * - post.permissions.ts - User edit/delete permissions
  */
 
-import { db, boards, eq, postStatuses, posts, postTags, type Post } from '@/lib/server/db'
+import {
+  db,
+  boards,
+  eq,
+  postStatuses,
+  posts,
+  postTags,
+  type Post,
+  type TiptapContent,
+} from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { dispatchPostCreated, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
+
+/** Convert plain text to TipTap JSON when contentJson is not provided */
+function plainTextToTipTap(text: string): TiptapContent {
+  return {
+    type: 'doc',
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      content: line ? [{ type: 'text', text: line }] : [],
+    })),
+  }
+}
 
 /**
  * Create a new post
@@ -99,7 +119,7 @@ export async function createPost(
       boardId: input.boardId,
       title,
       content,
-      contentJson: input.contentJson,
+      contentJson: input.contentJson ?? plainTextToTipTap(content),
       statusId,
       principalId: author.principalId,
     })

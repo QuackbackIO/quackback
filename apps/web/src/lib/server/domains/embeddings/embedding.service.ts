@@ -10,7 +10,7 @@ import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 
-const EMBEDDING_MODEL = 'text-embedding-3-small'
+const EMBEDDING_MODEL = 'openai/text-embedding-3-small'
 const EMBEDDING_DIMENSIONS = 1536
 
 /**

@@ -54,6 +54,22 @@ export interface RoadmapFilters {
 /**
  * Filters for the admin users list.
  */
+/**
+ * Filters for the admin suggestions list.
+ */
+export interface SuggestionsFilters {
+  search?: string
+  suggestionType?: 'merge_post' | 'create_post'
+  sourceIds?: string[]
+  board?: string[]
+  sort?: 'newest' | 'similarity' | 'confidence'
+  /** Selected suggestion ID (for URL persistence) */
+  suggestion?: string
+}
+
+/**
+ * Filters for the admin users list.
+ */
 export interface UsersFilters {
   search?: string
   /** Segment selection from sidebar (multi-select, like statuses for posts) */

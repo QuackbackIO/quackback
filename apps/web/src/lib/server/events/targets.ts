@@ -38,14 +38,22 @@ function getNotificationEventType(eventType: string): NotificationEventType | nu
       return 'status_change'
     case 'comment.created':
       return 'comment'
+    case 'changelog.published':
+      // Use status_change to filter subscribers who want status/progress updates
+      return 'status_change'
     default:
       return null
   }
 }
 
 /** Events that trigger subscriber email and in-app notifications */
-const SUBSCRIBER_EVENT_TYPES = ['post.status_changed', 'comment.created'] as const
+const SUBSCRIBER_EVENT_TYPES = [
+  'post.status_changed',
+  'comment.created',
+  'changelog.published',
+] as const
 const AI_EVENT_TYPES = ['post.created'] as const
+const FEEDBACK_PIPELINE_EVENT_TYPES = ['post.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -68,8 +76,13 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 
     // Email and in-app notification targets (subscribers)
     if (SUBSCRIBER_EVENT_TYPES.includes(event.type as (typeof SUBSCRIBER_EVENT_TYPES)[number])) {
-      const subscriberTargets = await getSubscriberTargets(event, context)
-      targets.push(...subscriberTargets)
+      if (event.type === 'changelog.published') {
+        const changelogTargets = await getChangelogSubscriberTargets(event, context)
+        targets.push(...changelogTargets)
+      } else {
+        const subscriberTargets = await getSubscriberTargets(event, context)
+        targets.push(...subscriberTargets)
+      }
     }
 
     // AI targets (sentiment, embeddings) - only when AI is configured
@@ -77,6 +90,19 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push({
         type: 'ai',
         target: { type: 'ai' },
+        config: {},
+      })
+    }
+
+    // Feedback pipeline target — ingests board posts into aggregation pipeline
+    if (
+      FEEDBACK_PIPELINE_EVENT_TYPES.includes(
+        event.type as (typeof FEEDBACK_PIPELINE_EVENT_TYPES)[number]
+      )
+    ) {
+      targets.push({
+        type: 'feedback_pipeline',
+        target: {},
         config: {},
       })
     }
@@ -106,6 +132,7 @@ async function getIntegrationTargets(
       secrets: integrations.secrets,
       integrationConfig: integrations.config,
       actionConfig: integrationEventMappings.actionConfig,
+      filters: integrationEventMappings.filters,
     })
     .from(integrationEventMappings)
     .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
@@ -122,8 +149,18 @@ async function getIntegrationTargets(
   }
 
   const targets: HookTarget[] = []
+  const boardId = extractBoardId(event)
+
+  // Track seen (integrationType, channelId) pairs to deduplicate
+  const seen = new Set<string>()
 
   for (const m of mappings) {
+    // Apply board filter
+    const filters = m.filters as { boardIds?: string[] } | null
+    if (filters?.boardIds?.length && boardId && !filters.boardIds.includes(boardId)) {
+      continue
+    }
+
     const integrationConfig = (m.integrationConfig as Record<string, unknown>) || {}
     const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
     const channelId = (actionConfig.channelId || integrationConfig.channelId) as string | undefined
@@ -132,6 +169,11 @@ async function getIntegrationTargets(
       console.warn(`[Targets] No channelId for ${m.integrationType}, skipping`)
       continue
     }
+
+    // Deduplicate by (integrationType, channelId)
+    const dedupeKey = `${m.integrationType}:${channelId}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
 
     let accessToken: string | undefined
     if (m.secrets) {
@@ -394,6 +436,123 @@ async function buildNotificationConfig(
   }
 
   return null
+}
+
+// ============================================================================
+// Changelog Subscriber Targets
+// ============================================================================
+
+/**
+ * Get subscriber targets for changelog.published events.
+ * Looks up all posts linked to the changelog, gets their subscribers,
+ * and deduplicates across posts.
+ */
+async function getChangelogSubscriberTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'changelog.published') return []
+
+  const changelogId = event.data.changelog.id
+  if (!changelogId) return []
+
+  // Look up linked posts
+  const { changelogEntryPosts, eq: eqOp } = await import('@/lib/server/db')
+  const linkedPosts = await db.query.changelogEntryPosts.findMany({
+    where: eqOp(
+      changelogEntryPosts.changelogEntryId,
+      changelogId as import('@quackback/ids').ChangelogId
+    ),
+    columns: { postId: true },
+  })
+
+  if (linkedPosts.length === 0) return []
+
+  const postIds = linkedPosts.map((lp) => lp.postId)
+
+  // Get subscribers for all linked posts, deduplicated
+  const allSubscribers: Map<string, Subscriber> = new Map()
+  for (const postId of postIds) {
+    const subscribers = await getSubscribersForEvent(postId, 'status_change')
+    for (const sub of subscribers) {
+      if (!allSubscribers.has(sub.principalId)) {
+        allSubscribers.set(sub.principalId, sub)
+      }
+    }
+  }
+
+  const subscribers = [...allSubscribers.values()]
+  console.log(
+    `[Targets] Found ${subscribers.length} unique subscribers across ${postIds.length} linked posts for changelog ${changelogId}`
+  )
+  if (subscribers.length === 0) return []
+
+  // Filter out the actor
+  const nonActorSubscribers = subscribers.filter(
+    (subscriber) => !isActorSubscriber(subscriber, event.actor)
+  )
+  if (nonActorSubscribers.length === 0) return []
+
+  const targets: HookTarget[] = []
+
+  // Build changelog URL
+  const changelogUrl = `${context.portalBaseUrl}/changelog`
+
+  // Email targets
+  const principalIds = nonActorSubscribers.map((s) => s.principalId)
+  const prefsMap = await batchGetNotificationPreferences(principalIds)
+
+  const eligibleSubscribers = nonActorSubscribers.filter((subscriber) => {
+    const prefs = prefsMap.get(subscriber.principalId)
+    return prefs && shouldSendEmail('post.status_changed', prefs)
+  })
+
+  if (eligibleSubscribers.length > 0) {
+    // Use the first linked post for unsubscribe tokens
+    const firstPostId = postIds[0]
+    const tokenMap = await batchGenerateUnsubscribeTokens(
+      eligibleSubscribers.map((s) => ({
+        principalId: s.principalId,
+        postId: firstPostId,
+        action: 'unsubscribe_post' as const,
+      }))
+    )
+
+    for (const subscriber of eligibleSubscribers) {
+      targets.push({
+        type: 'email',
+        target: {
+          email: subscriber.email,
+          unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
+        },
+        config: {
+          workspaceName: context.workspaceName,
+          changelogTitle: event.data.changelog.title,
+          changelogUrl,
+          contentPreview: event.data.changelog.contentPreview,
+          eventType: 'changelog.published',
+        },
+      })
+    }
+  }
+
+  // Notification targets
+  if (nonActorSubscribers.length > 0) {
+    targets.push({
+      type: 'notification',
+      target: {
+        principalIds: nonActorSubscribers.map((s) => s.principalId),
+      },
+      config: {
+        changelogTitle: event.data.changelog.title,
+        changelogUrl,
+        contentPreview: event.data.changelog.contentPreview,
+        eventType: 'changelog.published',
+      },
+    })
+  }
+
+  return targets
 }
 
 // ============================================================================

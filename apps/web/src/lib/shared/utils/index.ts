@@ -3,7 +3,7 @@
  */
 
 export { cn } from './cn'
-export { getInitials, stripHtml } from './string'
+export { getInitials, stripHtml, normalizeStrength, strengthTier } from './string'
 export {
   escapeHtmlAttr,
   sanitizeUrl,

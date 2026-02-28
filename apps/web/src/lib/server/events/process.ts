@@ -82,7 +82,7 @@ async function initializeQueue() {
         return
       }
 
-      const hook = getHook(hookType)
+      const hook = await getHook(hookType)
       if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
 
       let result: HookResult

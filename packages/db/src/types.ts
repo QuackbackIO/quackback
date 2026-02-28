@@ -57,6 +57,78 @@ export interface TiptapContent {
   attrs?: Record<string, string | number | boolean | null>
 }
 
+// Raw feedback JSONB column types
+export interface RawFeedbackAuthor {
+  name?: string
+  email?: string
+  externalUserId?: string
+  principalId?: string
+  attributes?: Record<string, unknown>
+}
+
+export interface RawFeedbackContent {
+  subject?: string
+  text: string
+  html?: string
+  language?: string
+}
+
+export interface RawFeedbackThreadMessage {
+  id: string
+  authorName?: string
+  authorEmail?: string
+  role?: 'customer' | 'agent' | 'teammate' | 'system'
+  sentAt: string
+  text: string
+  isTrigger?: boolean
+}
+
+export interface RawFeedbackItemContextEnvelope {
+  sourceChannel?: {
+    id?: string
+    name?: string
+    type?: string
+    purpose?: string
+    permalink?: string
+  }
+  sourceTicket?: {
+    id?: string
+    status?: string
+    priority?: string
+    tags?: string[]
+    customFields?: Record<string, unknown>
+  }
+  sourceConversation?: {
+    id?: string
+    state?: string
+    tags?: string[]
+  }
+  thread?: RawFeedbackThreadMessage[]
+  customer?: {
+    id?: string
+    email?: string
+    company?: string
+    plan?: string
+    mrr?: number
+    attributes?: Record<string, unknown>
+  }
+  pageContext?: {
+    url?: string
+    title?: string
+    route?: string
+    userAgent?: string
+    sessionId?: string
+  }
+  attachments?: Array<{
+    id?: string
+    name: string
+    mimeType?: string
+    sizeBytes?: number
+    url?: string
+  }>
+  metadata?: Record<string, unknown>
+}
+
 // Use case types for personalized onboarding
 export const USE_CASE_TYPES = ['saas', 'consumer', 'marketplace', 'internal'] as const
 export type UseCaseType = (typeof USE_CASE_TYPES)[number]
