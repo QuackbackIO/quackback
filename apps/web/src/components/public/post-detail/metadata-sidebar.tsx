@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { VoteButton } from '@/components/public/vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
+import { VotersModal } from '@/components/admin/feedback/voters-modal'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { PostId, StatusId, TagId, RoadmapId } from '@quackback/ids'
@@ -112,6 +113,7 @@ export function MetadataSidebar({
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
+  const [votersOpen, setVotersOpen] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
   // Fetch subscription status for the bell (only in portal mode)
@@ -189,8 +191,27 @@ export function MetadataSidebar({
               <span>Upvotes</span>
             </div>
             {canEdit ? (
-              // Admin mode: direct vote button (no auth wrapper needed)
-              <VoteButton postId={postId} voteCount={voteCount} compact />
+              <div className="flex items-center gap-1.5">
+                <VoteButton postId={postId} voteCount={voteCount} compact />
+                {voteCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setVotersOpen(true)}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Voters
+                    </button>
+                    <VotersModal
+                      postId={postId}
+                      voteCount={voteCount}
+                      open={votersOpen}
+                      onOpenChange={setVotersOpen}
+                    />
+                  </>
+                )}
+              </div>
             ) : (
               // Portal mode: interactive vote button with auth
               <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} compact />
