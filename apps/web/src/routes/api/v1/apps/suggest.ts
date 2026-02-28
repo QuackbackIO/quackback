@@ -1,13 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { fromUuid, type PostId } from '@quackback/ids'
+import { fromUuid } from '@quackback/ids'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
-import {
-  corsHeaders,
-  preflightResponse,
-} from '@/lib/server/integrations/apps/cors'
+import { corsHeaders, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -27,29 +24,26 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
             return badRequestResponse('text parameter is required')
           }
 
-          const { generateEmbedding } = await import(
-            '@/lib/server/domains/embeddings/embedding.service'
-          )
+          const { generateEmbedding } =
+            await import('@/lib/server/domains/embeddings/embedding.service')
 
           const embedding = await generateEmbedding(text)
 
           if (!embedding) {
             // AI not configured - fall back to text search
-            const { listPublicPosts } = await import(
-              '@/lib/server/domains/posts/post.public'
-            )
+            const { listPublicPosts } = await import('@/lib/server/domains/posts/post.public')
             const result = await listPublicPosts({
               search: text.slice(0, 100),
               sort: 'top',
               limit,
               page: 1,
             })
-            const resultPosts = result.items.map((p: { id: PostId; title: string; voteCount: number; board: { name: string } | null }) => ({
+            const resultPosts = result.items.map((p) => ({
               id: p.id,
               title: p.title,
               voteCount: p.voteCount,
               similarity: null,
-              board: p.board ? { name: p.board.name } : { name: '' },
+              board: { name: p.board?.name ?? '' },
             }))
             return new Response(JSON.stringify({ data: { posts: resultPosts } }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders() },
@@ -65,7 +59,9 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               id: posts.id,
               title: posts.title,
               voteCount: posts.voteCount,
-              similarity: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as('similarity'),
+              similarity: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as(
+                'similarity'
+              ),
               boardName: boards.name,
             })
             .from(posts)
@@ -74,8 +70,8 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               and(
                 isNull(posts.deletedAt),
                 sql`${posts.embedding} IS NOT NULL`,
-                sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${minSimilarity}`,
-              ),
+                sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${minSimilarity}`
+              )
             )
             .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
             .limit(limit)
