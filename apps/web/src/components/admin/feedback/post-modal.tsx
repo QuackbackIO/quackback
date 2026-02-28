@@ -45,7 +45,7 @@ import {
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
-import { Route } from '@/routes/admin/feedback'
+import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
   type StatusId,
@@ -510,13 +510,13 @@ function PostModalContent({
 }
 
 export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
-  const search = Route.useSearch()
+  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
     urlId: urlPostId,
     idPrefix: 'post',
     searchParam: 'post',
-    route: '/admin/feedback',
-    search,
+    route: pathname,
+    search: search as Record<string, unknown>,
   })
 
   return (

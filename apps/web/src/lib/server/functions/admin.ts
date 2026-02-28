@@ -400,19 +400,57 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
       }
 
       console.log(`[fn:admin] fetchIntegrationByType: found id=${integration.id}`)
+
+      // Group event mappings by targetKey into notification channels
+      const channelMap = new Map<
+        string,
+        {
+          channelId: string
+          events: { eventType: string; enabled: boolean }[]
+          boardIds: string[] | null
+        }
+      >()
+
+      const integrationConfig = (integration.config as Record<string, unknown>) || {}
+
+      for (const m of integration.eventMappings) {
+        const targetKey = (m as { targetKey?: string }).targetKey || 'default'
+        const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
+        const channelId = (actionConfig.channelId || integrationConfig.channelId) as
+          | string
+          | undefined
+
+        if (!channelId) continue
+
+        if (!channelMap.has(targetKey)) {
+          const filters = (m.filters as { boardIds?: string[] } | null) || null
+          channelMap.set(targetKey, {
+            channelId,
+            events: [],
+            boardIds: filters?.boardIds?.length ? filters.boardIds : null,
+          })
+        }
+
+        channelMap.get(targetKey)!.events.push({
+          eventType: m.eventType,
+          enabled: m.enabled,
+        })
+      }
+
+      const notificationChannels = [...channelMap.values()]
+
       return {
         integration: {
           id: integration.id,
           status: integration.status,
-          workspaceName: (integration.config as Record<string, unknown>)?.workspaceName as
-            | string
-            | undefined,
+          workspaceName: integrationConfig.workspaceName as string | undefined,
           config: integration.config as Record<string, string | number | boolean | null>,
           eventMappings: integration.eventMappings.map((m) => ({
             id: m.id,
             eventType: m.eventType,
             enabled: m.enabled,
           })),
+          notificationChannels,
         },
         platformCredentialFields,
         platformCredentialsConfigured,

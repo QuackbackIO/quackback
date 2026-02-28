@@ -2,6 +2,7 @@ import {
   CheckCircleIcon,
   ChatBubbleLeftEllipsisIcon,
   SparklesIcon,
+  NewspaperIcon,
   BellIcon,
 } from '@heroicons/react/24/solid'
 import type { NotificationType } from '@/lib/server/domains/notifications/notification.types'
@@ -27,6 +28,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     icon: SparklesIcon,
     iconClass: 'text-amber-500',
     bgClass: 'bg-amber-500/10',
+  },
+  changelog_published: {
+    icon: NewspaperIcon,
+    iconClass: 'text-green-500',
+    bgClass: 'bg-green-500/10',
   },
 }
 
