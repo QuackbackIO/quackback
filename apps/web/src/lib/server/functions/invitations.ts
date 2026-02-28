@@ -94,6 +94,9 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { invitationId, name } = data
     console.log(`[fn:invitations] acceptInvitationFn: invitationId=${invitationId}`)
+    // Track whether we successfully claimed the invitation so the catch
+    // block only rolls back when we actually changed its status.
+    let didClaim = false
     try {
       // Get current session
       const session = await getSession()
@@ -128,6 +131,8 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
             : 'This invitation is no longer valid'
         )
       }
+
+      didClaim = true
 
       async function rollbackAndThrow(message: string): Promise<never> {
         await db
@@ -188,16 +193,18 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       return { invitationId: invitationId as InviteId }
     } catch (error) {
       console.error(`[fn:invitations] ❌ acceptInvitationFn failed:`, error)
-      // Roll back the invitation status so the user can retry.
-      // The conditional update above already claimed it as 'accepted',
-      // so if anything downstream fails we must revert to 'pending'.
-      try {
-        await db
-          .update(invitation)
-          .set({ status: 'pending' })
-          .where(eq(invitation.id, invitationId as InviteId))
-      } catch (rollbackError) {
-        console.error(`[fn:invitations] ❌ rollback failed:`, rollbackError)
+      // Only roll back if we actually claimed the invitation. If the error
+      // came from the !claimed branch (already accepted / invalid), rolling
+      // back would incorrectly reopen it to 'pending'.
+      if (didClaim) {
+        try {
+          await db
+            .update(invitation)
+            .set({ status: 'pending' })
+            .where(eq(invitation.id, invitationId as InviteId))
+        } catch (rollbackError) {
+          console.error(`[fn:invitations] ❌ rollback failed:`, rollbackError)
+        }
       }
       throw error
     }
