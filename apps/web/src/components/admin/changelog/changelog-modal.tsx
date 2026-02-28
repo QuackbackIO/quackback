@@ -155,6 +155,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             onPublishStateChange={setPublishState}
             linkedPostIds={linkedPostIds}
             onLinkedPostsChange={setLinkedPostIds}
+            authorName={entry?.author?.name}
           />
         </div>
 
@@ -182,6 +183,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   onPublishStateChange={setPublishState}
                   linkedPostIds={linkedPostIds}
                   onLinkedPostsChange={setLinkedPostIds}
+                  authorName={entry?.author?.name}
                 />
               </div>
             </SheetContent>

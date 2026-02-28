@@ -6,25 +6,19 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface SuggestionsLayoutProps {
   filters: React.ReactNode
-  list: React.ReactNode
-  detail: React.ReactNode
+  content: React.ReactNode
   hasActiveFilters?: boolean
 }
 
-export function SuggestionsLayout({
-  filters,
-  list,
-  detail,
-  hasActiveFilters,
-}: SuggestionsLayoutProps) {
+export function SuggestionsLayout({ filters, content, hasActiveFilters }: SuggestionsLayoutProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   return (
     <div className="flex h-full">
       {/* Filter sidebar - Desktop */}
-      <aside className="hidden lg:flex w-56 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
+      <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-4">{filters}</div>
+          <div className="p-5">{filters}</div>
         </ScrollArea>
       </aside>
 
@@ -51,13 +45,8 @@ export function SuggestionsLayout({
         </Sheet>
       </div>
 
-      {/* Suggestion list - Center */}
-      <div className="w-[400px] lg:w-[480px] shrink-0 border-r border-border/40 flex flex-col bg-card/50 overflow-hidden">
-        {list}
-      </div>
-
-      {/* Detail panel - Right */}
-      <main className="flex-1 min-w-0 bg-card overflow-hidden">{detail}</main>
+      {/* Triage content */}
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">{content}</main>
     </div>
   )
 }

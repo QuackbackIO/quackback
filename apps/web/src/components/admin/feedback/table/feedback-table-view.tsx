@@ -149,7 +149,7 @@ export function FeedbackTableView({
   ] as const
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
@@ -199,7 +199,7 @@ export function FeedbackTableView({
 
   if (isLoading) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <TableSkeleton />
       </div>
@@ -208,7 +208,7 @@ export function FeedbackTableView({
 
   if (posts.length === 0) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <InboxEmptyState
           type={hasActiveFilters ? 'no-results' : 'no-posts'}
@@ -219,7 +219,7 @@ export function FeedbackTableView({
   }
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto w-full">
       {headerContent}
 
       {/* Post List */}

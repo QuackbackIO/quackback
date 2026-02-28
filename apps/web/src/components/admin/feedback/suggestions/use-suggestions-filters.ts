@@ -17,7 +17,6 @@ export function useSuggestionsFilters() {
       sourceIds: search.suggestionSource?.length ? search.suggestionSource : undefined,
       board: search.suggestionBoard?.length ? search.suggestionBoard : undefined,
       sort: search.suggestionSort,
-      suggestion: search.suggestion,
     }),
     [search]
   )
@@ -33,7 +32,6 @@ export function useSuggestionsFilters() {
           ...('sourceIds' in updates && { suggestionSource: updates.sourceIds }),
           ...('board' in updates && { suggestionBoard: updates.board }),
           ...('sort' in updates && { suggestionSort: updates.sort }),
-          ...('suggestion' in updates && { suggestion: updates.suggestion }),
         },
         replace: true,
       })
@@ -46,7 +44,6 @@ export function useSuggestionsFilters() {
       to: '/admin/feedback/suggestions',
       search: {
         suggestionSort: search.suggestionSort,
-        suggestion: search.suggestion,
       },
       replace: true,
     })
@@ -75,13 +72,6 @@ export function useSuggestionsFilters() {
     [filters.board, setFilters]
   )
 
-  const selectSuggestion = useCallback(
-    (suggestionId: string | undefined) => {
-      setFilters({ suggestion: suggestionId })
-    },
-    [setFilters]
-  )
-
   return {
     filters,
     setFilters,
@@ -89,6 +79,5 @@ export function useSuggestionsFilters() {
     hasActiveFilters,
     toggleSource,
     toggleBoard,
-    selectSuggestion,
   }
 }

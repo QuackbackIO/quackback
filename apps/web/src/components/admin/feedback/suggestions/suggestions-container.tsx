@@ -1,18 +1,19 @@
-import { Suspense, useCallback, useMemo } from 'react'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
-import { SparklesIcon } from '@heroicons/react/24/solid'
+import { Suspense, useCallback, useMemo, useState } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { SuggestionsLayout } from './suggestions-layout'
 import { SuggestionsFiltersSidebar } from './suggestions-filter-sidebar'
 import { SuggestionList } from './suggestion-list'
-import { SuggestionDetail } from './suggestion-detail'
+import { CreateFromSuggestionDialog } from './create-from-suggestion-dialog'
 import { useSuggestionsFilters } from './use-suggestions-filters'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { SuggestionListItem } from '../feedback-types'
 
 export function SuggestionsContainer() {
-  const queryClient = useQueryClient()
-  const { filters, setFilters, hasActiveFilters, selectSuggestion } = useSuggestionsFilters()
+  const { filters, setFilters, hasActiveFilters } = useSuggestionsFilters()
+
+  // Dialog state for create_post suggestions
+  const [createTarget, setCreateTarget] = useState<SuggestionListItem | null>(null)
 
   // Data queries
   const { data: sourcesData } = useSuspenseQuery(feedbackQueries.sources())
@@ -89,74 +90,62 @@ export function SuggestionsContainer() {
     return filtered
   }, [allSuggestions, filters.sourceIds, filters.board, filters.search, filters.sort])
 
-  // Find selected suggestion
-  const selectedSuggestion = useMemo(
-    () => suggestions.find((s) => s.id === filters.suggestion) ?? null,
-    [suggestions, filters.suggestion]
-  )
-
-  const handleSelect = useCallback(
-    (suggestion: SuggestionListItem) => {
-      selectSuggestion(suggestion.id)
-    },
-    [selectSuggestion]
-  )
-
   const handleResolved = useCallback(() => {
-    selectSuggestion(undefined)
-    queryClient.invalidateQueries({ queryKey: ['feedback', 'suggestions'] })
-    queryClient.invalidateQueries({ queryKey: ['feedback', 'suggestionStats'] })
-  }, [selectSuggestion, queryClient])
+    setCreateTarget(null)
+  }, [])
+
+  const handleSearchChange = useCallback(
+    (search: string) => setFilters({ search: search || undefined }),
+    [setFilters]
+  )
+
+  const handleSortChange = useCallback(
+    (sort: 'newest' | 'similarity' | 'confidence') => setFilters({ sort }),
+    [setFilters]
+  )
 
   return (
-    <SuggestionsLayout
-      hasActiveFilters={hasActiveFilters}
-      filters={
-        <SuggestionsFiltersSidebar
-          filters={filters}
-          onFiltersChange={setFilters}
-          sources={sources}
-          boards={boards}
-          suggestionCountsBySource={suggestionCountsBySource}
-        />
-      }
-      list={
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-16">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-            </div>
-          }
-        >
-          <SuggestionList
-            suggestions={suggestions}
-            total={data?.total ?? 0}
-            selectedId={filters.suggestion ?? null}
-            onSelect={handleSelect}
-            search={filters.search}
-            onSearchChange={(search) => setFilters({ search: search || undefined })}
-            sort={filters.sort}
-            onSortChange={(sort) => setFilters({ sort })}
+    <>
+      <SuggestionsLayout
+        hasActiveFilters={hasActiveFilters}
+        filters={
+          <SuggestionsFiltersSidebar
+            filters={filters}
+            onFiltersChange={setFilters}
+            sources={sources}
+            boards={boards}
+            suggestionCountsBySource={suggestionCountsBySource}
           />
-        </Suspense>
-      }
-      detail={
-        selectedSuggestion ? (
-          <SuggestionDetail
-            key={selectedSuggestion.id}
-            suggestion={selectedSuggestion}
-            onAccepted={handleResolved}
-            onDismissed={handleResolved}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/40 mb-4">
-              <SparklesIcon className="h-7 w-7 text-muted-foreground/30" />
-            </div>
-            <p className="text-sm text-muted-foreground/60">Select a suggestion to review</p>
-          </div>
-        )
-      }
-    />
+        }
+        content={
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-16">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+              </div>
+            }
+          >
+            <SuggestionList
+              suggestions={suggestions}
+              total={data?.total ?? 0}
+              onCreatePost={setCreateTarget}
+              onResolved={handleResolved}
+              search={filters.search}
+              onSearchChange={handleSearchChange}
+              sort={filters.sort}
+              onSortChange={handleSortChange}
+            />
+          </Suspense>
+        }
+      />
+
+      <CreateFromSuggestionDialog
+        suggestion={createTarget}
+        onOpenChange={(open) => {
+          if (!open) setCreateTarget(null)
+        }}
+        onCreated={handleResolved}
+      />
+    </>
   )
 }

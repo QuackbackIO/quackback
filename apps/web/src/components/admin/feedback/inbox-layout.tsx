@@ -47,7 +47,7 @@ export function InboxLayout({ filters, children, hasActiveFilters }: InboxLayout
       </div>
 
       {/* Main Content - Table View */}
-      <main className="flex-1 min-w-0 flex flex-col bg-card overflow-hidden">
+      <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <ScrollArea className="h-full">{children}</ScrollArea>
       </main>
     </div>
