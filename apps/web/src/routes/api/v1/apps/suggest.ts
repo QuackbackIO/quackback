@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { fromUuid } from '@quackback/ids'
+import { fromUuid, type PostId } from '@quackback/ids'
+import { db, posts, boards } from '@/lib/server/db'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
   corsHeaders,
   preflightResponse,
@@ -28,9 +30,6 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
           const { generateEmbedding } = await import(
             '@/lib/server/domains/embeddings/embedding.service'
           )
-          const { findSimilarPosts } = await import(
-            '@/lib/server/domains/feedback/pipeline/embedding.service'
-          )
 
           const embedding = await generateEmbedding(text)
 
@@ -45,32 +44,51 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               limit,
               page: 1,
             })
-            const posts = result.items.map((p) => ({
+            const resultPosts = result.items.map((p: { id: PostId; title: string; voteCount: number; board: { name: string } | null }) => ({
               id: p.id,
               title: p.title,
               voteCount: p.voteCount,
               similarity: null,
               board: p.board ? { name: p.board.name } : { name: '' },
             }))
-            return new Response(JSON.stringify({ data: { posts } }), {
+            return new Response(JSON.stringify({ data: { posts: resultPosts } }), {
               headers: { 'Content-Type': 'application/json', ...corsHeaders() },
             })
           }
 
-          const similar = await findSimilarPosts(embedding, {
-            limit,
-            minSimilarity: 0.5,
-          })
+          // Vector similarity search across all boards
+          const vectorStr = `[${embedding.join(',')}]`
+          const minSimilarity = 0.5
 
-          const posts = similar.map((p) => ({
+          const similar = await db
+            .select({
+              id: posts.id,
+              title: posts.title,
+              voteCount: posts.voteCount,
+              similarity: sql<number>`1 - (${posts.embedding} <=> ${vectorStr}::vector)`.as('similarity'),
+              boardName: boards.name,
+            })
+            .from(posts)
+            .innerJoin(boards, eq(boards.id, posts.boardId))
+            .where(
+              and(
+                isNull(posts.deletedAt),
+                sql`${posts.embedding} IS NOT NULL`,
+                sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${minSimilarity}`,
+              ),
+            )
+            .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
+            .limit(limit)
+
+          const resultPosts = similar.map((p) => ({
             id: fromUuid('post', p.id),
             title: p.title,
             voteCount: p.voteCount,
-            similarity: Math.round(p.similarity * 100) / 100,
+            similarity: Math.round(Number(p.similarity) * 100) / 100,
             board: { name: p.boardName ?? '' },
           }))
 
-          return new Response(JSON.stringify({ data: { posts } }), {
+          return new Response(JSON.stringify({ data: { posts: resultPosts } }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders() },
           })
         } catch (error) {
