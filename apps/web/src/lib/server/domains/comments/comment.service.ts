@@ -118,6 +118,7 @@ export async function createComment(
   }
 
   // Validate parent comment exists if specified
+  let parentIsPrivate = false
   if (input.parentId) {
     const parentComment = await db.query.comments.findFirst({
       where: eq(comments.id, input.parentId),
@@ -133,6 +134,8 @@ export async function createComment(
     if (parentComment.postId !== input.postId) {
       throw new ValidationError('VALIDATION_ERROR', 'Parent comment belongs to a different post')
     }
+
+    parentIsPrivate = parentComment.isPrivate
   }
 
   // Validate input
@@ -145,6 +148,17 @@ export async function createComment(
 
   // Determine if user is a team member
   const isTeamMember = ['admin', 'member'].includes(author.role)
+
+  // Enforce team-only for private comments
+  if (input.isPrivate && !isTeamMember) {
+    throw new ForbiddenError(
+      'PRIVATE_COMMENT_FORBIDDEN',
+      'Only team members can post private comments'
+    )
+  }
+
+  // Inherit privacy from parent: replies to private comments are always private
+  const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
@@ -170,7 +184,7 @@ export async function createComment(
     previousStatusName = prevStatus?.name ?? 'Open'
     newStatusName = newStatus.name
 
-    // Atomic transaction: insert comment + update post status + increment comment count
+    // Atomic transaction: insert comment + update post status + conditionally increment comment count
     const result = await db.transaction(async (tx) => {
       const [insertedComment] = await tx
         .insert(comments)
@@ -180,6 +194,7 @@ export async function createComment(
           parentId: input.parentId || null,
           principalId: author.principalId,
           isTeamMember,
+          isPrivate,
           statusChangeFromId: prevStatus?.id ?? null,
           statusChangeToId: newStatus.id,
         })
@@ -189,7 +204,8 @@ export async function createComment(
         .update(posts)
         .set({
           statusId: input.statusId as StatusId,
-          commentCount: sql`${posts.commentCount} + 1`,
+          // Private comments don't count toward the public comment count
+          ...(isPrivate ? {} : { commentCount: sql`${posts.commentCount} + 1` }),
         })
         .where(eq(posts.id, input.postId))
 
@@ -198,7 +214,7 @@ export async function createComment(
 
     comment = result
   } else {
-    // Atomic transaction: insert comment + increment comment count
+    // Atomic transaction: insert comment + conditionally increment comment count
     const result = await db.transaction(async (tx) => {
       const [insertedComment] = await tx
         .insert(comments)
@@ -208,13 +224,17 @@ export async function createComment(
           parentId: input.parentId || null,
           principalId: author.principalId,
           isTeamMember,
+          isPrivate,
         })
         .returning()
 
-      await tx
-        .update(posts)
-        .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, input.postId))
+      // Private comments don't count toward the public comment count
+      if (!isPrivate) {
+        await tx
+          .update(posts)
+          .set({ commentCount: sql`${posts.commentCount} + 1` })
+          .where(eq(posts.id, input.postId))
+      }
 
       return insertedComment
     })
@@ -236,6 +256,7 @@ export async function createComment(
       content: comment.content,
       authorName: actorName,
       authorEmail: author.email,
+      isPrivate,
     },
     {
       id: post.id,
@@ -376,7 +397,9 @@ export async function deleteComment(
 
   // Only decrement count if comment is not already soft-deleted
   // (soft-delete already decremented the count)
+  // Private comments never incremented the count, so skip decrement for them
   const wasActive = !existingComment.deletedAt
+  const shouldDecrement = wasActive && !existingComment.isPrivate
 
   // Atomic transaction: delete comment + conditionally decrement comment count
   await db.transaction(async (tx) => {
@@ -385,7 +408,7 @@ export async function deleteComment(
       throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
-    if (wasActive) {
+    if (shouldDecrement) {
       await tx
         .update(posts)
         .set({ commentCount: sql`GREATEST(0, ${posts.commentCount} - ${result.length})` })
@@ -491,6 +514,7 @@ export async function getCommentsByPost(
     authorName: comment.author?.displayName ?? null,
     content: comment.content,
     isTeamMember: comment.isTeamMember,
+    isPrivate: comment.isPrivate,
     createdAt: comment.createdAt,
     statusChange: toStatusChange(comment.statusChangeFrom, comment.statusChangeTo),
     reactions: comment.reactions.map((r) => ({
@@ -831,14 +855,22 @@ export async function softDeleteComment(
       return
     }
 
-    // Decrement comment count and auto-unpin if this comment was pinned
-    await tx
-      .update(posts)
-      .set({
-        commentCount: sql`GREATEST(0, ${posts.commentCount} - 1)`,
-        ...(comment.post?.pinnedCommentId === commentId ? { pinnedCommentId: null } : {}),
-      })
-      .where(eq(posts.id, comment.postId))
+    // Decrement comment count (only for public comments) and auto-unpin if this comment was pinned
+    // Private comments never incremented the count, so skip decrement for them
+    const shouldDecrementCount = !comment.isPrivate
+    const shouldUnpin = comment.post?.pinnedCommentId === commentId
+
+    if (shouldDecrementCount || shouldUnpin) {
+      await tx
+        .update(posts)
+        .set({
+          ...(shouldDecrementCount
+            ? { commentCount: sql`GREATEST(0, ${posts.commentCount} - 1)` }
+            : {}),
+          ...(shouldUnpin ? { pinnedCommentId: null } : {}),
+        })
+        .where(eq(posts.id, comment.postId))
+    }
   })
 }
 
@@ -879,6 +911,10 @@ export async function canPinComment(commentId: CommentId): Promise<{
 
   if (!comment.isTeamMember) {
     return { canPin: false, reason: 'Only team member comments can be pinned' }
+  }
+
+  if (comment.isPrivate) {
+    return { canPin: false, reason: 'Private comments cannot be pinned' }
   }
 
   return { canPin: true }

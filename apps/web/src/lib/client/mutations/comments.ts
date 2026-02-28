@@ -34,6 +34,7 @@ interface AddCommentInput {
   authorName?: string | null
   authorEmail?: string | null
   principalId?: string | null
+  isPrivate?: boolean
 }
 
 // ============================================================================
@@ -226,15 +227,16 @@ export function useAddComment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ postId, content, parentId }: AddCommentInput) =>
+    mutationFn: ({ postId, content, parentId, isPrivate }: AddCommentInput) =>
       createCommentFn({
         data: {
           postId: postId as PostId,
           content: content.trim(),
           parentId: (parentId || undefined) as CommentId | undefined,
+          isPrivate,
         },
       }),
-    onMutate: async ({ postId, content, parentId, authorName, principalId }) => {
+    onMutate: async ({ postId, content, parentId, authorName, principalId, isPrivate }) => {
       const typedPostId = postId as PostId
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(typedPostId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
@@ -252,6 +254,7 @@ export function useAddComment() {
         principalId: principalId as PrincipalId,
         parentId: (parentId || null) as CommentId | null,
         isTeamMember: !!principalId,
+        isPrivate: isPrivate ?? false,
         createdAt: new Date(),
         replies: [],
         reactions: [],
@@ -266,9 +269,12 @@ export function useAddComment() {
           comments: updatedComments,
         })
       }
-      updatePostInLists(queryClient, typedPostId, (post) => ({
-        commentCount: post.commentCount + 1,
-      }))
+      // Private comments don't count toward the public comment count
+      if (!isPrivate) {
+        updatePostInLists(queryClient, typedPostId, (post) => ({
+          commentCount: post.commentCount + 1,
+        }))
+      }
 
       return { previousDetail, previousLists }
     },

@@ -60,6 +60,7 @@ export interface CommentCreatedInput {
   content: string
   authorEmail?: string
   authorName?: string
+  isPrivate?: boolean
 }
 
 export interface CommentPostInput {

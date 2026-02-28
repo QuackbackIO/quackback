@@ -48,6 +48,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             authorEmail: comment.authorEmail,
             principalId: comment.principalId,
             isTeamMember: comment.isTeamMember,
+            isPrivate: comment.isPrivate,
             createdAt: comment.createdAt.toISOString(),
             deletedAt: comment.deletedAt?.toISOString() ?? null,
           })
@@ -113,6 +114,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             authorName: commentMember?.user?.name ?? null,
             principalId: result.principalId,
             isTeamMember: result.isTeamMember,
+            isPrivate: result.isPrivate,
             createdAt: result.createdAt.toISOString(),
           })
         } catch (error) {

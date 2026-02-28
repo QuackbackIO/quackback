@@ -28,6 +28,7 @@ const createCommentSchema = z.object({
   content: z.string().min(1).max(5000),
   parentId: z.string().optional(),
   statusId: z.string().optional(),
+  isPrivate: z.boolean().optional(),
 })
 
 const updateCommentSchema = z.object({
@@ -80,6 +81,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
           content: data.content,
           parentId: data.parentId as CommentId | undefined,
           statusId: data.statusId as StatusId | undefined,
+          isPrivate: data.isPrivate,
         },
         {
           principalId: auth.principal.id,

@@ -396,6 +396,7 @@ export async function getPublicPostDetail(
         SELECT p.id FROM ${posts} p
         WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
       )
+      AND c.is_private = false
       GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
       ORDER BY c.created_at ASC
     `),
@@ -447,6 +448,7 @@ export async function getPublicPostDetail(
     authorName: comment.author_name,
     content: comment.content,
     isTeamMember: comment.is_team_member,
+    isPrivate: false as const, // Portal query filters out private comments at SQL level
     createdAt: ensureDate(comment.created_at),
     avatarUrl: resolveAvatarUrl({
       avatarKey: comment.avatar_key,
@@ -512,7 +514,7 @@ export async function getPublicPostDetail(
     roadmaps: roadmapsResult,
     comments: rootComments,
     pinnedComment,
-    pinnedCommentId: (postResult.pinnedCommentId as CommentId) ?? null,
+    pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as CommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,
   }
 }
