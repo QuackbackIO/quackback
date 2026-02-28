@@ -123,19 +123,22 @@ export async function acceptMergeSuggestion(
     }
   } else if (rawItem?.principalId) {
     // External source: add a vote on behalf of the external author
-    await db
+    const [inserted] = await db
       .insert(votes)
       .values({
         postId: targetPostId,
         principalId: rawItem.principalId as PrincipalId,
       })
       .onConflictDoNothing()
+      .returning({ id: votes.id })
 
-    // Increment vote count
-    await db
-      .update(posts)
-      .set({ voteCount: sql`${posts.voteCount} + 1`, updatedAt: new Date() })
-      .where(eq(posts.id, targetPostId))
+    // Only increment vote count if the vote was actually inserted
+    if (inserted) {
+      await db
+        .update(posts)
+        .set({ voteCount: sql`${posts.voteCount} + 1`, updatedAt: new Date() })
+        .where(eq(posts.id, targetPostId))
+    }
   }
 
   // Subscribe external author to the target post for future updates
@@ -213,11 +216,10 @@ export async function acceptCreateSuggestion(
       title,
       content: body,
       boardId,
-      authorPrincipalId,
+      principalId: authorPrincipalId,
       statusId: defaultStatus?.id,
-      status: 'published',
       voteCount: 1,
-    } as any)
+    })
     .returning({ id: posts.id })
 
   const newPostId = newPost.id as PostId

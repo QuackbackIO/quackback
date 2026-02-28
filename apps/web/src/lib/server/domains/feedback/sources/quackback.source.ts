@@ -6,33 +6,36 @@
  * via the feedback_pipeline event hook on post.created.
  */
 
-import { db, eq, feedbackSources } from '@/lib/server/db'
+import { db } from '@/lib/server/db'
+import { generateId } from '@quackback/ids'
+import { sql } from 'drizzle-orm'
 
 /**
  * Ensure the quackback feedback source exists.
- * Creates it if absent. Idempotent — safe to call on every startup.
+ * Uses atomic INSERT ... WHERE NOT EXISTS to prevent duplicates
+ * from concurrent startups.
  */
 export async function ensureQuackbackFeedbackSource(): Promise<void> {
-  const existing = await db.query.feedbackSources.findFirst({
-    where: eq(feedbackSources.sourceType, 'quackback'),
-    columns: { id: true },
-  })
+  const newId = generateId('feedback_source')
 
-  if (existing) {
-    console.log('[QuackbackSource] Quackback feedback source already exists:', existing.id)
-    return
+  const [row] = await db.execute<{ id: string; created: boolean }>(sql`
+    WITH inserted AS (
+      INSERT INTO feedback_sources (id, source_type, delivery_mode, name, enabled, config, created_at, updated_at)
+      SELECT ${newId}, 'quackback', 'passive', 'Quackback', true, '{}'::jsonb, now(), now()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM feedback_sources WHERE source_type = 'quackback'
+      )
+      RETURNING id, true AS created
+    )
+    SELECT id, created FROM inserted
+    UNION ALL
+    SELECT id::text, false AS created FROM feedback_sources WHERE source_type = 'quackback'
+    LIMIT 1
+  `)
+
+  if (row?.created) {
+    console.log('[QuackbackSource] Created quackback feedback source:', row.id)
+  } else {
+    console.log('[QuackbackSource] Quackback feedback source already exists:', row?.id)
   }
-
-  const [created] = await db
-    .insert(feedbackSources)
-    .values({
-      sourceType: 'quackback',
-      deliveryMode: 'passive',
-      name: 'Quackback',
-      enabled: true,
-      config: {},
-    })
-    .returning({ id: feedbackSources.id })
-
-  console.log('[QuackbackSource] Created quackback feedback source:', created.id)
 }
