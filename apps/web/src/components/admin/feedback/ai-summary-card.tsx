@@ -8,7 +8,6 @@ import { TimeAgo } from '@/components/ui/time-ago'
 
 interface PostSummaryJson {
   summary: string
-  themes: string[]
   suggestions: string[]
 }
 
@@ -80,21 +79,6 @@ export function AiSummaryCard({
           <div className="px-4 pb-4 space-y-3">
             {/* Summary prose */}
             <p className="text-sm text-foreground/90 leading-relaxed">{summaryJson.summary}</p>
-
-            {/* Themes */}
-            {summaryJson.themes.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-medium text-muted-foreground">Themes:</span>
-                {summaryJson.themes.map((theme, i) => (
-                  <span key={i}>
-                    <span className="text-xs text-foreground/70">{theme}</span>
-                    {i < summaryJson.themes.length - 1 && (
-                      <span className="text-muted-foreground/40 mx-0.5">&middot;</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
 
             {/* Suggestions */}
             {summaryJson.suggestions.length > 0 && (

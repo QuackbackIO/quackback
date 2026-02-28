@@ -61,7 +61,7 @@ export interface PostDetails {
   /** IDs of roadmaps this post belongs to */
   roadmapIds?: string[]
   /** AI-generated post summary */
-  summaryJson?: { summary: string; themes: string[]; suggestions: string[] } | null
+  summaryJson?: { summary: string; suggestions: string[] } | null
   /** When the summary was last updated */
   summaryUpdatedAt?: Date | null
   /** Comment count at time of summary generation (for staleness detection) */

@@ -16,7 +16,6 @@ const SYSTEM_PROMPT = `You are a product feedback analyst. Summarize this post a
 
 Return JSON with:
 - "summary": 1-3 sentence overview of the feedback and discussion
-- "themes": array of 2-5 short theme labels (2-4 words each) representing key topics
 - "suggestions": array of 0-3 notable actionable suggestions from commenters (omit if none)
 
 Be concise and focus on what matters for product decisions.`
@@ -28,7 +27,6 @@ function stripCodeFences(text: string): string {
 
 interface PostSummaryJson {
   summary: string
-  themes: string[]
   suggestions: string[]
 }
 
@@ -120,7 +118,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   }
 
   // Validate shape
-  if (typeof summaryJson.summary !== 'string' || !Array.isArray(summaryJson.themes)) {
+  if (typeof summaryJson.summary !== 'string') {
     console.error(`[Summary] Invalid summary shape for post ${postId}`)
     return
   }
