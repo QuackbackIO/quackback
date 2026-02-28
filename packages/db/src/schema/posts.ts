@@ -9,6 +9,7 @@ import {
   jsonb,
   customType,
   check,
+  varchar,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -99,6 +100,15 @@ export const posts = pgTable(
     // Track model version for future upgrades (allows re-embedding without data loss)
     embeddingModel: text('embedding_model'),
     embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
+    // AI-generated post summary (structured JSON: { summary, themes, suggestions })
+    summaryJson: jsonb('summary_json').$type<{
+      summary: string
+      themes: string[]
+      suggestions: string[]
+    }>(),
+    summaryModel: text('summary_model'),
+    summaryUpdatedAt: timestamp('summary_updated_at', { withTimezone: true }),
+    summaryCommentCount: integer('summary_comment_count'),
   },
   (table) => [
     index('posts_board_id_idx').on(table.boardId),
@@ -183,6 +193,9 @@ export const votes = pgTable(
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
+    // Source tracking for integration-created votes (e.g. Zendesk sidebar)
+    sourceType: varchar('source_type', { length: 40 }),
+    sourceExternalUrl: text('source_external_url'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -192,6 +205,10 @@ export const votes = pgTable(
     uniqueIndex('votes_principal_post_idx').on(table.postId, table.principalId),
     index('votes_principal_id_idx').on(table.principalId),
     index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
+    // Partial index for finding integration-sourced votes
+    index('votes_source_type_idx')
+      .on(table.sourceType)
+      .where(sql`source_type IS NOT NULL`),
   ]
 )
 

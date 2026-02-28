@@ -27,6 +27,7 @@ import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
+import { getPostVoters } from '@/lib/server/domains/posts/post.voting'
 
 // ============================================
 // Helpers
@@ -265,6 +266,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
       return {
         ...serializePostDates(result),
+        summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
         hasVoted: voted,
         comments: comments.map(serializeComment),
         pinnedComment: serializedPinnedComment,
@@ -277,6 +279,20 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
       console.error(`[fn:posts] ❌ fetchPostWithDetails failed:`, error)
       throw error
     }
+  })
+
+/**
+ * Get voters for a post (admin/member only)
+ */
+export const fetchPostVotersFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const voters = await getPostVoters(data.id as PostId)
+    return voters.map((v) => ({
+      ...v,
+      createdAt: toIsoString(v.createdAt as Date | string),
+    }))
   })
 
 // ============================================

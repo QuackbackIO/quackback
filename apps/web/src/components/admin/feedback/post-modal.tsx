@@ -31,6 +31,7 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
+import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -414,6 +415,18 @@ function PostModalContent({
                 embeds: false,
               }}
             />
+
+            {/* AI Summary */}
+            {post.summaryJson && (
+              <AiSummaryCard
+                summaryJson={
+                  post.summaryJson as { summary: string; themes: string[]; suggestions: string[] }
+                }
+                summaryUpdatedAt={post.summaryUpdatedAt ?? null}
+                summaryCommentCount={post.summaryCommentCount ?? null}
+                currentCommentCount={post.commentCount ?? 0}
+              />
+            )}
           </div>
 
           {/* Right: Metadata sidebar */}

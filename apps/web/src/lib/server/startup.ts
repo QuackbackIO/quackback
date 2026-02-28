@@ -47,6 +47,20 @@ export function logStartupBanner(): void {
     .then(({ restoreAllFeedbackSchedules }) => restoreAllFeedbackSchedules())
     .catch((err) => console.error('[Startup] Failed to restore feedback schedules:', err))
 
+  // Start periodic summary sweep (refreshes stale/missing post summaries)
+  import('./domains/summary/summary.service')
+    .then(({ refreshStaleSummaries }) => {
+      setInterval(
+        () => {
+          refreshStaleSummaries().catch((err) =>
+            console.error('[Startup] Summary sweep failed:', err)
+          )
+        },
+        30 * 60 * 1000
+      ) // Every 30 minutes
+    })
+    .catch((err) => console.error('[Startup] Failed to init summary sweep:', err))
+
   // Ensure quackback feedback source exists (idempotent, creates on first startup)
   import('./domains/feedback/sources/quackback.source')
     .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())

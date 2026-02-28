@@ -54,6 +54,7 @@ const SUBSCRIBER_EVENT_TYPES = [
 ] as const
 const AI_EVENT_TYPES = ['post.created'] as const
 const FEEDBACK_PIPELINE_EVENT_TYPES = ['post.created'] as const
+const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -103,6 +104,18 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push({
         type: 'feedback_pipeline',
         target: {},
+        config: {},
+      })
+    }
+
+    // Summary targets - AI post summary generation
+    if (
+      isAIEnabled() &&
+      SUMMARY_EVENT_TYPES.includes(event.type as (typeof SUMMARY_EVENT_TYPES)[number])
+    ) {
+      targets.push({
+        type: 'summary',
+        target: { type: 'summary' },
         config: {},
       })
     }
