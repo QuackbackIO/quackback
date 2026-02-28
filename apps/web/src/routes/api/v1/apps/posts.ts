@@ -1,16 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import {
-  badRequestResponse,
-  handleDomainError,
-} from '@/lib/server/domains/api/responses'
+import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId, PostId } from '@quackback/ids'
-import {
-  corsHeaders,
-  preflightResponse,
-} from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 const createPostSchema = z.object({
   boardId: z.string().min(1, 'Board ID is required'),
@@ -59,9 +53,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
           // Resolve author: use requester if provided, else the API key principal
           let authorPrincipalId = principalId
           if (parsed.data.requester?.email) {
-            const { identifyPortalUser } = await import(
-              '@/lib/server/domains/users/user.service'
-            )
+            const { identifyPortalUser } = await import('@/lib/server/domains/users/user.service')
             const identified = await identifyPortalUser({
               email: parsed.data.requester.email,
               name: parsed.data.requester.name,
@@ -95,9 +87,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
 
           // If link info provided, link ticket to the newly created post
           if (parsed.data.link) {
-            const { linkTicketToPost } = await import(
-              '@/lib/server/integrations/apps/service'
-            )
+            const { linkTicketToPost } = await import('@/lib/server/integrations/apps/service')
             await linkTicketToPost(
               {
                 postId: result.id as PostId,
@@ -110,22 +100,17 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
             )
           }
 
-          return new Response(
-            JSON.stringify({
-              data: {
-                id: result.id,
-                title: result.title,
-                content: result.content,
-                voteCount: result.voteCount,
-                boardId: result.boardId,
-                statusId: result.statusId,
-                createdAt: result.createdAt.toISOString(),
-              },
-            }),
+          return appJsonResponse(
             {
-              status: 201,
-              headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-            }
+              id: result.id,
+              title: result.title,
+              content: result.content,
+              voteCount: result.voteCount,
+              boardId: result.boardId,
+              statusId: result.statusId,
+              createdAt: result.createdAt.toISOString(),
+            },
+            201
           )
         } catch (error) {
           return handleDomainError(error)

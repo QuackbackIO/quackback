@@ -35,6 +35,57 @@ export function SidebarPostRow({ post, linked, onLink, onUnlink }: SidebarPostRo
     }
   }
 
+  function renderAction() {
+    if (linked) {
+      return (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={handleAction}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2Icon className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <UnlinkIcon className="mr-1 h-3 w-3" />
+              Unlink
+            </>
+          )}
+        </Button>
+      )
+    }
+
+    if (onLink) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={handleAction}
+          disabled={loading}
+        >
+          {loading ? (
+            <Loader2Icon className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <LinkIcon className="mr-1 h-3 w-3" />
+              Link
+            </>
+          )}
+        </Button>
+      )
+    }
+
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <CheckIcon className="h-3 w-3" />
+        Linked
+      </span>
+    )
+  }
+
   return (
     <div className="rounded-lg border bg-card p-3">
       <div className="flex items-start justify-between gap-2">
@@ -64,48 +115,7 @@ export function SidebarPostRow({ post, linked, onLink, onUnlink }: SidebarPostRo
             )}
           </div>
         </div>
-        <div className="flex-shrink-0">
-          {linked ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={handleAction}
-              disabled={loading}
-            >
-              {loading ? (
-                <Loader2Icon className="h-3 w-3 animate-spin" />
-              ) : (
-                <>
-                  <UnlinkIcon className="mr-1 h-3 w-3" />
-                  Unlink
-                </>
-              )}
-            </Button>
-          ) : onLink ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={handleAction}
-              disabled={loading}
-            >
-              {loading ? (
-                <Loader2Icon className="h-3 w-3 animate-spin" />
-              ) : (
-                <>
-                  <LinkIcon className="mr-1 h-3 w-3" />
-                  Link
-                </>
-              )}
-            </Button>
-          ) : (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <CheckIcon className="h-3 w-3" />
-              Linked
-            </span>
-          )}
-        </div>
+        <div className="flex-shrink-0">{renderAction()}</div>
       </div>
     </div>
   )

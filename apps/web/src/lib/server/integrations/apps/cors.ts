@@ -19,3 +19,11 @@ export function corsHeaders(): Record<string, string> {
 export function preflightResponse(): Response {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
+
+/** Create a JSON response with CORS headers. Used by all /api/v1/apps/* routes. */
+export function appJsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify({ data }), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+  })
+}

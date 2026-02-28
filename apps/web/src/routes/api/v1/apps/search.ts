@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import {
-  corsHeaders,
-  preflightResponse,
-} from '@/lib/server/integrations/apps/cors'
+import { handleDomainError } from '@/lib/server/domains/api/responses'
+import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/search')({
   server: {
@@ -21,12 +18,10 @@ export const Route = createFileRoute('/api/v1/apps/search')({
           const limit = Math.min(Number(url.searchParams.get('limit')) || 10, 20)
 
           if (!q) {
-            return successResponse({ posts: [] })
+            return appJsonResponse({ posts: [] })
           }
 
-          const { listPublicPosts } = await import(
-            '@/lib/server/domains/posts/post.public'
-          )
+          const { listPublicPosts } = await import('@/lib/server/domains/posts/post.public')
 
           const result = await listPublicPosts({
             search: q,
@@ -44,9 +39,7 @@ export const Route = createFileRoute('/api/v1/apps/search')({
             board: p.board ? { name: p.board.name } : { name: '' },
           }))
 
-          return new Response(JSON.stringify({ data: { posts } }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-          })
+          return appJsonResponse({ posts })
         } catch (error) {
           return handleDomainError(error)
         }

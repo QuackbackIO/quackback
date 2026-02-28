@@ -1,6 +1,6 @@
 import { SidebarPostRow, type PostRowData } from './sidebar-post-row'
 
-interface LinkedPostData extends PostRowData {
+export interface LinkedPostData extends PostRowData {
   linkId: string
 }
 
@@ -19,12 +19,7 @@ export function SidebarLinkedPosts({ posts, onUnlink }: SidebarLinkedPostsProps)
       </h3>
       <div className="space-y-2">
         {posts.map((post) => (
-          <SidebarPostRow
-            key={post.id}
-            post={post}
-            linked
-            onUnlink={() => onUnlink(post.id)}
-          />
+          <SidebarPostRow key={post.id} post={post} linked onUnlink={() => onUnlink(post.id)} />
         ))}
       </div>
     </div>

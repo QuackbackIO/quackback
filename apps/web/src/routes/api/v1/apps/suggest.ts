@@ -4,7 +4,7 @@ import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/
 import { fromUuid } from '@quackback/ids'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
-import { corsHeaders, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -45,9 +45,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               similarity: null,
               board: { name: p.board?.name ?? '' },
             }))
-            return new Response(JSON.stringify({ data: { posts: resultPosts } }), {
-              headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-            })
+            return appJsonResponse({ posts: resultPosts })
           }
 
           // Vector similarity search across all boards
@@ -84,9 +82,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
             board: { name: p.boardName ?? '' },
           }))
 
-          return new Response(JSON.stringify({ data: { posts: resultPosts } }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-          })
+          return appJsonResponse({ posts: resultPosts })
         } catch (error) {
           return handleDomainError(error)
         }

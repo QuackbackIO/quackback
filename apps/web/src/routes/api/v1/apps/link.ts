@@ -4,10 +4,7 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
-import {
-  corsHeaders,
-  preflightResponse,
-} from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 const linkSchema = z.object({
   postId: z.string().min(1),
@@ -45,9 +42,7 @@ export const Route = createFileRoute('/api/v1/apps/link')({
           const validationError = validateTypeId(parsed.data.postId, 'post', 'post ID')
           if (validationError) return validationError
 
-          const { linkTicketToPost } = await import(
-            '@/lib/server/integrations/apps/service'
-          )
+          const { linkTicketToPost } = await import('@/lib/server/integrations/apps/service')
 
           const result = await linkTicketToPost(
             {
@@ -60,10 +55,7 @@ export const Route = createFileRoute('/api/v1/apps/link')({
             principalId
           )
 
-          return new Response(JSON.stringify({ data: result }), {
-            status: 201,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-          })
+          return appJsonResponse(result, 201)
         } catch (error) {
           return handleDomainError(error)
         }

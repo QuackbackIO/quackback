@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Loader2Icon, AlertCircleIcon } from 'lucide-react'
 import { useZafClient } from './use-zaf-client'
 import { AppContextProvider, useAppContext } from './use-app-context'
-import { SidebarLinkedPosts } from './sidebar-linked-posts'
+import { SidebarLinkedPosts, type LinkedPostData } from './sidebar-linked-posts'
 import { SidebarSuggestions } from './sidebar-suggestions'
 import { SidebarSearch } from './sidebar-search'
 import { SidebarCreateForm } from './sidebar-create-form'
 import type { PostRowData } from './sidebar-post-row'
-import { Loader2Icon, AlertCircleIcon } from 'lucide-react'
 
 export function SidebarApp() {
   const zaf = useZafClient()
@@ -29,18 +29,10 @@ export function SidebarApp() {
   }
 
   return (
-    <AppContextProvider
-      apiKey={zaf.apiKey}
-      baseUrl={zaf.baseUrl ?? ''}
-      ticket={zaf.ticket}
-    >
+    <AppContextProvider apiKey={zaf.apiKey} baseUrl={zaf.baseUrl ?? ''} ticket={zaf.ticket}>
       <SidebarContent />
     </AppContextProvider>
   )
-}
-
-interface LinkedPostData extends PostRowData {
-  linkId: string
 }
 
 type View = 'main' | 'create'

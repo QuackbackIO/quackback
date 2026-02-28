@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import {
-  corsHeaders,
-  preflightResponse,
-} from '@/lib/server/integrations/apps/cors'
+import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
 export const Route = createFileRoute('/api/v1/apps/linked')({
   server: {
@@ -24,15 +21,11 @@ export const Route = createFileRoute('/api/v1/apps/linked')({
             return badRequestResponse('integrationType and externalId are required')
           }
 
-          const { getLinkedPosts } = await import(
-            '@/lib/server/integrations/apps/service'
-          )
+          const { getLinkedPosts } = await import('@/lib/server/integrations/apps/service')
 
           const posts = await getLinkedPosts({ integrationType, externalId })
 
-          return new Response(JSON.stringify({ data: { posts } }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-          })
+          return appJsonResponse({ posts })
         } catch (error) {
           return handleDomainError(error)
         }
