@@ -7,7 +7,7 @@ import { RoadmapModal } from '@/components/admin/roadmap-modal'
 
 const searchSchema = z.object({
   roadmap: z.string().optional(),
-  post: z.string().optional(), // Post ID for modal view
+  post: z.string().optional(),
   search: z.string().optional(),
   board: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
@@ -18,17 +18,14 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/admin/roadmap')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    // User, member, and settings are validated in parent /admin layout
     const { queryClient } = context
 
-    // Get user and principal from parent's beforeLoad context
     const { user, principal } = context as {
       user: NonNullable<typeof context.user>
       principal: NonNullable<typeof context.principal>
       queryClient: typeof context.queryClient
     }
 
-    // Pre-fetch roadmap statuses and filter reference data
     await Promise.all([
       queryClient.ensureQueryData(adminQueries.roadmapStatuses()),
       queryClient.ensureQueryData(adminQueries.boards()),
@@ -51,7 +48,6 @@ function RoadmapPage() {
   const { currentUser } = Route.useLoaderData()
   const search = Route.useSearch()
 
-  // Read pre-fetched data from React Query cache
   const roadmapStatusesQuery = useSuspenseQuery(adminQueries.roadmapStatuses())
 
   return (
