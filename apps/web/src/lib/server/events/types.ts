@@ -65,6 +65,7 @@ export interface EventCommentData {
   content: string
   authorEmail?: string
   authorName?: string
+  isPrivate?: boolean
 }
 
 export interface PostCreatedPayload {

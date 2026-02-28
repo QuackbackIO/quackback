@@ -14,6 +14,8 @@ export interface CreateCommentInput {
   parentId?: CommentId | null
   /** Optional status change to apply atomically with the comment */
   statusId?: StatusId | null
+  /** Whether this comment is only visible to team members */
+  isPrivate?: boolean
 }
 
 /**
@@ -34,6 +36,7 @@ export interface CreateCommentResult {
     parentId: CommentId | null
     principalId: PrincipalId
     isTeamMember: boolean
+    isPrivate: boolean
     createdAt: Date
     statusChangeFromId: StatusId | null
     statusChangeToId: StatusId | null
@@ -65,6 +68,7 @@ export interface CommentThread {
   authorName: string | null
   content: string
   isTeamMember: boolean
+  isPrivate: boolean
   createdAt: Date
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null

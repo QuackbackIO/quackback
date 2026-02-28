@@ -52,6 +52,7 @@ export interface CommentWithReactions {
   authorName: string | null
   content: string
   isTeamMember: boolean
+  isPrivate: boolean
   createdAt: Date
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
@@ -72,6 +73,7 @@ export interface CommentTreeNode {
   authorName: string | null
   content: string
   isTeamMember: boolean
+  isPrivate: boolean
   createdAt: Date
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
@@ -133,6 +135,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       authorName: comment.authorName,
       content: comment.content,
       isTeamMember: comment.isTeamMember,
+      isPrivate: comment.isPrivate,
       createdAt: comment.createdAt,
       avatarUrl: comment.avatarUrl,
       statusChange: comment.statusChange,

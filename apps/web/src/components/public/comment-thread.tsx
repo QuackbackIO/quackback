@@ -146,6 +146,7 @@ export function CommentThread({
               onPinComment={onPinComment}
               onUnpinComment={onUnpinComment}
               isPinPending={isPinPending}
+              isTeamMember={isTeamMember}
             />
           ))}
         </div>
@@ -168,6 +169,8 @@ interface CommentItemProps {
   onPinComment?: (commentId: CommentId) => void
   onUnpinComment?: () => void
   isPinPending?: boolean
+  /** Whether the current user is a team member */
+  isTeamMember?: boolean
 }
 
 const MAX_NESTING_DEPTH = 5
@@ -185,6 +188,7 @@ function CommentItem({
   onPinComment,
   onUnpinComment,
   isPinPending = false,
+  isTeamMember,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -222,7 +226,11 @@ function CommentItem({
   return (
     <div
       id={`comment-${comment.id}`}
-      className="group/thread scroll-mt-20 transition-colors duration-500"
+      className={cn(
+        'group/thread scroll-mt-20 transition-colors duration-500',
+        comment.isPrivate &&
+          'border-l-2 border-amber-400 bg-amber-50/50 dark:bg-amber-950/20 rounded-r-md'
+      )}
     >
       {/* Thread container with visual thread line */}
       <div
@@ -252,6 +260,12 @@ function CommentItem({
                   />
                 ) : null}
                 Team
+              </Badge>
+            )}
+            {comment.isPrivate && (
+              <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
+                <LockClosedIcon className="h-2.5 w-2.5 mr-0.5" />
+                Internal note
               </Badge>
             )}
             {isPinned && (
@@ -410,6 +424,8 @@ function CommentItem({
                   onCancel={() => setShowReplyForm(false)}
                   user={user}
                   createComment={createComment}
+                  isTeamMember={isTeamMember}
+                  forcePrivate={comment.isPrivate}
                 />
               </div>
             </div>
@@ -441,6 +457,7 @@ function CommentItem({
                   onPinComment={onPinComment}
                   onUnpinComment={onUnpinComment}
                   isPinPending={isPinPending}
+                  isTeamMember={isTeamMember}
                 />
               ))}
             </div>
