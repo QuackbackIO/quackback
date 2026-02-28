@@ -82,7 +82,12 @@ function LinearIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <LinearConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <LinearConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }

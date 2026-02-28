@@ -82,7 +82,12 @@ function AsanaIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <AsanaConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <AsanaConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }

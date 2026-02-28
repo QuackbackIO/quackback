@@ -56,6 +56,7 @@ function SlackIntegrationPage() {
             integrationId={integration.id}
             initialConfig={integration.config}
             initialEventMappings={integration.eventMappings}
+            notificationChannels={integration.notificationChannels}
             enabled={isConnected}
           />
         </div>
@@ -86,7 +87,12 @@ function SlackIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <SlackConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <SlackConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }

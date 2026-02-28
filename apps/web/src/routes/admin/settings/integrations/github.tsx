@@ -82,7 +82,12 @@ function GitHubIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <GitHubConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <GitHubConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }

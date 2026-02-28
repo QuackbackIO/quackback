@@ -128,6 +128,35 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       }
     }
 
+    case 'changelog.published': {
+      const { changelog } = event.data
+      const changelogUrl = `${rootUrl}/changelog`
+      const content = truncate(stripHtml(changelog.contentPreview || ''), 300)
+      const actor = event.actor.displayName || event.actor.email || 'System'
+
+      return {
+        text: `Changelog published: ${changelog.title}`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `📢 Changelog published by *${escapeSlackMrkdwn(actor)}*`,
+              },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *<${changelogUrl}|${escapeSlackMrkdwn(changelog.title)}>*\n${quoteText(escapeSlackMrkdwn(content))}`,
+            },
+          },
+        ],
+      }
+    }
+
     default:
       return { text: `Event: ${(event as { type: string }).type}` }
   }

@@ -86,7 +86,12 @@ function IntercomIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <IntercomConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <IntercomConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }
