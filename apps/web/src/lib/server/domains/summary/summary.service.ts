@@ -5,7 +5,7 @@
  * Summaries include a prose overview, key themes, and actionable suggestions.
  */
 
-import { db, posts, comments, eq, and, or, isNull, ne, desc } from '@/lib/server/db'
+import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
 import { getOpenAI, isAIEnabled } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import type { PostId } from '@quackback/ids'
@@ -42,10 +42,10 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   const openai = getOpenAI()
   if (!openai) return
 
-  // Fetch post
+  // Fetch post (include existing summary for continuity on updates)
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    columns: { title: true, content: true, commentCount: true },
+    columns: { title: true, content: true, commentCount: true, summaryJson: true },
   })
   if (!post) {
     console.warn(`[Summary] Post ${postId} not found`)
@@ -73,16 +73,28 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     }
   }
 
+  // Include existing summary for continuity when refreshing
+  const existingSummary = post.summaryJson as PostSummaryJson | null
+  if (existingSummary) {
+    input += '\n\n## Previous Summary\n'
+    input += JSON.stringify(existingSummary)
+  }
+
   // Truncate to ~6000 chars to stay within token limits
   if (input.length > 6000) {
     input = input.slice(0, 6000) + '\n\n[truncated]'
   }
 
+  const systemPrompt = existingSummary
+    ? SYSTEM_PROMPT +
+      '\n\nA previous summary is included. Update it to reflect the current state of the discussion — preserve existing themes and suggestions that are still relevant, and incorporate any new information from recent comments.'
+    : SYSTEM_PROMPT
+
   const completion = await withRetry(() =>
     openai.chat.completions.create({
       model: SUMMARY_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: input },
       ],
       response_format: { type: 'json_object' },
@@ -130,35 +142,67 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   console.log(`[Summary] Generated for post ${postId} (${postComments.length} comments)`)
 }
 
+const SWEEP_BATCH_SIZE = 50
+const SWEEP_BATCH_DELAY_MS = 500
+
 /**
  * Refresh stale summaries.
- * Finds posts where the summary is missing or the comment count has changed.
- * Processes up to 10 per sweep.
+ * Finds all posts where the summary is missing or the comment count has changed,
+ * and processes them in batches until none remain.
  */
 export async function refreshStaleSummaries(): Promise<void> {
   if (!isAIEnabled()) return
 
-  const stalePosts = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(
-      and(
-        isNull(posts.deletedAt),
-        or(isNull(posts.summaryJson), ne(posts.summaryCommentCount, posts.commentCount))
+  let totalProcessed = 0
+  let totalFailed = 0
+
+  // Process in batches until no stale posts remain
+  while (true) {
+    const stalePosts = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          isNull(posts.deletedAt),
+          or(isNull(posts.summaryJson), ne(posts.summaryCommentCount, posts.commentCount))
+        )
       )
-    )
-    .orderBy(desc(posts.updatedAt))
-    .limit(10)
+      .orderBy(desc(posts.updatedAt))
+      .limit(SWEEP_BATCH_SIZE)
 
-  if (stalePosts.length === 0) return
+    if (stalePosts.length === 0) break
 
-  console.log(`[Summary] Refreshing ${stalePosts.length} stale summaries`)
-
-  for (const { id } of stalePosts) {
-    try {
-      await generateAndSavePostSummary(id)
-    } catch (err) {
-      console.error(`[Summary] Failed to refresh post ${id}:`, err)
+    if (totalProcessed === 0) {
+      // Count total on first batch for logging
+      const [{ count: totalStale }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(posts)
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            or(isNull(posts.summaryJson), ne(posts.summaryCommentCount, posts.commentCount))
+          )
+        )
+      console.log(`[Summary] Found ${totalStale} stale posts, processing...`)
     }
+
+    for (const { id } of stalePosts) {
+      try {
+        await generateAndSavePostSummary(id)
+        totalProcessed++
+      } catch (err) {
+        totalFailed++
+        console.error(`[Summary] Failed to refresh post ${id}:`, err)
+      }
+    }
+
+    console.log(`[Summary] Progress: ${totalProcessed} processed, ${totalFailed} failed`)
+
+    // Brief pause between batches to avoid rate limits
+    await new Promise((resolve) => setTimeout(resolve, SWEEP_BATCH_DELAY_MS))
+  }
+
+  if (totalProcessed > 0) {
+    console.log(`[Summary] Sweep complete: ${totalProcessed} processed, ${totalFailed} failed`)
   }
 }
