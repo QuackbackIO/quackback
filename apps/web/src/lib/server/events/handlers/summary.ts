@@ -7,7 +7,6 @@
 
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
-import { isAIEnabled } from '@/lib/server/domains/ai/config'
 import { generateAndSavePostSummary } from '@/lib/server/domains/summary'
 import type { PostId } from '@quackback/ids'
 
@@ -17,8 +16,6 @@ export const summaryHook: HookHandler = {
     _target: unknown,
     _config: Record<string, unknown>
   ): Promise<HookResult> {
-    if (!isAIEnabled()) return { success: true }
-
     const postId = (event.data as { post: { id: string } }).post.id as PostId
 
     try {

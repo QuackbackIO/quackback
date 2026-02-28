@@ -7,7 +7,6 @@
 
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
-import { isAIEnabled } from '@/lib/server/domains/ai/config'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings'
 import type { PostId } from '@quackback/ids'
@@ -19,11 +18,6 @@ import { db, postTags, tags, eq } from '@/lib/server/db'
  */
 export const aiHook: HookHandler = {
   async run(event: EventData, _target: unknown, _config: unknown): Promise<HookResult> {
-    if (!isAIEnabled()) {
-      console.log('[AI] Skipping: OPENAI_API_KEY not configured')
-      return { success: true }
-    }
-
     const { post } = event.data as { post: { id: string; title: string; content: string } }
     const postId = post.id as PostId
     console.log(`[AI] Processing post: ${postId}`)

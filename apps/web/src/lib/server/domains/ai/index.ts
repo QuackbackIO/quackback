@@ -1,2 +1,2 @@
-export { getOpenAI, isAIEnabled } from './config'
+export { getOpenAI } from './config'
 export { withRetry, isRetryableError, type RetryOptions } from './retry'

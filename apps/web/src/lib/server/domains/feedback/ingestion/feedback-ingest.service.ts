@@ -7,7 +7,7 @@
 
 import { db, eq, and, rawFeedbackItems } from '@/lib/server/db'
 import type { FeedbackSourceId } from '@quackback/ids'
-import { isAIEnabled } from '@/lib/server/domains/ai/config'
+import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { enqueueFeedbackIngestJob } from '../queues/feedback-ingest-queue'
 import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
 import { resolveAuthorPrincipal } from './author-resolver'
@@ -105,7 +105,7 @@ export async function enrichAndAdvance(rawItemId: string): Promise<void> {
     .where(eq(rawFeedbackItems.id, rawItemId as any))
 
   // If AI is enabled, enqueue extraction; otherwise mark completed
-  if (isAIEnabled()) {
+  if (getOpenAI()) {
     await enqueueFeedbackAiJob({ type: 'extract-signals', rawItemId })
   } else {
     await db

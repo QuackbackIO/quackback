@@ -6,7 +6,7 @@
  */
 
 import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
-import { getOpenAI, isAIEnabled } from '@/lib/server/domains/ai/config'
+import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import type { PostId } from '@quackback/ids'
 
@@ -35,8 +35,6 @@ interface PostSummaryJson {
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
-  if (!isAIEnabled()) return
-
   const openai = getOpenAI()
   if (!openai) return
 
@@ -149,7 +147,7 @@ const SWEEP_BATCH_DELAY_MS = 500
  * and processes them in batches until none remain.
  */
 export async function refreshStaleSummaries(): Promise<void> {
-  if (!isAIEnabled()) return
+  if (!getOpenAI()) return
 
   let totalProcessed = 0
   let totalFailed = 0
