@@ -113,3 +113,92 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
 
   return { voted, voteCount }
 }
+
+/**
+ * Add a vote on behalf of a user (insert-only, never removes)
+ *
+ * Used by integration apps (e.g. Zendesk sidebar) to vote on behalf of
+ * a customer when linking a ticket to a post. Unlike voteOnPost(), this
+ * is idempotent and never toggles — it only inserts.
+ *
+ * @param postId - Post ID to vote on
+ * @param principalId - Principal ID of the voter
+ * @param source - Optional source metadata (e.g. { type: 'zendesk', externalUrl: 'https://...' })
+ * @returns Result containing vote status and new count
+ */
+export async function addVoteOnBehalf(
+  postId: PostId,
+  principalId: PrincipalId,
+  source?: { type: string; externalUrl: string }
+): Promise<VoteResult> {
+  const postUuid = toUuid(postId)
+  const principalUuid = toUuid(principalId)
+  const voteId = toUuid(createId('vote'))
+  const subscriptionId = toUuid(createId('post_subscription'))
+
+  const sourceType = source?.type ?? null
+  const sourceExternalUrl = source?.externalUrl ?? null
+
+  // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
+  const result = await db.execute<{
+    post_exists: boolean
+    board_exists: boolean
+    newly_voted: boolean
+    vote_count: number
+  }>(sql`
+    WITH post_check AS (
+      SELECT id, board_id, vote_count FROM ${posts}
+      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+    ),
+    board_check AS (
+      SELECT 1 FROM ${boards}
+      WHERE id = (SELECT board_id FROM post_check)
+    ),
+    inserted AS (
+      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, updated_at)
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, NOW()
+      WHERE EXISTS (SELECT 1 FROM post_check)
+        AND EXISTS (SELECT 1 FROM board_check)
+      ON CONFLICT (post_id, principal_id) DO NOTHING
+      RETURNING id
+    ),
+    updated_post AS (
+      UPDATE ${posts}
+      SET vote_count = GREATEST(0, vote_count + 1)
+      WHERE id = ${postUuid}::uuid
+        AND EXISTS (SELECT 1 FROM inserted)
+      RETURNING vote_count
+    ),
+    subscribed AS (
+      INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
+      SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
+      WHERE EXISTS (SELECT 1 FROM inserted)
+      ON CONFLICT (post_id, principal_id) DO NOTHING
+      RETURNING 1
+    )
+    SELECT
+      EXISTS(SELECT 1 FROM post_check) as post_exists,
+      EXISTS(SELECT 1 FROM board_check) as board_exists,
+      EXISTS(SELECT 1 FROM inserted) as newly_voted,
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
+  `)
+
+  type VoteResultRow = {
+    post_exists: boolean
+    board_exists: boolean
+    newly_voted: boolean
+    vote_count: number
+  }
+  const rows = getExecuteRows<VoteResultRow>(result)
+  const row = rows[0]
+
+  if (!row?.post_exists) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  if (!row?.board_exists) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
+  }
+
+  return { voted: row.newly_voted, voteCount: row.vote_count ?? 0 }
+}

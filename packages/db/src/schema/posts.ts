@@ -9,6 +9,7 @@ import {
   jsonb,
   customType,
   check,
+  varchar,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -183,6 +184,9 @@ export const votes = pgTable(
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
+    // Source tracking for integration-created votes (e.g. Zendesk sidebar)
+    sourceType: varchar('source_type', { length: 40 }),
+    sourceExternalUrl: text('source_external_url'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -192,6 +196,8 @@ export const votes = pgTable(
     uniqueIndex('votes_principal_post_idx').on(table.postId, table.principalId),
     index('votes_principal_id_idx').on(table.principalId),
     index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
+    // Partial index for finding integration-sourced votes
+    index('votes_source_type_idx').on(table.sourceType).where(sql`source_type IS NOT NULL`),
   ]
 )
 
