@@ -5,12 +5,13 @@ import { useNavigate } from '@tanstack/react-router'
 import { useState, useCallback, useEffect, useMemo, startTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { SearchInput } from '@/components/shared/search-input'
 import { Spinner } from '@/components/shared/spinner'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { ChangelogFiltersPanel } from './changelog-filters'
 import { useChangelogFilters } from './use-changelog-filters'
 import { CreateChangelogDialog } from './create-changelog-dialog'
@@ -50,23 +51,10 @@ export function ChangelogList() {
 
   const deleteChangelogMutation = useDeleteChangelog()
 
-  const filterSearch = filters.search
-  const [searchValue, setSearchValue] = useState(filterSearch || '')
-
-  // Sync input when parent search changes (e.g., clear filters)
-  useEffect(() => {
-    setSearchValue(filterSearch || '')
-  }, [filterSearch])
-
-  // Debounce search input before updating URL
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchValue !== (filterSearch || '')) {
-        setFilters({ search: searchValue || undefined })
-      }
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }, [searchValue, filterSearch, setFilters])
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: filters.search,
+    onChange: (search) => setFilters({ search }),
+  })
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
     changelogQueries.list({ status: filters.status })
@@ -102,15 +90,15 @@ export function ChangelogList() {
 
   // Client-side search filtering
   const entries = useMemo(() => {
-    if (!filterSearch) return allEntries
-    const q = filterSearch.toLowerCase()
+    if (!filters.search) return allEntries
+    const q = filters.search.toLowerCase()
     return allEntries.filter(
       (e) =>
         e.title.toLowerCase().includes(q) ||
         e.content.toLowerCase().includes(q) ||
         e.author?.name.toLowerCase().includes(q)
     )
-  }, [allEntries, filterSearch])
+  }, [allEntries, filters.search])
 
   // Navigate to entry via URL for shareable links
   const handleEdit = useCallback(
@@ -154,17 +142,11 @@ export function ChangelogList() {
       >
         <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <SearchInput
-                value={searchValue}
-                onChange={setSearchValue}
-                placeholder="Search..."
-                data-search-input
-              />
-              <CreateChangelogDialog />
-            </div>
-          </div>
+          <AdminListHeader
+            searchValue={searchValue}
+            onSearchChange={setSearchValue}
+            action={<CreateChangelogDialog />}
+          />
 
           {/* List */}
           {isLoading ? (
@@ -173,13 +155,13 @@ export function ChangelogList() {
             <EmptyState
               icon={DocumentTextIcon}
               title={
-                filterSearch
+                filters.search
                   ? 'No changelog entries match your search'
                   : hasActiveFilters
                     ? 'No changelog entries match your filters'
                     : 'No changelog entries yet'
               }
-              action={!hasActiveFilters && !filterSearch ? <CreateChangelogDialog /> : undefined}
+              action={!hasActiveFilters && !filters.search ? <CreateChangelogDialog /> : undefined}
               className="h-48"
             />
           ) : (

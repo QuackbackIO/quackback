@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/shared/search-input'
@@ -93,23 +94,10 @@ export function FeedbackTableView({
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
-  const search = filters.search
-  const [searchValue, setSearchValue] = useState(search || '')
-
-  // Sync input when parent search changes (e.g., clear filters)
-  useEffect(() => {
-    setSearchValue(search || '')
-  }, [search])
-
-  // Debounce search input before updating parent
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchValue !== (search || '')) {
-        onFiltersChange({ search: searchValue || undefined })
-      }
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }, [searchValue, search, onFiltersChange])
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: filters.search,
+    onChange: (search) => onFiltersChange({ search }),
+  })
 
   const loadMoreRef = useInfiniteScroll({
     hasMore,

@@ -1,16 +1,13 @@
-import { useEffect, useRef } from 'react'
-import { ArrowPathIcon, UsersIcon } from '@heroicons/react/24/solid'
+import { useEffect } from 'react'
+import { UsersIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SearchInput } from '@/components/shared/search-input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Spinner } from '@/components/shared/spinner'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/shared/utils'
 import { UserCard } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
@@ -38,20 +35,32 @@ interface UsersListProps {
   onClearSegments: () => void
 }
 
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'most_active', label: 'Most Active' },
+  { value: 'most_posts', label: 'Most Posts' },
+  { value: 'most_comments', label: 'Most Comments' },
+  { value: 'most_votes', label: 'Most Votes' },
+  { value: 'name', label: 'Name A-Z' },
+] as const
+
 function UserListSkeleton() {
   return (
-    <div className="divide-y divide-border/50">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="flex items-start gap-3 p-3">
-          <Skeleton className="h-10 w-10 rounded-full shrink-0" />
-          <div className="flex-1 min-w-0">
-            <Skeleton className="h-4 w-32 mb-1.5" />
-            <Skeleton className="h-3 w-48 mb-1" />
-            <Skeleton className="h-3 w-24 mb-1.5" />
-            <Skeleton className="h-3 w-20" />
+    <div className="p-3">
+      <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-start gap-3 p-3">
+            <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+            <div className="flex-1 min-w-0">
+              <Skeleton className="h-4 w-32 mb-1.5" />
+              <Skeleton className="h-3 w-48 mb-1" />
+              <Skeleton className="h-3 w-24 mb-1.5" />
+              <Skeleton className="h-3 w-20" />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
@@ -64,27 +73,31 @@ function UsersEmptyState({
   onClearFilters: () => void
 }) {
   return (
-    <EmptyState
-      icon={UsersIcon}
-      title={hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
-      description={
-        hasActiveFilters
-          ? "Try adjusting your filters to find what you're looking for."
-          : 'Portal users will appear here when they sign up to your feedback portal.'
-      }
-      action={
-        hasActiveFilters ? (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            className="text-sm text-primary hover:underline"
-          >
-            Clear filters
-          </button>
-        ) : undefined
-      }
-      className="py-12"
-    />
+    <div className="p-3">
+      <div className="rounded-lg overflow-hidden bg-card border border-border/40">
+        <EmptyState
+          icon={UsersIcon}
+          title={hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
+          description={
+            hasActiveFilters
+              ? "Try adjusting your filters to find what you're looking for."
+              : 'Portal users will appear here when they sign up to your feedback portal.'
+          }
+          action={
+            hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={onClearFilters}
+                className="text-sm text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            ) : undefined
+          }
+          className="py-12"
+        />
+      </div>
+    </div>
   )
 }
 
@@ -106,11 +119,11 @@ export function UsersList({
   onSelectSegment,
   onClearSegments,
 }: UsersListProps) {
-  const searchInputRef = useRef<HTMLInputElement>(null)
-
-  const handleSearchChange = (value: string) => {
-    onFiltersChange({ search: value || undefined })
-  }
+  const sort = filters.sort || 'newest'
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: filters.search,
+    onChange: (value) => onFiltersChange({ search: value }),
+  })
 
   const handleSortChange = (value: UsersFilters['sort']) => {
     onFiltersChange({ sort: value })
@@ -161,7 +174,7 @@ export function UsersList({
           break
         case '/':
           e.preventDefault()
-          searchInputRef.current?.focus()
+          document.querySelector<HTMLInputElement>('[data-search-input]')?.focus()
           break
       }
     }
@@ -171,7 +184,7 @@ export function UsersList({
   }, [users, selectedUserId, onSelectUser])
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       {/* Mobile segment selector - only visible below lg */}
       <div className="lg:hidden mb-2">
         <MobileSegmentSelector
@@ -185,28 +198,28 @@ export function UsersList({
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
-          ref={searchInputRef}
-          value={filters.search || ''}
-          onChange={handleSearchChange}
+          value={searchValue}
+          onChange={setSearchValue}
           placeholder="Search users..."
+          data-search-input
         />
-        <Select
-          value={filters.sort || 'newest'}
-          onValueChange={(value) => handleSortChange(value as UsersFilters['sort'])}
-        >
-          <SelectTrigger className="h-8 w-[130px] text-xs border-border/50">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="oldest">Oldest</SelectItem>
-            <SelectItem value="most_active">Most Active</SelectItem>
-            <SelectItem value="most_posts">Most Posts</SelectItem>
-            <SelectItem value="most_comments">Most Comments</SelectItem>
-            <SelectItem value="most_votes">Most Votes</SelectItem>
-            <SelectItem value="name">Name A-Z</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1 flex-wrap">
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap',
+                sort === opt.value
+                  ? 'bg-muted text-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-muted/50'
+              )}
+              onClick={() => handleSortChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Active Filters Bar - Always visible */}
@@ -227,7 +240,7 @@ export function UsersList({
 
   if (isLoading) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <UserListSkeleton />
       </div>
@@ -236,7 +249,7 @@ export function UsersList({
 
   if (users.length === 0) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <UsersEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
       </div>
@@ -244,37 +257,45 @@ export function UsersList({
   }
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto w-full">
       {headerContent}
 
       {/* User List */}
-      <div className="divide-y divide-border/50">
-        {users.map((user) => (
-          <UserCard
-            key={user.principalId}
-            user={user}
-            isSelected={user.principalId === selectedUserId}
-            onClick={() => onSelectUser(user.principalId)}
-          />
-        ))}
-
-        {/* Load more trigger */}
-        {hasMore && (
-          <div ref={loadMoreRef} className="py-4 flex justify-center">
-            {isLoadingMore ? (
-              <ArrowPathIcon className="h-5 w-5 animate-spin text-muted-foreground" />
-            ) : (
-              <button
-                type="button"
-                onClick={onLoadMore}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Load more
-              </button>
-            )}
-          </div>
-        )}
+      <div className="p-3">
+        <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+          {users.map((user, index) => (
+            <div
+              key={user.principalId}
+              className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+              style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+            >
+              <UserCard
+                user={user}
+                isSelected={user.principalId === selectedUserId}
+                onClick={() => onSelectUser(user.principalId)}
+              />
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* Load more trigger */}
+      {hasMore && (
+        <div ref={loadMoreRef} className="px-3 pb-3 flex justify-center">
+          {isLoadingMore ? (
+            <Spinner />
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              className="text-muted-foreground"
+            >
+              Load more
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
