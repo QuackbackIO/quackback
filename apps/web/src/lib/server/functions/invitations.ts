@@ -188,6 +188,17 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       return { invitationId: invitationId as InviteId }
     } catch (error) {
       console.error(`[fn:invitations] ❌ acceptInvitationFn failed:`, error)
+      // Roll back the invitation status so the user can retry.
+      // The conditional update above already claimed it as 'accepted',
+      // so if anything downstream fails we must revert to 'pending'.
+      try {
+        await db
+          .update(invitation)
+          .set({ status: 'pending' })
+          .where(eq(invitation.id, invitationId as InviteId))
+      } catch (rollbackError) {
+        console.error(`[fn:invitations] ❌ rollback failed:`, rollbackError)
+      }
       throw error
     }
   })

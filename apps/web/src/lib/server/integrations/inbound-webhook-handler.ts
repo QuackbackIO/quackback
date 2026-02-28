@@ -10,6 +10,7 @@
 
 import { db, integrations, postExternalLinks, eq, and } from '@/lib/server/db'
 import { getIntegration } from './index'
+import { decryptSecrets } from './encryption'
 import { resolveStatusMapping, type StatusMappings } from './status-mapping'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import type { PostId, StatusId, PrincipalId } from '@quackback/ids'
@@ -53,8 +54,11 @@ export async function handleInboundWebhook(
     return verification
   }
 
+  // Decrypt secrets so handlers can access OAuth tokens
+  const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
+
   // Parse the webhook payload for a status change
-  const result = await definition.inbound.parseStatusChange(body, config)
+  const result = await definition.inbound.parseStatusChange(body, config, secrets)
   if (!result) {
     // Not a status change event — acknowledge but ignore
     return new Response('OK', { status: 200 })
