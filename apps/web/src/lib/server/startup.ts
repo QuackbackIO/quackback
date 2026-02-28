@@ -48,8 +48,14 @@ export function logStartupBanner(): void {
     .catch((err) => console.error('[Startup] Failed to restore feedback schedules:', err))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries)
+  // Runs once at startup (after a short delay) then every 30 minutes
   import('./domains/summary/summary.service')
     .then(({ refreshStaleSummaries }) => {
+      setTimeout(() => {
+        refreshStaleSummaries().catch((err) =>
+          console.error('[Startup] Initial summary sweep failed:', err)
+        )
+      }, 5_000) // 5s delay to let other startup tasks finish
       setInterval(
         () => {
           refreshStaleSummaries().catch((err) =>

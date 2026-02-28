@@ -6,36 +6,50 @@
  * via the feedback_pipeline event hook on post.created.
  */
 
-import { db } from '@/lib/server/db'
-import { generateId } from '@quackback/ids'
+import { db, eq, feedbackSources } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 
 /**
  * Ensure the quackback feedback source exists.
- * Uses atomic INSERT ... WHERE NOT EXISTS to prevent duplicates
- * from concurrent startups.
+ * Uses an advisory lock to prevent duplicate sources from concurrent startups.
  */
 export async function ensureQuackbackFeedbackSource(): Promise<void> {
-  const newId = generateId('feedback_source')
-
-  const [row] = await db.execute<{ id: string; created: boolean }>(sql`
-    WITH inserted AS (
-      INSERT INTO feedback_sources (id, source_type, delivery_mode, name, enabled, config, created_at, updated_at)
-      SELECT ${newId}, 'quackback', 'passive', 'Quackback', true, '{}'::jsonb, now(), now()
-      WHERE NOT EXISTS (
-        SELECT 1 FROM feedback_sources WHERE source_type = 'quackback'
-      )
-      RETURNING id, true AS created
+  await db.transaction(async (tx) => {
+    // Advisory lock scoped to this transaction prevents concurrent creation
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${sql.raw(String(hashCode('quackback_feedback_source')))})`
     )
-    SELECT id, created FROM inserted
-    UNION ALL
-    SELECT id::text, false AS created FROM feedback_sources WHERE source_type = 'quackback'
-    LIMIT 1
-  `)
 
-  if (row?.created) {
-    console.log('[QuackbackSource] Created quackback feedback source:', row.id)
-  } else {
-    console.log('[QuackbackSource] Quackback feedback source already exists:', row?.id)
+    const existing = await tx.query.feedbackSources.findFirst({
+      where: eq(feedbackSources.sourceType, 'quackback'),
+      columns: { id: true },
+    })
+
+    if (existing) {
+      console.log('[QuackbackSource] Quackback feedback source already exists:', existing.id)
+      return
+    }
+
+    const [created] = await tx
+      .insert(feedbackSources)
+      .values({
+        sourceType: 'quackback',
+        deliveryMode: 'passive',
+        name: 'Quackback',
+        enabled: true,
+        config: {},
+      })
+      .returning({ id: feedbackSources.id })
+
+    console.log('[QuackbackSource] Created quackback feedback source:', created.id)
+  })
+}
+
+/** Simple hash code for advisory lock key. */
+function hashCode(s: string): number {
+  let hash = 0
+  for (let i = 0; i < s.length; i++) {
+    hash = (Math.imul(31, hash) + s.charCodeAt(i)) | 0
   }
+  return hash
 }
