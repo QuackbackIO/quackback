@@ -68,11 +68,14 @@ async function resolveOAuthContext(token: string): Promise<McpAuthContext | null
 
     // Re-read the principal's current role from the database so that
     // role changes made after token issuance take effect immediately.
+    // If the principal no longer exists (deleted/revoked), reject the token.
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.id, principalId as PrincipalId),
       columns: { role: true },
     })
-    const role = principalRecord?.role ?? 'user'
+    if (!principalRecord) return null
+
+    const role = principalRecord.role
 
     // Parse granted scopes from space-separated string
     const scopeStr = (payload.scope as string) ?? ''
