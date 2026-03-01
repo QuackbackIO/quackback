@@ -161,7 +161,18 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     let mergeItems: any[] = []
     let mergeTotal = 0
 
-    if (includeMerge && !data.sourceIds?.length && !data.boardId) {
+    // Include merge suggestions unless filtered to a non-quackback source or specific board.
+    // When filtering by source, check if the quackback source is among the selected IDs.
+    let includesMergeSource = !data.sourceIds?.length
+    if (data.sourceIds?.length) {
+      const quackbackSource = await db.query.feedbackSources.findFirst({
+        where: eq(feedbackSources.sourceType, 'quackback'),
+        columns: { id: true },
+      })
+      includesMergeSource = !!quackbackSource && data.sourceIds.includes(quackbackSource.id)
+    }
+
+    if (includeMerge && includesMergeSource && !data.boardId) {
       const { getPendingMergeSuggestions } =
         await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
 

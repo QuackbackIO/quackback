@@ -38,23 +38,35 @@ export function SuggestionsContainer() {
   // Compute suggestion counts per source for sidebar badges
   const suggestionCountsBySource = useMemo(() => {
     const counts = new Map<string, number>()
+    const quackbackSource = sources.find((s) => s.sourceType === 'quackback')
     for (const s of allSuggestions) {
-      const sourceId = s.rawItem?.source?.id
-      if (sourceId) {
-        counts.set(sourceId, (counts.get(sourceId) ?? 0) + 1)
+      if (s.suggestionType === 'duplicate_post' && quackbackSource) {
+        // Merge suggestions belong to quackback source
+        counts.set(quackbackSource.id, (counts.get(quackbackSource.id) ?? 0) + 1)
+      } else {
+        const sourceId = s.rawItem?.source?.id
+        if (sourceId) {
+          counts.set(sourceId, (counts.get(sourceId) ?? 0) + 1)
+        }
       }
     }
     return counts
-  }, [allSuggestions])
+  }, [allSuggestions, sources])
 
   // Client-side filtering for source, board, and search
   const suggestions = useMemo(() => {
     let filtered = allSuggestions
 
     if (filters.sourceIds?.length) {
-      filtered = filtered.filter(
-        (s) => s.rawItem?.source && filters.sourceIds!.includes(s.rawItem.source.id)
-      )
+      // Find if quackback source is among selected sources
+      const quackbackSource = sources.find((s) => s.sourceType === 'quackback')
+      const includesQuackback = !!quackbackSource && filters.sourceIds.includes(quackbackSource.id)
+
+      filtered = filtered.filter((s) => {
+        // Merge suggestions belong to quackback source
+        if (s.suggestionType === 'duplicate_post') return includesQuackback
+        return s.rawItem?.source && filters.sourceIds!.includes(s.rawItem.source.id)
+      })
     }
 
     if (filters.board?.length) {
