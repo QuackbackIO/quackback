@@ -70,7 +70,7 @@ export function SuggestionList({
   )
 
   return (
-    <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
+    <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0 min-w-0">
       {headerContent}
 
       {/* Triage rows */}
@@ -81,7 +81,7 @@ export function SuggestionList({
           description="New suggestions appear here as the AI pipeline processes incoming feedback."
         />
       ) : (
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
           <div className="p-3">
             <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
               {suggestions.map((suggestion, index) => (

@@ -57,7 +57,7 @@ export interface RoadmapFilters {
  */
 export interface SuggestionsFilters {
   search?: string
-  suggestionType?: 'merge_post' | 'create_post'
+  suggestionType?: 'create_post' | 'duplicate_post'
   sourceIds?: string[]
   board?: string[]
   sort?: 'newest' | 'similarity' | 'confidence'

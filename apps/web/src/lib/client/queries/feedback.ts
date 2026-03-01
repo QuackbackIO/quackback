@@ -13,7 +13,7 @@ import {
 export const feedbackQueries = {
   suggestions: (filters?: {
     status?: 'pending' | 'accepted' | 'dismissed' | 'expired'
-    suggestionType?: 'merge_post' | 'create_post'
+    suggestionType?: 'create_post' | 'duplicate_post'
     boardId?: string
     sourceIds?: string[]
     sort?: 'newest' | 'similarity' | 'confidence'

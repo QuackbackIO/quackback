@@ -14,7 +14,7 @@ import type { RawFeedbackAuthor, RawFeedbackContent } from '@/lib/server/db'
 /** Suggestion in list view - returned by fetchSuggestions. */
 export interface SuggestionListItem {
   id: string
-  suggestionType: 'merge_post' | 'create_post'
+  suggestionType: 'create_post' | 'duplicate_post'
   status: 'pending' | 'accepted' | 'dismissed' | 'expired'
   similarityScore: number | null
   suggestedTitle: string | null
@@ -38,8 +38,26 @@ export interface SuggestionListItem {
   targetPost: {
     id: string
     title: string
+    content?: string | null
     voteCount: number
+    commentCount?: number
+    createdAt?: string | Date
+    boardName?: string | null
+    statusName?: string | null
+    statusColor?: string | null
     status: string
+  } | null
+  /** Source post (for duplicate_post suggestions only) */
+  sourcePost: {
+    id: string
+    title: string
+    content?: string | null
+    voteCount: number
+    commentCount?: number
+    createdAt?: string | Date
+    boardName?: string | null
+    statusName?: string | null
+    statusColor?: string | null
   } | null
   board: {
     id: string

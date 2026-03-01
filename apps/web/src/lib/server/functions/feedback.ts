@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { FeedbackSourceId, FeedbackSuggestionId, BoardId, PrincipalId } from '@quackback/ids'
+import { isTypeId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   db,
@@ -16,6 +17,7 @@ import {
   feedbackSignals,
   rawFeedbackItems,
   feedbackSources,
+  mergeSuggestions,
   count,
 } from '@/lib/server/db'
 
@@ -25,7 +27,7 @@ import {
 
 const listSuggestionsSchema = z.object({
   status: z.enum(['pending', 'accepted', 'dismissed', 'expired']).optional().default('pending'),
-  suggestionType: z.enum(['merge_post', 'create_post']).optional(),
+  suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
   boardId: z.string().optional(),
   sourceIds: z.array(z.string()).optional(),
   sort: z.enum(['newest', 'similarity', 'confidence']).optional().default('newest'),
@@ -83,70 +85,127 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const conditions: any[] = [eq(feedbackSuggestions.status, data.status ?? 'pending')]
-    if (data.suggestionType) {
-      conditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
-    }
-    if (data.boardId) {
-      conditions.push(eq(feedbackSuggestions.boardId, data.boardId as BoardId))
-    }
-    if (data.sourceIds?.length) {
-      const matchingRawItemIds = db
-        .select({ id: rawFeedbackItems.id })
-        .from(rawFeedbackItems)
-        .where(inArray(rawFeedbackItems.sourceId, data.sourceIds as FeedbackSourceId[]))
-      conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
-    }
+    // If filtering to duplicate_post only, skip feedback suggestions query
+    const includeFeedback = data.suggestionType !== 'duplicate_post'
+    const includeMerge = !data.suggestionType || data.suggestionType === 'duplicate_post'
 
-    const [totalResult] = await db
-      .select({ count: count() })
-      .from(feedbackSuggestions)
-      .where(and(...conditions))
+    let feedbackItems: any[] = []
+    let feedbackTotal = 0
 
-    const orderBy =
-      data.sort === 'similarity'
-        ? [desc(feedbackSuggestions.similarityScore), desc(feedbackSuggestions.createdAt)]
-        : [desc(feedbackSuggestions.createdAt)]
+    if (includeFeedback) {
+      const conditions: any[] = [eq(feedbackSuggestions.status, data.status ?? 'pending')]
+      if (data.suggestionType) {
+        conditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
+      }
+      if (data.boardId) {
+        conditions.push(eq(feedbackSuggestions.boardId, data.boardId as BoardId))
+      }
+      if (data.sourceIds?.length) {
+        const matchingRawItemIds = db
+          .select({ id: rawFeedbackItems.id })
+          .from(rawFeedbackItems)
+          .where(inArray(rawFeedbackItems.sourceId, data.sourceIds as FeedbackSourceId[]))
+        conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
+      }
 
-    const suggestions = await db.query.feedbackSuggestions.findMany({
-      where: () => and(...conditions),
-      orderBy,
-      limit: data.limit,
-      offset: data.offset,
-      with: {
-        rawItem: {
-          columns: {
-            id: true,
-            sourceType: true,
-            externalUrl: true,
-            author: true,
-            content: true,
-            sourceCreatedAt: true,
+      const [totalResult] = await db
+        .select({ count: count() })
+        .from(feedbackSuggestions)
+        .where(and(...conditions))
+
+      feedbackTotal = totalResult?.count ?? 0
+
+      const orderBy =
+        data.sort === 'similarity'
+          ? [desc(feedbackSuggestions.similarityScore), desc(feedbackSuggestions.createdAt)]
+          : [desc(feedbackSuggestions.createdAt)]
+
+      feedbackItems = await db.query.feedbackSuggestions.findMany({
+        where: () => and(...conditions),
+        orderBy,
+        limit: data.limit,
+        offset: data.offset,
+        with: {
+          rawItem: {
+            columns: {
+              id: true,
+              sourceType: true,
+              externalUrl: true,
+              author: true,
+              content: true,
+              sourceCreatedAt: true,
+            },
+            with: {
+              source: { columns: { id: true, name: true, sourceType: true } },
+            },
           },
-          with: {
-            source: { columns: { id: true, name: true, sourceType: true } },
+          targetPost: {
+            columns: { id: true, title: true, voteCount: true, statusId: true, boardId: true },
+            with: { postStatus: { columns: { id: true, name: true, color: true } } },
+          },
+          board: { columns: { id: true, name: true, slug: true } },
+          signal: {
+            columns: {
+              id: true,
+              signalType: true,
+              summary: true,
+              evidence: true,
+              extractionConfidence: true,
+            },
           },
         },
-        targetPost: {
-          columns: { id: true, title: true, voteCount: true, statusId: true, boardId: true },
-          with: { postStatus: { columns: { id: true, name: true, color: true } } },
-        },
-        board: { columns: { id: true, name: true, slug: true } },
-        signal: {
-          columns: {
-            id: true,
-            signalType: true,
-            summary: true,
-            evidence: true,
-            extractionConfidence: true,
-          },
-        },
-      },
+      })
+    }
+
+    // Include post-to-post merge suggestions
+    let mergeItems: any[] = []
+    let mergeTotal = 0
+
+    if (includeMerge && !data.sourceIds?.length && !data.boardId) {
+      const { getPendingMergeSuggestions } =
+        await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
+
+      const { items, total } = await getPendingMergeSuggestions({
+        sort:
+          data.sort === 'similarity'
+            ? 'similarity'
+            : data.sort === 'confidence'
+              ? 'confidence'
+              : 'newest',
+        limit: data.limit ?? 50,
+      })
+
+      mergeTotal = total
+
+      mergeItems = items.map((ms: any) => ({
+        id: ms.id,
+        suggestionType: 'duplicate_post' as const,
+        status: ms.status,
+        similarityScore: ms.hybridScore,
+        suggestedTitle: null,
+        suggestedBody: null,
+        reasoning: ms.llmReasoning,
+        createdAt: ms.createdAt,
+        updatedAt: ms.updatedAt,
+        rawItem: null,
+        targetPost: ms.targetPost ? { ...ms.targetPost, status: null } : null,
+        sourcePost: ms.sourcePost ?? null,
+        board: null,
+        signal: null,
+      }))
+    }
+
+    // Combine and sort across both sources
+    const allItems = [...feedbackItems, ...mergeItems].sort((a, b) => {
+      if (data.sort === 'similarity') {
+        return (b.similarityScore ?? 0) - (a.similarityScore ?? 0)
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
 
     return {
-      items: suggestions as any,
-      total: totalResult?.count ?? 0,
+      items: allItems,
+      total: feedbackTotal + mergeTotal,
     }
   })
 
@@ -200,17 +259,28 @@ export const fetchSuggestionDetail = createServerFn({ method: 'GET' })
 export const fetchSuggestionStats = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ roles: ['admin', 'member'] })
 
-  const results = await db
-    .select({
-      suggestionType: feedbackSuggestions.suggestionType,
-      count: count(),
-    })
-    .from(feedbackSuggestions)
-    .where(eq(feedbackSuggestions.status, 'pending'))
-    .groupBy(feedbackSuggestions.suggestionType)
+  const [feedbackResults, mergeCountResult] = await Promise.all([
+    db
+      .select({
+        suggestionType: feedbackSuggestions.suggestionType,
+        count: count(),
+      })
+      .from(feedbackSuggestions)
+      .where(eq(feedbackSuggestions.status, 'pending'))
+      .groupBy(feedbackSuggestions.suggestionType),
+    db
+      .select({ count: count() })
+      .from(mergeSuggestions)
+      .where(eq(mergeSuggestions.status, 'pending')),
+  ])
 
-  const stats: Record<string, number> = { merge_post: 0, create_post: 0, total: 0 }
-  for (const r of results) {
+  const mergeCount = mergeCountResult[0]?.count ?? 0
+  const stats: Record<string, number> = {
+    create_post: 0,
+    duplicate_post: mergeCount,
+    total: mergeCount,
+  }
+  for (const r of feedbackResults) {
     stats[r.suggestionType] = r.count
     stats.total += r.count
   }
@@ -279,6 +349,14 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member'] })
 
+    // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
+    if (isTypeId(data.id, 'merge_sug')) {
+      const { acceptMergeSuggestion: acceptPostMerge } =
+        await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
+      await acceptPostMerge(data.id, auth.principal.id as PrincipalId)
+      return { success: true }
+    }
+
     const suggestion = await db.query.feedbackSuggestions.findFirst({
       where: eq(feedbackSuggestions.id, data.id as FeedbackSuggestionId),
       columns: { id: true, suggestionType: true, status: true },
@@ -288,29 +366,29 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
       return { success: false, error: 'Suggestion not found or already resolved' }
     }
 
-    const { acceptMergeSuggestion, acceptCreateSuggestion } =
+    const { acceptCreateSuggestion } =
       await import('@/lib/server/domains/feedback/pipeline/suggestion.service')
 
-    if (suggestion.suggestionType === 'merge_post') {
-      const result = await acceptMergeSuggestion(
-        data.id as FeedbackSuggestionId,
-        auth.principal.id as PrincipalId
-      )
-      return { success: true, resultPostId: result.resultPostId }
-    } else {
-      const result = await acceptCreateSuggestion(
-        data.id as FeedbackSuggestionId,
-        auth.principal.id as PrincipalId,
-        data.edits
-      )
-      return { success: true, resultPostId: result.resultPostId }
-    }
+    const result = await acceptCreateSuggestion(
+      data.id as FeedbackSuggestionId,
+      auth.principal.id as PrincipalId,
+      data.edits
+    )
+    return { success: true, resultPostId: result.resultPostId }
   })
 
 export const dismissSuggestionFn = createServerFn({ method: 'POST' })
   .inputValidator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+    // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
+    if (isTypeId(data.id, 'merge_sug')) {
+      const { dismissMergeSuggestion } =
+        await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
+      await dismissMergeSuggestion(data.id, auth.principal.id as PrincipalId)
+      return { success: true }
+    }
 
     const { dismissSuggestion } =
       await import('@/lib/server/domains/feedback/pipeline/suggestion.service')

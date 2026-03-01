@@ -16,6 +16,7 @@ const searchSchema = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   minVotes: z.string().optional(),
+  minComments: z.string().optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
@@ -25,7 +26,7 @@ const searchSchema = z.object({
   roadmap: z.string().optional(),
   // Suggestion-specific
   suggestion: z.string().optional(),
-  suggestionType: z.enum(['merge_post', 'create_post']).optional(),
+  suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
   suggestionSource: z.array(z.string()).optional(),
   suggestionBoard: z.array(z.string()).optional(),
   suggestionSort: z.enum(['newest', 'similarity', 'confidence']).optional(),

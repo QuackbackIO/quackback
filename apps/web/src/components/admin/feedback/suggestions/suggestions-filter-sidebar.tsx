@@ -27,7 +27,7 @@ export function SuggestionsFiltersSidebar({
     if (current === id) {
       onFiltersChange({ suggestionType: undefined })
     } else {
-      onFiltersChange({ suggestionType: id as 'merge_post' | 'create_post' })
+      onFiltersChange({ suggestionType: id as 'create_post' | 'duplicate_post' })
     }
   }
 
@@ -55,7 +55,7 @@ export function SuggestionsFiltersSidebar({
       <FilterSection title="Type">
         <FilterList
           items={[
-            { id: 'merge_post', name: 'Merge into post' },
+            { id: 'duplicate_post', name: 'Duplicate post' },
             { id: 'create_post', name: 'New post' },
           ]}
           selectedIds={filters.suggestionType ? [filters.suggestionType] : []}

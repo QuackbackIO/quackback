@@ -31,6 +31,7 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
+import { MergeSuggestionBanner } from '@/components/admin/feedback/merge-suggestion-banner'
 import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
@@ -377,6 +378,9 @@ function PostModalContent({
         {post.mergeInfo && (
           <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
         )}
+
+        {/* AI merge suggestion banner */}
+        {!post.mergeInfo && <MergeSuggestionBanner postId={post.id as PostId} />}
 
         {/* 2-column layout for editor and metadata */}
         <div className="flex">

@@ -65,10 +65,13 @@ export function SuggestionsContainer() {
       const q = filters.search.toLowerCase()
       filtered = filtered.filter((s) => {
         const title =
-          s.suggestionType === 'merge_post'
-            ? (s.rawItem?.content?.subject ?? s.signal?.summary ?? '')
+          s.suggestionType === 'duplicate_post'
+            ? (s.sourcePost?.title ?? '')
             : (s.suggestedTitle ?? '')
-        const body = s.rawItem?.content?.text ?? s.suggestedBody ?? ''
+        const body =
+          s.suggestionType === 'duplicate_post'
+            ? (s.sourcePost?.content ?? s.targetPost?.content ?? '')
+            : (s.rawItem?.content?.text ?? s.suggestedBody ?? '')
         const target = s.targetPost?.title ?? ''
         return (
           title.toLowerCase().includes(q) ||
