@@ -48,18 +48,20 @@ export const Route = createFileRoute('/admin/login')({
 
     // Auth config is already computed in TenantSettings (filtered by configured credentials)
     const authConfig = settings.publicAuthConfig.oauth
+    const customProviderNames = settings.publicAuthConfig.customProviderNames
 
     return {
       errorMessage,
       safeCallbackUrl,
       authConfig,
+      customProviderNames,
     }
   },
   component: AdminLoginPage,
 })
 
 function AdminLoginPage() {
-  const { errorMessage, safeCallbackUrl, authConfig } = Route.useLoaderData()
+  const { errorMessage, safeCallbackUrl, authConfig, customProviderNames } = Route.useLoaderData()
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -74,7 +76,12 @@ function AdminLoginPage() {
             <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
-        <PortalAuthForm mode="login" callbackUrl={safeCallbackUrl} authConfig={authConfig} />
+        <PortalAuthForm
+          mode="login"
+          callbackUrl={safeCallbackUrl}
+          authConfig={authConfig}
+          customProviderNames={customProviderNames}
+        />
       </div>
     </div>
   )

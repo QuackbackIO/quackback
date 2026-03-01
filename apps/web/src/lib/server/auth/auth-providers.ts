@@ -1,7 +1,7 @@
 /**
  * Auth Provider Registry
  *
- * Defines all 33 Better Auth social providers with their credential fields.
+ * Defines the top 10 Better Auth social providers with their credential fields.
  * Credentials are stored encrypted in the integrationPlatformCredentials table
  * with an 'auth_' prefix (e.g. 'auth_github', 'auth_google').
  */
@@ -17,6 +17,8 @@ export interface AuthProviderDefinition {
   credentialType: string
   /** Tailwind bg class for icon container: 'bg-gray-900', 'bg-blue-600', etc. */
   iconBg: string
+  /** Provider type: 'social' (default, built-in Better Auth) or 'generic-oauth' (genericOAuth plugin) */
+  type?: 'generic-oauth'
   /** Credential fields required for this provider */
   platformCredentials: PlatformCredentialField[]
 }
@@ -59,23 +61,6 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
     ],
   },
   {
-    id: 'atlassian',
-    name: 'Atlassian',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}atlassian`,
-    iconBg: 'bg-blue-600',
-    platformCredentials: baseCredentials(
-      'Atlassian',
-      'https://developer.atlassian.com/console/myapps/'
-    ),
-  },
-  {
-    id: 'cognito',
-    name: 'Cognito',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}cognito`,
-    iconBg: 'bg-orange-600',
-    platformCredentials: baseCredentials('Cognito', 'https://console.aws.amazon.com/cognito/'),
-  },
-  {
     id: 'discord',
     name: 'Discord',
     credentialType: `${AUTH_CREDENTIAL_PREFIX}discord`,
@@ -83,25 +68,11 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
     platformCredentials: baseCredentials('Discord', 'https://discord.com/developers/applications'),
   },
   {
-    id: 'dropbox',
-    name: 'Dropbox',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}dropbox`,
-    iconBg: 'bg-blue-700',
-    platformCredentials: baseCredentials('Dropbox', 'https://www.dropbox.com/developers/apps'),
-  },
-  {
     id: 'facebook',
     name: 'Facebook',
     credentialType: `${AUTH_CREDENTIAL_PREFIX}facebook`,
     iconBg: 'bg-blue-600',
     platformCredentials: baseCredentials('Facebook', 'https://developers.facebook.com/apps/'),
-  },
-  {
-    id: 'figma',
-    name: 'Figma',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}figma`,
-    iconBg: 'bg-purple-500',
-    platformCredentials: baseCredentials('Figma', 'https://www.figma.com/developers/apps'),
   },
   {
     id: 'github',
@@ -137,44 +108,6 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
     ),
   },
   {
-    id: 'huggingface',
-    name: 'Hugging Face',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}huggingface`,
-    iconBg: 'bg-yellow-500',
-    platformCredentials: baseCredentials(
-      'Hugging Face',
-      'https://huggingface.co/settings/connected-applications'
-    ),
-  },
-  {
-    id: 'kakao',
-    name: 'Kakao',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}kakao`,
-    iconBg: 'bg-yellow-400',
-    platformCredentials: baseCredentials('Kakao', 'https://developers.kakao.com/console/app'),
-  },
-  {
-    id: 'kick',
-    name: 'Kick',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}kick`,
-    iconBg: 'bg-green-500',
-    platformCredentials: baseCredentials('Kick'),
-  },
-  {
-    id: 'line',
-    name: 'LINE',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}line`,
-    iconBg: 'bg-green-500',
-    platformCredentials: baseCredentials('LINE', 'https://developers.line.biz/console/'),
-  },
-  {
-    id: 'linear',
-    name: 'Linear',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}linear`,
-    iconBg: 'bg-indigo-500',
-    platformCredentials: baseCredentials('Linear', 'https://linear.app/settings/api'),
-  },
-  {
     id: 'linkedin',
     name: 'LinkedIn',
     credentialType: `${AUTH_CREDENTIAL_PREFIX}linkedin`,
@@ -201,91 +134,11 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
     ],
   },
   {
-    id: 'naver',
-    name: 'Naver',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}naver`,
-    iconBg: 'bg-green-600',
-    platformCredentials: baseCredentials('Naver', 'https://developers.naver.com/apps/'),
-  },
-  {
-    id: 'notion',
-    name: 'Notion',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}notion`,
-    iconBg: 'bg-gray-900',
-    platformCredentials: baseCredentials('Notion', 'https://www.notion.so/my-integrations'),
-  },
-  {
-    id: 'paybin',
-    name: 'Paybin',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}paybin`,
-    iconBg: 'bg-emerald-600',
-    platformCredentials: baseCredentials('Paybin'),
-  },
-  {
-    id: 'paypal',
-    name: 'PayPal',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}paypal`,
-    iconBg: 'bg-blue-800',
-    platformCredentials: baseCredentials(
-      'PayPal',
-      'https://developer.paypal.com/dashboard/applications'
-    ),
-  },
-  {
-    id: 'polar',
-    name: 'Polar',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}polar`,
-    iconBg: 'bg-blue-600',
-    platformCredentials: baseCredentials('Polar'),
-  },
-  {
     id: 'reddit',
     name: 'Reddit',
     credentialType: `${AUTH_CREDENTIAL_PREFIX}reddit`,
     iconBg: 'bg-orange-600',
     platformCredentials: baseCredentials('Reddit', 'https://www.reddit.com/prefs/apps'),
-  },
-  {
-    id: 'roblox',
-    name: 'Roblox',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}roblox`,
-    iconBg: 'bg-red-600',
-    platformCredentials: baseCredentials('Roblox', 'https://create.roblox.com/credentials'),
-  },
-  {
-    id: 'salesforce',
-    name: 'Salesforce',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}salesforce`,
-    iconBg: 'bg-sky-600',
-    platformCredentials: baseCredentials('Salesforce'),
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}slack`,
-    iconBg: 'bg-purple-600',
-    platformCredentials: baseCredentials('Slack', 'https://api.slack.com/apps'),
-  },
-  {
-    id: 'spotify',
-    name: 'Spotify',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}spotify`,
-    iconBg: 'bg-green-600',
-    platformCredentials: baseCredentials('Spotify', 'https://developer.spotify.com/dashboard'),
-  },
-  {
-    id: 'tiktok',
-    name: 'TikTok',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}tiktok`,
-    iconBg: 'bg-black',
-    platformCredentials: baseCredentials('TikTok', 'https://developers.tiktok.com/'),
-  },
-  {
-    id: 'twitch',
-    name: 'Twitch',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}twitch`,
-    iconBg: 'bg-purple-600',
-    platformCredentials: baseCredentials('Twitch', 'https://dev.twitch.tv/console/apps'),
   },
   {
     id: 'twitter',
@@ -298,25 +151,60 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
     ),
   },
   {
-    id: 'vercel',
-    name: 'Vercel',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}vercel`,
-    iconBg: 'bg-black',
-    platformCredentials: baseCredentials('Vercel', 'https://vercel.com/account/tokens'),
-  },
-  {
-    id: 'vk',
-    name: 'VK',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}vk`,
-    iconBg: 'bg-blue-600',
-    platformCredentials: baseCredentials('VK', 'https://dev.vk.com/ru/admin/apps-list'),
-  },
-  {
-    id: 'zoom',
-    name: 'Zoom',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}zoom`,
-    iconBg: 'bg-blue-600',
-    platformCredentials: baseCredentials('Zoom', 'https://marketplace.zoom.us/develop/create'),
+    id: 'custom-oidc',
+    name: 'Custom OIDC',
+    credentialType: `${AUTH_CREDENTIAL_PREFIX}custom-oidc`,
+    iconBg: 'bg-violet-600',
+    type: 'generic-oauth',
+    platformCredentials: [
+      {
+        key: 'displayName',
+        label: 'Display Name',
+        placeholder: 'e.g. Okta, Auth0, Keycloak',
+        sensitive: false,
+        helpText: 'Name shown on the sign-in button',
+      },
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'Enter your Client ID',
+        sensitive: false,
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        placeholder: 'Enter your Client Secret',
+        sensitive: true,
+      },
+      {
+        key: 'discoveryUrl',
+        label: 'Discovery URL',
+        placeholder: 'https://example.com/.well-known/openid-configuration',
+        sensitive: false,
+        helpText: 'If provided, authorization and token URLs are auto-discovered',
+      },
+      {
+        key: 'authorizationUrl',
+        label: 'Authorization URL',
+        placeholder: 'https://example.com/oauth/authorize',
+        sensitive: false,
+        helpText: 'Required if Discovery URL is not provided',
+      },
+      {
+        key: 'tokenUrl',
+        label: 'Token URL',
+        placeholder: 'https://example.com/oauth/token',
+        sensitive: false,
+        helpText: 'Required if Discovery URL is not provided',
+      },
+      {
+        key: 'scopes',
+        label: 'Scopes',
+        placeholder: 'openid email profile',
+        sensitive: false,
+        helpText: 'Space-separated list of scopes (defaults to "openid email profile")',
+      },
+    ],
   },
 ]
 

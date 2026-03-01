@@ -10,7 +10,11 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
 import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
-import { getEnabledOAuthProviders } from '@/components/auth/oauth-buttons'
+import {
+  getEnabledOAuthProviders,
+  getOAuthRedirectUrl,
+  type OAuthProviderEntry,
+} from '@/components/auth/oauth-buttons'
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/server/auth/client'
 
@@ -18,6 +22,7 @@ interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
+  customProviderNames?: Record<string, string>
 }
 
 interface InvitationInfo {
@@ -361,9 +366,9 @@ export function PortalAuthFormInline({
   }
 
   /**
-   * Initiate OAuth login using Better Auth's socialProviders.
+   * Initiate OAuth login using Better Auth's socialProviders or genericOAuth plugin.
    */
-  const initiateOAuth = async (provider: string) => {
+  const initiateOAuth = async (provider: OAuthProviderEntry) => {
     setError('')
 
     if (hasPopup()) {
@@ -371,7 +376,7 @@ export function PortalAuthFormInline({
       return
     }
 
-    setLoadingAction(provider)
+    setLoadingAction(provider.id)
     setPopupBlocked(false)
 
     const popup = openAuthPopup('about:blank')
@@ -383,17 +388,12 @@ export function PortalAuthFormInline({
     trackPopup(popup)
 
     try {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: '/auth/auth-complete',
-        disableRedirect: true,
-      })
-
-      if (result.data?.url) {
-        popup.location.href = result.data.url
+      const url = await getOAuthRedirectUrl(provider, '/auth/auth-complete')
+      if (url) {
+        popup.location.href = url
       } else {
         popup.close()
-        setError(result.error?.message || 'Failed to initiate sign in')
+        setError('Failed to initiate sign in')
         setLoadingAction(null)
       }
     } catch (err) {
@@ -404,7 +404,10 @@ export function PortalAuthFormInline({
   }
 
   // Derive which auth methods are enabled
-  const enabledProviders = getEnabledOAuthProviders(authConfig?.oauth ?? {})
+  const enabledProviders = getEnabledOAuthProviders(
+    authConfig?.oauth ?? {},
+    authConfig?.customProviderNames
+  )
   const showOAuth = enabledProviders.length > 0
 
   // Loading invitation
@@ -481,7 +484,7 @@ export function PortalAuthFormInline({
                   mode={mode}
                   loading={loadingAction === provider.id}
                   disabled={loadingAction !== null}
-                  onClick={() => initiateOAuth(provider.id)}
+                  onClick={() => initiateOAuth(provider)}
                 />
               )
             })}

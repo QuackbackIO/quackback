@@ -28,6 +28,8 @@ interface PortalAuthFormProps {
   callbackUrl?: string
   /** Auth method configuration (which methods are enabled) */
   authConfig?: PortalAuthMethods
+  /** Display name overrides for generic OAuth providers */
+  customProviderNames?: Record<string, string>
 }
 
 type Step = 'credentials' | 'email' | 'code' | 'forgot' | 'reset'
@@ -51,10 +53,11 @@ export function PortalAuthForm({
   invitationId,
   callbackUrl = '/',
   authConfig,
+  customProviderNames,
 }: PortalAuthFormProps) {
   const passwordEnabled = authConfig?.password ?? true
   const emailOtpEnabled = authConfig?.email ?? false
-  const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig) : []
+  const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig, customProviderNames) : []
 
   // Default step depends on what's enabled
   const defaultStep: Step = passwordEnabled ? 'credentials' : 'email'

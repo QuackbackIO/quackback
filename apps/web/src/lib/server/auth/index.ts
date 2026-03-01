@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { emailOTP, oneTimeToken, magicLink, jwt } from 'better-auth/plugins'
+import { emailOTP, oneTimeToken, magicLink, jwt, genericOAuth } from 'better-auth/plugins'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
@@ -62,10 +62,35 @@ async function createAuth() {
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, string>> = {}
   const trustedProviders: string[] = []
+  const genericOAuthConfigs: Array<{
+    providerId: string
+    clientId: string
+    clientSecret: string
+    discoveryUrl?: string
+    authorizationUrl?: string
+    tokenUrl?: string
+    scopes?: string[]
+  }> = []
 
   for (const provider of getAllAuthProviders()) {
     const creds = await getPlatformCredentials(provider.credentialType)
-    if (creds?.clientId && creds?.clientSecret) {
+    if (!creds?.clientId || !creds?.clientSecret) continue
+
+    if (provider.type === 'generic-oauth') {
+      // Generic OAuth providers use the genericOAuth plugin
+      const scopeStr = creds.scopes || 'openid email profile'
+      genericOAuthConfigs.push({
+        providerId: provider.id,
+        clientId: creds.clientId,
+        clientSecret: creds.clientSecret,
+        ...(creds.discoveryUrl && { discoveryUrl: creds.discoveryUrl }),
+        ...(creds.authorizationUrl && { authorizationUrl: creds.authorizationUrl }),
+        ...(creds.tokenUrl && { tokenUrl: creds.tokenUrl }),
+        scopes: scopeStr.split(/\s+/).filter(Boolean),
+      })
+      trustedProviders.push(provider.id)
+    } else {
+      // Built-in social providers
       const providerConfig: Record<string, string> = {
         clientId: creds.clientId,
         clientSecret: creds.clientSecret,
@@ -286,6 +311,9 @@ async function createAuth() {
           }
         },
       }),
+
+      // Generic OAuth plugin for custom OIDC providers (Okta, Auth0, Keycloak, etc.)
+      ...(genericOAuthConfigs.length > 0 ? [genericOAuth({ config: genericOAuthConfigs })] : []),
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

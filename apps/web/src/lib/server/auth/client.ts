@@ -1,5 +1,5 @@
 import { createAuthClient } from 'better-auth/client'
-import { emailOTPClient } from 'better-auth/client/plugins'
+import { emailOTPClient, genericOAuthClient } from 'better-auth/client/plugins'
 
 /**
  * Better-auth client for client-side authentication
@@ -13,7 +13,7 @@ import { emailOTPClient } from 'better-auth/client/plugins'
  * Note: No baseURL needed - Better Auth client defaults to current origin
  */
 export const authClient = createAuthClient({
-  plugins: [emailOTPClient()],
+  plugins: [emailOTPClient(), genericOAuthClient()],
 })
 
 /**

@@ -108,6 +108,35 @@ async function getPortalPassthroughKeys(): Promise<string[]> {
   return isEmailConfigured() ? ['email', 'password'] : ['password']
 }
 
+/**
+ * Fetch display name overrides for generic OAuth providers (e.g. custom-oidc).
+ * Returns a map of providerId → displayName for providers that have a custom displayName configured.
+ */
+async function getCustomProviderNames(
+  oauth: Record<string, boolean | undefined>,
+  configuredTypes: Set<string>
+): Promise<Record<string, string> | undefined> {
+  const { getAllAuthProviders } = await import('@/lib/server/auth/auth-providers')
+  const { getPlatformCredentials } =
+    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+
+  const genericProviders = getAllAuthProviders().filter(
+    (p) => p.type === 'generic-oauth' && oauth[p.id] && configuredTypes.has(p.credentialType)
+  )
+
+  if (genericProviders.length === 0) return undefined
+
+  const names: Record<string, string> = {}
+  for (const provider of genericProviders) {
+    const creds = await getPlatformCredentials(provider.credentialType)
+    if (creds?.displayName) {
+      names[provider.id] = creds.displayName
+    }
+  }
+
+  return Object.keys(names).length > 0 ? names : undefined
+}
+
 export async function getAuthConfig(): Promise<AuthConfig> {
   try {
     const org = await requireSettings()
@@ -506,9 +535,12 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
     const configuredTypes = await getConfiguredAuthTypes()
+    const filteredOAuth = filterOAuthByCredentials(authConfig.oauth, configuredTypes, ['password'])
+    const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
     return {
-      oauth: filterOAuthByCredentials(authConfig.oauth, configuredTypes, ['password']),
+      oauth: filteredOAuth,
       openSignup: authConfig.openSignup,
+      ...(customProviderNames && { customProviderNames }),
     }
   } catch (error) {
     wrapDbError('fetch public auth config', error)
@@ -524,9 +556,16 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       getConfiguredAuthTypes(),
       getPortalPassthroughKeys(),
     ])
+    const filteredOAuth = filterOAuthByCredentials(
+      portalConfig.oauth,
+      configuredTypes,
+      passthroughKeys
+    )
+    const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
     return {
-      oauth: filterOAuthByCredentials(portalConfig.oauth, configuredTypes, passthroughKeys),
+      oauth: filteredOAuth,
       features: portalConfig.features,
+      ...(customProviderNames && { customProviderNames }),
     }
   } catch (error) {
     wrapDbError('fetch public portal config', error)
@@ -587,6 +626,10 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       configuredTypes,
       portalPassthroughKeys
     )
+    const [authCustomNames, portalCustomNames] = await Promise.all([
+      getCustomProviderNames(filteredAuthOAuth, configuredTypes),
+      getCustomProviderNames(filteredPortalOAuth, configuredTypes),
+    ])
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -606,10 +649,15 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       brandingConfig,
       developerConfig,
       customCss: org.customCss ?? '',
-      publicAuthConfig: { oauth: filteredAuthOAuth, openSignup: authConfig.openSignup },
+      publicAuthConfig: {
+        oauth: filteredAuthOAuth,
+        openSignup: authConfig.openSignup,
+        ...(authCustomNames && { customProviderNames: authCustomNames }),
+      },
       publicPortalConfig: {
         oauth: filteredPortalOAuth,
         features: portalConfig.features,
+        ...(portalCustomNames && { customProviderNames: portalCustomNames }),
       },
       publicWidgetConfig: {
         enabled: widgetConfig.enabled,

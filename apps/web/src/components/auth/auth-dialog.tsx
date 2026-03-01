@@ -13,6 +13,7 @@ interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
+  customProviderNames?: Record<string, string>
 }
 
 interface AuthDialogProps {

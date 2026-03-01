@@ -283,6 +283,8 @@ export interface UpdatePortalConfigInput {
 export interface PublicAuthConfig {
   oauth: OAuthProviders
   openSignup: boolean
+  /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
+  customProviderNames?: Record<string, string>
 }
 
 /**
@@ -291,4 +293,6 @@ export interface PublicAuthConfig {
 export interface PublicPortalConfig {
   oauth: PortalAuthMethods
   features: PortalFeatures
+  /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
+  customProviderNames?: Record<string, string>
 }
