@@ -8,7 +8,8 @@ import { TimeAgo } from '@/components/ui/time-ago'
 
 interface PostSummaryJson {
   summary: string
-  suggestions: string[]
+  keyQuotes: string[]
+  nextSteps: string[]
 }
 
 interface AiSummaryCardProps {
@@ -80,15 +81,29 @@ export function AiSummaryCard({
             {/* Summary prose */}
             <p className="text-sm text-foreground/90 leading-relaxed">{summaryJson.summary}</p>
 
-            {/* Suggestions */}
-            {summaryJson.suggestions.length > 0 && (
+            {/* Key quotes */}
+            {summaryJson.keyQuotes.length > 0 && (
+              <div className="space-y-1.5">
+                {summaryJson.keyQuotes.map((quote, i) => (
+                  <p
+                    key={i}
+                    className="text-sm italic text-muted-foreground border-l-2 border-border/60 pl-3"
+                  >
+                    &ldquo;{quote}&rdquo;
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {/* Next steps */}
+            {summaryJson.nextSteps.length > 0 && (
               <div>
-                <span className="text-xs font-medium text-muted-foreground">Suggestions:</span>
+                <span className="text-xs font-medium text-muted-foreground">Next Steps:</span>
                 <ul className="mt-1 space-y-0.5">
-                  {summaryJson.suggestions.map((suggestion, i) => (
+                  {summaryJson.nextSteps.map((step, i) => (
                     <li key={i} className="text-xs text-foreground/70 flex gap-1.5">
                       <span className="text-muted-foreground/60 shrink-0">-</span>
-                      {suggestion}
+                      {step}
                     </li>
                   ))}
                 </ul>

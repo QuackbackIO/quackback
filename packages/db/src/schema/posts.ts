@@ -100,10 +100,11 @@ export const posts = pgTable(
     // Track model version for future upgrades (allows re-embedding without data loss)
     embeddingModel: text('embedding_model'),
     embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
-    // AI-generated post summary (structured JSON: { summary, suggestions })
+    // AI-generated post summary (structured JSON for PM triage)
     summaryJson: jsonb('summary_json').$type<{
       summary: string
-      suggestions: string[]
+      keyQuotes: string[]
+      nextSteps: string[]
     }>(),
     summaryModel: text('summary_model'),
     summaryUpdatedAt: timestamp('summary_updated_at', { withTimezone: true }),

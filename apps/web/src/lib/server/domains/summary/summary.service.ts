@@ -2,7 +2,7 @@
  * Post summary service.
  *
  * Generates AI-powered structured summaries of posts and their comment threads.
- * Summaries include a prose overview, key themes, and actionable suggestions.
+ * Summaries include a prose overview, urgency level, key quotes, and next steps.
  */
 
 import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
@@ -12,13 +12,35 @@ import type { PostId } from '@quackback/ids'
 
 const SUMMARY_MODEL = 'google/gemini-2.5-flash'
 
-const SYSTEM_PROMPT = `You are a product feedback analyst. Summarize this post and its comment thread for a product team member.
+const SYSTEM_PROMPT = `You are a product feedback analyst writing post briefs for a PM's triage queue.
+Your job is to surface what matters for prioritization, not restate the obvious.
 
-Return JSON with:
-- "summary": 1-3 sentence overview of the feedback and discussion
-- "suggestions": array of 0-3 notable actionable suggestions from commenters (omit if none)
+Return strict JSON only:
+{
+  "summary": "string",
+  "keyQuotes": ["string"],
+  "nextSteps": ["string"]
+}
 
-Be concise and focus on what matters for product decisions.`
+Rules for "summary" (1-3 sentences):
+- Lead with the core user need or problem, not "Users are requesting X."
+- Name specifics: what feature, what workflow, what breaks.
+- If comments add context beyond the original post, synthesize it.
+- If there is disagreement or pushback in the thread, note the tension.
+- Write for a PM who has 5 seconds to decide whether to dig deeper.
+- BAD: "Users are requesting improvements to the export functionality."
+- GOOD: "CSV exports silently drop columns with special characters, affecting 3 users doing financial reporting. Team acknowledged but no fix timeline given."
+
+Rules for "keyQuotes" (0-2):
+- Only quote user/customer text, never team replies.
+- Pick quotes that capture the emotional or factual core.
+- Keep each under 120 characters. Truncate with "..." if needed.
+- Omit if the post body alone is sufficient.
+
+Rules for "nextSteps" (0-2):
+- Start each with a verb: "Investigate...", "Reproduce...", "Respond to..."
+- Only include when the discussion has enough specificity for a real action.
+- Never include generic advice like "Consider user feedback."`
 
 /** Strip markdown code fences that some models wrap around JSON responses. */
 function stripCodeFences(text: string): string {
@@ -27,7 +49,8 @@ function stripCodeFences(text: string): string {
 
 interface PostSummaryJson {
   summary: string
-  suggestions: string[]
+  keyQuotes: string[]
+  nextSteps: string[]
 }
 
 /**
@@ -41,12 +64,18 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   // Fetch post (include existing summary for continuity on updates)
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    columns: { title: true, content: true, commentCount: true, summaryJson: true },
+    columns: { title: true, content: true, summaryJson: true },
   })
   if (!post) {
     console.warn(`[Summary] Post ${postId} not found`)
     return
   }
+
+  // Live comment count (not denormalized)
+  const [{ count: liveCommentCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(comments)
+    .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
 
   // Fetch comments (lightweight: just content and author name)
   const postComments = await db
@@ -83,7 +112,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
   const systemPrompt = existingSummary
     ? SYSTEM_PROMPT +
-      '\n\nA previous summary is included. Update it to reflect the current state of the discussion — preserve existing themes and suggestions that are still relevant, and incorporate any new information from recent comments.'
+      '\n\nA previous summary is included. Update it to reflect the current state of the discussion — preserve existing context that is still relevant, and incorporate any new information from recent comments.'
     : SYSTEM_PROMPT
 
   const completion = await withRetry(() =>
@@ -121,8 +150,12 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     return
   }
 
-  if (!Array.isArray(summaryJson.suggestions)) {
-    summaryJson.suggestions = []
+  // Coerce arrays
+  if (!Array.isArray(summaryJson.keyQuotes)) {
+    summaryJson.keyQuotes = []
+  }
+  if (!Array.isArray(summaryJson.nextSteps)) {
+    summaryJson.nextSteps = []
   }
 
   await db
@@ -131,7 +164,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       summaryJson,
       summaryModel: SUMMARY_MODEL,
       summaryUpdatedAt: new Date(),
-      summaryCommentCount: post.commentCount,
+      summaryCommentCount: liveCommentCount,
     })
     .where(eq(posts.id, postId))
 
@@ -141,9 +174,20 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_BATCH_DELAY_MS = 500
 
+/** Subquery: live comment count per post (non-deleted comments only). */
+const liveCommentCountSq = db
+  .select({
+    postId: comments.postId,
+    count: sql<number>`count(*)::int`.as('live_count'),
+  })
+  .from(comments)
+  .where(isNull(comments.deletedAt))
+  .groupBy(comments.postId)
+  .as('live_cc')
+
 /**
  * Refresh stale summaries.
- * Finds all posts where the summary is missing or the comment count has changed,
+ * Finds all posts where the summary is missing or the live comment count has changed,
  * and processes them in batches until none remain.
  */
 export async function refreshStaleSummaries(): Promise<void> {
@@ -157,10 +201,14 @@ export async function refreshStaleSummaries(): Promise<void> {
     const stalePosts = await db
       .select({ id: posts.id })
       .from(posts)
+      .leftJoin(liveCommentCountSq, eq(posts.id, liveCommentCountSq.postId))
       .where(
         and(
           isNull(posts.deletedAt),
-          or(isNull(posts.summaryJson), ne(posts.summaryCommentCount, posts.commentCount))
+          or(
+            isNull(posts.summaryJson),
+            ne(posts.summaryCommentCount, sql`coalesce(${liveCommentCountSq.count}, 0)`)
+          )
         )
       )
       .orderBy(desc(posts.updatedAt))
@@ -173,10 +221,14 @@ export async function refreshStaleSummaries(): Promise<void> {
       const [{ count: totalStale }] = await db
         .select({ count: sql<number>`count(*)` })
         .from(posts)
+        .leftJoin(liveCommentCountSq, eq(posts.id, liveCommentCountSq.postId))
         .where(
           and(
             isNull(posts.deletedAt),
-            or(isNull(posts.summaryJson), ne(posts.summaryCommentCount, posts.commentCount))
+            or(
+              isNull(posts.summaryJson),
+              ne(posts.summaryCommentCount, sql`coalesce(${liveCommentCountSq.count}, 0)`)
+            )
           )
         )
       console.log(`[Summary] Found ${totalStale} stale posts, processing...`)
