@@ -158,7 +158,9 @@ describe('merge-check.service', () => {
       const { checkPostForMergeCandidates } = await import('../merge-check.service')
       await checkPostForMergeCandidates(postId)
 
-      expect(mockFindMergeCandidates).toHaveBeenCalledWith(postId)
+      expect(mockFindMergeCandidates).toHaveBeenCalledWith(postId, {
+        sourcePost: { title: 'Test', embedding: [0.1, 0.2] },
+      })
       expect(mockAssessMergeCandidates).not.toHaveBeenCalled()
       // Should still update mergeCheckedAt
       expect(mockUpdateSet).toHaveBeenCalled()
