@@ -103,7 +103,7 @@ export function InboxFiltersPanel({
 
       {/* Segments Filter */}
       {segments && segments.length > 0 && (
-        <FilterSection title="Segments" defaultOpen={false}>
+        <FilterSection title="Segments" defaultOpen={true}>
           <div className="space-y-0.5">
             {segments.map((segment) => {
               const isSelected = filters.segmentIds?.includes(segment.id)

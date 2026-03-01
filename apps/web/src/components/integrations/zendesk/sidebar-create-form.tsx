@@ -4,6 +4,13 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ArrowLeftIcon, Loader2Icon } from 'lucide-react'
 import { useAppContext } from './use-app-context'
 
@@ -105,18 +112,18 @@ export function SidebarCreateForm({ initialTitle, onBack, onCreated }: SidebarCr
           <Label htmlFor="board" className="text-xs">
             Board
           </Label>
-          <select
-            id="board"
-            value={boardId}
-            onChange={(e) => setBoardId(e.target.value)}
-            className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
-          >
-            {boards.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <Select value={boardId} onValueChange={setBoardId}>
+            <SelectTrigger className="mt-1 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {boards.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div>

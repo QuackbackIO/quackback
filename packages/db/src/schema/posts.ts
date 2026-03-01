@@ -100,6 +100,17 @@ export const posts = pgTable(
     // Track model version for future upgrades (allows re-embedding without data loss)
     embeddingModel: text('embedding_model'),
     embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
+    // AI-generated post summary (structured JSON for PM triage)
+    summaryJson: jsonb('summary_json').$type<{
+      summary: string
+      keyQuotes: string[]
+      nextSteps: string[]
+    }>(),
+    summaryModel: text('summary_model'),
+    summaryUpdatedAt: timestamp('summary_updated_at', { withTimezone: true }),
+    summaryCommentCount: integer('summary_comment_count'),
+    // Merge suggestion staleness tracking
+    mergeCheckedAt: timestamp('merge_checked_at', { withTimezone: true }),
   },
   (table) => [
     index('posts_board_id_idx').on(table.boardId),
@@ -197,7 +208,9 @@ export const votes = pgTable(
     index('votes_principal_id_idx').on(table.principalId),
     index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
     // Partial index for finding integration-sourced votes
-    index('votes_source_type_idx').on(table.sourceType).where(sql`source_type IS NOT NULL`),
+    index('votes_source_type_idx')
+      .on(table.sourceType)
+      .where(sql`source_type IS NOT NULL`),
   ]
 )
 

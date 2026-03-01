@@ -30,7 +30,8 @@ function LoginPage() {
 
   // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
-  const authConfig = portalConfigQuery.data.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
+  const portalConfig = portalConfigQuery.data
+  const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -39,7 +40,12 @@ function LoginPage() {
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="mt-2 text-muted-foreground">Sign in to your account</p>
         </div>
-        <PortalAuthForm mode="login" callbackUrl="/" authConfig={authConfig} />
+        <PortalAuthForm
+          mode="login"
+          callbackUrl="/"
+          authConfig={authConfig}
+          customProviderNames={portalConfig.customProviderNames}
+        />
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
           <Link to="/auth/signup" className="font-medium text-primary hover:underline">

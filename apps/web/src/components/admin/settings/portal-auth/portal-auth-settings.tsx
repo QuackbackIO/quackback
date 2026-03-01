@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
 import { AUTH_PROVIDERS } from '@/lib/server/auth/auth-providers'
+import { cn } from '@/lib/shared/utils'
 import { AuthProviderCredentialsDialog } from './auth-provider-credentials-dialog'
 import type { PortalAuthMethods } from '@/lib/server/domains/settings'
 
@@ -227,118 +228,99 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
             />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProviders.map((provider) => {
             const isConfigured = credentialStatus[provider.id]
             const isEnabled = !!oauthState[provider.id]
             const IconComponent = AUTH_PROVIDER_ICON_MAP[provider.id]
 
+            const icon = (
+              <div
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg shrink-0',
+                  isConfigured ? provider.iconBg : provider.iconBg + ' opacity-60'
+                )}
+              >
+                {IconComponent ? (
+                  <IconComponent className="h-4 w-4 text-white" />
+                ) : (
+                  <span className="text-white font-semibold text-xs">
+                    {provider.name.charAt(0)}
+                  </span>
+                )}
+              </div>
+            )
+
             if (!isConfigured) {
-              // Unconfigured: dashed border with configure hover overlay (matches integration pattern)
               return (
                 <button
                   key={provider.id}
                   type="button"
                   onClick={() => openConfigDialog(provider)}
-                  className="group relative rounded-xl border border-dashed border-border/40 bg-muted/10 p-5 text-left transition-all hover:border-border/60"
+                  className="group flex items-center gap-3 rounded-lg border border-dashed border-border/40 bg-muted/10 p-3 text-left transition-all hover:border-border/60"
                 >
-                  {/* Hover overlay */}
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-background/80 opacity-0 transition-opacity group-hover:opacity-100">
-                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Cog6ToothIcon className="h-4 w-4" />
-                      Configure
+                  {icon}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground">{provider.name}</p>
+                    <div className="mt-0.5">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+                      >
+                        Not configured
+                      </Badge>
                     </div>
                   </div>
-
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider.iconBg} opacity-60`}
-                    >
-                      {IconComponent ? (
-                        <IconComponent className="h-5 w-5 text-white" />
-                      ) : (
-                        <span className="text-white font-semibold text-sm">
-                          {provider.name.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-muted-foreground">{provider.name}</h3>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
-                        >
-                          Not configured
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground/60">
-                        Sign in with {provider.name}
-                      </p>
-                    </div>
-                  </div>
+                  <Cog6ToothIcon className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
                 </button>
               )
             }
 
-            // Configured: normal card with toggle (matches integration "available" card)
             return (
               <div
                 key={provider.id}
-                className="rounded-xl border border-border/50 bg-card p-5 shadow-sm"
+                className="flex items-center gap-3 rounded-lg border border-border/50 bg-card p-3 shadow-sm"
               >
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${provider.iconBg}`}
-                  >
-                    {IconComponent ? (
-                      <IconComponent className="h-5 w-5 text-white" />
-                    ) : (
-                      <span className="text-white font-semibold text-sm">
-                        {provider.name.charAt(0)}
-                      </span>
+                {icon}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{provider.name}</p>
+                    {isEnabled && (
+                      <Badge
+                        variant="outline"
+                        className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+                      >
+                        Enabled
+                      </Badge>
+                    )}
+                    {isLastEnabledMethod(provider.id) && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>At least one authentication method must be enabled</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-foreground">{provider.name}</h3>
-                      {isEnabled && (
-                        <Badge
-                          variant="outline"
-                          className="border-green-500/30 text-green-600 text-xs"
-                        >
-                          Enabled
-                        </Badge>
-                      )}
-                      {isLastEnabledMethod(provider.id) && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>At least one authentication method must be enabled</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openConfigDialog(provider)}
-                      className="mt-1 text-sm text-primary hover:underline"
-                    >
-                      Update credentials
-                    </button>
-                  </div>
-                  <Switch
-                    id={`${provider.id}-toggle`}
-                    checked={isEnabled}
-                    onCheckedChange={(checked) => handleToggle(provider.id, checked)}
-                    disabled={saving || isPending || isLastEnabledMethod(provider.id)}
-                    className="flex-shrink-0 mt-0.5"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => openConfigDialog(provider)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Update credentials
+                  </button>
                 </div>
+                <Switch
+                  id={`${provider.id}-toggle`}
+                  checked={isEnabled}
+                  onCheckedChange={(checked) => handleToggle(provider.id, checked)}
+                  disabled={saving || isPending || isLastEnabledMethod(provider.id)}
+                  className="flex-shrink-0"
+                />
               </div>
             )
           })}

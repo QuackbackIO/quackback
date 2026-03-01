@@ -53,6 +53,7 @@
     "import": "bun scripts/import/cli.ts",
     "import:uservoice": "bun scripts/import/cli.ts uservoice",
     "ai:backfill": "bun apps/web/scripts/backfill-ai.ts",
+    "merge:backfill": "bun apps/web/scripts/backfill-merge-suggestions.ts",
     "prepare": "husky"
   },
   "type": "module",

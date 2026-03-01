@@ -46,7 +46,13 @@ export {
 export { usePostActions, type EditPostInput } from './portal-post-actions'
 
 // Integration mutations
-export { useUpdateIntegration, useDeleteIntegration } from './integrations'
+export {
+  useUpdateIntegration,
+  useDeleteIntegration,
+  useAddNotificationChannel,
+  useUpdateNotificationChannel,
+  useRemoveNotificationChannel,
+} from './integrations'
 
 // Status sync mutations
 export { useEnableStatusSync, useDisableStatusSync, useUpdateStatusMappings } from './status-sync'

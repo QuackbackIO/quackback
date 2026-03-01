@@ -11,7 +11,11 @@ import { config } from '@/lib/server/config'
 let openai: OpenAI | null = null
 
 /**
- * Get OpenAI client. Routes through Cloudflare AI Gateway if configured.
+ * Get the OpenAI client instance, or `null` when AI is not configured.
+ *
+ * This is the single guard for all AI functionality. Callers should handle
+ * `null` by returning early, falling back to a non-AI path, or throwing
+ * `UnrecoverableError` (BullMQ workers).
  */
 export function getOpenAI(): OpenAI | null {
   if (!config.openaiApiKey) return null
@@ -22,11 +26,4 @@ export function getOpenAI(): OpenAI | null {
     })
   }
   return openai
-}
-
-/**
- * Check if AI features are enabled (OpenAI API key is configured).
- */
-export function isAIEnabled(): boolean {
-  return !!config.openaiApiKey
 }

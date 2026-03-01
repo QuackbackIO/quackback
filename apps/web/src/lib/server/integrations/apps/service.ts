@@ -6,16 +6,7 @@
  * Integration-type agnostic — the integrationType field distinguishes sources.
  */
 
-import {
-  db,
-  eq,
-  and,
-  sql,
-  posts,
-  boards,
-  postStatuses,
-  postExternalLinks,
-} from '@/lib/server/db'
+import { db, eq, and, sql, posts, boards, postStatuses, postExternalLinks } from '@/lib/server/db'
 import { createId, fromUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'

@@ -31,6 +31,8 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
+import { MergeSuggestionBanner } from '@/components/admin/feedback/merge-suggestion-banner'
+import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -45,7 +47,7 @@ import {
 import { DeletePostDialog } from '@/components/public/post-detail/delete-post-dialog'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
-import { Route } from '@/routes/admin/feedback'
+import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
   type StatusId,
@@ -377,6 +379,9 @@ function PostModalContent({
           <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
         )}
 
+        {/* AI merge suggestion banner */}
+        {!post.mergeInfo && <MergeSuggestionBanner postId={post.id as PostId} />}
+
         {/* 2-column layout for editor and metadata */}
         <div className="flex">
           {/* Left: Content editor */}
@@ -414,6 +419,16 @@ function PostModalContent({
                 embeds: false,
               }}
             />
+
+            {/* AI Summary */}
+            {post.summaryJson && (
+              <AiSummaryCard
+                summaryJson={post.summaryJson}
+                summaryUpdatedAt={post.summaryUpdatedAt ?? null}
+                summaryCommentCount={post.summaryCommentCount ?? null}
+                currentCommentCount={post.commentCount ?? 0}
+              />
+            )}
           </div>
 
           {/* Right: Metadata sidebar */}
@@ -510,13 +525,13 @@ function PostModalContent({
 }
 
 export function PostModal({ postId: urlPostId, currentUser }: PostModalProps) {
-  const search = Route.useSearch()
+  const { pathname, search } = useRouterState({ select: (s) => s.location })
   const { open, validatedId, close, navigateTo } = useUrlModal<PostId>({
     urlId: urlPostId,
     idPrefix: 'post',
     searchParam: 'post',
-    route: '/admin/feedback',
-    search,
+    route: pathname,
+    search: search as Record<string, unknown>,
   })
 
   return (

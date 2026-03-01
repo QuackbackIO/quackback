@@ -134,7 +134,7 @@ export function PostCard({
 
   async function handleCopyLink(): Promise<void> {
     try {
-      const url = `${window.location.origin}/admin/feedback/posts/${id}`
+      const url = `${window.location.origin}/admin/feedback?post=${id}`
       await navigator.clipboard.writeText(url)
       toast.success('Link copied to clipboard')
     } catch {

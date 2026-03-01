@@ -91,6 +91,14 @@ export type {
   UserAttributeId,
   // AI entities
   SentimentId,
+  // Feedback aggregation entities
+  FeedbackSourceId,
+  RawFeedbackItemId,
+  FeedbackSignalId,
+  FeedbackSuggestionId,
+  FeedbackCorrectionId,
+  ExternalUserMappingId,
+  MergeSuggestionId,
   // Auth entities
   WorkspaceId,
   UserId,
@@ -149,6 +157,12 @@ export {
   invoiceIdSchema,
   domainIdSchema,
   segmentIdSchema,
+  // Pre-built strict schemas - feedback aggregation
+  feedbackSourceIdSchema,
+  rawFeedbackItemIdSchema,
+  feedbackSignalIdSchema,
+  feedbackCorrectionIdSchema,
+  externalUserMappingIdSchema,
   // Pre-built flexible schemas
   flexibleSegmentIdSchema,
   flexiblePostIdSchema,
@@ -169,6 +183,12 @@ export {
   flexibleSubscriptionIdSchema,
   flexibleInvoiceIdSchema,
   flexibleDomainIdSchema,
+  // Pre-built flexible schemas - feedback aggregation
+  flexibleFeedbackSourceIdSchema,
+  flexibleRawFeedbackItemIdSchema,
+  flexibleFeedbackSignalIdSchema,
+  flexibleFeedbackCorrectionIdSchema,
+  flexibleExternalUserMappingIdSchema,
   // Array schemas
   tagIdsSchema,
   postIdsSchema,

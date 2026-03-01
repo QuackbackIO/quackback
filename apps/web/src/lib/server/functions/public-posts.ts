@@ -650,7 +650,6 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
       const { db, posts, boards, postStatuses, and, isNull, desc, sql, inArray } =
         await import('@/lib/server/db')
       const { generateEmbedding } = await import('@/lib/server/domains/embeddings')
-      const { isAIEnabled } = await import('@/lib/server/domains/ai/config')
 
       const searchQuery = data.title.trim()
       const limit = data.limit ?? 5
@@ -686,7 +685,6 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
 
       // Vector search: embedding generation + vector query
       const vectorPromise = (async (): Promise<RawSearchResult[]> => {
-        if (!isAIEnabled()) return []
         try {
           const embedding = await generateEmbedding(searchQuery)
           if (!embedding) return []

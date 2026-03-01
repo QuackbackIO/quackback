@@ -216,6 +216,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     dateFrom,
     dateTo,
     minVotes,
+    minComments,
     responded,
     updatedBefore,
     showDeleted,
@@ -281,6 +282,11 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // Min votes filter
   if (minVotes !== undefined && minVotes > 0) {
     conditions.push(sql`${posts.voteCount} >= ${minVotes}`)
+  }
+
+  // Min comments filter
+  if (minComments !== undefined && minComments > 0) {
+    conditions.push(sql`${posts.commentCount} >= ${minComments}`)
   }
 
   // Tag filter - use subquery to find posts with at least one of the selected tags

@@ -99,6 +99,31 @@ export type UserAttributeId = TypeId<'user_attr'>
 export type SentimentId = TypeId<'sentiment'>
 
 // ============================================
+// Feedback Aggregation Entity IDs
+// ============================================
+
+/** Feedback source ID - e.g., feedback_source_01h455vb4pex5vsknk084sn02q */
+export type FeedbackSourceId = TypeId<'feedback_source'>
+
+/** Raw feedback item ID - e.g., raw_feedback_01h455vb4pex5vsknk084sn02q */
+export type RawFeedbackItemId = TypeId<'raw_feedback'>
+
+/** Feedback signal ID - e.g., feedback_signal_01h455vb4pex5vsknk084sn02q */
+export type FeedbackSignalId = TypeId<'feedback_signal'>
+
+/** Feedback suggestion ID - e.g., feedback_suggestion_01h455vb4pex5vsknk084sn02q */
+export type FeedbackSuggestionId = TypeId<'feedback_suggestion'>
+
+/** Feedback signal correction ID - e.g., signal_correction_01h455vb4pex5vsknk084sn02q */
+export type FeedbackCorrectionId = TypeId<'signal_correction'>
+
+/** External user mapping ID - e.g., user_mapping_01h455vb4pex5vsknk084sn02q */
+export type ExternalUserMappingId = TypeId<'user_mapping'>
+
+/** Merge suggestion ID - e.g., merge_sug_01h455vb4pex5vsknk084sn02q */
+export type MergeSuggestionId = TypeId<'merge_sug'>
+
+// ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
 
@@ -171,6 +196,13 @@ export interface EntityIdMap {
   segment: SegmentId
   user_attr: UserAttributeId
   sentiment: SentimentId
+  feedback_source: FeedbackSourceId
+  raw_feedback: RawFeedbackItemId
+  feedback_signal: FeedbackSignalId
+  feedback_suggestion: FeedbackSuggestionId
+  signal_correction: FeedbackCorrectionId
+  user_mapping: ExternalUserMappingId
+  merge_suggestion: MergeSuggestionId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId

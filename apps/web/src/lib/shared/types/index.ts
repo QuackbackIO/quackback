@@ -10,7 +10,13 @@
  */
 
 // Filter types
-export type { InboxFilters, PublicFeedbackFilters, RoadmapFilters, UsersFilters } from './filters'
+export type {
+  InboxFilters,
+  PublicFeedbackFilters,
+  RoadmapFilters,
+  SuggestionsFilters,
+  UsersFilters,
+} from './filters'
 
 // Inbox/post detail types
 export type {

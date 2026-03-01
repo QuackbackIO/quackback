@@ -204,7 +204,17 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             isEvaluating={evaluatingId}
           />
         }
-        userList={
+      >
+        {selectedUserId ? (
+          <UserDetail
+            user={selectedUser ?? null}
+            isLoading={isLoadingUser}
+            onClose={() => setSelectedUserId(null)}
+            onRemoveUser={handleRemoveUser}
+            isRemovePending={removePortalUser.isPending}
+            currentMemberRole={currentMemberRole}
+          />
+        ) : (
           <UsersList
             users={users}
             hasMore={!!hasMore}
@@ -223,18 +233,8 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             onSelectSegment={handleSelectSegment}
             onClearSegments={handleClearSegments}
           />
-        }
-        userDetail={
-          <UserDetail
-            user={selectedUser ?? null}
-            isLoading={isLoadingUser}
-            onClose={() => setSelectedUserId(null)}
-            onRemoveUser={handleRemoveUser}
-            isRemovePending={removePortalUser.isPending}
-            currentMemberRole={currentMemberRole}
-          />
-        }
-      />
+        )}
+      </UsersLayout>
 
       {/* Create dialog */}
       <SegmentFormDialog

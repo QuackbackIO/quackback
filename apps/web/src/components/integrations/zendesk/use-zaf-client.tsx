@@ -57,9 +57,7 @@ export function useZafClient(): ZafState {
     if (hasZafParams) {
       loadZafSdk()
         .then(initializeZaf)
-        .catch((err) =>
-          setState((s) => ({ ...s, status: 'error', error: String(err) }))
-        )
+        .catch((err) => setState((s) => ({ ...s, status: 'error', error: String(err) })))
     } else {
       // Local development fallback: read from URL params
       const apiKey = params.get('key')

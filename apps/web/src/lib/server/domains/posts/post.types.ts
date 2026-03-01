@@ -115,6 +115,7 @@ export interface InboxPostListParams {
   dateFrom?: Date
   dateTo?: Date
   minVotes?: number
+  minComments?: number
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date

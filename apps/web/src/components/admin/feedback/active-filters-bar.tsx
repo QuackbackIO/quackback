@@ -8,6 +8,7 @@ import {
   CalendarIcon,
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
+  ChatBubbleOvalLeftIcon,
   TrashIcon,
   PlusIcon,
   ChevronRightIcon,
@@ -30,6 +31,7 @@ interface ActiveFilter {
     | 'owner'
     | 'date'
     | 'minVotes'
+    | 'minComments'
     | 'responded'
     | 'deleted'
   label: string
@@ -63,6 +65,7 @@ type FilterCategory =
   | 'owner'
   | 'date'
   | 'votes'
+  | 'comments'
   | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
@@ -79,6 +82,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'owner', label: 'Assigned to', icon: UserIcon },
   { key: 'date', label: 'Created date', icon: CalendarIcon },
   { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
+  { key: 'comments', label: 'Comment count', icon: ChatBubbleOvalLeftIcon },
   { key: 'response', label: 'Team response', icon: ChatBubbleLeftRightIcon },
 ]
 
@@ -88,6 +92,14 @@ const VOTE_THRESHOLDS = [
   { value: 25, label: '25+ votes' },
   { value: 50, label: '50+ votes' },
   { value: 100, label: '100+ votes' },
+]
+
+const COMMENT_THRESHOLDS = [
+  { value: 1, label: '1+ comments' },
+  { value: 5, label: '5+ comments' },
+  { value: 10, label: '10+ comments' },
+  { value: 25, label: '25+ comments' },
+  { value: 50, label: '50+ comments' },
 ]
 
 function getDateFromDaysAgo(days: number): string {
@@ -185,8 +197,8 @@ function AddFilterButton({
     closePopover()
   }
 
-  const handleSelectVotes = (minVotes: number) => {
-    onFiltersChange({ minVotes })
+  const handleSelectThreshold = (key: 'minVotes' | 'minComments', value: number) => {
+    onFiltersChange({ [key]: value })
     closePopover()
   }
 
@@ -318,7 +330,17 @@ function AddFilterButton({
                 VOTE_THRESHOLDS.map((threshold) => (
                   <MenuButton
                     key={threshold.value}
-                    onClick={() => handleSelectVotes(threshold.value)}
+                    onClick={() => handleSelectThreshold('minVotes', threshold.value)}
+                  >
+                    {threshold.label}
+                  </MenuButton>
+                ))}
+
+              {activeCategory === 'comments' &&
+                COMMENT_THRESHOLDS.map((threshold) => (
+                  <MenuButton
+                    key={threshold.value}
+                    onClick={() => handleSelectThreshold('minComments', threshold.value)}
                   >
                     {threshold.label}
                   </MenuButton>
@@ -351,6 +373,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     owner: UserIcon,
     date: CalendarIcon,
     minVotes: ArrowTrendingUpIcon,
+    minComments: ChatBubbleOvalLeftIcon,
     responded: ChatBubbleLeftRightIcon,
     deleted: TrashIcon,
   }
@@ -577,24 +600,35 @@ function computeActiveFilters(
     })
   }
 
-  // Min votes - dropdown with thresholds
-  const voteOptions: FilterOption[] = VOTE_THRESHOLDS.map((t) => ({
-    id: t.value.toString(),
-    label: t.label,
-  }))
+  // Numeric threshold filters (votes, comments)
+  const thresholdFilters: Array<{
+    key: 'minVotes' | 'minComments'
+    label: string
+    thresholds: typeof VOTE_THRESHOLDS
+  }> = [
+    { key: 'minVotes', label: 'Min votes:', thresholds: VOTE_THRESHOLDS },
+    { key: 'minComments', label: 'Min comments:', thresholds: COMMENT_THRESHOLDS },
+  ]
 
-  if (filters.minVotes) {
-    const matchedThreshold = VOTE_THRESHOLDS.find((t) => t.value === filters.minVotes)
+  for (const { key, label, thresholds } of thresholdFilters) {
+    const current = filters[key]
+    if (!current) continue
+
+    const options: FilterOption[] = thresholds.map((t) => ({
+      id: t.value.toString(),
+      label: t.label,
+    }))
+    const matched = thresholds.find((t) => t.value === current)
 
     result.push({
-      key: 'minVotes',
-      type: 'minVotes',
-      label: 'Min votes:',
-      value: matchedThreshold ? matchedThreshold.label : `${filters.minVotes}+`,
-      valueId: filters.minVotes.toString(),
-      options: voteOptions,
-      onChange: (newValue) => onFiltersChange({ minVotes: parseInt(newValue, 10) }),
-      onRemove: () => onFiltersChange({ minVotes: undefined }),
+      key,
+      type: key,
+      label,
+      value: matched ? matched.label : `${current}+`,
+      valueId: current.toString(),
+      options,
+      onChange: (newValue) => onFiltersChange({ [key]: parseInt(newValue, 10) }),
+      onRemove: () => onFiltersChange({ [key]: undefined }),
     })
   }
 

@@ -12,6 +12,7 @@ interface ChangelogMetadataSidebarProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  authorName?: string | null
 }
 
 export function ChangelogMetadataSidebar({
@@ -19,6 +20,7 @@ export function ChangelogMetadataSidebar({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  authorName,
 }: ChangelogMetadataSidebarProps) {
   return (
     <SidebarContainer className="overflow-y-auto">
@@ -27,6 +29,7 @@ export function ChangelogMetadataSidebar({
         onPublishStateChange={onPublishStateChange}
         linkedPostIds={linkedPostIds}
         onLinkedPostsChange={onLinkedPostsChange}
+        authorName={authorName}
       />
     </SidebarContainer>
   )

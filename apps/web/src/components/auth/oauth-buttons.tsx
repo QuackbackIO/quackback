@@ -9,10 +9,39 @@ import {
 } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/server/auth/client'
 
+export type OAuthProviderEntry = {
+  id: string
+  name: string
+  type: 'social' | 'generic-oauth'
+}
+
+/**
+ * Get the OAuth redirect URL for a provider.
+ * Handles routing between signIn.oauth2 (generic) and signIn.social (built-in).
+ */
+export async function getOAuthRedirectUrl(
+  provider: OAuthProviderEntry,
+  callbackURL: string
+): Promise<string | null> {
+  const result =
+    provider.type === 'generic-oauth'
+      ? await authClient.signIn.oauth2({
+          providerId: provider.id,
+          callbackURL,
+          disableRedirect: true,
+        })
+      : await authClient.signIn.social({
+          provider: provider.id,
+          callbackURL,
+          disableRedirect: true,
+        })
+  return result.data?.url ?? null
+}
+
 interface OAuthButtonsProps {
   callbackUrl?: string
   /** Dynamic list of enabled providers keyed by provider ID */
-  providers: { id: string; name: string }[]
+  providers: OAuthProviderEntry[]
   /** Callback when auth succeeds (for popup flow) */
   onSuccess?: () => void
 }
@@ -44,13 +73,13 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
     },
   })
 
-  async function handleOAuthLogin(providerId: string): Promise<void> {
+  async function handleOAuthLogin(provider: OAuthProviderEntry): Promise<void> {
     if (hasPopup()) {
       focusPopup()
       return
     }
 
-    setLoadingProvider(providerId)
+    setLoadingProvider(provider.id)
     setPopupBlocked(false)
 
     // Open popup synchronously (must be in direct response to user click)
@@ -63,15 +92,9 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
     trackPopup(popup)
 
     try {
-      // POST to Better Auth's /sign-in/social endpoint to get OAuth URL
-      const result = await authClient.signIn.social({
-        provider: providerId,
-        callbackURL: callbackUrl,
-        disableRedirect: true,
-      })
-
-      if (result.data?.url) {
-        popup.location.href = result.data.url
+      const url = await getOAuthRedirectUrl(provider, callbackUrl)
+      if (url) {
+        popup.location.href = url
       } else {
         popup.close()
         setLoadingProvider(null)
@@ -102,7 +125,7 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => handleOAuthLogin(provider.id)}
+            onClick={() => handleOAuthLogin(provider)}
             disabled={loadingProvider !== null}
           >
             {IconComponent && <IconComponent className="mr-2 h-4 w-4" />}
@@ -119,16 +142,21 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
  * Filters to only enabled OAuth providers (excludes 'email').
  */
 export function getEnabledOAuthProviders(
-  authConfig: Record<string, boolean | undefined>
-): { id: string; name: string }[] {
+  authConfig: Record<string, boolean | undefined>,
+  customProviderNames?: Record<string, string>
+): OAuthProviderEntry[] {
   const providerMap = new Map(AUTH_PROVIDERS.map((p) => [p.id, p]))
-  const result: { id: string; name: string }[] = []
+  const result: OAuthProviderEntry[] = []
 
   for (const [key, enabled] of Object.entries(authConfig)) {
     if (key === 'email' || key === 'password' || !enabled) continue
     const provider = providerMap.get(key)
     if (provider) {
-      result.push({ id: provider.id, name: provider.name })
+      result.push({
+        id: provider.id,
+        name: customProviderNames?.[provider.id] || provider.name,
+        type: provider.type === 'generic-oauth' ? 'generic-oauth' : 'social',
+      })
     }
   }
 

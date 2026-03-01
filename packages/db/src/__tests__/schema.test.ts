@@ -84,7 +84,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      expect(columns.length).toBe(24)
+      expect(columns.length).toBe(29)
     })
   })
 

@@ -3,7 +3,11 @@
  * Sends email notifications to subscribers when events occur.
  */
 
-import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
+import {
+  sendStatusChangeEmail,
+  sendNewCommentEmail,
+  sendChangelogPublishedEmail,
+} from '@quackback/email'
 import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
 import type { EventData } from '../types'
 import { isRetryableError } from '../hook-utils'
@@ -35,6 +39,16 @@ export const emailHook: HookHandler = {
           commenterName: cfg.commenterName!,
           commentPreview: cfg.commentPreview!,
           isTeamMember: cfg.isTeamMember ?? false,
+          workspaceName: cfg.workspaceName,
+          unsubscribeUrl,
+        })
+      } else if (event.type === 'changelog.published') {
+        const changelogCfg = config as Record<string, unknown>
+        result = await sendChangelogPublishedEmail({
+          to: email,
+          changelogTitle: changelogCfg.changelogTitle as string,
+          changelogUrl: changelogCfg.changelogUrl as string,
+          contentPreview: (changelogCfg.contentPreview as string) ?? '',
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
         })

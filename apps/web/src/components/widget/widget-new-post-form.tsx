@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetNewPostFormProps {
@@ -100,18 +107,18 @@ export function WidgetNewPostForm({
             <label htmlFor="widget-board" className="text-xs font-medium text-muted-foreground">
               Board
             </label>
-            <select
-              id="widget-board"
-              value={boardId}
-              onChange={(e) => setBoardId(e.target.value)}
-              className={`mt-1 ${inputClass}`}
-            >
-              {boards.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            <Select value={boardId} onValueChange={setBoardId}>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {boards.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

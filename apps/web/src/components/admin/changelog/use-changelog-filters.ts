@@ -6,6 +6,7 @@ export type ChangelogStatusFilter = 'all' | 'draft' | 'scheduled' | 'published'
 
 export interface ChangelogFilters {
   status: ChangelogStatusFilter
+  search?: string
 }
 
 export function useChangelogFilters() {
@@ -15,8 +16,9 @@ export function useChangelogFilters() {
   const filters: ChangelogFilters = useMemo(
     () => ({
       status: search.status ?? 'all',
+      search: search.search,
     }),
-    [search.status]
+    [search.status, search.search]
   )
 
   const setFilters = useCallback(
@@ -27,6 +29,9 @@ export function useChangelogFilters() {
           ...search,
           ...('status' in updates && {
             status: updates.status === 'all' ? undefined : updates.status,
+          }),
+          ...('search' in updates && {
+            search: updates.search || undefined,
           }),
         },
         replace: true,

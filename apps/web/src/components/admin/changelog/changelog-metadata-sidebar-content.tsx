@@ -6,6 +6,7 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   ChevronUpIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -32,6 +33,7 @@ interface ChangelogMetadataSidebarContentProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  authorName?: string | null
 }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
@@ -45,6 +47,7 @@ export function ChangelogMetadataSidebarContent({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  authorName,
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -113,6 +116,17 @@ export function ChangelogMetadataSidebarContent({
           onChange={handleStatusChange}
         />
       </div>
+
+      {/* Author */}
+      {authorName && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <UserIcon className="h-4 w-4" />
+            <span>Author</span>
+          </div>
+          <span className="text-sm font-medium text-foreground">{authorName}</span>
+        </div>
+      )}
 
       {/* Schedule Date - only show when scheduled */}
       {publishState.type === 'scheduled' && (

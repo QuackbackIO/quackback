@@ -84,7 +84,12 @@ function ZendeskIntegrationPage() {
                 <Button onClick={() => setCredentialsOpen(true)}>Configure credentials</Button>
               )}
               {platformCredentialsConfigured && (
-                <ZendeskConnectionActions integrationId={undefined} isConnected={false} />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setCredentialsOpen(true)}>
+                    Configure credentials
+                  </Button>
+                  <ZendeskConnectionActions integrationId={undefined} isConnected={false} />
+                </div>
               )}
             </div>
           }

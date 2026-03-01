@@ -60,6 +60,18 @@ export interface PostDetails {
   avatarUrls?: Record<string, string | null>
   /** IDs of roadmaps this post belongs to */
   roadmapIds?: string[]
+  /** AI-generated post summary */
+  summaryJson?: {
+    summary: string
+    keyQuotes: string[]
+    nextSteps: string[]
+  } | null
+  /** When the summary was last updated */
+  summaryUpdatedAt?: Date | null
+  /** Comment count at time of summary generation (for staleness detection) */
+  summaryCommentCount?: number | null
+  /** Current comment count (for staleness comparison) */
+  commentCount?: number
   /** When the post was soft-deleted (null if not deleted) */
   deletedAt?: Date | null
   /** Name of the member who deleted the post */

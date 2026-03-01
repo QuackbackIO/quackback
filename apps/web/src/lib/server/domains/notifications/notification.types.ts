@@ -9,7 +9,11 @@ import type { NotificationId, PostId, CommentId, PrincipalId } from '@quackback/
 /**
  * Notification event types that can trigger in-app notifications
  */
-export type NotificationType = 'post_status_changed' | 'comment_created' | 'post_mentioned'
+export type NotificationType =
+  | 'post_status_changed'
+  | 'comment_created'
+  | 'post_mentioned'
+  | 'changelog_published'
 
 /**
  * Input for creating a single notification

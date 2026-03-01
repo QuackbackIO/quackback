@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { SearchInput } from '@/components/shared/search-input'
@@ -93,23 +94,10 @@ export function FeedbackTableView({
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
-  const search = filters.search
-  const [searchValue, setSearchValue] = useState(search || '')
-
-  // Sync input when parent search changes (e.g., clear filters)
-  useEffect(() => {
-    setSearchValue(search || '')
-  }, [search])
-
-  // Debounce search input before updating parent
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchValue !== (search || '')) {
-        onFiltersChange({ search: searchValue || undefined })
-      }
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }, [searchValue, search, onFiltersChange])
+  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
+    externalValue: filters.search,
+    onChange: (search) => onFiltersChange({ search }),
+  })
 
   const loadMoreRef = useInfiniteScroll({
     hasMore,
@@ -149,7 +137,7 @@ export function FeedbackTableView({
   ] as const
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b border-border/50 px-3 py-2.5">
+    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       {/* Search and Sort Row */}
       <div className="flex items-center gap-2">
         <SearchInput
@@ -199,7 +187,7 @@ export function FeedbackTableView({
 
   if (isLoading) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <TableSkeleton />
       </div>
@@ -208,7 +196,7 @@ export function FeedbackTableView({
 
   if (posts.length === 0) {
     return (
-      <div>
+      <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <InboxEmptyState
           type={hasActiveFilters ? 'no-results' : 'no-posts'}
@@ -219,7 +207,7 @@ export function FeedbackTableView({
   }
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto w-full">
       {headerContent}
 
       {/* Post List */}

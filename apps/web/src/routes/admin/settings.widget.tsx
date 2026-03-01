@@ -16,6 +16,13 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
@@ -36,9 +43,6 @@ export const Route = createFileRoute('/admin/settings/widget')({
   },
   component: WidgetSettingsPage,
 })
-
-const selectClass =
-  'flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50'
 
 function SavingIndicator({ visible }: { visible: boolean }) {
   if (!visible) return null
@@ -154,20 +158,22 @@ function WidgetGeneralSettings({
           <Label htmlFor="widget-position" className="text-sm font-medium">
             Button Position
           </Label>
-          <select
-            id="widget-position"
+          <Select
             value={position}
-            onChange={(e) => {
-              const val = e.target.value as 'bottom-right' | 'bottom-left'
+            onValueChange={(val: 'bottom-right' | 'bottom-left') => {
               setPosition(val)
               save({ position: val })
             }}
             disabled={isBusy}
-            className={selectClass}
           >
-            <option value="bottom-right">Bottom Right</option>
-            <option value="bottom-left">Bottom Left</option>
-          </select>
+            <SelectTrigger className="max-w-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bottom-right">Bottom Right</SelectItem>
+              <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -177,23 +183,26 @@ function WidgetGeneralSettings({
           <p className="text-xs text-muted-foreground">
             Which board new posts from the widget are submitted to
           </p>
-          <select
-            id="widget-board"
+          <Select
             value={defaultBoard}
-            onChange={(e) => {
-              setDefaultBoard(e.target.value)
-              save({ defaultBoard: e.target.value || undefined })
+            onValueChange={(val) => {
+              setDefaultBoard(val)
+              save({ defaultBoard: val || undefined })
             }}
             disabled={isBusy}
-            className={selectClass}
           >
-            <option value="">All Boards</option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.slug}>
-                {board.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="max-w-xs">
+              <SelectValue placeholder="All Boards" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Boards</SelectItem>
+              {boards.map((board) => (
+                <SelectItem key={board.id} value={board.slug}>
+                  {board.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">

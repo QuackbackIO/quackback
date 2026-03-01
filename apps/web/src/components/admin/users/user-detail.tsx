@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
-  XMarkIcon,
+  ArrowLeftIcon,
   CheckCircleIcon,
   DocumentTextIcon,
   ChatBubbleLeftIcon,
@@ -19,7 +19,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { EmptyState } from '@/components/shared/empty-state'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/server/domains/users'
 import { UserSegmentBadges } from '@/components/admin/users/user-segments'
@@ -172,41 +171,31 @@ export function UserDetail({
   // Check if current user can manage portal users
   const canManageUsers = currentMemberRole === 'admin'
 
+  const backHeader = (
+    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
+      <Button variant="ghost" size="sm" onClick={onClose}>
+        <ArrowLeftIcon className="h-4 w-4 mr-1.5" />
+        Back to users
+      </Button>
+    </div>
+  )
+
   if (isLoading) {
     return (
-      <div>
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-2.5 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Loading...</span>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <XMarkIcon className="h-4 w-4" />
-          </Button>
-        </div>
+      <div className="max-w-5xl mx-auto w-full">
+        {backHeader}
         <DetailSkeleton />
       </div>
     )
   }
 
   if (!user) {
-    return (
-      <EmptyState
-        icon={UserIcon}
-        title="No user selected"
-        description="Select a user from the list to view their details and activity"
-        className="min-h-[calc(100vh-69px)]"
-      />
-    )
+    return null
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-2.5 flex items-center justify-between">
-        <span className="text-sm font-medium">User Details</span>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <XMarkIcon className="h-4 w-4" />
-        </Button>
-      </div>
-
+    <div className="max-w-5xl mx-auto w-full">
+      {backHeader}
       <div className="p-4 space-y-6">
         {/* Profile Header */}
         <div className="flex items-start gap-4">

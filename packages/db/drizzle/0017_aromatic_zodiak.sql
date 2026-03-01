@@ -1,0 +1,1 @@
+ALTER TABLE "posts" DROP COLUMN "promoted_from_theme_id";

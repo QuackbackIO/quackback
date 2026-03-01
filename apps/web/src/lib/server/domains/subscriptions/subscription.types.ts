@@ -7,7 +7,7 @@
 
 import type { PrincipalId, PostId, PostSubscriptionId } from '@quackback/ids'
 
-export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual'
+export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual' | 'feedback_author'
 
 export interface Subscriber {
   principalId: PrincipalId

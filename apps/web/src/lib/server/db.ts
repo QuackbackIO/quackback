@@ -203,6 +203,22 @@ export {
   type CurrencyCode,
   // Schema tables - user attributes
   userAttributeDefinitions,
+  // Schema tables - feedback aggregation
+  feedbackSources,
+  feedbackSourcesRelations,
+  rawFeedbackItems,
+  rawFeedbackItemsRelations,
+  feedbackSignals,
+  feedbackSignalsRelations,
+  feedbackSignalCorrections,
+  feedbackSignalCorrectionsRelations,
+  feedbackSuggestions,
+  feedbackSuggestionsRelations,
+  externalUserMappings,
+  externalUserMappingsRelations,
+  // Schema tables - merge suggestions
+  mergeSuggestions,
+  mergeSuggestionsRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

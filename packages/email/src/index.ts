@@ -16,6 +16,8 @@ import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
+import { ChangelogPublishedEmail } from './templates/changelog-published'
+import { FeedbackLinkedEmail } from './templates/feedback-linked'
 
 /**
  * Get environment variable at runtime.
@@ -354,6 +356,98 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
 }
 
 // ============================================================================
+// Changelog Published Email
+// ============================================================================
+
+interface SendChangelogPublishedParams {
+  to: string
+  changelogTitle: string
+  changelogUrl: string
+  contentPreview: string
+  workspaceName: string
+  unsubscribeUrl: string
+}
+
+export async function sendChangelogPublishedEmail(
+  params: SendChangelogPublishedParams
+): Promise<EmailResult> {
+  const { to, changelogTitle, changelogUrl, contentPreview, workspaceName, unsubscribeUrl } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Changelog Published Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Changelog: ${changelogTitle}`)
+    console.log(`│ Preview: ${contentPreview.substring(0, 50)}...`)
+    console.log(`│ URL: ${changelogUrl}`)
+    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `New update: ${changelogTitle}`,
+    react: ChangelogPublishedEmail({
+      changelogTitle,
+      changelogUrl,
+      contentPreview,
+      organizationName: workspaceName,
+      unsubscribeUrl,
+    }),
+  })
+}
+
+// ============================================================================
+// Feedback Linked Email
+// ============================================================================
+
+interface SendFeedbackLinkedParams {
+  to: string
+  recipientName?: string
+  postTitle: string
+  postUrl: string
+  workspaceName: string
+  unsubscribeUrl: string
+  attributedByName?: string
+}
+
+export async function sendFeedbackLinkedEmail(
+  params: SendFeedbackLinkedParams
+): Promise<EmailResult> {
+  const { to, recipientName, postTitle, postUrl, workspaceName, unsubscribeUrl, attributedByName } =
+    params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Feedback Linked Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Name: ${recipientName || '(not provided)'}`)
+    console.log(`│ Post: ${postTitle}`)
+    console.log(`│ Attributed by: ${attributedByName || '(not provided)'}`)
+    console.log(`│ URL: ${postUrl}`)
+    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `Your feedback has been linked to "${postTitle}"`,
+    react: FeedbackLinkedEmail({
+      recipientName,
+      postTitle,
+      postUrl,
+      workspaceName,
+      unsubscribeUrl,
+      attributedByName,
+    }),
+  })
+}
+
+// ============================================================================
 // Re-export templates for preview/testing
 // ============================================================================
 
@@ -362,3 +456,5 @@ export { WelcomeEmail } from './templates/welcome'
 export { SigninCodeEmail } from './templates/signin-code'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
+export { ChangelogPublishedEmail } from './templates/changelog-published'
+export { FeedbackLinkedEmail } from './templates/feedback-linked'

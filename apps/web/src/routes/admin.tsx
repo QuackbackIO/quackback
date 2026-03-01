@@ -1,6 +1,8 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { Suspense } from 'react'
+import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
+import { PostModal } from '@/components/admin/feedback/post-modal'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -27,11 +29,14 @@ export const Route = createFileRoute('/admin')({
     // Skip for public admin routes (login, signup) - they have their own layouts
     const publicPaths = ['/admin/login', '/admin/signup']
     if (publicPaths.includes(location.pathname)) {
-      return { user: null, initialUserData: null }
+      return { user: null, initialUserData: null, currentUser: null }
     }
 
-    // Auth is already validated in beforeLoad - user is guaranteed to exist here
-    const { user } = context as { user: NonNullable<typeof context.user> }
+    // Auth is already validated in beforeLoad - user and principal are guaranteed here
+    const { user, principal } = context as {
+      user: NonNullable<typeof context.user>
+      principal: NonNullable<typeof context.principal>
+    }
 
     // Get avatar URL with base64 data for SSR (no flicker)
     const avatarData = await fetchUserAvatar({
@@ -47,13 +52,28 @@ export const Route = createFileRoute('/admin')({
     return {
       user,
       initialUserData,
+      currentUser: {
+        name: user.name,
+        email: user.email,
+        principalId: principal.id,
+      },
     }
   },
   component: AdminLayout,
 })
 
+function usePostIdFromUrl(): string | undefined {
+  return useRouterState({
+    select: (s) => {
+      const { post } = s.location.search as { post?: string }
+      return post
+    },
+  })
+}
+
 function AdminLayout() {
-  const { initialUserData } = Route.useLoaderData()
+  const { initialUserData, currentUser } = Route.useLoaderData()
+  const postId = usePostIdFromUrl()
 
   // For public routes (login, signup), render just the outlet without the admin layout
   if (!initialUserData) {
@@ -69,6 +89,11 @@ function AdminLayout() {
           <Outlet />
         </div>
       </main>
+      {currentUser && (
+        <Suspense>
+          <PostModal postId={postId} currentUser={currentUser} />
+        </Suspense>
+      )}
     </div>
   )
 }

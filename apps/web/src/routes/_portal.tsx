@@ -51,6 +51,7 @@ export const Route = createFileRoute('/_portal')({
     const authConfig = {
       found: true,
       oauth: portalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
+      customProviderNames: portalConfig?.customProviderNames,
     }
 
     return {

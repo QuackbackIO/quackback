@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
-import { db, integrations, integrationEventMappings, eq, sql } from '@/lib/server/db'
+import { db, integrations, integrationEventMappings, eq, and, sql } from '@/lib/server/db'
 import type { IntegrationId } from '@quackback/ids'
 
 // ============================================
@@ -84,6 +84,7 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
             integrationEventMappings.integrationId,
             integrationEventMappings.eventType,
             integrationEventMappings.actionType,
+            integrationEventMappings.targetKey,
           ],
           set: {
             enabled: sql`excluded.enabled`,
@@ -146,4 +147,159 @@ export const deleteIntegrationFn = createServerFn({ method: 'POST' })
 
     console.log(`[fn:integrations] deleteIntegrationFn: deleted id=${data.id}`)
     return { id: data.id }
+  })
+
+// ============================================
+// Notification Channel CRUD
+// ============================================
+
+const addNotificationChannelSchema = z.object({
+  integrationId: z.string(),
+  channelId: z.string(),
+  events: z.array(z.string()),
+  boardIds: z.array(z.string()).optional(),
+})
+
+const updateNotificationChannelSchema = z.object({
+  integrationId: z.string(),
+  channelId: z.string(),
+  events: z.array(
+    z.object({
+      eventType: z.string(),
+      enabled: z.boolean(),
+    })
+  ),
+  boardIds: z.array(z.string()).nullable().optional(),
+})
+
+const removeNotificationChannelSchema = z.object({
+  integrationId: z.string(),
+  channelId: z.string(),
+})
+
+export type AddNotificationChannelInput = z.infer<typeof addNotificationChannelSchema>
+export type UpdateNotificationChannelInput = z.infer<typeof updateNotificationChannelSchema>
+export type RemoveNotificationChannelInput = z.infer<typeof removeNotificationChannelSchema>
+
+/**
+ * Add a notification channel with event mappings
+ */
+export const addNotificationChannelFn = createServerFn({ method: 'POST' })
+  .inputValidator(addNotificationChannelSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:integrations] addNotificationChannelFn: channelId=${data.channelId}`)
+    await requireAuth({ roles: ['admin'] })
+
+    const integrationId = data.integrationId as IntegrationId
+    const filters = data.boardIds?.length ? { boardIds: data.boardIds } : null
+
+    await db
+      .insert(integrationEventMappings)
+      .values(
+        data.events.map((eventType) => ({
+          integrationId,
+          eventType,
+          actionType: 'send_message' as const,
+          targetKey: data.channelId,
+          actionConfig: { channelId: data.channelId },
+          filters,
+          enabled: true,
+        }))
+      )
+      .onConflictDoUpdate({
+        target: [
+          integrationEventMappings.integrationId,
+          integrationEventMappings.eventType,
+          integrationEventMappings.actionType,
+          integrationEventMappings.targetKey,
+        ],
+        set: {
+          enabled: sql`excluded.enabled`,
+          actionConfig: sql`excluded.action_config`,
+          filters: sql`excluded.filters`,
+          updatedAt: new Date(),
+        },
+      })
+
+    console.log(`[fn:integrations] addNotificationChannelFn: added ${data.events.length} mappings`)
+    return { success: true }
+  })
+
+/**
+ * Update a notification channel's event mappings and board filter
+ */
+export const updateNotificationChannelFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateNotificationChannelSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:integrations] updateNotificationChannelFn: channelId=${data.channelId}`)
+    await requireAuth({ roles: ['admin'] })
+
+    const integrationId = data.integrationId as IntegrationId
+    const filters = data.boardIds?.length ? { boardIds: data.boardIds } : null
+
+    // Upsert event mappings for this channel
+    await db
+      .insert(integrationEventMappings)
+      .values(
+        data.events.map((event) => ({
+          integrationId,
+          eventType: event.eventType,
+          actionType: 'send_message' as const,
+          targetKey: data.channelId,
+          actionConfig: { channelId: data.channelId },
+          filters,
+          enabled: event.enabled,
+        }))
+      )
+      .onConflictDoUpdate({
+        target: [
+          integrationEventMappings.integrationId,
+          integrationEventMappings.eventType,
+          integrationEventMappings.actionType,
+          integrationEventMappings.targetKey,
+        ],
+        set: {
+          enabled: sql`excluded.enabled`,
+          filters: sql`excluded.filters`,
+          updatedAt: new Date(),
+        },
+      })
+
+    // Also update filters on any existing mappings for this channel that weren't in the upsert
+    await db
+      .update(integrationEventMappings)
+      .set({ filters, updatedAt: new Date() })
+      .where(
+        and(
+          eq(integrationEventMappings.integrationId, integrationId),
+          eq(integrationEventMappings.targetKey, data.channelId)
+        )
+      )
+
+    console.log(`[fn:integrations] updateNotificationChannelFn: updated`)
+    return { success: true }
+  })
+
+/**
+ * Remove a notification channel and all its event mappings
+ */
+export const removeNotificationChannelFn = createServerFn({ method: 'POST' })
+  .inputValidator(removeNotificationChannelSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:integrations] removeNotificationChannelFn: channelId=${data.channelId}`)
+    await requireAuth({ roles: ['admin'] })
+
+    const integrationId = data.integrationId as IntegrationId
+
+    await db
+      .delete(integrationEventMappings)
+      .where(
+        and(
+          eq(integrationEventMappings.integrationId, integrationId),
+          eq(integrationEventMappings.targetKey, data.channelId)
+        )
+      )
+
+    console.log(`[fn:integrations] removeNotificationChannelFn: removed`)
+    return { success: true }
   })

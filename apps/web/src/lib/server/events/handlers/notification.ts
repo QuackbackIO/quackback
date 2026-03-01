@@ -121,5 +121,23 @@ function buildNotifications(
     }))
   }
 
+  if (event.type === 'changelog.published') {
+    const changelogConfig = config as Record<string, unknown>
+    const changelogTitle = (changelogConfig.changelogTitle as string) ?? 'New update'
+    const body = truncate((changelogConfig.contentPreview as string) ?? '', 150)
+
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'changelog_published' as NotificationType,
+      title: `New update: ${changelogTitle}`,
+      body,
+      metadata: {
+        changelogTitle,
+        changelogUrl: changelogConfig.changelogUrl,
+        contentPreview: changelogConfig.contentPreview,
+      },
+    }))
+  }
+
   return []
 }

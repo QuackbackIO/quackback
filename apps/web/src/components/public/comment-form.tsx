@@ -4,7 +4,6 @@ import type { UseMutationResult } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { commentSchema, type CommentInput } from '@/lib/shared/schemas/comments'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Form,
   FormControl,
@@ -16,11 +15,12 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/solid'
+import { CheckIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/server/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { cn } from '@/lib/shared/utils'
 import type { PostId, CommentId } from '@quackback/ids'
 
 export type CreateCommentMutation = UseMutationResult<
@@ -101,6 +101,8 @@ export function CommentForm({
 
   const isSubmitting = createComment?.isPending ?? false
   const selectedStatus = statuses?.find((s) => s.id === selectedStatusId) ?? null
+  const currentStatus = statuses?.find((s) => s.id === currentStatusId) ?? null
+  const showStatusSelector = isTeamMember && !parentId && statuses && statuses.length > 0
 
   function privateTooltipText(): string {
     if (forcePrivate) return 'Replies to private comments are always private'
@@ -158,6 +160,161 @@ export function CommentForm({
     )
   }
 
+  // Team member composer: unified card with toolbar
+  if (showStatusSelector) {
+    return (
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors">
+            {/* Textarea area */}
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="sr-only">Your comment</FormLabel>
+                  <FormControl>
+                    <textarea
+                      placeholder="Write a comment..."
+                      rows={3}
+                      disabled={isSubmitting}
+                      className="w-full resize-none border-0 bg-transparent px-3 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="px-3" />
+                </FormItem>
+              )}
+            />
+
+            {error && <p className="text-sm text-destructive px-3 pb-1">{error}</p>}
+
+            {/* Toolbar footer */}
+            <div className="flex items-center gap-2 border-t border-border/30 bg-muted/20 px-3 py-2">
+              {/* Left: Identity */}
+              <p className="text-xs text-muted-foreground mr-auto truncate">
+                <span className="font-medium text-foreground">
+                  {effectiveUser.name || effectiveUser.email}
+                </span>
+              </p>
+
+              {/* Status selector */}
+              <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
+                      'hover:bg-muted/80',
+                      selectedStatus
+                        ? 'bg-muted/60 border border-border/50'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {selectedStatus ? (
+                      <>
+                        <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
+                        <button
+                          type="button"
+                          className="ml-0.5 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedStatusId(null)
+                          }}
+                        >
+                          &times;
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span
+                          className="size-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: currentStatus?.color ?? '#94a3b8' }}
+                        />
+                        <span>{currentStatus?.name ?? 'No status'}</span>
+                      </>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-44 p-1" align="end">
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    Update status
+                  </div>
+                  {statuses.map((status) => {
+                    const isCurrent = status.id === currentStatusId
+                    const isSelected = status.id === selectedStatusId
+                    return (
+                      <button
+                        key={status.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatusId(isCurrent ? null : status.id)
+                          setStatusPopoverOpen(false)
+                        }}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-xs transition-colors',
+                          'hover:bg-muted/50',
+                          isSelected && 'bg-muted/40'
+                        )}
+                      >
+                        <span
+                          className="size-2 rounded-full shrink-0"
+                          style={{ backgroundColor: status.color }}
+                        />
+                        <span className="flex-1 text-left">{status.name}</span>
+                        {isCurrent && !isSelected && (
+                          <span className="text-muted-foreground text-[10px]">current</span>
+                        )}
+                        {isSelected && <CheckIcon className="size-3.5 text-primary shrink-0" />}
+                      </button>
+                    )
+                  })}
+                  {selectedStatusId && (
+                    <>
+                      <div className="my-1 border-t border-border/30" />
+                      <button
+                        type="button"
+                        className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted/50 transition-colors text-muted-foreground"
+                        onClick={() => {
+                          setSelectedStatusId(null)
+                          setStatusPopoverOpen(false)
+                        }}
+                      >
+                        Clear status change
+                      </button>
+                    </>
+                  )}
+                </PopoverContent>
+              </Popover>
+
+              {/* Submit */}
+              {onCancel && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancel}
+                  disabled={isSubmitting}
+                  className="h-7 text-xs"
+                >
+                  Cancel
+                </Button>
+              )}
+              <Button type="submit" size="sm" disabled={isSubmitting} className="h-7 text-xs">
+                {isSubmitting
+                  ? 'Posting...'
+                  : selectedStatus
+                    ? `Comment & mark ${selectedStatus.name}`
+                    : 'Comment'}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Form>
+    )
+  }
+
+  // Default composer for non-team-members / replies
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -168,10 +325,11 @@ export function CommentForm({
             <FormItem>
               <FormLabel className="sr-only">Your comment</FormLabel>
               <FormControl>
-                <Textarea
+                <textarea
                   placeholder="Write a comment..."
                   rows={3}
                   disabled={isSubmitting}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   {...field}
                 />
               </FormControl>
@@ -181,55 +339,6 @@ export function CommentForm({
         />
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-
-        {/* Status selector for team members on root comments */}
-        {isTeamMember && !parentId && statuses && statuses.length > 0 && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Status:</span>
-            <Popover open={statusPopoverOpen} onOpenChange={setStatusPopoverOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/50 hover:bg-muted/50 transition-colors text-xs"
-                >
-                  {selectedStatus ? (
-                    <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
-                  ) : (
-                    <span className="text-muted-foreground">No change</span>
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-1" align="start">
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted transition-colors text-muted-foreground"
-                  onClick={() => {
-                    setSelectedStatusId(null)
-                    setStatusPopoverOpen(false)
-                  }}
-                >
-                  No change
-                </button>
-                {statuses.map((status) => (
-                  <button
-                    key={status.id}
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted transition-colors"
-                    onClick={() => {
-                      setSelectedStatusId(status.id === currentStatusId ? null : status.id)
-                      setStatusPopoverOpen(false)
-                    }}
-                  >
-                    <StatusBadge name={status.name} color={status.color} />
-                    {status.id === currentStatusId && (
-                      <span className="text-muted-foreground ml-1">(current)</span>
-                    )}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-          </div>
-        )}
 
         <div className="flex items-center justify-end gap-2">
           <p className="text-xs text-muted-foreground mr-auto">

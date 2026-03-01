@@ -4,11 +4,32 @@
  * Handles vote operations for posts with atomic SQL to prevent race conditions.
  */
 
-import { db, posts, votes, postSubscriptions, boards, sql } from '@/lib/server/db'
+import {
+  db,
+  posts,
+  votes,
+  postSubscriptions,
+  boards,
+  principal,
+  user,
+  sql,
+  eq,
+  desc,
+} from '@/lib/server/db'
 import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
+
+export interface VoterInfo {
+  principalId: string
+  displayName: string | null
+  email: string | null
+  avatarUrl: string | null
+  sourceType: string | null
+  sourceExternalUrl: string | null
+  createdAt: Date | string
+}
 
 /**
  * Toggle vote on a post
@@ -201,4 +222,28 @@ export async function addVoteOnBehalf(
   }
 
   return { voted: row.newly_voted, voteCount: row.vote_count ?? 0 }
+}
+
+/**
+ * Get all voters for a post with their identity and source attribution.
+ * Returns newest votes first.
+ */
+export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
+  const rows = await db
+    .select({
+      principalId: principal.id,
+      displayName: principal.displayName,
+      email: user.email,
+      avatarUrl: principal.avatarUrl,
+      sourceType: votes.sourceType,
+      sourceExternalUrl: votes.sourceExternalUrl,
+      createdAt: votes.createdAt,
+    })
+    .from(votes)
+    .innerJoin(principal, eq(principal.id, votes.principalId))
+    .leftJoin(user, eq(user.id, principal.userId))
+    .where(eq(votes.postId, postId))
+    .orderBy(desc(votes.createdAt))
+
+  return rows
 }

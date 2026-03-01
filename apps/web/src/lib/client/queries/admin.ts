@@ -23,7 +23,7 @@ import {
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
-import { fetchPostWithDetails } from '@/lib/server/functions/posts'
+import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/server/domains/users/user.types'
 
@@ -39,6 +39,7 @@ export interface InboxPostListParams {
   dateFrom?: string
   dateTo?: string
   minVotes?: number
+  minComments?: number
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
@@ -270,6 +271,7 @@ export const adminQueries = {
           createdAt: new Date(data.createdAt),
           updatedAt: new Date(data.updatedAt),
           deletedAt: data.deletedAt ? new Date(data.deletedAt) : null,
+          summaryUpdatedAt: data.summaryUpdatedAt ? new Date(data.summaryUpdatedAt) : null,
           comments: data.comments.map(deserializeComment),
           pinnedComment: data.pinnedComment
             ? { ...data.pinnedComment, createdAt: new Date(data.pinnedComment.createdAt) }
@@ -277,6 +279,16 @@ export const adminQueries = {
         }
       },
       staleTime: 30 * 1000, // 30s - frequently updated
+    }),
+
+  /**
+   * Get voters for a post (admin/member only)
+   */
+  postVoters: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'voters', postId],
+      queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
+      staleTime: 30 * 1000,
     }),
 
   /**

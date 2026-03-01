@@ -20,6 +20,7 @@ export interface InboxFilters {
   dateFrom?: string
   dateTo?: string
   minVotes?: number
+  minComments?: number
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
   sort?: 'newest' | 'oldest' | 'votes'
@@ -49,6 +50,19 @@ export interface RoadmapFilters {
   /** Segment IDs - filter posts whose author is in any of these segments */
   segmentIds?: string[]
   sort?: 'votes' | 'newest' | 'oldest'
+}
+
+/**
+ * Filters for the admin suggestions list.
+ */
+export interface SuggestionsFilters {
+  search?: string
+  suggestionType?: 'create_post' | 'duplicate_post'
+  sourceIds?: string[]
+  board?: string[]
+  sort?: 'newest' | 'similarity' | 'confidence'
+  /** Selected suggestion ID (for URL persistence) */
+  suggestion?: string
 }
 
 /**
