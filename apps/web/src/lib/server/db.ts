@@ -216,6 +216,9 @@ export {
   feedbackSuggestionsRelations,
   externalUserMappings,
   externalUserMappingsRelations,
+  // Schema tables - merge suggestions
+  mergeSuggestions,
+  mergeSuggestionsRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

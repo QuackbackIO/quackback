@@ -109,6 +109,8 @@ export const posts = pgTable(
     summaryModel: text('summary_model'),
     summaryUpdatedAt: timestamp('summary_updated_at', { withTimezone: true }),
     summaryCommentCount: integer('summary_comment_count'),
+    // Merge suggestion staleness tracking
+    mergeCheckedAt: timestamp('merge_checked_at', { withTimezone: true }),
   },
   (table) => [
     index('posts_board_id_idx').on(table.boardId),

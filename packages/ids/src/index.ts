@@ -98,6 +98,7 @@ export type {
   FeedbackSuggestionId,
   FeedbackCorrectionId,
   ExternalUserMappingId,
+  MergeSuggestionId,
   // Auth entities
   WorkspaceId,
   UserId,

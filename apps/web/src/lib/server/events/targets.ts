@@ -54,8 +54,8 @@ const SUBSCRIBER_EVENT_TYPES = [
   'changelog.published',
 ] as const
 const AI_EVENT_TYPES = ['post.created'] as const
-const FEEDBACK_PIPELINE_EVENT_TYPES = ['post.created'] as const
 const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
+const MERGE_SUGGESTION_EVENT_TYPES = ['post.created'] as const
 
 /**
  * Get all hook targets for an event.
@@ -96,19 +96,6 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       })
     }
 
-    // Feedback pipeline target — ingests board posts into aggregation pipeline
-    if (
-      FEEDBACK_PIPELINE_EVENT_TYPES.includes(
-        event.type as (typeof FEEDBACK_PIPELINE_EVENT_TYPES)[number]
-      )
-    ) {
-      targets.push({
-        type: 'feedback_pipeline',
-        target: {},
-        config: {},
-      })
-    }
-
     // Summary targets - AI post summary generation
     if (
       getOpenAI() &&
@@ -117,6 +104,20 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push({
         type: 'summary',
         target: { type: 'summary' },
+        config: {},
+      })
+    }
+
+    // Merge suggestion targets - AI duplicate detection
+    if (
+      getOpenAI() &&
+      MERGE_SUGGESTION_EVENT_TYPES.includes(
+        event.type as (typeof MERGE_SUGGESTION_EVENT_TYPES)[number]
+      )
+    ) {
+      targets.push({
+        type: 'merge_suggestion',
+        target: { type: 'merge_suggestion' },
         config: {},
       })
     }

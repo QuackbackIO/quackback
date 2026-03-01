@@ -162,6 +162,13 @@
       "when": 1772350000000,
       "tag": "0022_odd_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1772360000000,
+      "tag": "0023_merge_suggestions",
+      "breakpoints": true
     }
   ]
 }
