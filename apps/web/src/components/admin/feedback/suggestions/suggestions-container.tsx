@@ -7,7 +7,7 @@ import { CreateFromSuggestionDialog } from './create-from-suggestion-dialog'
 import { useSuggestionsFilters } from './use-suggestions-filters'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
 import { adminQueries } from '@/lib/client/queries/admin'
-import type { SuggestionListItem } from '../feedback-types'
+import type { SuggestionListItem, FeedbackSourceView } from '../feedback-types'
 
 export function SuggestionsContainer() {
   const { filters, setFilters, hasActiveFilters } = useSuggestionsFilters()
@@ -19,7 +19,7 @@ export function SuggestionsContainer() {
   const { data: sourcesData } = useSuspenseQuery(feedbackQueries.sources())
   const { data: boardsData } = useSuspenseQuery(adminQueries.boards())
 
-  const sources = sourcesData ?? []
+  const sources: FeedbackSourceView[] = sourcesData ?? []
   const boards = boardsData ?? []
 
   // Fetch ALL pending suggestions (filter client-side so sidebar counts are accurate)
