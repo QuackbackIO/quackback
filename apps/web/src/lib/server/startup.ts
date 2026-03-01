@@ -42,10 +42,35 @@ export function logStartupBanner(): void {
     .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
     .catch((err) => console.error('[Startup] Failed to init feedback AI worker:', err))
 
-  // Restore feedback pipeline schedules (lazy import to avoid eager queue init)
-  import('./domains/feedback/queues/feedback-maintenance-queue')
-    .then(({ restoreAllFeedbackSchedules }) => restoreAllFeedbackSchedules())
-    .catch((err) => console.error('[Startup] Failed to restore feedback schedules:', err))
+  // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily)
+  Promise.all([
+    import('./domains/feedback/pipeline/stuck-recovery.service'),
+    import('./domains/feedback/pipeline/suggestion.service'),
+  ])
+    .then(([{ recoverStuckItems }, { expireStaleSuggestions }]) => {
+      setTimeout(() => {
+        recoverStuckItems().catch((err) =>
+          console.error('[Startup] Initial stuck-item recovery failed:', err)
+        )
+      }, 20_000) // 20s delay
+      setInterval(
+        () => {
+          recoverStuckItems().catch((err) =>
+            console.error('[Startup] Stuck-item recovery failed:', err)
+          )
+        },
+        15 * 60 * 1000
+      ) // Every 15 minutes
+      setInterval(
+        () => {
+          expireStaleSuggestions().catch((err) =>
+            console.error('[Startup] Suggestion expiry failed:', err)
+          )
+        },
+        24 * 60 * 60 * 1000
+      ) // Daily
+    })
+    .catch((err) => console.error('[Startup] Failed to init feedback maintenance:', err))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries)
   // Runs once at startup (after a short delay) then every 30 minutes

@@ -278,7 +278,7 @@ export async function dismissSuggestion(
  * Expire stale pending suggestions older than 30 days.
  */
 export async function expireStaleSuggestions(): Promise<number> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const result = await db
     .update(feedbackSuggestions)
