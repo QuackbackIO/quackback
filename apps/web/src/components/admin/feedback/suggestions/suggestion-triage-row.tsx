@@ -51,6 +51,17 @@ function DuplicateRow({
 
   return (
     <div className="w-full px-4 py-3 space-y-2">
+      {/* Header: source */}
+      <div className="flex items-center gap-2">
+        <SourceTypeIcon sourceType="quackback" size="sm" />
+        <Badge
+          variant="outline"
+          className="text-[10px] px-1.5 py-0 shrink-0 border-violet-300/50 text-violet-600 dark:border-violet-700/50 dark:text-violet-400"
+        >
+          Duplicate post
+        </Badge>
+      </div>
+
       {/* Side-by-side post cards */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
         <MiniPostCard post={suggestion.sourcePost} />

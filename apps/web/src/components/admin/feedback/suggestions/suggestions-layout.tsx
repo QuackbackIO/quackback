@@ -8,7 +8,7 @@ interface SuggestionsLayoutProps {
 
 export function SuggestionsLayout({ filters, content, hasActiveFilters }: SuggestionsLayoutProps) {
   return (
-    <AdminFilterLayout filters={filters} hasActiveFilters={hasActiveFilters} scrollContent={false}>
+    <AdminFilterLayout filters={filters} hasActiveFilters={hasActiveFilters}>
       {content}
     </AdminFilterLayout>
   )
