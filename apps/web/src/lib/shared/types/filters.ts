@@ -52,9 +52,6 @@ export interface RoadmapFilters {
 }
 
 /**
- * Filters for the admin users list.
- */
-/**
  * Filters for the admin suggestions list.
  */
 export interface SuggestionsFilters {

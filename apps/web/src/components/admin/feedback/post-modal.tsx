@@ -419,7 +419,7 @@ function PostModalContent({
             {/* AI Summary */}
             {post.summaryJson && (
               <AiSummaryCard
-                summaryJson={post.summaryJson ?? null}
+                summaryJson={post.summaryJson}
                 summaryUpdatedAt={post.summaryUpdatedAt ?? null}
                 summaryCommentCount={post.summaryCommentCount ?? null}
                 currentCommentCount={post.commentCount ?? 0}

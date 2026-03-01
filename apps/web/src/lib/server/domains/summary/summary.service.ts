@@ -8,6 +8,7 @@
 import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import type { PostId } from '@quackback/ids'
 
 const SUMMARY_MODEL = 'google/gemini-2.5-flash'
@@ -42,11 +43,6 @@ Rules for "nextSteps" (0-2):
 - Only include when the discussion has enough specificity for a real action.
 - Never include generic advice like "Consider user feedback."`
 
-/** Strip markdown code fences that some models wrap around JSON responses. */
-function stripCodeFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
-}
-
 interface PostSummaryJson {
   summary: string
   keyQuotes: string[]
@@ -70,12 +66,6 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     console.warn(`[Summary] Post ${postId} not found`)
     return
   }
-
-  // Live comment count (not denormalized)
-  const [{ count: liveCommentCount }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(comments)
-    .where(and(eq(comments.postId, postId), isNull(comments.deletedAt)))
 
   // Fetch comments (lightweight: just content and author name)
   const postComments = await db
@@ -164,7 +154,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       summaryJson,
       summaryModel: SUMMARY_MODEL,
       summaryUpdatedAt: new Date(),
-      summaryCommentCount: liveCommentCount,
+      summaryCommentCount: postComments.length,
     })
     .where(eq(posts.id, postId))
 
@@ -217,21 +207,7 @@ export async function refreshStaleSummaries(): Promise<void> {
     if (stalePosts.length === 0) break
 
     if (totalProcessed === 0) {
-      // Count total on first batch for logging
-      const [{ count: totalStale }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(posts)
-        .leftJoin(liveCommentCountSq, eq(posts.id, liveCommentCountSq.postId))
-        .where(
-          and(
-            isNull(posts.deletedAt),
-            or(
-              isNull(posts.summaryJson),
-              ne(posts.summaryCommentCount, sql`coalesce(${liveCommentCountSq.count}, 0)`)
-            )
-          )
-        )
-      console.log(`[Summary] Found ${totalStale} stale posts, processing...`)
+      console.log(`[Summary] Found stale posts, processing...`)
     }
 
     for (const { id } of stalePosts) {

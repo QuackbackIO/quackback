@@ -9,6 +9,7 @@ import { UnrecoverableError } from 'bullmq'
 import { db, eq, rawFeedbackItems, feedbackSignals, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { buildExtractionPrompt } from './prompts/extraction.prompt'
 import { shouldExtract } from './quality-gate.service'
 import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
@@ -17,11 +18,6 @@ import type { RawFeedbackItemId } from '@quackback/ids'
 
 const EXTRACTION_MODEL = 'google/gemini-2.5-flash'
 const EXTRACTION_PROMPT_VERSION = 'v1'
-
-/** Strip markdown code fences that some models wrap around JSON responses. */
-function stripCodeFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
-}
 
 /**
  * Extract signals from a raw feedback item.

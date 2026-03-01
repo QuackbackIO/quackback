@@ -226,14 +226,6 @@ async function main() {
       AND processing_state IN ('extracting', 'interpreting', 'failed')
     RETURNING id
   `
-  // Count via a separate query since RETURNING with count is awkward
-  const _resetCount = (
-    await sql`
-    SELECT count(*)::int AS cnt FROM raw_feedback_items
-    WHERE source_type = 'quackback' AND processing_state = 'ready_for_extraction'
-  `
-  )[0].cnt
-
   if (resetResult) {
     const [resetTotal] = await sql`
       SELECT count(*)::int as cnt FROM raw_feedback_items

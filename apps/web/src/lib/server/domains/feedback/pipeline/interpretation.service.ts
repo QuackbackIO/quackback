@@ -12,6 +12,7 @@ import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, rawFeedbackItems, posts } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { embedSignal, findSimilarPosts } from './embedding.service'
 import { createMergeSuggestion, createPostSuggestion } from './suggestion.service'
 import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
@@ -23,11 +24,6 @@ const SUGGESTION_MODEL = 'google/gemini-2.5-flash'
 /** Similarity thresholds for merge suggestions. */
 const MERGE_THRESHOLD_QUACKBACK = 0.75
 const MERGE_THRESHOLD_EXTERNAL = 0.8
-
-/** Strip markdown code fences that some models wrap around JSON responses. */
-function stripCodeFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
-}
 
 /**
  * Interpret a single signal: embed, find similar posts, generate suggestions.

@@ -11,6 +11,7 @@
 
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { buildQualityGatePrompt } from './prompts/quality-gate.prompt'
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
 
@@ -18,11 +19,6 @@ const QUALITY_GATE_MODEL = 'google/gemini-2.5-flash-lite'
 
 /** Sources where users intentionally submit feedback — high baseline intent. */
 const HIGH_INTENT_SOURCES = new Set(['api', 'quackback'])
-
-/** Strip markdown code fences that some models wrap around JSON responses. */
-function stripCodeFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
-}
 
 function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 1).length

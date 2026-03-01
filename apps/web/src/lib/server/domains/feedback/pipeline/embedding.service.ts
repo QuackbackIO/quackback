@@ -10,9 +10,8 @@ import { db, eq, feedbackSignals, sql } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { EMBEDDING_MODEL } from '@/lib/server/domains/embeddings/embedding.service'
 import type { FeedbackSignalId } from '@quackback/ids'
-
-const EMBEDDING_MODEL = 'openai/text-embedding-3-small'
 
 /**
  * Generate and store an embedding for a feedback signal.
