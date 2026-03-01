@@ -121,7 +121,7 @@ export async function sweepMergeSuggestions(): Promise<void> {
 }
 
 async function _doSweep(): Promise<void> {
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   let totalProcessed = 0
   let totalFailed = 0
 
