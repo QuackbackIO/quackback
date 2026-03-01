@@ -5,7 +5,7 @@
  * parallel vector + FTS queries, score merging, hybrid threshold filtering.
  */
 
-import { db, posts, and, isNull, desc, sql } from '@/lib/server/db'
+import { db, posts, and, isNull, isNotNull, ne, desc, sql } from '@/lib/server/db'
 import type { PostId } from '@quackback/ids'
 
 export interface MergeCandidate {
@@ -70,8 +70,8 @@ export async function findMergeCandidates(
       and(
         isNull(posts.deletedAt),
         isNull(posts.canonicalPostId),
-        sql`${posts.embedding} IS NOT NULL`,
-        sql`${posts.id} != ${postId}`,
+        isNotNull(posts.embedding),
+        ne(posts.id, postId),
         sql`${posts.searchVector} @@ plainto_tsquery('english', ${title})`
       )
     )
@@ -93,8 +93,8 @@ export async function findMergeCandidates(
       and(
         isNull(posts.deletedAt),
         isNull(posts.canonicalPostId),
-        sql`${posts.embedding} IS NOT NULL`,
-        sql`${posts.id} != ${postId}`,
+        isNotNull(posts.embedding),
+        ne(posts.id, postId),
         sql`1 - (${posts.embedding} <=> ${vectorStr}::vector) >= ${VECTOR_THRESHOLD}`
       )
     )

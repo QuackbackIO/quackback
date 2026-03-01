@@ -4,7 +4,7 @@
  * Mirrors the AI summary pattern: event-driven + periodic sweep.
  */
 
-import { db, posts, and, or, isNull, desc, eq, sql } from '@/lib/server/db'
+import { db, posts, and, or, isNull, isNotNull, desc, eq, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
@@ -134,7 +134,7 @@ async function _doSweep(): Promise<void> {
         and(
           isNull(posts.deletedAt),
           isNull(posts.canonicalPostId),
-          sql`${posts.embedding} IS NOT NULL`,
+          isNotNull(posts.embedding),
           or(isNull(posts.mergeCheckedAt), sql`${posts.mergeCheckedAt} < ${twentyFourHoursAgo}`)
         )
       )
