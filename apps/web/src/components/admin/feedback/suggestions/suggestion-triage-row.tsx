@@ -5,6 +5,7 @@ import {
   ChatBubbleLeftIcon,
   ChevronUpIcon,
   Squares2X2Icon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -48,8 +49,6 @@ function DuplicateRow({
   onResolved: () => void
 }) {
   const [swapped, setSwapped] = useState(false)
-  const similarity =
-    suggestion.similarityScore != null ? Math.round(suggestion.similarityScore * 100) : null
 
   const { accept, dismiss, isPending } = useSuggestionActions({
     suggestionId: suggestion.id,
@@ -61,17 +60,24 @@ function DuplicateRow({
   const rightPost = swapped ? suggestion.sourcePost : suggestion.targetPost
 
   return (
-    <div className="w-full px-4 py-3 space-y-2">
-      {/* Header: source */}
+    <div className="w-full px-4 py-3 space-y-2.5">
+      {/* Header: sparkles + label + similarity pill + time */}
       <div className="flex items-center gap-2">
-        <SourceTypeIcon sourceType="quackback" size="sm" />
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 shrink-0 border-violet-300/50 text-violet-600 dark:border-violet-700/50 dark:text-violet-400"
-        >
-          Merge posts
-        </Badge>
+        <SparklesIcon className="h-3.5 w-3.5 text-amber-500/80 shrink-0" />
+        <span className="text-xs font-medium text-muted-foreground/70">Possible duplicate</span>
+        <div className="flex-1" />
+        <TimeAgo
+          date={suggestion.createdAt}
+          className="text-[11px] text-muted-foreground/40 shrink-0"
+        />
       </div>
+
+      {/* AI reasoning */}
+      {suggestion.reasoning && (
+        <p className="text-sm text-foreground/80 leading-relaxed line-clamp-3">
+          {suggestion.reasoning}
+        </p>
+      )}
 
       {/* Side-by-side post cards */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -92,46 +98,25 @@ function DuplicateRow({
         <MiniPostCard post={rightPost} />
       </div>
 
-      {/* Footer: reasoning + match info + actions */}
-      <div className="space-y-2">
-        {suggestion.reasoning && (
-          <p className="text-[11px] text-muted-foreground/50 line-clamp-2 flex items-start gap-1.5">
-            <ChatBubbleLeftIcon className="h-3 w-3 shrink-0 mt-0.5" />
-            <span>{suggestion.reasoning}</span>
-          </p>
-        )}
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
-            {similarity != null && (
-              <span className="font-semibold tabular-nums text-violet-600 dark:text-violet-400">
-                {similarity}%
-              </span>
-            )}
-            <span className="text-muted-foreground/40">&middot;</span>
-            <TimeAgo date={suggestion.createdAt} className="text-muted-foreground/40" />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
-              disabled={isPending}
-            >
-              Merge
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => dismiss()}
-              disabled={isPending}
-              className="text-muted-foreground"
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
+          disabled={isPending}
+        >
+          Merge
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => dismiss()}
+          disabled={isPending}
+          className="text-muted-foreground"
+        >
+          Dismiss
+        </Button>
       </div>
     </div>
   )
