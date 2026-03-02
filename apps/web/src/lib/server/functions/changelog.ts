@@ -29,30 +29,7 @@ import {
   deleteChangelogSchema,
   listPublicChangelogsSchema,
 } from '@/lib/shared/schemas/changelog'
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Safely convert a date value to ISO string.
- */
-function toIsoString(value: Date | string): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  return value.toISOString()
-}
-
-/**
- * Safely convert an optional date value to ISO string or null.
- */
-function toIsoStringOrNull(value: Date | string | null | undefined): string | null {
-  if (value == null) {
-    return null
-  }
-  return toIsoString(value)
-}
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 // ============================================================================
 // Admin Server Functions (Require Auth)

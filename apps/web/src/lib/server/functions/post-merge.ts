@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { toIsoString } from '@/lib/shared/utils'
 import {
   mergePost,
   unmergePost,
@@ -44,15 +45,6 @@ export type MergePostInput = z.infer<typeof mergePostSchema>
 export type UnmergePostInput = z.infer<typeof unmergePostSchema>
 export type GetMergedPostsInput = z.infer<typeof getMergedPostsSchema>
 export type GetPostMergeInfoInput = z.infer<typeof getPostMergeInfoSchema>
-
-// ============================================
-// Helpers
-// ============================================
-
-function toIsoString(value: Date | string): string {
-  if (typeof value === 'string') return value
-  return value.toISOString()
-}
 
 // ============================================
 // Server Functions

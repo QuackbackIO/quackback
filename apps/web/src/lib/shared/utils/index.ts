@@ -12,3 +12,4 @@ export {
   safePositiveInt,
   extractYoutubeId,
 } from './sanitize'
+export { toIsoString, toIsoStringOrNull } from './date'
