@@ -15,6 +15,7 @@ import {
   boards,
   eq,
   asc,
+  isNull,
   DEFAULT_STATUSES,
 } from '@/lib/server/db'
 
@@ -437,6 +438,7 @@ export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler
   console.log(`[fn:onboarding] listBoardsForOnboarding`)
   try {
     const boardList = await db.query.boards.findMany({
+      where: isNull(boards.deletedAt),
       orderBy: [asc(boards.name)],
     })
     return boardList.map((b) => ({

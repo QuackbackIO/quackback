@@ -16,7 +16,7 @@ import {
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, invitation, principal, user, eq, and } from '@/lib/server/db'
+import { db, invitation, principal, user, boards, eq, and, isNull } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -320,7 +320,9 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const orgBoards = await db.query.boards.findMany()
+    const orgBoards = await db.query.boards.findMany({
+      where: isNull(boards.deletedAt),
+    })
     console.log(`[fn:admin] fetchBoardsForSettings: count=${orgBoards.length}`)
     return orgBoards.map((b) => ({
       ...b,
