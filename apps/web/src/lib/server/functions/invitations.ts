@@ -38,24 +38,28 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
     ])
 
     if (!inv) {
-      throw new Error('Invitation not found')
+      throw new Error(
+        'This invitation could not be found. It may have been cancelled. Please contact your administrator.'
+      )
     }
 
     if (inv.status !== 'pending') {
       throw new Error(
         inv.status === 'accepted'
-          ? 'This invitation has already been accepted'
-          : 'This invitation is no longer valid'
+          ? "This invitation has already been accepted. If you're having trouble accessing the dashboard, try signing in."
+          : 'This invitation has been cancelled. Please ask your administrator to send a new one.'
       )
     }
 
     if (new Date(inv.expiresAt) < new Date()) {
-      throw new Error('This invitation has expired')
+      throw new Error('This invitation has expired. Please ask your administrator to resend it.')
     }
 
     // Verify the authenticated user's email matches the invitation
     if (inv.email.toLowerCase() !== session.user.email?.toLowerCase()) {
-      throw new Error('This invitation was sent to a different email address')
+      throw new Error(
+        'This invitation was sent to a different email address. Please sign in with the email address that received the invitation, or ask your administrator to send a new invitation to your current email.'
+      )
     }
 
     const passwordEnabled = authConfig.oauth.password ?? true
@@ -101,14 +105,16 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       // Get current session
       const session = await getSession()
       if (!session?.user) {
-        throw new Error('Not authenticated')
+        throw new Error('Your session has expired. Please sign in again using the invitation link.')
       }
 
       const userId = session.user.id as UserId
       const userEmail = session.user.email?.toLowerCase()
 
       if (!userEmail) {
-        throw new Error('User email not found')
+        throw new Error(
+          'Your account is missing an email address. Please contact your administrator.'
+        )
       }
 
       // Atomically claim the invitation with a conditional update to prevent
@@ -124,11 +130,11 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         const inv = await db.query.invitation.findFirst({
           where: eq(invitation.id, invitationId as InviteId),
         })
-        if (!inv) throw new Error('Invitation not found')
+        if (!inv) throw new Error('This invitation could not be found. It may have been cancelled.')
         throw new Error(
           inv.status === 'accepted'
             ? 'This invitation has already been accepted'
-            : 'This invitation is no longer valid'
+            : 'This invitation has been cancelled. Please ask your administrator to send a new one.'
         )
       }
 
@@ -143,11 +149,15 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       }
 
       if (new Date(claimed.expiresAt) < new Date()) {
-        await rollbackAndThrow('This invitation has expired')
+        await rollbackAndThrow(
+          'This invitation has expired. Please ask your administrator to resend it.'
+        )
       }
 
       if (claimed.email.toLowerCase() !== userEmail) {
-        await rollbackAndThrow('This invitation was sent to a different email address')
+        await rollbackAndThrow(
+          'This invitation was sent to a different email address. Please sign in with the correct email.'
+        )
       }
 
       const role = claimed.role || 'member'
