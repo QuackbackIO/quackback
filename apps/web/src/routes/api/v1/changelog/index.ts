@@ -8,7 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { listChangelogs, createChangelog } from '@/lib/server/domains/changelog'
-import type { PublishState } from '@/lib/server/domains/changelog'
+import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
 import { db, principal, eq } from '@/lib/server/db'
 
 // Input validation schema
@@ -89,17 +89,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           }
 
           // Determine publish state from publishedAt
-          let publishState: PublishState
-          if (parsed.data.publishedAt) {
-            const publishDate = new Date(parsed.data.publishedAt)
-            if (publishDate > new Date()) {
-              publishState = { type: 'scheduled', publishAt: publishDate }
-            } else {
-              publishState = { type: 'published' }
-            }
-          } else {
-            publishState = { type: 'draft' }
-          }
+          const publishState = publishedAtToPublishState(parsed.data.publishedAt)
 
           // Look up principal display name for author info
           const principalRecord = await db.query.principal.findFirst({
