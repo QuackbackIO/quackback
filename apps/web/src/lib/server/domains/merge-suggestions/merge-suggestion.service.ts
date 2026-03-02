@@ -57,6 +57,10 @@ export interface MergeSuggestionView {
   targetPostTitle: string
   sourcePostVoteCount: number
   targetPostVoteCount: number
+  sourcePostStatusName: string | null
+  sourcePostStatusColor: string | null
+  targetPostStatusName: string | null
+  targetPostStatusColor: string | null
 }
 
 /**
@@ -83,7 +87,8 @@ export async function createMergeSuggestion(opts: CreateMergeSuggestionOpts): Pr
  */
 export async function acceptMergeSuggestion(
   id: MergeSuggestionId,
-  principalId: PrincipalId
+  principalId: PrincipalId,
+  opts?: { swapDirection?: boolean }
 ): Promise<void> {
   const suggestion = await db.query.mergeSuggestions.findFirst({
     where: (s, { eq }) => eq(s.id, id),
@@ -93,8 +98,10 @@ export async function acceptMergeSuggestion(
     throw new Error('Merge suggestion not found or already resolved')
   }
 
-  // Perform the actual merge
-  await mergePost(suggestion.sourcePostId, suggestion.targetPostId, principalId)
+  // Perform the actual merge (swap source/target if user toggled direction)
+  const duplicateId = opts?.swapDirection ? suggestion.targetPostId : suggestion.sourcePostId
+  const canonicalId = opts?.swapDirection ? suggestion.sourcePostId : suggestion.targetPostId
+  await mergePost(duplicateId, canonicalId, principalId)
 
   // Mark suggestion as accepted
   await db
@@ -156,6 +163,7 @@ export async function getPendingSuggestionsForPost(postId: PostId): Promise<Merg
       id: posts.id,
       title: posts.title,
       voteCount: posts.voteCount,
+      statusId: posts.statusId,
     })
     .from(posts)
     .as('source_posts')
@@ -165,9 +173,20 @@ export async function getPendingSuggestionsForPost(postId: PostId): Promise<Merg
       id: posts.id,
       title: posts.title,
       voteCount: posts.voteCount,
+      statusId: posts.statusId,
     })
     .from(posts)
     .as('target_posts')
+
+  const sourceStatusAlias = db
+    .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
+    .from(postStatuses)
+    .as('source_status')
+
+  const targetStatusAlias = db
+    .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
+    .from(postStatuses)
+    .as('target_status')
 
   const rows = await db
     .select({
@@ -183,10 +202,16 @@ export async function getPendingSuggestionsForPost(postId: PostId): Promise<Merg
       targetPostTitle: targetPostsAlias.title,
       sourcePostVoteCount: sourcePostsAlias.voteCount,
       targetPostVoteCount: targetPostsAlias.voteCount,
+      sourcePostStatusName: sourceStatusAlias.name,
+      sourcePostStatusColor: sourceStatusAlias.color,
+      targetPostStatusName: targetStatusAlias.name,
+      targetPostStatusColor: targetStatusAlias.color,
     })
     .from(mergeSuggestions)
     .innerJoin(sourcePostsAlias, eq(mergeSuggestions.sourcePostId, sourcePostsAlias.id))
     .innerJoin(targetPostsAlias, eq(mergeSuggestions.targetPostId, targetPostsAlias.id))
+    .leftJoin(sourceStatusAlias, eq(sourcePostsAlias.statusId, sourceStatusAlias.id))
+    .leftJoin(targetStatusAlias, eq(targetPostsAlias.statusId, targetStatusAlias.id))
     .where(
       and(
         eq(mergeSuggestions.status, 'pending'),
@@ -202,7 +227,7 @@ export async function getPendingSuggestionsForPost(postId: PostId): Promise<Merg
  * Get all pending merge suggestions with joined post data, for the suggestions page.
  */
 export async function getPendingMergeSuggestions(opts: {
-  sort?: 'newest' | 'similarity' | 'confidence'
+  sort?: 'newest' | 'relevance'
   limit?: number
 }): Promise<{
   items: Array<{
@@ -220,11 +245,9 @@ export async function getPendingMergeSuggestions(opts: {
 }> {
   // Step 1: Fetch count + merge suggestion rows in parallel
   const orderBy =
-    opts.sort === 'similarity'
+    opts.sort === 'relevance'
       ? [desc(mergeSuggestions.hybridScore), desc(mergeSuggestions.createdAt)]
-      : opts.sort === 'confidence'
-        ? [desc(mergeSuggestions.llmConfidence), desc(mergeSuggestions.createdAt)]
-        : [desc(mergeSuggestions.createdAt)]
+      : [desc(mergeSuggestions.createdAt)]
 
   const [countRows, rows] = await Promise.all([
     db

@@ -274,7 +274,7 @@ input[type="button"],
 input[type="reset"],
 label[for],
 select,
-[tabindex]:not([tabindex="-1"]),
+[tabindex]:not([tabindex="-1"]):not(.ProseMirror),
 [data-radix-collection-item],
 .cursor-pointer {
   cursor: pointer !important;

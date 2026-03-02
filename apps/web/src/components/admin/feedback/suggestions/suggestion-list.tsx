@@ -1,31 +1,37 @@
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { SearchInput } from '@/components/shared/search-input'
 import { EmptyState } from '@/components/shared/empty-state'
+import { Spinner } from '@/components/shared/spinner'
+import { Button } from '@/components/ui/button'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { cn } from '@/lib/shared/utils'
 import { SuggestionTriageRow } from './suggestion-triage-row'
 import type { SuggestionListItem } from '../feedback-types'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
-  { value: 'similarity', label: 'Similarity' },
-  { value: 'confidence', label: 'Confidence' },
+  { value: 'relevance', label: 'Relevance' },
 ] as const
 
 interface SuggestionListProps {
   suggestions: SuggestionListItem[]
-  total: number
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
   search?: string
   onSearchChange: (search: string) => void
   sort?: string
-  onSortChange: (sort: 'newest' | 'similarity' | 'confidence') => void
+  onSortChange: (sort: 'newest' | 'relevance') => void
 }
 
 export function SuggestionList({
   suggestions,
-  total,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
   onCreatePost,
   onResolved,
   search,
@@ -36,6 +42,14 @@ export function SuggestionList({
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: search,
     onChange: (v) => onSearchChange(v ?? ''),
+  })
+
+  const loadMoreRef = useInfiniteScroll({
+    hasMore,
+    isFetching: isLoadingMore,
+    onLoadMore,
+    rootMargin: '0px',
+    threshold: 0.1,
   })
 
   const headerContent = (
@@ -96,10 +110,24 @@ export function SuggestionList({
               </div>
             ))}
           </div>
+        </div>
+      )}
 
-          <div className="px-4 py-3 text-center text-[11px] text-muted-foreground/50">
-            {suggestions.length} of {total} pending
-          </div>
+      {/* Load more trigger */}
+      {hasMore && (
+        <div ref={loadMoreRef} className="px-3 pb-3 flex justify-center">
+          {isLoadingMore ? (
+            <Spinner />
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              className="text-muted-foreground"
+            >
+              Load more
+            </Button>
+          )}
         </div>
       )}
     </div>

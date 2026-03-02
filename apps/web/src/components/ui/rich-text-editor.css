@@ -4,6 +4,11 @@
  * tables, images, and syntax highlighting.
  */
 
+/* Text cursor for editable content */
+.tiptap.ProseMirror {
+  cursor: text;
+}
+
 /* Placeholder text */
 .tiptap p.is-editor-empty:first-child::before {
   color: color-mix(in oklch, var(--muted-foreground), transparent 50%);

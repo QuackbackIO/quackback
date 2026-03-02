@@ -32,12 +32,12 @@ export function AiSummaryCard({
   // Generating state: no summary yet
   if (!summaryJson) {
     return (
-      <div className="border border-border/30 rounded-lg bg-muted/5 mb-4">
+      <div className="border border-border/30 rounded-lg bg-muted/5">
         <div className="flex items-center gap-2 px-4 py-3">
-          <SparklesIcon className="size-4 text-amber-500/80" />
-          <span className="text-sm font-medium text-muted-foreground">AI Summary</span>
+          <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
+          <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
         </div>
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-3">
           <p className="text-sm text-muted-foreground italic">Summary is being generated...</p>
         </div>
       </div>
@@ -46,15 +46,15 @@ export function AiSummaryCard({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="border border-border/30 rounded-lg bg-muted/5 mb-4">
+      <div className="border border-border/30 rounded-lg bg-muted/5">
         {/* Header */}
         <CollapsibleTrigger asChild>
           <button
             type="button"
             className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/10 transition-colors rounded-t-lg"
           >
-            <SparklesIcon className="size-4 text-amber-500/80 shrink-0" />
-            <span className="text-sm font-medium">AI Summary</span>
+            <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
+            <p className="text-xs font-medium text-muted-foreground/70">AI Summary</p>
             <div className="flex-1" />
             {summaryUpdatedAt && (
               <span className="text-xs text-muted-foreground">
@@ -79,7 +79,7 @@ export function AiSummaryCard({
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
           <div className="px-4 pb-4 space-y-3">
             {/* Summary prose */}
-            <p className="text-sm text-foreground/90 leading-relaxed">{summaryJson.summary}</p>
+            <p className="text-sm text-foreground/80 leading-relaxed">{summaryJson.summary}</p>
 
             {/* Key quotes */}
             {summaryJson.keyQuotes.length > 0 && (

@@ -30,8 +30,8 @@ const listSuggestionsSchema = z.object({
   suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
   boardId: z.string().optional(),
   sourceIds: z.array(z.string()).optional(),
-  sort: z.enum(['newest', 'similarity', 'confidence']).optional().default('newest'),
-  limit: z.number().optional().default(50),
+  sort: z.enum(['newest', 'relevance']).optional().default('newest'),
+  limit: z.number().optional().default(20),
   offset: z.number().optional().default(0),
 })
 
@@ -48,6 +48,7 @@ const acceptSuggestionSchema = z.object({
       boardId: z.string().optional(),
     })
     .optional(),
+  swapDirection: z.boolean().optional(),
 })
 
 const dismissSuggestionSchema = z.object({
@@ -116,15 +117,17 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       feedbackTotal = totalResult?.count ?? 0
 
       const orderBy =
-        data.sort === 'similarity'
+        data.sort === 'relevance'
           ? [desc(feedbackSuggestions.similarityScore), desc(feedbackSuggestions.createdAt)]
           : [desc(feedbackSuggestions.createdAt)]
+
+      // Fetch enough items to cover the combined offset + limit range
+      const fetchUpTo = data.offset + data.limit + 1
 
       feedbackItems = await db.query.feedbackSuggestions.findMany({
         where: () => and(...conditions),
         orderBy,
-        limit: data.limit,
-        offset: data.offset,
+        limit: fetchUpTo,
         with: {
           rawItem: {
             columns: {
@@ -161,29 +164,24 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     let mergeItems: any[] = []
     let mergeTotal = 0
 
+    // Look up quackback source once (used for merge source filtering and per-source counts)
+    const quackbackSource = await db.query.feedbackSources.findFirst({
+      where: eq(feedbackSources.sourceType, 'quackback'),
+      columns: { id: true },
+    })
+
     // Include merge suggestions unless filtered to a non-quackback source or specific board.
-    // When filtering by source, check if the quackback source is among the selected IDs.
-    let includesMergeSource = !data.sourceIds?.length
-    if (data.sourceIds?.length) {
-      const quackbackSource = await db.query.feedbackSources.findFirst({
-        where: eq(feedbackSources.sourceType, 'quackback'),
-        columns: { id: true },
-      })
-      includesMergeSource = !!quackbackSource && data.sourceIds.includes(quackbackSource.id)
-    }
+    const includesMergeSource =
+      !data.sourceIds?.length || (!!quackbackSource && data.sourceIds.includes(quackbackSource.id))
 
     if (includeMerge && includesMergeSource && !data.boardId) {
       const { getPendingMergeSuggestions } =
         await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
 
+      const mergeFetchUpTo = data.offset + data.limit + 1
       const { items, total } = await getPendingMergeSuggestions({
-        sort:
-          data.sort === 'similarity'
-            ? 'similarity'
-            : data.sort === 'confidence'
-              ? 'confidence'
-              : 'newest',
-        limit: data.limit ?? 50,
+        sort: data.sort === 'relevance' ? 'relevance' : 'newest',
+        limit: mergeFetchUpTo,
       })
 
       mergeTotal = total
@@ -206,17 +204,58 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       }))
     }
 
+    // Compute per-source counts across ALL matching suggestions (ignoring pagination)
+    const countsBySource: Record<string, number> = {}
+
+    // Count feedback suggestions grouped by source
+    if (includeFeedback) {
+      const feedbackCountConditions: any[] = [
+        eq(feedbackSuggestions.status, data.status ?? 'pending'),
+      ]
+      if (data.suggestionType) {
+        feedbackCountConditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
+      }
+
+      const feedbackCountsBySource = await db
+        .select({
+          sourceId: rawFeedbackItems.sourceId,
+          count: count(),
+        })
+        .from(feedbackSuggestions)
+        .innerJoin(rawFeedbackItems, eq(feedbackSuggestions.rawFeedbackItemId, rawFeedbackItems.id))
+        .where(and(...feedbackCountConditions))
+        .groupBy(rawFeedbackItems.sourceId)
+
+      for (const row of feedbackCountsBySource) {
+        if (row.sourceId) {
+          countsBySource[row.sourceId] = row.count
+        }
+      }
+    }
+
+    // Attribute merge suggestion count to quackback source
+    if (includeMerge && mergeTotal > 0 && quackbackSource) {
+      countsBySource[quackbackSource.id] = (countsBySource[quackbackSource.id] ?? 0) + mergeTotal
+    }
+
     // Combine and sort across both sources
-    const allItems = [...feedbackItems, ...mergeItems].sort((a, b) => {
-      if (data.sort === 'similarity') {
+    const allSorted = [...feedbackItems, ...mergeItems].sort((a, b) => {
+      if (data.sort === 'relevance') {
         return (b.similarityScore ?? 0) - (a.similarityScore ?? 0)
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
 
+    // Slice to the requested page
+    const hasMore = allSorted.length > data.offset + data.limit
+    const pageItems = allSorted.slice(data.offset, data.offset + data.limit)
+
     return {
-      items: allItems,
+      items: pageItems,
       total: feedbackTotal + mergeTotal,
+      countsBySource,
+      nextCursor: hasMore ? String(data.offset + data.limit) : null,
+      hasMore,
     }
   })
 
@@ -364,7 +403,9 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
     if (isTypeId(data.id, 'merge_sug')) {
       const { acceptMergeSuggestion: acceptPostMerge } =
         await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
-      await acceptPostMerge(data.id, auth.principal.id as PrincipalId)
+      await acceptPostMerge(data.id, auth.principal.id as PrincipalId, {
+        swapDirection: data.swapDirection,
+      })
       return { success: true }
     }
 

@@ -28,23 +28,39 @@ import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { PostId, StatusId, TagId, RoadmapId } from '@quackback/ids'
 
-export function MetadataSidebarSkeleton() {
+export function MetadataSidebarSkeleton({
+  variant = 'column',
+}: { variant?: 'column' | 'card' } = {}) {
+  const isCard = variant === 'card'
   return (
-    <div className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5 p-4 space-y-5">
-      {/* Upvotes */}
-      <Skeleton className="h-12 w-full rounded-lg" />
-      {/* Status */}
-      <Skeleton className="h-8 w-full" />
-      {/* Board */}
-      <Skeleton className="h-8 w-full" />
-      {/* Tags */}
-      <Skeleton className="h-8 w-full" />
-      {/* Roadmaps */}
-      <Skeleton className="h-8 w-full" />
-      {/* Date */}
-      <Skeleton className="h-8 w-full" />
-      {/* Author */}
-      <Skeleton className="h-8 w-full" />
+    <div
+      className={cn(
+        'hidden lg:block w-72 shrink-0',
+        !isCard && 'border-l border-border/30 bg-muted/5 p-4 space-y-5'
+      )}
+    >
+      <div
+        className={cn(
+          isCard
+            ? 'mt-6 mr-4 ml-1 rounded-xl border border-border/20 bg-card shadow-sm p-4 space-y-5'
+            : 'contents'
+        )}
+      >
+        {/* Upvotes */}
+        <Skeleton className="h-12 w-full rounded-lg" />
+        {/* Status */}
+        <Skeleton className="h-8 w-full" />
+        {/* Board */}
+        <Skeleton className="h-8 w-full" />
+        {/* Tags */}
+        <Skeleton className="h-8 w-full" />
+        {/* Roadmaps */}
+        <Skeleton className="h-8 w-full" />
+        {/* Date */}
+        <Skeleton className="h-8 w-full" />
+        {/* Author */}
+        <Skeleton className="h-8 w-full" />
+      </div>
     </div>
   )
 }
@@ -87,6 +103,8 @@ interface MetadataSidebarProps {
   hideSubscribe?: boolean
   /** Hide vote button (for admin context where voting is handled differently) */
   hideVote?: boolean
+  /** Visual variant: 'column' (default border-l) or 'card' (floating card) */
+  variant?: 'column' | 'card'
 }
 
 export function MetadataSidebar({
@@ -110,6 +128,7 @@ export function MetadataSidebar({
   isUpdating = false,
   hideSubscribe = false,
   hideVote = false,
+  variant = 'column',
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
@@ -177,12 +196,22 @@ export function MetadataSidebar({
     }
   }
 
+  const isCard = variant === 'card'
+
   return (
     <aside
-      className="hidden lg:block w-72 shrink-0 border-l border-border/30 bg-muted/5 animate-in fade-in duration-200 fill-mode-backwards"
+      className={cn(
+        'hidden lg:block w-72 shrink-0 animate-in fade-in duration-200 fill-mode-backwards',
+        !isCard && 'border-l border-border/30 bg-muted/5'
+      )}
       style={{ animationDelay: '100ms' }}
     >
-      <div className="p-4 space-y-5">
+      <div
+        className={cn(
+          'p-4 space-y-5',
+          isCard && 'mt-6 mr-4 ml-1 rounded-xl border border-border/20 bg-card shadow-sm'
+        )}
+      >
         {/* Upvotes */}
         {!hideVote && (
           <div className="flex items-center justify-between">
@@ -313,8 +342,8 @@ export function MetadataSidebar({
                   </PopoverContent>
                 </Popover>
               )}
-              {tags.length === 0 && !tagOpen && (
-                <span className="text-xs text-muted-foreground/60 italic">None</span>
+              {tags.length === 0 && availableTags.length === 0 && !tagOpen && (
+                <span className="text-xs text-muted-foreground/60">-</span>
               )}
             </div>
           ) : tags.length > 0 ? (
@@ -326,7 +355,7 @@ export function MetadataSidebar({
               ))}
             </div>
           ) : (
-            <NoneLabel />
+            <span className="text-xs text-muted-foreground/60">-</span>
           )}
         </div>
 
@@ -414,8 +443,8 @@ export function MetadataSidebar({
                   </PopoverContent>
                 </Popover>
               )}
-              {roadmaps.length === 0 && !roadmapOpen && (
-                <span className="text-xs text-muted-foreground/60 italic">None</span>
+              {roadmaps.length === 0 && availableRoadmaps.length === 0 && !roadmapOpen && (
+                <span className="text-xs text-muted-foreground/60">-</span>
               )}
             </div>
           ) : roadmaps.length > 0 ? (
@@ -431,7 +460,7 @@ export function MetadataSidebar({
               ))}
             </div>
           ) : (
-            <NoneLabel />
+            <span className="text-xs text-muted-foreground/60">-</span>
           )}
         </div>
 

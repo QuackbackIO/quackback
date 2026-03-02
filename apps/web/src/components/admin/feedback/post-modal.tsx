@@ -379,60 +379,94 @@ function PostModalContent({
           <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
         )}
 
-        {/* AI merge suggestion banner */}
-        {!post.mergeInfo && <MergeSuggestionBanner postId={post.id as PostId} />}
-
-        {/* 2-column layout for editor and metadata */}
+        {/* 2-column layout - extends full height */}
         <div className="flex">
-          {/* Left: Content editor */}
-          <div className="flex-1 p-6">
-            {/* Title input */}
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="What's the feedback about?"
-              maxLength={200}
-              autoFocus
-              disabled={updatePost.isPending}
-              className="w-full bg-transparent border-0 outline-none text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
-            />
-
-            {/* Rich text editor */}
-            <RichTextEditor
-              value={contentJson || ''}
-              onChange={handleContentChange}
-              placeholder="Add more details..."
-              minHeight="200px"
-              disabled={updatePost.isPending}
-              borderless
-              features={{
-                headings: false,
-                images: false,
-                codeBlocks: false,
-                bubbleMenu: true,
-                slashMenu: false,
-                taskLists: false,
-                blockquotes: true,
-                tables: false,
-                dividers: false,
-                embeds: false,
-              }}
-            />
-
-            {/* AI Summary */}
-            {post.summaryJson && (
-              <AiSummaryCard
-                summaryJson={post.summaryJson}
-                summaryUpdatedAt={post.summaryUpdatedAt ?? null}
-                summaryCommentCount={post.summaryCommentCount ?? null}
-                currentCommentCount={post.commentCount ?? 0}
+          {/* Left: Content, AI, Comments */}
+          <div className="flex-1 min-w-0">
+            {/* Editor area */}
+            <div className="p-6">
+              {/* Title input */}
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="What's the feedback about?"
+                maxLength={200}
+                autoFocus
+                disabled={updatePost.isPending}
+                className="w-full bg-transparent border-0 outline-none text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
               />
-            )}
+
+              {/* Rich text editor */}
+              <RichTextEditor
+                value={contentJson || ''}
+                onChange={handleContentChange}
+                placeholder="Add more details..."
+                minHeight="200px"
+                disabled={updatePost.isPending}
+                borderless
+                features={{
+                  headings: false,
+                  images: false,
+                  codeBlocks: false,
+                  bubbleMenu: true,
+                  slashMenu: false,
+                  taskLists: false,
+                  blockquotes: true,
+                  tables: false,
+                  dividers: false,
+                  embeds: false,
+                }}
+              />
+
+              {/* AI section — merge suggestions + summary */}
+              <div className="mt-8 space-y-3">
+                {!post.mergeInfo && <MergeSuggestionBanner postId={post.id as PostId} />}
+
+                {/* AI Summary */}
+                {post.summaryJson && (
+                  <AiSummaryCard
+                    summaryJson={post.summaryJson}
+                    summaryUpdatedAt={post.summaryUpdatedAt ?? null}
+                    summaryCommentCount={post.summaryCommentCount ?? null}
+                    currentCommentCount={post.commentCount ?? 0}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Merge actions section */}
+            <MergeActions
+              postId={postId}
+              postTitle={post.title}
+              canonicalPostId={post.canonicalPostId as PostId | undefined}
+              mergedPosts={post.mergedPosts}
+              showDialog={showMergeDialog}
+              onShowDialogChange={setShowMergeDialog}
+            />
+
+            {/* Comments section */}
+            <div>
+              <Suspense fallback={<CommentsSectionSkeleton />}>
+                <CommentsSection
+                  postId={postId}
+                  comments={toPortalComments(post)}
+                  pinnedCommentId={post.pinnedCommentId}
+                  canPinComments
+                  onPinComment={(commentId) => pinComment.mutate(commentId)}
+                  onUnpinComment={() => unpinComment.mutate()}
+                  isPinPending={pinComment.isPending || unpinComment.isPending}
+                  adminUser={{ name: currentUser.name, email: currentUser.email }}
+                  statuses={statuses}
+                  currentStatusId={post.statusId}
+                  isTeamMember
+                />
+              </Suspense>
+            </div>
           </div>
 
           {/* Right: Metadata sidebar */}
-          <Suspense fallback={<MetadataSidebarSkeleton />}>
+          <Suspense fallback={<MetadataSidebarSkeleton variant="card" />}>
             <MetadataSidebar
               postId={postId}
               voteCount={post.voteCount}
@@ -453,35 +487,7 @@ function PostModalContent({
               onRoadmapRemove={handleRoadmapRemove}
               isUpdating={isUpdating || !!pendingRoadmapId}
               hideSubscribe
-            />
-          </Suspense>
-        </div>
-
-        {/* Merge actions section */}
-        <MergeActions
-          postId={postId}
-          postTitle={post.title}
-          canonicalPostId={post.canonicalPostId as PostId | undefined}
-          mergedPosts={post.mergedPosts}
-          showDialog={showMergeDialog}
-          onShowDialogChange={setShowMergeDialog}
-        />
-
-        {/* Comments section */}
-        <div className="bg-muted/20 border-t border-border/30">
-          <Suspense fallback={<CommentsSectionSkeleton />}>
-            <CommentsSection
-              postId={postId}
-              comments={toPortalComments(post)}
-              pinnedCommentId={post.pinnedCommentId}
-              canPinComments
-              onPinComment={(commentId) => pinComment.mutate(commentId)}
-              onUnpinComment={() => unpinComment.mutate()}
-              isPinPending={pinComment.isPending || unpinComment.isPending}
-              adminUser={{ name: currentUser.name, email: currentUser.email }}
-              statuses={statuses}
-              currentStatusId={post.statusId}
-              isTeamMember
+              variant="card"
             />
           </Suspense>
         </div>

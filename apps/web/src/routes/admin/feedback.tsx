@@ -28,8 +28,7 @@ const searchSchema = z.object({
   suggestion: z.string().optional(),
   suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
   suggestionSource: z.array(z.string()).optional(),
-  suggestionBoard: z.array(z.string()).optional(),
-  suggestionSort: z.enum(['newest', 'similarity', 'confidence']).optional(),
+  suggestionSort: z.enum(['newest', 'relevance']).optional(),
   suggestionSearch: z.string().optional(),
 })
 

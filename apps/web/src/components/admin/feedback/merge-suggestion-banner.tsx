@@ -4,7 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { SparklesIcon, ArrowRightIcon } from '@heroicons/react/16/solid'
+import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
+import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +38,10 @@ interface Suggestion {
   targetPostTitle: string
   sourcePostVoteCount: number
   targetPostVoteCount: number
+  sourcePostStatusName: string | null
+  sourcePostStatusColor: string | null
+  targetPostStatusName: string | null
+  targetPostStatusColor: string | null
   hybridScore: number
   llmConfidence: number
   llmReasoning: string | null
@@ -79,55 +87,104 @@ export function MergeSuggestionBanner({ postId }: MergeSuggestionBannerProps) {
 
   return (
     <>
-      <div className="mx-6 mt-4 space-y-2">
+      <div className="space-y-2">
         {suggestions.map((suggestion) => {
           // Show the "other" post (not the one being viewed)
-          const otherPostTitle =
-            suggestion.sourcePostId === postId
-              ? suggestion.targetPostTitle
-              : suggestion.sourcePostTitle
-          const confidence = Math.round((suggestion.llmConfidence as number) * 100)
-
+          const isSource = suggestion.sourcePostId === postId
+          const otherPostId = isSource ? suggestion.targetPostId : suggestion.sourcePostId
+          const otherPost = {
+            id: otherPostId,
+            title: isSource ? suggestion.targetPostTitle : suggestion.sourcePostTitle,
+            voteCount: isSource ? suggestion.targetPostVoteCount : suggestion.sourcePostVoteCount,
+            statusName: isSource
+              ? suggestion.targetPostStatusName
+              : suggestion.sourcePostStatusName,
+            statusColor: isSource
+              ? suggestion.targetPostStatusColor
+              : suggestion.sourcePostStatusColor,
+          }
           return (
-            <div
-              key={suggestion.id}
-              className="p-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800/40"
-            >
-              <div className="flex items-start gap-2">
-                <SparklesIcon className="h-4 w-4 mt-0.5 text-violet-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-violet-800 dark:text-violet-200">
-                    AI detected a possible duplicate ({confidence}% confidence):{' '}
-                    <span className="font-medium">{otherPostTitle}</span>
-                  </p>
-                  {suggestion.llmReasoning && (
-                    <p className="text-xs text-violet-600 dark:text-violet-400 mt-1">
-                      {suggestion.llmReasoning}
+            <Collapsible key={suggestion.id} defaultOpen>
+              <div className="rounded-lg border border-border/30 bg-muted/5 overflow-hidden">
+                {/* Header */}
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      'group flex w-full items-center gap-2 px-4 py-3 text-left',
+                      'hover:bg-muted/10 transition-colors'
+                    )}
+                  >
+                    <SparklesIcon className="h-3.5 w-3.5 text-amber-500/80 shrink-0" />
+                    <p className="text-xs font-medium text-muted-foreground/70">
+                      Possible duplicate
                     </p>
-                  )}
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmAccept(suggestion as Suggestion)}
-                      disabled={loading}
-                      className="text-xs h-7 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+                    <div className="flex-1" />
+                    <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </button>
+                </CollapsibleTrigger>
+
+                {/* Body */}
+                <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                  <div className="px-4 pb-3 space-y-2.5">
+                    {/* Reasoning */}
+                    <p className="text-sm text-foreground/80 leading-relaxed">
+                      {suggestion.llmReasoning ??
+                        'This post may be a duplicate of the following feedback'}
+                    </p>
+
+                    {/* Post card */}
+                    <a
+                      href={`/admin/feedback?post=${otherPost.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2.5 rounded-md border border-border/50 bg-muted/20 p-2 pl-2.5 transition-colors hover:bg-muted/40"
                     >
-                      Merge
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDismiss(suggestion.id as string)}
-                      disabled={loading}
-                      className="text-xs h-7 text-violet-600 dark:text-violet-400"
-                    >
-                      Dismiss
-                    </Button>
+                      <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-0.5 gap-0">
+                        <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs font-semibold tabular-nums text-foreground">
+                          {otherPost.voteCount}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {otherPost.statusName && (
+                          <StatusBadge
+                            name={otherPost.statusName}
+                            color={otherPost.statusColor}
+                            className="text-[10px]"
+                          />
+                        )}
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {otherPost.title}
+                        </p>
+                      </div>
+                    </a>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmAccept(suggestion as Suggestion)}
+                        disabled={loading}
+                        className="text-xs h-7"
+                      >
+                        Merge into this post
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDismiss(suggestion.id as string)}
+                        disabled={loading}
+                        className="text-xs h-7 text-muted-foreground"
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                </CollapsibleContent>
               </div>
-            </div>
+            </Collapsible>
           )
         })}
       </div>

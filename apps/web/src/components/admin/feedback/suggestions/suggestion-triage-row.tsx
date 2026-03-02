@@ -1,10 +1,12 @@
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRightIcon, ChatBubbleLeftIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
+import { useState } from 'react'
+import { ArrowsRightLeftIcon, ChatBubbleLeftIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { cn } from '@/lib/shared/utils'
 import { SourceTypeIcon } from '../source-type-icon'
 import { useSuggestionActions } from './use-suggestion-actions'
 import type { SuggestionListItem } from '../feedback-types'
@@ -40,6 +42,7 @@ function DuplicateRow({
   suggestion: SuggestionListItem
   onResolved: () => void
 }) {
+  const [swapped, setSwapped] = useState(false)
   const similarity =
     suggestion.similarityScore != null ? Math.round(suggestion.similarityScore * 100) : null
 
@@ -48,6 +51,9 @@ function DuplicateRow({
     isMerge: true,
     onResolved,
   })
+
+  const leftPost = swapped ? suggestion.targetPost : suggestion.sourcePost
+  const rightPost = swapped ? suggestion.sourcePost : suggestion.targetPost
 
   return (
     <div className="w-full px-4 py-3 space-y-2">
@@ -58,17 +64,27 @@ function DuplicateRow({
           variant="outline"
           className="text-[10px] px-1.5 py-0 shrink-0 border-violet-300/50 text-violet-600 dark:border-violet-700/50 dark:text-violet-400"
         >
-          Duplicate post
+          Merge posts
         </Badge>
       </div>
 
       {/* Side-by-side post cards */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
-        <MiniPostCard post={suggestion.sourcePost} />
-        <div className="flex items-center px-0.5">
-          <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground/40" />
-        </div>
-        <MiniPostCard post={suggestion.targetPost} />
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <MiniPostCard post={leftPost} />
+        <button
+          type="button"
+          onClick={() => setSwapped(!swapped)}
+          className={cn(
+            'flex items-center px-1 py-1 rounded transition-colors cursor-pointer',
+            'hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground/70',
+            swapped &&
+              'text-violet-500 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-300'
+          )}
+          title="Swap merge direction"
+        >
+          <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+        </button>
+        <MiniPostCard post={rightPost} />
       </div>
 
       {/* Footer: reasoning + match info + actions */}
@@ -93,7 +109,7 @@ function DuplicateRow({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => accept(undefined)}
+            onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
             disabled={isPending}
           >
             Merge
@@ -211,7 +227,7 @@ function CreatePostRow({
           variant="outline"
           className="text-[10px] px-1.5 py-0 shrink-0 border-emerald-300/50 text-emerald-600 dark:border-emerald-700/50 dark:text-emerald-400"
         >
-          New post
+          Create post
         </Badge>
         <span className="text-[11px] text-muted-foreground/60 truncate">
           {author?.name ?? author?.email ?? rawItem?.source?.name ?? sourceType}
@@ -232,7 +248,7 @@ function CreatePostRow({
       {/* AI-derived title + reasoning */}
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground leading-snug">
-          {suggestion.suggestedTitle ?? 'New post suggestion'}
+          {suggestion.suggestedTitle ?? 'Create post suggestion'}
         </p>
         {suggestion.reasoning && (
           <p className="text-[11px] text-muted-foreground/50 line-clamp-1 flex items-center gap-1.5 mt-1">

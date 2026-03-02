@@ -59,8 +59,7 @@ export interface SuggestionsFilters {
   search?: string
   suggestionType?: 'create_post' | 'duplicate_post'
   sourceIds?: string[]
-  board?: string[]
-  sort?: 'newest' | 'similarity' | 'confidence'
+  sort?: 'newest' | 'relevance'
   /** Selected suggestion ID (for URL persistence) */
   suggestion?: string
 }

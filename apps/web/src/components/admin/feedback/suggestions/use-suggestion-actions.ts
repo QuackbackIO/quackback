@@ -20,11 +20,12 @@ export function useSuggestionActions({
   }
 
   const acceptMutation = useMutation({
-    mutationFn: (edits?: { title: string; body: string }) =>
+    mutationFn: (opts?: { title: string; body: string } | { swapDirection: boolean }) =>
       acceptSuggestionFn({
         data: {
           id: suggestionId,
-          ...(!isMerge && edits && { edits }),
+          ...(!isMerge && opts && 'title' in opts && { edits: opts }),
+          ...(isMerge && opts && 'swapDirection' in opts && { swapDirection: opts.swapDirection }),
         },
       }),
     onSuccess: () => {

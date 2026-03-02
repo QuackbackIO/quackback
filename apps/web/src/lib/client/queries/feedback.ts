@@ -16,7 +16,7 @@ export const feedbackQueries = {
     suggestionType?: 'create_post' | 'duplicate_post'
     boardId?: string
     sourceIds?: string[]
-    sort?: 'newest' | 'similarity' | 'confidence'
+    sort?: 'newest' | 'relevance'
     limit?: number
     offset?: number
   }) =>

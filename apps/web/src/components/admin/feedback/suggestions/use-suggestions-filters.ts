@@ -15,7 +15,6 @@ export function useSuggestionsFilters() {
       search: search.suggestionSearch,
       suggestionType: search.suggestionType,
       sourceIds: search.suggestionSource?.length ? search.suggestionSource : undefined,
-      board: search.suggestionBoard?.length ? search.suggestionBoard : undefined,
       sort: search.suggestionSort,
     }),
     [search]
@@ -30,7 +29,6 @@ export function useSuggestionsFilters() {
           ...('search' in updates && { suggestionSearch: updates.search }),
           ...('suggestionType' in updates && { suggestionType: updates.suggestionType }),
           ...('sourceIds' in updates && { suggestionSource: updates.sourceIds }),
-          ...('board' in updates && { suggestionBoard: updates.board }),
           ...('sort' in updates && { suggestionSort: updates.sort }),
         },
         replace: true,
@@ -50,12 +48,7 @@ export function useSuggestionsFilters() {
   }, [navigate, search])
 
   const hasActiveFilters = useMemo(() => {
-    return !!(
-      filters.search ||
-      filters.suggestionType ||
-      filters.sourceIds?.length ||
-      filters.board?.length
-    )
+    return !!(filters.search || filters.suggestionType || filters.sourceIds?.length)
   }, [filters])
 
   const toggleSource = useCallback(
@@ -65,19 +58,11 @@ export function useSuggestionsFilters() {
     [filters.sourceIds, setFilters]
   )
 
-  const toggleBoard = useCallback(
-    (boardId: string) => {
-      setFilters({ board: toggleItem(filters.board, boardId) })
-    },
-    [filters.board, setFilters]
-  )
-
   return {
     filters,
     setFilters,
     clearFilters,
     hasActiveFilters,
     toggleSource,
-    toggleBoard,
   }
 }

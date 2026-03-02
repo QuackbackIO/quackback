@@ -1,16 +1,14 @@
-import { FilterList, BoardFilterList } from '../single-select-filter-list'
+import { FilterList } from '../single-select-filter-list'
 import { toggleItem } from '../filter-utils'
 import { SourceTypeIcon, SOURCE_TYPE_LABELS } from '../source-type-icon'
 import { FilterSection } from '@/components/shared/filter-section'
 import type { SuggestionsFilters } from './use-suggestions-filters'
 import type { FeedbackSourceView } from '../feedback-types'
-import type { Board } from '@/lib/shared/db-types'
 
 interface SuggestionsFiltersSidebarProps {
   filters: SuggestionsFilters
   onFiltersChange: (updates: Partial<SuggestionsFilters>) => void
   sources: FeedbackSourceView[]
-  boards: Board[]
   /** Pending suggestion counts keyed by source ID */
   suggestionCountsBySource?: Map<string, number>
 }
@@ -19,7 +17,6 @@ export function SuggestionsFiltersSidebar({
   filters,
   onFiltersChange,
   sources,
-  boards,
   suggestionCountsBySource,
 }: SuggestionsFiltersSidebarProps) {
   const handleTypeSelect = (id: string) => {
@@ -40,23 +37,14 @@ export function SuggestionsFiltersSidebar({
     }
   }
 
-  const handleBoardSelect = (id: string, addToSelection: boolean) => {
-    if (addToSelection) {
-      onFiltersChange({ board: toggleItem(filters.board, id) })
-    } else {
-      const isOnlySelected = filters.board?.length === 1 && filters.board[0] === id
-      onFiltersChange({ board: isOnlySelected ? undefined : [id] })
-    }
-  }
-
   return (
     <div className="space-y-0">
       {/* Type Filter */}
-      <FilterSection title="Type">
+      <FilterSection title="Suggested action">
         <FilterList
           items={[
-            { id: 'duplicate_post', name: 'Duplicate post' },
-            { id: 'create_post', name: 'New post' },
+            { id: 'duplicate_post', name: 'Merge posts' },
+            { id: 'create_post', name: 'Create post' },
           ]}
           selectedIds={filters.suggestionType ? [filters.suggestionType] : []}
           onSelect={(id) => handleTypeSelect(id)}
@@ -87,17 +75,6 @@ export function SuggestionsFiltersSidebar({
                 </span>
               )
             }}
-          />
-        </FilterSection>
-      )}
-
-      {/* Board Filter */}
-      {boards.length > 0 && (
-        <FilterSection title="Board">
-          <BoardFilterList
-            boards={boards}
-            selectedIds={filters.board || []}
-            onSelect={handleBoardSelect}
           />
         </FilterSection>
       )}

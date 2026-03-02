@@ -1,15 +1,23 @@
-import { Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { SuggestionsLayout } from './suggestions-layout'
 import { SuggestionsFiltersSidebar } from './suggestions-filter-sidebar'
 import { SuggestionList } from './suggestion-list'
 import { CreateFromSuggestionDialog } from './create-from-suggestion-dialog'
 import { useSuggestionsFilters } from './use-suggestions-filters'
+import {
+  useSuggestionsQuery,
+  flattenSuggestions,
+  type SuggestionsPageResult,
+} from '@/lib/client/hooks/use-suggestions-query'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
-import { adminQueries } from '@/lib/client/queries/admin'
 import type { SuggestionListItem, FeedbackSourceView } from '../feedback-types'
 
-export function SuggestionsContainer() {
+interface SuggestionsContainerProps {
+  initialSuggestions?: SuggestionsPageResult
+}
+
+export function SuggestionsContainer({ initialSuggestions }: SuggestionsContainerProps) {
   const { filters, setFilters, hasActiveFilters } = useSuggestionsFilters()
 
   // Dialog state for create_post suggestions
@@ -17,12 +25,19 @@ export function SuggestionsContainer() {
 
   // Data queries
   const { data: sourcesData } = useSuspenseQuery(feedbackQueries.sources())
-  const { data: boardsData } = useSuspenseQuery(adminQueries.boards())
 
   const sources: FeedbackSourceView[] = sourcesData ?? []
-  const boards = boardsData ?? []
 
-  // Fetch ALL pending suggestions (filter client-side so sidebar counts are accurate)
+  // Track whether we're on the initial render (for using server-prefetched data)
+  const isInitialRender = useRef(true)
+  useEffect(() => {
+    isInitialRender.current = false
+  }, [])
+
+  const shouldUseInitialData =
+    isInitialRender.current && !filters.search && !filters.sourceIds?.length
+
+  // Server-side query filters (type + sort go to server, source/board/search are client-side)
   const queryFilters = useMemo(
     () => ({
       status: 'pending' as const,
@@ -32,26 +47,30 @@ export function SuggestionsContainer() {
     [filters.suggestionType, filters.sort]
   )
 
-  const { data } = useSuspenseQuery(feedbackQueries.suggestions(queryFilters))
-  const allSuggestions = (data?.items ?? []) as SuggestionListItem[]
+  // Infinite query for paginated suggestions
+  const {
+    data: paginatedData,
+    isFetchingNextPage: isLoadingMore,
+    hasNextPage: hasMore,
+    fetchNextPage,
+  } = useSuggestionsQuery({
+    filters: queryFilters,
+    initialData: shouldUseInitialData ? initialSuggestions : undefined,
+  })
 
-  // Compute suggestion counts per source for sidebar badges
+  const allSuggestions = flattenSuggestions(paginatedData) as unknown as SuggestionListItem[]
+
+  // Use server-provided per-source counts from the first page (reflects totals, not just current page)
   const suggestionCountsBySource = useMemo(() => {
     const counts = new Map<string, number>()
-    const quackbackSource = sources.find((s) => s.sourceType === 'quackback')
-    for (const s of allSuggestions) {
-      if (s.suggestionType === 'duplicate_post' && quackbackSource) {
-        // Merge suggestions belong to quackback source
-        counts.set(quackbackSource.id, (counts.get(quackbackSource.id) ?? 0) + 1)
-      } else {
-        const sourceId = s.rawItem?.source?.id
-        if (sourceId) {
-          counts.set(sourceId, (counts.get(sourceId) ?? 0) + 1)
-        }
+    const firstPage = paginatedData?.pages[0]
+    if (firstPage?.countsBySource) {
+      for (const [sourceId, cnt] of Object.entries(firstPage.countsBySource)) {
+        counts.set(sourceId, cnt as number)
       }
     }
     return counts
-  }, [allSuggestions, sources])
+  }, [paginatedData?.pages[0]?.countsBySource])
 
   // Client-side filtering for source, board, and search
   const suggestions = useMemo(() => {
@@ -67,10 +86,6 @@ export function SuggestionsContainer() {
         if (s.suggestionType === 'duplicate_post') return includesQuackback
         return s.rawItem?.source && filters.sourceIds!.includes(s.rawItem.source.id)
       })
-    }
-
-    if (filters.board?.length) {
-      filtered = filtered.filter((s) => s.board && filters.board!.includes(s.board.id))
     }
 
     if (filters.search) {
@@ -93,17 +108,14 @@ export function SuggestionsContainer() {
       })
     }
 
-    // Client-side sort for confidence (server handles newest + similarity)
-    if (filters.sort === 'confidence') {
-      filtered = [...filtered].sort((a, b) => {
-        const ac = a.signal?.extractionConfidence ?? 0
-        const bc = b.signal?.extractionConfidence ?? 0
-        return bc - ac
-      })
-    }
-
     return filtered
-  }, [allSuggestions, filters.sourceIds, filters.board, filters.search, filters.sort])
+  }, [allSuggestions, filters.sourceIds, filters.search])
+
+  const handleLoadMore = useCallback(() => {
+    if (hasMore && !isLoadingMore) {
+      fetchNextPage()
+    }
+  }, [hasMore, isLoadingMore, fetchNextPage])
 
   const handleResolved = useCallback(() => {
     setCreateTarget(null)
@@ -115,7 +127,7 @@ export function SuggestionsContainer() {
   )
 
   const handleSortChange = useCallback(
-    (sort: 'newest' | 'similarity' | 'confidence') => setFilters({ sort }),
+    (sort: 'newest' | 'relevance') => setFilters({ sort }),
     [setFilters]
   )
 
@@ -128,7 +140,6 @@ export function SuggestionsContainer() {
             filters={filters}
             onFiltersChange={setFilters}
             sources={sources}
-            boards={boards}
             suggestionCountsBySource={suggestionCountsBySource}
           />
         }
@@ -142,7 +153,9 @@ export function SuggestionsContainer() {
           >
             <SuggestionList
               suggestions={suggestions}
-              total={data?.total ?? 0}
+              hasMore={!!hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={handleLoadMore}
               onCreatePost={setCreateTarget}
               onResolved={handleResolved}
               search={filters.search}
