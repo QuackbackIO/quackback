@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { db, invitation, principal, user, account, and, eq } from '@/lib/server/db'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from './auth'
 
 /**
@@ -235,4 +236,28 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
       headers: getRequestHeaders(),
     })
     return { status: true }
+  })
+
+/**
+ * Get workspace branding for the invite page.
+ * Public - no authentication required.
+ */
+export const getInviteBrandingFn = createServerFn({ method: 'GET' })
+  .inputValidator((invitationId: string) => invitationId)
+  .handler(async ({ data: invitationId }) => {
+    const [settings, inv] = await Promise.all([
+      db.query.settings.findFirst(),
+      db.query.invitation
+        .findFirst({
+          where: eq(invitation.id, invitationId as InviteId),
+          with: { inviter: true },
+        })
+        .catch(() => null),
+    ])
+
+    return {
+      workspaceName: settings?.name ?? 'Quackback',
+      logoUrl: getPublicUrlOrNull(settings?.logoKey),
+      inviterName: inv?.inviter?.name ?? null,
+    }
   })

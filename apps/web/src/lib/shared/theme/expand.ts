@@ -72,7 +72,7 @@ export function generateChartColors(primary: string): [string, string, string, s
   const parsed = parseOklch(primary)
   if (!parsed) {
     return [
-      'oklch(0.623 0.188 260)',
+      'oklch(0.886 0.176 86)',
       'oklch(0.696 0.149 163)',
       'oklch(0.769 0.165 70)',
       'oklch(0.645 0.215 16)',

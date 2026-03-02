@@ -48,11 +48,11 @@ export const themePresets: Record<string, ThemePreset> = {
   default: createPreset({
     name: 'Default',
     description: 'Clean and professional',
-    color: '#3b82f6',
+    color: '#FFD43B',
     font: FONTS.inter,
     radius: '0.625rem',
     light: {
-      primary: 'oklch(0.623 0.188 260)',
+      primary: 'oklch(0.886 0.176 86)',
       background: 'oklch(1 0 0)',
       foreground: 'oklch(0.145 0 0)',
       card: 'oklch(1 0 0)',
@@ -63,7 +63,7 @@ export const themePresets: Record<string, ThemePreset> = {
       success: 'oklch(0.696 0.149 163)',
     },
     dark: {
-      primary: 'oklch(0.623 0.188 260)',
+      primary: 'oklch(0.886 0.176 86)',
       background: 'oklch(0.145 0 0)',
       foreground: 'oklch(0.985 0 0)',
       card: 'oklch(0.17 0 0)',

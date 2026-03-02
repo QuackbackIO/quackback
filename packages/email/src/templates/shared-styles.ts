@@ -7,9 +7,9 @@
 
 // Brand colors (converted from oklch to hex for email compatibility)
 export const colors = {
-  // Primary blue - oklch(0.623 0.214 259) ≈ #3b82f6
-  primary: '#3b82f6',
-  primaryDark: '#2563eb',
+  // Primary gold - oklch(0.886 0.176 86) ≈ #FFD43B
+  primary: '#FFD43B',
+  primaryDark: '#F2C230',
 
   // Text colors
   heading: '#0f172a', // slate-900
@@ -84,7 +84,7 @@ export const button = {
   primary: {
     backgroundColor: colors.primary,
     borderRadius: '8px',
-    color: '#ffffff',
+    color: '#09090b',
     fontSize: '16px',
     fontWeight: '600',
     padding: '14px 28px',
@@ -100,7 +100,7 @@ export const utils = {
     margin: '32px 0',
   },
   link: {
-    color: colors.primary,
+    color: '#b45309',
     textDecoration: 'none',
   },
   codeBox: {
