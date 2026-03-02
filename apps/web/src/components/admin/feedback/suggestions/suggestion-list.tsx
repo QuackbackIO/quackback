@@ -10,8 +10,8 @@ import { SuggestionTriageRow } from './suggestion-triage-row'
 import type { SuggestionListItem } from '../feedback-types'
 
 const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest' },
   { value: 'relevance', label: 'Relevance' },
+  { value: 'newest', label: 'Newest' },
 ] as const
 
 interface SuggestionListProps {
@@ -36,7 +36,7 @@ export function SuggestionList({
   onResolved,
   search,
   onSearchChange,
-  sort = 'newest',
+  sort = 'relevance',
   onSortChange,
 }: SuggestionListProps) {
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
