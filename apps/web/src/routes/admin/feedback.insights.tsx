@@ -5,7 +5,7 @@ import { feedbackQueries } from '@/lib/client/queries/feedback'
 import { SuggestionsContainer } from '@/components/admin/feedback/suggestions/suggestions-container'
 import type { SuggestionsPageResult } from '@/lib/client/hooks/use-suggestions-query'
 
-export const Route = createFileRoute('/admin/feedback/suggestions')({
+export const Route = createFileRoute('/admin/feedback/insights')({
   loaderDeps: ({ search }) => ({
     suggestionType: search.suggestionType,
     suggestionSort: search.suggestionSort,

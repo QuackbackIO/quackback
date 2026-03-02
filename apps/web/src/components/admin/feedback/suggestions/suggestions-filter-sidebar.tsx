@@ -40,11 +40,11 @@ export function SuggestionsFiltersSidebar({
   return (
     <div className="space-y-0">
       {/* Type Filter */}
-      <FilterSection title="Suggested action">
+      <FilterSection title="Type">
         <FilterList
           items={[
-            { id: 'duplicate_post', name: 'Merge posts' },
-            { id: 'create_post', name: 'Create post' },
+            { id: 'duplicate_post', name: 'Duplicates' },
+            { id: 'create_post', name: 'New feedback' },
           ]}
           selectedIds={filters.suggestionType ? [filters.suggestionType] : []}
           onSelect={(id) => handleTypeSelect(id)}

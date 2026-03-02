@@ -134,7 +134,7 @@ function MiniPostCard({
 
   const handleClick = () => {
     navigate({
-      to: '/admin/feedback/suggestions',
+      to: '/admin/feedback/insights',
       search: (prev: Record<string, unknown>) => ({ ...prev, post: post.id }),
     })
   }

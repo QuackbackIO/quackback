@@ -90,8 +90,8 @@ export function SuggestionList({
       {suggestions.length === 0 ? (
         <EmptyState
           icon={SparklesIcon}
-          title="No pending suggestions"
-          description="New suggestions appear here as the AI pipeline processes incoming feedback."
+          title="No pending insights"
+          description="New insights will appear here as the AI pipeline processes incoming feedback."
         />
       ) : (
         <div className="p-3">

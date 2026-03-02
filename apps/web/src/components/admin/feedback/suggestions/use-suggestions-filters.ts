@@ -23,7 +23,7 @@ export function useSuggestionsFilters() {
   const setFilters = useCallback(
     (updates: Partial<SuggestionsFilters>) => {
       void navigate({
-        to: '/admin/feedback/suggestions',
+        to: '/admin/feedback/insights',
         search: {
           ...search,
           ...('search' in updates && { suggestionSearch: updates.search }),
@@ -39,7 +39,7 @@ export function useSuggestionsFilters() {
 
   const clearFilters = useCallback(() => {
     void navigate({
-      to: '/admin/feedback/suggestions',
+      to: '/admin/feedback/insights',
       search: {
         suggestionSort: search.suggestionSort,
       },

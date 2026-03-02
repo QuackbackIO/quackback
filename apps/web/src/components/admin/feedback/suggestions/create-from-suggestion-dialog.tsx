@@ -68,7 +68,7 @@ function CreateFromSuggestionContent({
       className="w-[95vw] max-w-2xl p-0 gap-0 overflow-hidden"
       onKeyDown={handleKeyDown}
     >
-      <DialogTitle className="sr-only">Create post from suggestion</DialogTitle>
+      <DialogTitle className="sr-only">Create post from insight</DialogTitle>
 
       <div className="space-y-4 p-4 sm:p-6">
         {/* Source context banner */}

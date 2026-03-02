@@ -54,8 +54,8 @@ function FeedbackLayout() {
   const viewTabs: TabStripItem[] = [
     { label: 'Inbox', to: '/admin/feedback', icon: InboxIcon, exact: true, search: {} },
     {
-      label: 'Suggestions',
-      to: '/admin/feedback/suggestions',
+      label: 'Insights',
+      to: '/admin/feedback/insights',
       icon: SparklesIcon,
       exact: false,
       search: {},
