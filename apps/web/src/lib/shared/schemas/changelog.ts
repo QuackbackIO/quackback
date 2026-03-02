@@ -92,3 +92,21 @@ export function toPublishState(
       return { type: 'published' }
   }
 }
+
+/**
+ * Derive a PublishState from an optional publishedAt ISO datetime string.
+ *
+ * - No value / undefined -> draft
+ * - Future date -> scheduled
+ * - Past or current date -> published
+ */
+export function publishedAtToPublishState(publishedAt?: string): PublishState {
+  if (!publishedAt) {
+    return { type: 'draft' }
+  }
+  const publishDate = new Date(publishedAt)
+  if (publishDate > new Date()) {
+    return { type: 'scheduled', publishAt: publishDate }
+  }
+  return { type: 'published' }
+}
