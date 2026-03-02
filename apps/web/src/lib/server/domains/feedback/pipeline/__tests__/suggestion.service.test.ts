@@ -98,7 +98,6 @@ describe('suggestion.service', () => {
 
   const rawItemId = 'raw_item_1' as RawFeedbackItemId
   const signalId = 'signal_1' as FeedbackSignalId
-  const _postId = 'post_1' as PostId
   const boardId = 'board_1' as BoardId
   const adminPrincipalId = 'principal_admin' as PrincipalId
   const externalPrincipalId = 'principal_ext' as PrincipalId
