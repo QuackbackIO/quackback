@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/feedback'
+import { suggestionsKeys } from '@/lib/client/hooks/use-suggestions-query'
 
 interface UseSuggestionActionsOptions {
   suggestionId: string
@@ -15,8 +16,7 @@ export function useSuggestionActions({
   const queryClient = useQueryClient()
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['feedback', 'suggestions'] })
-    queryClient.invalidateQueries({ queryKey: ['feedback', 'suggestionStats'] })
+    queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
   }
 
   const acceptMutation = useMutation({
@@ -32,6 +32,9 @@ export function useSuggestionActions({
       invalidate()
       onResolved?.()
     },
+    onError: () => {
+      invalidate()
+    },
   })
 
   const dismissMutation = useMutation({
@@ -39,6 +42,9 @@ export function useSuggestionActions({
     onSuccess: () => {
       invalidate()
       onResolved?.()
+    },
+    onError: () => {
+      invalidate()
     },
   })
 

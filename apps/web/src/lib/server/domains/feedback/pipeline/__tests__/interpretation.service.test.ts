@@ -20,7 +20,6 @@ function createUpdateChain() {
 
 const mockSignalFindFirst = vi.fn()
 const mockRawItemFindFirst = vi.fn()
-const mockPostFindFirst = vi.fn()
 const mockSignalFindMany = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
@@ -32,9 +31,6 @@ vi.mock('@/lib/server/db', () => ({
       },
       rawFeedbackItems: {
         findFirst: (...args: unknown[]) => mockRawItemFindFirst(...args),
-      },
-      posts: {
-        findFirst: (...args: unknown[]) => mockPostFindFirst(...args),
       },
       boards: {
         findMany: vi
@@ -54,7 +50,6 @@ vi.mock('@/lib/server/db', () => ({
     id: 'id',
     processingState: 'processing_state',
   },
-  posts: { id: 'id' },
   boards: {},
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings,
@@ -70,11 +65,9 @@ vi.mock('../embedding.service', () => ({
   findSimilarPosts: (...args: unknown[]) => mockFindSimilarPosts(...args),
 }))
 
-const mockCreateMergeSuggestion = vi.fn()
 const mockCreatePostSuggestion = vi.fn()
 
 vi.mock('../suggestion.service', () => ({
-  createMergeSuggestion: (...args: unknown[]) => mockCreateMergeSuggestion(...args),
   createPostSuggestion: (...args: unknown[]) => mockCreatePostSuggestion(...args),
 }))
 
@@ -120,7 +113,7 @@ describe('interpretation.service', () => {
     urgency: 'medium',
   }
 
-  it('should create merge suggestion for quackback post with similar match', async () => {
+  it('should only embed for quackback post (no suggestions)', async () => {
     mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
     mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
     mockRawItemFindFirst.mockResolvedValueOnce({
@@ -128,54 +121,19 @@ describe('interpretation.service', () => {
       externalId: 'post:post_src',
       content: { text: 'test' },
     })
-    mockPostFindFirst.mockResolvedValueOnce({
-      embedding: '[0.1,0.2,0.3]',
-    })
-    mockFindSimilarPosts.mockResolvedValueOnce([
-      {
-        id: 'post_target',
-        title: 'Export Data',
-        voteCount: 5,
-        boardId: 'b1',
-        boardName: 'Features',
-        similarity: 0.85,
-      },
-    ])
     // For checkRawItemCompletion
     mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
 
     const { interpretSignal } = await import('../interpretation.service')
     await interpretSignal(signalId)
 
-    expect(mockCreateMergeSuggestion).toHaveBeenCalledTimes(1)
-    expect(mockCreateMergeSuggestion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        targetPostId: 'post_target',
-        similarityScore: 0.85,
-      })
-    )
-  })
-
-  it('should not create suggestions for quackback post with no match', async () => {
-    mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
-    mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
-    mockRawItemFindFirst.mockResolvedValueOnce({
-      sourceType: 'quackback',
-      externalId: 'post:post_src',
-      content: { text: 'test' },
-    })
-    mockPostFindFirst.mockResolvedValueOnce({ embedding: '[0.1,0.2,0.3]' })
-    mockFindSimilarPosts.mockResolvedValueOnce([])
-    mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
-
-    const { interpretSignal } = await import('../interpretation.service')
-    await interpretSignal(signalId)
-
-    expect(mockCreateMergeSuggestion).not.toHaveBeenCalled()
+    // Quackback posts only get embedded — duplicate detection handled by merge_suggestions system
+    expect(mockEmbedSignal).toHaveBeenCalledWith(signalId)
+    expect(mockFindSimilarPosts).not.toHaveBeenCalled()
     expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
   })
 
-  it('should create merge suggestion for external source above threshold', async () => {
+  it('should not create suggestion for external source with similar match', async () => {
     mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
     mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
     mockRawItemFindFirst.mockResolvedValueOnce({
@@ -198,7 +156,7 @@ describe('interpretation.service', () => {
     const { interpretSignal } = await import('../interpretation.service')
     await interpretSignal(signalId)
 
-    expect(mockCreateMergeSuggestion).toHaveBeenCalledTimes(1)
+    expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
   })
 
   it('should create post suggestion for external source with no match', async () => {
@@ -292,8 +250,6 @@ describe('interpretation.service', () => {
       externalId: 'post:post_1',
       content: { text: 'test' },
     })
-    mockPostFindFirst.mockResolvedValueOnce({ embedding: null })
-    mockFindSimilarPosts.mockResolvedValueOnce([])
     mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
 
     const { interpretSignal } = await import('../interpretation.service')
@@ -314,8 +270,6 @@ describe('interpretation.service', () => {
       externalId: 'post:post_1',
       content: { text: 'test' },
     })
-    mockPostFindFirst.mockResolvedValueOnce({ embedding: null })
-    mockFindSimilarPosts.mockResolvedValueOnce([])
     mockSignalFindMany.mockResolvedValueOnce([
       { id: signalId, processingState: 'completed' },
       { id: 'signal_other' as FeedbackSignalId, processingState: 'failed' },
@@ -330,28 +284,41 @@ describe('interpretation.service', () => {
     expect(failedUpdate).toBeDefined()
   })
 
-  it('should parse pgvector string embedding from post', async () => {
+  it('should use signal embedding for external source similarity search', async () => {
     mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
     mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
     mockRawItemFindFirst.mockResolvedValueOnce({
-      sourceType: 'quackback',
-      externalId: 'post:post_src',
-      content: { text: 'test' },
-    })
-    // pgvector returns embedding as string
-    mockPostFindFirst.mockResolvedValueOnce({
-      embedding: '[0.5,0.6,0.7]',
+      sourceType: 'intercom',
+      externalId: 'conv_456',
+      content: { subject: 'CSV', text: 'We need CSV export' },
     })
     mockFindSimilarPosts.mockResolvedValueOnce([])
+
+    // Mock LLM for suggestion generation
+    mockOpenAI.chat.completions.create.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              title: 'Add CSV Export',
+              body: 'Users need CSV export for data',
+              boardId: 'board_1',
+              reasoning: 'Clear feature request',
+            }),
+          },
+        },
+      ],
+    })
+
     mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
 
     const { interpretSignal } = await import('../interpretation.service')
     await interpretSignal(signalId)
 
-    // findSimilarPosts should be called with the parsed post embedding, not signal embedding
+    // findSimilarPosts should be called with the signal embedding
     expect(mockFindSimilarPosts).toHaveBeenCalledWith(
-      [0.5, 0.6, 0.7],
-      expect.objectContaining({ excludePostId: 'post_src' })
+      mockEmbedding,
+      expect.objectContaining({ minSimilarity: 0.8 })
     )
   })
 })

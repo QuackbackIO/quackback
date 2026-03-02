@@ -2,7 +2,7 @@
  * Suggestion service — create, accept, dismiss feedback suggestions.
  *
  * Suggestions are the output of the feedback pipeline. They recommend
- * either merging feedback into an existing post or creating a new post.
+ * creating a new post from external feedback signals.
  */
 
 import { db, eq, and, feedbackSuggestions, posts, votes, sql } from '@/lib/server/db'
@@ -16,36 +16,6 @@ import type {
   RawFeedbackItemId,
   FeedbackSignalId,
 } from '@quackback/ids'
-
-/**
- * Create a merge_post suggestion: "This feedback matches existing Post X"
- */
-export async function createMergeSuggestion(opts: {
-  rawFeedbackItemId: RawFeedbackItemId
-  signalId?: FeedbackSignalId
-  targetPostId: PostId
-  similarityScore: number
-  reasoning: string
-  embedding?: number[]
-}): Promise<FeedbackSuggestionId | null> {
-  const vectorStr = opts.embedding ? `[${opts.embedding.join(',')}]` : null
-
-  const inserted = await db
-    .insert(feedbackSuggestions)
-    .values({
-      suggestionType: 'merge_post',
-      rawFeedbackItemId: opts.rawFeedbackItemId,
-      signalId: opts.signalId ?? null,
-      targetPostId: opts.targetPostId,
-      similarityScore: opts.similarityScore,
-      reasoning: opts.reasoning,
-      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as any }),
-    } as any)
-    .onConflictDoNothing() // Partial unique index prevents duplicate pending merge suggestions
-    .returning({ id: feedbackSuggestions.id })
-
-  return inserted[0]?.id ?? null
-}
 
 /**
  * Create a create_post suggestion: "Create a new post from this feedback"
@@ -76,94 +46,6 @@ export async function createPostSuggestion(opts: {
     .returning({ id: feedbackSuggestions.id })
 
   return inserted.id
-}
-
-/**
- * Accept a merge suggestion: add a vote to the target post.
- * For quackback posts, sets canonicalPostId (existing merge mechanism).
- */
-export async function acceptMergeSuggestion(
-  suggestionId: FeedbackSuggestionId,
-  resolvedByPrincipalId: PrincipalId
-): Promise<{ success: boolean; resultPostId: PostId }> {
-  const suggestion = await db.query.feedbackSuggestions.findFirst({
-    where: eq(feedbackSuggestions.id, suggestionId),
-    with: {
-      rawItem: {
-        columns: { sourceType: true, externalId: true, principalId: true },
-      },
-    },
-  })
-
-  if (
-    !suggestion ||
-    suggestion.status !== 'pending' ||
-    suggestion.suggestionType !== 'merge_post'
-  ) {
-    throw new Error('Invalid suggestion for merge accept')
-  }
-
-  const targetPostId = suggestion.targetPostId as PostId
-  const rawItem = suggestion.rawItem
-
-  if (rawItem?.sourceType === 'quackback') {
-    // Quackback post: set canonicalPostId on the source post
-    const match = rawItem.externalId.match(/^post:(.+)$/)
-    if (match) {
-      const sourcePostId = match[1] as PostId
-      await db
-        .update(posts)
-        .set({
-          canonicalPostId: targetPostId,
-          mergedAt: new Date(),
-          mergedByPrincipalId: resolvedByPrincipalId,
-          updatedAt: new Date(),
-        })
-        .where(eq(posts.id, sourcePostId))
-    }
-  } else if (rawItem?.principalId) {
-    // External source: add a vote on behalf of the external author
-    const [inserted] = await db
-      .insert(votes)
-      .values({
-        postId: targetPostId,
-        principalId: rawItem.principalId as PrincipalId,
-      })
-      .onConflictDoNothing()
-      .returning({ id: votes.id })
-
-    // Only increment vote count if the vote was actually inserted
-    if (inserted) {
-      await db
-        .update(posts)
-        .set({ voteCount: sql`${posts.voteCount} + 1`, updatedAt: new Date() })
-        .where(eq(posts.id, targetPostId))
-    }
-  }
-
-  // Subscribe external author to the target post for future updates
-  if (rawItem?.principalId) {
-    await subscribeToPost(rawItem.principalId as PrincipalId, targetPostId, 'feedback_author')
-    await sendFeedbackAttributionEmail(
-      rawItem.principalId as PrincipalId,
-      targetPostId,
-      resolvedByPrincipalId
-    )
-  }
-
-  // Mark suggestion as accepted
-  await db
-    .update(feedbackSuggestions)
-    .set({
-      status: 'accepted',
-      resultPostId: targetPostId,
-      resolvedAt: new Date(),
-      resolvedByPrincipalId: resolvedByPrincipalId,
-      updatedAt: new Date(),
-    })
-    .where(eq(feedbackSuggestions.id, suggestionId))
-
-  return { success: true, resultPostId: targetPostId }
 }
 
 /**

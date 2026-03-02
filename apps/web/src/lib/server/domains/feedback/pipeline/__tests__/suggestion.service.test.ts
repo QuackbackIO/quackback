@@ -98,44 +98,10 @@ describe('suggestion.service', () => {
 
   const rawItemId = 'raw_item_1' as RawFeedbackItemId
   const signalId = 'signal_1' as FeedbackSignalId
-  const postId = 'post_1' as PostId
+  const _postId = 'post_1' as PostId
   const boardId = 'board_1' as BoardId
   const adminPrincipalId = 'principal_admin' as PrincipalId
   const externalPrincipalId = 'principal_ext' as PrincipalId
-
-  describe('createMergeSuggestion', () => {
-    it('should insert a merge suggestion', async () => {
-      const { createMergeSuggestion } = await import('../suggestion.service')
-      const result = await createMergeSuggestion({
-        rawFeedbackItemId: rawItemId,
-        signalId,
-        targetPostId: postId,
-        similarityScore: 0.85,
-        reasoning: 'Matches existing post',
-      })
-
-      expect(result).toBe('suggestion_1')
-      expect(insertValuesCalls.length).toBe(1)
-      const values = insertValuesCalls[0][0] as Record<string, unknown>
-      expect(values.suggestionType).toBe('merge_post')
-      expect(values.targetPostId).toBe(postId)
-    })
-
-    it('should return null on conflict', async () => {
-      const { db } = await import('@/lib/server/db')
-      vi.mocked(db.insert).mockReturnValueOnce(createInsertChain([]) as any)
-
-      const { createMergeSuggestion } = await import('../suggestion.service')
-      const result = await createMergeSuggestion({
-        rawFeedbackItemId: rawItemId,
-        targetPostId: postId,
-        similarityScore: 0.8,
-        reasoning: 'Duplicate',
-      })
-
-      expect(result).toBeNull()
-    })
-  })
 
   describe('createPostSuggestion', () => {
     it('should insert a create_post suggestion', async () => {
@@ -153,89 +119,6 @@ describe('suggestion.service', () => {
       const values = insertValuesCalls[0][0] as Record<string, unknown>
       expect(values.suggestionType).toBe('create_post')
       expect(values.suggestedTitle).toBe('Add CSV Export')
-    })
-  })
-
-  describe('acceptMergeSuggestion', () => {
-    it('should set canonicalPostId for quackback source', async () => {
-      mockSuggestionFindFirst.mockResolvedValueOnce({
-        id: 'suggestion_1',
-        status: 'pending',
-        suggestionType: 'merge_post',
-        targetPostId: postId,
-        rawItem: {
-          sourceType: 'quackback',
-          externalId: 'post:post_source',
-          principalId: externalPrincipalId,
-        },
-      })
-
-      const { acceptMergeSuggestion } = await import('../suggestion.service')
-      const result = await acceptMergeSuggestion(
-        'suggestion_1' as FeedbackSuggestionId,
-        adminPrincipalId
-      )
-
-      expect(result.success).toBe(true)
-      expect(result.resultPostId).toBe(postId)
-      // Should set canonicalPostId on source post
-      const mergeUpdate = updateSetCalls.find(
-        (call) => (call[0] as Record<string, unknown>).canonicalPostId !== undefined
-      )
-      expect(mergeUpdate).toBeDefined()
-      // Should subscribe the author
-      expect(mockSubscribeToPost).toHaveBeenCalledWith(
-        externalPrincipalId,
-        postId,
-        'feedback_author'
-      )
-      // Should send attribution email
-      expect(mockSendAttributionEmail).toHaveBeenCalledWith(
-        externalPrincipalId,
-        postId,
-        adminPrincipalId
-      )
-    })
-
-    it('should add vote for external source', async () => {
-      mockSuggestionFindFirst.mockResolvedValueOnce({
-        id: 'suggestion_1',
-        status: 'pending',
-        suggestionType: 'merge_post',
-        targetPostId: postId,
-        rawItem: {
-          sourceType: 'intercom',
-          externalId: 'conv_123',
-          principalId: externalPrincipalId,
-        },
-      })
-
-      const { acceptMergeSuggestion } = await import('../suggestion.service')
-      const result = await acceptMergeSuggestion(
-        'suggestion_1' as FeedbackSuggestionId,
-        adminPrincipalId
-      )
-
-      expect(result.success).toBe(true)
-      // Should insert vote
-      expect(insertValuesCalls.length).toBeGreaterThanOrEqual(1)
-      // Should subscribe
-      expect(mockSubscribeToPost).toHaveBeenCalled()
-      // Should send email
-      expect(mockSendAttributionEmail).toHaveBeenCalled()
-    })
-
-    it('should throw for invalid suggestion', async () => {
-      mockSuggestionFindFirst.mockResolvedValueOnce({
-        id: 'suggestion_1',
-        status: 'accepted',
-        suggestionType: 'merge_post',
-      })
-
-      const { acceptMergeSuggestion } = await import('../suggestion.service')
-      await expect(
-        acceptMergeSuggestion('suggestion_1' as FeedbackSuggestionId, adminPrincipalId)
-      ).rejects.toThrow('Invalid suggestion')
     })
   })
 

@@ -31,7 +31,7 @@ export type SignalProcessingState =
   | 'completed'
   | 'failed'
 
-export type SuggestionType = 'merge_post' | 'create_post'
+export type SuggestionType = 'create_post'
 export type SuggestionStatus = 'pending' | 'accepted' | 'dismissed' | 'expired'
 
 export type SignalType =

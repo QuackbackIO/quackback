@@ -161,7 +161,7 @@ export const feedbackSuggestions = pgTable(
   'feedback_suggestions',
   {
     id: typeIdWithDefault('feedback_suggestion')('id').primaryKey(),
-    suggestionType: varchar('suggestion_type', { length: 20 }).notNull(), // 'merge_post' | 'create_post'
+    suggestionType: varchar('suggestion_type', { length: 20 }).notNull(), // 'create_post'
     status: varchar('status', { length: 20 }).notNull().default('pending'), // 'pending' | 'accepted' | 'dismissed' | 'expired'
     rawFeedbackItemId: typeIdColumn('raw_feedback')('raw_feedback_item_id')
       .notNull()
@@ -173,10 +173,6 @@ export const feedbackSuggestions = pgTable(
     boardId: typeIdColumnNullable('board')('board_id').references(() => boards.id, {
       onDelete: 'set null',
     }),
-    targetPostId: typeIdColumnNullable('post')('target_post_id').references(() => posts.id, {
-      onDelete: 'cascade',
-    }),
-    similarityScore: real('similarity_score'),
     suggestedTitle: text('suggested_title'),
     suggestedBody: text('suggested_body'),
     reasoning: text('reasoning'),
@@ -196,12 +192,7 @@ export const feedbackSuggestions = pgTable(
     index('feedback_suggestions_status_idx').on(t.status),
     index('feedback_suggestions_type_idx').on(t.suggestionType),
     index('feedback_suggestions_raw_item_idx').on(t.rawFeedbackItemId),
-    index('feedback_suggestions_target_post_idx').on(t.targetPostId),
     index('feedback_suggestions_created_idx').on(t.createdAt),
-    // Prevent duplicate pending merge suggestions for the same raw item + target post
-    uniqueIndex('feedback_suggestions_pending_merge_idx')
-      .on(t.rawFeedbackItemId, t.targetPostId)
-      .where(sql`${t.status} = 'pending' AND ${t.targetPostId} IS NOT NULL`),
   ]
 )
 
@@ -289,11 +280,6 @@ export const feedbackSuggestionsRelations = relations(feedbackSuggestions, ({ on
   board: one(boards, {
     fields: [feedbackSuggestions.boardId],
     references: [boards.id],
-  }),
-  targetPost: one(posts, {
-    fields: [feedbackSuggestions.targetPostId],
-    references: [posts.id],
-    relationName: 'suggestionTarget',
   }),
   resultPost: one(posts, {
     fields: [feedbackSuggestions.resultPostId],

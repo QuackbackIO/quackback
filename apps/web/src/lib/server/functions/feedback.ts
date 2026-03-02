@@ -116,10 +116,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
 
       feedbackTotal = totalResult?.count ?? 0
 
-      const orderBy =
-        data.sort === 'relevance'
-          ? [desc(feedbackSuggestions.similarityScore), desc(feedbackSuggestions.createdAt)]
-          : [desc(feedbackSuggestions.createdAt)]
+      const orderBy = [desc(feedbackSuggestions.createdAt)]
 
       // Fetch enough items to cover the combined offset + limit range
       const fetchUpTo = data.offset + data.limit + 1
@@ -141,10 +138,6 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
             with: {
               source: { columns: { id: true, name: true, sourceType: true } },
             },
-          },
-          targetPost: {
-            columns: { id: true, title: true, voteCount: true, statusId: true, boardId: true },
-            with: { postStatus: { columns: { id: true, name: true, color: true } } },
           },
           board: { columns: { id: true, name: true, slug: true } },
           signal: {
@@ -279,10 +272,6 @@ export const fetchSuggestionDetail = createServerFn({ method: 'GET' })
           with: {
             source: { columns: { id: true, name: true, sourceType: true } },
           },
-        },
-        targetPost: {
-          columns: { id: true, title: true, voteCount: true, statusId: true, boardId: true },
-          with: { postStatus: { columns: { id: true, name: true, color: true } } },
         },
         resultPost: {
           columns: { id: true, title: true },

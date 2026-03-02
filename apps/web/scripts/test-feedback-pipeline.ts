@@ -3,8 +3,8 @@
  * End-to-end test for the external feedback suggestion pipeline.
  *
  * Tests that every external feedback item (that passes quality gate) produces
- * at least one suggestion — either merge_post or create_post — and that
- * accepting those suggestions correctly votes on existing posts or creates new ones.
+ * at least one create_post suggestion, and that accepting those suggestions
+ * correctly creates new posts.
  *
  * Also tests that non-actionable messages (greetings, auto-replies, short messages)
  * produce NO suggestions.
@@ -333,10 +333,10 @@ async function main() {
   console.log(`\n5. Verifying actionable items\n`)
 
   const actionableItems = [
-    { id: rawA, label: 'A: CSV export (intercom)', expectMergeTarget: targetX.title },
-    { id: rawB, label: 'B: Dark mode (slack)', expectMergeTarget: targetY.title },
-    { id: rawC, label: 'C: API rate limits (api)', expectCreate: true },
-    { id: rawD, label: 'D: Mobile app (intercom)', expectCreate: true },
+    { id: rawA, label: 'A: CSV export (intercom)' },
+    { id: rawB, label: 'B: Dark mode (slack)' },
+    { id: rawC, label: 'C: API rate limits (api)' },
+    { id: rawD, label: 'D: Mobile app (intercom)' },
   ]
 
   const suggestionsByItem: Record<string, any[]> = {}
@@ -367,14 +367,12 @@ async function main() {
     }
 
     const suggestions = await sql`
-      SELECT s.id, s.suggestion_type, s.status, s.similarity_score,
+      SELECT s.id, s.suggestion_type, s.status,
              s.suggested_title, s.suggested_body, s.reasoning,
-             s.target_post_id, s.board_id,
-             p.title AS target_title, p.vote_count AS target_votes
+             s.board_id
       FROM feedback_suggestions s
-      LEFT JOIN posts p ON p.id = s.target_post_id
       WHERE s.raw_feedback_item_id = ${item.id}
-      ORDER BY s.similarity_score DESC NULLS LAST
+      ORDER BY s.created_at DESC
     `
 
     suggestionsByItem[item.id] = suggestions
@@ -386,34 +384,8 @@ async function main() {
 
     pass(`${item.label}: ${suggestions.length} suggestion(s)`)
 
-    const merges = suggestions.filter((s: any) => s.suggestion_type === 'merge_post')
-    const creates = suggestions.filter((s: any) => s.suggestion_type === 'create_post')
-
-    for (const sug of merges) {
-      const sim = sug.similarity_score ? `${(sug.similarity_score * 100).toFixed(0)}%` : '?'
-      pass(`  merge_post: ${sim} -> "${sug.target_title}" (${sug.target_votes} votes)`)
-    }
-    for (const sug of creates) {
+    for (const sug of suggestions) {
       pass(`  create_post: "${sug.suggested_title}"`)
-    }
-
-    // Check merge expectations
-    if (item.expectMergeTarget) {
-      const matchedMerge = merges.find((s: any) => s.target_title === item.expectMergeTarget)
-      if (matchedMerge) {
-        const sim = matchedMerge.similarity_score
-          ? `${(matchedMerge.similarity_score * 100).toFixed(0)}%`
-          : '?'
-        pass(`  matched expected target "${item.expectMergeTarget}" at ${sim}`)
-      } else if (merges.length > 0) {
-        console.log(
-          `  [INFO] Merged to different post: "${merges[0].target_title}" instead of expected "${item.expectMergeTarget}"`
-        )
-      } else {
-        console.log(
-          `  [INFO] No merge — similarity below 0.80 threshold, got create_post instead (valid)`
-        )
-      }
     }
   }
 
@@ -471,72 +443,7 @@ async function main() {
   // ──────────────────────────────────────────
   console.log(`\n7. Testing accept flows\n`)
 
-  // 7a. Accept merge — should add a vote to target post
-  const mergeCandidate = Object.values(suggestionsByItem)
-    .flat()
-    .find((s) => s.suggestion_type === 'merge_post' && s.status === 'pending')
-
-  if (mergeCandidate) {
-    console.log(`  --- Accept merge: -> "${mergeCandidate.target_title}" ---`)
-
-    // Record vote count BEFORE
-    const [beforePost] = await sql`
-      SELECT vote_count FROM posts WHERE id = ${mergeCandidate.target_post_id}
-    `
-    const votesBefore = beforePost.vote_count
-
-    // Accept: mark suggestion, add vote, bump count
-    const voteId = toUuid(generateId('vote'))
-    await sql`
-      INSERT INTO votes (id, post_id, principal_id)
-      VALUES (${voteId}, ${mergeCandidate.target_post_id}, ${principalId})
-      ON CONFLICT DO NOTHING
-    `
-    createdVoteIds.push(voteId)
-
-    await sql`
-      UPDATE posts SET vote_count = vote_count + 1, updated_at = NOW()
-      WHERE id = ${mergeCandidate.target_post_id}
-    `
-    await sql`
-      UPDATE feedback_suggestions
-      SET status = 'accepted', result_post_id = ${mergeCandidate.target_post_id},
-          resolved_at = NOW(), resolved_by_principal_id = ${principalId}, updated_at = NOW()
-      WHERE id = ${mergeCandidate.id}
-    `
-
-    // Verify
-    const [afterPost] = await sql`
-      SELECT vote_count FROM posts WHERE id = ${mergeCandidate.target_post_id}
-    `
-    const [acceptedSug] = await sql`
-      SELECT status, result_post_id FROM feedback_suggestions WHERE id = ${mergeCandidate.id}
-    `
-
-    if (acceptedSug.status === 'accepted') pass('Accept merge: status = accepted')
-    else fail('Accept merge: status', acceptedSug.status)
-
-    if (acceptedSug.result_post_id === mergeCandidate.target_post_id)
-      pass('Accept merge: resultPostId set')
-    else fail('Accept merge: resultPostId', acceptedSug.result_post_id)
-
-    if (afterPost.vote_count > votesBefore) {
-      pass('Accept merge: vote count increased', `${votesBefore} -> ${afterPost.vote_count}`)
-    } else {
-      fail('Accept merge: vote count unchanged', `${votesBefore} -> ${afterPost.vote_count}`)
-    }
-
-    // Revert the vote so cleanup is cleaner
-    await sql`DELETE FROM votes WHERE id = ${voteId}`
-    await sql`UPDATE posts SET vote_count = ${votesBefore} WHERE id = ${mergeCandidate.target_post_id}`
-  } else {
-    console.log(`  (No merge suggestions to test — skipping merge accept)`)
-    console.log(
-      `  [INFO] This likely means similarity was below 0.80 threshold for all external items`
-    )
-  }
-
-  // 7b. Accept create — should create a new post
+  // 7a. Accept create — should create a new post
   const createCandidate = Object.values(suggestionsByItem)
     .flat()
     .find((s) => s.suggestion_type === 'create_post' && s.status === 'pending')
@@ -648,15 +555,12 @@ async function main() {
   const [sugStats] = await sql`
     SELECT
       count(*)::int AS total,
-      count(*) FILTER (WHERE suggestion_type = 'merge_post')::int AS merges,
       count(*) FILTER (WHERE suggestion_type = 'create_post')::int AS creates,
       count(*) FILTER (WHERE status = 'accepted')::int AS accepted,
       count(*) FILTER (WHERE status = 'dismissed')::int AS dismissed
     FROM feedback_suggestions WHERE raw_feedback_item_id = ANY(${allRawIds})
   `
-  console.log(
-    `  Suggestions: ${sugStats.total} total (${sugStats.merges} merge, ${sugStats.creates} create)`
-  )
+  console.log(`  Suggestions: ${sugStats.total} total (${sugStats.creates} create_post)`)
   console.log(`  Actions: ${sugStats.accepted} accepted, ${sugStats.dismissed} dismissed`)
 
   // Key assertion: every actionable external item got at least one suggestion
