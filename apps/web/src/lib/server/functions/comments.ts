@@ -20,6 +20,7 @@ import {
   updateComment,
   userEditComment,
 } from '@/lib/server/domains/comments/comment.service'
+import { NotFoundError } from '@/lib/shared/errors'
 import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 
 // Schemas
@@ -212,8 +213,12 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
         canDelete: deleteResult.allowed,
       }
     } catch (error) {
+      if (error instanceof NotFoundError) {
+        console.log(`[fn:comments] getCommentPermissionsFn: comment not found`)
+        return { canEdit: false, canDelete: false }
+      }
       console.error(`[fn:comments] getCommentPermissionsFn failed:`, error)
-      return { canEdit: false, canDelete: false }
+      throw error
     }
   })
 
@@ -329,7 +334,11 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
       console.log(`[fn:comments] canPinCommentFn: canPin=${result.canPin}`)
       return result
     } catch (error) {
+      if (error instanceof NotFoundError) {
+        console.log(`[fn:comments] canPinCommentFn: comment not found`)
+        return { canPin: false, reason: 'Comment not found' }
+      }
       console.error(`[fn:comments] canPinCommentFn failed:`, error)
-      return { canPin: false, reason: 'An error occurred' }
+      throw error
     }
   })
