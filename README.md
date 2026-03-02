@@ -44,20 +44,27 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 
 - **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
 - **Own your data.** Your feedback lives in your PostgreSQL database. No vendor lock-in.
-- **AI-native.** Built-in [MCP server](https://quackback.io/docs/mcp) lets AI agents search, triage, and act on feedback directly.
-- **14 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and more out of the box.
+- **AI-powered.** Automatic duplicate detection, AI summaries, and a 17-tool [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
+- **24 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
 
 ## Features
 
-- **Feedback boards.** Public voting, status tracking, nested comments, reactions, and official responses.
+- **Feedback boards.** Public voting, status tracking, nested comments, reactions, and comment locking.
+- **AI duplicate detection.** Automatically finds duplicate posts using hybrid vector + full-text search and suggests which to merge.
+- **AI summaries.** Key quotes, suggested next steps, and staleness detection on feedback posts.
 - **Embeddable widget.** Drop a script tag into your app and collect feedback without leaving the page.
-- **Admin inbox.** Unified triage view with filtering, bulk actions, and automatic deduplication.
+- **Admin inbox.** Unified triage view with filtering, bulk actions, and soft delete with 30-day restore.
 - **Roadmap.** Show users what you're planning, working on, and what's shipped.
-- **Changelog.** Publish updates and close the loop when features ship.
-- **Integrations.** Sync with Slack, Linear, Jira, GitHub, Asana, ClickUp, Intercom, Zendesk, HubSpot, Discord, Teams, Shortcut, Azure DevOps, and Zapier.
-- **Inbound webhooks.** Two-way status sync with your issue tracker.
-- **API & webhooks.** API keys and outbound webhooks for custom workflows.
-- **MCP server.** Let AI agents interact with your feedback data via the [Model Context Protocol](https://quackback.io/docs/mcp).
+- **Changelog.** Publish updates, schedule for later, and close the loop when features ship.
+- **Integrations.** [24 integrations](#integrations) including two-way status sync with your issue tracker via inbound webhooks.
+- **API & webhooks.** REST API, API keys, and outbound webhooks for custom workflows.
+- **MCP server.** 17 tools for AI agents to search, triage, comment, merge posts, manage roadmaps, and publish changelogs via the [Model Context Protocol](https://quackback.io/docs/mcp). Supports API key and OAuth 2.1 authentication.
+- **Flexible auth.** Password, email OTP, OAuth social logins (Google, GitHub), and custom OIDC providers (Okta, Auth0, Keycloak).
+- **SEO-ready.** Auto-generated sitemap, Open Graph and Twitter Card meta tags, and robots.txt on every portal page.
+
+## Integrations
+
+Slack, Linear, Jira, GitHub, GitLab, Asana, ClickUp, Monday, Trello, Notion, Shortcut, Azure DevOps, Intercom, Zendesk, Freshdesk, HubSpot, Salesforce, Stripe, Discord, Teams, Segment, Zapier, Make, and n8n.
 
 ## Tech Stack
 
@@ -80,11 +87,11 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
 cp .env.example .env   # Edit with your configuration
-docker build -t quackback .
+docker build -t quackback -f apps/web/Dockerfile .
 docker run -p 3000:3000 --env-file .env quackback
 ```
 
-Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`.
+Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`. Migrations run automatically on startup.
 
 ### Local Development
 
