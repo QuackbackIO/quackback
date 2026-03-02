@@ -8,7 +8,7 @@ import { db, eq, and, sql, principal, user, type Principal } from '@/lib/server/
 import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, isAdmin } from '@/lib/shared/roles'
 import type { TeamMember } from './principal.types'
 
 // Re-export types for backwards compatibility
@@ -157,7 +157,7 @@ export async function updateMemberRole(
     }
 
     // If demoting an admin to member, ensure at least one human admin remains
-    if (targetMember.role === 'admin' && newRole === 'member') {
+    if (isAdmin(targetMember.role) && newRole === 'member') {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
         .from(principal)
@@ -210,7 +210,7 @@ export async function removeTeamMember(
     }
 
     // If removing an admin, ensure at least one human admin remains
-    if (targetMember.role === 'admin') {
+    if (isAdmin(targetMember.role)) {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
         .from(principal)

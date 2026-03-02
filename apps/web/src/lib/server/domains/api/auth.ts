@@ -10,6 +10,7 @@ import { unauthorizedResponse, forbiddenResponse, rateLimitedResponse } from './
 import { checkRateLimit, getClientIp } from './rate-limit'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
+import { isAdmin, isTeamMember } from '@/lib/shared/roles'
 
 export type MemberRole = 'admin' | 'member' | 'user'
 
@@ -107,11 +108,11 @@ export async function withApiKeyAuth(
   }
 
   // Check role-based authorization
-  if (options.role === 'admin' && auth.role !== 'admin') {
+  if (options.role === 'admin' && !isAdmin(auth.role)) {
     return forbiddenResponse('Admin access required for this operation')
   }
 
-  if (options.role === 'team' && auth.role === 'user') {
+  if (options.role === 'team' && !isTeamMember(auth.role)) {
     return forbiddenResponse('Team member access required for this operation')
   }
 

@@ -8,6 +8,7 @@
 import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
 import type { PrincipalId, TypeId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
@@ -111,7 +112,7 @@ export async function createApiKey(
     where: eq(principal.id, createdById),
     columns: { role: true },
   })
-  const role = (creator?.role === 'admin' ? 'admin' : 'member') as 'admin' | 'member'
+  const role = (isAdmin(creator?.role) ? 'admin' : 'member') as 'admin' | 'member'
 
   // Create service principal for this API key
   const servicePrincipal = await createServicePrincipal({
