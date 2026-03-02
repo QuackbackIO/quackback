@@ -320,7 +320,7 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const orgBoards = await db.query.boards.findMany()
+    const orgBoards = await listBoards()
     console.log(`[fn:admin] fetchBoardsForSettings: count=${orgBoards.length}`)
     return orgBoards.map((b) => ({
       ...b,
