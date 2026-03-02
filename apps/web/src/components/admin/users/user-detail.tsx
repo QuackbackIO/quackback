@@ -12,6 +12,7 @@ import {
   TrashIcon,
   ChevronUpIcon,
   PencilSquareIcon,
+  Squares2X2Icon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -150,7 +151,11 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
             <ChatBubbleLeftIcon className="h-3 w-3" />
             <span>{post.commentCount}</span>
           </div>
-          <Badge variant="secondary" className="text-[10px] font-normal bg-muted/50 px-1.5 py-0">
+          <Badge
+            variant="secondary"
+            className="text-[10px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
+          >
+            <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
             {post.boardName}
           </Badge>
         </div>

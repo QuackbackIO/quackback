@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronUpIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 
 interface RoadmapCardProps {
@@ -25,7 +25,8 @@ export function RoadmapCard({ id, title, voteCount, board }: RoadmapCardProps): 
       </div>
       <div className="roadmap-card__content flex-1 min-w-0 p-3">
         <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
-        <Badge variant="secondary" className="mt-2 text-[11px]">
+        <Badge variant="secondary" className="mt-2 text-[11px] inline-flex items-center gap-0.5">
+          <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
           {board.name}
         </Badge>
       </div>

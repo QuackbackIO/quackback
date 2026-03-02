@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronUpIcon, MagnifyingGlassIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, MagnifyingGlassIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -401,7 +401,7 @@ export function WidgetHome({
                       </h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {status && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
                             <span
                               className="size-1.5 rounded-full shrink-0"
                               style={{ backgroundColor: status.color }}
@@ -410,7 +410,8 @@ export function WidgetHome({
                           </span>
                         )}
                         {post.board && !selectedBoardSlug && (
-                          <span className="text-[10px] text-muted-foreground/60">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+                            <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
                             {post.board.name}
                           </span>
                         )}

@@ -1,6 +1,11 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { ArrowsRightLeftIcon, ChatBubbleLeftIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
+import {
+  ArrowsRightLeftIcon,
+  ChatBubbleLeftIcon,
+  ChevronUpIcon,
+  Squares2X2Icon,
+} from '@heroicons/react/24/solid'
 import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -88,41 +93,44 @@ function DuplicateRow({
       </div>
 
       {/* Footer: reasoning + match info + actions */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2 text-[11px] text-muted-foreground/50">
-          {suggestion.reasoning && (
-            <span className="truncate flex items-center gap-1.5">
-              <ChatBubbleLeftIcon className="h-3 w-3 shrink-0" />
-              {suggestion.reasoning}
-            </span>
-          )}
-          {similarity != null && (
-            <span className="font-semibold tabular-nums shrink-0 text-violet-600 dark:text-violet-400">
-              {similarity}%
-            </span>
-          )}
-          <span className="shrink-0 text-muted-foreground/40">&middot;</span>
-          <TimeAgo date={suggestion.createdAt} className="shrink-0 text-muted-foreground/40" />
-        </div>
+      <div className="space-y-2">
+        {suggestion.reasoning && (
+          <p className="text-[11px] text-muted-foreground/50 line-clamp-2 flex items-start gap-1.5">
+            <ChatBubbleLeftIcon className="h-3 w-3 shrink-0 mt-0.5" />
+            <span>{suggestion.reasoning}</span>
+          </p>
+        )}
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
-            disabled={isPending}
-          >
-            Merge
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => dismiss()}
-            disabled={isPending}
-            className="text-muted-foreground"
-          >
-            Dismiss
-          </Button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+            {similarity != null && (
+              <span className="font-semibold tabular-nums text-violet-600 dark:text-violet-400">
+                {similarity}%
+              </span>
+            )}
+            <span className="text-muted-foreground/40">&middot;</span>
+            <TimeAgo date={suggestion.createdAt} className="text-muted-foreground/40" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
+              disabled={isPending}
+            >
+              Merge
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => dismiss()}
+              disabled={isPending}
+              className="text-muted-foreground"
+            >
+              Dismiss
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -175,7 +183,12 @@ function MiniPostCard({
             <p className="text-xs text-muted-foreground/60 line-clamp-1 mt-0.5">{post.content}</p>
           )}
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1.5">
-            {post.boardName && <span className="truncate">{post.boardName}</span>}
+            {post.boardName && (
+              <>
+                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground/40 -mr-1 mb-0.5" />
+                <span className="truncate">{post.boardName}</span>
+              </>
+            )}
             {post.createdAt && (
               <>
                 {post.boardName && <span className="text-muted-foreground/30">&middot;</span>}
@@ -262,7 +275,8 @@ function CreatePostRow({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex items-center gap-2">
           {suggestion.board && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-[10px] inline-flex items-center gap-0.5">
+              <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
               {suggestion.board.name}
             </Badge>
           )}

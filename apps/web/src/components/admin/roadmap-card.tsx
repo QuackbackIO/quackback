@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { ChevronUpIcon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
 import type { RoadmapPostEntry } from '@/lib/server/domains/roadmaps'
 
@@ -45,7 +45,8 @@ function CardContent({ post }: { post: RoadmapPostEntry }) {
         <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
           {post.title}
         </p>
-        <Badge variant="secondary" className="mt-2.5 text-xs">
+        <Badge variant="secondary" className="mt-2.5 text-xs inline-flex items-center gap-0.5">
+          <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
           {post.board.name}
         </Badge>
       </div>
