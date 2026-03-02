@@ -236,8 +236,8 @@ async function findMergeCandidates(postId: PostId): Promise<MergeCandidate[]> {
 // LLM assessment
 // ============================================
 
-const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform.
-You will be given a source post and a list of candidate posts. For each candidate, determine whether it is truly a DUPLICATE — meaning they request the exact same thing, just worded differently.
+const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform used by product managers.
+You will be given a reference post and one or more posts to compare. For each comparison post, determine whether it is truly a DUPLICATE of the reference — meaning they request the exact same thing, just worded differently.
 
 Return strict JSON only — an array of objects:
 [
@@ -252,10 +252,10 @@ Return strict JSON only — an array of objects:
 Rules:
 - A TRUE duplicate means the posts request the EXACT SAME feature, fix, or change. If merged into one post, every voter on both posts would agree they wanted the same thing.
 - "confidence" is 0-1 where 1 means certain duplicate.
-- "reasoning" should be 1 sentence explaining your determination.
+- "reasoning" is a 1-sentence summary shown to product managers. Describe the shared customer need — e.g. "Both request the ability to export data as PDF." NEVER use labels like "source post", "candidate post", "Post A", "Post B", or "reference post". Just describe what the posts have in common.
 - Be VERY conservative: when in doubt, mark isDuplicate as false.
 - NOT duplicates: posts about the same product/area but different features, posts with overlapping keywords but different actual requests, posts that are merely related or in the same category.
-- Example: "Add Amazon Japan marketplace" and "Amazon Japan integration" ARE duplicates (same request). "Add Amazon Japan" and "Simplified Amazon Upload" are NOT (different features on the same platform).`
+- Example: "Add dark mode to the dashboard" and "Support dark theme across the app" ARE duplicates (same request). "Add dark mode" and "Improve dashboard loading speed" are NOT (same area, different requests).`
 
 interface Assessment {
   candidatePostId: PostId

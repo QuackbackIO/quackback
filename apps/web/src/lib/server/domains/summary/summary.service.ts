@@ -30,7 +30,7 @@ Rules for "summary" (1-3 sentences):
 - If there is disagreement or pushback in the thread, note the tension.
 - Write for a PM who has 5 seconds to decide whether to dig deeper.
 - BAD: "Users are requesting improvements to the export functionality."
-- GOOD: "CSV exports silently drop columns with special characters, affecting 3 users doing financial reporting. Team acknowledged but no fix timeline given."
+- GOOD: "CSV exports silently drop columns with special characters, affecting 3 users. Team acknowledged but no fix timeline given."
 
 Rules for "keyQuotes" (0-2):
 - Only quote user/customer text, never team replies.
