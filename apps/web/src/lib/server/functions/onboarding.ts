@@ -6,18 +6,8 @@ import { USE_CASE_TYPES, type SetupState, type UseCaseType } from '@/lib/server/
 import { getSession } from './auth'
 import { getSettings } from './workspace'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
-import {
-  db,
-  settings,
-  principal,
-  user,
-  postStatuses,
-  boards,
-  eq,
-  asc,
-  isNull,
-  DEFAULT_STATUSES,
-} from '@/lib/server/db'
+import { listBoards } from '@/lib/server/domains/boards/board.service'
+import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 
 /**
  * Server functions for onboarding workflow.
@@ -437,10 +427,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
 export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:onboarding] listBoardsForOnboarding`)
   try {
-    const boardList = await db.query.boards.findMany({
-      where: isNull(boards.deletedAt),
-      orderBy: [asc(boards.name)],
-    })
+    const boardList = await listBoards()
     return boardList.map((b) => ({
       id: b.id,
       name: b.name,
