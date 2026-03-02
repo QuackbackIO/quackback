@@ -80,9 +80,7 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
           // Drizzle returns pgvector columns as strings — parse to number[]
           const raw = sourcePost.embedding as unknown
           searchEmbedding =
-            typeof raw === 'string'
-              ? JSON.parse(raw.replace(/^\[/, '[').replace(/\]$/, ']'))
-              : (raw as number[])
+            typeof raw === 'string' ? JSON.parse(raw) : (raw as number[])
         }
       }
     }
