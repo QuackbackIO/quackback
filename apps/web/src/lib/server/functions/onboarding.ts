@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { UserId, StatusId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { USE_CASE_TYPES, type SetupState, type UseCaseType } from '@/lib/server/db'
+import { isAdmin } from '@/lib/shared/roles'
 import { getSession } from './auth'
 import { getSettings } from './workspace'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
@@ -87,7 +88,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             role: 'admin',
             createdAt: new Date(),
           })
-        } else if (principalRecord.role !== 'admin') {
+        } else if (!isAdmin(principalRecord.role)) {
           // User exists but not admin - upgrade to admin (fresh install, they're first)
           console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
           await db
@@ -109,7 +110,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
 
         if (currentSetupState?.steps?.workspace) {
           // Workspace already set up - require existing admin
-          if (!principalRecord || principalRecord.role !== 'admin') {
+          if (!principalRecord || !isAdmin(principalRecord.role)) {
             throw new Error('Only admin can complete setup')
           }
         } else {
@@ -124,7 +125,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
               role: 'admin',
               createdAt: new Date(),
             })
-          } else if (principalRecord.role !== 'admin') {
+          } else if (!isAdmin(principalRecord.role)) {
             console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
             await db
               .update(principal)

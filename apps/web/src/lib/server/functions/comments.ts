@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 
 import {
   addReaction,
@@ -326,7 +327,7 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
 
       const ctx = await getOptionalAuth()
       // Must be a team member to pin
-      if (!ctx?.principal || !['admin', 'member'].includes(ctx.principal.role)) {
+      if (!ctx?.principal || !isTeamMember(ctx.principal.role)) {
         return { canPin: false, reason: 'Only team members can pin comments' }
       }
 

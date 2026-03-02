@@ -9,6 +9,7 @@ import { TeamHeader } from '@/components/admin/settings/team/team-header'
 import { PendingInvitations } from '@/components/admin/settings/team/pending-invitations'
 import { MemberActions } from '@/components/admin/settings/team/member-actions'
 import type { UserId, PrincipalId } from '@quackback/ids'
+import { isAdmin } from '@/lib/shared/roles'
 
 export const Route = createFileRoute('/admin/settings/team')({
   loader: async ({ context }) => {
@@ -34,11 +35,11 @@ function TeamPage() {
   const { members, avatarMap, formattedInvitations } = teamDataQuery.data
 
   // Calculate if there's only one admin (for disabling actions)
-  const adminCount = members.filter((m) => m.role === 'admin').length
+  const adminCount = members.filter((m) => isAdmin(m.role)).length
   const isLastAdmin = adminCount <= 1
 
   // Current user is admin
-  const isCurrentUserAdmin = currentMember.role === 'admin'
+  const isCurrentUserAdmin = isAdmin(currentMember.role)
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -86,7 +87,7 @@ function TeamPage() {
                     <Badge
                       variant="outline"
                       className={
-                        m.role === 'admin'
+                        isAdmin(m.role)
                           ? 'bg-primary/10 text-primary border-primary/30'
                           : 'bg-muted/50'
                       }
@@ -98,7 +99,7 @@ function TeamPage() {
                         principalId={m.id}
                         memberName={m.userName || m.userEmail}
                         memberRole={m.role as 'admin' | 'member'}
-                        isLastAdmin={isLastAdmin && m.role === 'admin'}
+                        isLastAdmin={isLastAdmin && isAdmin(m.role)}
                       />
                     )}
                   </div>

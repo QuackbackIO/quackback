@@ -12,6 +12,7 @@ import {
 } from '@quackback/ids'
 import type { BoardSettings } from '@/lib/server/db'
 import { getOptionalAuth, hasSessionCookie } from './auth-helpers'
+import { isTeamMember } from '@/lib/shared/roles'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import {
@@ -289,7 +290,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
     let segmentIds: SegmentId[] | undefined
     if (data.segmentIds?.length && hasSessionCookie()) {
       const auth = await getOptionalAuth()
-      if (auth && (auth.principal.role === 'admin' || auth.principal.role === 'member')) {
+      if (auth && isTeamMember(auth.principal.role)) {
         segmentIds = data.segmentIds as SegmentId[]
       }
       // Non-admin callers silently ignore segmentIds

@@ -32,6 +32,7 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import {
   dispatchCommentCreated,
@@ -147,14 +148,14 @@ export async function createComment(
   }
 
   // Determine if user is a team member
-  const isTeamMember = ['admin', 'member'].includes(author.role)
+  const authorIsTeamMember = isTeamMember(author.role)
 
   // Inherit privacy from parent: replies to private comments are always private
   const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
 
   // Enforce team-only for private comments (after inheritance, so replying to
   // a private parent with isPrivate omitted is also caught)
-  if (isPrivate && !isTeamMember) {
+  if (isPrivate && !authorIsTeamMember) {
     throw new ForbiddenError(
       'PRIVATE_COMMENT_FORBIDDEN',
       'Only team members can post private comments'
@@ -163,7 +164,7 @@ export async function createComment(
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
-  const shouldChangeStatus = !!(input.statusId && isTeamMember && !input.parentId)
+  const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
 
   let comment: Comment
   let previousStatusName: string | null = null
@@ -194,7 +195,7 @@ export async function createComment(
           content: input.content.trim(),
           parentId: input.parentId || null,
           principalId: author.principalId,
-          isTeamMember,
+          isTeamMember: authorIsTeamMember,
           isPrivate,
           statusChangeFromId: prevStatus?.id ?? null,
           statusChangeToId: newStatus.id,
@@ -224,7 +225,7 @@ export async function createComment(
           content: input.content.trim(),
           parentId: input.parentId || null,
           principalId: author.principalId,
-          isTeamMember,
+          isTeamMember: authorIsTeamMember,
           isPrivate,
         })
         .returning()
@@ -321,9 +322,8 @@ export async function updateComment(
 
   // Authorization check - user must be comment author or team member
   const isAuthor = existingComment.principalId === actor.principalId
-  const isTeamMember = ['admin', 'member'].includes(actor.role)
 
-  if (!isAuthor && !isTeamMember) {
+  if (!isAuthor && !isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to update this comment')
   }
 
@@ -390,9 +390,8 @@ export async function deleteComment(
 
   // Authorization check - user must be comment author or team member
   const isAuthor = existingComment.principalId === actor.principalId
-  const isTeamMember = ['admin', 'member'].includes(actor.role)
 
-  if (!isAuthor && !isTeamMember) {
+  if (!isAuthor && !isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
   }
 
@@ -682,7 +681,7 @@ export async function canEditComment(
   }
 
   // Team members (admin, member) can always edit
-  if (actor.role && ['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -730,7 +729,7 @@ export async function canDeleteComment(
   }
 
   // Team members (admin, member) can always delete
-  if (actor.role && ['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -937,7 +936,7 @@ export async function pinComment(
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<{ postId: PostId }> {
   // Only team members can pin comments
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can pin comments')
   }
 
@@ -978,7 +977,7 @@ export async function unpinComment(
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
   // Only team members can unpin comments
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can unpin comments')
   }
 
