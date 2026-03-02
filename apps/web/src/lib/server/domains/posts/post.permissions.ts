@@ -18,6 +18,7 @@ import {
 import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult, UserEditPostInput } from './post.types'
 
@@ -53,7 +54,7 @@ export async function canEditPost(
   }
 
   // Team members (admin, member) can always edit
-  if (['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -117,7 +118,7 @@ export async function canDeletePost(
   }
 
   // Team members (admin, member) can always delete
-  if (['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -189,7 +190,7 @@ export async function getPostPermissions(
   }
 
   // Team members (admin, member) can always edit and delete
-  if (['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return {
       canEdit: { allowed: true },
       canDelete: { allowed: true },
@@ -311,7 +312,7 @@ export async function userEditPost(
   }
 
   // Team members (admin, member) can always edit - skip further checks
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     // Must be the author
     if (existingPost.principalId !== actor.principalId) {
       throw new ForbiddenError('EDIT_NOT_ALLOWED', 'You can only edit your own posts')
@@ -401,7 +402,7 @@ export async function softDeletePost(
   }
 
   // Team members (admin, member) can always delete - skip further checks
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     // Must be the author
     if (existingPost.principalId !== actor.principalId) {
       throw new ForbiddenError('DELETE_NOT_ALLOWED', 'You can only delete your own posts')

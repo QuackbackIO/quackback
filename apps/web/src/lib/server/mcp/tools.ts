@@ -52,6 +52,7 @@ import {
   removePostFromRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -111,7 +112,7 @@ function requireScope(auth: McpAuthContext, scope: McpScope): CallToolResult | n
 
 /** Return an error if the user doesn't have an admin or member role. */
 function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
-  if (auth.role === 'admin' || auth.role === 'member') return null
+  if (isTeamMember(auth.role)) return null
   return {
     isError: true,
     content: [

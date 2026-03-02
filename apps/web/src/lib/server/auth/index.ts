@@ -365,7 +365,9 @@ export type Auth = ReturnType<typeof betterAuth>
 
 // Role-based access control
 
-export type Role = 'admin' | 'member' | 'user'
+export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
+
+import type { Role } from '@/lib/shared/roles'
 
 const levels: Record<Role, number> = {
   admin: 3,

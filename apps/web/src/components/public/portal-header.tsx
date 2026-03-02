@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/shared/utils'
+import { isTeamMember } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/server/auth/client'
 import {
@@ -84,7 +85,7 @@ export function PortalHeader({
   const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
   // Team members (admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && ['admin', 'member'].includes(userRole || '')
+  const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
 
   const handleSignOut = async () => {
     await signOut()
