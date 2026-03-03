@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type PostId } from '@quackback/ids'
+import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   getSubscriptionStatus,
@@ -109,6 +109,46 @@ export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
       return { postId: data.postId }
     } catch (error) {
       console.error(`[fn:subscriptions] ❌ updateSubscriptionLevelFn failed:`, error)
+      throw error
+    }
+  })
+
+// Admin mutation: update any voter's subscription level
+const adminUpdateVoterSubscriptionSchema = z.object({
+  postId: z.string(),
+  principalId: z.string(),
+  level: z.enum(['all', 'status_only', 'none']),
+})
+
+export type AdminUpdateVoterSubscriptionInput = z.infer<typeof adminUpdateVoterSubscriptionSchema>
+
+export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
+  .inputValidator(adminUpdateVoterSubscriptionSchema)
+  .handler(async ({ data }) => {
+    console.log(
+      `[fn:subscriptions] adminUpdateVoterSubscriptionFn: postId=${data.postId} principalId=${data.principalId} level=${data.level}`
+    )
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+
+      const targetPrincipalId = data.principalId as PrincipalId
+      const targetPostId = data.postId as PostId
+
+      if (data.level === 'none') {
+        await unsubscribeFromPost(targetPrincipalId, targetPostId)
+      } else {
+        await subscribeToPost(targetPrincipalId, targetPostId, 'manual')
+        await updateSubscriptionLevel(
+          targetPrincipalId,
+          targetPostId,
+          data.level as SubscriptionLevel
+        )
+      }
+
+      console.log(`[fn:subscriptions] adminUpdateVoterSubscriptionFn: updated`)
+      return { postId: data.postId, principalId: data.principalId, level: data.level }
+    } catch (error) {
+      console.error(`[fn:subscriptions] ❌ adminUpdateVoterSubscriptionFn failed:`, error)
       throw error
     }
   })

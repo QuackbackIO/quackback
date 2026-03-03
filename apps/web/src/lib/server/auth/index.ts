@@ -54,7 +54,8 @@ async function createAuth() {
     oauthConsent: oauthConsentTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendSigninCodeEmail, isEmailConfigured } = await import('@quackback/email')
+  const { sendSigninCodeEmail, sendPasswordResetEmail, isEmailConfigured } =
+    await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
@@ -151,6 +152,16 @@ async function createAuth() {
       minPasswordLength: 8,
       maxPasswordLength: 128,
       autoSignIn: true,
+      async sendResetPassword({ user, url }) {
+        if (!isEmailConfigured()) {
+          console.warn(
+            `[auth] Password reset requested for ${user.email} but email is not configured. Link will not be delivered.`
+          )
+          return
+        }
+        await sendPasswordResetEmail({ to: user.email, resetLink: url })
+      },
+      resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
     },
 
     // Account linking - allow users to link multiple OAuth providers to their account

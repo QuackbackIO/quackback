@@ -12,6 +12,7 @@ import { useRouter } from '@tanstack/react-router'
 import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { PasswordForm } from '@/components/settings/password-form'
 
 interface ProfileFormProps {
   user: {
@@ -260,6 +261,9 @@ export function ProfileForm({ user }: ProfileFormProps) {
           </div>
         </div>
       </form>
+
+      {/* Password */}
+      <PasswordForm />
 
       {/* Image Cropper Modal */}
       {cropImageSrc && (
