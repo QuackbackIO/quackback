@@ -107,3 +107,6 @@ export {
   useUpdateUserAttribute,
   useDeleteUserAttribute,
 } from './user-attributes'
+
+// Admin subscription mutations
+export { useUpdateVoterSubscription } from './admin-subscriptions'

@@ -32,12 +32,13 @@ import {
 } from '@/lib/server/db'
 import type { PrincipalId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
-import type {
-  SubscriptionReason,
-  Subscriber,
-  Subscription,
-  NotificationPreferencesData,
-  SubscriptionLevel,
+import {
+  levelFromFlags,
+  type SubscriptionReason,
+  type Subscriber,
+  type Subscription,
+  type NotificationPreferencesData,
+  type SubscriptionLevel,
 } from './subscription.types'
 
 // Re-export types for backwards compatibility
@@ -169,20 +170,12 @@ export async function getSubscriptionStatus(
     }
   }
 
-  // Determine level from flags
-  let level: SubscriptionLevel = 'none'
-  if (subscription.notifyComments && subscription.notifyStatusChanges) {
-    level = 'all'
-  } else if (subscription.notifyStatusChanges) {
-    level = 'status_only'
-  }
-
   return {
     subscribed: true,
     notifyComments: subscription.notifyComments,
     notifyStatusChanges: subscription.notifyStatusChanges,
     reason: subscription.reason as SubscriptionReason,
-    level,
+    level: levelFromFlags(subscription.notifyComments, subscription.notifyStatusChanges),
   }
 }
 

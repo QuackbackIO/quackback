@@ -14,12 +14,17 @@ import {
   user,
   sql,
   eq,
+  and,
   desc,
 } from '@/lib/server/db'
 import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
+import {
+  levelFromFlags,
+  type SubscriptionLevel,
+} from '@/lib/server/domains/subscriptions/subscription.types'
 
 export interface VoterInfo {
   principalId: string
@@ -29,6 +34,7 @@ export interface VoterInfo {
   sourceType: string | null
   sourceExternalUrl: string | null
   createdAt: Date | string
+  subscriptionLevel: SubscriptionLevel
 }
 
 /**
@@ -238,12 +244,33 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       sourceType: votes.sourceType,
       sourceExternalUrl: votes.sourceExternalUrl,
       createdAt: votes.createdAt,
+      notifyComments: postSubscriptions.notifyComments,
+      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
     })
     .from(votes)
     .innerJoin(principal, eq(principal.id, votes.principalId))
     .leftJoin(user, eq(user.id, principal.userId))
+    .leftJoin(
+      postSubscriptions,
+      and(
+        eq(postSubscriptions.postId, votes.postId),
+        eq(postSubscriptions.principalId, votes.principalId)
+      )
+    )
     .where(eq(votes.postId, postId))
     .orderBy(desc(votes.createdAt))
 
-  return rows
+  return rows.map((row) => ({
+    principalId: row.principalId,
+    displayName: row.displayName,
+    email: row.email,
+    avatarUrl: row.avatarUrl,
+    sourceType: row.sourceType,
+    sourceExternalUrl: row.sourceExternalUrl,
+    createdAt: row.createdAt,
+    subscriptionLevel: levelFromFlags(
+      row.notifyComments ?? false,
+      row.notifyStatusChanges ?? false
+    ),
+  }))
 }
