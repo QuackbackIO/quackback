@@ -15,7 +15,7 @@ import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { buildQualityGatePrompt } from './prompts/quality-gate.prompt'
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
 
-const QUALITY_GATE_MODEL = 'google/gemini-2.5-flash-lite'
+const QUALITY_GATE_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 /** Sources where users intentionally submit feedback — high baseline intent. */
 const HIGH_INTENT_SOURCES = new Set(['api', 'quackback'])
