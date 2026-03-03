@@ -197,11 +197,13 @@ function MergePreviewCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           {preview.statusName && (
-            <StatusBadge
-              name={preview.statusName}
-              color={preview.statusColor}
-              className="text-[10px] mb-0.5"
-            />
+            <div className="flex items-center mb-0.5">
+              <StatusBadge
+                name={preview.statusName}
+                color={preview.statusColor}
+                className="text-[10px]"
+              />
+            </div>
           )}
           <p className="text-sm font-semibold text-foreground line-clamp-1">{preview.title}</p>
           {preview.content && (
