@@ -1,12 +1,13 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  ArrowsRightLeftIcon,
+  ArrowsUpDownIcon,
   ChatBubbleLeftIcon,
   ChevronUpIcon,
   Squares2X2Icon,
   SparklesIcon,
 } from '@heroicons/react/24/solid'
+import { ArrowRightIcon } from '@heroicons/react/16/solid'
 import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +16,8 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { SourceTypeIcon } from '../source-type-icon'
 import { useSuggestionActions } from './use-suggestion-actions'
+import { MergeConfirmDialog } from './merge-confirm-dialog'
+import { computeMergePreview } from './merge-preview'
 import type { SuggestionListItem } from '../feedback-types'
 
 interface SuggestionTriageRowProps {
@@ -39,7 +42,7 @@ export function SuggestionTriageRow({
   )
 }
 
-// ─── Duplicate post: side-by-side mini post cards ─────────────────────
+// ─── Duplicate post: stacked cards → merged preview ─────────────────
 
 function DuplicateRow({
   suggestion,
@@ -49,6 +52,7 @@ function DuplicateRow({
   onResolved: () => void
 }) {
   const [swapped, setSwapped] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   const { accept, dismiss, isPending } = useSuggestionActions({
     suggestionId: suggestion.id,
@@ -56,12 +60,17 @@ function DuplicateRow({
     onResolved,
   })
 
-  const leftPost = swapped ? suggestion.targetPost : suggestion.sourcePost
-  const rightPost = swapped ? suggestion.sourcePost : suggestion.targetPost
+  const duplicatePost = swapped ? suggestion.targetPost : suggestion.sourcePost
+  const canonicalPost = swapped ? suggestion.sourcePost : suggestion.targetPost
+
+  const preview = useMemo(() => {
+    if (!duplicatePost || !canonicalPost) return null
+    return computeMergePreview(duplicatePost, canonicalPost)
+  }, [duplicatePost, canonicalPost])
 
   return (
     <div className="w-full px-4 py-3 space-y-2.5">
-      {/* Header: sparkles + label + similarity pill + time */}
+      {/* Header: sparkles + label + time */}
       <div className="flex items-center gap-2">
         <SparklesIcon className="h-3.5 w-3.5 text-amber-500/80 shrink-0" />
         <span className="text-xs font-medium text-muted-foreground/70">Possible duplicate</span>
@@ -79,23 +88,41 @@ function DuplicateRow({
         </p>
       )}
 
-      {/* Side-by-side post cards */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <MiniPostCard post={leftPost} />
-        <button
-          type="button"
-          onClick={() => setSwapped(!swapped)}
-          className={cn(
-            'flex items-center px-1 py-1 rounded transition-colors cursor-pointer',
-            'hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground/70',
-            swapped &&
-              'text-violet-500 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-300'
-          )}
-          title="Swap merge direction"
-        >
-          <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-        </button>
-        <MiniPostCard post={rightPost} />
+      {/* Stacked source cards → merged preview */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-2">
+        {/* Left: stacked post cards with swap */}
+        <div className="flex flex-col gap-1.5">
+          <MiniPostCard post={canonicalPost} />
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setSwapped(!swapped)}
+              className={cn(
+                'flex items-center px-1.5 py-0.5 rounded transition-colors cursor-pointer',
+                'hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground/70',
+                swapped &&
+                  'text-violet-500 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-300'
+              )}
+              title="Swap merge direction"
+            >
+              <ArrowsUpDownIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <MiniPostCard post={duplicatePost} label="Duplicate" />
+        </div>
+
+        {/* Center: arrow */}
+        <div className="hidden md:flex items-center justify-center px-1">
+          <ArrowRightIcon className="h-4 w-4 text-muted-foreground/40" />
+        </div>
+
+        {/* Right: merged preview card */}
+        {preview && (
+          <MergePreviewCard
+            preview={preview}
+            onClick={() => setShowConfirmDialog(true)}
+          />
+        )}
       </div>
 
       {/* Actions */}
@@ -103,7 +130,7 @@ function DuplicateRow({
         <Button
           size="sm"
           variant="outline"
-          onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
+          onClick={() => setShowConfirmDialog(true)}
           disabled={isPending}
         >
           Merge
@@ -118,15 +145,95 @@ function DuplicateRow({
           Dismiss
         </Button>
       </div>
+
+      {/* Merge confirmation dialog */}
+      {duplicatePost && canonicalPost && preview && (
+        <MergeConfirmDialog
+          open={showConfirmDialog}
+          onOpenChange={setShowConfirmDialog}
+          duplicatePost={duplicatePost}
+          canonicalPost={canonicalPost}
+          preview={preview}
+          onConfirm={() => accept(swapped ? { swapDirection: true } : undefined)}
+          isPending={isPending}
+        />
+      )}
     </div>
   )
 }
 
+// ─── Merge preview card ─────────────────────────────────────────────
+
+function MergePreviewCard({
+  preview,
+  onClick,
+}: {
+  preview: ReturnType<typeof computeMergePreview>
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-w-0 rounded-md border border-dashed border-border/60 bg-muted/20 p-2.5 text-left cursor-pointer transition-colors hover:bg-muted/40 hover:border-border group"
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+          Merged result
+        </p>
+        <span className="text-[10px] text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity">
+          Review
+        </span>
+      </div>
+      <div className="flex items-start gap-2.5">
+        {/* Vote pill */}
+        <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-1 gap-0">
+          <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs font-semibold tabular-nums text-foreground">
+            {preview.voteCount}
+          </span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          {preview.statusName && (
+            <StatusBadge
+              name={preview.statusName}
+              color={preview.statusColor}
+              className="text-[10px] mb-0.5"
+            />
+          )}
+          <p className="text-sm font-semibold text-foreground line-clamp-1">{preview.title}</p>
+          {preview.content && (
+            <p className="text-xs text-muted-foreground/60 line-clamp-1 mt-0.5">{preview.content}</p>
+          )}
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1.5">
+            {preview.boardName && (
+              <>
+                <Squares2X2Icon className="h-3 w-3 shrink-0 text-muted-foreground/40 -mr-1 mb-0.5" />
+                <span className="truncate">{preview.boardName}</span>
+              </>
+            )}
+            <span className="flex items-center gap-0.5 ml-auto shrink-0">
+              <CommentIcon className="h-3 w-3" />
+              {preview.commentCount}
+            </span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ─── Mini post card ─────────────────────────────────────────────────
+
 /** Compact post card matching the real PostCard layout — clickable to open post modal. */
 function MiniPostCard({
   post,
+  label,
 }: {
   post: SuggestionListItem['sourcePost'] | SuggestionListItem['targetPost']
+  label?: string
 }) {
   const navigate = useNavigate()
 
@@ -156,12 +263,21 @@ function MiniPostCard({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {post.statusName && (
-            <StatusBadge
-              name={post.statusName}
-              color={post.statusColor}
-              className="text-[10px] mb-0.5"
-            />
+          {(label || post.statusName) && (
+          <div className="flex items-center gap-1.5 mb-0.5">
+            {label && (
+              <span className="text-[10px] font-medium px-1.5 py-0 rounded-sm bg-muted text-muted-foreground/70">
+                {label}
+              </span>
+            )}
+            {post.statusName && (
+              <StatusBadge
+                name={post.statusName}
+                color={post.statusColor}
+                className="text-[10px]"
+              />
+            )}
+          </div>
           )}
           <p className="text-sm font-semibold text-foreground line-clamp-1">{post.title}</p>
           {post.content && (
