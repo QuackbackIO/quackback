@@ -1,14 +1,17 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowsUpDownIcon,
+  ArrowPathIcon,
   ChatBubbleLeftIcon,
+  CheckCircleIcon,
   ChevronUpIcon,
   Squares2X2Icon,
   SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { ArrowRightIcon } from '@heroicons/react/16/solid'
 import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon } from '@heroicons/react/20/solid'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -16,9 +19,13 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import { SourceTypeIcon } from '../source-type-icon'
 import { useSuggestionActions } from './use-suggestion-actions'
+import { useUnmergePost } from '@/lib/client/mutations/post-merge'
+import { suggestionsKeys } from '@/lib/client/hooks/use-suggestions-query'
+import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/feedback'
 import { MergeConfirmDialog } from './merge-confirm-dialog'
 import { computeMergePreview } from './merge-preview'
 import type { SuggestionListItem } from '../feedback-types'
+import type { PostId } from '@quackback/ids'
 
 interface SuggestionTriageRowProps {
   suggestion: SuggestionListItem
@@ -44,6 +51,11 @@ export function SuggestionTriageRow({
 
 // ─── Duplicate post: stacked cards → merged preview ─────────────────
 
+interface MergedState {
+  canonicalPost: NonNullable<SuggestionListItem['targetPost']> | NonNullable<SuggestionListItem['sourcePost']>
+  duplicatePostId: string
+}
+
 function DuplicateRow({
   suggestion,
   onResolved,
@@ -53,12 +65,41 @@ function DuplicateRow({
 }) {
   const [swapped, setSwapped] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [mergedState, setMergedState] = useState<MergedState | null>(null)
 
-  const { accept, dismiss, isPending } = useSuggestionActions({
-    suggestionId: suggestion.id,
-    isMerge: true,
-    onResolved,
+  const queryClient = useQueryClient()
+
+  // Direct merge mutation — sets local merged state without invalidating queries
+  const mergeMutation = useMutation({
+    mutationFn: (opts?: { swapDirection: boolean }) =>
+      acceptSuggestionFn({
+        data: {
+          id: suggestion.id,
+          ...(opts?.swapDirection && { swapDirection: true }),
+        },
+      }),
+    onSuccess: () => {
+      const canonical = swapped ? suggestion.sourcePost : suggestion.targetPost
+      const duplicate = swapped ? suggestion.targetPost : suggestion.sourcePost
+      if (canonical && duplicate) {
+        setMergedState({ canonicalPost: canonical, duplicatePostId: duplicate.id })
+      }
+    },
   })
+
+  // Dismiss mutation — same behavior as useSuggestionActions
+  const dismissMutation = useMutation({
+    mutationFn: () => dismissSuggestionFn({ data: { id: suggestion.id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+      onResolved()
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+    },
+  })
+
+  const isPending = mergeMutation.isPending || dismissMutation.isPending
 
   const duplicatePost = swapped ? suggestion.targetPost : suggestion.sourcePost
   const canonicalPost = swapped ? suggestion.sourcePost : suggestion.targetPost
@@ -67,6 +108,19 @@ function DuplicateRow({
     if (!duplicatePost || !canonicalPost) return null
     return computeMergePreview(duplicatePost, canonicalPost)
   }, [duplicatePost, canonicalPost])
+
+  // ─── Resolved state: show merged confirmation ───
+  if (mergedState) {
+    return (
+      <MergedDuplicateRow
+        mergedState={mergedState}
+        onDismiss={() => {
+          queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+          onResolved()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="w-full px-4 py-3 space-y-2.5">
@@ -105,7 +159,7 @@ function DuplicateRow({
               )}
               title="Swap merge direction"
             >
-              <ArrowsUpDownIcon className="h-3.5 w-3.5" />
+              <ArrowPathIcon className="h-3.5 w-3.5 rotate-90" />
             </button>
           </div>
           <MiniPostCard post={duplicatePost} label="Duplicate" />
@@ -138,7 +192,7 @@ function DuplicateRow({
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => dismiss()}
+          onClick={() => dismissMutation.mutate()}
           disabled={isPending}
           className="text-muted-foreground"
         >
@@ -154,10 +208,82 @@ function DuplicateRow({
           duplicatePost={duplicatePost}
           canonicalPost={canonicalPost}
           preview={preview}
-          onConfirm={() => accept(swapped ? { swapDirection: true } : undefined)}
+          onConfirm={() => mergeMutation.mutate(swapped ? { swapDirection: true } : undefined)}
           isPending={isPending}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Merged confirmation row ────────────────────────────────────────
+
+function MergedDuplicateRow({
+  mergedState,
+  onDismiss,
+}: {
+  mergedState: MergedState
+  onDismiss: () => void
+}) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const unmerge = useUnmergePost()
+
+  const handleUndo = async () => {
+    await unmerge.mutateAsync(mergedState.duplicatePostId as PostId)
+    queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+    onDismiss()
+  }
+
+  return (
+    <div className="w-full px-4 py-3 space-y-2.5 border-l-2 border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-950/10">
+      {/* Header with dismiss button */}
+      <div className="flex items-center gap-2">
+        <CheckCircleIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          Posts merged
+        </span>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors cursor-pointer"
+          title="Dismiss"
+        >
+          <XMarkIcon className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Canonical post card */}
+      <MiniPostCard post={mergedState.canonicalPost} />
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            navigate({
+              to: '/admin/feedback/insights',
+              search: (prev: Record<string, unknown>) => ({
+                ...prev,
+                post: mergedState.canonicalPost.id,
+              }),
+            })
+          }
+        >
+          View post
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleUndo}
+          disabled={unmerge.isPending}
+          className="text-muted-foreground"
+        >
+          Undo merge
+        </Button>
+      </div>
     </div>
   )
 }
