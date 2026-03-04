@@ -49,7 +49,7 @@ interface InvitationActionsProps {
   invitation: PendingInvitation
   onResent: (id: string, lastSentAt: string) => void
   onCancelled: (id: string) => void
-  onError: (message: string) => void
+  onError: (message: string | null) => void
   onInviteLink: (id: string, link: string) => void
 }
 
@@ -77,6 +77,7 @@ export function InvitationActions({
 
   const handleResend = async () => {
     setLoading('resend')
+    onError(null)
     try {
       const result = await resendInvitationFn({
         data: { invitationId: inv.id as InviteId },
@@ -94,6 +95,7 @@ export function InvitationActions({
 
   const handleCancel = async () => {
     setLoading('cancel')
+    onError(null)
     try {
       await cancelInvitationFn({
         data: { invitationId: inv.id as InviteId },
