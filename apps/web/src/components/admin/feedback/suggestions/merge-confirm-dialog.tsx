@@ -43,7 +43,7 @@ export function MergeConfirmDialog({
                 <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-1 gap-0">
                   <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
                   <span className="text-xs font-semibold tabular-nums text-foreground">
-                    ~{preview.voteCount}
+                    {preview.voteCount}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
