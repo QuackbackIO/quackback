@@ -78,9 +78,10 @@ function DuplicateRow({
           ...(opts?.swapDirection && { swapDirection: true }),
         },
       }),
-    onSuccess: () => {
-      const canonical = swapped ? suggestion.sourcePost : suggestion.targetPost
-      const duplicate = swapped ? suggestion.targetPost : suggestion.sourcePost
+    onSuccess: (_data, variables) => {
+      const wasSwapped = variables?.swapDirection ?? false
+      const canonical = wasSwapped ? suggestion.sourcePost : suggestion.targetPost
+      const duplicate = wasSwapped ? suggestion.targetPost : suggestion.sourcePost
       if (canonical && duplicate) {
         setMergedState({ canonicalPost: canonical, duplicatePostId: duplicate.id })
       }
