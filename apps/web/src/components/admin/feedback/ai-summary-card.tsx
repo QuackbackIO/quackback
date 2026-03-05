@@ -15,19 +15,13 @@ interface PostSummaryJson {
 interface AiSummaryCardProps {
   summaryJson: PostSummaryJson | null
   summaryUpdatedAt: Date | string | null
-  summaryCommentCount: number | null
-  currentCommentCount: number
 }
 
 export function AiSummaryCard({
   summaryJson,
   summaryUpdatedAt,
-  summaryCommentCount,
-  currentCommentCount,
 }: AiSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true)
-
-  const isStale = summaryCommentCount != null && currentCommentCount > summaryCommentCount
 
   // Generating state: no summary yet
   if (!summaryJson) {
@@ -59,11 +53,6 @@ export function AiSummaryCard({
             {summaryUpdatedAt && (
               <span className="text-xs text-muted-foreground">
                 Updated <TimeAgo date={summaryUpdatedAt} />
-              </span>
-            )}
-            {isStale && (
-              <span className="text-xs text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium">
-                Stale
               </span>
             )}
             <ChevronDownIcon

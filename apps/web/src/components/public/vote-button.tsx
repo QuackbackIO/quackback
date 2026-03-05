@@ -11,6 +11,8 @@ interface VoteButtonProps {
   onAuthRequired?: () => void
   /** Compact horizontal variant for inline use */
   compact?: boolean
+  /** Static display with no interactivity */
+  readonly?: boolean
 }
 
 export function VoteButton({
@@ -19,11 +21,15 @@ export function VoteButton({
   disabled = false,
   onAuthRequired,
   compact = false,
+  readonly = false,
 }: VoteButtonProps): React.ReactElement {
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
+    enabled: !readonly,
   })
+
+  const displayCount = readonly ? initialVoteCount : voteCount
 
   function handleClick(): void {
     if (disabled) {
@@ -31,6 +37,53 @@ export function VoteButton({
       return
     }
     handleVote()
+  }
+
+  const sharedClassName = cn(
+    'relative flex items-center justify-center',
+    'border-2 rounded-md',
+    compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-12 py-2 gap-0.5',
+    'bg-muted/40 border-border/50 text-muted-foreground',
+    !readonly && 'group transition-colors duration-200 cursor-pointer',
+    !readonly &&
+      (hasVoted
+        ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)] text-[var(--post-card-voted-color)]'
+        : 'hover:border-border hover:text-foreground/80'),
+    !readonly && isPending && 'opacity-70 cursor-wait',
+    !readonly && disabled && 'cursor-not-allowed opacity-50'
+  )
+
+  const chevron = (
+    <ChevronUpIcon
+      className={cn(
+        compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
+        !readonly && 'transition-transform duration-200',
+        !readonly && hasVoted && 'fill-[var(--post-card-voted-color)]',
+        !readonly && !isPending && !disabled && 'group-hover:-translate-y-0.5'
+      )}
+    />
+  )
+
+  const count = (
+    <span
+      data-testid="vote-count"
+      className={cn(
+        'font-semibold tabular-nums',
+        compact ? 'text-xs' : 'text-sm',
+        !readonly && hasVoted ? 'text-[var(--post-card-voted-color)]' : 'text-foreground'
+      )}
+    >
+      {displayCount}
+    </span>
+  )
+
+  if (readonly) {
+    return (
+      <div data-testid="vote-button" aria-label={`${displayCount} votes`} className={sharedClassName}>
+        {chevron}
+        {count}
+      </div>
+    )
   }
 
   return (
@@ -41,37 +94,12 @@ export function VoteButton({
         hasVoted ? `Remove vote (${voteCount} votes)` : `Vote for this post (${voteCount} votes)`
       }
       aria-pressed={hasVoted}
-      className={cn(
-        'group relative flex items-center justify-center transition-colors duration-200 cursor-pointer',
-        'border-2 rounded-md',
-        compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-12 py-2 gap-0.5',
-        hasVoted
-          ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)] text-[var(--post-card-voted-color)]'
-          : 'bg-muted/40 border-border/50 text-muted-foreground hover:border-border hover:text-foreground/80',
-        isPending && 'opacity-70 cursor-wait',
-        disabled && 'cursor-not-allowed opacity-50'
-      )}
+      className={sharedClassName}
       onClick={handleClick}
       disabled={isPending}
     >
-      <ChevronUpIcon
-        className={cn(
-          'transition-transform duration-200',
-          compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
-          hasVoted && 'fill-[var(--post-card-voted-color)]',
-          !isPending && !disabled && 'group-hover:-translate-y-0.5'
-        )}
-      />
-      <span
-        data-testid="vote-count"
-        className={cn(
-          'font-semibold tabular-nums',
-          compact ? 'text-xs' : 'text-sm',
-          hasVoted ? 'text-[var(--post-card-voted-color)]' : 'text-foreground'
-        )}
-      >
-        {voteCount}
-      </span>
+      {chevron}
+      {count}
     </button>
   )
 }

@@ -107,6 +107,12 @@ interface MetadataSidebarProps {
   hideVote?: boolean
   /** Visual variant: 'column' (default border-l) or 'card' (floating card) */
   variant?: 'column' | 'card'
+  /** Static display with no vote interactivity */
+  readonlyVote?: boolean
+  /** Additional post IDs whose voters should be merged (e.g. for merge preview) */
+  votersAdditionalPostIds?: PostId[]
+  /** Hide subscription controls in voters modal */
+  votersReadonly?: boolean
 }
 
 export function MetadataSidebar({
@@ -132,6 +138,9 @@ export function MetadataSidebar({
   hideSubscribe = false,
   hideVote = false,
   variant = 'column',
+  readonlyVote = false,
+  votersAdditionalPostIds,
+  votersReadonly = false,
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
@@ -224,7 +233,7 @@ export function MetadataSidebar({
             </div>
             {canEdit ? (
               <div className="flex items-center gap-1.5">
-                <VoteButton postId={postId} voteCount={voteCount} compact />
+                <VoteButton postId={postId} voteCount={voteCount} compact readonly={readonlyVote} />
                 {voteCount > 0 && (
                   <>
                     <span className="text-muted-foreground/40">·</span>
@@ -240,6 +249,8 @@ export function MetadataSidebar({
                       voteCount={voteCount}
                       open={votersOpen}
                       onOpenChange={setVotersOpen}
+                      additionalPostIds={votersAdditionalPostIds}
+                      readonly={votersReadonly}
                     />
                   </>
                 )}

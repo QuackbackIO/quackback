@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { fetchPostVotersFn } from '@/lib/server/functions/posts'
 import { useUpdateVoterSubscription } from '@/lib/client/mutations/admin-subscriptions'
 import type { PostId, PrincipalId } from '@quackback/ids'
 import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.types'
@@ -24,6 +25,10 @@ interface VotersModalProps {
   voteCount: number
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Additional post IDs whose voters should be merged (e.g. for merge preview) */
+  additionalPostIds?: PostId[]
+  /** Hide subscription controls (e.g. for readonly previews) */
+  readonly?: boolean
 }
 
 const SUBSCRIPTION_LABELS: Record<SubscriptionLevel, string> = {
@@ -32,11 +37,37 @@ const SUBSCRIPTION_LABELS: Record<SubscriptionLevel, string> = {
   none: 'Not subscribed',
 }
 
-export function VotersModal({ postId, voteCount, open, onOpenChange }: VotersModalProps) {
-  const { data: voters, isLoading } = useQuery({
+export function VotersModal({ postId, voteCount, open, onOpenChange, additionalPostIds = [], readonly = false }: VotersModalProps) {
+  const { data: primaryVoters, isLoading: primaryLoading } = useQuery({
     ...adminQueries.postVoters(postId),
     enabled: open,
   })
+
+  const { data: additionalVoters, isLoading: additionalLoading } = useQuery({
+    queryKey: ['inbox', 'voters', 'merged', ...additionalPostIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        additionalPostIds.map((id) => fetchPostVotersFn({ data: { id } }))
+      )
+      return results.flat()
+    },
+    enabled: open && additionalPostIds.length > 0,
+  })
+
+  const isLoading = primaryLoading || additionalLoading
+
+  // Merge and deduplicate voters by principalId
+  const voters = useMemo(() => {
+    if (!primaryVoters) return undefined
+    if (additionalPostIds.length === 0) return primaryVoters
+    const all = [...primaryVoters, ...(additionalVoters ?? [])]
+    const seen = new Set<string>()
+    return all.filter((v) => {
+      if (seen.has(v.principalId)) return false
+      seen.add(v.principalId)
+      return true
+    })
+  }, [primaryVoters, additionalVoters, additionalPostIds.length])
 
   const updateSubscription = useUpdateVoterSubscription(postId)
 
@@ -86,7 +117,7 @@ export function VotersModal({ postId, voteCount, open, onOpenChange }: VotersMod
                       </p>
                       <VoterSourceLine voter={voter} />
                     </div>
-                    {isAnonymous ? (
+                    {readonly ? null : isAnonymous ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <SubscriptionBadge

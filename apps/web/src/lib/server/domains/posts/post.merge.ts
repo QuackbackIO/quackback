@@ -23,6 +23,7 @@ import {
   principal as principalTable,
 } from '@/lib/server/db'
 import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
+import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { getPostWithDetails, getCommentsWithReplies } from './post.query'
@@ -103,13 +104,32 @@ export async function mergePost(
     })
     .where(eq(posts.id, duplicatePostId))
 
-  // Recalculate canonical post's vote count
-  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
+  // Recalculate canonical post's vote count and reset merge check in one update
+  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId, { resetMergeCheck: true })
+
+  // Queue a delayed re-check for additional duplicates (e.g. 3 similar posts where only 1 was caught)
+  schedulePostMergeRecheck(canonicalPostId)
 
   return {
     canonicalPost: { id: canonicalPostId, voteCount: newVoteCount },
     duplicatePost: { id: duplicatePostId },
   }
+}
+
+/**
+ * Schedule a delayed duplicate re-check for a canonical post after merge.
+ * Uses BullMQ for persistence and retry. The 3s delay lets the DB transaction
+ * settle and avoids re-finding just-dismissed suggestions.
+ */
+function schedulePostMergeRecheck(canonicalPostId: PostId): void {
+  scheduleDispatch({
+    jobId: `merge-recheck:${canonicalPostId}`,
+    handler: '__post_merge_recheck__',
+    delayMs: 3000,
+    payload: { postId: canonicalPostId },
+  }).catch((err) =>
+    console.error(`[PostMerge] Failed to schedule recheck for ${canonicalPostId}:`, err)
+  )
 }
 
 /**
@@ -309,7 +329,10 @@ export async function previewMergedPost(
  * @param canonicalPostId - The canonical post to recalculate
  * @returns The new vote count
  */
-async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<number> {
+async function recalculateCanonicalVoteCount(
+  canonicalPostId: PostId,
+  options?: { resetMergeCheck?: boolean }
+): Promise<number> {
   // Count unique member votes across canonical + all merged duplicates
   // Note: must convert TypeID to raw UUID for use in raw SQL
   const canonicalUuid = toUuid(canonicalPostId)
@@ -329,8 +352,11 @@ async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<n
   const rows = getExecuteRows<{ unique_voters: number }>(result)
   const newCount = rows[0]?.unique_voters ?? 0
 
-  // Update the canonical post's vote count
-  await db.update(posts).set({ voteCount: newCount }).where(eq(posts.id, canonicalPostId))
+  // Update the canonical post's vote count (and optionally reset mergeCheckedAt)
+  await db.update(posts).set({
+    voteCount: newCount,
+    ...(options?.resetMergeCheck && { mergeCheckedAt: null }),
+  }).where(eq(posts.id, canonicalPostId))
 
   return newCount
 }

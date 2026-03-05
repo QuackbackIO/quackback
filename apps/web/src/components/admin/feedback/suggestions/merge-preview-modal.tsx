@@ -1,9 +1,10 @@
 'use client'
 
 import { Suspense } from 'react'
+import { useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
-import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { InformationCircleIcon } from '@heroicons/react/24/outline'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
@@ -67,8 +68,12 @@ function MergePreviewContent({
     adminQueries.mergePreview(canonicalPostId, duplicatePostId)
   )
 
+  const { session } = useRouteContext({ from: '__root__' })
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
+  const adminUser = session?.user
+    ? { name: session.user.name, email: session.user.email }
+    : null
 
   const post = data.post as PostDetails
   const currentStatus = statuses.find((s) => s.id === post.statusId)
@@ -105,10 +110,11 @@ function MergePreviewContent({
         section="Merge Preview"
         title={post.title}
         onClose={onClose}
+        hideCopyLink
       />
 
       {/* Main content area - scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <ScrollArea className="flex-1 min-h-0">
         {/* Info banner */}
         <div className="mx-6 mt-4 mb-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
           <InformationCircleIcon className="h-5 w-5 shrink-0 mt-0.5" />
@@ -152,84 +158,52 @@ function MergePreviewContent({
                   <AiSummaryCard
                     summaryJson={post.summaryJson}
                     summaryUpdatedAt={post.summaryUpdatedAt ?? null}
-                    summaryCommentCount={post.summaryCommentCount ?? null}
-                    currentCommentCount={post.commentCount ?? 0}
                   />
                 )}
               </div>
             </div>
 
-            {/* Canonical comments */}
+            {/* All comments (canonical + duplicate merged) */}
             <div>
               <Suspense fallback={<CommentsSectionSkeleton />}>
                 <CommentsSection
                   postId={canonicalPostId}
-                  comments={canonicalComments}
+                  comments={[...canonicalComments, ...duplicateComments]}
                   pinnedCommentId={post.pinnedCommentId}
+                  adminUser={adminUser ?? undefined}
                   disableCommenting
                 />
               </Suspense>
             </div>
-
-            {/* Duplicate comments (with divider) */}
-            {duplicateComments.length > 0 && (
-              <div>
-                <div className="flex items-center gap-3 px-6 py-3">
-                  <div className="flex-1 border-t border-dashed border-border/60" />
-                  <span className="text-xs font-medium text-muted-foreground/60 whitespace-nowrap">
-                    Comments from duplicate ({data.duplicatePostTitle})
-                  </span>
-                  <div className="flex-1 border-t border-dashed border-border/60" />
-                </div>
-                <Suspense fallback={<CommentsSectionSkeleton />}>
-                  <CommentsSection
-                    postId={duplicatePostId}
-                    comments={duplicateComments}
-                    disableCommenting
-                  />
-                </Suspense>
-              </div>
-            )}
           </div>
 
           {/* Right: Metadata sidebar (readonly) */}
           {/* canEdit avoids AuthPopover (uses VoteButton path).
-              hideVote hides the interactive button; we show a static count above instead.
               No edit callbacks → dropdowns render as static badges. */}
           <Suspense fallback={<MetadataSidebarSkeleton variant="card" />}>
-            <div className="w-[240px] shrink-0">
-              {/* Static vote count */}
-              <div className="mt-6 mr-4 ml-1 flex items-center gap-2 rounded-xl border border-border/20 bg-card px-4 py-3 shadow-sm">
-                <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold tabular-nums">
-                  {post.voteCount}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {post.voteCount === 1 ? 'vote' : 'votes'}
-                </span>
-              </div>
-              <MetadataSidebar
-                postId={canonicalPostId}
-                voteCount={post.voteCount}
-                status={currentStatus}
-                board={post.board}
-                authorName={post.authorName}
-                authorAvatarUrl={
-                  (post.principalId && post.avatarUrls?.[post.principalId]) || null
-                }
-                authorPrincipalId={post.principalId}
-                createdAt={new Date(post.createdAt)}
-                tags={post.tags}
-                roadmaps={postRoadmaps}
-                canEdit
-                hideVote
-                hideSubscribe
-                variant="card"
-              />
-            </div>
+            <MetadataSidebar
+              postId={canonicalPostId}
+              voteCount={post.voteCount}
+              status={currentStatus}
+              board={post.board}
+              authorName={post.authorName}
+              authorAvatarUrl={
+                (post.principalId && post.avatarUrls?.[post.principalId]) || null
+              }
+              authorPrincipalId={post.principalId}
+              createdAt={new Date(post.createdAt)}
+              tags={post.tags}
+              roadmaps={postRoadmaps}
+              canEdit
+              hideSubscribe
+              readonlyVote
+              votersAdditionalPostIds={[duplicatePostId]}
+              votersReadonly
+              variant="card"
+            />
           </Suspense>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Footer — Close only */}
       <div className="flex items-center justify-end px-4 sm:px-6 py-3 border-t bg-muted/30 shrink-0">
