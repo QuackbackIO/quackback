@@ -16,6 +16,7 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
@@ -333,7 +334,7 @@ function PostModalContent({
       </ModalHeader>
 
       {/* Main content area - scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <ScrollArea className="flex-1 min-h-0">
         {/* Merge info banner (if this post has been merged into another) */}
         {post.mergeInfo && (
           <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
@@ -386,8 +387,6 @@ function PostModalContent({
                   <AiSummaryCard
                     summaryJson={post.summaryJson}
                     summaryUpdatedAt={post.summaryUpdatedAt ?? null}
-                    summaryCommentCount={post.summaryCommentCount ?? null}
-                    currentCommentCount={post.commentCount ?? 0}
                   />
                 )}
               </div>
@@ -450,7 +449,7 @@ function PostModalContent({
             />
           </Suspense>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Footer */}
       <ModalFooter

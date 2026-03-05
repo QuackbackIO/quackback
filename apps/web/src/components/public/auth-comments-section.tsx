@@ -33,6 +33,8 @@ interface AuthCommentsSectionProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member */
   isTeamMember?: boolean
+  /** Hide the comment form area entirely (for readonly previews) */
+  hideCommentForm?: boolean
 }
 
 /**
@@ -56,6 +58,7 @@ export function AuthCommentsSection({
   statuses,
   currentStatusId,
   isTeamMember,
+  hideCommentForm,
 }: AuthCommentsSectionProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -110,6 +113,7 @@ export function AuthCommentsSection({
       statuses={statuses}
       currentStatusId={currentStatusId}
       isTeamMember={isTeamMember}
+      hideCommentForm={hideCommentForm}
     />
   )
 }

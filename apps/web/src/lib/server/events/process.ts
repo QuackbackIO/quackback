@@ -82,6 +82,12 @@ async function initializeQueue() {
         return
       }
 
+      // Handle post-merge recheck sentinel
+      if (hookType === '__post_merge_recheck__') {
+        await handlePostMergeRecheck(hookConfig)
+        return
+      }
+
       const hook = await getHook(hookType)
       if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
 
@@ -325,4 +331,19 @@ async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>
     publishedAt: entry.publishedAt,
     linkedPostCount: linkedPosts.length,
   })
+}
+
+/**
+ * Handle a post-merge recheck job.
+ * Re-checks the canonical post for additional duplicate candidates.
+ */
+async function handlePostMergeRecheck(hookConfig: Record<string, unknown>): Promise<void> {
+  const postId = hookConfig.postId as string | undefined
+  if (!postId) return
+
+  const { checkPostForMergeCandidates } = await import(
+    '@/lib/server/domains/merge-suggestions/merge-check.service'
+  )
+  await checkPostForMergeCandidates(postId as import('@quackback/ids').PostId)
+  console.log(`[PostMerge] Post-merge recheck complete for ${postId}`)
 }

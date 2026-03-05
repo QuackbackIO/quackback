@@ -60,6 +60,8 @@ interface CommentThreadProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member */
   isTeamMember?: boolean
+  /** Hide the comment form area entirely (for readonly previews) */
+  hideCommentForm?: boolean
 }
 
 export function CommentThread({
@@ -79,6 +81,7 @@ export function CommentThread({
   statuses,
   currentStatusId,
   isTeamMember,
+  hideCommentForm = false,
 }: CommentThreadProps) {
   const sortedComments = [...comments].sort((a, b) => {
     // Pinned comment always first
@@ -90,6 +93,8 @@ export function CommentThread({
   })
 
   function renderCommentArea() {
+    if (hideCommentForm) return null
+
     if (allowCommenting) {
       return (
         <CommentForm

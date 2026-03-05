@@ -19,6 +19,8 @@ export const voteCountKeys = {
 interface UsePostVoteOptions {
   postId: PostId
   voteCount: number // Initial vote count (seeds cache)
+  /** Set to false to disable queries (e.g. readonly mode) */
+  enabled?: boolean
 }
 
 interface UsePostVoteReturn {
@@ -39,7 +41,7 @@ interface UsePostVoteReturn {
  * @param postId - The post ID to vote on
  * @param voteCount - Initial vote count (seeds the cache)
  */
-export function usePostVote({ postId, voteCount }: UsePostVoteOptions): UsePostVoteReturn {
+export function usePostVote({ postId, voteCount, enabled = true }: UsePostVoteOptions): UsePostVoteReturn {
   const queryClient = useQueryClient()
 
   // Subscribe to per-post vote count cache
@@ -49,6 +51,7 @@ export function usePostVote({ postId, voteCount }: UsePostVoteOptions): UsePostV
     queryFn: () => voteCount,
     initialData: voteCount,
     staleTime: Infinity, // Never refetch, rely on cache updates
+    enabled,
   })
 
   // Subscribe to votedPosts cache for hasVoted state
@@ -57,6 +60,7 @@ export function usePostVote({ postId, voteCount }: UsePostVoteOptions): UsePostV
     queryKey: votedPostsKeys.byWorkspace(),
     queryFn: fetchVotedPosts,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled,
   })
 
   const hasVoted = votedPosts?.has(postId) ?? false

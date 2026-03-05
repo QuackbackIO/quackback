@@ -130,6 +130,7 @@ export function CommentsSection({
         statuses={statuses}
         currentStatusId={currentStatusId}
         isTeamMember={isTeamMember}
+        hideCommentForm={disableCommenting && !!adminUser}
       />
     </div>
   )
