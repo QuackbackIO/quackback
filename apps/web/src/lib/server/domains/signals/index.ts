@@ -1,0 +1,17 @@
+export {
+  createSignal,
+  resolveSignal,
+  resolveSignalsForPost,
+  resolveDuplicateSignalsForPosts,
+  expireStaleSignals,
+  getSignalSummary,
+  getSignalCountsForPosts,
+  getSignalsForPost,
+  type AiSignalType,
+  type AiSignalSeverity,
+  type AiSignalStatus,
+  type CreateSignalOpts,
+  type SignalSummary,
+  type PostSignalCounts,
+  type AiSignalRow,
+} from './signal.service'

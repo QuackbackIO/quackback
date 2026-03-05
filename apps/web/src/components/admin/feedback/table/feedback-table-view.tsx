@@ -8,11 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
+import { SignalSummaryBar } from '@/components/admin/feedback/signal-summary-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { PostSignalCounts } from '@/lib/server/domains/signals'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -34,6 +36,12 @@ interface FeedbackTableViewProps {
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
   onToggleSegment?: (id: string) => void
+  /** Signal counts per post (for L1 badges) */
+  signalsByPostId?: Map<string, PostSignalCounts[]>
+  /** Active signal type filter */
+  activeSignalFilter?: string
+  /** Callback to change signal filter */
+  onSignalFilter?: (type: string | undefined) => void
 }
 
 function TableSkeleton() {
@@ -91,6 +99,9 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
+  signalsByPostId,
+  activeSignalFilter,
+  onSignalFilter,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
@@ -166,6 +177,14 @@ export function FeedbackTableView({
         {headerAction}
       </div>
 
+      {/* Signal Summary Bar */}
+      {onSignalFilter && (
+        <SignalSummaryBar
+          activeSignalFilter={activeSignalFilter}
+          onSignalFilter={onSignalFilter}
+        />
+      )}
+
       {/* Active Filters Bar - Always visible */}
       <div className="mt-2">
         <ActiveFiltersBar
@@ -194,7 +213,15 @@ export function FeedbackTableView({
     )
   }
 
-  if (posts.length === 0) {
+  // Filter posts by signal type if active
+  const filteredPosts = activeSignalFilter && signalsByPostId
+    ? posts.filter((p) => {
+        const signals = signalsByPostId.get(p.id)
+        return signals?.some((s) => s.type === activeSignalFilter)
+      })
+    : posts
+
+  if (filteredPosts.length === 0) {
     return (
       <div className="max-w-5xl mx-auto w-full">
         {headerContent}
@@ -213,7 +240,7 @@ export function FeedbackTableView({
       {/* Post List */}
       <div className="p-3">
         <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
-          {posts.map((post, index) => (
+          {filteredPosts.map((post, index) => (
             <div
               key={post.id}
               className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
@@ -222,6 +249,7 @@ export function FeedbackTableView({
               <FeedbackRow
                 post={post}
                 statuses={statuses}
+                signals={signalsByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
               />
             </div>

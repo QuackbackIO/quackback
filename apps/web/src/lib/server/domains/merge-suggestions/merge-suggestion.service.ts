@@ -18,6 +18,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import { mergePost } from '@/lib/server/domains/posts/post.merge'
+import { resolveDuplicateSignalsForPosts } from '@/lib/server/domains/signals'
 import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
 
 export interface MergeSuggestionPostView {
@@ -140,6 +141,13 @@ export async function acceptMergeSuggestion(
         )
       )
     )
+
+  // Resolve all duplicate signals for both posts
+  await resolveDuplicateSignalsForPosts(
+    [suggestion.sourcePostId as PostId, suggestion.targetPostId as PostId],
+    'accepted',
+    principalId
+  )
 }
 
 /**
@@ -152,6 +160,12 @@ export async function dismissMergeSuggestion(
   console.log(
     `[domain:merge-suggestions] dismissMergeSuggestion: id=${id} principalId=${principalId}`
   )
+  // Fetch suggestion to get post IDs for signal resolution
+  const suggestion = await db.query.mergeSuggestions.findFirst({
+    where: (s, { eq }) => eq(s.id, id),
+    columns: { sourcePostId: true, targetPostId: true },
+  })
+
   await db
     .update(mergeSuggestions)
     .set({
@@ -161,6 +175,15 @@ export async function dismissMergeSuggestion(
       updatedAt: new Date(),
     })
     .where(and(eq(mergeSuggestions.id, id), eq(mergeSuggestions.status, 'pending')))
+
+  // Resolve corresponding duplicate signals
+  if (suggestion) {
+    await resolveDuplicateSignalsForPosts(
+      [suggestion.sourcePostId as PostId, suggestion.targetPostId as PostId],
+      'dismissed',
+      principalId
+    )
+  }
 }
 
 /**

@@ -99,6 +99,7 @@ export type {
   FeedbackCorrectionId,
   ExternalUserMappingId,
   MergeSuggestionId,
+  AiSignalId,
   // Auth entities
   WorkspaceId,
   UserId,

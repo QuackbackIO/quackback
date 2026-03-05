@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { Route } from '@/routes/admin/feedback'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
@@ -9,9 +9,11 @@ import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { signalQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
+import type { PostSignalCounts } from '@/lib/server/domains/signals'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {
@@ -48,6 +50,9 @@ export function InboxContainer({
   // Segments data for filter UI
   const { data: segments } = useSegments()
 
+  // Signal filter state
+  const [activeSignalFilter, setActiveSignalFilter] = useState<string | undefined>()
+
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
 
@@ -72,6 +77,22 @@ export function InboxContainer({
   })
 
   const posts = flattenInboxPosts(postsData)
+
+  // Fetch signal counts for visible posts
+  const postIds = useMemo(() => posts.map((p) => p.id), [posts])
+  const { data: signalCounts } = useQuery(signalQueries.countsForPosts(postIds))
+
+  // Build a Map<postId, PostSignalCounts[]> for efficient lookup
+  const signalsByPostId = useMemo(() => {
+    if (!signalCounts || signalCounts.length === 0) return undefined
+    const map = new Map<string, PostSignalCounts[]>()
+    for (const signal of signalCounts) {
+      const existing = map.get(signal.postId) ?? []
+      existing.push(signal)
+      map.set(signal.postId, existing)
+    }
+    return map
+  }, [signalCounts])
 
   // Handlers
   const handleLoadMore = useCallback(() => {
@@ -140,6 +161,9 @@ export function InboxContainer({
         onToggleStatus={toggleStatus}
         onToggleBoard={toggleBoard}
         onToggleSegment={toggleSegment}
+        signalsByPostId={signalsByPostId}
+        activeSignalFilter={activeSignalFilter}
+        onSignalFilter={setActiveSignalFilter}
         headerAction={
           <CreatePostDialog
             boards={boards}

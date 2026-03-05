@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
+import { signalQueries } from '@/lib/client/queries/signals'
 import { TabStrip, type TabStripItem } from '@/components/admin/tab-strip'
 import { InboxIcon, SparklesIcon } from '@heroicons/react/24/solid'
 
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/admin/feedback')({
       queryClient.ensureQueryData(feedbackQueries.pipelineStats()),
       queryClient.ensureQueryData(feedbackQueries.suggestionStats()),
       queryClient.ensureQueryData(feedbackQueries.sources()),
+      queryClient.ensureQueryData(signalQueries.summary()),
     ])
   },
   component: FeedbackLayout,

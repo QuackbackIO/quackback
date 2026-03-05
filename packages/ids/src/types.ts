@@ -123,6 +123,9 @@ export type ExternalUserMappingId = TypeId<'user_mapping'>
 /** Merge suggestion ID - e.g., merge_sug_01h455vb4pex5vsknk084sn02q */
 export type MergeSuggestionId = TypeId<'merge_sug'>
 
+/** AI signal ID - e.g., ai_signal_01h455vb4pex5vsknk084sn02q */
+export type AiSignalId = TypeId<'ai_signal'>
+
 // ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
@@ -203,6 +206,7 @@ export interface EntityIdMap {
   signal_correction: FeedbackCorrectionId
   user_mapping: ExternalUserMappingId
   merge_suggestion: MergeSuggestionId
+  ai_signal: AiSignalId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId

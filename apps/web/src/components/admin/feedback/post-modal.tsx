@@ -32,6 +32,7 @@ import {
 } from '@/components/public/post-detail/comments-section'
 import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
 import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
+import { PostSignalsPanel } from '@/components/admin/feedback/detail/post-signals-panel'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -392,6 +393,9 @@ function PostModalContent({
                 )}
               </div>
             </div>
+
+            {/* AI Signals panel */}
+            <PostSignalsPanel postId={postId} />
 
             {/* Merge actions section */}
             <MergeActions

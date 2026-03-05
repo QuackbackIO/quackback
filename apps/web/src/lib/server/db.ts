@@ -219,6 +219,9 @@ export {
   // Schema tables - merge suggestions
   mergeSuggestions,
   mergeSuggestionsRelations,
+  // Schema tables - AI signals
+  aiSignals,
+  aiSignalsRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

@@ -176,6 +176,13 @@
       "when": 1772370000000,
       "tag": "0024_remove_merge_post_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1772380000000,
+      "tag": "0025_ai_signals",
+      "breakpoints": true
     }
   ]
 }
