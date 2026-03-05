@@ -1,39 +1,24 @@
 /**
  * Server functions for AI merge suggestions.
  *
- * Provides endpoints for querying, accepting, and dismissing
- * AI-generated merge suggestions.
+ * Provides query endpoint for pending merge suggestions.
+ * Accept/dismiss actions are handled via acceptSuggestionFn/dismissSuggestionFn
+ * in feedback.ts, which detect the merge_sug prefix and delegate accordingly.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type PostId, type PrincipalId, type MergeSuggestionId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
-import {
-  getPendingSuggestionsForPost,
-  acceptMergeSuggestion,
-  dismissMergeSuggestion,
-} from '@/lib/server/domains/merge-suggestions'
+import { getPendingSuggestionsForPost } from '@/lib/server/domains/merge-suggestions'
 
 // ============================================
-// Schemas
+// Server Functions
 // ============================================
 
 const getMergeSuggestionsSchema = z.object({
   postId: z.string(),
 })
-
-const acceptMergeSuggestionSchema = z.object({
-  suggestionId: z.string(),
-})
-
-const dismissMergeSuggestionSchema = z.object({
-  suggestionId: z.string(),
-})
-
-// ============================================
-// Server Functions
-// ============================================
 
 /**
  * Get pending merge suggestions for a post.
@@ -53,36 +38,4 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
       console.error(`[fn:merge-suggestions] getMergeSuggestionsForPostFn failed:`, error)
       return []
     }
-  })
-
-/**
- * Accept a merge suggestion — performs the actual post merge.
- * Requires admin/member role.
- */
-export const acceptMergeSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(acceptMergeSuggestionSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:merge-suggestions] acceptMergeSuggestionFn: ${data.suggestionId}`)
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
-    await acceptMergeSuggestion(
-      data.suggestionId as MergeSuggestionId,
-      auth.principal.id as PrincipalId
-    )
-    return { success: true }
-  })
-
-/**
- * Dismiss a merge suggestion.
- * Requires admin/member role.
- */
-export const dismissMergeSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(dismissMergeSuggestionSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:merge-suggestions] dismissMergeSuggestionFn: ${data.suggestionId}`)
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
-    await dismissMergeSuggestion(
-      data.suggestionId as MergeSuggestionId,
-      auth.principal.id as PrincipalId
-    )
-    return { success: true }
   })
