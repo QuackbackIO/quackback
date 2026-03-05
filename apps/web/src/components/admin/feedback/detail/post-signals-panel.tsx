@@ -23,15 +23,17 @@ export function PostSignalsPanel({ postId }: PostSignalsPanelProps) {
   if (!signals || signals.length === 0) return null
 
   return (
-    <div className="mx-6 mb-4 rounded-lg border border-amber-400/20 bg-amber-400/5 p-4">
+    <div className="mx-6 mb-4 rounded-lg border border-border/30 bg-muted/5 p-4">
       <div className="flex items-center gap-2 mb-3">
-        <SparklesIcon className="h-4 w-4 text-amber-400" />
-        <span className="text-sm font-medium text-foreground">AI Insights</span>
+        <SparklesIcon className="size-3.5 text-amber-500/80 shrink-0" />
+        <span className="text-xs font-medium text-muted-foreground/70">AI Insights</span>
       </div>
 
-      <div className="space-y-4">
+      <div className="divide-y divide-border/20">
         {signals.map((signal) => (
-          <SignalRow key={signal.id} signal={signal} postId={postId} />
+          <div key={signal.id} className="py-3 first:pt-0 last:pb-0">
+            <SignalRow signal={signal} postId={postId} />
+          </div>
         ))}
       </div>
     </div>
@@ -39,12 +41,9 @@ export function PostSignalsPanel({ postId }: PostSignalsPanelProps) {
 }
 
 function SignalRow({ signal, postId }: { signal: AiSignalRow; postId: PostId }) {
-  // Duplicate signals get the full actionable card
   if (signal.type === 'duplicate') {
     return <DuplicateSignalCard signal={signal} postId={postId} />
   }
-
-  // Other signal types render as simple informational rows
   return <GenericSignalRow signal={signal} />
 }
 
@@ -55,33 +54,31 @@ function GenericSignalRow({ signal }: { signal: AiSignalRow }) {
   switch (signal.type) {
     case 'sentiment':
       return (
-        <div className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground/80">
           <span className={`${config.color} font-medium`}>
             {(payload.label as string) || 'Negative sentiment'}
           </span>
-        </div>
+        </p>
       )
     case 'categorize':
       return (
-        <div className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground/80">
           <span className={`${config.color} font-medium`}>Suggested board: </span>
-          <span>{(payload.suggestedBoardName as string) || 'Unknown'}</span>
-        </div>
+          {(payload.suggestedBoardName as string) || 'Unknown'}
+        </p>
       )
     case 'trend':
       return (
-        <div className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground/80">
           <span className={`${config.color} font-medium`}>Trending: </span>
-          <span>
-            {(payload.velocity as number) || 0} similar posts in the last 7 days
-          </span>
-        </div>
+          {(payload.velocity as number) || 0} similar posts in the last 7 days
+        </p>
       )
     case 'response_draft':
       return (
-        <div className="text-sm text-muted-foreground">
+        <p className="text-sm text-foreground/80">
           <span className={`${config.color} font-medium`}>Draft response ready</span>
-        </div>
+        </p>
       )
   }
 }

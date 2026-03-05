@@ -2,14 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  SparklesIcon,
-  ChevronUpIcon,
-  ArrowPathIcon,
-} from '@heroicons/react/24/solid'
+import { ChevronUpIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { ensureTypeId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
 import { signalQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -34,8 +31,12 @@ interface DuplicateSignalCardProps {
  */
 export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps) {
   const queryClient = useQueryClient()
-  const matchedPostId = signal.payload.matchedPostId as string | undefined
-  const confidence = signal.payload.confidence as number | undefined
+  const rawMatchedPostId = signal.payload.matchedPostId as string | undefined
+  // Backfilled signals store raw UUIDs; runtime signals store TypeIDs.
+  // Normalize to TypeID so the correlation matches Drizzle-returned IDs.
+  const matchedPostId = rawMatchedPostId
+    ? ensureTypeId(rawMatchedPostId, 'post')
+    : undefined
 
   const { data: suggestions } = useQuery(signalQueries.mergeSuggestionsForPost(postId))
 
@@ -54,7 +55,6 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
   // Determine which post is "the other one" to display
   const otherPost = useMemo(() => {
     if (!suggestion) return null
-    // The signal is on this post; show the other post in the suggestion pair
     const isSource = suggestion.sourcePostId === postId
     return {
       id: isSource ? suggestion.targetPostId : suggestion.sourcePostId,
@@ -66,8 +66,6 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
   }, [suggestion, postId])
 
   // For merge direction: canonical = the one kept, duplicate = merged away
-  // Default: suggestion.targetPostId is canonical (higher votes)
-  // Swapped: flip the direction
   const canonicalId = suggestion
     ? (swapped ? suggestion.sourcePostId : suggestion.targetPostId) as PostId
     : null
@@ -78,7 +76,6 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
   // Build MergePreview for confirmation dialog
   const preview = useMemo((): MergePreview | null => {
     if (!suggestion) return null
-    // Canonical post details (the one that survives)
     const canon = swapped
       ? { title: suggestion.sourcePostTitle, votes: suggestion.sourcePostVoteCount, statusName: suggestion.sourcePostStatusName, statusColor: suggestion.sourcePostStatusColor }
       : { title: suggestion.targetPostTitle, votes: suggestion.targetPostVoteCount, statusName: suggestion.targetPostStatusName, statusColor: suggestion.targetPostStatusColor }
@@ -134,34 +131,21 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
 
   const isPending = mergeMutation.isPending || dismissMutation.isPending
 
-  // If no suggestion found (resolved separately or signal exists without suggestion), show minimal info
+  // If no suggestion found (resolved separately or signal exists without suggestion)
   if (!suggestion || !otherPost) {
     if (!matchedPostId) return null
-    const pct = confidence ? `${Math.round(confidence * 100)}%` : null
     return (
-      <div className="text-sm text-muted-foreground">
-        <span className="text-amber-400 font-medium">Possible duplicate</span>
-        {pct && <span className="ml-1.5 text-muted-foreground/60">({pct} match)</span>}
-      </div>
+      <p className="text-sm text-foreground/80">
+        <span className="font-medium">Possible duplicate</span>
+      </p>
     )
   }
 
   return (
-    <div className="space-y-3">
-      {/* Header with confidence */}
-      <div className="flex items-center gap-2">
-        <SparklesIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-        <span className="text-xs font-medium text-amber-400">Possible duplicate</span>
-        {confidence && (
-          <span className="text-xs text-muted-foreground/60">
-            {Math.round(confidence * 100)}% match
-          </span>
-        )}
-      </div>
-
+    <div className="space-y-2.5">
       {/* AI reasoning */}
       {suggestion.llmReasoning && (
-        <p className="text-sm text-muted-foreground leading-relaxed">
+        <p className="text-sm text-foreground/80 leading-relaxed">
           {suggestion.llmReasoning}
         </p>
       )}
@@ -169,15 +153,12 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
       {/* Matched post card */}
       <div className="rounded-md border border-border/60 bg-muted/30 p-2.5">
         <div className="flex items-start gap-2.5">
-          {/* Vote pill */}
           <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-1">
             <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs font-semibold tabular-nums text-foreground">
               {otherPost.voteCount}
             </span>
           </div>
-
-          {/* Content */}
           <div className="flex-1 min-w-0">
             {otherPost.statusName && (
               <div className="mb-0.5">
@@ -202,7 +183,6 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
           variant="outline"
           onClick={() => setShowPreview(true)}
           disabled={isPending}
-          className="text-xs"
         >
           Preview
         </Button>
@@ -213,7 +193,7 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
             variant="outline"
             onClick={() => setShowConfirm(true)}
             disabled={isPending}
-            className="text-xs rounded-r-none border-r-0"
+            className="rounded-r-none border-r-0"
           >
             {mergeMutation.isPending ? 'Merging...' : 'Merge'}
           </Button>
@@ -223,7 +203,7 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
             onClick={() => setSwapped(!swapped)}
             disabled={isPending}
             className={cn(
-              'px-1.5 rounded-l-none text-xs',
+              'px-1.5 rounded-l-none',
               swapped && 'text-violet-500 dark:text-violet-400'
             )}
             title={swapped ? 'Direction swapped — click to reset' : 'Swap merge direction'}
@@ -237,7 +217,7 @@ export function DuplicateSignalCard({ signal, postId }: DuplicateSignalCardProps
           variant="ghost"
           onClick={() => dismissMutation.mutate()}
           disabled={isPending}
-          className="text-xs text-muted-foreground"
+          className="text-muted-foreground"
         >
           {dismissMutation.isPending ? 'Dismissing...' : 'Not a duplicate'}
         </Button>
