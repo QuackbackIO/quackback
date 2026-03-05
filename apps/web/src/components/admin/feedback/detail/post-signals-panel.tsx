@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { signalQueries } from '@/lib/client/queries/signals'
+import { SIGNAL_DISPLAY } from '@/components/admin/feedback/signal-config'
 import type { AiSignalRow } from '@/lib/server/domains/signals'
 import type { PostId } from '@quackback/ids'
 
@@ -35,6 +36,7 @@ export function PostSignalsPanel({ postId }: PostSignalsPanelProps) {
 
 function SignalRow({ signal }: { signal: AiSignalRow }) {
   const payload = signal.payload
+  const config = SIGNAL_DISPLAY[signal.type]
 
   switch (signal.type) {
     case 'duplicate': {
@@ -42,7 +44,7 @@ function SignalRow({ signal }: { signal: AiSignalRow }) {
       const pct = confidence ? `${Math.round(confidence * 100)}%` : null
       return (
         <div className="text-sm text-muted-foreground">
-          <span className="text-amber-400 font-medium">Possible duplicate</span>
+          <span className={`${config.color} font-medium`}>Possible duplicate</span>
           {pct && <span className="ml-1.5 text-muted-foreground/60">({pct} match)</span>}
         </div>
       )
@@ -50,7 +52,7 @@ function SignalRow({ signal }: { signal: AiSignalRow }) {
     case 'sentiment':
       return (
         <div className="text-sm text-muted-foreground">
-          <span className="text-red-400 font-medium">
+          <span className={`${config.color} font-medium`}>
             {(payload.label as string) || 'Negative sentiment'}
           </span>
         </div>
@@ -58,20 +60,24 @@ function SignalRow({ signal }: { signal: AiSignalRow }) {
     case 'categorize':
       return (
         <div className="text-sm text-muted-foreground">
-          <span className="text-blue-400 font-medium">Suggested board: </span>
+          <span className={`${config.color} font-medium`}>Suggested board: </span>
           <span>{(payload.suggestedBoardName as string) || 'Unknown'}</span>
         </div>
       )
     case 'trend':
       return (
         <div className="text-sm text-muted-foreground">
-          <span className="text-green-400 font-medium">Trending: </span>
+          <span className={`${config.color} font-medium`}>Trending: </span>
           <span>
             {(payload.velocity as number) || 0} similar posts in the last 7 days
           </span>
         </div>
       )
-    default:
-      return null
+    case 'response_draft':
+      return (
+        <div className="text-sm text-muted-foreground">
+          <span className={`${config.color} font-medium`}>Draft response ready</span>
+        </div>
+      )
   }
 }

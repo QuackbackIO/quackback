@@ -13,7 +13,8 @@ import { signalQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
-import type { PostSignalCounts } from '@/lib/server/domains/signals'
+import type { AiSignalType, PostSignalCounts } from '@/lib/server/domains/signals'
+import type { PostId } from '@quackback/ids'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {
@@ -51,7 +52,7 @@ export function InboxContainer({
   const { data: segments } = useSegments()
 
   // Signal filter state
-  const [activeSignalFilter, setActiveSignalFilter] = useState<string | undefined>()
+  const [activeSignalFilter, setActiveSignalFilter] = useState<AiSignalType | undefined>()
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -76,16 +77,16 @@ export function InboxContainer({
     initialData: shouldUseInitialData ? initialPosts : undefined,
   })
 
-  const posts = flattenInboxPosts(postsData)
+  const posts = useMemo(() => flattenInboxPosts(postsData), [postsData])
 
   // Fetch signal counts for visible posts
-  const postIds = useMemo(() => posts.map((p) => p.id), [posts])
+  const postIds = useMemo(() => posts.map((p) => p.id) as PostId[], [posts])
   const { data: signalCounts } = useQuery(signalQueries.countsForPosts(postIds))
 
   // Build a Map<postId, PostSignalCounts[]> for efficient lookup
   const signalsByPostId = useMemo(() => {
     if (!signalCounts || signalCounts.length === 0) return undefined
-    const map = new Map<string, PostSignalCounts[]>()
+    const map = new Map<PostId, PostSignalCounts[]>()
     for (const signal of signalCounts) {
       const existing = map.get(signal.postId) ?? []
       existing.push(signal)

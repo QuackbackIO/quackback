@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
+import type { PostId } from '@quackback/ids'
 import {
   fetchSignalSummary,
   fetchSignalCountsForPosts,
@@ -22,7 +23,7 @@ export const signalQueries = {
   /**
    * Signal counts for a batch of post IDs (for L1 badges).
    */
-  countsForPosts: (postIds: string[]) =>
+  countsForPosts: (postIds: PostId[]) =>
     queryOptions({
       queryKey: ['signals', 'counts', postIds],
       queryFn: () => fetchSignalCountsForPosts({ data: { postIds } }),
@@ -33,7 +34,7 @@ export const signalQueries = {
   /**
    * All pending signals for a single post (for L3 detail panel).
    */
-  forPost: (postId: string) =>
+  forPost: (postId: PostId) =>
     queryOptions({
       queryKey: ['signals', 'post', postId],
       queryFn: () => fetchSignalsForPost({ data: { postId } }),

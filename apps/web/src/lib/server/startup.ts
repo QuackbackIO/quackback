@@ -46,8 +46,9 @@ export function logStartupBanner(): void {
   Promise.all([
     import('./domains/feedback/pipeline/stuck-recovery.service'),
     import('./domains/feedback/pipeline/suggestion.service'),
+    import('./domains/signals'),
   ])
-    .then(([{ recoverStuckItems }, { expireStaleSuggestions }]) => {
+    .then(([{ recoverStuckItems }, { expireStaleSuggestions }, { expireStaleSignals }]) => {
       setTimeout(() => {
         recoverStuckItems().catch((err) =>
           console.error('[Startup] Initial stuck-item recovery failed:', err)
@@ -65,6 +66,9 @@ export function logStartupBanner(): void {
         () => {
           expireStaleSuggestions().catch((err) =>
             console.error('[Startup] Suggestion expiry failed:', err)
+          )
+          expireStaleSignals().catch((err) =>
+            console.error('[Startup] Signal expiry failed:', err)
           )
         },
         24 * 60 * 60 * 1000

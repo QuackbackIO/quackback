@@ -160,13 +160,7 @@ export async function dismissMergeSuggestion(
   console.log(
     `[domain:merge-suggestions] dismissMergeSuggestion: id=${id} principalId=${principalId}`
   )
-  // Fetch suggestion to get post IDs for signal resolution
-  const suggestion = await db.query.mergeSuggestions.findFirst({
-    where: (s, { eq }) => eq(s.id, id),
-    columns: { sourcePostId: true, targetPostId: true },
-  })
-
-  await db
+  const [updated] = await db
     .update(mergeSuggestions)
     .set({
       status: 'dismissed',
@@ -175,11 +169,15 @@ export async function dismissMergeSuggestion(
       updatedAt: new Date(),
     })
     .where(and(eq(mergeSuggestions.id, id), eq(mergeSuggestions.status, 'pending')))
+    .returning({
+      sourcePostId: mergeSuggestions.sourcePostId,
+      targetPostId: mergeSuggestions.targetPostId,
+    })
 
   // Resolve corresponding duplicate signals
-  if (suggestion) {
+  if (updated) {
     await resolveDuplicateSignalsForPosts(
-      [suggestion.sourcePostId as PostId, suggestion.targetPostId as PostId],
+      [updated.sourcePostId as PostId, updated.targetPostId as PostId],
       'dismissed',
       principalId
     )

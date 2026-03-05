@@ -14,7 +14,8 @@ import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { PostSignalCounts } from '@/lib/server/domains/signals'
+import type { AiSignalType, PostSignalCounts } from '@/lib/server/domains/signals'
+import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -37,11 +38,11 @@ interface FeedbackTableViewProps {
   onToggleBoard: (id: string) => void
   onToggleSegment?: (id: string) => void
   /** Signal counts per post (for L1 badges) */
-  signalsByPostId?: Map<string, PostSignalCounts[]>
+  signalsByPostId?: Map<PostId, PostSignalCounts[]>
   /** Active signal type filter */
-  activeSignalFilter?: string
+  activeSignalFilter?: AiSignalType
   /** Callback to change signal filter */
-  onSignalFilter?: (type: string | undefined) => void
+  onSignalFilter?: (type: AiSignalType | undefined) => void
 }
 
 function TableSkeleton() {

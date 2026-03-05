@@ -23,7 +23,7 @@ export const fetchSignalSummary = createServerFn({ method: 'GET' }).handler(asyn
 /**
  * Get signal counts for a batch of post IDs (for L1 badges).
  */
-export const fetchSignalCountsForPosts = createServerFn({ method: 'GET' })
+export const fetchSignalCountsForPosts = createServerFn({ method: 'POST' })
   .inputValidator(z.object({ postIds: z.array(z.string()) }))
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })

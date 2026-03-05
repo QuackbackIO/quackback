@@ -212,13 +212,13 @@ export async function getSignalCountsForPosts(postIds: PostId[]): Promise<PostSi
 }
 
 export interface AiSignalRow {
-  id: string
-  type: string
-  severity: string
-  postId: string
+  id: AiSignalId
+  type: AiSignalType
+  severity: AiSignalSeverity
+  postId: PostId
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: Record<string, any>
-  status: string
+  status: AiSignalStatus
   createdAt: Date
 }
 

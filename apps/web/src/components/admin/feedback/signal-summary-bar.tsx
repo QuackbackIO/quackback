@@ -1,19 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { signalQueries } from '@/lib/client/queries/signals'
+import { SIGNAL_DISPLAY } from '@/components/admin/feedback/signal-config'
 import { cn } from '@/lib/shared/utils'
+import type { AiSignalType } from '@/lib/server/domains/signals'
 
 interface SignalSummaryBarProps {
-  activeSignalFilter?: string
-  onSignalFilter: (type: string | undefined) => void
-}
-
-const SIGNAL_LABELS: Record<string, { singular: string; plural: string }> = {
-  duplicate: { singular: 'duplicate', plural: 'duplicates' },
-  sentiment: { singular: 'urgent', plural: 'urgent' },
-  categorize: { singular: 'uncategorized', plural: 'uncategorized' },
-  trend: { singular: 'trending', plural: 'trending' },
-  response_draft: { singular: 'needs response', plural: 'need response' },
+  activeSignalFilter?: AiSignalType
+  onSignalFilter: (type: AiSignalType | undefined) => void
 }
 
 /**
@@ -25,17 +19,13 @@ export function SignalSummaryBar({ activeSignalFilter, onSignalFilter }: SignalS
 
   if (!summary || summary.length === 0) return null
 
-  const totalCount = summary.reduce((sum, s) => sum + s.count, 0)
-  if (totalCount === 0) return null
-
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
       <SparklesIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
       <div className="flex items-center gap-1.5 flex-wrap">
         {summary.map((signal) => {
-          const labels = SIGNAL_LABELS[signal.type]
-          if (!labels) return null
-          const label = signal.count === 1 ? labels.singular : labels.plural
+          const config = SIGNAL_DISPLAY[signal.type]
+          const label = signal.count === 1 ? config.singularLabel : config.pluralLabel
           const isActive = activeSignalFilter === signal.type
 
           return (
