@@ -5,6 +5,7 @@ import {
   fetchSignalCountsForPosts,
   fetchSignalsForPost,
 } from '@/lib/server/functions/signals'
+import { getMergeSuggestionsForPostFn } from '@/lib/server/functions/merge-suggestions'
 
 /**
  * Query options factory for AI signals.
@@ -39,5 +40,15 @@ export const signalQueries = {
       queryKey: ['signals', 'post', postId],
       queryFn: () => fetchSignalsForPost({ data: { postId } }),
       staleTime: 15 * 1000,
+    }),
+
+  /**
+   * Pending merge suggestions for a post (for L3 duplicate card actions).
+   */
+  mergeSuggestionsForPost: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['signals', 'merge-suggestions', postId],
+      queryFn: () => getMergeSuggestionsForPostFn({ data: { postId } }),
+      staleTime: 30 * 1000,
     }),
 }

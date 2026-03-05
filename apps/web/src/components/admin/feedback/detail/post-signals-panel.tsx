@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { SparklesIcon } from '@heroicons/react/24/solid'
 import { signalQueries } from '@/lib/client/queries/signals'
 import { SIGNAL_DISPLAY } from '@/components/admin/feedback/signal-config'
+import { DuplicateSignalCard } from '@/components/admin/feedback/detail/duplicate-signal-card'
 import type { AiSignalRow } from '@/lib/server/domains/signals'
 import type { PostId } from '@quackback/ids'
 
@@ -11,7 +12,10 @@ interface PostSignalsPanelProps {
 
 /**
  * L3: AI Insights panel shown on the post detail page.
- * Displays all pending signals for the current post.
+ *
+ * Dispatches to type-specific card components. Each card owns
+ * its own data fetching and actions — the signal is a thin pointer,
+ * the card hydrates the full context from the relevant domain service.
  */
 export function PostSignalsPanel({ postId }: PostSignalsPanelProps) {
   const { data: signals } = useQuery(signalQueries.forPost(postId))
@@ -25,30 +29,30 @@ export function PostSignalsPanel({ postId }: PostSignalsPanelProps) {
         <span className="text-sm font-medium text-foreground">AI Insights</span>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-4">
         {signals.map((signal) => (
-          <SignalRow key={signal.id} signal={signal} />
+          <SignalRow key={signal.id} signal={signal} postId={postId} />
         ))}
       </div>
     </div>
   )
 }
 
-function SignalRow({ signal }: { signal: AiSignalRow }) {
+function SignalRow({ signal, postId }: { signal: AiSignalRow; postId: PostId }) {
+  // Duplicate signals get the full actionable card
+  if (signal.type === 'duplicate') {
+    return <DuplicateSignalCard signal={signal} postId={postId} />
+  }
+
+  // Other signal types render as simple informational rows
+  return <GenericSignalRow signal={signal} />
+}
+
+function GenericSignalRow({ signal }: { signal: AiSignalRow }) {
   const payload = signal.payload
   const config = SIGNAL_DISPLAY[signal.type]
 
   switch (signal.type) {
-    case 'duplicate': {
-      const confidence = payload.confidence as number | undefined
-      const pct = confidence ? `${Math.round(confidence * 100)}%` : null
-      return (
-        <div className="text-sm text-muted-foreground">
-          <span className={`${config.color} font-medium`}>Possible duplicate</span>
-          {pct && <span className="ml-1.5 text-muted-foreground/60">({pct} match)</span>}
-        </div>
-      )
-    }
     case 'sentiment':
       return (
         <div className="text-sm text-muted-foreground">
