@@ -9,12 +9,13 @@ import type { JSONContent } from '@tiptap/react'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  DocumentDuplicateIcon,
+  ChevronDownIcon,
   LockClosedIcon,
   LockOpenIcon,
   TrashIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/solid'
+import { ArrowsRightLeftIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
@@ -22,7 +23,14 @@ import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { signalQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   MetadataSidebar,
   MetadataSidebarSkeleton,
@@ -31,7 +39,7 @@ import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
+import { MergeActions, MergeInfoBanner, MergeOthersDialog } from '@/components/admin/feedback/merge-section'
 import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
 import { PostSignalsPanel } from '@/components/admin/feedback/detail/post-signals-panel'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
@@ -95,7 +103,12 @@ function PostModalContent({
   const [isUpdating, setIsUpdating] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  // AI duplicate signals for badge indicator
+  const { data: signals } = useQuery(signalQueries.forPost(postId))
+  const hasDuplicateSignals = signals?.some((s) => s.type === 'duplicate') ?? false
 
   // Navigation context
   const navigationContext = useNavigationContext(post.id)
@@ -124,6 +137,7 @@ function PostModalContent({
     setTitle(post.title)
     setContentJson(getInitialContentJson(post))
     setShowMergeDialog(false)
+    setShowMergeOthersDialog(false)
   }, [post.id, post.title, post.contentJson])
 
   // Keyboard navigation
@@ -228,17 +242,32 @@ function PostModalContent({
         onClose={onClose}
         viewUrl={`/b/${post.board.slug}/posts/${post.id}`}
       >
-        {!post.canonicalPostId && !post.mergeInfo && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMergeDialog(true)}
-            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
-          >
-            <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Mark as duplicate</span>
-          </Button>
+        {!post.mergeInfo && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 h-8 text-muted-foreground hover:text-foreground relative"
+              >
+                <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Merge</span>
+                <ChevronDownIcon className="h-3 w-3 opacity-50" />
+                {hasDuplicateSignals && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setShowMergeOthersDialog(true)}>
+                Merge others into this
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowMergeDialog(true)}>
+                Merge into existing...
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         <Button
           type="button"
@@ -404,6 +433,14 @@ function PostModalContent({
               mergedPosts={post.mergedPosts}
               showDialog={showMergeDialog}
               onShowDialogChange={setShowMergeDialog}
+            />
+
+            {/* Merge others dialog */}
+            <MergeOthersDialog
+              postId={postId}
+              postTitle={post.title}
+              open={showMergeOthersDialog}
+              onOpenChange={setShowMergeOthersDialog}
             />
 
             {/* Comments section */}
