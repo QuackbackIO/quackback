@@ -49,7 +49,9 @@ export function usePostVote({ postId, voteCount, enabled = true }: UsePostVoteOp
   const { data: cachedVoteCount } = useQuery({
     queryKey: voteCountKeys.byPost(postId),
     queryFn: () => voteCount,
-    initialData: voteCount,
+    // Only seed cache when enabled — in readonly mode (e.g. merge preview),
+    // initialData would overwrite the real post's cached count with a simulated value
+    ...(enabled && { initialData: voteCount }),
     staleTime: Infinity, // Never refetch, rely on cache updates
     enabled,
   })
