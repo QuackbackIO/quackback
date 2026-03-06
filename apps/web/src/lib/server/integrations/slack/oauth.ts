@@ -9,6 +9,8 @@ const SLACK_SCOPES = [
   'channels:read',
   'groups:read',
   'channels:join',
+  'channels:history',
+  'groups:history',
   'chat:write',
   'team:read',
   'commands',

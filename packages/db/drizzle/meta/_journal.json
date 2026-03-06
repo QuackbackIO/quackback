@@ -183,6 +183,13 @@
       "when": 1772390000000,
       "tag": "0026_post_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1772813136056,
+      "tag": "0027_slack_channel_monitors",
+      "breakpoints": true
     }
   ]
 }

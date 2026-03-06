@@ -2,10 +2,8 @@
  * Slack interactivity handler.
  *
  * Handles message shortcuts ("Send to Quackback") and view submissions.
- * Signature verification follows Slack's HMAC-SHA256 signing spec.
  */
 
-import { timingSafeEqual, createHmac } from 'crypto'
 import { WebClient } from '@slack/web-api'
 import { db, eq, and, feedbackSources, integrations } from '@/lib/server/db'
 import { getPlatformCredentials } from '@/lib/server/domains/platform-credentials/platform-credential.service'
@@ -13,46 +11,11 @@ import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { getBaseUrl } from '@/lib/server/config'
 import { decryptSecrets } from '../encryption'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
+import { verifySlackSignature } from './verify'
 import type { FeedbackSourceId, IntegrationId } from '@quackback/ids'
 
-const REPLAY_WINDOW_S = 60 * 5 // 5 minutes
 const CALLBACK_ID_MESSAGE_ACTION = 'quackback_send_feedback'
 const CALLBACK_ID_MODAL = 'quackback_send_feedback_modal'
-
-/**
- * Verify Slack request signature (HMAC-SHA256).
- * Returns true if valid, or a Response with the rejection reason.
- */
-function verifySlackSignature(
-  body: string,
-  timestamp: string | null,
-  signature: string | null,
-  signingSecret: string
-): true | Response {
-  if (!timestamp || !signature) {
-    return new Response('Missing signature headers', { status: 401 })
-  }
-
-  // Replay protection
-  const ts = parseInt(timestamp, 10)
-  if (isNaN(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > REPLAY_WINDOW_S) {
-    return new Response('Request too old', { status: 401 })
-  }
-
-  const basestring = `v0:${timestamp}:${body}`
-  const expected = Buffer.from(
-    `v0=${createHmac('sha256', signingSecret).update(basestring).digest('hex')}`
-  )
-  const actual = Buffer.from(signature)
-
-  const valid = expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual)
-
-  if (!valid) {
-    return new Response('Invalid signature', { status: 401 })
-  }
-
-  return true
-}
 
 /**
  * Main entry point for Slack interactivity requests.
@@ -130,7 +93,6 @@ async function handleMessageAction(payload: any, client: WebClient): Promise<Res
     channelName,
     messageTs,
     teamId,
-    messageText,
   })
 
   const boardOptions = boardList.map((b) => ({
@@ -256,7 +218,7 @@ async function handleViewSubmission(
           },
           contextEnvelope: {
             sourceChannel: { id: channelId, name: channelName },
-            metadata: { messageTs, teamId, boardId },
+            metadata: { messageTs, teamId, boardId, ingestionMode: 'shortcut' },
           },
         },
         {

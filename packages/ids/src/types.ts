@@ -64,6 +64,9 @@ export type LinkedEntityId = TypeId<'linked_entity'>
 /** Sync log ID - e.g., sync_log_01h455vb4pex5vsknk084sn02q */
 export type SyncLogId = TypeId<'sync_log'>
 
+/** Slack channel monitor ID - e.g., slack_monitor_01h455vb4pex5vsknk084sn02q */
+export type SlackMonitorId = TypeId<'slack_monitor'>
+
 /** Post subscription ID - e.g., post_sub_01h455vb4pex5vsknk084sn02q */
 export type PostSubscriptionId = TypeId<'post_sub'>
 
@@ -214,6 +217,7 @@ export interface EntityIdMap {
   event_mapping: EventMappingId
   linked_entity: LinkedEntityId
   sync_log: SyncLogId
+  slack_monitor: SlackMonitorId
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId

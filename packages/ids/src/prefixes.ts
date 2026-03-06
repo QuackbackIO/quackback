@@ -33,6 +33,7 @@ export const ID_PREFIXES = {
   event_mapping: 'event_mapping',
   linked_entity: 'linked_entity',
   sync_log: 'sync_log',
+  slack_monitor: 'slack_monitor',
 
   // Notifications
   post_subscription: 'post_sub',

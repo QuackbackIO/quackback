@@ -161,6 +161,8 @@ export {
   integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
+  slackChannelMonitors,
+  slackChannelMonitorsRelations,
   // Schema tables - external links
   postExternalLinks,
   postExternalLinksRelations,
