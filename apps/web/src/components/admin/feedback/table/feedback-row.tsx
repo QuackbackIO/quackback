@@ -1,16 +1,15 @@
 import { PostCard } from '@/components/public/post-card'
-import { SignalBadges } from '@/components/admin/feedback/signal-badges'
+import { Square2StackIcon } from '@heroicons/react/24/outline'
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
-import type { PostSignalCounts } from '@/lib/server/domains/signals'
 
 interface FeedbackRowProps {
   post: PostListItem
   statuses: PostStatusEntity[]
-  signals?: PostSignalCounts[]
+  duplicateCount?: number
   onClick: () => void
 }
 
-export function FeedbackRow({ post, statuses, signals, onClick }: FeedbackRowProps) {
+export function FeedbackRow({ post, statuses, duplicateCount, onClick }: FeedbackRowProps) {
   return (
     <div className="relative">
       <PostCard
@@ -31,11 +30,11 @@ export function FeedbackRow({ post, statuses, signals, onClick }: FeedbackRowPro
         // Admin doesn't need avatars in list view
         showAvatar={false}
       />
-      {signals && signals.length > 0 && (
-        <SignalBadges
-          signals={signals}
-          className="absolute top-3 right-3"
-        />
+      {duplicateCount != null && duplicateCount > 0 && (
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border text-muted-foreground bg-muted/40 border-border/40">
+          <Square2StackIcon className="h-3.5 w-3.5" />
+          {duplicateCount === 1 ? '1 duplicate' : `${duplicateCount} duplicates`}
+        </span>
       )}
     </div>
   )

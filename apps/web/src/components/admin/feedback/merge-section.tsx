@@ -26,117 +26,14 @@ import {
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { useMergePost, useUnmergePost } from '@/lib/client/mutations/post-merge'
+import { useMergePost } from '@/lib/client/mutations/post-merge'
 import { findSimilarPostsFn, type SimilarPost } from '@/lib/server/functions/public-posts'
-import { getMergedPostsFn } from '@/lib/server/functions/post-merge'
-import { signalQueries } from '@/lib/client/queries/signals'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostId } from '@quackback/ids'
-import type { MergedPostItem } from '@/lib/shared/types/inbox'
 
 // ============================================================================
-// Merged Posts List (shown on canonical posts)
-// ============================================================================
-
-interface MergedPostsListProps {
-  postId: PostId
-  mergedPosts?: MergedPostItem[]
-}
-
-export function MergedPostsList({ postId, mergedPosts: initialMergedPosts }: MergedPostsListProps) {
-  const queryClient = useQueryClient()
-  const unmerge = useUnmergePost()
-  const [confirmUnmergeId, setConfirmUnmergeId] = useState<PostId | null>(null)
-  const confirmTarget = initialMergedPosts?.find((p) => p.id === confirmUnmergeId)
-
-  const { data: mergedPosts } = useQuery({
-    queryKey: ['merged-posts', postId],
-    queryFn: async () => {
-      const result = await getMergedPostsFn({ data: { canonicalPostId: postId } })
-      return result as MergedPostItem[]
-    },
-    initialData: initialMergedPosts,
-    staleTime: 30_000,
-  })
-
-  if (!mergedPosts || mergedPosts.length === 0) return null
-
-  const handleUnmerge = async () => {
-    if (!confirmUnmergeId) return
-    try {
-      await unmerge.mutateAsync(confirmUnmergeId)
-      queryClient.invalidateQueries({ queryKey: ['merged-posts', postId] })
-      toast.success('Post unmerged successfully')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')
-    } finally {
-      setConfirmUnmergeId(null)
-    }
-  }
-
-  return (
-    <div className="border-t border-border/40 px-6 py-4">
-      <h3 className="text-sm font-medium text-foreground mb-3">
-        Merged Feedback ({mergedPosts.length})
-      </h3>
-      <div className="space-y-2">
-        {mergedPosts.map((merged) => (
-          <div
-            key={merged.id}
-            className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/30 border border-border/30"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{merged.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {merged.voteCount} vote{merged.voteCount !== 1 ? 's' : ''}
-                {merged.authorName ? ` · by ${merged.authorName}` : ''}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setConfirmUnmergeId(merged.id)}
-              disabled={unmerge.isPending}
-              className="text-xs shrink-0"
-            >
-              Unmerge
-            </Button>
-          </div>
-        ))}
-      </div>
-
-      <AlertDialog
-        open={!!confirmUnmergeId}
-        onOpenChange={(open) => !open && setConfirmUnmergeId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unmerge this post?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmTarget ? (
-                <>
-                  <span className="font-medium text-foreground">{confirmTarget.title}</span> will be
-                  restored as independent feedback. Its votes will no longer count toward this post.
-                </>
-              ) : (
-                'This post will be restored as independent feedback.'
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={unmerge.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleUnmerge} disabled={unmerge.isPending}>
-              {unmerge.isPending ? 'Unmerging...' : 'Unmerge'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
-
-// ============================================================================
-// Merge Into Dialog (shown when admin wants to mark current post as duplicate)
+// Merge Into Dialog (shown when admin wants to merge current post into another)
 // ============================================================================
 
 interface MergeIntoDialogProps {
@@ -162,7 +59,7 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
   }, [open, postTitle])
 
   const { data: suggestions, isLoading } = useQuery({
-    queryKey: ['merge-suggestions', searchQuery],
+    queryKey: ['merge-suggestions', 'search-into', postId, searchQuery],
     queryFn: async () => {
       const result = await findSimilarPostsFn({ data: { title: searchQuery, limit: 8 } })
       return result.filter((p) => p.id !== postId)
@@ -195,10 +92,8 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
       <Dialog open={open && !confirmTarget} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg p-0 gap-0">
           <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-base">Mark as Duplicate</DialogTitle>
-            <DialogDescription>
-              Select the original post to merge this feedback into.
-            </DialogDescription>
+            <DialogTitle className="text-base">Merge into another</DialogTitle>
+            <DialogDescription>Select the post to merge this feedback into.</DialogDescription>
           </DialogHeader>
 
           <div className="px-5 pb-3">
@@ -281,14 +176,16 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
       <AlertDialog open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Merge this feedback?</AlertDialogTitle>
+            <AlertDialogTitle>Merge this post?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
-                <p>This will mark the current post as a duplicate. Votes will be combined.</p>
-                <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3 text-sm">
-                  <span className="truncate font-medium text-foreground">{postTitle}</span>
+                <p>This post will be merged into the selected post. Votes will be combined.</p>
+                <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3 text-sm overflow-hidden">
+                  <span className="truncate flex-1 min-w-0 font-medium text-foreground">
+                    {postTitle}
+                  </span>
                   <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate font-medium text-foreground">
+                  <span className="truncate flex-1 min-w-0 font-medium text-foreground">
                     {confirmTarget?.title}
                   </span>
                 </div>
@@ -318,7 +215,12 @@ interface MergeOthersDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: MergeOthersDialogProps) {
+export function MergeOthersDialog({
+  postId,
+  postTitle,
+  open,
+  onOpenChange,
+}: MergeOthersDialogProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isMerging, setIsMerging] = useState(false)
@@ -335,13 +237,13 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
 
   // AI-suggested duplicates
   const { data: aiSuggestions } = useQuery({
-    ...signalQueries.mergeSuggestionsForPost(postId),
+    ...mergeSuggestionQueries.forPost(postId),
     enabled: open,
   })
 
   // Manual search results
   const { data: searchResults, isLoading } = useQuery({
-    queryKey: ['merge-others-search', searchQuery],
+    queryKey: ['merge-suggestions', 'search-others', postId, searchQuery],
     queryFn: async () => {
       const result = await findSimilarPostsFn({ data: { title: searchQuery, limit: 8 } })
       return result.filter((p) => p.id !== postId)
@@ -351,19 +253,26 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
   })
 
   // Build AI suggestion post list (deduplicated against search results)
-  const aiPosts: Array<{ id: string; title: string; voteCount: number; status: { name: string; color: string } | null; reasoning?: string }> =
-    (aiSuggestions ?? []).map((s) => {
-      const isSource = s.sourcePostId === postId
-      return {
-        id: isSource ? s.targetPostId : s.sourcePostId,
-        title: isSource ? s.targetPostTitle : s.sourcePostTitle,
-        voteCount: isSource ? s.targetPostVoteCount : s.sourcePostVoteCount,
-        status: (isSource ? s.targetPostStatusName : s.sourcePostStatusName)
-          ? { name: (isSource ? s.targetPostStatusName : s.sourcePostStatusName)!, color: (isSource ? s.targetPostStatusColor : s.sourcePostStatusColor) ?? '' }
-          : null,
-        reasoning: s.llmReasoning ?? undefined,
-      }
-    })
+  const aiPosts: Array<{
+    id: string
+    title: string
+    voteCount: number
+    status: { name: string; color: string } | null
+    reasoning?: string
+  }> = (aiSuggestions ?? [])
+    .filter((suggestion) => suggestion.targetPostId === postId)
+    .map((suggestion) => ({
+      id: suggestion.sourcePostId,
+      title: suggestion.sourcePostTitle,
+      voteCount: suggestion.sourcePostVoteCount,
+      status: suggestion.sourcePostStatusName
+        ? {
+            name: suggestion.sourcePostStatusName,
+            color: suggestion.sourcePostStatusColor ?? '',
+          }
+        : null,
+      reasoning: suggestion.llmReasoning ?? undefined,
+    }))
 
   // Filter out AI-suggested IDs from search results to avoid duplication
   const aiPostIds = new Set(aiPosts.map((p) => p.id))
@@ -390,7 +299,7 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
       }
       queryClient.invalidateQueries({ queryKey: ['merged-posts'] })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: ['signals'] })
+      queryClient.invalidateQueries({ queryKey: ['merge-suggestions'] })
       toast.success(`Merged ${selectedIds.size} post${selectedIds.size > 1 ? 's' : ''}`)
       onOpenChange(false)
     } catch (err) {
@@ -407,9 +316,10 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3">
-          <DialogTitle className="text-base">Merge posts into this</DialogTitle>
+          <DialogTitle className="text-base">Merge into this</DialogTitle>
           <DialogDescription>
-            Select posts to merge into &ldquo;{postTitle}&rdquo;. Selected posts become duplicates.
+            Select posts to merge into &ldquo;{postTitle}&rdquo;. Votes and comments will be
+            combined.
           </DialogDescription>
         </DialogHeader>
 
@@ -434,7 +344,6 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
                 {aiPosts.map((post) => (
                   <MergeOthersRow
                     key={post.id}
-                    id={post.id}
                     title={post.title}
                     voteCount={post.voteCount}
                     status={post.status}
@@ -464,7 +373,6 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
                 {filteredSearchResults.map((post) => (
                   <MergeOthersRow
                     key={post.id}
-                    id={post.id}
                     title={post.title}
                     voteCount={post.voteCount}
                     status={post.status}
@@ -499,7 +407,12 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
 
         {/* Footer with merge button */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/40">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isMerging}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={isMerging}
+          >
             Cancel
           </Button>
           <Button size="sm" onClick={handleMerge} disabled={selectedIds.size === 0 || isMerging}>
@@ -517,7 +430,6 @@ export function MergeOthersDialog({ postId, postTitle, open, onOpenChange }: Mer
 
 /** Shared row component for MergeOthersDialog results */
 function MergeOthersRow({
-  id,
   title,
   voteCount,
   status,
@@ -526,7 +438,6 @@ function MergeOthersRow({
   disabled,
   onToggle,
 }: {
-  id: string
   title: string
   voteCount: number
   status: { name: string; color: string } | null
@@ -554,9 +465,7 @@ function MergeOthersRow({
           {status && <StatusBadge name={status.name} color={status.color} />}
           <h3 className="font-medium text-sm text-foreground line-clamp-1 flex-1">{title}</h3>
         </div>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground/60 line-clamp-1">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-xs text-muted-foreground/60 line-clamp-1">{subtitle}</p>}
       </div>
     </button>
   )
@@ -601,7 +510,6 @@ interface MergeActionsProps {
   postId: PostId
   postTitle: string
   canonicalPostId?: PostId | null
-  mergedPosts?: MergedPostItem[]
   /** Controlled dialog state (optional — falls back to internal state) */
   showDialog?: boolean
   onShowDialogChange?: (show: boolean) => void
@@ -611,7 +519,6 @@ export function MergeActions({
   postId,
   postTitle,
   canonicalPostId,
-  mergedPosts,
   showDialog,
   onShowDialogChange,
 }: MergeActionsProps) {
@@ -619,13 +526,8 @@ export function MergeActions({
   const isDialogOpen = showDialog ?? internalShowDialog
   const setDialogOpen = onShowDialogChange ?? setInternalShowDialog
 
-  // If this post is a canonical post with merged posts, show the list
-  const hasMergedPosts = mergedPosts && mergedPosts.length > 0
-
   return (
     <>
-      {hasMergedPosts && <MergedPostsList postId={postId} mergedPosts={mergedPosts} />}
-
       {!canonicalPostId && (
         <MergeIntoDialog
           postId={postId}

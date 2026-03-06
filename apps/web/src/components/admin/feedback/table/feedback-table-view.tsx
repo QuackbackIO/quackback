@@ -8,13 +8,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
-import { SignalSummaryBar } from '@/components/admin/feedback/signal-summary-bar'
+import { DuplicateSummaryBar } from '@/components/admin/feedback/signal-summary-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { AiSignalType, PostSignalCounts } from '@/lib/server/domains/signals'
 import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
@@ -37,12 +36,12 @@ interface FeedbackTableViewProps {
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
   onToggleSegment?: (id: string) => void
-  /** Signal counts per post (for L1 badges) */
-  signalsByPostId?: Map<PostId, PostSignalCounts[]>
-  /** Active signal type filter */
-  activeSignalFilter?: AiSignalType
-  /** Callback to change signal filter */
-  onSignalFilter?: (type: AiSignalType | undefined) => void
+  /** Duplicate counts per post (for badges) */
+  duplicateCountByPostId?: Map<PostId, number>
+  /** Whether duplicates filter is active */
+  duplicatesFilter?: boolean
+  /** Toggle duplicates filter */
+  onToggleDuplicatesFilter?: () => void
 }
 
 function TableSkeleton() {
@@ -100,9 +99,9 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
-  signalsByPostId,
-  activeSignalFilter,
-  onSignalFilter,
+  duplicateCountByPostId,
+  duplicatesFilter,
+  onToggleDuplicatesFilter,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
@@ -178,12 +177,9 @@ export function FeedbackTableView({
         {headerAction}
       </div>
 
-      {/* Signal Summary Bar */}
-      {onSignalFilter && (
-        <SignalSummaryBar
-          activeSignalFilter={activeSignalFilter}
-          onSignalFilter={onSignalFilter}
-        />
+      {/* Duplicate Summary Bar */}
+      {onToggleDuplicatesFilter && (
+        <DuplicateSummaryBar active={!!duplicatesFilter} onToggle={onToggleDuplicatesFilter} />
       )}
 
       {/* Active Filters Bar - Always visible */}
@@ -214,22 +210,40 @@ export function FeedbackTableView({
     )
   }
 
-  // Filter posts by signal type if active
-  const filteredPosts = activeSignalFilter && signalsByPostId
-    ? posts.filter((p) => {
-        const signals = signalsByPostId.get(p.id)
-        return signals?.some((s) => s.type === activeSignalFilter)
-      })
-    : posts
+  // Filter posts by duplicates if active
+  const filteredPosts =
+    duplicatesFilter && duplicateCountByPostId
+      ? posts.filter((p) => (duplicateCountByPostId.get(p.id) ?? 0) > 0)
+      : posts
+  const isSearchingForDuplicateMatches =
+    !!duplicatesFilter && filteredPosts.length === 0 && (hasMore || isLoadingMore)
 
-  if (filteredPosts.length === 0) {
+  useEffect(() => {
+    if (isSearchingForDuplicateMatches && !isLoading && !isLoadingMore) {
+      onLoadMore()
+    }
+  }, [isSearchingForDuplicateMatches, isLoading, isLoadingMore, onLoadMore])
+
+  if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
       <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <InboxEmptyState
-          type={hasActiveFilters ? 'no-results' : 'no-posts'}
+          type={hasActiveFilters || !!duplicatesFilter ? 'no-results' : 'no-posts'}
           onClearFilters={hasActiveFilters ? onClearFilters : undefined}
         />
+      </div>
+    )
+  }
+
+  if (isSearchingForDuplicateMatches) {
+    return (
+      <div className="max-w-5xl mx-auto w-full">
+        {headerContent}
+        <div className="px-3 py-12 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <Spinner />
+          <p>Searching for posts with duplicate suggestions…</p>
+        </div>
       </div>
     )
   }
@@ -250,7 +264,7 @@ export function FeedbackTableView({
               <FeedbackRow
                 post={post}
                 statuses={statuses}
-                signals={signalsByPostId?.get(post.id)}
+                duplicateCount={duplicateCountByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
               />
             </div>

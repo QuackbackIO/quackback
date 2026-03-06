@@ -1,59 +1,47 @@
 import { useQuery } from '@tanstack/react-query'
-import { SparklesIcon } from '@heroicons/react/24/solid'
-import { signalQueries } from '@/lib/client/queries/signals'
-import { SIGNAL_DISPLAY } from '@/components/admin/feedback/signal-config'
+import { Square2StackIcon } from '@heroicons/react/24/outline'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { cn } from '@/lib/shared/utils'
-import type { AiSignalType } from '@/lib/server/domains/signals'
 
-interface SignalSummaryBarProps {
-  activeSignalFilter?: AiSignalType
-  onSignalFilter: (type: AiSignalType | undefined) => void
+interface DuplicateSummaryBarProps {
+  active: boolean
+  onToggle: () => void
 }
 
 /**
- * Signal summary bar showing counts by type.
- * Each count is clickable to filter the inbox by that signal type.
+ * Shows pending duplicate count from merge suggestions.
+ * Clickable to filter the inbox to only posts with duplicates.
  */
-export function SignalSummaryBar({ activeSignalFilter, onSignalFilter }: SignalSummaryBarProps) {
-  const { data: summary } = useQuery(signalQueries.summary())
+export function DuplicateSummaryBar({ active, onToggle }: DuplicateSummaryBarProps) {
+  const { data: summary } = useQuery(mergeSuggestionQueries.summary())
 
-  if (!summary || summary.length === 0) return null
+  const count = summary?.count ?? 0
+  if (count === 0) return null
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
-      <SparklesIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {summary.map((signal) => {
-          const config = SIGNAL_DISPLAY[signal.type]
-          const label = signal.count === 1 ? config.singularLabel : config.pluralLabel
-          const isActive = activeSignalFilter === signal.type
-
-          return (
-            <button
-              key={signal.type}
-              type="button"
-              onClick={() => onSignalFilter(isActive ? undefined : signal.type)}
-              className={cn(
-                'px-2 py-0.5 rounded-full transition-colors cursor-pointer',
-                isActive
-                  ? 'bg-amber-400/20 text-amber-300 font-medium'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              )}
-            >
-              {signal.count} {label}
-            </button>
-          )
-        })}
-        {activeSignalFilter && (
-          <button
-            type="button"
-            onClick={() => onSignalFilter(undefined)}
-            className="text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer ml-1"
-          >
-            Clear
-          </button>
+      <Square2StackIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          'px-2 py-0.5 rounded-full transition-colors cursor-pointer',
+          active
+            ? 'bg-amber-400/20 text-amber-300 font-medium'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
         )}
-      </div>
+      >
+        {count} {count === 1 ? 'duplicate' : 'duplicates'}
+      </button>
+      {active && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer ml-1"
+        >
+          Clear
+        </button>
+      )}
     </div>
   )
 }

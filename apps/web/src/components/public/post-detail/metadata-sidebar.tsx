@@ -2,16 +2,24 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  FolderIcon,
-  CalendarIcon,
-  UserIcon,
-  MapIcon,
-  TagIcon,
-  ChevronUpIcon,
-  PlusIcon,
-  XMarkIcon,
   ArrowPathIcon,
+  CalendarIcon,
+  ChevronUpIcon,
+  FolderIcon,
+  MapIcon,
+  PlusIcon,
+  TagIcon,
+  UserIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
+import { IconGitMerge, IconLock, IconLockOpen, IconTrash, IconRestore } from '@tabler/icons-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { StatusDropdown } from '@/components/shared/status-dropdown'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -69,6 +77,121 @@ function NoneLabel() {
   return <span className="text-sm italic text-muted-foreground">None</span>
 }
 
+export interface MetadataSidebarManageActions {
+  onMergeOthers: () => void
+  onMergeInto: () => void
+  onToggleLock: () => void
+  isCommentsLocked: boolean
+  isLockPending: boolean
+  onDelete: () => void
+  onRestore: () => void
+  isDeleted: boolean
+  isRestorePending: boolean
+  isMerged: boolean
+  hasDuplicateSignals: boolean
+}
+
+interface ManagePostActionsProps {
+  actions: MetadataSidebarManageActions
+  showLabel?: boolean
+  className?: string
+}
+
+export function ManagePostActions({
+  actions,
+  showLabel = true,
+  className,
+}: ManagePostActionsProps) {
+  return (
+    <div className={cn('flex items-center justify-between', className)}>
+      {showLabel ? (
+        <span className="text-sm text-muted-foreground">Manage</span>
+      ) : (
+        <span className="sr-only">Manage post</span>
+      )}
+      <TooltipProvider delayDuration={300}>
+        <div className="flex items-center gap-0.5">
+          {!actions.isMerged && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="relative flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    >
+                      <IconGitMerge className="h-5 w-5" strokeWidth={1.5} />
+                      {actions.hasDuplicateSignals && (
+                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Merge</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={actions.onMergeOthers}>Merge into this</DropdownMenuItem>
+                <DropdownMenuItem onClick={actions.onMergeInto}>
+                  Merge into another...
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={actions.onToggleLock}
+                disabled={actions.isLockPending}
+                className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+              >
+                {actions.isCommentsLocked ? (
+                  <IconLock className="h-5 w-5" strokeWidth={1.5} />
+                ) : (
+                  <IconLockOpen className="h-5 w-5" strokeWidth={1.5} />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {actions.isCommentsLocked ? 'Unlock comments' : 'Lock comments'}
+            </TooltipContent>
+          </Tooltip>
+
+          {actions.isDeleted ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={actions.onRestore}
+                  disabled={actions.isRestorePending}
+                  className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+                >
+                  <IconRestore className="h-5 w-5" strokeWidth={1.5} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Restore post</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={actions.onDelete}
+                  className="flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors"
+                >
+                  <IconTrash className="h-5 w-5" strokeWidth={1.5} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Delete post</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </TooltipProvider>
+    </div>
+  )
+}
+
 interface MetadataSidebarProps {
   postId: PostId
   voteCount: number
@@ -113,6 +236,8 @@ interface MetadataSidebarProps {
   votersAdditionalPostIds?: PostId[]
   /** Hide subscription controls in voters modal */
   votersReadonly?: boolean
+  /** Admin manage actions (renders icon row at top of sidebar) */
+  manageActions?: MetadataSidebarManageActions
 }
 
 export function MetadataSidebar({
@@ -141,6 +266,7 @@ export function MetadataSidebar({
   readonlyVote = false,
   votersAdditionalPostIds,
   votersReadonly = false,
+  manageActions,
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
@@ -224,6 +350,11 @@ export function MetadataSidebar({
           isCard && 'mt-6 mr-4 ml-1 rounded-xl border border-border/20 bg-card shadow-sm'
         )}
       >
+        {/* Manage Post actions */}
+        {manageActions && <ManagePostActions actions={manageActions} />}
+
+        {manageActions && <div className="border-t border-border/30" />}
+
         {/* Upvotes */}
         {!hideVote && (
           <div className="flex items-center justify-between">

@@ -9,11 +9,10 @@ import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
-import { signalQueries } from '@/lib/client/queries/signals'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
-import type { AiSignalType, PostSignalCounts } from '@/lib/server/domains/signals'
 import type { PostId } from '@quackback/ids'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
@@ -51,8 +50,8 @@ export function InboxContainer({
   // Segments data for filter UI
   const { data: segments } = useSegments()
 
-  // Signal filter state
-  const [activeSignalFilter, setActiveSignalFilter] = useState<AiSignalType | undefined>()
+  // Duplicates filter state
+  const [duplicatesFilter, setDuplicatesFilter] = useState(false)
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -79,21 +78,19 @@ export function InboxContainer({
 
   const posts = useMemo(() => flattenInboxPosts(postsData), [postsData])
 
-  // Fetch signal counts for visible posts
+  // Fetch duplicate counts for visible posts
   const postIds = useMemo(() => posts.map((p) => p.id) as PostId[], [posts])
-  const { data: signalCounts } = useQuery(signalQueries.countsForPosts(postIds))
+  const { data: duplicateCounts } = useQuery(mergeSuggestionQueries.countsForPosts(postIds))
 
-  // Build a Map<postId, PostSignalCounts[]> for efficient lookup
-  const signalsByPostId = useMemo(() => {
-    if (!signalCounts || signalCounts.length === 0) return undefined
-    const map = new Map<PostId, PostSignalCounts[]>()
-    for (const signal of signalCounts) {
-      const existing = map.get(signal.postId) ?? []
-      existing.push(signal)
-      map.set(signal.postId, existing)
+  // Build a Map<postId, count> for efficient lookup
+  const duplicateCountByPostId = useMemo(() => {
+    if (!duplicateCounts || duplicateCounts.length === 0) return undefined
+    const map = new Map<PostId, number>()
+    for (const item of duplicateCounts) {
+      map.set(item.postId, item.count)
     }
     return map
-  }, [signalCounts])
+  }, [duplicateCounts])
 
   // Handlers
   const handleLoadMore = useCallback(() => {
@@ -162,9 +159,9 @@ export function InboxContainer({
         onToggleStatus={toggleStatus}
         onToggleBoard={toggleBoard}
         onToggleSegment={toggleSegment}
-        signalsByPostId={signalsByPostId}
-        activeSignalFilter={activeSignalFilter}
-        onSignalFilter={setActiveSignalFilter}
+        duplicateCountByPostId={duplicateCountByPostId}
+        duplicatesFilter={duplicatesFilter}
+        onToggleDuplicatesFilter={() => setDuplicatesFilter((v) => !v)}
         headerAction={
           <CreatePostDialog
             boards={boards}
