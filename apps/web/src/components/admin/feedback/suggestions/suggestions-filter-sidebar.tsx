@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+import { PlusIcon } from '@heroicons/react/16/solid'
 import { FilterList } from '../single-select-filter-list'
 import { toggleItem } from '../filter-utils'
 import { SourceTypeIcon, SOURCE_TYPE_LABELS } from '../source-type-icon'
@@ -19,15 +21,6 @@ export function SuggestionsFiltersSidebar({
   sources,
   suggestionCountsBySource,
 }: SuggestionsFiltersSidebarProps) {
-  const handleTypeSelect = (id: string) => {
-    const current = filters.suggestionType
-    if (current === id) {
-      onFiltersChange({ suggestionType: undefined })
-    } else {
-      onFiltersChange({ suggestionType: id as 'create_post' | 'duplicate_post' })
-    }
-  }
-
   const handleSourceSelect = (id: string, addToSelection: boolean) => {
     if (addToSelection) {
       onFiltersChange({ sourceIds: toggleItem(filters.sourceIds, id) })
@@ -37,25 +30,15 @@ export function SuggestionsFiltersSidebar({
     }
   }
 
+  const externalSources = sources.filter((s) => s.sourceType !== 'quackback')
+
   return (
     <div className="space-y-0">
-      {/* Type Filter */}
-      <FilterSection title="Type">
-        <FilterList
-          items={[
-            { id: 'duplicate_post', name: 'Duplicates' },
-            { id: 'create_post', name: 'New feedback' },
-          ]}
-          selectedIds={filters.suggestionType ? [filters.suggestionType] : []}
-          onSelect={(id) => handleTypeSelect(id)}
-        />
-      </FilterSection>
-
-      {/* Source Filter */}
-      {sources.length > 0 && (
+      {/* Source Filter — external sources only */}
+      {externalSources.length > 0 && (
         <FilterSection title="Source">
           <FilterList
-            items={sources.map((s) => ({
+            items={externalSources.map((s) => ({
               id: s.id,
               name: s.name || SOURCE_TYPE_LABELS[s.sourceType] || s.sourceType,
               sourceType: s.sourceType,
@@ -77,6 +60,19 @@ export function SuggestionsFiltersSidebar({
             }}
           />
         </FilterSection>
+      )}
+
+      {/* Connect sources prompt */}
+      {externalSources.length === 0 && (
+        <div className="px-1">
+          <Link
+            to="/admin/settings/integrations"
+            className="flex items-center gap-2 px-2.5 py-2 rounded-md text-xs text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            Connect a source
+          </Link>
+        </div>
       )}
     </div>
   )

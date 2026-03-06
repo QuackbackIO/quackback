@@ -13,7 +13,6 @@ export function useSuggestionsFilters() {
   const filters: SuggestionsFilters = useMemo(
     () => ({
       search: search.suggestionSearch,
-      suggestionType: search.suggestionType,
       sourceIds: search.suggestionSource?.length ? search.suggestionSource : undefined,
       sort: search.suggestionSort,
     }),
@@ -23,11 +22,10 @@ export function useSuggestionsFilters() {
   const setFilters = useCallback(
     (updates: Partial<SuggestionsFilters>) => {
       void navigate({
-        to: '/admin/feedback/insights',
+        to: '/admin/feedback/incoming',
         search: {
           ...search,
           ...('search' in updates && { suggestionSearch: updates.search }),
-          ...('suggestionType' in updates && { suggestionType: updates.suggestionType }),
           ...('sourceIds' in updates && { suggestionSource: updates.sourceIds }),
           ...('sort' in updates && { suggestionSort: updates.sort }),
         },
@@ -39,7 +37,7 @@ export function useSuggestionsFilters() {
 
   const clearFilters = useCallback(() => {
     void navigate({
-      to: '/admin/feedback/insights',
+      to: '/admin/feedback/incoming',
       search: {
         suggestionSort: search.suggestionSort,
       },
@@ -48,7 +46,7 @@ export function useSuggestionsFilters() {
   }, [navigate, search])
 
   const hasActiveFilters = useMemo(() => {
-    return !!(filters.search || filters.suggestionType || filters.sourceIds?.length)
+    return !!(filters.search || filters.sourceIds?.length)
   }, [filters])
 
   const toggleSource = useCallback(

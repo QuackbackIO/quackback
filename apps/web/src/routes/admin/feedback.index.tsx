@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
 import { type BoardId, type TagId, type PrincipalId } from '@quackback/ids'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
@@ -62,9 +63,11 @@ export const Route = createFileRoute('/admin/feedback/')({
           limit: 20,
         })
       ),
+      queryClient.ensureQueryData(adminQueries.boards()),
       queryClient.ensureQueryData(adminQueries.tags()),
       queryClient.ensureQueryData(adminQueries.statuses()),
       queryClient.ensureQueryData(adminQueries.teamMembers()),
+      queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
     ])
 
     return {

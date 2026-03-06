@@ -1,4 +1,4 @@
-import { SparklesIcon } from '@heroicons/react/24/solid'
+import { InboxIcon } from '@heroicons/react/24/solid'
 import { SearchInput } from '@/components/shared/search-input'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
@@ -89,9 +89,9 @@ export function SuggestionList({
       {/* Triage rows */}
       {suggestions.length === 0 ? (
         <EmptyState
-          icon={SparklesIcon}
-          title="No pending insights"
-          description="New insights will appear here as the AI pipeline processes incoming feedback."
+          icon={InboxIcon}
+          title="No incoming feedback"
+          description="Feedback from connected sources like Zendesk, Intercom, and other integrations will appear here for triage."
         />
       ) : (
         <div className="p-3">

@@ -1,11 +1,8 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { z } from 'zod'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { adminQueries } from '@/lib/client/queries/admin'
+import { useQuery } from '@tanstack/react-query'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
-import { signalQueries } from '@/lib/client/queries/signals'
 import { TabStrip, type TabStripItem } from '@/components/admin/tab-strip'
-import { InboxIcon, SparklesIcon } from '@heroicons/react/24/solid'
 
 const searchSchema = z.object({
   board: z.array(z.string()).optional(),
@@ -25,9 +22,7 @@ const searchSchema = z.object({
   post: z.string().optional(),
   // Roadmap-specific
   roadmap: z.string().optional(),
-  // Suggestion-specific
-  suggestion: z.string().optional(),
-  suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
+  // Suggestion filters (for incoming sub-route)
   suggestionSource: z.array(z.string()).optional(),
   suggestionSort: z.enum(['newest', 'relevance']).optional(),
   suggestionSearch: z.string().optional(),
@@ -35,40 +30,21 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/admin/feedback')({
   validateSearch: searchSchema,
-  loader: async ({ context }) => {
-    const { queryClient } = context
-
-    await Promise.all([
-      queryClient.ensureQueryData(adminQueries.boards()),
-      queryClient.ensureQueryData(feedbackQueries.pipelineStats()),
-      queryClient.ensureQueryData(feedbackQueries.suggestionStats()),
-      queryClient.ensureQueryData(feedbackQueries.sources()),
-      queryClient.ensureQueryData(signalQueries.summary()),
-    ])
-  },
   component: FeedbackLayout,
 })
 
 function FeedbackLayout() {
-  const statsQuery = useSuspenseQuery(feedbackQueries.suggestionStats())
-  const pendingCount = statsQuery.data?.total ?? 0
+  const { data: incomingStats } = useQuery(feedbackQueries.incomingCount())
+  const incomingCount = incomingStats?.count ?? 0
 
-  const viewTabs: TabStripItem[] = [
-    { label: 'Inbox', to: '/admin/feedback', icon: InboxIcon, exact: true, search: {} },
-    {
-      label: 'Insights',
-      to: '/admin/feedback/insights',
-      icon: SparklesIcon,
-      exact: false,
-      search: {},
-      badge: pendingCount,
-    },
+  const tabs: TabStripItem[] = [
+    { label: 'Posts', to: '/admin/feedback', exact: true },
+    { label: 'Incoming', to: '/admin/feedback/incoming', badge: incomingCount },
   ]
 
   return (
     <div className="flex h-full flex-col">
-      <TabStrip tabs={viewTabs} />
-
+      <TabStrip tabs={tabs} />
       <div className="flex-1 min-h-0">
         <Outlet />
       </div>
