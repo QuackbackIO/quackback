@@ -23,6 +23,7 @@ export type RawFeedbackProcessingState =
   | 'extracting'
   | 'interpreting'
   | 'completed'
+  | 'dismissed'
   | 'failed'
 
 export type SignalProcessingState =
