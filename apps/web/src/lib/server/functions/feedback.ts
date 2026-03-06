@@ -194,10 +194,10 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       }))
     }
 
-    // Compute per-source counts across ALL matching suggestions (ignoring pagination)
+    // Compute per-source-type counts across ALL matching suggestions (ignoring pagination)
     const countsBySource: Record<string, number> = {}
 
-    // Count feedback suggestions grouped by source
+    // Count feedback suggestions grouped by source type
     if (includeFeedback) {
       const feedbackCountConditions: any[] = [
         eq(feedbackSuggestions.status, data.status ?? 'pending'),
@@ -206,26 +206,26 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
         feedbackCountConditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
       }
 
-      const feedbackCountsBySource = await db
+      const feedbackCountsBySourceType = await db
         .select({
-          sourceId: rawFeedbackItems.sourceId,
+          sourceType: rawFeedbackItems.sourceType,
           count: count(),
         })
         .from(feedbackSuggestions)
         .innerJoin(rawFeedbackItems, eq(feedbackSuggestions.rawFeedbackItemId, rawFeedbackItems.id))
         .where(and(...feedbackCountConditions))
-        .groupBy(rawFeedbackItems.sourceId)
+        .groupBy(rawFeedbackItems.sourceType)
 
-      for (const row of feedbackCountsBySource) {
-        if (row.sourceId) {
-          countsBySource[row.sourceId] = row.count
+      for (const row of feedbackCountsBySourceType) {
+        if (row.sourceType) {
+          countsBySource[row.sourceType] = row.count
         }
       }
     }
 
-    // Attribute merge suggestion count to quackback source
-    if (includeMerge && mergeTotal > 0 && quackbackSource) {
-      countsBySource[quackbackSource.id] = (countsBySource[quackbackSource.id] ?? 0) + mergeTotal
+    // Attribute merge suggestion count to quackback source type
+    if (includeMerge && mergeTotal > 0) {
+      countsBySource['quackback'] = (countsBySource['quackback'] ?? 0) + mergeTotal
     }
 
     // Combine and sort across both sources

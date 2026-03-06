@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from '@heroicons/react/16/solid'
 import { FilterList } from '../single-select-filter-list'
@@ -11,41 +12,55 @@ interface SuggestionsFiltersSidebarProps {
   filters: SuggestionsFilters
   onFiltersChange: (updates: Partial<SuggestionsFilters>) => void
   sources: FeedbackSourceView[]
-  /** Pending suggestion counts keyed by source ID */
-  suggestionCountsBySource?: Map<string, number>
+  /** Pending suggestion counts keyed by source type */
+  countsBySourceType?: Map<string, number>
 }
 
 export function SuggestionsFiltersSidebar({
   filters,
   onFiltersChange,
   sources,
-  suggestionCountsBySource,
+  countsBySourceType,
 }: SuggestionsFiltersSidebarProps) {
-  const handleSourceSelect = (id: string, addToSelection: boolean) => {
+  const handleSourceTypeSelect = (sourceType: string, addToSelection: boolean) => {
     if (addToSelection) {
-      onFiltersChange({ sourceIds: toggleItem(filters.sourceIds, id) })
+      onFiltersChange({ sourceTypes: toggleItem(filters.sourceTypes, sourceType) })
     } else {
-      const isOnlySelected = filters.sourceIds?.length === 1 && filters.sourceIds[0] === id
-      onFiltersChange({ sourceIds: isOnlySelected ? undefined : [id] })
+      const isOnlySelected =
+        filters.sourceTypes?.length === 1 && filters.sourceTypes[0] === sourceType
+      onFiltersChange({ sourceTypes: isOnlySelected ? undefined : [sourceType] })
     }
   }
 
-  const externalSources = sources.filter((s) => s.sourceType !== 'quackback')
+  // Deduplicate sources by sourceType, keeping only external ones
+  const uniqueSourceTypes = useMemo(() => {
+    const seen = new Set<string>()
+    const result: { sourceType: string; name: string }[] = []
+    for (const s of sources) {
+      if (s.sourceType === 'quackback' || seen.has(s.sourceType)) continue
+      seen.add(s.sourceType)
+      result.push({
+        sourceType: s.sourceType,
+        name: SOURCE_TYPE_LABELS[s.sourceType] || s.name || s.sourceType,
+      })
+    }
+    return result
+  }, [sources])
 
   return (
     <div className="space-y-0">
-      {/* Source Filter — external sources only */}
-      {externalSources.length > 0 && (
+      {/* Source Filter — deduplicated by source type */}
+      {uniqueSourceTypes.length > 0 && (
         <FilterSection title="Source">
           <FilterList
-            items={externalSources.map((s) => ({
-              id: s.id,
-              name: s.name || SOURCE_TYPE_LABELS[s.sourceType] || s.sourceType,
+            items={uniqueSourceTypes.map((s) => ({
+              id: s.sourceType,
+              name: s.name,
               sourceType: s.sourceType,
-              suggestionCount: suggestionCountsBySource?.get(s.id) ?? 0,
+              suggestionCount: countsBySourceType?.get(s.sourceType) ?? 0,
             }))}
-            selectedIds={filters.sourceIds || []}
-            onSelect={handleSourceSelect}
+            selectedIds={filters.sourceTypes || []}
+            onSelect={handleSourceTypeSelect}
             renderItem={(item) => {
               const count = (item as any).suggestionCount as number
               return (
@@ -63,7 +78,7 @@ export function SuggestionsFiltersSidebar({
       )}
 
       {/* Connect sources prompt */}
-      {externalSources.length === 0 && (
+      {uniqueSourceTypes.length === 0 && (
         <div className="px-1">
           <Link
             to="/admin/settings/integrations"

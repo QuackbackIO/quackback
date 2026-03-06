@@ -4,7 +4,8 @@
  */
 import { db, integrations, eq } from '@/lib/server/db'
 import { encryptSecrets } from './encryption'
-import type { PrincipalId } from '@quackback/ids'
+import { getIntegration } from './index'
+import type { IntegrationId, PrincipalId } from '@quackback/ids'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
 
 export interface SaveIntegrationParams {
@@ -22,7 +23,7 @@ export interface SaveIntegrationParams {
 export async function saveIntegration(
   integrationType: string,
   params: SaveIntegrationParams
-): Promise<void> {
+): Promise<IntegrationId> {
   const { principalId, accessToken, refreshToken, expiresIn, config: oauthConfig } = params
 
   const secrets: Record<string, unknown> = { accessToken }
@@ -55,7 +56,7 @@ export async function saveIntegration(
     integrationPrincipalId = servicePrincipal.id
   }
 
-  await db
+  const [row] = await db
     .insert(integrations)
     .values({
       integrationType,
@@ -81,4 +82,15 @@ export async function saveIntegration(
         updatedAt: now,
       },
     })
+    .returning({ id: integrations.id })
+
+  const integrationId = row.id as IntegrationId
+
+  // Run integration-specific post-connect hook (e.g. provision feedback source)
+  const definition = getIntegration(integrationType)
+  if (definition?.onConnect) {
+    await definition.onConnect(integrationId)
+  }
+
+  return integrationId
 }

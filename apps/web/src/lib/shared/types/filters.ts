@@ -57,7 +57,7 @@ export interface RoadmapFilters {
  */
 export interface SuggestionsFilters {
   search?: string
-  sourceIds?: string[]
+  sourceTypes?: string[]
   sort?: 'newest' | 'relevance'
   /** Selected suggestion ID (for URL persistence) */
   suggestion?: string

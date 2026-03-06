@@ -35,7 +35,7 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   }, [])
 
   const shouldUseInitialData =
-    isInitialRender.current && !filters.search && !filters.sourceIds?.length
+    isInitialRender.current && !filters.search && !filters.sourceTypes?.length
 
   // Server-side query filters — always create_post only
   const queryFilters = useMemo(
@@ -60,14 +60,14 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
 
   const allSuggestions = flattenSuggestions(paginatedData) as unknown as SuggestionListItem[]
 
-  // Use server-provided per-source counts from the first page (reflects totals, not just current page)
+  // Use server-provided per-source-type counts from the first page
   const countsBySourceJson = JSON.stringify(paginatedData?.pages[0]?.countsBySource)
-  const suggestionCountsBySource = useMemo(() => {
+  const countsBySourceType = useMemo(() => {
     const counts = new Map<string, number>()
     const parsed = JSON.parse(countsBySourceJson ?? 'null') as Record<string, number> | null
     if (parsed) {
-      for (const [sourceId, cnt] of Object.entries(parsed)) {
-        counts.set(sourceId, cnt)
+      for (const [sourceType, cnt] of Object.entries(parsed)) {
+        counts.set(sourceType, cnt)
       }
     }
     return counts
@@ -77,9 +77,9 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   const suggestions = useMemo(() => {
     let filtered = allSuggestions
 
-    if (filters.sourceIds?.length) {
+    if (filters.sourceTypes?.length) {
       filtered = filtered.filter(
-        (s) => s.rawItem?.source && filters.sourceIds!.includes(s.rawItem.source.id)
+        (s) => s.rawItem?.sourceType && filters.sourceTypes!.includes(s.rawItem.sourceType)
       )
     }
 
@@ -93,7 +93,7 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
     }
 
     return filtered
-  }, [allSuggestions, filters.sourceIds, filters.search])
+  }, [allSuggestions, filters.sourceTypes, filters.search])
 
   const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -124,7 +124,7 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
             filters={filters}
             onFiltersChange={setFilters}
             sources={sources}
-            suggestionCountsBySource={suggestionCountsBySource}
+            countsBySourceType={countsBySourceType}
           />
         }
         content={

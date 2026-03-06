@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -89,9 +89,7 @@ function CreateFromSuggestionContent({
                   className="text-muted-foreground/60 shrink-0"
                 />
               </div>
-              <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">
-                {snippet}
-              </p>
+              <ExpandableSnippet text={snippet} />
             </div>
           </div>
         )}
@@ -144,5 +142,36 @@ function CreateFromSuggestionContent({
         onSubmit={handleSubmit}
       />
     </DialogContent>
+  )
+}
+
+function ExpandableSnippet({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [isClamped, setIsClamped] = useState(false)
+  const ref = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (el) setIsClamped(el.scrollHeight > el.clientHeight + 1)
+  }, [text])
+
+  return (
+    <div className="mt-1">
+      <p
+        ref={ref}
+        className={`text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap ${expanded ? '' : 'line-clamp-2'}`}
+      >
+        {text}
+      </p>
+      {isClamped && !expanded && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
+        >
+          Show full message
+        </button>
+      )}
+    </div>
   )
 }

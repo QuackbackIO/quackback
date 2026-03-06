@@ -23,7 +23,7 @@ const searchSchema = z.object({
   // Roadmap-specific
   roadmap: z.string().optional(),
   // Suggestion filters (for incoming sub-route)
-  suggestionSource: z.array(z.string()).optional(),
+  source: z.string().optional(),
   suggestionSort: z.enum(['newest', 'relevance']).optional(),
   suggestionSearch: z.string().optional(),
 })
