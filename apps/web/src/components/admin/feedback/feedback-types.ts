@@ -73,22 +73,6 @@ export interface SuggestionListItem {
   } | null
 }
 
-/** Full suggestion detail - returned by fetchSuggestionDetail. */
-export interface SuggestionDetailView extends SuggestionListItem {
-  resultPost: {
-    id: string
-    title: string
-  } | null
-  signal: {
-    id: string
-    signalType: string
-    summary: string
-    evidence: string[]
-    implicitNeed: string | null
-    extractionConfidence: number
-  } | null
-}
-
 /** Feedback source with item count. */
 export interface FeedbackSourceView {
   id: string
@@ -96,15 +80,4 @@ export interface FeedbackSourceView {
   name: string
   enabled: boolean
   itemCount: number
-}
-
-// ============================================
-// Pipeline Stats
-// ============================================
-
-/** Pipeline stats returned by fetchFeedbackPipelineStats. */
-export interface PipelineStats {
-  rawItems: Record<string, number>
-  signals: Record<string, number>
-  pendingSuggestions: number
 }

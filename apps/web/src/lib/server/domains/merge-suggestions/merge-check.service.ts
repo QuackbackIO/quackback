@@ -9,7 +9,6 @@ import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
-import { createSignal } from '@/lib/server/domains/signals'
 import type { PostId } from '@quackback/ids'
 
 const SWEEP_BATCH_SIZE = 50
@@ -97,17 +96,6 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       llmConfidence: bestAssessment.confidence,
       llmReasoning: bestAssessment.reasoning,
       llmModel: 'google/gemini-3.1-flash-lite-preview',
-    })
-
-    // Create AI signal on the canonical (target) post for progressive disclosure
-    await createSignal({
-      type: 'duplicate',
-      severity: 'info',
-      postId: targetPostId,
-      payload: {
-        matchedPostId: sourcePostId,
-        confidence: bestAssessment.confidence,
-      },
     })
   }
 

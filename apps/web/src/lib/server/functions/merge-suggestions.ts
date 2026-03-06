@@ -1,16 +1,20 @@
 /**
- * Server functions for AI merge suggestions.
+ * Server functions for merge suggestions.
  *
- * Provides query endpoint for pending merge suggestions.
- * Accept/dismiss actions are handled via acceptSuggestionFn/dismissSuggestionFn
- * in feedback.ts, which detect the merge_sug prefix and delegate accordingly.
+ * Provides query endpoints for pending merge suggestions, summary counts,
+ * and per-post counts. Accept/dismiss actions are handled via
+ * acceptSuggestionFn/dismissSuggestionFn in feedback.ts.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { PostId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
-import { getPendingSuggestionsForPost } from '@/lib/server/domains/merge-suggestions'
+import {
+  getPendingSuggestionsForPost,
+  getPendingMergeSuggestionSummary,
+  getMergeSuggestionCountsForPosts,
+} from '@/lib/server/domains/merge-suggestions'
 
 // ============================================
 // Server Functions
@@ -36,6 +40,34 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
       }))
     } catch (error) {
       console.error(`[fn:merge-suggestions] getMergeSuggestionsForPostFn failed:`, error)
+      return []
+    }
+  })
+
+/**
+ * Get total pending merge suggestion count (for summary bar).
+ */
+export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).handler(async () => {
+  try {
+    await requireAuth({ roles: ['admin', 'member'] })
+    return getPendingMergeSuggestionSummary()
+  } catch (error) {
+    console.error(`[fn:merge-suggestions] fetchMergeSuggestionSummaryFn failed:`, error)
+    return { count: 0 }
+  }
+})
+
+/**
+ * Get merge suggestion counts for a batch of post IDs (for inbox badges).
+ */
+export const fetchMergeSuggestionCountsForPostsFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ postIds: z.array(z.string()) }))
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      return getMergeSuggestionCountsForPosts(data.postIds as PostId[])
+    } catch (error) {
+      console.error(`[fn:merge-suggestions] fetchMergeSuggestionCountsForPostsFn failed:`, error)
       return []
     }
   })

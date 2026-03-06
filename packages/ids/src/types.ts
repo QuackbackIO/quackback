@@ -98,6 +98,9 @@ export type UserAttributeId = TypeId<'user_attr'>
 /** Post sentiment analysis ID - e.g., sentiment_01h455vb4pex5vsknk084sn02q */
 export type SentimentId = TypeId<'sentiment'>
 
+/** Post activity log ID - e.g., activity_01h455vb4pex5vsknk084sn02q */
+export type ActivityId = TypeId<'activity'>
+
 // ============================================
 // Feedback Aggregation Entity IDs
 // ============================================
@@ -122,9 +125,6 @@ export type ExternalUserMappingId = TypeId<'user_mapping'>
 
 /** Merge suggestion ID - e.g., merge_sug_01h455vb4pex5vsknk084sn02q */
 export type MergeSuggestionId = TypeId<'merge_sug'>
-
-/** AI signal ID - e.g., ai_signal_01h455vb4pex5vsknk084sn02q */
-export type AiSignalId = TypeId<'ai_signal'>
 
 // ============================================
 // Auth Entity IDs (Better-auth)
@@ -199,6 +199,7 @@ export interface EntityIdMap {
   segment: SegmentId
   user_attr: UserAttributeId
   sentiment: SentimentId
+  activity: ActivityId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId
@@ -206,7 +207,6 @@ export interface EntityIdMap {
   signal_correction: FeedbackCorrectionId
   user_mapping: ExternalUserMappingId
   merge_suggestion: MergeSuggestionId
-  ai_signal: AiSignalId
   roadmap: RoadmapId
   changelog: ChangelogId
   integration: IntegrationId

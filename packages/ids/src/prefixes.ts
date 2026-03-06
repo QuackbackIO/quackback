@@ -55,7 +55,7 @@ export const ID_PREFIXES = {
   signal_correction: 'signal_correction',
   user_mapping: 'user_mapping',
   merge_suggestion: 'merge_sug',
-  ai_signal: 'ai_signal',
+  activity: 'activity',
 
   // ============================================
   // Auth Entities (Better-auth, text primary keys)

@@ -14,10 +14,8 @@ import {
   desc,
   inArray,
   feedbackSuggestions,
-  feedbackSignals,
   rawFeedbackItems,
   feedbackSources,
-  mergeSuggestions,
   count,
 } from '@/lib/server/db'
 
@@ -33,10 +31,6 @@ const listSuggestionsSchema = z.object({
   sort: z.enum(['newest', 'relevance']).optional().default('newest'),
   limit: z.number().optional().default(20),
   offset: z.number().optional().default(0),
-})
-
-const getSuggestionSchema = z.object({
-  id: z.string(),
 })
 
 const acceptSuggestionSchema = z.object({
@@ -255,113 +249,21 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     }
   })
 
-export const fetchSuggestionDetail = createServerFn({ method: 'GET' })
-  .inputValidator(getSuggestionSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:feedback] fetchSuggestionDetail: id=${data.id}`)
-    await requireAuth({ roles: ['admin', 'member'] })
-
-    const suggestion = await db.query.feedbackSuggestions.findFirst({
-      where: eq(feedbackSuggestions.id, data.id as FeedbackSuggestionId),
-      with: {
-        rawItem: {
-          columns: {
-            id: true,
-            sourceType: true,
-            externalUrl: true,
-            author: true,
-            content: true,
-            sourceCreatedAt: true,
-          },
-          with: {
-            source: { columns: { id: true, name: true, sourceType: true } },
-          },
-        },
-        resultPost: {
-          columns: { id: true, title: true },
-        },
-        board: { columns: { id: true, name: true, slug: true } },
-        signal: {
-          columns: {
-            id: true,
-            signalType: true,
-            summary: true,
-            evidence: true,
-            implicitNeed: true,
-            extractionConfidence: true,
-          },
-        },
-      },
-    })
-
-    if (!suggestion) return null
-
-    return suggestion as any
-  })
-
-export const fetchSuggestionStats = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:feedback] fetchSuggestionStats`)
+/**
+ * Count pending create_post suggestions (for sidebar badge).
+ */
+export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ roles: ['admin', 'member'] })
-
-  const [feedbackResults, mergeCountResult] = await Promise.all([
-    db
-      .select({
-        suggestionType: feedbackSuggestions.suggestionType,
-        count: count(),
-      })
-      .from(feedbackSuggestions)
-      .where(eq(feedbackSuggestions.status, 'pending'))
-      .groupBy(feedbackSuggestions.suggestionType),
-    db
-      .select({ count: count() })
-      .from(mergeSuggestions)
-      .where(eq(mergeSuggestions.status, 'pending')),
-  ])
-
-  const mergeCount = mergeCountResult[0]?.count ?? 0
-  const stats: Record<string, number> = {
-    create_post: 0,
-    duplicate_post: mergeCount,
-    total: mergeCount,
-  }
-  for (const r of feedbackResults) {
-    stats[r.suggestionType] = r.count
-    stats.total += r.count
-  }
-
-  return stats
-})
-
-export const fetchFeedbackPipelineStats = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:feedback] fetchFeedbackPipelineStats`)
-  await requireAuth({ roles: ['admin', 'member'] })
-
-  const [rawCounts, signalCounts, suggestionCounts] = await Promise.all([
-    db
-      .select({
-        state: rawFeedbackItems.processingState,
-        count: count(),
-      })
-      .from(rawFeedbackItems)
-      .groupBy(rawFeedbackItems.processingState),
-    db
-      .select({
-        state: feedbackSignals.processingState,
-        count: count(),
-      })
-      .from(feedbackSignals)
-      .groupBy(feedbackSignals.processingState),
-    db
-      .select({ count: count() })
-      .from(feedbackSuggestions)
-      .where(eq(feedbackSuggestions.status, 'pending')),
-  ])
-
-  return {
-    rawItems: Object.fromEntries(rawCounts.map((r) => [r.state, r.count])),
-    signals: Object.fromEntries(signalCounts.map((r) => [r.state, r.count])),
-    pendingSuggestions: suggestionCounts[0]?.count ?? 0,
-  }
+  const [result] = await db
+    .select({ count: count() })
+    .from(feedbackSuggestions)
+    .where(
+      and(
+        eq(feedbackSuggestions.status, 'pending'),
+        eq(feedbackSuggestions.suggestionType, 'create_post')
+      )
+    )
+  return { count: result?.count ?? 0 }
 })
 
 export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(async () => {

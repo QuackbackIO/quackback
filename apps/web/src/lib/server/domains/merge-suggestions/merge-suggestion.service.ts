@@ -16,9 +16,9 @@ import {
   inArray,
   desc,
   sql,
+  count,
 } from '@/lib/server/db'
 import { mergePost } from '@/lib/server/domains/posts/post.merge'
-import { resolveDuplicateSignalsForPosts } from '@/lib/server/domains/signals'
 import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
 
 export interface MergeSuggestionPostView {
@@ -141,13 +141,6 @@ export async function acceptMergeSuggestion(
         )
       )
     )
-
-  // Resolve all duplicate signals for both posts
-  await resolveDuplicateSignalsForPosts(
-    [suggestion.sourcePostId as PostId, suggestion.targetPostId as PostId],
-    'accepted',
-    principalId
-  )
 }
 
 /**
@@ -160,7 +153,7 @@ export async function dismissMergeSuggestion(
   console.log(
     `[domain:merge-suggestions] dismissMergeSuggestion: id=${id} principalId=${principalId}`
   )
-  const [updated] = await db
+  await db
     .update(mergeSuggestions)
     .set({
       status: 'dismissed',
@@ -169,19 +162,6 @@ export async function dismissMergeSuggestion(
       updatedAt: new Date(),
     })
     .where(and(eq(mergeSuggestions.id, id), eq(mergeSuggestions.status, 'pending')))
-    .returning({
-      sourcePostId: mergeSuggestions.sourcePostId,
-      targetPostId: mergeSuggestions.targetPostId,
-    })
-
-  // Resolve corresponding duplicate signals
-  if (updated) {
-    await resolveDuplicateSignalsForPosts(
-      [updated.sourcePostId as PostId, updated.targetPostId as PostId],
-      'dismissed',
-      principalId
-    )
-  }
 }
 
 /**
@@ -373,4 +353,61 @@ export async function expireStaleMergeSuggestions(): Promise<number> {
     .returning({ id: mergeSuggestions.id })
 
   return result.length
+}
+
+/**
+ * Get total count of pending merge suggestions (for summary bar).
+ */
+export async function getPendingMergeSuggestionSummary(): Promise<{ count: number }> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(mergeSuggestions)
+    .where(eq(mergeSuggestions.status, 'pending'))
+
+  return { count: Number(row?.count ?? 0) }
+}
+
+/**
+ * Get pending merge suggestion counts per post (for inbox badges).
+ * Counts suggestions where the post is either source or target.
+ */
+export async function getMergeSuggestionCountsForPosts(
+  postIds: PostId[]
+): Promise<Array<{ postId: PostId; count: number }>> {
+  if (postIds.length === 0) return []
+
+  // Use two separate queries with inArray() (safe for Drizzle) then merge in JS.
+  // Avoids raw SQL IN ${array} which Drizzle spreads without parens.
+  const [sourceRows, targetRows] = await Promise.all([
+    db
+      .select({
+        postId: mergeSuggestions.sourcePostId,
+        count: count(),
+      })
+      .from(mergeSuggestions)
+      .where(
+        and(eq(mergeSuggestions.status, 'pending'), inArray(mergeSuggestions.sourcePostId, postIds))
+      )
+      .groupBy(mergeSuggestions.sourcePostId),
+    db
+      .select({
+        postId: mergeSuggestions.targetPostId,
+        count: count(),
+      })
+      .from(mergeSuggestions)
+      .where(
+        and(eq(mergeSuggestions.status, 'pending'), inArray(mergeSuggestions.targetPostId, postIds))
+      )
+      .groupBy(mergeSuggestions.targetPostId),
+  ])
+
+  // Merge counts from both sides
+  const countMap = new Map<string, number>()
+  for (const row of [...sourceRows, ...targetRows]) {
+    countMap.set(row.postId, (countMap.get(row.postId) ?? 0) + Number(row.count))
+  }
+
+  return Array.from(countMap.entries())
+    .filter(([, c]) => c > 0)
+    .map(([postId, c]) => ({ postId: postId as PostId, count: c }))
 }

@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
 import {
   addReaction,
@@ -285,6 +286,14 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
+
+      createActivity({
+        postId: result.postId,
+        principalId: auth.principal.id,
+        type: 'comment.pinned',
+        metadata: { commentId: data.commentId },
+      })
+
       console.log(
         `[fn:comments] pinCommentFn: pinned comment ${data.commentId} on post ${result.postId}`
       )
@@ -306,6 +315,13 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
+
+      createActivity({
+        postId: data.postId as PostId,
+        principalId: auth.principal.id,
+        type: 'comment.unpinned',
+      })
+
       console.log(`[fn:comments] unpinCommentFn: unpinned comment from post ${data.postId}`)
       return { postId: data.postId }
     } catch (error) {

@@ -16,17 +16,21 @@ import {
   db,
   boards,
   eq,
+  inArray,
   postStatuses,
   posts,
   postTags,
+  tags,
+  principal as principalTable,
   type Post,
   type TiptapContent,
 } from '@/lib/server/db'
-import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
+import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import { dispatchPostCreated, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
 /** Convert plain text to TipTap JSON when contentJson is not provided */
 function plainTextToTipTap(text: string): TiptapContent {
@@ -149,6 +153,13 @@ export async function createPost(
     voteCount: post.voteCount,
   })
 
+  createActivity({
+    postId: post.id,
+    principalId: author.principalId,
+    type: 'post.created',
+    metadata: { boardName: board.name },
+  })
+
   return { ...post, boardSlug: board.slug }
 }
 
@@ -165,7 +176,11 @@ export async function createPost(
  * @param input - Update data
  * @returns Result containing the updated post or an error
  */
-export async function updatePost(id: PostId, input: UpdatePostInput): Promise<Post> {
+export async function updatePost(
+  id: PostId,
+  input: UpdatePostInput,
+  actorPrincipalId?: PrincipalId | null
+): Promise<Post> {
   console.log(`[domain:posts] updatePost: id=${id}`)
   // Get existing post
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, id) })
@@ -194,6 +209,16 @@ export async function updatePost(id: PostId, input: UpdatePostInput): Promise<Po
     }
   }
 
+  // Capture current tag IDs before update (for activity diff)
+  let currentTagIds: string[] = []
+  if (input.tagIds !== undefined && actorPrincipalId) {
+    const currentTags = await db
+      .select({ tagId: postTags.tagId })
+      .from(postTags)
+      .where(eq(postTags.postId, id))
+    currentTagIds = currentTags.map((t) => t.tagId)
+  }
+
   // Build update data
   const updateData: Partial<Post> = {}
   if (input.title !== undefined) updateData.title = input.title.trim()
@@ -220,6 +245,80 @@ export async function updatePost(id: PostId, input: UpdatePostInput): Promise<Po
     await db.delete(postTags).where(eq(postTags.postId, id))
     if (input.tagIds.length > 0) {
       await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+    }
+  }
+
+  // Record activity for owner changes
+  if (actorPrincipalId && input.ownerPrincipalId !== undefined) {
+    const oldOwner = existingPost.ownerPrincipalId
+    const newOwner = input.ownerPrincipalId
+    if (oldOwner !== newOwner) {
+      const resolveName = (pid: PrincipalId) =>
+        db.query.principal.findFirst({
+          where: eq(principalTable.id, pid),
+          columns: { displayName: true },
+        })
+
+      if (newOwner) {
+        const [ownerRow, prevOwnerRow] = await Promise.all([
+          resolveName(newOwner),
+          oldOwner ? resolveName(oldOwner) : null,
+        ])
+        createActivity({
+          postId: id,
+          principalId: actorPrincipalId,
+          type: 'owner.assigned',
+          metadata: {
+            ownerName: ownerRow?.displayName ?? null,
+            ...(oldOwner ? { previousOwnerName: prevOwnerRow?.displayName ?? null } : {}),
+          },
+        })
+      } else {
+        const prevOwnerRow = oldOwner ? await resolveName(oldOwner) : null
+        createActivity({
+          postId: id,
+          principalId: actorPrincipalId,
+          type: 'owner.unassigned',
+          metadata: { previousOwnerName: prevOwnerRow?.displayName ?? null },
+        })
+      }
+    }
+  }
+
+  // Record activity for tag changes
+  if (actorPrincipalId && input.tagIds !== undefined) {
+    const newTagIds = input.tagIds.map((t) => String(t))
+    const added = newTagIds.filter((t) => !currentTagIds.includes(t))
+    const removed = currentTagIds.filter((t) => !newTagIds.includes(t))
+
+    if (added.length > 0 || removed.length > 0) {
+      // Resolve all tag names in one query
+      const allChangedIds = [...added, ...removed] as TagId[]
+      const tagRows =
+        allChangedIds.length > 0
+          ? await db
+              .select({ id: tags.id, name: tags.name })
+              .from(tags)
+              .where(inArray(tags.id, allChangedIds))
+          : []
+      const tagNameMap = new Map(tagRows.map((t) => [String(t.id), t.name]))
+
+      if (added.length > 0) {
+        createActivity({
+          postId: id,
+          principalId: actorPrincipalId,
+          type: 'tags.added',
+          metadata: { tagNames: added.map((t) => tagNameMap.get(t) ?? 'Unknown') },
+        })
+      }
+      if (removed.length > 0) {
+        createActivity({
+          postId: id,
+          principalId: actorPrincipalId,
+          type: 'tags.removed',
+          metadata: { tagNames: removed.map((t) => tagNameMap.get(t) ?? 'Unknown') },
+        })
+      }
     }
   }
 

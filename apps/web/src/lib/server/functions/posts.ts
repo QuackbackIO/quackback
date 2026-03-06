@@ -17,6 +17,7 @@ import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/po
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import {
   listInboxPosts,
@@ -322,14 +323,18 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await updatePost(data.id as PostId, {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-        ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
-      })
+      const result = await updatePost(
+        data.id as PostId,
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
+        },
+        auth.principal.id
+      )
       console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -394,9 +399,9 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] restorePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await restorePost(data.id as PostId)
+      const result = await restorePost(data.id as PostId, auth.principal.id)
       console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -413,11 +418,15 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      await updatePost(data.id as PostId, {
-        tagIds: data.tagIds as TagId[],
-      })
+      await updatePost(
+        data.id as PostId,
+        {
+          tagIds: data.tagIds as TagId[],
+        },
+        auth.principal.id
+      )
       console.log(`[fn:posts] updatePostTagsFn: updated id=${data.id}`)
       return { id: data.id }
     } catch (error) {
@@ -434,12 +443,18 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] toggleCommentsLockFn: id=${data.id}, locked=${data.locked}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await db
         .update(posts)
         .set({ isCommentsLocked: data.locked })
         .where(eq(posts.id, data.id as PostId))
+
+      createActivity({
+        postId: data.id as PostId,
+        principalId: auth.principal.id,
+        type: data.locked ? 'comments.locked' : 'comments.unlocked',
+      })
 
       console.log(`[fn:posts] toggleCommentsLockFn: updated id=${data.id}`)
       return { id: data.id, isCommentsLocked: data.locked }

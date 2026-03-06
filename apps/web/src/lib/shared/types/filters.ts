@@ -57,7 +57,6 @@ export interface RoadmapFilters {
  */
 export interface SuggestionsFilters {
   search?: string
-  suggestionType?: 'create_post' | 'duplicate_post'
   sourceIds?: string[]
   sort?: 'newest' | 'relevance'
   /** Selected suggestion ID (for URL persistence) */
