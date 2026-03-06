@@ -348,6 +348,7 @@ export function useCreatePost() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
 }

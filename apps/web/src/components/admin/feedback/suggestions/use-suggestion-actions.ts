@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/feedback'
 import { suggestionsKeys } from '@/lib/client/hooks/use-suggestions-query'
+import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 
 interface UseSuggestionActionsOptions {
   suggestionId: string
@@ -17,6 +18,7 @@ export function useSuggestionActions({
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+    queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
   }
 
   const acceptMutation = useMutation({
