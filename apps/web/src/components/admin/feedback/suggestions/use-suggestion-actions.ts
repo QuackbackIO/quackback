@@ -20,7 +20,17 @@ export function useSuggestionActions({
   }
 
   const acceptMutation = useMutation({
-    mutationFn: (opts?: { title: string; body: string } | { swapDirection: boolean }) =>
+    mutationFn: (
+      opts?:
+        | {
+            title: string
+            body: string
+            boardId?: string
+            statusId?: string
+            authorPrincipalId?: string
+          }
+        | { swapDirection: boolean }
+    ) =>
       acceptSuggestionFn({
         data: {
           id: suggestionId,

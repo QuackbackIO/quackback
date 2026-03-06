@@ -40,6 +40,8 @@ const acceptSuggestionSchema = z.object({
       title: z.string().optional(),
       body: z.string().optional(),
       boardId: z.string().optional(),
+      statusId: z.string().optional(),
+      authorPrincipalId: z.string().optional(),
     })
     .optional(),
   swapDirection: z.boolean().optional(),

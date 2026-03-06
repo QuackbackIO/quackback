@@ -54,7 +54,13 @@ export async function createPostSuggestion(opts: {
 export async function acceptCreateSuggestion(
   suggestionId: FeedbackSuggestionId,
   resolvedByPrincipalId: PrincipalId,
-  edits?: { title?: string; body?: string; boardId?: string }
+  edits?: {
+    title?: string
+    body?: string
+    boardId?: string
+    statusId?: string
+    authorPrincipalId?: string
+  }
 ): Promise<{ success: boolean; resultPostId: PostId }> {
   const suggestion = await db.query.feedbackSuggestions.findFirst({
     where: eq(feedbackSuggestions.id, suggestionId),
@@ -88,9 +94,13 @@ export async function acceptCreateSuggestion(
     columns: { id: true },
   })
 
-  // Create post with the feedback author as the author
-  const authorPrincipalId = (suggestion.rawItem?.principalId ??
+  // Resolve author: use explicit override, or feedback author, or accepting admin
+  const authorPrincipalId = (edits?.authorPrincipalId ??
+    suggestion.rawItem?.principalId ??
     resolvedByPrincipalId) as PrincipalId
+
+  // Use explicit statusId override or fall back to default
+  const statusId = edits?.statusId ?? defaultStatus?.id
 
   const [newPost] = await db
     .insert(posts)
@@ -99,7 +109,7 @@ export async function acceptCreateSuggestion(
       content: body,
       boardId,
       principalId: authorPrincipalId,
-      statusId: defaultStatus?.id,
+      statusId,
       voteCount: 1,
     })
     .returning({ id: posts.id })

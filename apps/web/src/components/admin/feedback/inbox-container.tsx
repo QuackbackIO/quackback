@@ -31,6 +31,7 @@ export function InboxContainer({
   tags,
   statuses,
   members,
+  currentUser,
 }: InboxContainerProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -167,6 +168,8 @@ export function InboxContainer({
             boards={boards}
             tags={tags}
             statuses={statuses}
+            members={members}
+            currentUser={currentUser}
             onPostCreated={refetchPosts}
           />
         }
