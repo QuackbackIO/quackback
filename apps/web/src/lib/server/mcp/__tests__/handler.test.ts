@@ -1001,7 +1001,7 @@ describe('MCP HTTP Handler', () => {
       expect(text.restored).toBe(true)
       expect(text.postId).toBe('post_test')
       expect(text.title).toBe('Restored Post')
-      expect(vi.mocked(restorePost)).toHaveBeenCalledWith('post_test')
+      expect(vi.mocked(restorePost)).toHaveBeenCalledWith('post_test', expect.any(String))
     })
 
     // ── delete_post error handling ──────────────────────────────────

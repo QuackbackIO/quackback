@@ -119,13 +119,20 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           // Import service
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
 
-          const result = await updatePost(postId as PostId, {
-            title: parsed.data.title,
-            content: parsed.data.content,
-            statusId: parsed.data.statusId as StatusId | undefined,
-            tagIds: parsed.data.tagIds as TagId[] | undefined,
-            ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
-          })
+          const result = await updatePost(
+            postId as PostId,
+            {
+              title: parsed.data.title,
+              content: parsed.data.content,
+              statusId: parsed.data.statusId as StatusId | undefined,
+              tagIds: parsed.data.tagIds as TagId[] | undefined,
+              ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
+            },
+            {
+              principalId: authResult.principalId,
+              displayName: authResult.apiKey.name,
+            }
+          )
 
           return successResponse({
             id: result.id,

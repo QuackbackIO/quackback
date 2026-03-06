@@ -31,6 +31,7 @@ import {
   ChatBubbleLeftIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
+import { getLatestMergeStateByDuplicateId } from './post-activity-timeline.utils'
 
 // ============================================
 // Types
@@ -294,10 +295,10 @@ function MergedInCard({ activity, isUnmerged }: { activity: ActivityItem; isUnme
 
 function ActivityEntry({
   activity,
-  unmergedPostIds,
+  mergeStateByDuplicateId,
 }: {
   activity: ActivityItem
-  unmergedPostIds: Set<string>
+  mergeStateByDuplicateId: Map<string, boolean>
 }) {
   const config = ACTIVITY_CONFIG[activity.type]
   if (!config) return null
@@ -305,10 +306,12 @@ function ActivityEntry({
   const Icon = config.icon
   const label = config.label(activity.metadata, activity.actorName)
   const detail = activity.type === 'post.merged_in' ? null : config.detail?.(activity.metadata)
+  const duplicatePostId = activity.metadata.duplicatePostId as string | undefined
 
   const isUnmerged =
-    activity.type === 'post.merged_in' &&
-    unmergedPostIds.has(activity.metadata.duplicatePostId as string)
+    activity.type === 'post.merged_in' && !!duplicatePostId
+      ? mergeStateByDuplicateId.get(duplicatePostId) === true
+      : false
 
   return (
     <div className="flex items-start gap-3 py-2.5">
@@ -332,6 +335,7 @@ function ActivityEntry({
 export function PostActivityTimeline({ postId }: { postId: PostId }) {
   const { data, isLoading } = useQuery(activityQueries.forPost(postId))
   const activities = data as unknown as ActivityItem[] | undefined
+  const mergeStateByDuplicateId = getLatestMergeStateByDuplicateId(activities ?? [])
 
   if (isLoading) {
     return (
@@ -349,13 +353,6 @@ export function PostActivityTimeline({ postId }: { postId: PostId }) {
     )
   }
 
-  // Collect duplicate post IDs that have already been unmerged
-  const unmergedPostIds = new Set(
-    (activities ?? [])
-      .filter((a) => a.type === 'post.unmerged')
-      .map((a) => a.metadata.otherPostId as string)
-  )
-
   if (!activities?.length) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -370,7 +367,11 @@ export function PostActivityTimeline({ postId }: { postId: PostId }) {
   return (
     <div className="divide-y divide-border px-6">
       {activities.map((activity) => (
-        <ActivityEntry key={activity.id} activity={activity} unmergedPostIds={unmergedPostIds} />
+        <ActivityEntry
+          key={activity.id}
+          activity={activity}
+          mergeStateByDuplicateId={mergeStateByDuplicateId}
+        />
       ))}
     </div>
   )

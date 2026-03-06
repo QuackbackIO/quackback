@@ -486,7 +486,12 @@ Examples:
             tagIds: args.tagIds as TagId[] | undefined,
             ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
           },
-          auth.principalId
+          {
+            principalId: auth.principalId,
+            userId: auth.userId,
+            email: auth.email,
+            displayName: auth.name,
+          }
         )
 
         return jsonResult({

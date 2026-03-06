@@ -70,8 +70,13 @@ vi.mock('@/lib/server/db', async () => {
     comments: { postId: 'post_id', principalId: 'principal_id', deletedAt: 'deleted_at' },
     postEditHistory: {},
     postStatuses: { id: 'id', isDefault: 'is_default' },
+    postActivity: {},
   }
 })
+
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  createActivity: vi.fn(),
+}))
 
 // Constants
 const TEAM_ACTOR = {

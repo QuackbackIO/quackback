@@ -201,15 +201,6 @@ export function FeedbackTableView({
     </div>
   )
 
-  if (isLoading) {
-    return (
-      <div className="max-w-5xl mx-auto w-full">
-        {headerContent}
-        <TableSkeleton />
-      </div>
-    )
-  }
-
   // Filter posts by duplicates if active
   const filteredPosts =
     duplicatesFilter && duplicateCountByPostId
@@ -223,6 +214,15 @@ export function FeedbackTableView({
       onLoadMore()
     }
   }, [isSearchingForDuplicateMatches, isLoading, isLoadingMore, onLoadMore])
+
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto w-full">
+        {headerContent}
+        <TableSkeleton />
+      </div>
+    )
+  }
 
   if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
