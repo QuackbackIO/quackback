@@ -31,8 +31,8 @@ const getMergeSuggestionsSchema = z.object({
 export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
   .inputValidator(getMergeSuggestionsSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
       const suggestions = await getPendingSuggestionsForPost(data.postId as PostId)
       return suggestions.map((s) => ({
         ...s,
@@ -48,8 +48,8 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
  * Get total pending merge suggestion count (for summary bar).
  */
 export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin', 'member'] })
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
     return getPendingMergeSuggestionSummary()
   } catch (error) {
     console.error(`[fn:merge-suggestions] fetchMergeSuggestionSummaryFn failed:`, error)
@@ -63,8 +63,8 @@ export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).h
 export const fetchMergeSuggestionCountsForPostsFn = createServerFn({ method: 'POST' })
   .inputValidator(z.object({ postIds: z.array(z.string()) }))
   .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
       return getMergeSuggestionCountsForPosts(data.postIds as PostId[])
     } catch (error) {
       console.error(`[fn:merge-suggestions] fetchMergeSuggestionCountsForPostsFn failed:`, error)

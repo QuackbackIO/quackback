@@ -54,7 +54,12 @@ export async function handleSlackInteractivity(request: Request): Promise<Respon
     return new Response('Missing payload', { status: 400 })
   }
 
-  const payload = JSON.parse(rawPayload)
+  let payload: any
+  try {
+    payload = JSON.parse(rawPayload)
+  } catch {
+    return new Response('Invalid payload JSON', { status: 400 })
+  }
 
   if (!integration?.secrets) {
     return new Response('Slack integration not connected', { status: 400 })

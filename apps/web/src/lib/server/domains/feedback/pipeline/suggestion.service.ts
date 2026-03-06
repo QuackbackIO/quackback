@@ -15,6 +15,7 @@ import type {
   PrincipalId,
   RawFeedbackItemId,
   FeedbackSignalId,
+  StatusId,
 } from '@quackback/ids'
 
 /**
@@ -100,7 +101,7 @@ export async function acceptCreateSuggestion(
     resolvedByPrincipalId) as PrincipalId
 
   // Use explicit statusId override or fall back to default
-  const statusId = edits?.statusId ?? defaultStatus?.id
+  const statusId = (edits?.statusId ?? defaultStatus?.id) as StatusId | undefined
 
   const [newPost] = await db
     .insert(posts)

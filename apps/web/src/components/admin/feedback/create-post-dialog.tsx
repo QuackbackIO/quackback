@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm, Controller } from 'react-hook-form'
@@ -9,14 +9,7 @@ import type { CreatePostInput } from '@/lib/server/domains/posts'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import {
-  FolderIcon,
-  TagIcon,
-  UserIcon,
-  ChevronUpDownIcon,
-  CheckIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline'
+import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { richTextToPlainText, RichTextEditor } from '@/components/ui/rich-text-editor'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
@@ -28,12 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { AuthorSelector } from '@/components/shared/author-selector'
+import { cn } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
@@ -128,14 +120,15 @@ export function CreatePostDialog({
 
   const watchedTitle = form.watch('title')
   const watchedBoardId = form.watch('boardId')
+  const watchedStatusId = form.watch('statusId')
 
   const { posts: similarPosts } = useSimilarPosts({
     title: watchedTitle,
     enabled: open && !!watchedBoardId,
   })
 
-  const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
-  const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
+  const selectedBoard = boards.find((b) => b.id === watchedBoardId)
+  const selectedStatus = statuses.find((s) => s.id === watchedStatusId)
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -219,9 +212,9 @@ export function CreatePostDialog({
                     </div>
                     <AuthorSelector
                       members={members}
-                      currentUser={currentUser}
                       value={authorPrincipalId}
                       onChange={setAuthorPrincipalId}
+                      fallbackName={currentUser.name}
                     />
                   </div>
 
@@ -363,121 +356,5 @@ export function CreatePostDialog({
         </Form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-// ============================================================================
-// Author Selector (searchable popover)
-// ============================================================================
-
-interface AuthorSelectorProps {
-  members: TeamMember[]
-  currentUser: CurrentUser
-  value: string
-  onChange: (principalId: string) => void
-}
-
-function AuthorSelector({ members, currentUser, value, onChange }: AuthorSelectorProps) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (open) {
-      // Focus the search input when popover opens
-      setTimeout(() => inputRef.current?.focus(), 0)
-    } else {
-      setSearch('')
-    }
-  }, [open])
-
-  const selectedMember = members.find((m) => m.id === value)
-  const selectedName = selectedMember?.name || currentUser.name
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return members
-    const q = search.toLowerCase()
-    return members.filter(
-      (m) => m.name?.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
-    )
-  }, [members, search])
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
-            'border border-border/50 hover:border-border hover:bg-muted/40',
-            'transition-all duration-150 text-xs'
-          )}
-        >
-          <Avatar className="h-5 w-5 shrink-0">
-            {selectedMember?.image && (
-              <AvatarImage src={selectedMember.image} alt={selectedName || ''} />
-            )}
-            <AvatarFallback className="text-[9px]">{getInitials(selectedName)}</AvatarFallback>
-          </Avatar>
-          <span className="truncate font-medium text-foreground">
-            {selectedName || 'Anonymous'}
-          </span>
-          <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 ml-auto shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="start" sideOffset={4}>
-        {/* Search input */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30">
-          <MagnifyingGlassIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search members..."
-            className="flex-1 text-xs bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
-          />
-        </div>
-        {/* Member list */}
-        <div className="max-h-56 overflow-y-auto p-1 scrollbar-thin">
-          {filtered.length === 0 ? (
-            <p className="text-xs text-muted-foreground/60 text-center py-4">No members found</p>
-          ) : (
-            filtered.map((member) => {
-              const isSelected = member.id === value
-              return (
-                <button
-                  key={member.id}
-                  type="button"
-                  onClick={() => {
-                    onChange(member.id)
-                    setOpen(false)
-                  }}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left',
-                    'text-xs transition-colors duration-100',
-                    isSelected
-                      ? 'bg-primary/10 text-foreground'
-                      : 'text-foreground/80 hover:bg-muted/60'
-                  )}
-                >
-                  <Avatar className="h-5 w-5 shrink-0">
-                    {member.image && <AvatarImage src={member.image} alt={member.name || ''} />}
-                    <AvatarFallback className="text-[9px]">
-                      {getInitials(member.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{member.name || 'Unnamed'}</div>
-                    <div className="text-muted-foreground/60 truncate">{member.email}</div>
-                  </div>
-                  {isSelected && <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
-                </button>
-              )
-            })
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
   )
 }

@@ -48,18 +48,7 @@ function pruneMap(map: Map<string, any>, maxSize: number, ttlMs: number) {
 export async function handleSlackEvents(request: Request): Promise<Response> {
   const body = await request.text()
 
-  // URL verification challenge -- must respond before signature check
-  // because Slack sends this during app setup
-  try {
-    const parsed = JSON.parse(body)
-    if (parsed.type === 'url_verification') {
-      return Response.json({ challenge: parsed.challenge })
-    }
-  } catch {
-    return new Response('Invalid JSON', { status: 400 })
-  }
-
-  // Verify signature
+  // Verify signature first — all Slack requests (including url_verification) are signed
   const [credentials, integration] = await Promise.all([
     getPlatformCredentials('slack'),
     db.query.integrations.findFirst({
@@ -81,11 +70,21 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
   )
   if (sigResult !== true) return sigResult
 
+  let payload: any
+  try {
+    payload = JSON.parse(body)
+  } catch {
+    return new Response('Invalid JSON', { status: 400 })
+  }
+
+  // URL verification challenge (Slack app setup handshake)
+  if (payload.type === 'url_verification') {
+    return Response.json({ challenge: payload.challenge })
+  }
+
   if (!integration?.secrets) {
     return new Response('Slack integration not connected', { status: 400 })
   }
-
-  const payload = JSON.parse(body)
   if (payload.type !== 'event_callback') {
     return new Response('', { status: 200 })
   }
