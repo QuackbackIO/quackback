@@ -48,6 +48,13 @@ export function strengthTier(normalized: number): 'low' | 'medium' | 'high' | 'c
  * stripHtml('<p>Hello <strong>world</strong></p>') // 'Hello world'
  * stripHtml('No tags here') // 'No tags here'
  */
+/**
+ * Format a badge count for display, capping at 99+.
+ */
+export function formatBadgeCount(n: number): string {
+  return n > 99 ? '99+' : String(n)
+}
+
 export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, '') // Remove HTML tags

@@ -1,11 +1,10 @@
 import { queryOptions } from '@tanstack/react-query'
 import {
   fetchSuggestions,
-  fetchSuggestionDetail,
-  fetchSuggestionStats,
-  fetchFeedbackPipelineStats,
   fetchFeedbackSources,
+  fetchIncomingSuggestionCount,
 } from '@/lib/server/functions/feedback'
+import type { SuggestionsPageResult } from '@/lib/client/hooks/use-suggestions-query'
 
 /**
  * Query options factory for feedback aggregation routes.
@@ -22,22 +21,8 @@ export const feedbackQueries = {
   }) =>
     queryOptions({
       queryKey: ['feedback', 'suggestions', filters],
-      queryFn: () => fetchSuggestions({ data: filters ?? {} }),
+      queryFn: () => fetchSuggestions({ data: filters ?? {} }) as Promise<SuggestionsPageResult>,
       staleTime: 15 * 1000,
-    }),
-
-  suggestionDetail: (id: string) =>
-    queryOptions({
-      queryKey: ['feedback', 'suggestion', id],
-      queryFn: () => fetchSuggestionDetail({ data: { id } }),
-      staleTime: 10 * 1000,
-    }),
-
-  suggestionStats: () =>
-    queryOptions({
-      queryKey: ['feedback', 'suggestionStats'],
-      queryFn: () => fetchSuggestionStats(),
-      staleTime: 10 * 1000,
     }),
 
   sources: () =>
@@ -47,10 +32,10 @@ export const feedbackQueries = {
       staleTime: 60 * 1000,
     }),
 
-  pipelineStats: () =>
+  incomingCount: () =>
     queryOptions({
-      queryKey: ['feedback', 'pipelineStats'],
-      queryFn: () => fetchFeedbackPipelineStats(),
-      staleTime: 10 * 1000,
+      queryKey: ['feedback', 'incoming-count'],
+      queryFn: () => fetchIncomingSuggestionCount(),
+      staleTime: 60 * 1000,
     }),
 }
