@@ -1,30 +1,97 @@
-import { ChatBubbleLeftIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
+import { HandThumbUpIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { CompactPostCard } from '@/components/shared/compact-post-card'
+import { ExpandableQuote } from '@/components/shared/expandable-quote'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { SourceTypeIcon } from '../source-type-icon'
+import { SourceTypeIcon, SOURCE_TYPE_LABELS } from '../source-type-icon'
 import { useSuggestionActions } from './use-suggestion-actions'
-import type { SuggestionListItem } from '../feedback-types'
+import type { SuggestionListItem, SuggestionGroup } from '../feedback-types'
 
-interface SuggestionTriageRowProps {
-  suggestion: SuggestionListItem
+// ─── Group component ────────────────────────────────────────────────
+
+interface SuggestionSourceGroupProps {
+  group: SuggestionGroup
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
+  onDismissAll: (ids: string[]) => void
 }
 
-export function SuggestionTriageRow({
-  suggestion,
+export function SuggestionSourceGroup({
+  group,
   onCreatePost,
   onResolved,
-}: SuggestionTriageRowProps) {
+  onDismissAll,
+}: SuggestionSourceGroupProps) {
+  const rawItem = group.rawItem
+  // Derive header info from rawItem when available, otherwise from the first suggestion
+  const firstSuggestion = group.suggestions[0]
+  const sourceType = rawItem?.sourceType ?? firstSuggestion.rawItem?.sourceType ?? 'api'
+  const author = rawItem?.author ?? firstSuggestion.rawItem?.author
+  const authorLabel = author?.name ?? author?.email ?? rawItem?.source?.name ?? sourceType
+  const headerDate = rawItem?.sourceCreatedAt ?? firstSuggestion.createdAt
+  const originalText = rawItem?.content?.text ?? ''
+  const allIds = group.suggestions.map((s) => s.id)
+
   return (
-    <CreatePostRow suggestion={suggestion} onCreatePost={onCreatePost} onResolved={onResolved} />
+    <div className="w-full px-4 py-3 space-y-2">
+      {/* Source header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <SourceTypeIcon sourceType={sourceType} size="sm" />
+          <span className="text-[11px] font-medium text-muted-foreground/70">
+            {SOURCE_TYPE_LABELS[sourceType] ?? sourceType}
+          </span>
+          <span className="text-[11px] text-muted-foreground/60 truncate">{authorLabel}</span>
+          <TimeAgo date={headerDate} className="text-[11px] text-muted-foreground/40 shrink-0" />
+        </div>
+        {allIds.length > 1 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground/50 hover:text-muted-foreground h-7 px-2 text-[11px]"
+            onClick={() => onDismissAll(allIds)}
+          >
+            <XMarkIcon className="h-3 w-3 mr-1" />
+            Dismiss all
+          </Button>
+        )}
+      </div>
+
+      {/* Original quote */}
+      {originalText && (
+        <ExpandableQuote
+          text={originalText}
+          className="border-l-2 border-muted-foreground/20 pl-2.5 italic"
+        />
+      )}
+
+      {/* Child suggestions */}
+      <div className="space-y-2 pl-1">
+        {group.suggestions.map((s) =>
+          s.suggestionType === 'vote_on_post' ? (
+            <VoteOnPostChild
+              key={s.id}
+              suggestion={s}
+              onCreatePost={onCreatePost}
+              onResolved={onResolved}
+            />
+          ) : (
+            <CreatePostChild
+              key={s.id}
+              suggestion={s}
+              onCreatePost={onCreatePost}
+              onResolved={onResolved}
+            />
+          )
+        )}
+      </div>
+    </div>
   )
 }
 
-// ─── Create post: original layout ─────────────────────────────────────
+// ─── Child: Create post ─────────────────────────────────────────────
 
-function CreatePostRow({
+function CreatePostChild({
   suggestion,
   onCreatePost,
   onResolved,
@@ -33,89 +100,107 @@ function CreatePostRow({
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
 }) {
-  const rawItem = suggestion.rawItem
-  const content = rawItem?.content
-  const author = rawItem?.author
-  const sourceType = rawItem?.sourceType ?? 'api'
-  const originalText = content?.text ?? ''
-
   const { dismiss, isPending } = useSuggestionActions({
     suggestionId: suggestion.id,
     isMerge: false,
     onResolved,
   })
 
-  return (
-    <div className="w-full px-4 py-3 space-y-2.5">
-      {/* Header: source icon + type badge + author + time */}
-      <div className="flex items-center gap-2">
-        <SourceTypeIcon sourceType={sourceType} size="sm" />
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 shrink-0 border-emerald-300/50 text-emerald-600 dark:border-emerald-700/50 dark:text-emerald-400"
-        >
-          Create post
-        </Badge>
-        <span className="text-[11px] text-muted-foreground/60 truncate">
-          {author?.name ?? author?.email ?? rawItem?.source?.name ?? sourceType}
-        </span>
-        <TimeAgo
-          date={suggestion.createdAt}
-          className="text-[11px] text-muted-foreground/40 shrink-0"
-        />
-      </div>
-
-      {/* Original feedback quote */}
-      {originalText && (
-        <p className="text-xs text-muted-foreground/70 line-clamp-2 border-l-2 border-muted-foreground/20 pl-2.5 italic">
-          {originalText}
-        </p>
-      )}
-
-      {/* AI-derived title + reasoning */}
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground leading-snug">
-          {suggestion.suggestedTitle ?? 'Create post suggestion'}
-        </p>
-        {suggestion.reasoning && (
-          <p className="text-[11px] text-muted-foreground/50 line-clamp-1 flex items-center gap-1.5 mt-1">
-            <ChatBubbleLeftIcon className="h-3 w-3 shrink-0" />
-            {suggestion.reasoning}
-          </p>
-        )}
-      </div>
-
-      {/* Footer: board + actions */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2">
-          {suggestion.board && (
-            <Badge variant="outline" className="text-[10px] inline-flex items-center gap-0.5">
-              <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
-              {suggestion.board.name}
-            </Badge>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onCreatePost(suggestion)}
-            disabled={isPending}
-          >
-            Create post
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => dismiss()}
-            disabled={isPending}
-            className="text-muted-foreground"
-          >
-            Dismiss
-          </Button>
-        </div>
-      </div>
+  const actions = (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => onCreatePost(suggestion)}
+        disabled={isPending}
+      >
+        Create post
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => dismiss()}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Dismiss
+      </Button>
     </div>
+  )
+
+  return (
+    <CompactPostCard
+      dashed
+      label="Create post"
+      title={suggestion.suggestedTitle ?? 'Create post suggestion'}
+      voteCount={0}
+      boardName={suggestion.board?.name}
+      description={suggestion.reasoning}
+      actions={actions}
+    />
+  )
+}
+
+// ─── Child: Vote on post ────────────────────────────────────────────
+
+function VoteOnPostChild({
+  suggestion,
+  onCreatePost,
+  onResolved,
+}: {
+  suggestion: SuggestionListItem
+  onCreatePost: (suggestion: SuggestionListItem) => void
+  onResolved: () => void
+}) {
+  const targetPost = suggestion.targetPost
+  const { accept, dismiss, isPending } = useSuggestionActions({
+    suggestionId: suggestion.id,
+    isMerge: false,
+    onResolved,
+  })
+
+  const similarity = suggestion.similarPosts?.find((p) => p.postId === targetPost?.id)?.similarity
+  const similarityLabel = similarity != null ? ` ${Math.round(similarity * 100)}%` : ''
+
+  const actions = (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <Button size="sm" variant="outline" onClick={() => accept(undefined)} disabled={isPending}>
+        <HandThumbUpIcon className="h-3.5 w-3.5 mr-1" />
+        Vote
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onCreatePost(suggestion)}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Create instead
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => dismiss()}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Dismiss
+      </Button>
+    </div>
+  )
+
+  if (!targetPost) return null
+
+  return (
+    <CompactPostCard
+      label={`Vote on post${similarityLabel}`}
+      title={targetPost.title}
+      voteCount={targetPost.voteCount}
+      boardName={targetPost.boardName}
+      statusName={targetPost.statusName}
+      statusColor={targetPost.statusColor}
+      description={suggestion.reasoning}
+      actions={actions}
+    />
   )
 }

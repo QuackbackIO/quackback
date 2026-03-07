@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { SuggestionsLayout } from './suggestions-layout'
 import { SuggestionsFiltersSidebar } from './suggestions-filter-sidebar'
 import { SuggestionList } from './suggestion-list'
@@ -8,8 +8,11 @@ import { useSuggestionsFilters } from './use-suggestions-filters'
 import {
   useSuggestionsQuery,
   flattenSuggestions,
+  suggestionsKeys,
   type SuggestionsPageResult,
 } from '@/lib/client/hooks/use-suggestions-query'
+import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { dismissSuggestionFn } from '@/lib/server/functions/feedback'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
 import type { SuggestionListItem, FeedbackSourceView } from '../feedback-types'
 
@@ -18,6 +21,7 @@ interface SuggestionsContainerProps {
 }
 
 export function SuggestionsContainer({ initialSuggestions }: SuggestionsContainerProps) {
+  const queryClient = useQueryClient()
   const { filters, setFilters, hasActiveFilters } = useSuggestionsFilters()
 
   // Dialog state for create_post suggestions
@@ -37,11 +41,10 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   const shouldUseInitialData =
     isInitialRender.current && !filters.search && !filters.sourceTypes?.length
 
-  // Server-side query filters — always create_post only
+  // Server-side query filters — all feedback suggestions (create_post + vote_on_post)
   const queryFilters = useMemo(
     () => ({
       status: 'pending' as const,
-      suggestionType: 'create_post' as const,
       sort: filters.sort,
     }),
     [filters.sort]
@@ -115,6 +118,15 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
     [setFilters]
   )
 
+  const handleDismissAll = useCallback(
+    async (ids: string[]) => {
+      await Promise.all(ids.map((id) => dismissSuggestionFn({ data: { id } })))
+      queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    },
+    [queryClient]
+  )
+
   return (
     <>
       <SuggestionsLayout
@@ -142,6 +154,7 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
               onLoadMore={handleLoadMore}
               onCreatePost={setCreateTarget}
               onResolved={handleResolved}
+              onDismissAll={handleDismissAll}
               search={filters.search}
               onSearchChange={handleSearchChange}
               sort={filters.sort}

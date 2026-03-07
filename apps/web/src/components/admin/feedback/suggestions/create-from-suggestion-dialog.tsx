@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ModalFooter } from '@/components/shared/modal-footer'
+import { ExpandableQuote } from '@/components/shared/expandable-quote'
 import { AuthorSelector } from '@/components/shared/author-selector'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -138,7 +139,7 @@ function CreateFromSuggestionContent({
                       className="text-muted-foreground/60 shrink-0"
                     />
                   </div>
-                  <ExpandableSnippet text={snippet} />
+                  <ExpandableQuote text={snippet} />
                 </div>
               </div>
             )}
@@ -258,59 +259,5 @@ function CreateFromSuggestionContent({
         onSubmit={handleSubmit}
       />
     </DialogContent>
-  )
-}
-
-// ============================================================================
-// Expandable Snippet
-// ============================================================================
-
-function ExpandableSnippet({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false)
-  const [isClamped, setIsClamped] = useState(false)
-  const ref = useRef<HTMLParagraphElement>(null)
-
-  useEffect(() => {
-    const el = ref.current
-    if (el) setIsClamped(el.scrollHeight > el.clientHeight + 1)
-  }, [text])
-
-  return (
-    <div className="mt-1">
-      {expanded ? (
-        <>
-          <div className="max-h-56 overflow-y-auto overscroll-contain scrollbar-thin">
-            <p className="text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap">
-              {text}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
-          >
-            Show less
-          </button>
-        </>
-      ) : (
-        <>
-          <p
-            ref={ref}
-            className="text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap line-clamp-2"
-          >
-            {text}
-          </p>
-          {isClamped && (
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground mt-0.5 cursor-pointer"
-            >
-              Show full message
-            </button>
-          )}
-        </>
-      )}
-    </div>
   )
 }

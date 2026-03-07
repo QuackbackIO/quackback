@@ -29,8 +29,10 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   ChatBubbleLeftIcon,
+  HandThumbUpIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
+import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
 import { getLatestMergeStateByDuplicateId } from './post-activity-timeline.utils'
 
 // ============================================
@@ -59,11 +61,44 @@ interface ActivityDisplayConfig {
 
 const actorLabel = (name: string | null) => name ?? 'System'
 
+const SUGGESTION_TYPE_LABELS: Record<string, string> = {
+  create_post: 'create',
+  vote_on_post: 'vote',
+  duplicate_post: 'merge',
+}
+
 const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
   'post.created': {
     icon: PlusIcon,
-    label: (m, a) => `${actorLabel(a)} created this post`,
-    detail: (m) => (m.boardName ? `in ${m.boardName as string}` : undefined),
+    label: (m, a) =>
+      m.source === 'feedback_suggestion'
+        ? `${actorLabel(a)} created this post from feedback`
+        : `${actorLabel(a)} created this post`,
+    detail: (m) => {
+      if (m.source === 'feedback_suggestion') {
+        const typeLabel =
+          SUGGESTION_TYPE_LABELS[m.suggestionType as string] ?? (m.suggestionType as string)
+        return m.suggestionType ? (
+          <span className="text-xs text-muted-foreground">via {typeLabel} suggestion</span>
+        ) : null
+      }
+      return m.boardName ? `in ${m.boardName as string}` : undefined
+    },
+  },
+  'vote.proxy': {
+    icon: HandThumbUpIcon,
+    label: (m, a) => {
+      const voter = m.voterName as string | undefined
+      return voter
+        ? `${actorLabel(a)} voted on behalf of ${voter}`
+        : `${actorLabel(a)} added a proxy vote`
+    },
+    detail: (m) => {
+      const st = m.sourceType as string | undefined
+      return st ? (
+        <span className="text-xs text-muted-foreground">via {SOURCE_TYPE_LABELS[st] ?? st}</span>
+      ) : null
+    },
   },
   'post.deleted': {
     icon: TrashIcon,

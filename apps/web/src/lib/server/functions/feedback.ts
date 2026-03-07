@@ -25,7 +25,7 @@ import {
 
 const listSuggestionsSchema = z.object({
   status: z.enum(['pending', 'accepted', 'dismissed', 'expired']).optional().default('pending'),
-  suggestionType: z.enum(['create_post', 'duplicate_post']).optional(),
+  suggestionType: z.enum(['create_post', 'vote_on_post', 'duplicate_post']).optional(),
   boardId: z.string().optional(),
   sourceIds: z.array(z.string()).optional(),
   sort: z.enum(['newest', 'relevance']).optional().default('newest'),
@@ -139,6 +139,9 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
             },
           },
           board: { columns: { id: true, name: true, slug: true } },
+          resultPost: {
+            columns: { id: true, title: true, content: true, voteCount: true, createdAt: true },
+          },
           signal: {
             columns: {
               id: true,
@@ -191,6 +194,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
         rawItem: null,
         targetPost: ms.targetPost ? { ...ms.targetPost, status: null } : null,
         sourcePost: ms.sourcePost ?? null,
+        similarPosts: null,
         board: null,
         signal: null,
       }))
@@ -230,8 +234,18 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       countsBySource['quackback'] = (countsBySource['quackback'] ?? 0) + mergeTotal
     }
 
+    // Map feedback items: rename resultPost → targetPost for UI consistency
+    const mappedFeedbackItems = feedbackItems.map((item: any) => {
+      const { resultPost, ...rest } = item
+      return {
+        ...rest,
+        targetPost: resultPost ? { ...resultPost, status: null } : null,
+        sourcePost: null,
+      }
+    })
+
     // Combine and sort across both sources
-    const allSorted = [...feedbackItems, ...mergeItems].sort((a, b) => {
+    const allSorted = [...mappedFeedbackItems, ...mergeItems].sort((a, b) => {
       if (data.sort === 'relevance') {
         return (b.similarityScore ?? 0) - (a.similarityScore ?? 0)
       }
@@ -262,7 +276,7 @@ export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).ha
     .where(
       and(
         eq(feedbackSuggestions.status, 'pending'),
-        eq(feedbackSuggestions.suggestionType, 'create_post')
+        inArray(feedbackSuggestions.suggestionType, ['create_post', 'vote_on_post'])
       )
     )
   return { count: result?.count ?? 0 }
@@ -320,6 +334,19 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
 
       if (!suggestion || suggestion.status !== 'pending') {
         return { success: false, error: 'Suggestion not found or already resolved' }
+      }
+
+      // vote_on_post with no edits → cast proxy vote
+      // vote_on_post with edits → admin chose "Create instead", treat as create
+      if (suggestion.suggestionType === 'vote_on_post' && !data.edits) {
+        const { acceptVoteSuggestion } =
+          await import('@/lib/server/domains/feedback/pipeline/suggestion.service')
+
+        const result = await acceptVoteSuggestion(
+          data.id as FeedbackSuggestionId,
+          auth.principal.id as PrincipalId
+        )
+        return { success: true, resultPostId: result.resultPostId }
       }
 
       const { acceptCreateSuggestion } =

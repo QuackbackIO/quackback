@@ -80,6 +80,7 @@ function PostModalContent({
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
+  const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
 
   const post = postQuery.data as PostDetails
 
@@ -435,6 +436,7 @@ function PostModalContent({
               hideSubscribe
               variant="card"
               manageActions={manageActions}
+              feedbackSource={feedbackSource}
             />
           </Suspense>
         </div>

@@ -24,6 +24,7 @@ import {
   listInboxPosts,
   getPostWithDetails,
   getCommentsWithReplies,
+  getPostFeedbackSource,
 } from '@/lib/server/domains/posts/post.query'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
@@ -274,6 +275,21 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
       ...v,
       createdAt: toIsoString(v.createdAt as Date | string),
     }))
+  })
+
+/**
+ * Get feedback source for a post (if created from feedback pipeline)
+ */
+export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const source = await getPostFeedbackSource(data.id as PostId)
+    if (!source) return null
+    return {
+      ...source,
+      createdAt: toIsoString(source.createdAt),
+    }
   })
 
 // ============================================

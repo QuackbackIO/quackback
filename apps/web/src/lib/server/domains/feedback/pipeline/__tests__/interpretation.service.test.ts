@@ -66,9 +66,11 @@ vi.mock('../embedding.service', () => ({
 }))
 
 const mockCreatePostSuggestion = vi.fn()
+const mockCreateVoteSuggestion = vi.fn()
 
 vi.mock('../suggestion.service', () => ({
   createPostSuggestion: (...args: unknown[]) => mockCreatePostSuggestion(...args),
+  createVoteSuggestion: (...args: unknown[]) => mockCreateVoteSuggestion(...args),
 }))
 
 vi.mock('../prompts/suggestion.prompt', () => ({
@@ -133,7 +135,7 @@ describe('interpretation.service', () => {
     expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
   })
 
-  it('should not create suggestion for external source with similar match', async () => {
+  it('should create vote_on_post suggestion for external source with high-similarity match', async () => {
     mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
     mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
     mockRawItemFindFirst.mockResolvedValueOnce({
@@ -151,12 +153,38 @@ describe('interpretation.service', () => {
         similarity: 0.85,
       },
     ])
+
+    // Mock LLM for suggestion generation (vote suggestions also generate title/body)
+    mockOpenAI.chat.completions.create.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              title: 'Add CSV Export',
+              body: 'Users need CSV export',
+              boardId: 'board_1',
+              reasoning: 'Feature request',
+            }),
+          },
+        },
+      ],
+    })
+
     mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
 
     const { interpretSignal } = await import('../interpretation.service')
     await interpretSignal(signalId)
 
     expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
+    expect(mockCreateVoteSuggestion).toHaveBeenCalledTimes(1)
+    expect(mockCreateVoteSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resultPostId: 'post_target',
+        similarPosts: expect.arrayContaining([
+          expect.objectContaining({ postId: 'post_target', similarity: 0.85 }),
+        ]),
+      })
+    )
   })
 
   it('should create post suggestion for external source with no match', async () => {
@@ -315,10 +343,10 @@ describe('interpretation.service', () => {
     const { interpretSignal } = await import('../interpretation.service')
     await interpretSignal(signalId)
 
-    // findSimilarPosts should be called with the signal embedding
+    // findSimilarPosts should be called with the signal embedding and lowered threshold
     expect(mockFindSimilarPosts).toHaveBeenCalledWith(
       mockEmbedding,
-      expect.objectContaining({ minSimilarity: 0.8 })
+      expect.objectContaining({ minSimilarity: 0.55 })
     )
   })
 })

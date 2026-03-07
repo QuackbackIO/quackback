@@ -7,6 +7,8 @@
 
 import { db, eq, and, feedbackSuggestions, posts, votes, sql } from '@/lib/server/db'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
 import { sendFeedbackAttributionEmail } from './feedback-attribution-email'
 import type {
   FeedbackSuggestionId,
@@ -17,6 +19,8 @@ import type {
   FeedbackSignalId,
   StatusId,
 } from '@quackback/ids'
+
+type SimilarPostEntry = { postId: string; title: string; similarity: number; voteCount: number }
 
 /**
  * Create a create_post suggestion: "Create a new post from this feedback"
@@ -29,6 +33,7 @@ export async function createPostSuggestion(opts: {
   suggestedBody: string
   reasoning: string
   embedding?: number[]
+  similarPosts?: SimilarPostEntry[]
 }): Promise<FeedbackSuggestionId> {
   const vectorStr = opts.embedding ? `[${opts.embedding.join(',')}]` : null
 
@@ -42,6 +47,42 @@ export async function createPostSuggestion(opts: {
       suggestedTitle: opts.suggestedTitle,
       suggestedBody: opts.suggestedBody,
       reasoning: opts.reasoning,
+      similarPosts: opts.similarPosts ?? null,
+      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as any }),
+    } as any)
+    .returning({ id: feedbackSuggestions.id })
+
+  return inserted.id
+}
+
+/**
+ * Create a vote_on_post suggestion: "Vote on an existing post on behalf of this feedback author"
+ */
+export async function createVoteSuggestion(opts: {
+  rawFeedbackItemId: RawFeedbackItemId
+  signalId?: FeedbackSignalId
+  resultPostId: PostId
+  boardId?: BoardId
+  suggestedTitle: string
+  suggestedBody: string
+  reasoning: string
+  embedding?: number[]
+  similarPosts?: SimilarPostEntry[]
+}): Promise<FeedbackSuggestionId> {
+  const vectorStr = opts.embedding ? `[${opts.embedding.join(',')}]` : null
+
+  const [inserted] = await db
+    .insert(feedbackSuggestions)
+    .values({
+      suggestionType: 'vote_on_post',
+      rawFeedbackItemId: opts.rawFeedbackItemId,
+      signalId: opts.signalId ?? null,
+      boardId: opts.boardId ?? null,
+      resultPostId: opts.resultPostId,
+      suggestedTitle: opts.suggestedTitle,
+      suggestedBody: opts.suggestedBody,
+      reasoning: opts.reasoning,
+      similarPosts: opts.similarPosts ?? null,
       ...(vectorStr && { embedding: sql`${vectorStr}::vector` as any }),
     } as any)
     .returning({ id: feedbackSuggestions.id })
@@ -75,7 +116,7 @@ export async function acceptCreateSuggestion(
   if (
     !suggestion ||
     suggestion.status !== 'pending' ||
-    suggestion.suggestionType !== 'create_post'
+    (suggestion.suggestionType !== 'create_post' && suggestion.suggestionType !== 'vote_on_post')
   ) {
     throw new Error('Invalid suggestion for create accept')
   }
@@ -134,6 +175,19 @@ export async function acceptCreateSuggestion(
     await sendFeedbackAttributionEmail(authorPrincipalId, newPostId, resolvedByPrincipalId)
   }
 
+  // Record activity — uses post.created with feedback provenance in metadata
+  createActivity({
+    postId: newPostId,
+    principalId: resolvedByPrincipalId,
+    type: 'post.created',
+    metadata: {
+      source: 'feedback_suggestion',
+      suggestionId,
+      suggestionType: suggestion.suggestionType,
+      rawFeedbackItemId: suggestion.rawFeedbackItemId,
+    },
+  })
+
   // Mark suggestion as accepted
   await db
     .update(feedbackSuggestions)
@@ -147,6 +201,84 @@ export async function acceptCreateSuggestion(
     .where(eq(feedbackSuggestions.id, suggestionId))
 
   return { success: true, resultPostId: newPostId }
+}
+
+/**
+ * Accept a vote_on_post suggestion: cast a proxy vote on the matched post
+ * on behalf of the feedback author.
+ */
+export async function acceptVoteSuggestion(
+  suggestionId: FeedbackSuggestionId,
+  resolvedByPrincipalId: PrincipalId
+): Promise<{ success: boolean; resultPostId: PostId }> {
+  const suggestion = await db.query.feedbackSuggestions.findFirst({
+    where: eq(feedbackSuggestions.id, suggestionId),
+    with: {
+      rawItem: {
+        columns: { principalId: true, sourceType: true, externalUrl: true, author: true },
+      },
+    },
+  })
+
+  if (
+    !suggestion ||
+    suggestion.status !== 'pending' ||
+    suggestion.suggestionType !== 'vote_on_post'
+  ) {
+    throw new Error('Invalid suggestion for vote accept')
+  }
+
+  const targetPostId = suggestion.resultPostId as PostId
+  if (!targetPostId) {
+    throw new Error('No target post for vote suggestion')
+  }
+
+  const voterPrincipalId = suggestion.rawItem?.principalId as PrincipalId | undefined
+  if (!voterPrincipalId) {
+    throw new Error('Cannot cast proxy vote: feedback author has no linked account')
+  }
+
+  const sourceType = suggestion.rawItem?.sourceType ?? 'feedback'
+  const externalUrl = suggestion.rawItem?.externalUrl ?? undefined
+  const voterName = (suggestion.rawItem?.author as { name?: string } | null)?.name ?? null
+
+  await addVoteOnBehalf(
+    targetPostId,
+    voterPrincipalId,
+    {
+      type: sourceType,
+      externalUrl: externalUrl ?? '',
+    },
+    suggestionId
+  )
+
+  // Record activity: "Admin X voted on behalf of User Y via Slack"
+  createActivity({
+    postId: targetPostId,
+    principalId: resolvedByPrincipalId,
+    type: 'vote.proxy',
+    metadata: {
+      voterPrincipalId,
+      voterName,
+      sourceType,
+      suggestionId,
+      rawFeedbackItemId: suggestion.rawFeedbackItemId,
+    },
+  })
+
+  // Mark suggestion as accepted
+  await db
+    .update(feedbackSuggestions)
+    .set({
+      status: 'accepted',
+      resultPostId: targetPostId,
+      resolvedAt: new Date(),
+      resolvedByPrincipalId: resolvedByPrincipalId,
+      updatedAt: new Date(),
+    })
+    .where(eq(feedbackSuggestions.id, suggestionId))
+
+  return { success: true, resultPostId: targetPostId }
 }
 
 /**

@@ -190,6 +190,20 @@
       "when": 1772813136056,
       "tag": "0027_slack_channel_monitors",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1772900000000,
+      "tag": "0028_vote_on_post_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1772910000000,
+      "tag": "0029_feedback_indexes",
+      "breakpoints": true
     }
   ]
 }
