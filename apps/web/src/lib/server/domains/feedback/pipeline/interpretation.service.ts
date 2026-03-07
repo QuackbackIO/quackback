@@ -56,7 +56,7 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
     // separate merge_suggestions system.
     const rawItem = await db.query.rawFeedbackItems.findFirst({
       where: eq(rawFeedbackItems.id, signal.rawFeedbackItemId),
-      columns: { sourceType: true, externalId: true, content: true },
+      columns: { sourceType: true, externalId: true, content: true, contextEnvelope: true },
     })
 
     if (!rawItem) {
@@ -64,6 +64,11 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
     }
 
     const isQuackback = rawItem.sourceType === 'quackback'
+
+    // Extract user-provided boardId from context metadata (e.g. Slack shortcut board selection)
+    const contextMetadata = (rawItem.contextEnvelope as Record<string, unknown> | null)
+      ?.metadata as Record<string, unknown> | undefined
+    const userProvidedBoardId = contextMetadata?.boardId as string | undefined
 
     if (!isQuackback) {
       // External source: check if similar posts exist to decide whether to suggest a new post
@@ -86,6 +91,7 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
             },
             sourceContent: rawItem.content as { subject?: string; text?: string },
             embedding: signalEmbedding ?? undefined,
+            userProvidedBoardId,
           })
         }
       } else {
@@ -100,6 +106,7 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
             evidence: (signal.evidence ?? []) as string[],
           },
           sourceContent: rawItem.content as { subject?: string; text?: string },
+          userProvidedBoardId,
         })
       }
     }
@@ -144,6 +151,8 @@ async function generateCreatePostSuggestion(opts: {
   }
   sourceContent: { subject?: string; text?: string }
   embedding?: number[]
+  /** Board explicitly chosen by the user (e.g. Slack shortcut). Takes precedence over LLM choice. */
+  userProvidedBoardId?: string
 }): Promise<void> {
   const openai = getOpenAI()
 
@@ -152,6 +161,11 @@ async function generateCreatePostSuggestion(opts: {
   const allBoards = await db.query.boards.findMany({
     columns: { id: true, name: true, slug: true },
   })
+
+  // Validate user-provided boardId exists
+  const validUserBoardId = opts.userProvidedBoardId
+    ? allBoards.find((b) => b.id === opts.userProvidedBoardId)?.id
+    : undefined
 
   if (openai) {
     const prompt = buildSuggestionPrompt({
@@ -178,7 +192,7 @@ async function generateCreatePostSuggestion(opts: {
         await createPostSuggestion({
           rawFeedbackItemId: opts.rawFeedbackItemId,
           signalId: opts.signalId,
-          boardId: result.boardId as BoardId | undefined,
+          boardId: (validUserBoardId ?? result.boardId) as BoardId | undefined,
           suggestedTitle: result.title,
           suggestedBody: result.body,
           reasoning: result.reasoning,
@@ -195,7 +209,7 @@ async function generateCreatePostSuggestion(opts: {
   await createPostSuggestion({
     rawFeedbackItemId: opts.rawFeedbackItemId,
     signalId: opts.signalId,
-    boardId: allBoards[0]?.id as BoardId | undefined,
+    boardId: (validUserBoardId ?? allBoards[0]?.id) as BoardId | undefined,
     suggestedTitle: opts.signal.summary.slice(0, 100),
     suggestedBody: opts.sourceContent.text?.slice(0, 500) ?? opts.signal.summary,
     reasoning: `Auto-generated from ${opts.signal.signalType} signal`,

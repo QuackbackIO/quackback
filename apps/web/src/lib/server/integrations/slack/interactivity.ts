@@ -7,7 +7,6 @@
 import { WebClient } from '@slack/web-api'
 import { db, eq, and, feedbackSources, integrations } from '@/lib/server/db'
 import { getPlatformCredentials } from '@/lib/server/domains/platform-credentials/platform-credential.service'
-import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { getBaseUrl } from '@/lib/server/config'
 import { decryptSecrets } from '../encryption'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
@@ -84,8 +83,6 @@ export async function handleSlackInteractivity(request: Request): Promise<Respon
  * Handle a message shortcut action - opens the feedback modal.
  */
 async function handleMessageAction(payload: any, client: WebClient): Promise<Response> {
-  const boardList = await listBoards()
-
   const messageText = payload.message?.text || ''
   const channelName = payload.channel?.name || 'unknown'
   const channelId = payload.channel?.id || ''
@@ -100,57 +97,27 @@ async function handleMessageAction(payload: any, client: WebClient): Promise<Res
     teamId,
   })
 
-  const boardOptions = boardList.map((b) => ({
-    text: { type: 'plain_text' as const, text: b.name },
-    value: b.id,
-  }))
-
+  // Only field: the feedback content. Title, board, status, and author
+  // are all handled downstream — AI generates suggestions, admin refines
+  // when creating the post from the Incoming tab.
   const blocks: any[] = [
     {
-      type: 'input',
-      block_id: 'title_block',
-      label: { type: 'plain_text', text: 'Title' },
-      element: {
-        type: 'plain_text_input',
-        action_id: 'title',
-        placeholder: { type: 'plain_text', text: 'Brief summary of the feedback' },
-      },
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `From *#${channelName}*` }],
     },
     {
       type: 'input',
       block_id: 'details_block',
-      label: { type: 'plain_text', text: 'Details' },
+      label: { type: 'plain_text', text: 'Feedback' },
       element: {
         type: 'plain_text_input',
         action_id: 'details',
         multiline: true,
         initial_value: messageText,
+        placeholder: { type: 'plain_text', text: 'Edit or add context before sending' },
       },
-      optional: true,
     },
   ]
-
-  // Only add board selector if boards exist
-  if (boardOptions.length > 0) {
-    blocks.push({
-      type: 'input',
-      block_id: 'board_block',
-      label: { type: 'plain_text', text: 'Board' },
-      optional: true,
-      element: {
-        type: 'static_select',
-        action_id: 'board',
-        placeholder: { type: 'plain_text', text: 'Select a board' },
-        options: boardOptions,
-      },
-    })
-  }
-
-  // Context line
-  blocks.push({
-    type: 'context',
-    elements: [{ type: 'mrkdwn', text: `From *#${channelName}*` }],
-  })
 
   try {
     await client.views.open({
@@ -182,9 +149,11 @@ async function handleViewSubmission(
   integrationId: IntegrationId
 ): Promise<Response> {
   const values = payload.view?.state?.values || {}
-  const title = values.title_block?.title?.value || ''
   const details = values.details_block?.details?.value || ''
-  const boardId = values.board_block?.board?.selected_option?.value
+
+  if (!details.trim()) {
+    return new Response('', { status: 200 })
+  }
 
   const metadata = JSON.parse(payload.view?.private_metadata || '{}')
   const { channelId, channelName, messageTs, teamId } = metadata
@@ -218,12 +187,12 @@ async function handleViewSubmission(
             externalUserId: userId,
           },
           content: {
-            subject: title,
-            text: details || title,
+            subject: '',
+            text: details,
           },
           contextEnvelope: {
             sourceChannel: { id: channelId, name: channelName },
-            metadata: { messageTs, teamId, boardId, ingestionMode: 'shortcut' },
+            metadata: { messageTs, teamId, ingestionMode: 'shortcut' },
           },
         },
         {
@@ -236,12 +205,14 @@ async function handleViewSubmission(
       if (channelId) {
         const baseUrl = getBaseUrl()
         const incomingUrl = `${baseUrl}/admin/feedback/incoming`
+        const snippet = details.length > 80 ? details.slice(0, 77) + '...' : details
+        const fallbackText = `Feedback sent to Quackback: ${snippet}`
         const confirmationBlocks = [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `*Feedback sent to Quackback*\n${title}`,
+              text: `*Feedback sent to Quackback*\n${snippet}`,
             },
           },
           {
@@ -259,14 +230,14 @@ async function handleViewSubmission(
           await client.chat.postEphemeral({
             channel: channelId,
             user: userId,
-            text: `Feedback sent to Quackback: ${title}`,
+            text: fallbackText,
             blocks: confirmationBlocks,
           })
         } catch {
           // Bot not in channel - send DM instead
           await client.chat.postMessage({
             channel: userId,
-            text: `Feedback sent to Quackback: ${title}`,
+            text: fallbackText,
             blocks: confirmationBlocks,
             unfurl_links: false,
           })
