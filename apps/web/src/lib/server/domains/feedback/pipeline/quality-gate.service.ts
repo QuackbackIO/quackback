@@ -5,8 +5,11 @@
  * spending tokens on the full extraction model. Uses a tiered approach:
  *
  * 1. Hard skip: trivially empty content (< 5 words)
- * 2. Auto-pass: high-intent sources (quackback, api) with 15+ words
+ * 2. Auto-pass: high-intent sources (quackback, api, slack shortcut) with 15+ words
  * 3. LLM gate: everything else gets a cheap model call
+ *
+ * For channel-monitored items, the LLM gate also generates a suggested title
+ * since there is no human-provided one.
  */
 
 import { getOpenAI } from '@/lib/server/domains/ai/config'
@@ -24,11 +27,34 @@ function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 1).length
 }
 
+function getIngestionMode(context: RawFeedbackItemContextEnvelope): string | undefined {
+  return (context.metadata as Record<string, unknown> | undefined)?.ingestionMode as
+    | string
+    | undefined
+}
+
+function isHighIntent(item: {
+  sourceType: string
+  context: RawFeedbackItemContextEnvelope
+}): boolean {
+  if (HIGH_INTENT_SOURCES.has(item.sourceType)) return true
+  // Slack shortcut = human-curated, high trust
+  if (item.sourceType === 'slack' && getIngestionMode(item.context) === 'shortcut') return true
+  return false
+}
+
+export interface QualityGateResult {
+  extract: boolean
+  reason: string
+  /** AI-generated title for channel-monitored items that pass the gate. */
+  suggestedTitle?: string
+}
+
 export async function shouldExtract(item: {
   sourceType: string
   content: RawFeedbackContent
   context: RawFeedbackItemContextEnvelope
-}): Promise<{ extract: boolean; reason: string }> {
+}): Promise<QualityGateResult> {
   const combinedText = [item.content.subject, item.content.text].filter(Boolean).join(' ')
   const words = wordCount(combinedText)
 
@@ -38,7 +64,7 @@ export async function shouldExtract(item: {
   }
 
   // Tier 2: Auto-pass — high-intent sources with enough substance
-  if (HIGH_INTENT_SOURCES.has(item.sourceType) && words >= 15) {
+  if (isHighIntent(item) && words >= 15) {
     return { extract: true, reason: 'high-intent source with sufficient content' }
   }
 
@@ -48,6 +74,8 @@ export async function shouldExtract(item: {
     // AI not configured — fall back to permissive behavior
     return { extract: words >= 15, reason: 'AI not configured, falling back to word count' }
   }
+
+  const isChannelMonitor = getIngestionMode(item.context) === 'channel_monitor'
 
   try {
     const prompt = buildQualityGatePrompt(item)
@@ -59,25 +87,26 @@ export async function shouldExtract(item: {
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' },
           temperature: 0,
-          max_tokens: 100,
+          max_tokens: isChannelMonitor ? 200 : 100,
         }),
       { maxRetries: 2, baseDelayMs: 500 }
     )
 
     const responseText = completion.choices[0]?.message?.content
     if (!responseText) {
-      // Empty response — err on the side of extraction
       return { extract: true, reason: 'quality gate returned empty response' }
     }
 
     const result = JSON.parse(stripCodeFences(responseText)) as {
       extract?: boolean
       reason?: string
+      suggestedTitle?: string
     }
 
     return {
       extract: result.extract !== false,
       reason: result.reason ?? 'no reason provided',
+      suggestedTitle: result.suggestedTitle,
     }
   } catch (error) {
     // Quality gate failure should never block the pipeline — pass through

@@ -16,7 +16,7 @@ import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { integrations } from './integrations'
 import { boards } from './boards'
-import { posts } from './posts'
+import { posts, votes } from './posts'
 import { principal } from './auth'
 import type {
   RawFeedbackAuthor,
@@ -102,6 +102,7 @@ export const rawFeedbackItems = pgTable(
     index('raw_feedback_state_idx').on(t.processingState),
     index('raw_feedback_source_type_idx').on(t.sourceType),
     index('raw_feedback_created_idx').on(t.createdAt),
+    index('raw_feedback_principal_idx').on(t.principalId),
   ]
 )
 
@@ -161,7 +162,7 @@ export const feedbackSuggestions = pgTable(
   'feedback_suggestions',
   {
     id: typeIdWithDefault('feedback_suggestion')('id').primaryKey(),
-    suggestionType: varchar('suggestion_type', { length: 20 }).notNull(), // 'create_post'
+    suggestionType: varchar('suggestion_type', { length: 20 }).notNull(), // 'create_post' | 'vote_on_post'
     status: varchar('status', { length: 20 }).notNull().default('pending'), // 'pending' | 'accepted' | 'dismissed' | 'expired'
     rawFeedbackItemId: typeIdColumn('raw_feedback')('raw_feedback_item_id')
       .notNull()
@@ -177,6 +178,10 @@ export const feedbackSuggestions = pgTable(
     suggestedBody: text('suggested_body'),
     reasoning: text('reasoning'),
     embedding: vector1536('embedding'),
+    similarPosts:
+      jsonb('similar_posts').$type<
+        Array<{ postId: string; title: string; similarity: number; voteCount: number }>
+      >(),
     resultPostId: typeIdColumnNullable('post')('result_post_id').references(() => posts.id, {
       onDelete: 'set null',
     }),
@@ -193,6 +198,8 @@ export const feedbackSuggestions = pgTable(
     index('feedback_suggestions_type_idx').on(t.suggestionType),
     index('feedback_suggestions_raw_item_idx').on(t.rawFeedbackItemId),
     index('feedback_suggestions_created_idx').on(t.createdAt),
+    index('feedback_suggestions_result_post_idx').on(t.resultPostId),
+    index('feedback_suggestions_signal_idx').on(t.signalId),
   ]
 )
 
@@ -266,9 +273,11 @@ export const rawFeedbackItemsRelations = relations(rawFeedbackItems, ({ one, man
     relationName: 'rawFeedbackAuthor',
   }),
   signals: many(feedbackSignals),
+  suggestions: many(feedbackSuggestions),
 }))
 
-export const feedbackSuggestionsRelations = relations(feedbackSuggestions, ({ one }) => ({
+export const feedbackSuggestionsRelations = relations(feedbackSuggestions, ({ one, many }) => ({
+  proxyVotes: many(votes, { relationName: 'feedbackSuggestionVotes' }),
   rawItem: one(rawFeedbackItems, {
     fields: [feedbackSuggestions.rawFeedbackItemId],
     references: [rawFeedbackItems.id],

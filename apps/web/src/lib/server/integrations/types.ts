@@ -143,6 +143,8 @@ export interface IntegrationDefinition {
   platformCredentials: PlatformCredentialField[]
   /** Feedback source connector for ingesting feedback from this platform */
   feedbackSource?: FeedbackConnector
+  /** Called after an integration is saved (connect or reconnect). Receives the integration ID to provision dependent resources. */
+  onConnect?(integrationId: import('@quackback/ids').IntegrationId): Promise<void>
   /** Called before an integration is deleted. Receives decrypted secrets, config, and platform credentials to revoke tokens or clean up. */
   onDisconnect?(
     secrets: Record<string, unknown>,

@@ -17,11 +17,14 @@ import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/po
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import {
   listInboxPosts,
   getPostWithDetails,
   getCommentsWithReplies,
+  getPostFeedbackSource,
 } from '@/lib/server/domains/posts/post.query'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
@@ -87,6 +90,7 @@ const createPostSchema = z.object({
   boardId: z.string(),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional().default([]),
+  authorPrincipalId: z.string().optional(),
 })
 
 const getPostSchema = z.object({
@@ -273,6 +277,21 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
     }))
   })
 
+/**
+ * Get feedback source for a post (if created from feedback pipeline)
+ */
+export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const source = await getPostFeedbackSource(data.id as PostId)
+    if (!source) return null
+    return {
+      ...source,
+      createdAt: toIsoString(source.createdAt),
+    }
+  })
+
 // ============================================
 // Write Operations
 // ============================================
@@ -287,6 +306,29 @@ export const createPostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
+      // Resolve author: use specified principal or fall back to authenticated user
+      let author: {
+        principalId: PrincipalId
+        userId?: UserId
+        name?: string
+        email?: string
+      } = {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        name: auth.user.name,
+        email: auth.user.email,
+      }
+
+      if (data.authorPrincipalId && data.authorPrincipalId !== auth.principal.id) {
+        const selectedPrincipal = await getMemberById(data.authorPrincipalId as PrincipalId)
+        if (selectedPrincipal) {
+          author = {
+            principalId: selectedPrincipal.id,
+            name: selectedPrincipal.displayName ?? undefined,
+          }
+        }
+      }
+
       const result = await createPost(
         {
           title: data.title,
@@ -296,12 +338,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
           statusId: data.statusId as StatusId | undefined,
           tagIds: data.tagIds as TagId[] | undefined,
         },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          name: auth.user.name,
-          email: auth.user.email,
-        }
+        author
       )
       console.log(`[fn:posts] createPostFn: id=${result.id}`)
 
@@ -322,14 +359,23 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await updatePost(data.id as PostId, {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-        ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
-      })
+      const result = await updatePost(
+        data.id as PostId,
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
+        },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
       console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -394,9 +440,9 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] restorePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await restorePost(data.id as PostId)
+      const result = await restorePost(data.id as PostId, auth.principal.id)
       console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -413,11 +459,20 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      await updatePost(data.id as PostId, {
-        tagIds: data.tagIds as TagId[],
-      })
+      await updatePost(
+        data.id as PostId,
+        {
+          tagIds: data.tagIds as TagId[],
+        },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
       console.log(`[fn:posts] updatePostTagsFn: updated id=${data.id}`)
       return { id: data.id }
     } catch (error) {
@@ -434,12 +489,18 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] toggleCommentsLockFn: id=${data.id}, locked=${data.locked}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await db
         .update(posts)
         .set({ isCommentsLocked: data.locked })
         .where(eq(posts.id, data.id as PostId))
+
+      createActivity({
+        postId: data.id as PostId,
+        principalId: auth.principal.id,
+        type: data.locked ? 'comments.locked' : 'comments.unlocked',
+      })
 
       console.log(`[fn:posts] toggleCommentsLockFn: updated id=${data.id}`)
       return { id: data.id, isCommentsLocked: data.locked }

@@ -161,6 +161,8 @@ export {
   integrationPlatformCredentialsRelations,
   integrations,
   integrationsRelations,
+  slackChannelMonitors,
+  slackChannelMonitorsRelations,
   // Schema tables - external links
   postExternalLinks,
   postExternalLinksRelations,
@@ -219,6 +221,9 @@ export {
   // Schema tables - merge suggestions
   mergeSuggestions,
   mergeSuggestionsRelations,
+  // Schema tables - activity
+  postActivity,
+  postActivityRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

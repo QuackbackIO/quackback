@@ -479,11 +479,20 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
-        const result = await updatePost(args.postId as PostId, {
-          statusId: args.statusId as StatusId | undefined,
-          tagIds: args.tagIds as TagId[] | undefined,
-          ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
-        })
+        const result = await updatePost(
+          args.postId as PostId,
+          {
+            statusId: args.statusId as StatusId | undefined,
+            tagIds: args.tagIds as TagId[] | undefined,
+            ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
+          },
+          {
+            principalId: auth.principalId,
+            userId: auth.userId,
+            email: auth.email,
+            displayName: auth.name,
+          }
+        )
 
         return jsonResult({
           id: result.id,
@@ -823,12 +832,19 @@ Examples:
       if (roleDenied) return roleDenied
       try {
         if (args.action === 'add') {
-          await addPostToRoadmap({
-            postId: args.postId as PostId,
-            roadmapId: args.roadmapId as RoadmapId,
-          })
+          await addPostToRoadmap(
+            {
+              postId: args.postId as PostId,
+              roadmapId: args.roadmapId as RoadmapId,
+            },
+            auth.principalId
+          )
         } else {
-          await removePostFromRoadmap(args.postId as PostId, args.roadmapId as RoadmapId)
+          await removePostFromRoadmap(
+            args.postId as PostId,
+            args.roadmapId as RoadmapId,
+            auth.principalId
+          )
         }
 
         return jsonResult({
@@ -942,7 +958,7 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
-        const result = await restorePost(args.postId as PostId)
+        const result = await restorePost(args.postId as PostId, auth.principalId)
 
         return jsonResult({ restored: true, postId: args.postId, title: result.title })
       } catch (err) {

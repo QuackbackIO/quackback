@@ -25,8 +25,9 @@ import {
   userSegments,
   type Roadmap,
 } from '@/lib/server/db'
-import { toUuid, type RoadmapId, type PostId } from '@quackback/ids'
+import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
@@ -217,7 +218,10 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
 /**
  * Add a post to a roadmap
  */
-export async function addPostToRoadmap(input: AddPostToRoadmapInput): Promise<void> {
+export async function addPostToRoadmap(
+  input: AddPostToRoadmapInput,
+  actorPrincipalId?: PrincipalId
+): Promise<void> {
   console.log(
     `[domain:roadmaps] addPostToRoadmap: postId=${input.postId}, roadmapId=${input.roadmapId}`
   )
@@ -257,12 +261,23 @@ export async function addPostToRoadmap(input: AddPostToRoadmapInput): Promise<vo
     roadmapId: input.roadmapId,
     position,
   })
+
+  createActivity({
+    postId: input.postId,
+    principalId: actorPrincipalId ?? null,
+    type: 'roadmap.added',
+    metadata: { roadmapName: roadmap.name },
+  })
 }
 
 /**
  * Remove a post from a roadmap
  */
-export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId): Promise<void> {
+export async function removePostFromRoadmap(
+  postId: PostId,
+  roadmapId: RoadmapId,
+  actorPrincipalId?: PrincipalId
+): Promise<void> {
   console.log(`[domain:roadmaps] removePostFromRoadmap: postId=${postId}, roadmapId=${roadmapId}`)
   // Remove the post from the roadmap (single delete, check result)
   const result = await db
@@ -273,6 +288,19 @@ export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId
   if (result.length === 0) {
     throw new NotFoundError('POST_NOT_IN_ROADMAP', `Post ${postId} is not in roadmap ${roadmapId}`)
   }
+
+  // Look up roadmap name for the activity record
+  const roadmap = await db.query.roadmaps.findFirst({
+    where: eq(roadmaps.id, roadmapId),
+    columns: { name: true },
+  })
+
+  createActivity({
+    postId,
+    principalId: actorPrincipalId ?? null,
+    type: 'roadmap.removed',
+    metadata: { roadmapName: roadmap?.name ?? '' },
+  })
 }
 
 /**

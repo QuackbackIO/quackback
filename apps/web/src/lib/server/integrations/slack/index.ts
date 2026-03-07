@@ -1,6 +1,7 @@
 import type { IntegrationDefinition } from '../types'
 import { slackHook } from './hook'
 import { getSlackOAuthUrl, exchangeSlackCode, revokeSlackToken } from './oauth'
+import { ensureSlackFeedbackSource } from './feedback-source'
 import { slackCatalog } from './catalog'
 
 export const slackIntegration: IntegrationDefinition = {
@@ -25,6 +26,14 @@ export const slackIntegration: IntegrationDefinition = {
       sensitive: true,
       helpUrl: 'https://api.slack.com/apps',
     },
+    {
+      key: 'signingSecret',
+      label: 'Signing Secret',
+      sensitive: true,
+      helpText: 'Found under Basic Information > App Credentials',
+      helpUrl: 'https://api.slack.com/apps',
+    },
   ],
+  onConnect: (integrationId) => ensureSlackFeedbackSource(integrationId),
   onDisconnect: (secrets) => revokeSlackToken(secrets.accessToken as string),
 }

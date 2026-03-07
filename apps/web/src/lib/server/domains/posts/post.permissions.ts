@@ -19,6 +19,7 @@ import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult, UserEditPostInput } from './post.types'
 
@@ -460,6 +461,12 @@ export async function softDeletePost(
   if (!updatedPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
+
+  createActivity({
+    postId,
+    principalId: actor.principalId,
+    type: 'post.deleted',
+  })
 }
 
 /**
@@ -470,7 +477,7 @@ export async function softDeletePost(
  * @param postId - Post ID to restore
  * @returns Restored post
  */
-export async function restorePost(postId: PostId): Promise<Post> {
+export async function restorePost(postId: PostId, actorPrincipalId?: PrincipalId): Promise<Post> {
   console.log(`[domain:post-permissions] restorePost: postId=${postId}`)
   // Get the post first to validate it exists and is deleted
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -504,6 +511,12 @@ export async function restorePost(postId: PostId): Promise<Post> {
   if (!restoredPost) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
+
+  createActivity({
+    postId,
+    principalId: actorPrincipalId ?? null,
+    type: 'post.restored',
+  })
 
   return restoredPost
 }

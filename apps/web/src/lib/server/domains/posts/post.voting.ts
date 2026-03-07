@@ -156,7 +156,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
 export async function addVoteOnBehalf(
   postId: PostId,
   principalId: PrincipalId,
-  source?: { type: string; externalUrl: string }
+  source?: { type: string; externalUrl: string },
+  feedbackSuggestionId?: string | null
 ): Promise<VoteResult> {
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
@@ -165,6 +166,7 @@ export async function addVoteOnBehalf(
 
   const sourceType = source?.type ?? null
   const sourceExternalUrl = source?.externalUrl ?? null
+  const suggestionUuid = feedbackSuggestionId ? toUuid(feedbackSuggestionId) : null
 
   // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
   const result = await db.execute<{
@@ -182,8 +184,8 @@ export async function addVoteOnBehalf(
       WHERE id = (SELECT board_id FROM post_check)
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, NOW()
+      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, updated_at)
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${suggestionUuid}::uuid, NOW()
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING

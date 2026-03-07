@@ -8,11 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
+import { DuplicateSummaryBar } from '@/components/admin/feedback/signal-summary-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -34,6 +36,12 @@ interface FeedbackTableViewProps {
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
   onToggleSegment?: (id: string) => void
+  /** Duplicate counts per post (for badges) */
+  duplicateCountByPostId?: Map<PostId, number>
+  /** Whether duplicates filter is active */
+  duplicatesFilter?: boolean
+  /** Toggle duplicates filter */
+  onToggleDuplicatesFilter?: () => void
 }
 
 function TableSkeleton() {
@@ -91,6 +99,9 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
+  duplicateCountByPostId,
+  duplicatesFilter,
+  onToggleDuplicatesFilter,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
@@ -166,6 +177,11 @@ export function FeedbackTableView({
         {headerAction}
       </div>
 
+      {/* Duplicate Summary Bar */}
+      {onToggleDuplicatesFilter && (
+        <DuplicateSummaryBar active={!!duplicatesFilter} onToggle={onToggleDuplicatesFilter} />
+      )}
+
       {/* Active Filters Bar - Always visible */}
       <div className="mt-2">
         <ActiveFiltersBar
@@ -185,6 +201,20 @@ export function FeedbackTableView({
     </div>
   )
 
+  // Filter posts by duplicates if active
+  const filteredPosts =
+    duplicatesFilter && duplicateCountByPostId
+      ? posts.filter((p) => (duplicateCountByPostId.get(p.id) ?? 0) > 0)
+      : posts
+  const isSearchingForDuplicateMatches =
+    !!duplicatesFilter && filteredPosts.length === 0 && (hasMore || isLoadingMore)
+
+  useEffect(() => {
+    if (isSearchingForDuplicateMatches && !isLoading && !isLoadingMore) {
+      onLoadMore()
+    }
+  }, [isSearchingForDuplicateMatches, isLoading, isLoadingMore, onLoadMore])
+
   if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto w-full">
@@ -194,14 +224,26 @@ export function FeedbackTableView({
     )
   }
 
-  if (posts.length === 0) {
+  if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
       <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <InboxEmptyState
-          type={hasActiveFilters ? 'no-results' : 'no-posts'}
+          type={hasActiveFilters || !!duplicatesFilter ? 'no-results' : 'no-posts'}
           onClearFilters={hasActiveFilters ? onClearFilters : undefined}
         />
+      </div>
+    )
+  }
+
+  if (isSearchingForDuplicateMatches) {
+    return (
+      <div className="max-w-5xl mx-auto w-full">
+        {headerContent}
+        <div className="px-3 py-12 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <Spinner />
+          <p>Searching for posts with duplicate suggestions…</p>
+        </div>
       </div>
     )
   }
@@ -213,7 +255,7 @@ export function FeedbackTableView({
       {/* Post List */}
       <div className="p-3">
         <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
-          {posts.map((post, index) => (
+          {filteredPosts.map((post, index) => (
             <div
               key={post.id}
               className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
@@ -222,6 +264,7 @@ export function FeedbackTableView({
               <FeedbackRow
                 post={post}
                 statuses={statuses}
+                duplicateCount={duplicateCountByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
               />
             </div>

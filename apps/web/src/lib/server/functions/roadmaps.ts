@@ -245,12 +245,15 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
       `[fn:roadmaps] addPostToRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      await addPostToRoadmap({
-        roadmapId: data.roadmapId as RoadmapId,
-        postId: data.postId as PostId,
-      })
+      await addPostToRoadmap(
+        {
+          roadmapId: data.roadmapId as RoadmapId,
+          postId: data.postId as PostId,
+        },
+        auth.principal.id
+      )
       return { success: true }
     } catch (error) {
       console.error(`[fn:roadmaps] addPostToRoadmapFn failed:`, error)
@@ -268,9 +271,13 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
       `[fn:roadmaps] removePostFromRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
+      await removePostFromRoadmap(
+        data.postId as PostId,
+        data.roadmapId as RoadmapId,
+        auth.principal.id
+      )
       return { success: true }
     } catch (error) {
       console.error(`[fn:roadmaps] removePostFromRoadmapFn failed:`, error)

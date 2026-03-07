@@ -26,6 +26,7 @@ import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
 import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getPostWithDetails, getCommentsWithReplies } from './post.query'
 import { hasUserVoted } from './post.public'
 import type {
@@ -105,10 +106,39 @@ export async function mergePost(
     .where(eq(posts.id, duplicatePostId))
 
   // Recalculate canonical post's vote count and reset merge check in one update
-  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId, { resetMergeCheck: true })
+  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId, {
+    resetMergeCheck: true,
+  })
 
   // Queue a delayed re-check for additional duplicates (e.g. 3 similar posts where only 1 was caught)
   schedulePostMergeRecheck(canonicalPostId)
+
+  // Look up the duplicate post's author name for activity metadata
+  const duplicateAuthor = duplicatePost.principalId
+    ? await db.query.principal.findFirst({
+        where: eq(principalTable.id, duplicatePost.principalId),
+        columns: { displayName: true },
+      })
+    : null
+
+  // Record activity on both posts
+  createActivity({
+    postId: canonicalPostId,
+    principalId: actorPrincipalId,
+    type: 'post.merged_in',
+    metadata: {
+      duplicatePostId,
+      duplicatePostTitle: duplicatePost.title,
+      duplicateVoteCount: duplicatePost.voteCount,
+      duplicateAuthorName: duplicateAuthor?.displayName ?? null,
+    },
+  })
+  createActivity({
+    postId: duplicatePostId,
+    principalId: actorPrincipalId,
+    type: 'post.merged_away',
+    metadata: { canonicalPostId, canonicalPostTitle: canonicalPost.title },
+  })
 
   return {
     canonicalPost: { id: canonicalPostId, voteCount: newVoteCount },
@@ -144,7 +174,7 @@ function schedulePostMergeRecheck(canonicalPostId: PostId): void {
  */
 export async function unmergePost(
   postId: PostId,
-  _actorPrincipalId: PrincipalId
+  actorPrincipalId: PrincipalId
 ): Promise<UnmergePostResult> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -172,6 +202,26 @@ export async function unmergePost(
 
   // Recalculate canonical post's vote count
   const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
+
+  // Look up the canonical post title for the activity metadata
+  const canonicalPost = await db.query.posts.findFirst({
+    where: eq(posts.id, canonicalPostId),
+    columns: { title: true },
+  })
+
+  // Record activity on both posts
+  createActivity({
+    postId,
+    principalId: actorPrincipalId,
+    type: 'post.unmerged',
+    metadata: { otherPostId: canonicalPostId, otherPostTitle: canonicalPost?.title ?? '' },
+  })
+  createActivity({
+    postId: canonicalPostId,
+    principalId: actorPrincipalId,
+    type: 'post.unmerged',
+    metadata: { otherPostId: postId, otherPostTitle: post.title },
+  })
 
   return {
     post: { id: postId },
@@ -353,10 +403,13 @@ async function recalculateCanonicalVoteCount(
   const newCount = rows[0]?.unique_voters ?? 0
 
   // Update the canonical post's vote count (and optionally reset mergeCheckedAt)
-  await db.update(posts).set({
-    voteCount: newCount,
-    ...(options?.resetMergeCheck && { mergeCheckedAt: null }),
-  }).where(eq(posts.id, canonicalPostId))
+  await db
+    .update(posts)
+    .set({
+      voteCount: newCount,
+      ...(options?.resetMergeCheck && { mergeCheckedAt: null }),
+    })
+    .where(eq(posts.id, canonicalPostId))
 
   return newCount
 }

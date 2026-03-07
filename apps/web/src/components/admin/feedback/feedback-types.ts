@@ -14,7 +14,7 @@ import type { RawFeedbackAuthor, RawFeedbackContent } from '@/lib/server/db'
 /** Suggestion in list view - returned by fetchSuggestions. */
 export interface SuggestionListItem {
   id: string
-  suggestionType: 'create_post' | 'duplicate_post'
+  suggestionType: 'create_post' | 'vote_on_post' | 'duplicate_post'
   status: 'pending' | 'accepted' | 'dismissed' | 'expired'
   similarityScore: number | null
   suggestedTitle: string | null
@@ -59,6 +59,12 @@ export interface SuggestionListItem {
     statusName?: string | null
     statusColor?: string | null
   } | null
+  similarPosts: Array<{
+    postId: string
+    title: string
+    similarity: number
+    voteCount: number
+  }> | null
   board: {
     id: string
     name: string
@@ -73,20 +79,11 @@ export interface SuggestionListItem {
   } | null
 }
 
-/** Full suggestion detail - returned by fetchSuggestionDetail. */
-export interface SuggestionDetailView extends SuggestionListItem {
-  resultPost: {
-    id: string
-    title: string
-  } | null
-  signal: {
-    id: string
-    signalType: string
-    summary: string
-    evidence: string[]
-    implicitNeed: string | null
-    extractionConfidence: number
-  } | null
+/** Suggestions grouped by source feedback item. */
+export interface SuggestionGroup {
+  rawItemId: string
+  rawItem: SuggestionListItem['rawItem']
+  suggestions: SuggestionListItem[]
 }
 
 /** Feedback source with item count. */
@@ -96,15 +93,4 @@ export interface FeedbackSourceView {
   name: string
   enabled: boolean
   itemCount: number
-}
-
-// ============================================
-// Pipeline Stats
-// ============================================
-
-/** Pipeline stats returned by fetchFeedbackPipelineStats. */
-export interface PipelineStats {
-  rawItems: Record<string, number>
-  signals: Record<string, number>
-  pendingSuggestions: number
 }

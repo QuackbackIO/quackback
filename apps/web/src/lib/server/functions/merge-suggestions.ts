@@ -1,39 +1,28 @@
 /**
- * Server functions for AI merge suggestions.
+ * Server functions for merge suggestions.
  *
- * Provides endpoints for querying, accepting, and dismissing
- * AI-generated merge suggestions.
+ * Provides query endpoints for pending merge suggestions, summary counts,
+ * and per-post counts. Accept/dismiss actions are handled via
+ * acceptSuggestionFn/dismissSuggestionFn in feedback.ts.
  */
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { type PostId, type PrincipalId, type MergeSuggestionId } from '@quackback/ids'
+import type { PostId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import {
   getPendingSuggestionsForPost,
-  acceptMergeSuggestion,
-  dismissMergeSuggestion,
+  getPendingMergeSuggestionSummary,
+  getMergeSuggestionCountsForPosts,
 } from '@/lib/server/domains/merge-suggestions'
 
 // ============================================
-// Schemas
+// Server Functions
 // ============================================
 
 const getMergeSuggestionsSchema = z.object({
   postId: z.string(),
 })
-
-const acceptMergeSuggestionSchema = z.object({
-  suggestionId: z.string(),
-})
-
-const dismissMergeSuggestionSchema = z.object({
-  suggestionId: z.string(),
-})
-
-// ============================================
-// Server Functions
-// ============================================
 
 /**
  * Get pending merge suggestions for a post.
@@ -42,8 +31,8 @@ const dismissMergeSuggestionSchema = z.object({
 export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
   .inputValidator(getMergeSuggestionsSchema)
   .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
       const suggestions = await getPendingSuggestionsForPost(data.postId as PostId)
       return suggestions.map((s) => ({
         ...s,
@@ -56,33 +45,29 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Accept a merge suggestion — performs the actual post merge.
- * Requires admin/member role.
+ * Get total pending merge suggestion count (for summary bar).
  */
-export const acceptMergeSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(acceptMergeSuggestionSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:merge-suggestions] acceptMergeSuggestionFn: ${data.suggestionId}`)
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
-    await acceptMergeSuggestion(
-      data.suggestionId as MergeSuggestionId,
-      auth.principal.id as PrincipalId
-    )
-    return { success: true }
-  })
+export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin', 'member'] })
+  try {
+    return getPendingMergeSuggestionSummary()
+  } catch (error) {
+    console.error(`[fn:merge-suggestions] fetchMergeSuggestionSummaryFn failed:`, error)
+    return { count: 0 }
+  }
+})
 
 /**
- * Dismiss a merge suggestion.
- * Requires admin/member role.
+ * Get merge suggestion counts for a batch of post IDs (for inbox badges).
  */
-export const dismissMergeSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(dismissMergeSuggestionSchema)
+export const fetchMergeSuggestionCountsForPostsFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ postIds: z.array(z.string()) }))
   .handler(async ({ data }) => {
-    console.log(`[fn:merge-suggestions] dismissMergeSuggestionFn: ${data.suggestionId}`)
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
-    await dismissMergeSuggestion(
-      data.suggestionId as MergeSuggestionId,
-      auth.principal.id as PrincipalId
-    )
-    return { success: true }
+    await requireAuth({ roles: ['admin', 'member'] })
+    try {
+      return getMergeSuggestionCountsForPosts(data.postIds as PostId[])
+    } catch (error) {
+      console.error(`[fn:merge-suggestions] fetchMergeSuggestionCountsForPostsFn failed:`, error)
+      return []
+    }
   })

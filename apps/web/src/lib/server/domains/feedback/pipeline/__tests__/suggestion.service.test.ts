@@ -89,6 +89,10 @@ vi.mock('../feedback-attribution-email', () => ({
   sendFeedbackAttributionEmail: (...args: unknown[]) => mockSendAttributionEmail(...args),
 }))
 
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  createActivity: vi.fn(),
+}))
+
 describe('suggestion.service', () => {
   beforeEach(() => {
     insertValuesCalls.length = 0

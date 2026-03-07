@@ -33,6 +33,7 @@ export const ID_PREFIXES = {
   event_mapping: 'event_mapping',
   linked_entity: 'linked_entity',
   sync_log: 'sync_log',
+  slack_monitor: 'slack_monitor',
 
   // Notifications
   post_subscription: 'post_sub',
@@ -55,6 +56,7 @@ export const ID_PREFIXES = {
   signal_correction: 'signal_correction',
   user_mapping: 'user_mapping',
   merge_suggestion: 'merge_sug',
+  activity: 'activity',
 
   // ============================================
   // Auth Entities (Better-auth, text primary keys)

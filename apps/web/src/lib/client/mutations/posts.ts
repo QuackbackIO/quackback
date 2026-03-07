@@ -334,7 +334,7 @@ export function useCreatePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: CreatePostInput) =>
+    mutationFn: (input: CreatePostInput & { authorPrincipalId?: string }) =>
       createPostFn({
         data: {
           title: input.title,
@@ -343,10 +343,12 @@ export function useCreatePost() {
           boardId: input.boardId,
           statusId: input.statusId,
           tagIds: input.tagIds,
+          authorPrincipalId: input.authorPrincipalId,
         },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
 }

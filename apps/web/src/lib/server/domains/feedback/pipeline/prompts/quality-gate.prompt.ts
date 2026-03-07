@@ -4,9 +4,17 @@
  * Decides whether raw feedback content contains actionable product
  * feedback worth extracting signals from. Filters out routine support
  * conversations, greetings, spam, and off-topic messages.
+ *
+ * For channel-monitored items, the prompt also asks for a suggested title.
  */
 
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../../types'
+
+function getIngestionMode(context: RawFeedbackItemContextEnvelope): string | undefined {
+  return (context.metadata as Record<string, unknown> | undefined)?.ingestionMode as
+    | string
+    | undefined
+}
 
 export function buildQualityGatePrompt(input: {
   sourceType: string
@@ -14,6 +22,7 @@ export function buildQualityGatePrompt(input: {
   context: RawFeedbackItemContextEnvelope
 }): string {
   const contentText = [input.content.subject, input.content.text].filter(Boolean).join('\n')
+  const isChannelMonitor = getIngestionMode(input.context) === 'channel_monitor'
 
   // Include thread context for conversational sources so the model
   // can see whether the customer expressed product feedback
@@ -29,12 +38,25 @@ export function buildQualityGatePrompt(input: {
     }
   }
 
+  const responseFormat = isChannelMonitor
+    ? '{ "extract": true/false, "reason": "brief explanation", "suggestedTitle": "short title if extract is true" }'
+    : '{ "extract": true/false, "reason": "brief explanation" }'
+
+  const channelMonitorContext = isChannelMonitor
+    ? `
+IMPORTANT: This message was passively collected from a monitored Slack channel.
+Be STRICT — most messages will be casual conversation, not feedback.
+Only extract if the message contains genuine product feedback.
+REJECT: greetings, coordination, meeting scheduling, social chat, reactions to other messages, how-to questions, status updates, links without commentary.
+If you extract, also provide a concise "suggestedTitle" (under 80 chars) summarizing the feedback.`
+    : ''
+
   return `You are a quality gate for a product feedback pipeline.
 Decide whether this content contains actionable product feedback worth analyzing.
 
 Return strict JSON only:
-{ "extract": true/false, "reason": "brief explanation" }
-
+${responseFormat}
+${channelMonitorContext}
 EXTRACT (true) if the content contains:
 - Feature requests or product suggestions
 - Bug reports or error descriptions

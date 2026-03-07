@@ -23,7 +23,11 @@ import {
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
-import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
+import {
+  fetchPostWithDetails,
+  fetchPostVotersFn,
+  fetchPostFeedbackSourceFn,
+} from '@/lib/server/functions/posts'
 import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/server/domains/users/user.types'
@@ -292,6 +296,14 @@ export const adminQueries = {
       staleTime: 30 * 1000,
     }),
 
+  /** Feedback source for a post (if created from the feedback pipeline) */
+  postFeedbackSource: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'feedback-source', postId],
+      queryFn: () => fetchPostFeedbackSourceFn({ data: { id: postId } }),
+      staleTime: 60 * 1000,
+    }),
+
   /**
    * Preview what a merged post would look like (admin/member only)
    */
@@ -324,7 +336,10 @@ export const adminQueries = {
               : null,
             comments: data.post.comments.map(deserializeComment),
             pinnedComment: data.post.pinnedComment
-              ? { ...data.post.pinnedComment, createdAt: new Date(data.post.pinnedComment.createdAt) }
+              ? {
+                  ...data.post.pinnedComment,
+                  createdAt: new Date(data.post.pinnedComment.createdAt),
+                }
               : null,
           },
           duplicateComments: data.duplicateComments.map(deserializeComment),

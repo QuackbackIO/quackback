@@ -9,8 +9,11 @@ const SLACK_SCOPES = [
   'channels:read',
   'groups:read',
   'channels:join',
+  'channels:history',
+  'groups:history',
   'chat:write',
   'team:read',
+  'commands',
 ].join(',')
 
 /**
@@ -85,6 +88,10 @@ export async function exchangeSlackCode(
 
   return {
     accessToken: response.access_token!,
-    config: { workspaceId: response.team!.id!, workspaceName: response.team!.name! },
+    config: {
+      workspaceId: response.team!.id!,
+      workspaceName: response.team!.name!,
+      scopes: response.scope,
+    },
   }
 }

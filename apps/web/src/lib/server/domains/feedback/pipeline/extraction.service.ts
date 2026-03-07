@@ -53,7 +53,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
     .where(eq(rawFeedbackItems.id, rawItemId))
 
   try {
-    const content = item.content as RawFeedbackContent
+    let content = item.content as RawFeedbackContent
     const context = (item.contextEnvelope ?? {}) as RawFeedbackItemContextEnvelope
 
     // Quality gate: cheap LLM pre-classifier decides if content is actionable
@@ -63,17 +63,33 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
       context,
     })
     if (!gate.extract) {
-      console.log(`[Extraction] Quality gate filtered ${rawItemId}: ${gate.reason}`)
+      // Channel-monitored items are 'dismissed' (auditable); others are 'completed'
+      const isChannelMonitor =
+        (context.metadata as Record<string, unknown> | undefined)?.ingestionMode ===
+        'channel_monitor'
+      const finalState = isChannelMonitor ? 'dismissed' : 'completed'
+      console.log(
+        `[Extraction] Quality gate filtered ${rawItemId} -> ${finalState}: ${gate.reason}`
+      )
       await db
         .update(rawFeedbackItems)
         .set({
-          processingState: 'completed',
+          processingState: finalState,
           stateChangedAt: new Date(),
           processedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(rawFeedbackItems.id, rawItemId))
       return
+    }
+
+    // For channel-monitored items, use the AI-generated title if we don't have one
+    if (gate.suggestedTitle && !content.subject) {
+      content = { ...content, subject: gate.suggestedTitle }
+      await db
+        .update(rawFeedbackItems)
+        .set({ content, updatedAt: new Date() })
+        .where(eq(rawFeedbackItems.id, rawItemId))
     }
 
     const prompt = buildExtractionPrompt({

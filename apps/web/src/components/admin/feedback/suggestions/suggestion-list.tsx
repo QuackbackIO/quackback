@@ -1,4 +1,5 @@
-import { SparklesIcon } from '@heroicons/react/24/solid'
+import { useMemo } from 'react'
+import { InboxIcon } from '@heroicons/react/24/solid'
 import { SearchInput } from '@/components/shared/search-input'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
@@ -6,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { cn } from '@/lib/shared/utils'
-import { SuggestionTriageRow } from './suggestion-triage-row'
+import { SuggestionSourceGroup } from './suggestion-triage-row'
+import { groupSuggestionsBySource } from './suggestion-grouping'
 import type { SuggestionListItem } from '../feedback-types'
 
 const SORT_OPTIONS = [
@@ -21,6 +23,7 @@ interface SuggestionListProps {
   onLoadMore: () => void
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
+  onDismissAll: (ids: string[]) => void
   search?: string
   onSearchChange: (search: string) => void
   sort?: string
@@ -34,6 +37,7 @@ export function SuggestionList({
   onLoadMore,
   onCreatePost,
   onResolved,
+  onDismissAll,
   search,
   onSearchChange,
   sort = 'relevance',
@@ -43,6 +47,8 @@ export function SuggestionList({
     externalValue: search,
     onChange: (v) => onSearchChange(v ?? ''),
   })
+
+  const groups = useMemo(() => groupSuggestionsBySource(suggestions), [suggestions])
 
   const loadMoreRef = useInfiniteScroll({
     hasMore,
@@ -89,23 +95,24 @@ export function SuggestionList({
       {/* Triage rows */}
       {suggestions.length === 0 ? (
         <EmptyState
-          icon={SparklesIcon}
-          title="No pending insights"
-          description="New insights will appear here as the AI pipeline processes incoming feedback."
+          icon={InboxIcon}
+          title="No incoming feedback"
+          description="Feedback from connected sources like Zendesk, Intercom, and other integrations will appear here for triage."
         />
       ) : (
         <div className="p-3">
           <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
-            {suggestions.map((suggestion, index) => (
+            {groups.map((group, index) => (
               <div
-                key={suggestion.id}
+                key={group.rawItemId}
                 className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
               >
-                <SuggestionTriageRow
-                  suggestion={suggestion}
+                <SuggestionSourceGroup
+                  group={group}
                   onCreatePost={onCreatePost}
                   onResolved={onResolved}
+                  onDismissAll={onDismissAll}
                 />
               </div>
             ))}

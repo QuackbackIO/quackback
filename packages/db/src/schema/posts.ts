@@ -16,6 +16,7 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
+import { feedbackSuggestions } from './feedback'
 import { principal } from './auth'
 import type { TiptapContent } from '../types'
 
@@ -198,6 +199,10 @@ export const votes = pgTable(
     // Source tracking for integration-created votes (e.g. Zendesk sidebar)
     sourceType: varchar('source_type', { length: 40 }),
     sourceExternalUrl: text('source_external_url'),
+    // Provenance: which feedback suggestion triggered this proxy vote
+    feedbackSuggestionId: typeIdColumnNullable('feedback_suggestion')(
+      'feedback_suggestion_id'
+    ).references(() => feedbackSuggestions.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -383,6 +388,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   roadmaps: many(postRoadmaps),
   notes: many(postNotes),
   externalLinks: many(postExternalLinks),
+  incomingSuggestions: many(feedbackSuggestions, { relationName: 'suggestionResult' }),
 }))
 
 export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
@@ -400,6 +406,11 @@ export const votesRelations = relations(votes, ({ one }) => ({
   post: one(posts, {
     fields: [votes.postId],
     references: [posts.id],
+  }),
+  feedbackSuggestion: one(feedbackSuggestions, {
+    fields: [votes.feedbackSuggestionId],
+    references: [feedbackSuggestions.id],
+    relationName: 'feedbackSuggestionVotes',
   }),
 }))
 

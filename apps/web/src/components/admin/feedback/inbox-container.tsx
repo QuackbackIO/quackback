@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { Route } from '@/routes/admin/feedback'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
@@ -9,9 +9,11 @@ import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog
 import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/components/admin/feedback/inbox-types'
 import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
+import type { PostId } from '@quackback/ids'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 
 interface InboxContainerProps {
@@ -29,6 +31,7 @@ export function InboxContainer({
   tags,
   statuses,
   members,
+  currentUser,
 }: InboxContainerProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -47,6 +50,9 @@ export function InboxContainer({
 
   // Segments data for filter UI
   const { data: segments } = useSegments()
+
+  // Duplicates filter state
+  const [duplicatesFilter, setDuplicatesFilter] = useState(false)
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -71,7 +77,21 @@ export function InboxContainer({
     initialData: shouldUseInitialData ? initialPosts : undefined,
   })
 
-  const posts = flattenInboxPosts(postsData)
+  const posts = useMemo(() => flattenInboxPosts(postsData), [postsData])
+
+  // Fetch duplicate counts for visible posts
+  const postIds = useMemo(() => posts.map((p) => p.id) as PostId[], [posts])
+  const { data: duplicateCounts } = useQuery(mergeSuggestionQueries.countsForPosts(postIds))
+
+  // Build a Map<postId, count> for efficient lookup
+  const duplicateCountByPostId = useMemo(() => {
+    if (!duplicateCounts || duplicateCounts.length === 0) return undefined
+    const map = new Map<PostId, number>()
+    for (const item of duplicateCounts) {
+      map.set(item.postId, item.count)
+    }
+    return map
+  }, [duplicateCounts])
 
   // Handlers
   const handleLoadMore = useCallback(() => {
@@ -140,11 +160,16 @@ export function InboxContainer({
         onToggleStatus={toggleStatus}
         onToggleBoard={toggleBoard}
         onToggleSegment={toggleSegment}
+        duplicateCountByPostId={duplicateCountByPostId}
+        duplicatesFilter={duplicatesFilter}
+        onToggleDuplicatesFilter={() => setDuplicatesFilter((v) => !v)}
         headerAction={
           <CreatePostDialog
             boards={boards}
             tags={tags}
             statuses={statuses}
+            members={members}
+            currentUser={currentUser}
             onPostCreated={refetchPosts}
           />
         }
