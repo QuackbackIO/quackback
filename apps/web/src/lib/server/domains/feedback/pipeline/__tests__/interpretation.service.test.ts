@@ -59,10 +59,12 @@ vi.mock('@/lib/server/db', () => ({
 
 const mockEmbedSignal = vi.fn()
 const mockFindSimilarPosts = vi.fn()
+const mockFindSimilarPendingSuggestions = vi.fn()
 
 vi.mock('../embedding.service', () => ({
   embedSignal: (...args: unknown[]) => mockEmbedSignal(...args),
   findSimilarPosts: (...args: unknown[]) => mockFindSimilarPosts(...args),
+  findSimilarPendingSuggestions: (...args: unknown[]) => mockFindSimilarPendingSuggestions(...args),
 }))
 
 const mockCreatePostSuggestion = vi.fn()
@@ -196,6 +198,7 @@ describe('interpretation.service', () => {
       content: { subject: 'CSV', text: 'We need CSV export' },
     })
     mockFindSimilarPosts.mockResolvedValueOnce([])
+    mockFindSimilarPendingSuggestions.mockResolvedValueOnce([])
 
     // Mock LLM for suggestion generation
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({
@@ -235,6 +238,7 @@ describe('interpretation.service', () => {
       content: { subject: 'CSV', text: 'We need CSV' },
     })
     mockFindSimilarPosts.mockResolvedValueOnce([])
+    mockFindSimilarPendingSuggestions.mockResolvedValueOnce([])
     mockOpenAI.chat.completions.create.mockRejectedValueOnce(new Error('API down'))
     mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
 
@@ -312,6 +316,44 @@ describe('interpretation.service', () => {
     expect(failedUpdate).toBeDefined()
   })
 
+  it('should skip creating suggestion when similar pending suggestion exists', async () => {
+    mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
+    mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
+    mockRawItemFindFirst.mockResolvedValueOnce({
+      sourceType: 'intercom',
+      externalId: 'conv_789',
+      content: { subject: 'CSV', text: 'We need CSV export' },
+    })
+    mockFindSimilarPosts.mockResolvedValueOnce([]) // no matching posts
+    mockFindSimilarPendingSuggestions.mockResolvedValueOnce([
+      {
+        id: 'existing_suggestion_1',
+        rawFeedbackItemId: 'other_raw_item',
+        suggestedTitle: 'Add CSV Export',
+        boardId: 'board_1',
+        similarity: 0.92,
+      },
+    ])
+    mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'completed' }])
+
+    const { interpretSignal } = await import('../interpretation.service')
+    await interpretSignal(signalId)
+
+    // Should NOT create any suggestion — the existing pending one covers this need
+    expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
+    expect(mockCreateVoteSuggestion).not.toHaveBeenCalled()
+
+    // Should still check pending suggestions with the right params
+    expect(mockFindSimilarPendingSuggestions).toHaveBeenCalledWith(
+      mockEmbedding,
+      expect.objectContaining({
+        limit: 1,
+        minSimilarity: 0.8,
+        excludeRawItemId: rawItemId,
+      })
+    )
+  })
+
   it('should use signal embedding for external source similarity search', async () => {
     mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
     mockEmbedSignal.mockResolvedValueOnce(mockEmbedding)
@@ -321,6 +363,7 @@ describe('interpretation.service', () => {
       content: { subject: 'CSV', text: 'We need CSV export' },
     })
     mockFindSimilarPosts.mockResolvedValueOnce([])
+    mockFindSimilarPendingSuggestions.mockResolvedValueOnce([])
 
     // Mock LLM for suggestion generation
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({

@@ -116,3 +116,64 @@ export async function findSimilarPosts(
     similarity: r.similarity,
   }))
 }
+
+/**
+ * Find similar pending create_post suggestions by embedding cosine similarity.
+ * Used to avoid generating duplicate create_post suggestions when identical
+ * feedback arrives before any suggestion has been accepted into a real post.
+ */
+export async function findSimilarPendingSuggestions(
+  embedding: number[],
+  opts?: {
+    limit?: number
+    minSimilarity?: number
+    excludeRawItemId?: string
+  }
+): Promise<
+  Array<{
+    id: string
+    rawFeedbackItemId: string
+    suggestedTitle: string | null
+    boardId: string | null
+    similarity: number
+  }>
+> {
+  const limit = opts?.limit ?? 5
+  const minSimilarity = opts?.minSimilarity ?? 0.7
+  const vectorStr = `[${embedding.join(',')}]`
+
+  const excludeClause = opts?.excludeRawItemId
+    ? sql`AND fs.raw_feedback_item_id != ${opts.excludeRawItemId}::uuid`
+    : sql``
+
+  const results = await db.execute(sql`
+    SELECT
+      fs.id,
+      fs.raw_feedback_item_id,
+      fs.suggested_title,
+      fs.board_id,
+      1 - (fs.embedding <=> ${vectorStr}::vector) AS similarity
+    FROM feedback_suggestions fs
+    WHERE fs.embedding IS NOT NULL
+      AND fs.status = 'pending'
+      AND fs.suggestion_type = 'create_post'
+      AND 1 - (fs.embedding <=> ${vectorStr}::vector) >= ${minSimilarity}
+      ${excludeClause}
+    ORDER BY fs.embedding <=> ${vectorStr}::vector
+    LIMIT ${limit}
+  `)
+
+  return getExecuteRows<{
+    id: string
+    raw_feedback_item_id: string
+    suggested_title: string | null
+    board_id: string | null
+    similarity: number
+  }>(results).map((r) => ({
+    id: r.id,
+    rawFeedbackItemId: r.raw_feedback_item_id,
+    suggestedTitle: r.suggested_title,
+    boardId: r.board_id,
+    similarity: r.similarity,
+  }))
+}

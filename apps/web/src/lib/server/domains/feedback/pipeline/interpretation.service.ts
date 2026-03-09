@@ -15,7 +15,7 @@ import { db, eq, feedbackSignals, rawFeedbackItems } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { stripCodeFences } from '@/lib/server/domains/ai/parse'
-import { embedSignal, findSimilarPosts } from './embedding.service'
+import { embedSignal, findSimilarPosts, findSimilarPendingSuggestions } from './embedding.service'
 import { createPostSuggestion, createVoteSuggestion } from './suggestion.service'
 import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
 import type { SuggestionGenerationResult } from '../types'
@@ -116,17 +116,37 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
           similarPosts: similarPostsJson,
         })
       } else {
-        // Primary: create new post
-        await generateSuggestion({
-          type: 'create_post',
-          signalId,
-          rawFeedbackItemId: signal.rawFeedbackItemId as RawFeedbackItemId,
-          signal: signalData,
-          sourceContent,
-          embedding: signalEmbedding ?? undefined,
-          userProvidedBoardId,
-          similarPosts: similarPostsJson.length > 0 ? similarPostsJson : undefined,
-        })
+        // No matching post — check if a similar pending create_post suggestion
+        // already exists (e.g. from duplicate feedback arriving before any
+        // suggestion was accepted). If so, skip — the existing suggestion
+        // already represents this need.
+        const similarSuggestions = signalEmbedding
+          ? await findSimilarPendingSuggestions(signalEmbedding, {
+              limit: 1,
+              minSimilarity: VOTE_SUGGESTION_THRESHOLD,
+              excludeRawItemId: signal.rawFeedbackItemId,
+            })
+          : []
+
+        if (similarSuggestions[0]) {
+          console.log(
+            `[Interpretation] Skipping duplicate suggestion for signal ${signalId} — ` +
+              `similar pending suggestion ${similarSuggestions[0].id} exists ` +
+              `(${Math.round(similarSuggestions[0].similarity * 100)}% similar)`
+          )
+        } else {
+          // No similar posts or suggestions — create new post
+          await generateSuggestion({
+            type: 'create_post',
+            signalId,
+            rawFeedbackItemId: signal.rawFeedbackItemId as RawFeedbackItemId,
+            signal: signalData,
+            sourceContent,
+            embedding: signalEmbedding ?? undefined,
+            userProvidedBoardId,
+            similarPosts: similarPostsJson.length > 0 ? similarPostsJson : undefined,
+          })
+        }
       }
     }
 
