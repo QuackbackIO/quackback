@@ -203,6 +203,11 @@ export const votes = pgTable(
     feedbackSuggestionId: typeIdColumnNullable('feedback_suggestion')(
       'feedback_suggestion_id'
     ).references(() => feedbackSuggestions.id, { onDelete: 'set null' }),
+    // Which admin/member added this vote on behalf of the voter
+    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id').references(
+      () => principal.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

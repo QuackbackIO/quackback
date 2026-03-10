@@ -13,6 +13,7 @@ import {
   toggleCommentsLockFn,
   deletePostFn,
   restorePostFn,
+  proxyVoteFn,
 } from '@/lib/server/functions/posts'
 import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -349,6 +350,32 @@ export function useCreatePost() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+    },
+  })
+}
+
+// ============================================================================
+// Proxy Vote Mutation (admin votes on behalf of a user)
+// ============================================================================
+
+export function useProxyVote(postId: PostId) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (voterPrincipalId: PrincipalId) =>
+      proxyVoteFn({ data: { postId, voterPrincipalId } }),
+    onSuccess: (data) => {
+      // Update detail cache vote count
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old ? { ...old, voteCount: data.voteCount } : old
+      )
+      // Update list caches
+      updatePostInLists(queryClient, postId, (post) => ({
+        ...post,
+        voteCount: data.voteCount,
+      }))
+      // Refresh avatar stack
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'voters', postId] })
     },
   })
 }

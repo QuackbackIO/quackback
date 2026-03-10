@@ -30,7 +30,7 @@ import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
-import { getPostVoters } from '@/lib/server/domains/posts/post.voting'
+import { getPostVoters, addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 /**
@@ -319,7 +319,11 @@ export const createPostFn = createServerFn({ method: 'POST' })
         email: auth.user.email,
       }
 
-      if (data.authorPrincipalId && data.authorPrincipalId !== auth.principal.id) {
+      if (
+        data.authorPrincipalId &&
+        data.authorPrincipalId !== auth.principal.id &&
+        auth.principal.role === 'admin'
+      ) {
         const selectedPrincipal = await getMemberById(data.authorPrincipalId as PrincipalId)
         if (selectedPrincipal) {
           author = {
@@ -479,6 +483,41 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
       console.error(`[fn:posts] ❌ updatePostTagsFn failed:`, error)
       throw error
     }
+  })
+
+/**
+ * Proxy vote: admin votes on behalf of another user
+ */
+export const proxyVoteFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const postId = data.postId as PostId
+    const voterPrincipalId = data.voterPrincipalId as PrincipalId
+
+    const result = await addVoteOnBehalf(
+      postId,
+      voterPrincipalId,
+      { type: 'proxy', externalUrl: '' },
+      null,
+      auth.principal.id
+    )
+
+    // Fire-and-forget activity if a new vote was actually inserted
+    if (result.voted) {
+      const voter = await getMemberById(voterPrincipalId)
+      createActivity({
+        postId,
+        principalId: auth.principal.id,
+        type: 'vote.proxy',
+        metadata: {
+          voterPrincipalId,
+          voterName: voter?.displayName ?? null,
+        },
+      })
+    }
+
+    return result
   })
 
 /**
