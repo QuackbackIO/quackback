@@ -13,6 +13,17 @@ import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedb
 import { verifySlackSignature } from './verify'
 import type { FeedbackSourceId, IntegrationId } from '@quackback/ids'
 
+interface SlackMessageEvent {
+  type?: string
+  subtype?: string
+  bot_id?: string
+  channel_type?: string
+  channel?: string
+  user?: string
+  text?: string
+  ts?: string
+}
+
 // In-memory LRU dedup for Slack event retries.
 // Slack retries up to 3 times if we don't respond within 3 seconds.
 const SEEN_EVENTS = new Map<string, number>()
@@ -20,10 +31,10 @@ const SEEN_EVENTS_MAX = 10_000
 const SEEN_EVENTS_TTL_MS = 5 * 60 * 1000
 
 // Simple user info cache to avoid hammering Slack API for repeat posters.
-const USER_CACHE = new Map<string, { name: string; ts: number }>()
+const USER_CACHE = new Map<string, { name: string; email?: string; ts: number }>()
 const USER_CACHE_TTL_MS = 10 * 60 * 1000
 
-function pruneMap(map: Map<string, any>, maxSize: number, ttlMs: number) {
+function pruneMap(map: Map<string, number | { ts: number }>, maxSize: number, ttlMs: number) {
   if (map.size <= maxSize) return
   const now = Date.now()
   for (const [key, val] of map) {
@@ -70,7 +81,13 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
   )
   if (sigResult !== true) return sigResult
 
-  let payload: any
+  let payload: {
+    type: string
+    challenge?: string
+    event_id?: string
+    team_id?: string
+    event?: SlackMessageEvent
+  }
   try {
     payload = JSON.parse(body)
   } catch {
@@ -90,7 +107,7 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
   }
 
   // Deduplicate by event_id (Slack retries)
-  const eventId = payload.event_id as string
+  const eventId = payload.event_id
   if (eventId) {
     if (SEEN_EVENTS.has(eventId)) {
       return new Response('', { status: 200 })
@@ -105,7 +122,7 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
     // Fire-and-forget to stay within 3-second Slack deadline
     void handleChannelMessage(
       event,
-      payload.team_id,
+      payload.team_id ?? '',
       integration.id as IntegrationId,
       secrets.accessToken
     ).catch((err) => {
@@ -117,7 +134,7 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
 }
 
 async function handleChannelMessage(
-  event: any,
+  event: SlackMessageEvent,
   teamId: string,
   integrationId: IntegrationId,
   accessToken: string
@@ -127,7 +144,7 @@ async function handleChannelMessage(
   if (event.bot_id) return
   if (event.channel_type !== 'channel' && event.channel_type !== 'group') return
 
-  const channelId: string = event.channel
+  const channelId = event.channel
   if (!channelId) return
 
   // Check if this channel is monitored
@@ -155,21 +172,30 @@ async function handleChannelMessage(
     return
   }
 
-  // Resolve user display name
-  const userName = await resolveUserName(accessToken, event.user)
+  // Resolve user display name and email
+  const userInfo = await resolveSlackUser(accessToken, event.user ?? '')
 
-  // Build permalink
-  const tsNoDot = (event.ts as string).replace('.', '')
-  const permalink = `https://slack.com/archives/${channelId}/p${tsNoDot}`
+  // Fetch workspace-scoped permalink (falls back to generic slack.com URL)
+  const messageTs = event.ts ?? ''
+  let permalink: string
+  try {
+    const client = new WebClient(accessToken)
+    const res = await client.chat.getPermalink({ channel: channelId, message_ts: messageTs })
+    permalink = res.permalink!
+  } catch {
+    const tsNoDot = messageTs.replace('.', '')
+    permalink = `https://slack.com/archives/${channelId}/p${tsNoDot}`
+  }
 
   await ingestRawFeedback(
     {
-      externalId: `${teamId}:${channelId}:${event.ts}`,
-      sourceCreatedAt: new Date(parseFloat(event.ts) * 1000),
+      externalId: `${teamId}:${channelId}:${messageTs}`,
+      sourceCreatedAt: new Date(parseFloat(messageTs) * 1000),
       externalUrl: permalink,
       author: {
-        name: userName,
-        externalUserId: event.user,
+        name: userInfo.name,
+        ...(userInfo.email && { email: userInfo.email }),
+        externalUserId: event.user ?? '',
       },
       content: {
         subject: '', // Quality gate will generate the title
@@ -178,7 +204,7 @@ async function handleChannelMessage(
       contextEnvelope: {
         sourceChannel: { id: channelId, name: monitor.channelName },
         metadata: {
-          messageTs: event.ts,
+          messageTs,
           teamId,
           boardId: monitor.boardId,
           monitorId: monitor.id,
@@ -193,12 +219,15 @@ async function handleChannelMessage(
   )
 }
 
-async function resolveUserName(accessToken: string, userId: string): Promise<string> {
-  if (!userId) return 'Unknown'
+async function resolveSlackUser(
+  accessToken: string,
+  userId: string
+): Promise<{ name: string; email?: string }> {
+  if (!userId) return { name: 'Unknown' }
 
   const cached = USER_CACHE.get(userId)
   if (cached && Date.now() - cached.ts < USER_CACHE_TTL_MS) {
-    return cached.name
+    return { name: cached.name, email: cached.email }
   }
 
   try {
@@ -209,11 +238,12 @@ async function resolveUserName(accessToken: string, userId: string): Promise<str
       result.user?.profile?.real_name ||
       result.user?.name ||
       userId
-    USER_CACHE.set(userId, { name, ts: Date.now() })
+    const email = result.user?.profile?.email || undefined
+    USER_CACHE.set(userId, { name, email, ts: Date.now() })
     pruneMap(USER_CACHE, 1000, USER_CACHE_TTL_MS)
-    return name
+    return { name, email }
   } catch (error) {
     console.warn(`[SlackEvents] Failed to resolve user ${userId}:`, error)
-    return userId
+    return { name: userId }
   }
 }

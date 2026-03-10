@@ -5,6 +5,7 @@
  */
 
 import { WebClient } from '@slack/web-api'
+import type { KnownBlock } from '@slack/web-api'
 import { db, eq, and, feedbackSources, integrations } from '@/lib/server/db'
 import { getPlatformCredentials } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import { getBaseUrl } from '@/lib/server/config'
@@ -12,6 +13,23 @@ import { decryptSecrets } from '../encryption'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
 import { verifySlackSignature } from './verify'
 import type { FeedbackSourceId, IntegrationId } from '@quackback/ids'
+
+interface SlackInteractionPayload {
+  type: string
+  callback_id?: string
+  trigger_id?: string
+  team?: { id?: string }
+  channel?: { id?: string; name?: string }
+  user?: { id?: string; name?: string; username?: string }
+  message?: { text?: string; ts?: string }
+  view?: {
+    callback_id?: string
+    private_metadata?: string
+    state?: {
+      values?: Record<string, Record<string, { value?: string }>>
+    }
+  }
+}
 
 const CALLBACK_ID_MESSAGE_ACTION = 'quackback_send_feedback'
 const CALLBACK_ID_MODAL = 'quackback_send_feedback_modal'
@@ -53,7 +71,7 @@ export async function handleSlackInteractivity(request: Request): Promise<Respon
     return new Response('Missing payload', { status: 400 })
   }
 
-  let payload: any
+  let payload: SlackInteractionPayload
   try {
     payload = JSON.parse(rawPayload)
   } catch {
@@ -82,7 +100,10 @@ export async function handleSlackInteractivity(request: Request): Promise<Respon
 /**
  * Handle a message shortcut action - opens the feedback modal.
  */
-async function handleMessageAction(payload: any, client: WebClient): Promise<Response> {
+async function handleMessageAction(
+  payload: SlackInteractionPayload,
+  client: WebClient
+): Promise<Response> {
   const messageText = payload.message?.text || ''
   const channelName = payload.channel?.name || 'unknown'
   const channelId = payload.channel?.id || ''
@@ -100,7 +121,7 @@ async function handleMessageAction(payload: any, client: WebClient): Promise<Res
   // Only field: the feedback content. Title, board, status, and author
   // are all handled downstream — AI generates suggestions, admin refines
   // when creating the post from the Incoming tab.
-  const blocks: any[] = [
+  const blocks: KnownBlock[] = [
     {
       type: 'context',
       elements: [{ type: 'mrkdwn', text: `From *#${channelName}*` }],
@@ -121,7 +142,7 @@ async function handleMessageAction(payload: any, client: WebClient): Promise<Res
 
   try {
     await client.views.open({
-      trigger_id: payload.trigger_id,
+      trigger_id: payload.trigger_id!,
       view: {
         type: 'modal',
         callback_id: CALLBACK_ID_MODAL,
@@ -144,7 +165,7 @@ async function handleMessageAction(payload: any, client: WebClient): Promise<Res
  * Handle modal submission - ingest feedback and post confirmation.
  */
 async function handleViewSubmission(
-  payload: any,
+  payload: SlackInteractionPayload,
   client: WebClient,
   integrationId: IntegrationId
 ): Promise<Response> {
@@ -178,10 +199,22 @@ async function handleViewSubmission(
   // Fire-and-forget: ingest + confirmation
   void (async () => {
     try {
+      // Fetch workspace-scoped permalink (falls back to generic slack.com URL)
+      let permalink: string | undefined
+      if (channelId && messageTs) {
+        try {
+          const res = await client.chat.getPermalink({ channel: channelId, message_ts: messageTs })
+          permalink = res.permalink!
+        } catch {
+          permalink = `https://slack.com/archives/${channelId}/p${messageTs.replace('.', '')}`
+        }
+      }
+
       await ingestRawFeedback(
         {
-          externalId: `${teamId}:${channelId}:${messageTs}`,
+          externalId: `shortcut:${teamId}:${channelId}:${messageTs}`,
           sourceCreatedAt: messageTs ? new Date(parseFloat(messageTs) * 1000) : new Date(),
+          externalUrl: permalink,
           author: {
             name: userName,
             externalUserId: userId,
