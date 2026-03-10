@@ -37,7 +37,14 @@ const SUBSCRIPTION_LABELS: Record<SubscriptionLevel, string> = {
   none: 'Not subscribed',
 }
 
-export function VotersModal({ postId, voteCount, open, onOpenChange, additionalPostIds = [], readonly = false }: VotersModalProps) {
+export function VotersModal({
+  postId,
+  voteCount,
+  open,
+  onOpenChange,
+  additionalPostIds = [],
+  readonly = false,
+}: VotersModalProps) {
   const { data: primaryVoters, isLoading: primaryLoading } = useQuery({
     ...adminQueries.postVoters(postId),
     enabled: open,
@@ -208,35 +215,60 @@ function VoterSourceLine({
   voter: {
     sourceType: string | null
     sourceExternalUrl: string | null
+    addedByName: string | null
     createdAt: string
   }
 }) {
-  if (voter.sourceType && voter.sourceExternalUrl) {
-    const platformName = SOURCE_TYPE_LABELS[voter.sourceType] ?? capitalize(voter.sourceType)
+  const time = <TimeAgo date={voter.createdAt} />
+  const separator = <span aria-hidden> · </span>
+
+  // Proxy votes: "{time} · Added by {admin}"
+  if (voter.sourceType === 'proxy') {
+    const label = voter.addedByName ? `Added by ${voter.addedByName}` : 'Added manually'
     return (
-      <a
-        href={voter.sourceExternalUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <SourceTypeIcon sourceType={voter.sourceType} size="xs" />
-        <span>via {platformName}</span>
-        <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-      </a>
+      <p className="text-xs text-muted-foreground">
+        {time}
+        {separator}
+        {label}
+      </p>
     )
   }
 
+  // Integration votes with link: "{time} · via Slack ↗"
+  if (voter.sourceType && voter.sourceExternalUrl) {
+    const platformName = SOURCE_TYPE_LABELS[voter.sourceType] ?? capitalize(voter.sourceType)
+    return (
+      <p className="text-xs text-muted-foreground">
+        {time}
+        {separator}
+        <a
+          href={voter.sourceExternalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        >
+          <SourceTypeIcon sourceType={voter.sourceType} size="xs" />
+          <span>via {platformName}</span>
+          <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+        </a>
+      </p>
+    )
+  }
+
+  // Integration votes without link: "{time} · via Zendesk"
   if (voter.sourceType) {
     const platformName = SOURCE_TYPE_LABELS[voter.sourceType] ?? capitalize(voter.sourceType)
     return (
       <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        {time}
+        {separator}
         <SourceTypeIcon sourceType={voter.sourceType} size="xs" />
         <span>via {platformName}</span>
       </p>
     )
   }
 
+  // Direct votes: just "{time}"
   return <TimeAgo date={voter.createdAt} className="text-xs text-muted-foreground" />
 }
 

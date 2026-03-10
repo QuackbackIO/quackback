@@ -28,12 +28,12 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AuthVoteButton } from '@/components/public/auth-vote-button'
-import { VoteButton } from '@/components/public/vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
-import { VotersModal } from '@/components/admin/feedback/voters-modal'
+import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-stack'
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
@@ -233,8 +233,6 @@ interface MetadataSidebarProps {
   hideVote?: boolean
   /** Visual variant: 'column' (default border-l) or 'card' (floating card) */
   variant?: 'column' | 'card'
-  /** Static display with no vote interactivity */
-  readonlyVote?: boolean
   /** Additional post IDs whose voters should be merged (e.g. for merge preview) */
   votersAdditionalPostIds?: PostId[]
   /** Hide subscription controls in voters modal */
@@ -274,7 +272,6 @@ export function MetadataSidebar({
   hideSubscribe = false,
   hideVote = false,
   variant = 'column',
-  readonlyVote = false,
   votersAdditionalPostIds,
   votersReadonly = false,
   manageActions,
@@ -282,7 +279,6 @@ export function MetadataSidebar({
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
-  const [votersOpen, setVotersOpen] = useState(false)
   const [sourceQuoteOpen, setSourceQuoteOpen] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
@@ -369,42 +365,35 @@ export function MetadataSidebar({
         {manageActions && <div className="border-t border-border/30" />}
 
         {/* Upvotes */}
-        {!hideVote && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ChevronUpIcon className="h-4 w-4" />
-              <span>Upvotes</span>
-            </div>
-            {canEdit ? (
-              <div className="flex items-center gap-1.5">
-                <VoteButton postId={postId} voteCount={voteCount} compact readonly={readonlyVote} />
-                {voteCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground/40">·</span>
-                    <button
-                      type="button"
-                      onClick={() => setVotersOpen(true)}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Voters
-                    </button>
-                    <VotersModal
-                      postId={postId}
-                      voteCount={voteCount}
-                      open={votersOpen}
-                      onOpenChange={setVotersOpen}
-                      additionalPostIds={votersAdditionalPostIds}
-                      readonly={votersReadonly}
-                    />
-                  </>
-                )}
+        {!hideVote &&
+          (canEdit ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <ChevronUpIcon className="h-4 w-4" />
+                  <span>Upvotes</span>
+                </div>
+                <span className="text-sm font-semibold tabular-nums text-foreground">
+                  {voteCount}
+                </span>
               </div>
-            ) : (
-              // Portal mode: interactive vote button with auth
+              <VotersAvatarStack
+                postId={postId}
+                voteCount={voteCount}
+                votersAdditionalPostIds={votersAdditionalPostIds}
+                votersReadonly={votersReadonly}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ChevronUpIcon className="h-4 w-4" />
+                <span>Upvotes</span>
+              </div>
+              {/* Portal mode: interactive vote button with auth */}
               <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} compact />
-            )}
-          </div>
-        )}
+            </div>
+          ))}
 
         {/* Status */}
         <div className="flex items-center justify-between">
@@ -658,10 +647,12 @@ export function MetadataSidebar({
                     Original feedback
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-3">
+                <ScrollArea className="max-h-[50vh] -mx-6 px-6">
                   <blockquote className="border-l-2 border-muted-foreground/20 pl-3 text-sm text-muted-foreground/70 italic leading-relaxed whitespace-pre-wrap">
                     {feedbackSource.quote}
                   </blockquote>
+                </ScrollArea>
+                <div className="space-y-2 pt-3 border-t border-border/30">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{feedbackSource.authorName ?? 'Unknown author'}</span>
                     <TimeAgo date={feedbackSource.createdAt} />
@@ -671,9 +662,11 @@ export function MetadataSidebar({
                       href={feedbackSource.externalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      View original
+                      <SourceTypeIcon sourceType={feedbackSource.sourceType} size="xs" />
+                      Open in{' '}
+                      {SOURCE_TYPE_LABELS[feedbackSource.sourceType] ?? feedbackSource.sourceType}
                       <span aria-hidden>&rarr;</span>
                     </a>
                   )}

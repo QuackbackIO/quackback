@@ -19,7 +19,10 @@ import {
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
 import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
-import { toPortalComments, getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
+import {
+  toPortalComments,
+  getInitialContentJson,
+} from '@/components/admin/feedback/detail/post-utils'
 import type { PostId, CommentId } from '@quackback/ids'
 import type { PostDetails } from '@/components/admin/feedback/inbox-types'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
@@ -64,16 +67,12 @@ function MergePreviewContent({
   duplicatePostId: PostId
   onClose: () => void
 }) {
-  const { data } = useSuspenseQuery(
-    adminQueries.mergePreview(canonicalPostId, duplicatePostId)
-  )
+  const { data } = useSuspenseQuery(adminQueries.mergePreview(canonicalPostId, duplicatePostId))
 
   const { session } = useRouteContext({ from: '__root__' })
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
-  const adminUser = session?.user
-    ? { name: session.user.name, email: session.user.email }
-    : null
+  const adminUser = session?.user ? { name: session.user.name, email: session.user.email } : null
 
   const post = data.post as PostDetails
   const currentStatus = statuses.find((s) => s.id === post.statusId)
@@ -106,21 +105,14 @@ function MergePreviewContent({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <ModalHeader
-        section="Merge Preview"
-        title={post.title}
-        onClose={onClose}
-        hideCopyLink
-      />
+      <ModalHeader section="Merge Preview" title={post.title} onClose={onClose} hideCopyLink />
 
       {/* Main content area - scrollable */}
       <ScrollArea className="flex-1 min-h-0">
         {/* Info banner */}
         <div className="mx-6 mt-4 mb-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
           <InformationCircleIcon className="h-5 w-5 shrink-0 mt-0.5" />
-          <span>
-            This is a preview of the merged result. Nothing has changed yet.
-          </span>
+          <span>This is a preview of the merged result. Nothing has changed yet.</span>
         </div>
 
         {/* 2-column layout */}
@@ -129,9 +121,7 @@ function MergePreviewContent({
           <div className="flex-1 min-w-0">
             <div className="p-6">
               {/* Title (readonly) */}
-              <h1 className="text-2xl font-semibold text-foreground mb-4">
-                {post.title}
-              </h1>
+              <h1 className="text-2xl font-semibold text-foreground mb-4">{post.title}</h1>
 
               {/* Rich text editor (readonly) */}
               <RichTextEditor
@@ -187,16 +177,13 @@ function MergePreviewContent({
               status={currentStatus}
               board={post.board}
               authorName={post.authorName}
-              authorAvatarUrl={
-                (post.principalId && post.avatarUrls?.[post.principalId]) || null
-              }
+              authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
               authorPrincipalId={post.principalId}
               createdAt={new Date(post.createdAt)}
               tags={post.tags}
               roadmaps={postRoadmaps}
               canEdit
               hideSubscribe
-              readonlyVote
               votersAdditionalPostIds={[duplicatePostId]}
               votersReadonly
               variant="card"

@@ -33,6 +33,7 @@ export interface VoterInfo {
   avatarUrl: string | null
   sourceType: string | null
   sourceExternalUrl: string | null
+  addedByName: string | null
   createdAt: Date | string
   subscriptionLevel: SubscriptionLevel
 }
@@ -157,7 +158,8 @@ export async function addVoteOnBehalf(
   postId: PostId,
   principalId: PrincipalId,
   source?: { type: string; externalUrl: string },
-  feedbackSuggestionId?: string | null
+  feedbackSuggestionId?: string | null,
+  addedByPrincipalId?: PrincipalId
 ): Promise<VoteResult> {
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
@@ -167,6 +169,7 @@ export async function addVoteOnBehalf(
   const sourceType = source?.type ?? null
   const sourceExternalUrl = source?.externalUrl ?? null
   const suggestionUuid = feedbackSuggestionId ? toUuid(feedbackSuggestionId) : null
+  const addedByUuid = addedByPrincipalId ? toUuid(addedByPrincipalId) : null
 
   // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
   const result = await db.execute<{
@@ -184,8 +187,8 @@ export async function addVoteOnBehalf(
       WHERE id = (SELECT board_id FROM post_check)
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${suggestionUuid}::uuid, NOW()
+      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, added_by_principal_id, updated_at)
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${suggestionUuid}::uuid, ${addedByUuid}::uuid, NOW()
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
@@ -245,6 +248,10 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       avatarUrl: principal.avatarUrl,
       sourceType: votes.sourceType,
       sourceExternalUrl: votes.sourceExternalUrl,
+      addedByName: sql<string | null>`(
+        SELECT p2.display_name FROM ${principal} p2
+        WHERE p2.id = ${votes.addedByPrincipalId}
+      )`.as('added_by_name'),
       createdAt: votes.createdAt,
       notifyComments: postSubscriptions.notifyComments,
       notifyStatusChanges: postSubscriptions.notifyStatusChanges,
@@ -269,6 +276,7 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
     avatarUrl: row.avatarUrl,
     sourceType: row.sourceType,
     sourceExternalUrl: row.sourceExternalUrl,
+    addedByName: row.addedByName,
     createdAt: row.createdAt,
     subscriptionLevel: levelFromFlags(
       row.notifyComments ?? false,
