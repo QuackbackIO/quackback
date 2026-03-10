@@ -215,11 +215,10 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           ),
         }
       })
-      // If a status change was included, invalidate to pick up new status + status badge
-      if (input.statusId) {
-        queryClient.invalidateQueries({ queryKey })
-        queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
-      }
+      // Always invalidate to ensure fresh server data replaces optimistic state
+      queryClient.invalidateQueries({ queryKey })
+      // Also invalidate admin inbox detail so comments appear in admin context
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.(data)
     },
   })
@@ -235,6 +234,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
     mutationFn: (content: string) => userEditCommentFn({ data: { commentId, content } }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       queryClient.invalidateQueries({ queryKey: commentKeys.permission(commentId) })
       onSuccess?.(data)
     },
@@ -257,6 +257,7 @@ export function useDeleteComment({
     mutationFn: () => userDeleteCommentFn({ data: { commentId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.()
     },
     onError,
@@ -281,6 +282,7 @@ export function useToggleReaction({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.(data)
     },
     onError,
@@ -298,7 +300,7 @@ export function usePinComment({ postId, onSuccess, onError }: UsePinCommentOptio
     onSuccess: () => {
       // Invalidate both portal and admin queries
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.()
     },
     onError,
@@ -316,7 +318,7 @@ export function useUnpinComment({ postId, onSuccess, onError }: UseUnpinCommentO
     onSuccess: () => {
       // Invalidate both portal and admin queries
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.()
     },
     onError,
