@@ -41,14 +41,15 @@ export function VoteButton({
 
   const sharedClassName = cn(
     'relative flex items-center justify-center',
-    'border-2 rounded-md',
-    compact ? 'flex-row gap-1 py-1 px-2 text-xs' : 'flex-col w-12 py-2 gap-0.5',
-    'bg-muted/40 border-border/50 text-muted-foreground',
+    'border rounded-md',
+    compact ? 'flex-row gap-1 py-1.5 px-2.5 text-xs' : 'flex-col w-12 py-2 gap-0.5',
+    'bg-muted/40 text-muted-foreground',
     !readonly && 'group transition-colors duration-200 cursor-pointer',
     !readonly &&
       (hasVoted
-        ? 'bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)] text-[var(--post-card-voted-color)]'
-        : 'hover:border-border hover:text-foreground/80'),
+        ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
+        : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
+    readonly && 'border-border/50',
     !readonly && isPending && 'opacity-70 cursor-wait',
     !readonly && disabled && 'cursor-not-allowed opacity-50'
   )
@@ -58,7 +59,7 @@ export function VoteButton({
       className={cn(
         compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
         !readonly && 'transition-transform duration-200',
-        !readonly && hasVoted && 'fill-[var(--post-card-voted-color)]',
+        !readonly && hasVoted && 'fill-post-card-voted',
         !readonly && !isPending && !disabled && 'group-hover:-translate-y-0.5'
       )}
     />
@@ -70,7 +71,7 @@ export function VoteButton({
       className={cn(
         'font-semibold tabular-nums',
         compact ? 'text-xs' : 'text-sm',
-        !readonly && hasVoted ? 'text-[var(--post-card-voted-color)]' : 'text-foreground'
+        !readonly && hasVoted ? 'text-post-card-voted' : 'text-foreground'
       )}
     >
       {displayCount}
@@ -79,7 +80,11 @@ export function VoteButton({
 
   if (readonly) {
     return (
-      <div data-testid="vote-button" aria-label={`${displayCount} votes`} className={sharedClassName}>
+      <div
+        data-testid="vote-button"
+        aria-label={`${displayCount} votes`}
+        className={sharedClassName}
+      >
         {chevron}
         {count}
       </div>

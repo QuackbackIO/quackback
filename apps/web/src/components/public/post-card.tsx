@@ -156,18 +156,18 @@ export function PostCard({
       onClick={handleVoteClick}
       disabled={isVotePending}
       className={cn(
-        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border-2 transition-colors duration-200',
+        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]'
-          : 'text-muted-foreground border-border/50 bg-muted/40 hover:border-border hover:text-foreground/80',
+          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15'
+          : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80',
         isVotePending && 'opacity-70 cursor-wait'
       )}
     >
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
-          currentHasVoted && 'fill-[var(--post-card-voted-color)]',
+          currentHasVoted && 'fill-post-card-voted',
           !isVotePending && 'group-hover/vote:-translate-y-0.5'
         )}
       />

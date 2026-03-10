@@ -378,16 +378,18 @@ export function WidgetHome({
                       className={cn(
                         'flex flex-col items-center justify-center shrink-0 w-10 h-10 rounded-md border transition-all duration-200',
                         hasVoted
-                          ? 'text-primary bg-primary/10 border-primary/30'
-                          : 'text-muted-foreground bg-muted/30 border-border/50 hover:bg-muted/50 hover:border-border',
+                          ? 'text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15'
+                          : 'bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50 hover:border-border',
                         isPending && 'opacity-70 cursor-wait'
                       )}
                     >
-                      <ChevronUpIcon className={cn('h-3.5 w-3.5', hasVoted && 'text-primary')} />
+                      <ChevronUpIcon
+                        className={cn('h-3.5 w-3.5', hasVoted && 'text-post-card-voted')}
+                      />
                       <span
                         className={cn(
                           'text-xs font-semibold tabular-nums leading-none',
-                          hasVoted ? 'text-primary' : 'text-foreground'
+                          hasVoted ? 'text-post-card-voted' : 'text-foreground'
                         )}
                       >
                         {voteCount}

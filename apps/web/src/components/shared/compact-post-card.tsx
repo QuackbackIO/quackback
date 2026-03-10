@@ -47,8 +47,8 @@ export function CompactPostCard({
   const content = (
     <div className="flex items-start gap-2.5">
       {/* Vote pill */}
-      <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-1 gap-0">
-        <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
+      <div className="flex items-center shrink-0 rounded-md border border-border/50 bg-muted/40 px-2.5 py-1.5 gap-1">
+        <ChevronUpIcon className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-semibold tabular-nums text-foreground">{voteCount}</span>
       </div>
 

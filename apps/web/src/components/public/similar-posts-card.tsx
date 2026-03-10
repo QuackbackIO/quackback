@@ -40,12 +40,12 @@ function SimilarPostItem({ post }: SimilarPostItemProps): React.ReactElement {
         className={cn(
           'flex flex-col items-center justify-center shrink-0 w-10 rounded transition-colors',
           hasVoted
-            ? 'bg-primary/10 text-primary'
+            ? 'text-post-card-voted border border-post-card-voted/60 bg-post-card-voted/15'
             : 'bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60',
           isPending && 'opacity-50 cursor-wait'
         )}
       >
-        <ChevronUpIcon className={cn('h-4 w-4', hasVoted && 'text-primary')} />
+        <ChevronUpIcon className={cn('h-4 w-4', hasVoted && 'text-post-card-voted')} />
         <span className="text-xs font-semibold tabular-nums">{voteCount}</span>
       </button>
 

@@ -4,7 +4,6 @@ import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  EllipsisVerticalIcon,
   FaceSmileIcon,
   LockClosedIcon,
   MapPinIcon,
@@ -12,12 +11,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
@@ -245,8 +238,13 @@ function CommentItem({
             'ml-4 pl-4 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
         )}
       >
-        {/* Comment content */}
-        <div className="py-2">
+        {/* Comment content — pinned highlight wraps only the comment, not replies */}
+        <div
+          className={cn(
+            'py-2',
+            isPinned && 'bg-primary/[0.04] border border-primary/15 rounded-lg px-3 -mx-3'
+          )}
+        >
           <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8 shrink-0">
               {comment.avatarUrl && (
@@ -281,36 +279,6 @@ function CommentItem({
             )}
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
-            {/* Admin pin/unpin dropdown */}
-            {canPin && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-60 hover:opacity-100 ml-auto"
-                  >
-                    <EllipsisVerticalIcon className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {isPinned ? (
-                    <DropdownMenuItem onClick={onUnpinComment} disabled={isPinPending}>
-                      <MapPinIcon className="h-4 w-4 mr-2" />
-                      Unpin
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem
-                      onClick={() => onPinComment?.(comment.id as CommentId)}
-                      disabled={isPinPending}
-                    >
-                      <MapPinIcon className="h-4 w-4 mr-2" />
-                      Pin
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
           </div>
 
           {/* Comment content - always visible */}
@@ -358,9 +326,10 @@ function CommentItem({
                 className={cn(
                   'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all duration-150',
                   'border hover:bg-muted',
+                  'bg-muted/50',
                   reaction.hasReacted
-                    ? 'bg-primary/10 border-primary/30 text-primary'
-                    : 'bg-muted/50 border-transparent text-muted-foreground'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground'
                 )}
               >
                 <span>{reaction.emoji}</span>
@@ -410,6 +379,20 @@ function CommentItem({
                 Reply
               </Button>
             )}
+
+            {/* Pin/Unpin button (admin only) */}
+            {canPin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={isPinned ? onUnpinComment : () => onPinComment?.(comment.id as CommentId)}
+                disabled={isPinPending}
+              >
+                <MapPinIcon className="h-3 w-3 mr-1" />
+                {isPinned ? 'Unpin' : 'Pin'}
+              </Button>
+            )}
           </div>
 
           {/* Reply form */}
@@ -430,7 +413,7 @@ function CommentItem({
                   user={user}
                   createComment={createComment}
                   isTeamMember={isTeamMember}
-                  forcePrivate={comment.isPrivate}
+                  defaultPrivate={comment.isPrivate}
                 />
               </div>
             </div>

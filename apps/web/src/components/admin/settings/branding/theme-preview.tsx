@@ -306,6 +306,12 @@ function PostCard({
         )}
         style={{
           borderColor: 'color-mix(in srgb, var(--post-card-border) 30%, transparent)',
+          ...(hasVoted
+            ? {
+                backgroundColor:
+                  'color-mix(in srgb, var(--post-card-voted-color) 15%, transparent)',
+              }
+            : {}),
         }}
       >
         <ChevronUpIcon

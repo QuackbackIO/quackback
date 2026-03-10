@@ -178,6 +178,9 @@
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
 
+    /* Portal component colors */
+    --color-post-card-voted: var(--post-card-voted-color);
+
     /* Typography */
     --font-sans: var(--font-sans);
     --font-mono: var(--font-mono);
@@ -240,23 +243,14 @@
    Applies default border and outline colors
    ============================================== */
 
-* {
-  color-scheme: light dark;
-  border-color: var(--color-border);
-}
-
-body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  -webkit-font-smoothing: antialiased;
-  letter-spacing: var(--letter-spacing);
-}
-
 @layer base {
   * {
+    color-scheme: light dark;
     @apply border-border outline-ring/50;
   }
   body {
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: var(--letter-spacing);
     @apply bg-background text-foreground;
   }
   button:not(:disabled),

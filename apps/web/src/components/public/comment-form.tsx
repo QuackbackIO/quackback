@@ -52,8 +52,8 @@ interface CommentFormProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member (enables status selector and private toggle) */
   isTeamMember?: boolean
-  /** Force comment to be private (for replies to private comments) */
-  forcePrivate?: boolean
+  /** Default the private toggle to on (e.g. replying to a private comment) */
+  defaultPrivate?: boolean
 }
 
 export function CommentForm({
@@ -66,15 +66,14 @@ export function CommentForm({
   statuses,
   currentStatusId,
   isTeamMember,
-  forcePrivate,
+  defaultPrivate,
 }: CommentFormProps) {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)
-  const [isPrivate, setIsPrivate] = useState(false)
-  const effectiveIsPrivate = forcePrivate || isPrivate
+  const [isPrivate, setIsPrivate] = useState(defaultPrivate ?? false)
 
   const authPopover = useAuthPopoverSafe()
 
@@ -105,8 +104,7 @@ export function CommentForm({
   const showStatusSelector = isTeamMember && !parentId && statuses && statuses.length > 0
 
   function privateTooltipText(): string {
-    if (forcePrivate) return 'Replies to private comments are always private'
-    if (effectiveIsPrivate) return 'Only visible to team members'
+    if (isPrivate) return 'Only visible to team members'
     return 'Make this comment private (team-only)'
   }
 
@@ -127,7 +125,7 @@ export function CommentForm({
         authorEmail: effectiveUser?.email || null,
         principalId: effectiveUser?.principalId || null,
         statusId: selectedStatusId,
-        isPrivate: effectiveIsPrivate,
+        isPrivate: isPrivate,
       },
       {
         onSuccess: () => {
@@ -287,6 +285,32 @@ export function CommentForm({
                 </PopoverContent>
               </Popover>
 
+              {/* Private toggle */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(!isPrivate)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
+                        isPrivate
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      {isPrivate ? (
+                        <LockClosedIcon className="h-3 w-3" />
+                      ) : (
+                        <LockOpenIcon className="h-3 w-3" />
+                      )}
+                      Private
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{privateTooltipText()}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               {/* Submit */}
               {onCancel && (
                 <Button
@@ -382,17 +406,16 @@ export function CommentForm({
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    variant={effectiveIsPrivate ? 'default' : 'ghost'}
+                    variant={isPrivate ? 'default' : 'ghost'}
                     size="sm"
-                    disabled={forcePrivate}
                     onClick={() => setIsPrivate(!isPrivate)}
                     className={
-                      effectiveIsPrivate
+                      isPrivate
                         ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
                         : 'text-muted-foreground gap-1.5'
                     }
                   >
-                    {effectiveIsPrivate ? (
+                    {isPrivate ? (
                       <LockClosedIcon className="h-3.5 w-3.5" />
                     ) : (
                       <LockOpenIcon className="h-3.5 w-3.5" />
