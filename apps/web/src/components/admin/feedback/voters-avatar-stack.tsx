@@ -123,16 +123,20 @@ export function VotersAvatarStack({
           onClick={() => setVotersOpen(true)}
           className="flex items-center -space-x-2 hover:opacity-80 transition-opacity"
         >
-          {displayVoters.map((voter) => (
+          {displayVoters.map((voter, i) => (
             <Avatar
               key={voter.principalId}
               src={voter.avatarUrl}
               name={voter.displayName}
               className="h-6 w-6 text-[9px] ring-2 ring-background"
+              style={{ zIndex: i + 1 }}
             />
           ))}
           {remainingCount > 0 && (
-            <span className="flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background">
+            <span
+              className="relative flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background"
+              style={{ zIndex: displayVoters.length + 1 }}
+            >
               +{remainingCount}
             </span>
           )}

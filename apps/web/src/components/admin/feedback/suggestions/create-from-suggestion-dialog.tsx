@@ -165,6 +165,17 @@ function CreateFromSuggestionContent({
                       date={rawItem.sourceCreatedAt}
                       className="text-muted-foreground/60 shrink-0"
                     />
+                    {rawItem.externalUrl && (
+                      <a
+                        href={rawItem.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-muted-foreground/60 hover:text-foreground transition-colors shrink-0"
+                      >
+                        Open in {SOURCE_TYPE_LABELS[sourceType] ?? sourceType}
+                        <span aria-hidden>&rarr;</span>
+                      </a>
+                    )}
                   </div>
                   <ExpandableQuote text={snippet} />
                 </div>

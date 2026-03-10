@@ -119,6 +119,17 @@ export function SuggestionSourceGroup({
           </span>
           <span className="text-[11px] text-muted-foreground/60 truncate">{authorLabel}</span>
           <TimeAgo date={headerDate} className="text-[11px] text-muted-foreground/40 shrink-0" />
+          {rawItem?.externalUrl && (
+            <a
+              href={rawItem.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0"
+            >
+              Open in {SOURCE_TYPE_LABELS[sourceType] ?? sourceType}
+              <span aria-hidden>&rarr;</span>
+            </a>
+          )}
         </div>
         {!readOnly && allIds.length > 1 && !hasPending && (
           <Button
