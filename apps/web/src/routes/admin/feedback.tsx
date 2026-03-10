@@ -18,6 +18,7 @@ const searchSchema = z.object({
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
   sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
+  hasDuplicates: z.boolean().optional(),
   deleted: z.boolean().optional(),
   post: z.string().optional(),
   // Roadmap-specific
@@ -26,6 +27,7 @@ const searchSchema = z.object({
   source: z.string().optional(),
   suggestionSort: z.enum(['newest', 'relevance']).optional(),
   suggestionSearch: z.string().optional(),
+  suggestionStatus: z.enum(['pending', 'dismissed']).optional(),
 })
 
 export const Route = createFileRoute('/admin/feedback')({

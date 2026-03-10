@@ -12,7 +12,7 @@ import type { SuggestionsPageResult } from '@/lib/client/hooks/use-suggestions-q
 export const feedbackQueries = {
   suggestions: (filters?: {
     status?: 'pending' | 'accepted' | 'dismissed' | 'expired'
-    suggestionType?: 'create_post' | 'duplicate_post'
+    suggestionType?: 'create_post' | 'vote_on_post' | 'duplicate_post'
     boardId?: string
     sourceIds?: string[]
     sort?: 'newest' | 'relevance'

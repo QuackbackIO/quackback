@@ -165,6 +165,27 @@ export async function dismissMergeSuggestion(
 }
 
 /**
+ * Restore a dismissed merge suggestion back to pending.
+ */
+export async function restoreMergeSuggestion(
+  id: MergeSuggestionId,
+  principalId: PrincipalId
+): Promise<void> {
+  console.log(
+    `[domain:merge-suggestions] restoreMergeSuggestion: id=${id} principalId=${principalId}`
+  )
+  await db
+    .update(mergeSuggestions)
+    .set({
+      status: 'pending',
+      resolvedAt: null,
+      resolvedByPrincipalId: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(mergeSuggestions.id, id), eq(mergeSuggestions.status, 'dismissed')))
+}
+
+/**
  * Get pending merge suggestions for a post (where the post is source OR target).
  */
 export async function getPendingSuggestionsForPost(postId: PostId): Promise<MergeSuggestionView[]> {

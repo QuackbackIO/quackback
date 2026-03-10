@@ -15,6 +15,7 @@ export function useSuggestionsFilters() {
       search: search.suggestionSearch,
       sourceTypes: search.source ? [search.source] : undefined,
       sort: search.suggestionSort,
+      status: search.suggestionStatus,
     }),
     [search]
   )
@@ -30,6 +31,7 @@ export function useSuggestionsFilters() {
             source: updates.sourceTypes?.[0],
           }),
           ...('sort' in updates && { suggestionSort: updates.sort }),
+          ...('status' in updates && { suggestionStatus: updates.status }),
         },
         replace: true,
       })
@@ -42,6 +44,7 @@ export function useSuggestionsFilters() {
       to: '/admin/feedback/incoming',
       search: {
         suggestionSort: search.suggestionSort,
+        suggestionStatus: search.suggestionStatus,
       },
       replace: true,
     })

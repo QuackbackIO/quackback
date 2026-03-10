@@ -4,8 +4,16 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { FeedbackSourceId, FeedbackSuggestionId, BoardId, PrincipalId } from '@quackback/ids'
+import type {
+  FeedbackSourceId,
+  FeedbackSuggestionId,
+  BoardId,
+  PrincipalId,
+  RawFeedbackItemId,
+} from '@quackback/ids'
 import { isTypeId } from '@quackback/ids'
+import type { SQL } from 'drizzle-orm'
+
 import { requireAuth } from './auth-helpers'
 import {
   db,
@@ -28,6 +36,7 @@ const listSuggestionsSchema = z.object({
   suggestionType: z.enum(['create_post', 'vote_on_post', 'duplicate_post']).optional(),
   boardId: z.string().optional(),
   sourceIds: z.array(z.string()).optional(),
+  sourceTypes: z.array(z.string()).optional(),
   sort: z.enum(['newest', 'relevance']).optional().default('newest'),
   limit: z.number().optional().default(20),
   offset: z.number().optional().default(0),
@@ -87,13 +96,10 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
 
     // If filtering to duplicate_post only, skip feedback suggestions query
     const includeFeedback = data.suggestionType !== 'duplicate_post'
-    const includeMerge = !data.suggestionType || data.suggestionType === 'duplicate_post'
+    const includeMerge = data.suggestionType === 'duplicate_post'
 
-    let feedbackItems: any[] = []
-    let feedbackTotal = 0
-
-    if (includeFeedback) {
-      const conditions: any[] = [eq(feedbackSuggestions.status, data.status ?? 'pending')]
+    const feedbackQuery = async () => {
+      const conditions: SQL[] = [eq(feedbackSuggestions.status, data.status ?? 'pending')]
       if (data.suggestionType) {
         conditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
       }
@@ -107,21 +113,30 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
           .where(inArray(rawFeedbackItems.sourceId, data.sourceIds as FeedbackSourceId[]))
         conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
       }
+      if (data.sourceTypes?.length) {
+        const matchingRawItemIds = db
+          .select({ id: rawFeedbackItems.id })
+          .from(rawFeedbackItems)
+          .where(inArray(rawFeedbackItems.sourceType, data.sourceTypes))
+        conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
+      }
 
       const [totalResult] = await db
         .select({ count: count() })
         .from(feedbackSuggestions)
         .where(and(...conditions))
 
-      feedbackTotal = totalResult?.count ?? 0
-
       const orderBy = [desc(feedbackSuggestions.createdAt)]
 
       // Fetch enough items to cover the combined offset + limit range
       const fetchUpTo = data.offset + data.limit + 1
 
-      feedbackItems = await db.query.feedbackSuggestions.findMany({
+      const rows = await db.query.feedbackSuggestions.findMany({
         where: () => and(...conditions),
+        columns: {
+          // Exclude embedding vectors — they're large (1536 floats) and not needed by the UI
+          embedding: false,
+        },
         orderBy,
         limit: fetchUpTo,
         with: {
@@ -133,6 +148,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
               author: true,
               content: true,
               sourceCreatedAt: true,
+              principalId: true,
             },
             with: {
               source: { columns: { id: true, name: true, sourceType: true } },
@@ -153,11 +169,13 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
           },
         },
       })
+
+      return { rows, total: totalResult?.count ?? 0 }
     }
 
-    // Include post-to-post merge suggestions
-    let mergeItems: any[] = []
-    let mergeTotal = 0
+    const feedbackResult = includeFeedback ? await feedbackQuery() : null
+    const feedbackItems = feedbackResult?.rows ?? []
+    const feedbackTotal = feedbackResult?.total ?? 0
 
     // Look up quackback source once (used for merge source filtering and per-source counts)
     const quackbackSource = await db.query.feedbackSources.findFirst({
@@ -169,7 +187,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     const includesMergeSource =
       !data.sourceIds?.length || (!!quackbackSource && data.sourceIds.includes(quackbackSource.id))
 
-    if (includeMerge && includesMergeSource && !data.boardId) {
+    const mergeQuery = async () => {
       const { getPendingMergeSuggestions } =
         await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
 
@@ -179,9 +197,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
         limit: mergeFetchUpTo,
       })
 
-      mergeTotal = total
-
-      mergeItems = items.map((ms: any) => ({
+      const mapped = items.map((ms) => ({
         id: ms.id,
         suggestionType: 'duplicate_post' as const,
         status: ms.status,
@@ -198,14 +214,21 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
         board: null,
         signal: null,
       }))
+
+      return { items: mapped, total }
     }
+
+    const mergeResult =
+      includeMerge && includesMergeSource && !data.boardId ? await mergeQuery() : null
+    const mergeItems = mergeResult?.items ?? []
+    const mergeTotal = mergeResult?.total ?? 0
 
     // Compute per-source-type counts across ALL matching suggestions (ignoring pagination)
     const countsBySource: Record<string, number> = {}
 
     // Count feedback suggestions grouped by source type
     if (includeFeedback) {
-      const feedbackCountConditions: any[] = [
+      const feedbackCountConditions: SQL[] = [
         eq(feedbackSuggestions.status, data.status ?? 'pending'),
       ]
       if (data.suggestionType) {
@@ -234,11 +257,17 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       countsBySource['quackback'] = (countsBySource['quackback'] ?? 0) + mergeTotal
     }
 
-    // Map feedback items: rename resultPost → targetPost for UI consistency
-    const mappedFeedbackItems = feedbackItems.map((item: any) => {
-      const { resultPost, ...rest } = item
+    // Map feedback items: rename resultPost -> targetPost for UI consistency
+    const mappedFeedbackItems = feedbackItems.map((item) => {
+      const { resultPost, rawItem, ...rest } = item
       return {
         ...rest,
+        rawItem: rawItem
+          ? {
+              ...rawItem,
+              author: rawItem.author as Record<string, never>,
+            }
+          : null,
         targetPost: resultPost ? { ...resultPost, status: null } : null,
         sourcePost: null,
       }
@@ -247,7 +276,9 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     // Combine and sort across both sources
     const allSorted = [...mappedFeedbackItems, ...mergeItems].sort((a, b) => {
       if (data.sort === 'relevance') {
-        return (b.similarityScore ?? 0) - (a.similarityScore ?? 0)
+        const scoreB = 'similarityScore' in b ? (b.similarityScore ?? 0) : 0
+        const scoreA = 'similarityScore' in a ? (a.similarityScore ?? 0) : 0
+        return scoreB - scoreA
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
@@ -266,20 +297,28 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
   })
 
 /**
- * Count pending create_post suggestions (for sidebar badge).
+ * Count pending and dismissed suggestions (for sidebar badge + toggle).
  */
 export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ roles: ['admin', 'member'] })
-  const [result] = await db
-    .select({ count: count() })
-    .from(feedbackSuggestions)
-    .where(
-      and(
-        eq(feedbackSuggestions.status, 'pending'),
-        inArray(feedbackSuggestions.suggestionType, ['create_post', 'vote_on_post'])
-      )
-    )
-  return { count: result?.count ?? 0 }
+
+  const typeFilter = inArray(feedbackSuggestions.suggestionType, ['create_post', 'vote_on_post'])
+
+  const [[pendingResult], [dismissedResult]] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(feedbackSuggestions)
+      .where(and(eq(feedbackSuggestions.status, 'pending'), typeFilter)),
+    db
+      .select({ count: count() })
+      .from(feedbackSuggestions)
+      .where(and(eq(feedbackSuggestions.status, 'dismissed'), typeFilter)),
+  ])
+
+  return {
+    count: pendingResult?.count ?? 0,
+    dismissedCount: dismissedResult?.count ?? 0,
+  }
 })
 
 export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(async () => {
@@ -301,7 +340,10 @@ export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(as
     })
   )
 
-  return sourcesWithCounts as any
+  return sourcesWithCounts.map((s) => ({
+    ...s,
+    config: s.config as Record<string, never>,
+  }))
 })
 
 // ============================================
@@ -352,10 +394,16 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
       const { acceptCreateSuggestion } =
         await import('@/lib/server/domains/feedback/pipeline/suggestion.service')
 
+      // Strip authorPrincipalId from edits for non-admin callers
+      const safeEdits =
+        data.edits && auth.principal.role !== 'admin'
+          ? { ...data.edits, authorPrincipalId: undefined }
+          : data.edits
+
       const result = await acceptCreateSuggestion(
         data.id as FeedbackSuggestionId,
         auth.principal.id as PrincipalId,
-        data.edits
+        safeEdits
       )
       return { success: true, resultPostId: result.resultPostId }
     } catch (error) {
@@ -391,6 +439,33 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
     }
   })
 
+export const restoreSuggestionFn = createServerFn({ method: 'POST' })
+  .inputValidator(dismissSuggestionSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:feedback] restoreSuggestionFn: id=${data.id}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+      // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
+      if (isTypeId(data.id, 'merge_sug')) {
+        const { restoreMergeSuggestion } =
+          await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
+        await restoreMergeSuggestion(data.id, auth.principal.id as PrincipalId)
+        return { success: true }
+      }
+
+      const { restoreSuggestion } =
+        await import('@/lib/server/domains/feedback/pipeline/suggestion.service')
+
+      await restoreSuggestion(data.id as FeedbackSuggestionId, auth.principal.id as PrincipalId)
+
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:feedback] restoreSuggestionFn failed:`, error)
+      throw error
+    }
+  })
+
 export const retryFailedItemFn = createServerFn({ method: 'POST' })
   .inputValidator(retryItemSchema)
   .handler(async ({ data }) => {
@@ -409,7 +484,7 @@ export const retryFailedItemFn = createServerFn({ method: 'POST' })
           lastError: null,
           updatedAt: new Date(),
         })
-        .where(eq(rawFeedbackItems.id, data.rawItemId as any))
+        .where(eq(rawFeedbackItems.id, data.rawItemId as RawFeedbackItemId))
 
       await enqueueFeedbackAiJob({ type: 'extract-signals', rawItemId: data.rawItemId })
 
@@ -477,7 +552,7 @@ export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
         })
         .returning()
 
-      return source as any
+      return { ...source, config: source.config as Record<string, never> }
     } catch (error) {
       console.error(`[fn:feedback] createFeedbackSourceFn failed:`, error)
       throw error
@@ -502,7 +577,7 @@ export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
         .where(eq(feedbackSources.id, data.id as FeedbackSourceId))
         .returning()
 
-      return updated as any
+      return { ...updated, config: updated.config as Record<string, never> }
     } catch (error) {
       console.error(`[fn:feedback] updateFeedbackSourceFn failed:`, error)
       throw error

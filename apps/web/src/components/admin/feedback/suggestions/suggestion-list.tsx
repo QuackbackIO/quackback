@@ -23,11 +23,13 @@ interface SuggestionListProps {
   onLoadMore: () => void
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
-  onDismissAll: (ids: string[]) => void
   search?: string
   onSearchChange: (search: string) => void
   sort?: string
   onSortChange: (sort: 'newest' | 'relevance') => void
+  status: 'pending' | 'dismissed'
+  onStatusChange: (status: 'pending' | 'dismissed') => void
+  dismissedCount?: number
 }
 
 export function SuggestionList({
@@ -37,11 +39,13 @@ export function SuggestionList({
   onLoadMore,
   onCreatePost,
   onResolved,
-  onDismissAll,
   search,
   onSearchChange,
   sort = 'relevance',
   onSortChange,
+  status,
+  onStatusChange,
+  dismissedCount,
 }: SuggestionListProps) {
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: search,
@@ -58,9 +62,33 @@ export function SuggestionList({
     threshold: 0.1,
   })
 
+  const isDismissed = status === 'dismissed'
+
   const headerContent = (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 border border-border/40 rounded-lg p-0.5">
+          {(['pending', 'dismissed'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer whitespace-nowrap',
+                status === s
+                  ? 'bg-muted text-foreground font-medium shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted/50'
+              )}
+              onClick={() => onStatusChange(s)}
+            >
+              {s === 'pending' ? 'Active' : 'Dismissed'}
+              {s === 'dismissed' && dismissedCount != null && dismissedCount > 0 && (
+                <span className="ml-1 text-[10px] text-muted-foreground/50">
+                  ({dismissedCount})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
         <SearchInput
           value={searchValue}
           onChange={setSearchValue}
@@ -96,8 +124,12 @@ export function SuggestionList({
       {suggestions.length === 0 ? (
         <EmptyState
           icon={InboxIcon}
-          title="No incoming feedback"
-          description="Feedback from connected sources like Zendesk, Intercom, and other integrations will appear here for triage."
+          title={isDismissed ? 'No dismissed suggestions' : 'No incoming feedback'}
+          description={
+            isDismissed
+              ? 'Suggestions you dismiss will appear here for review.'
+              : 'Feedback from connected sources like Zendesk, Intercom, and other integrations will appear here for triage.'
+          }
         />
       ) : (
         <div className="p-3">
@@ -112,7 +144,7 @@ export function SuggestionList({
                   group={group}
                   onCreatePost={onCreatePost}
                   onResolved={onResolved}
-                  onDismissAll={onDismissAll}
+                  readOnly={isDismissed}
                 />
               </div>
             ))}

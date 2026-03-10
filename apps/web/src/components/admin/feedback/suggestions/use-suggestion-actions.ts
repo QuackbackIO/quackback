@@ -1,7 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { acceptSuggestionFn, dismissSuggestionFn } from '@/lib/server/functions/feedback'
+import {
+  acceptSuggestionFn,
+  dismissSuggestionFn,
+  restoreSuggestionFn,
+} from '@/lib/server/functions/feedback'
 import { suggestionsKeys } from '@/lib/client/hooks/use-suggestions-query'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { feedbackQueries } from '@/lib/client/queries/feedback'
 
 interface UseSuggestionActionsOptions {
   suggestionId: string
@@ -19,6 +24,7 @@ export function useSuggestionActions({
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
     queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    queryClient.invalidateQueries({ queryKey: feedbackQueries.incomingCount().queryKey })
   }
 
   const acceptMutation = useMutation({
@@ -60,9 +66,21 @@ export function useSuggestionActions({
     },
   })
 
+  const restoreMutation = useMutation({
+    mutationFn: () => restoreSuggestionFn({ data: { id: suggestionId } }),
+    onSuccess: () => {
+      invalidate()
+      onResolved?.()
+    },
+    onError: () => {
+      invalidate()
+    },
+  })
+
   return {
     accept: acceptMutation.mutate,
     dismiss: () => dismissMutation.mutate(),
-    isPending: acceptMutation.isPending || dismissMutation.isPending,
+    restore: () => restoreMutation.mutate(),
+    isPending: acceptMutation.isPending || dismissMutation.isPending || restoreMutation.isPending,
   }
 }

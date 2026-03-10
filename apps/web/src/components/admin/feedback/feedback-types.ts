@@ -29,6 +29,7 @@ export interface SuggestionListItem {
     author: RawFeedbackAuthor
     content: RawFeedbackContent
     sourceCreatedAt: string | Date
+    principalId: string | null
     source: {
       id: string
       name: string

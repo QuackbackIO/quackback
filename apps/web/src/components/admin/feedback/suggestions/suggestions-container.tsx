@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { SuggestionsLayout } from './suggestions-layout'
 import { SuggestionsFiltersSidebar } from './suggestions-filter-sidebar'
 import { SuggestionList } from './suggestion-list'
@@ -8,11 +8,8 @@ import { useSuggestionsFilters } from './use-suggestions-filters'
 import {
   useSuggestionsQuery,
   flattenSuggestions,
-  suggestionsKeys,
   type SuggestionsPageResult,
 } from '@/lib/client/hooks/use-suggestions-query'
-import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
-import { dismissSuggestionFn } from '@/lib/server/functions/feedback'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
 import type { SuggestionListItem, FeedbackSourceView } from '../feedback-types'
 
@@ -21,7 +18,6 @@ interface SuggestionsContainerProps {
 }
 
 export function SuggestionsContainer({ initialSuggestions }: SuggestionsContainerProps) {
-  const queryClient = useQueryClient()
   const { filters, setFilters, hasActiveFilters } = useSuggestionsFilters()
 
   // Dialog state for create_post suggestions
@@ -39,15 +35,16 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   }, [])
 
   const shouldUseInitialData =
-    isInitialRender.current && !filters.search && !filters.sourceTypes?.length
+    isInitialRender.current && !filters.search && !filters.sourceTypes?.length && !filters.status
 
   // Server-side query filters — all feedback suggestions (create_post + vote_on_post)
   const queryFilters = useMemo(
     () => ({
-      status: 'pending' as const,
+      status: (filters.status ?? 'pending') as 'pending' | 'dismissed',
+      sourceTypes: filters.sourceTypes,
       sort: filters.sort,
     }),
-    [filters.sort]
+    [filters.status, filters.sourceTypes, filters.sort]
   )
 
   // Infinite query for paginated suggestions
@@ -118,14 +115,14 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
     [setFilters]
   )
 
-  const handleDismissAll = useCallback(
-    async (ids: string[]) => {
-      await Promise.all(ids.map((id) => dismissSuggestionFn({ data: { id } })))
-      queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
-      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
-    },
-    [queryClient]
+  const handleStatusChange = useCallback(
+    (status: 'pending' | 'dismissed') => setFilters({ status }),
+    [setFilters]
   )
+
+  // Dismissed count for the toggle badge
+  const { data: countData } = useQuery(feedbackQueries.incomingCount())
+  const dismissedCount = countData?.dismissedCount ?? 0
 
   return (
     <>
@@ -154,11 +151,13 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
               onLoadMore={handleLoadMore}
               onCreatePost={setCreateTarget}
               onResolved={handleResolved}
-              onDismissAll={handleDismissAll}
               search={filters.search}
               onSearchChange={handleSearchChange}
               sort={filters.sort}
               onSortChange={handleSortChange}
+              status={filters.status ?? 'pending'}
+              onStatusChange={handleStatusChange}
+              dismissedCount={dismissedCount}
             />
           </Suspense>
         }

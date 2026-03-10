@@ -62,10 +62,16 @@ export function SuggestionsFiltersSidebar({
             selectedIds={filters.sourceTypes || []}
             onSelect={handleSourceTypeSelect}
             renderItem={(item) => {
-              const count = (item as any).suggestionCount as number
+              const typed = item as {
+                id: string
+                name: string
+                sourceType: string
+                suggestionCount: number
+              }
+              const count = typed.suggestionCount
               return (
                 <span className="flex items-center gap-2">
-                  <SourceTypeIcon sourceType={(item as any).sourceType} size="xs" />
+                  <SourceTypeIcon sourceType={typed.sourceType} size="xs" />
                   <span className="truncate">{item.name}</span>
                   {count > 0 && (
                     <span className="ml-auto text-[10px] text-muted-foreground">{count}</span>

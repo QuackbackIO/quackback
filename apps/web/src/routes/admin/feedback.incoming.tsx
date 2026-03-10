@@ -8,6 +8,7 @@ import { Spinner } from '@/components/shared/spinner'
 export const Route = createFileRoute('/admin/feedback/incoming')({
   loaderDeps: ({ search }) => ({
     suggestionSort: search.suggestionSort,
+    suggestionStatus: search.suggestionStatus,
   }),
   loader: async ({ context, deps }) => {
     const { queryClient } = context
@@ -15,8 +16,7 @@ export const Route = createFileRoute('/admin/feedback/incoming')({
     await Promise.all([
       queryClient.ensureQueryData(
         feedbackQueries.suggestions({
-          status: 'pending',
-          suggestionType: 'create_post',
+          status: deps.suggestionStatus ?? 'pending',
           sort: deps.suggestionSort,
         })
       ),
@@ -31,8 +31,7 @@ function IncomingPage() {
 
   const suggestionsQuery = useSuspenseQuery(
     feedbackQueries.suggestions({
-      status: 'pending',
-      suggestionType: 'create_post',
+      status: deps.suggestionStatus ?? 'pending',
       sort: deps.suggestionSort,
     })
   )
