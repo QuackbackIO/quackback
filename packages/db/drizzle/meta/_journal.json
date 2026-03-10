@@ -204,6 +204,34 @@
       "when": 1772910000000,
       "tag": "0029_feedback_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1772920000000,
+      "tag": "0030_ai_usage_and_pipeline_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1772930000000,
+      "tag": "0031_nullable_user_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1772940000000,
+      "tag": "0032_drop_dismiss_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1772950000000,
+      "tag": "0033_vote_added_by_principal",
+      "breakpoints": true
     }
   ]
 }

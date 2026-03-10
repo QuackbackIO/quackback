@@ -101,6 +101,12 @@ export type UserAttributeId = TypeId<'user_attr'>
 /** Post sentiment analysis ID - e.g., sentiment_01h455vb4pex5vsknk084sn02q */
 export type SentimentId = TypeId<'sentiment'>
 
+/** AI usage log entry ID - e.g., ailog_01h455vb4pex5vsknk084sn02q */
+export type AiUsageLogId = TypeId<'ailog'>
+
+/** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
+export type PipelineLogId = TypeId<'plog'>
+
 /** Post activity log ID - e.g., activity_01h455vb4pex5vsknk084sn02q */
 export type ActivityId = TypeId<'activity'>
 
@@ -202,6 +208,8 @@ export interface EntityIdMap {
   segment: SegmentId
   user_attr: UserAttributeId
   sentiment: SentimentId
+  ai_usage: AiUsageLogId
+  pipeline_log: PipelineLogId
   activity: ActivityId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId

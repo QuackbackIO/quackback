@@ -47,6 +47,8 @@ export const ID_PREFIXES = {
 
   // AI
   sentiment: 'sentiment',
+  ai_usage: 'ailog',
+  pipeline_log: 'plog',
 
   // Feedback aggregation
   feedback_source: 'feedback_source',

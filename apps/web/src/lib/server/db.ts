@@ -224,6 +224,10 @@ export {
   // Schema tables - activity
   postActivity,
   postActivityRelations,
+  // Schema tables - ai usage log
+  aiUsageLog,
+  // Schema tables - pipeline log
+  pipelineLog,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
