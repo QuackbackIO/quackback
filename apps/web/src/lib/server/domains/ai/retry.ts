@@ -17,22 +17,30 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   maxDelayMs: 30000,
 }
 
-export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<{ result: T; retryCount: number }> {
   const { maxRetries, baseDelayMs, maxDelayMs } = { ...DEFAULT_OPTIONS, ...options }
 
   let lastError: Error = new Error('No attempts made')
+  let retryCount = 0
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await fn()
+      const result = await fn()
+      return { result, retryCount }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
 
       const isLastAttempt = attempt === maxRetries
       if (!isRetryableError(lastError) || isLastAttempt) {
+        // Attach retryCount so withUsageLogging can capture it in error rows
+        ;(lastError as Error & { retryCount?: number }).retryCount = retryCount
         throw lastError
       }
 
+      retryCount++
       const delay = Math.min(baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000, maxDelayMs)
 
       console.log(

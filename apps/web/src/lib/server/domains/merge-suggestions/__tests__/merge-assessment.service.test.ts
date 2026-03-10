@@ -17,7 +17,9 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+  withRetry: vi.fn((fn: () => Promise<unknown>) =>
+    fn().then((result: unknown) => ({ result, retryCount: 0 }))
+  ),
 }))
 
 vi.mock('@/lib/server/domains/ai/parse', () => ({

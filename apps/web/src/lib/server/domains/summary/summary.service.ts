@@ -105,7 +105,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       '\n\nA previous summary is included. Update it to reflect the current state of the discussion — preserve existing context that is still relevant, and incorporate any new information from recent comments.'
     : SYSTEM_PROMPT
 
-  const completion = await withRetry(() =>
+  const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
       model: SUMMARY_MODEL,
       messages: [

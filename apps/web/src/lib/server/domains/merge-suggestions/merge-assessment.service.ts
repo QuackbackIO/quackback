@@ -60,7 +60,7 @@ export async function assessMergeCandidates(
 
   const userPrompt = buildPrompt(sourcePost, candidates)
 
-  const completion = await withRetry(() =>
+  const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
       model: ASSESSMENT_MODEL,
       messages: [
