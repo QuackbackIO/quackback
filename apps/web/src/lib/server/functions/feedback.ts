@@ -7,12 +7,10 @@ import { createServerFn } from '@tanstack/react-start'
 import type {
   FeedbackSourceId,
   FeedbackSuggestionId,
-  BoardId,
   PrincipalId,
   RawFeedbackItemId,
 } from '@quackback/ids'
 import { isTypeId } from '@quackback/ids'
-import type { SQL } from 'drizzle-orm'
 
 import { requireAuth } from './auth-helpers'
 import {
@@ -26,6 +24,7 @@ import {
   feedbackSources,
   count,
 } from '@/lib/server/db'
+import { listSuggestions } from '@/lib/server/domains/feedback/suggestion.query'
 
 // ============================================
 // Schemas
@@ -94,206 +93,16 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
     )
     await requireAuth({ roles: ['admin', 'member'] })
 
-    // If filtering to duplicate_post only, skip feedback suggestions query
-    const includeFeedback = data.suggestionType !== 'duplicate_post'
-    const includeMerge = data.suggestionType === 'duplicate_post'
-
-    const feedbackQuery = async () => {
-      const conditions: SQL[] = [eq(feedbackSuggestions.status, data.status ?? 'pending')]
-      if (data.suggestionType) {
-        conditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
-      }
-      if (data.boardId) {
-        conditions.push(eq(feedbackSuggestions.boardId, data.boardId as BoardId))
-      }
-      if (data.sourceIds?.length) {
-        const matchingRawItemIds = db
-          .select({ id: rawFeedbackItems.id })
-          .from(rawFeedbackItems)
-          .where(inArray(rawFeedbackItems.sourceId, data.sourceIds as FeedbackSourceId[]))
-        conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
-      }
-      if (data.sourceTypes?.length) {
-        const matchingRawItemIds = db
-          .select({ id: rawFeedbackItems.id })
-          .from(rawFeedbackItems)
-          .where(inArray(rawFeedbackItems.sourceType, data.sourceTypes))
-        conditions.push(inArray(feedbackSuggestions.rawFeedbackItemId, matchingRawItemIds))
-      }
-
-      const [totalResult] = await db
-        .select({ count: count() })
-        .from(feedbackSuggestions)
-        .where(and(...conditions))
-
-      const orderBy = [desc(feedbackSuggestions.createdAt)]
-
-      // Fetch enough items to cover the combined offset + limit range
-      const fetchUpTo = data.offset + data.limit + 1
-
-      const rows = await db.query.feedbackSuggestions.findMany({
-        where: () => and(...conditions),
-        columns: {
-          // Exclude embedding vectors — they're large (1536 floats) and not needed by the UI
-          embedding: false,
-        },
-        orderBy,
-        limit: fetchUpTo,
-        with: {
-          rawItem: {
-            columns: {
-              id: true,
-              sourceType: true,
-              externalUrl: true,
-              author: true,
-              content: true,
-              sourceCreatedAt: true,
-              principalId: true,
-            },
-            with: {
-              source: { columns: { id: true, name: true, sourceType: true } },
-            },
-          },
-          board: { columns: { id: true, name: true, slug: true } },
-          resultPost: {
-            columns: { id: true, title: true, content: true, voteCount: true, createdAt: true },
-          },
-          signal: {
-            columns: {
-              id: true,
-              signalType: true,
-              summary: true,
-              evidence: true,
-              extractionConfidence: true,
-            },
-          },
-        },
-      })
-
-      return { rows, total: totalResult?.count ?? 0 }
-    }
-
-    const feedbackResult = includeFeedback ? await feedbackQuery() : null
-    const feedbackItems = feedbackResult?.rows ?? []
-    const feedbackTotal = feedbackResult?.total ?? 0
-
-    // Look up quackback source once (used for merge source filtering and per-source counts)
-    const quackbackSource = await db.query.feedbackSources.findFirst({
-      where: eq(feedbackSources.sourceType, 'quackback'),
-      columns: { id: true },
+    return listSuggestions({
+      status: data.status ?? 'pending',
+      suggestionType: data.suggestionType,
+      boardId: data.boardId,
+      sourceIds: data.sourceIds,
+      sourceTypes: data.sourceTypes,
+      sort: data.sort ?? 'newest',
+      limit: data.limit ?? 20,
+      offset: data.offset ?? 0,
     })
-
-    // Include merge suggestions unless filtered to a non-quackback source or specific board.
-    const includesMergeSource =
-      !data.sourceIds?.length || (!!quackbackSource && data.sourceIds.includes(quackbackSource.id))
-
-    const mergeQuery = async () => {
-      const { getPendingMergeSuggestions } =
-        await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
-
-      const mergeFetchUpTo = data.offset + data.limit + 1
-      const { items, total } = await getPendingMergeSuggestions({
-        sort: data.sort === 'relevance' ? 'relevance' : 'newest',
-        limit: mergeFetchUpTo,
-      })
-
-      const mapped = items.map((ms) => ({
-        id: ms.id,
-        suggestionType: 'duplicate_post' as const,
-        status: ms.status,
-        similarityScore: ms.hybridScore,
-        suggestedTitle: null,
-        suggestedBody: null,
-        reasoning: ms.llmReasoning,
-        createdAt: ms.createdAt,
-        updatedAt: ms.updatedAt,
-        rawItem: null,
-        targetPost: ms.targetPost ? { ...ms.targetPost, status: null } : null,
-        sourcePost: ms.sourcePost ?? null,
-        similarPosts: null,
-        board: null,
-        signal: null,
-      }))
-
-      return { items: mapped, total }
-    }
-
-    const mergeResult =
-      includeMerge && includesMergeSource && !data.boardId ? await mergeQuery() : null
-    const mergeItems = mergeResult?.items ?? []
-    const mergeTotal = mergeResult?.total ?? 0
-
-    // Compute per-source-type counts across ALL matching suggestions (ignoring pagination)
-    const countsBySource: Record<string, number> = {}
-
-    // Count feedback suggestions grouped by source type
-    if (includeFeedback) {
-      const feedbackCountConditions: SQL[] = [
-        eq(feedbackSuggestions.status, data.status ?? 'pending'),
-      ]
-      if (data.suggestionType) {
-        feedbackCountConditions.push(eq(feedbackSuggestions.suggestionType, data.suggestionType))
-      }
-
-      const feedbackCountsBySourceType = await db
-        .select({
-          sourceType: rawFeedbackItems.sourceType,
-          count: count(),
-        })
-        .from(feedbackSuggestions)
-        .innerJoin(rawFeedbackItems, eq(feedbackSuggestions.rawFeedbackItemId, rawFeedbackItems.id))
-        .where(and(...feedbackCountConditions))
-        .groupBy(rawFeedbackItems.sourceType)
-
-      for (const row of feedbackCountsBySourceType) {
-        if (row.sourceType) {
-          countsBySource[row.sourceType] = row.count
-        }
-      }
-    }
-
-    // Attribute merge suggestion count to quackback source type
-    if (includeMerge && mergeTotal > 0) {
-      countsBySource['quackback'] = (countsBySource['quackback'] ?? 0) + mergeTotal
-    }
-
-    // Map feedback items: rename resultPost -> targetPost for UI consistency
-    const mappedFeedbackItems = feedbackItems.map((item) => {
-      const { resultPost, rawItem, ...rest } = item
-      return {
-        ...rest,
-        rawItem: rawItem
-          ? {
-              ...rawItem,
-              author: rawItem.author as Record<string, never>,
-            }
-          : null,
-        targetPost: resultPost ? { ...resultPost, status: null } : null,
-        sourcePost: null,
-      }
-    })
-
-    // Combine and sort across both sources
-    const allSorted = [...mappedFeedbackItems, ...mergeItems].sort((a, b) => {
-      if (data.sort === 'relevance') {
-        const scoreB = 'similarityScore' in b ? (b.similarityScore ?? 0) : 0
-        const scoreA = 'similarityScore' in a ? (a.similarityScore ?? 0) : 0
-        return scoreB - scoreA
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    })
-
-    // Slice to the requested page
-    const hasMore = allSorted.length > data.offset + data.limit
-    const pageItems = allSorted.slice(data.offset, data.offset + data.limit)
-
-    return {
-      items: pageItems,
-      total: feedbackTotal + mergeTotal,
-      countsBySource,
-      nextCursor: hasMore ? String(data.offset + data.limit) : null,
-      hasMore,
-    }
   })
 
 /**

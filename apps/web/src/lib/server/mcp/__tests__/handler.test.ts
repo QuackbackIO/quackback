@@ -73,6 +73,11 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
     tags: [],
     roadmapIds: [],
     pinnedComment: null,
+    summaryJson: null,
+    summaryUpdatedAt: null,
+    canonicalPostId: null,
+    mergedAt: null,
+    isCommentsLocked: false,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
   }),
@@ -109,6 +114,25 @@ vi.mock('@/lib/server/domains/posts/post.merge', () => ({
     post: { id: 'post_dup' },
     canonicalPost: { id: 'post_canon', voteCount: 5 },
   }),
+  getMergedPosts: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  getActivityForPost: vi.fn().mockResolvedValue([]),
+  createActivity: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/feedback/pipeline/suggestion.service', () => ({
+  acceptCreateSuggestion: vi.fn().mockResolvedValue({ success: true, resultPostId: 'post_new' }),
+  acceptVoteSuggestion: vi.fn().mockResolvedValue({ success: true, resultPostId: 'post_test' }),
+  dismissSuggestion: vi.fn().mockResolvedValue(undefined),
+  restoreSuggestion: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/server/domains/merge-suggestions/merge-suggestion.service', () => ({
+  acceptMergeSuggestion: vi.fn().mockResolvedValue(undefined),
+  dismissMergeSuggestion: vi.fn().mockResolvedValue(undefined),
+  restoreMergeSuggestion: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/domains/posts/post.permissions', () => ({
@@ -539,7 +563,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unmerge_post')
       expect(toolNames).toContain('delete_post')
       expect(toolNames).toContain('restore_post')
-      expect(toolNames).toHaveLength(17)
+      expect(toolNames).toHaveLength(22)
     })
 
     it('should handle resources/list request', async () => {

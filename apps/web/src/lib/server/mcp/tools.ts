@@ -1,7 +1,7 @@
 /**
  * MCP Tools for Quackback
  *
- * 17 tools calling domain services directly (no HTTP self-loop):
+ * 22 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, and owner
@@ -19,6 +19,11 @@
  * - manage_roadmap_post: Add or remove a post from a roadmap
  * - merge_post: Merge a duplicate post into a canonical post
  * - unmerge_post: Restore a merged post to independent state
+ * - list_suggestions: List AI-generated feedback suggestions
+ * - accept_suggestion: Accept a feedback or merge suggestion
+ * - dismiss_suggestion: Dismiss a suggestion
+ * - restore_suggestion: Restore a dismissed suggestion to pending
+ * - get_post_activity: Get activity log for a post
  */
 
 import { z } from 'zod'
@@ -31,8 +36,20 @@ import {
 } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
+import { mergePost, unmergePost, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
+import { getActivityForPost } from '@/lib/server/domains/activity/activity.service'
+import {
+  acceptCreateSuggestion,
+  acceptVoteSuggestion,
+  dismissSuggestion as dismissFeedbackSuggestion,
+  restoreSuggestion as restoreFeedbackSuggestion,
+} from '@/lib/server/domains/feedback/pipeline/suggestion.service'
+import {
+  acceptMergeSuggestion,
+  dismissMergeSuggestion,
+  restoreMergeSuggestion,
+} from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import {
   createComment,
   updateComment,
@@ -51,7 +68,7 @@ import {
   addPostToRoadmap,
   removePostFromRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
-import { getTypeIdPrefix } from '@quackback/ids'
+import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { McpAuthContext, McpScope } from './types'
 import type {
@@ -63,6 +80,8 @@ import type {
   CommentId,
   ChangelogId,
   RoadmapId,
+  FeedbackSuggestionId,
+  MergeSuggestionId,
 } from '@quackback/ids'
 
 // ============================================================================
@@ -293,6 +312,52 @@ const restorePostSchema = {
   postId: z.string().describe('Post TypeID to restore'),
 }
 
+const listSuggestionsSchema = {
+  status: z
+    .enum(['pending', 'dismissed'])
+    .default('pending')
+    .describe('Filter by status: pending or dismissed'),
+  suggestionType: z
+    .enum(['create_post', 'vote_on_post', 'duplicate_post'])
+    .optional()
+    .describe('Filter by suggestion type'),
+  sort: z.enum(['newest', 'relevance']).default('newest').describe('Sort order'),
+  limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
+  cursor: z.string().optional().describe('Pagination cursor from previous response'),
+}
+
+const acceptSuggestionSchema = {
+  id: z.string().describe('Suggestion TypeID (feedback_suggestion_xxx or merge_sug_xxx)'),
+  edits: z
+    .object({
+      title: z.string().optional(),
+      body: z.string().optional(),
+      boardId: z.string().optional(),
+      statusId: z.string().optional(),
+    })
+    .optional()
+    .describe('Optional edits to apply before accepting (create_post type only)'),
+  swapDirection: z.boolean().optional().describe('Swap merge direction (duplicate_post type only)'),
+}
+
+const dismissSuggestionSchema = {
+  id: z
+    .string()
+    .describe('Suggestion TypeID to dismiss (feedback_suggestion_xxx or merge_sug_xxx)'),
+}
+
+const restoreSuggestionSchema = {
+  id: z
+    .string()
+    .describe(
+      'Suggestion TypeID to restore from dismissed to pending (feedback_suggestion_xxx or merge_sug_xxx)'
+    ),
+}
+
+const getPostActivitySchema = {
+  postId: z.string().describe('Post TypeID to get activity for'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion.
 // WARNING: These must stay in sync with the Zod schemas above.
@@ -383,6 +448,31 @@ type UnmergePostArgs = { postId: string }
 type DeletePostArgs = { postId: string }
 
 type RestorePostArgs = { postId: string }
+
+type ListSuggestionsArgs = {
+  status: 'pending' | 'dismissed'
+  suggestionType?: 'create_post' | 'vote_on_post' | 'duplicate_post'
+  sort: 'newest' | 'relevance'
+  limit: number
+  cursor?: string
+}
+
+type AcceptSuggestionArgs = {
+  id: string
+  edits?: {
+    title?: string
+    body?: string
+    boardId?: string
+    statusId?: string
+  }
+  swapDirection?: boolean
+}
+
+type DismissSuggestionArgs = { id: string }
+
+type RestoreSuggestionArgs = { id: string }
+
+type GetPostActivityArgs = { postId: string }
 
 // ============================================================================
 // Tool registration
@@ -966,6 +1056,242 @@ Examples:
       }
     }
   )
+
+  // list_suggestions
+  server.tool(
+    'list_suggestions',
+    `List AI-generated feedback suggestions. Suggestions are created when feedback is ingested from external sources (Slack, email, etc.) and processed by the AI pipeline.
+
+Types:
+- create_post: AI suggests creating a new post from extracted feedback
+- vote_on_post: AI suggests adding a vote to an existing similar post
+- duplicate_post: AI detected two existing posts that may be duplicates
+
+Examples:
+- List pending: list_suggestions()
+- Filter by type: list_suggestions({ suggestionType: "create_post" })
+- Show dismissed: list_suggestions({ status: "dismissed" })`,
+    listSuggestionsSchema,
+    READ_ONLY,
+    async (args: ListSuggestionsArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'read:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const { listSuggestions } = await import('@/lib/server/domains/feedback/suggestion.query')
+
+        const decoded = decodeSearchCursor(args.cursor)
+        const offset =
+          typeof decoded.value === 'number'
+            ? decoded.value
+            : parseInt(String(decoded.value), 10) || 0
+
+        const result = await listSuggestions({
+          status: args.status,
+          suggestionType: args.suggestionType,
+          sort: args.sort,
+          limit: args.limit,
+          offset,
+        })
+
+        const nextCursor = result.hasMore
+          ? encodeSearchCursor('suggestions', offset + args.limit)
+          : null
+
+        return jsonResult({
+          suggestions: result.items,
+          total: result.total,
+          countsBySource: result.countsBySource,
+          nextCursor,
+          hasMore: result.hasMore,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // accept_suggestion
+  server.tool(
+    'accept_suggestion',
+    `Accept an AI-generated suggestion. Behavior depends on the suggestion type:
+- create_post: Creates a new post from the extracted feedback. Optional edits can override the suggested title/body/board.
+- vote_on_post: Adds a proxy vote to the matched existing post.
+- duplicate_post: Merges the source post into the target post. Use swapDirection to reverse which post is kept.
+
+Examples:
+- Accept as-is: accept_suggestion({ id: "feedback_suggestion_01abc..." })
+- Accept with edits: accept_suggestion({ id: "feedback_suggestion_01abc...", edits: { title: "Better title" } })
+- Accept merge: accept_suggestion({ id: "merge_sug_01abc..." })
+- Accept merge swapped: accept_suggestion({ id: "merge_sug_01abc...", swapDirection: true })`,
+    acceptSuggestionSchema,
+    WRITE,
+    async (args: AcceptSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        // Route to merge suggestion handler
+        if (isTypeId(args.id, 'merge_sug')) {
+          await acceptMergeSuggestion(args.id as MergeSuggestionId, auth.principalId, {
+            swapDirection: args.swapDirection,
+          })
+          return jsonResult({ accepted: true, id: args.id })
+        }
+
+        // Validate feedback suggestion ID
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        const suggestionId = args.id as FeedbackSuggestionId
+
+        // Look up suggestion to determine type
+        const { db, feedbackSuggestions, eq } = await import('@/lib/server/db')
+        const suggestion = await db.query.feedbackSuggestions.findFirst({
+          where: eq(feedbackSuggestions.id, suggestionId),
+          columns: { id: true, suggestionType: true, status: true },
+        })
+
+        if (!suggestion || suggestion.status !== 'pending') {
+          return errorResult(new Error('Suggestion not found or already resolved'))
+        }
+
+        // vote_on_post with no edits → proxy vote
+        if (suggestion.suggestionType === 'vote_on_post' && !args.edits) {
+          const result = await acceptVoteSuggestion(suggestionId, auth.principalId)
+          return jsonResult({
+            accepted: true,
+            id: args.id,
+            resultPostId: result.resultPostId,
+          })
+        }
+
+        // create_post or vote_on_post with edits → create post
+        const result = await acceptCreateSuggestion(suggestionId, auth.principalId, args.edits)
+        return jsonResult({
+          accepted: true,
+          id: args.id,
+          resultPostId: result.resultPostId,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // dismiss_suggestion
+  server.tool(
+    'dismiss_suggestion',
+    `Dismiss an AI-generated suggestion. The suggestion can be restored later via restore_suggestion.
+
+Examples:
+- Dismiss: dismiss_suggestion({ id: "feedback_suggestion_01abc..." })
+- Dismiss merge: dismiss_suggestion({ id: "merge_sug_01abc..." })`,
+    dismissSuggestionSchema,
+    WRITE,
+    async (args: DismissSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (isTypeId(args.id, 'merge_sug')) {
+          await dismissMergeSuggestion(args.id as MergeSuggestionId, auth.principalId)
+          return jsonResult({ dismissed: true, id: args.id })
+        }
+
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        await dismissFeedbackSuggestion(args.id as FeedbackSuggestionId, auth.principalId)
+        return jsonResult({ dismissed: true, id: args.id })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // restore_suggestion
+  server.tool(
+    'restore_suggestion',
+    `Restore a dismissed suggestion back to pending status.
+
+Examples:
+- Restore: restore_suggestion({ id: "feedback_suggestion_01abc..." })
+- Restore merge: restore_suggestion({ id: "merge_sug_01abc..." })`,
+    restoreSuggestionSchema,
+    WRITE,
+    async (args: RestoreSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (isTypeId(args.id, 'merge_sug')) {
+          await restoreMergeSuggestion(args.id as MergeSuggestionId, auth.principalId)
+          return jsonResult({ restored: true, id: args.id })
+        }
+
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        await restoreFeedbackSuggestion(args.id as FeedbackSuggestionId, auth.principalId)
+        return jsonResult({ restored: true, id: args.id })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // get_post_activity
+  server.tool(
+    'get_post_activity',
+    `Get the activity log for a post. Shows status changes, merges, tag changes, owner assignments, proxy votes, and other events.
+
+Examples:
+- Get activity: get_post_activity({ postId: "post_01abc..." })`,
+    getPostActivitySchema,
+    READ_ONLY,
+    async (args: GetPostActivityArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'read:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const activities = await getActivityForPost(args.postId as PostId)
+
+        return jsonResult({
+          postId: args.postId,
+          activities: activities.map((a) => ({
+            id: a.id,
+            type: a.type,
+            actorName: a.actorName,
+            metadata: a.metadata,
+            createdAt: a.createdAt,
+          })),
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
 }
 
 // ============================================================================
@@ -1019,6 +1345,9 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
       authorName: p.authorName,
       ownerPrincipalId: p.ownerPrincipalId,
       tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
+      summaryJson: p.summaryJson ?? null,
+      canonicalPostId: p.canonicalPostId ?? null,
+      isCommentsLocked: p.isCommentsLocked,
       createdAt: p.createdAt,
       deletedAt: p.deletedAt ?? null,
     })),
@@ -1079,9 +1408,10 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
 // ============================================================================
 
 async function getPostDetails(postId: PostId): Promise<CallToolResult> {
-  const [post, comments] = await Promise.all([
+  const [post, comments, mergedPosts] = await Promise.all([
     getPostWithDetails(postId),
     getCommentsWithReplies(postId),
+    getMergedPosts(postId),
   ])
 
   return jsonResult({
@@ -1106,6 +1436,18 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
           createdAt: post.pinnedComment.createdAt,
         }
       : null,
+    summaryJson: post.summaryJson ?? null,
+    summaryUpdatedAt: post.summaryUpdatedAt ?? null,
+    canonicalPostId: post.canonicalPostId ?? null,
+    mergedAt: post.mergedAt ?? null,
+    isCommentsLocked: post.isCommentsLocked,
+    mergedPosts: mergedPosts.map((mp) => ({
+      id: mp.id,
+      title: mp.title,
+      voteCount: mp.voteCount,
+      authorName: mp.authorName,
+      mergedAt: mp.mergedAt,
+    })),
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     deletedAt: post.deletedAt ?? null,

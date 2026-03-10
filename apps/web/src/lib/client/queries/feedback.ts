@@ -21,7 +21,8 @@ export const feedbackQueries = {
   }) =>
     queryOptions({
       queryKey: ['feedback', 'suggestions', filters],
-      queryFn: () => fetchSuggestions({ data: filters ?? {} }) as Promise<SuggestionsPageResult>,
+      queryFn: () =>
+        fetchSuggestions({ data: filters ?? {} }) as unknown as Promise<SuggestionsPageResult>,
       staleTime: 15 * 1000,
     }),
 

@@ -13,6 +13,7 @@ import {
   validateTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
+import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
 
 // Input validation schema
 const updatePostSchema = z.object({
@@ -42,10 +43,14 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           const validationError = validateTypeId(postId, 'post', 'post ID')
           if (validationError) return validationError
 
-          // Import service function
+          // Import service functions
           const { getPostWithDetails } = await import('@/lib/server/domains/posts/post.query')
+          const { getMergedPosts } = await import('@/lib/server/domains/posts/post.merge')
 
-          const post = await getPostWithDetails(postId as PostId)
+          const [post, mergedPosts] = await Promise.all([
+            getPostWithDetails(postId as PostId),
+            getMergedPosts(postId as PostId),
+          ])
 
           return successResponse({
             id: post.id,
@@ -71,6 +76,19 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
                   createdAt: post.pinnedComment.createdAt.toISOString(),
                 }
               : null,
+            summaryJson: post.summaryJson ?? null,
+            summaryUpdatedAt: post.summaryUpdatedAt?.toISOString() ?? null,
+            canonicalPostId: post.canonicalPostId ?? null,
+            mergedAt: post.mergedAt?.toISOString() ?? null,
+            isCommentsLocked: post.isCommentsLocked,
+            mergedPosts: mergedPosts.map((mp: MergedPostSummary) => ({
+              id: mp.id,
+              title: mp.title,
+              voteCount: mp.voteCount,
+              authorName: mp.authorName,
+              createdAt: mp.createdAt.toISOString(),
+              mergedAt: mp.mergedAt.toISOString(),
+            })),
             createdAt: post.createdAt.toISOString(),
             updatedAt: post.updatedAt.toISOString(),
             deletedAt: post.deletedAt?.toISOString() ?? null,
