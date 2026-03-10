@@ -23,6 +23,8 @@ export interface InboxFilters {
   minComments?: number
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: string
+  /** Only show posts with pending duplicate suggestions */
+  hasDuplicates?: boolean
   sort?: 'newest' | 'oldest' | 'votes'
   showDeleted?: boolean
 }
@@ -59,6 +61,7 @@ export interface SuggestionsFilters {
   search?: string
   sourceTypes?: string[]
   sort?: 'newest' | 'relevance'
+  status?: 'pending' | 'dismissed'
   /** Selected suggestion ID (for URL persistence) */
   suggestion?: string
 }

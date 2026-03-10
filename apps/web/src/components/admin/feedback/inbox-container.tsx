@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
+import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { Route } from '@/routes/admin/feedback'
@@ -50,9 +50,6 @@ export function InboxContainer({
 
   // Segments data for filter UI
   const { data: segments } = useSegments()
-
-  // Duplicates filter state
-  const [duplicatesFilter, setDuplicatesFilter] = useState(false)
 
   // Track whether we're on the initial render (for using server-prefetched data)
   const isInitialRender = useRef(true)
@@ -161,14 +158,11 @@ export function InboxContainer({
         onToggleBoard={toggleBoard}
         onToggleSegment={toggleSegment}
         duplicateCountByPostId={duplicateCountByPostId}
-        duplicatesFilter={duplicatesFilter}
-        onToggleDuplicatesFilter={() => setDuplicatesFilter((v) => !v)}
         headerAction={
           <CreatePostDialog
             boards={boards}
             tags={tags}
             statuses={statuses}
-            members={members}
             currentUser={currentUser}
             onPostCreated={refetchPosts}
           />

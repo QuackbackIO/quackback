@@ -9,6 +9,7 @@ import {
   ArrowTrendingUpIcon,
   ChatBubbleLeftRightIcon,
   ChatBubbleOvalLeftIcon,
+  Square2StackIcon,
   TrashIcon,
   PlusIcon,
   ChevronRightIcon,
@@ -33,6 +34,7 @@ interface ActiveFilter {
     | 'minVotes'
     | 'minComments'
     | 'responded'
+    | 'hasDuplicates'
     | 'deleted'
   label: string
   value: string
@@ -67,6 +69,7 @@ type FilterCategory =
   | 'votes'
   | 'comments'
   | 'response'
+  | 'duplicates'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
@@ -84,6 +87,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'votes', label: 'Vote count', icon: ArrowTrendingUpIcon },
   { key: 'comments', label: 'Comment count', icon: ChatBubbleOvalLeftIcon },
   { key: 'response', label: 'Team response', icon: ChatBubbleLeftRightIcon },
+  { key: 'duplicates', label: 'Has duplicates', icon: Square2StackIcon },
 ]
 
 const VOTE_THRESHOLDS = [
@@ -207,6 +211,14 @@ function AddFilterButton({
     closePopover()
   }
 
+  const handleDirectToggle = (key: FilterCategory) => {
+    if (key === 'duplicates') onFiltersChange({ hasDuplicates: true })
+    closePopover()
+  }
+
+  // Categories that act as direct toggles (no submenu)
+  const directToggleCategories = new Set<FilterCategory>(['duplicates'])
+
   return (
     <Popover
       open={open}
@@ -234,13 +246,24 @@ function AddFilterButton({
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
           <div className="py-1">
-            {FILTER_CATEGORIES.map((category) => {
+            {FILTER_CATEGORIES.filter((c) => {
+              // Hide direct toggles that are already active
+              if (c.key === 'duplicates' && filters.hasDuplicates) return false
+              return true
+            }).map((category) => {
               const Icon = category.icon
+              const isDirect = directToggleCategories.has(category.key)
               return (
                 <button
                   key={category.key}
                   type="button"
-                  onClick={() => setActiveCategory(category.key)}
+                  onClick={() => {
+                    if (isDirect) {
+                      handleDirectToggle(category.key)
+                    } else {
+                      setActiveCategory(category.key)
+                    }
+                  }}
                   className={cn(
                     'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
                     'text-xs text-left',
@@ -251,7 +274,7 @@ function AddFilterButton({
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                     {category.label}
                   </span>
-                  <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                  {!isDirect && <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />}
                 </button>
               )
             })}
@@ -375,6 +398,7 @@ function getFilterIcon(type: ActiveFilter['type']): IconComponent {
     minVotes: ArrowTrendingUpIcon,
     minComments: ChatBubbleOvalLeftIcon,
     responded: ChatBubbleLeftRightIcon,
+    hasDuplicates: Square2StackIcon,
     deleted: TrashIcon,
   }
   return icons[type]
@@ -416,7 +440,7 @@ function computeActiveFilters(
   }))
   const ownerOptions: FilterOption[] = [
     { id: 'unassigned', label: 'Unassigned' },
-    ...members.map((m) => ({ id: m.id, label: m.name || m.email })),
+    ...members.map((m) => ({ id: m.id, label: m.name || m.email || 'Unnamed' })),
   ]
 
   // Status filters
@@ -649,6 +673,18 @@ function computeActiveFilters(
       onChange: (newValue) =>
         onFiltersChange({ responded: newValue as 'responded' | 'unresponded' }),
       onRemove: () => onFiltersChange({ responded: undefined }),
+    })
+  }
+
+  // Duplicates filter
+  if (filters.hasDuplicates) {
+    result.push({
+      key: 'hasDuplicates',
+      type: 'hasDuplicates',
+      label: '',
+      value: 'Has duplicates',
+      valueId: 'hasDuplicates',
+      onRemove: () => onFiltersChange({ hasDuplicates: undefined }),
     })
   }
 

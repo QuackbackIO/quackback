@@ -8,7 +8,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
-import { DuplicateSummaryBar } from '@/components/admin/feedback/signal-summary-bar'
 import { FeedbackRow } from './feedback-row'
 import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/server/domains/principals'
@@ -38,10 +37,6 @@ interface FeedbackTableViewProps {
   onToggleSegment?: (id: string) => void
   /** Duplicate counts per post (for badges) */
   duplicateCountByPostId?: Map<PostId, number>
-  /** Whether duplicates filter is active */
-  duplicatesFilter?: boolean
-  /** Toggle duplicates filter */
-  onToggleDuplicatesFilter?: () => void
 }
 
 function TableSkeleton() {
@@ -100,8 +95,6 @@ export function FeedbackTableView({
   onToggleStatus,
   onToggleBoard,
   duplicateCountByPostId,
-  duplicatesFilter,
-  onToggleDuplicatesFilter,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
@@ -177,11 +170,6 @@ export function FeedbackTableView({
         {headerAction}
       </div>
 
-      {/* Duplicate Summary Bar */}
-      {onToggleDuplicatesFilter && (
-        <DuplicateSummaryBar active={!!duplicatesFilter} onToggle={onToggleDuplicatesFilter} />
-      )}
-
       {/* Active Filters Bar - Always visible */}
       <div className="mt-2">
         <ActiveFiltersBar
@@ -203,11 +191,11 @@ export function FeedbackTableView({
 
   // Filter posts by duplicates if active
   const filteredPosts =
-    duplicatesFilter && duplicateCountByPostId
+    filters.hasDuplicates && duplicateCountByPostId
       ? posts.filter((p) => (duplicateCountByPostId.get(p.id) ?? 0) > 0)
       : posts
   const isSearchingForDuplicateMatches =
-    !!duplicatesFilter && filteredPosts.length === 0 && (hasMore || isLoadingMore)
+    !!filters.hasDuplicates && filteredPosts.length === 0 && (hasMore || isLoadingMore)
 
   useEffect(() => {
     if (isSearchingForDuplicateMatches && !isLoading && !isLoadingMore) {
@@ -229,7 +217,7 @@ export function FeedbackTableView({
       <div className="max-w-5xl mx-auto w-full">
         {headerContent}
         <InboxEmptyState
-          type={hasActiveFilters || !!duplicatesFilter ? 'no-results' : 'no-posts'}
+          type={hasActiveFilters ? 'no-results' : 'no-posts'}
           onClearFilters={hasActiveFilters ? onClearFilters : undefined}
         />
       </div>
