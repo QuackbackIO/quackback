@@ -10,7 +10,7 @@ import {
   and,
   sql,
 } from '@/lib/server/db'
-import type { IntegrationId } from '@quackback/ids'
+import type { IntegrationId, BoardId } from '@quackback/ids'
 
 // ============================================
 // Schemas
@@ -376,14 +376,14 @@ export const addMonitoredChannelFn = createServerFn({ method: 'POST' })
         integrationId,
         channelId: data.channelId,
         channelName: data.channelName,
-        boardId: (data.boardId ?? null) as any,
+        boardId: (data.boardId ?? null) as BoardId | null,
         enabled: true,
       })
       .onConflictDoUpdate({
         target: [slackChannelMonitors.integrationId, slackChannelMonitors.channelId],
         set: {
           channelName: data.channelName,
-          boardId: (data.boardId ?? null) as any,
+          boardId: (data.boardId ?? null) as BoardId | null,
           enabled: true,
           updatedAt: new Date(),
         },
@@ -407,7 +407,7 @@ export const updateMonitoredChannelFn = createServerFn({ method: 'POST' })
       updatedAt: new Date(),
     }
     if (data.enabled !== undefined) updates.enabled = data.enabled
-    if (data.boardId !== undefined) updates.boardId = (data.boardId ?? null) as any
+    if (data.boardId !== undefined) updates.boardId = (data.boardId ?? null) as BoardId | null
 
     await db
       .update(slackChannelMonitors)

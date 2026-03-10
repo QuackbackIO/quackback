@@ -339,7 +339,7 @@ async function main() {
     { id: rawD, label: 'D: Mobile app (intercom)' },
   ]
 
-  const suggestionsByItem: Record<string, any[]> = {}
+  const suggestionsByItem: Record<string, postgres.Row[]> = {}
 
   for (const item of actionableItems) {
     console.log(`\n  --- ${item.label} ---`)
@@ -360,7 +360,7 @@ async function main() {
     if (signals.length > 0) {
       pass(
         `${item.label}: ${signals.length} signal(s)`,
-        signals.map((s: any) => s.signal_type).join(', ')
+        signals.map((s) => s.signal_type).join(', ')
       )
     } else {
       fail(`${item.label}: no signals extracted`)

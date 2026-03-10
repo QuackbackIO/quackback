@@ -501,7 +501,10 @@ async function main() {
       } catch (err) {
         failed++
         const errMsg = err instanceof Error ? err.message : String(err)
-        const cause = err instanceof Error && 'cause' in err ? (err as any).cause : undefined
+        const cause =
+          err instanceof Error && 'cause' in err
+            ? (err as Error & { cause: unknown }).cause
+            : undefined
         console.error(
           `  [${processed + failed}/${totalToProcess}] ${truncate(post.title, 45)} - FAILED: ${errMsg}`
         )

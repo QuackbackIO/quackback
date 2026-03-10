@@ -26,7 +26,7 @@ export async function ensureSlackFeedbackSource(integrationId: IntegrationId): P
         await tx
           .update(feedbackSources)
           .set({ integrationId, updatedAt: new Date() })
-          .where(eq(feedbackSources.id, existing.id as any))
+          .where(eq(feedbackSources.id, existing.id))
       }
       return
     }

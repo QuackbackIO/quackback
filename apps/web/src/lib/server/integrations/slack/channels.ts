@@ -41,13 +41,14 @@ export async function joinSlackChannel(accessToken: string, channelId: string): 
   try {
     await client.conversations.join({ channel: channelId })
     return true
-  } catch (error: any) {
-    if (error?.data?.error === 'method_not_supported_for_channel_type') {
+  } catch (error) {
+    const slackError = error as { data?: { error?: string } }
+    if (slackError.data?.error === 'method_not_supported_for_channel_type') {
       // Private channel -- bot must be invited manually
       console.warn(`[Slack] Cannot join private channel ${channelId} -- bot must be invited`)
       return false
     }
-    if (error?.data?.error === 'already_in_channel') {
+    if (slackError.data?.error === 'already_in_channel') {
       return true
     }
     throw error
