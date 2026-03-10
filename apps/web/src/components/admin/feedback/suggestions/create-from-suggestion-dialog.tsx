@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
-import { ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { FolderIcon, UserIcon } from '@heroicons/react/24/outline'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -13,7 +12,8 @@ import {
 } from '@/components/ui/select'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { ExpandableQuote } from '@/components/shared/expandable-quote'
-import { AuthorSelector } from '@/components/shared/author-selector'
+import { AuthorSelector, type NewAuthor } from '@/components/shared/author-selector'
+import { useCreatePortalUser, useUpdatePortalUser } from '@/lib/client/mutations'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -65,13 +65,27 @@ function CreateFromSuggestionContent({
   }
   const currentPrincipalId = context.principal?.id ?? ''
 
-  // Default author to current admin
-  const [authorPrincipalId, setAuthorPrincipalId] = useState(currentPrincipalId)
-
-  // Fetch team members and boards (already cached by admin layout)
-  const { data: members = [] } = useQuery(adminQueries.teamMembers())
+  // Fetch boards and statuses (already cached by admin layout)
   const { data: boards = [] } = useQuery(adminQueries.boards())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
+
+  // Prepopulate feedback author as a "New" user in the AuthorSelector
+  // (the server-side search in AuthorSelector handles finding existing members)
+  const feedbackAuthorId = suggestion.rawItem?.principalId
+  const feedbackAuthor = suggestion.rawItem?.author
+  const initialNewUsers = useMemo(() => {
+    if (!feedbackAuthorId || !feedbackAuthor?.name) return undefined
+    return [
+      {
+        principalId: feedbackAuthorId,
+        name: feedbackAuthor.name,
+        email: feedbackAuthor.email ?? null,
+      },
+    ]
+  }, [feedbackAuthorId, feedbackAuthor])
+
+  // Default author: feedback author principal > current admin
+  const [authorPrincipalId, setAuthorPrincipalId] = useState(feedbackAuthorId || currentPrincipalId)
 
   const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
   const [statusId, setStatusId] = useState('')
@@ -85,6 +99,25 @@ function CreateFromSuggestionContent({
 
   const selectedBoard = boards.find((b) => b.id === boardId)
   const selectedStatus = statuses.find((s) => s.id === statusId)
+
+  const createUserMutation = useCreatePortalUser()
+  const updateUserMutation = useUpdatePortalUser()
+  const handleCreateUser = async (data: { name: string; email?: string }): Promise<NewAuthor> => {
+    const result = await createUserMutation.mutateAsync(data)
+    return result
+  }
+  const handleEditUser = async (data: {
+    principalId: string
+    name: string
+    email?: string
+  }): Promise<NewAuthor> => {
+    await updateUserMutation.mutateAsync({
+      principalId: data.principalId,
+      name: data.name,
+      email: data.email || undefined,
+    })
+    return { principalId: data.principalId, name: data.name, email: data.email || null }
+  }
 
   const { accept, isPending } = useSuggestionActions({
     suggestionId: suggestion.id,
@@ -162,16 +195,6 @@ function CreateFromSuggestionContent({
               rows={5}
               className="w-full text-sm bg-transparent border-0 outline-none resize-none leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             />
-
-            {/* AI reasoning */}
-            {suggestion.reasoning && (
-              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/30">
-                <ChatBubbleLeftIcon className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {suggestion.reasoning}
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -185,9 +208,12 @@ function CreateFromSuggestionContent({
                 <span>Author</span>
               </div>
               <AuthorSelector
-                members={members}
                 value={authorPrincipalId}
                 onChange={setAuthorPrincipalId}
+                initialNewUsers={initialNewUsers}
+                onCreateUser={handleCreateUser}
+                onEditUser={handleEditUser}
+                isCreating={createUserMutation.isPending || updateUserMutation.isPending}
               />
             </div>
 

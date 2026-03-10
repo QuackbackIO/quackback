@@ -23,6 +23,7 @@ import { listTags } from '@/lib/server/domains/tags/tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
 import {
   listTeamMembers,
+  searchMembers,
   updateMemberRole,
   removeTeamMember,
 } from '@/lib/server/domains/principals/principal.service'
@@ -236,6 +237,18 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
     throw error
   }
 })
+
+const searchMembersSchema = z.object({
+  search: z.string().optional(),
+  limit: z.number().optional(),
+})
+
+export const searchMembersFn = createServerFn({ method: 'GET' })
+  .inputValidator(searchMembersSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    return searchMembers(data)
+  })
 
 // Schema for team member operations
 const principalIdSchema = z.object({
@@ -644,6 +657,134 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ getPortalUserFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Update a portal user's details (admin-only).
+ */
+const updatePortalUserSchema = z.object({
+  principalId: z.string(),
+  name: z.string().min(1).max(200).optional(),
+  email: z.string().email().nullable().optional(),
+})
+
+export const updatePortalUserFn = createServerFn({ method: 'POST' })
+  .inputValidator(updatePortalUserSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] updatePortalUserFn: principalId=${data.principalId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      // Look up the principal to get userId
+      const p = await db.query.principal.findFirst({
+        where: eq(principal.id, data.principalId as PrincipalId),
+        columns: { userId: true },
+      })
+      if (!p?.userId) throw new Error('User not found')
+
+      // Build update set
+      const updates: Record<string, unknown> = {}
+      if (data.name !== undefined) updates.name = data.name.trim()
+      if (data.email !== undefined) {
+        // If setting an email, check uniqueness
+        if (data.email !== null) {
+          const normalized = data.email.toLowerCase().trim()
+          const existing = await db
+            .select({ id: user.id })
+            .from(user)
+            .where(eq(user.email, normalized))
+            .limit(1)
+          if (existing.length > 0 && existing[0].id !== p.userId) {
+            throw new Error('Email already in use')
+          }
+          updates.email = normalized
+        } else {
+          updates.email = null
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return { success: true }
+      }
+
+      await db.update(user).set(updates).where(eq(user.id, p.userId))
+
+      // Sync display name to principal if name changed
+      if (data.name !== undefined) {
+        await db
+          .update(principal)
+          .set({ displayName: data.name.trim() })
+          .where(eq(principal.id, data.principalId as PrincipalId))
+      }
+
+      console.log(`[fn:admin] updatePortalUserFn: updated`)
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ updatePortalUserFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Create a new portal user (admin-only).
+ * Used by the AuthorSelector when the admin wants to attribute feedback to someone not yet in the system.
+ */
+const createPortalUserSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().optional(),
+})
+
+export const createPortalUserFn = createServerFn({ method: 'POST' })
+  .inputValidator(createPortalUserSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] createPortalUserFn: name=${data.name}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      // Check email uniqueness if provided
+      if (data.email) {
+        const normalized = data.email.toLowerCase().trim()
+        const existing = await db
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.email, normalized))
+          .limit(1)
+        if (existing.length > 0) {
+          throw new Error('A user with this email already exists')
+        }
+      }
+
+      const userId = generateId('user')
+      const principalId = generateId('principal')
+      const trimmedName = data.name.trim()
+
+      await db.insert(user).values({
+        id: userId,
+        name: trimmedName,
+        email: data.email ? data.email.toLowerCase().trim() : null,
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+
+      await db.insert(principal).values({
+        id: principalId,
+        userId,
+        role: 'user' as const,
+        displayName: trimmedName,
+        createdAt: new Date(),
+      })
+
+      console.log(`[fn:admin] createPortalUserFn: created principalId=${principalId}`)
+      return {
+        principalId: principalId as string,
+        name: trimmedName,
+        email: data.email?.toLowerCase().trim() ?? null,
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ createPortalUserFn failed:`, error)
       throw error
     }
   })

@@ -4,7 +4,7 @@
  * Provides principal lookup operations.
  */
 
-import { db, eq, and, sql, principal, user, type Principal } from '@/lib/server/db'
+import { db, eq, and, or, sql, ilike, principal, user, type Principal } from '@/lib/server/db'
 import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
@@ -109,6 +109,39 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
     console.error('Error listing team members:', error)
     throw new InternalError('DATABASE_ERROR', 'Failed to list team members', error)
   }
+}
+
+/**
+ * Search members (all human principals) by name or email.
+ * Returns a limited result set for use in typeahead/combobox components.
+ */
+export async function searchMembers(params: {
+  search?: string
+  limit?: number
+}): Promise<TeamMember[]> {
+  const limit = Math.min(params.limit ?? 20, 50)
+  const conditions = [eq(principal.type, 'user')]
+
+  if (params.search?.trim()) {
+    const q = `%${params.search.trim()}%`
+    conditions.push(or(ilike(user.name, q), ilike(user.email, q))!)
+  }
+
+  return db
+    .select({
+      id: principal.id,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      role: principal.role,
+      createdAt: principal.createdAt,
+    })
+    .from(principal)
+    .innerJoin(user, eq(principal.userId, user.id))
+    .where(and(...conditions))
+    .orderBy(user.name)
+    .limit(limit)
 }
 
 /**

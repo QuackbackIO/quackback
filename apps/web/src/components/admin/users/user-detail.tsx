@@ -13,8 +13,13 @@ import {
   ChevronUpIcon,
   PencilSquareIcon,
   Squares2X2Icon,
+  PencilIcon,
+  XMarkIcon,
+  CheckIcon,
 } from '@heroicons/react/24/solid'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,6 +28,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/server/domains/users'
 import { UserSegmentBadges } from '@/components/admin/users/user-segments'
+import { useUpdatePortalUser } from '@/lib/client/mutations'
 import type { PrincipalId } from '@quackback/ids'
 
 interface UserDetailProps {
@@ -173,8 +179,55 @@ export function UserDetail({
   currentMemberRole,
 }: UserDetailProps) {
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const updateUser = useUpdatePortalUser()
   // Check if current user can manage portal users
   const canManageUsers = currentMemberRole === 'admin'
+
+  const startEditing = () => {
+    if (!user) return
+    setEditName(user.name || '')
+    setEditEmail(user.email || '')
+    setIsEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+  }
+
+  const saveEdits = () => {
+    if (!user) return
+    const updates: { principalId: string; name?: string; email?: string | null } = {
+      principalId: user.principalId,
+    }
+    const trimmedName = editName.trim()
+    const trimmedEmail = editEmail.trim()
+
+    if (trimmedName && trimmedName !== (user.name || '')) {
+      updates.name = trimmedName
+    }
+    const newEmail = trimmedEmail || null
+    if (newEmail !== (user.email || null)) {
+      updates.email = newEmail
+    }
+
+    if (!updates.name && updates.email === undefined) {
+      setIsEditing(false)
+      return
+    }
+
+    updateUser.mutate(updates, {
+      onSuccess: () => {
+        setIsEditing(false)
+        toast.success('User updated')
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to update user')
+      },
+    })
+  }
 
   const backHeader = (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
@@ -206,14 +259,69 @@ export function UserDetail({
         <div className="flex items-start gap-4">
           <Avatar src={user.image} name={user.name} className="h-16 w-16" />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-lg truncate">{user.name || 'Unnamed User'}</h2>
-              {user.emailVerified && <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />}
-            </div>
-            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-            <Badge variant="secondary" className="mt-2 text-xs">
-              Portal User
-            </Badge>
+            {isEditing ? (
+              <div className="space-y-2">
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Name"
+                  className="text-sm"
+                />
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="Email (optional)"
+                  className="text-sm"
+                />
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={saveEdits}
+                    disabled={updateUser.isPending}
+                  >
+                    {updateUser.isPending ? (
+                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CheckIcon className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={cancelEditing}>
+                    <XMarkIcon className="h-3.5 w-3.5 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-lg truncate">{user.name || 'Unnamed User'}</h2>
+                  {user.emailVerified && (
+                    <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
+                  )}
+                  {canManageUsers && (
+                    <button
+                      type="button"
+                      onClick={startEditing}
+                      className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                      title="Edit user details"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {user.email ? (
+                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground/50 italic">No email</p>
+                )}
+                <Badge variant="secondary" className="mt-2 text-xs">
+                  Portal User
+                </Badge>
+              </>
+            )}
           </div>
         </div>
 

@@ -43,7 +43,11 @@ export function UserCard({ user, isSelected, onClick }: UserCardProps) {
         </div>
 
         {/* Email */}
-        <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+        {user.email ? (
+          <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground/50 italic">No email</p>
+        )}
 
         {/* Join date */}
         <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">

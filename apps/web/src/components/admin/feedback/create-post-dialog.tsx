@@ -24,11 +24,11 @@ import { Badge } from '@/components/ui/badge'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
-import { AuthorSelector } from '@/components/shared/author-selector'
+import { AuthorSelector, type NewAuthor } from '@/components/shared/author-selector'
+import { useCreatePortalUser, useUpdatePortalUser } from '@/lib/client/mutations'
 import { cn } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
-import type { TeamMember } from '@/lib/server/domains/principals'
 import type { CurrentUser } from '@/lib/shared/types/inbox'
 import { Form } from '@/components/ui/form'
 
@@ -36,7 +36,6 @@ interface CreatePostDialogProps {
   boards: Board[]
   tags: Tag[]
   statuses: PostStatusEntity[]
-  members: TeamMember[]
   currentUser: CurrentUser
   onPostCreated?: () => void
   open?: boolean
@@ -48,7 +47,6 @@ export function CreatePostDialog({
   boards,
   tags,
   statuses,
-  members,
   currentUser,
   onPostCreated,
   open: controlledOpen,
@@ -62,6 +60,25 @@ export function CreatePostDialog({
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [authorPrincipalId, setAuthorPrincipalId] = useState(currentUser.principalId)
   const createPostMutation = useCreatePost()
+  const createUserMutation = useCreatePortalUser()
+  const updateUserMutation = useUpdatePortalUser()
+  const handleCreateUser = async (data: { name: string; email?: string }): Promise<NewAuthor> => {
+    const result = await createUserMutation.mutateAsync(data)
+    return result
+  }
+  const handleEditUser = async (data: {
+    principalId: string
+    name: string
+    email?: string
+  }): Promise<NewAuthor> => {
+    await updateUserMutation.mutateAsync({
+      principalId: data.principalId,
+      name: data.name,
+      email: data.email || undefined,
+    })
+    return { principalId: data.principalId, name: data.name, email: data.email || null }
+  }
+  const userMutationPending = createUserMutation.isPending || updateUserMutation.isPending
 
   const form = useForm({
     resolver: standardSchemaResolver(createPostSchema),
@@ -201,7 +218,7 @@ export function CreatePostDialog({
                 </div>
               </div>
 
-              {/* Right sidebar: Metadata */}
+              {/* Right sidebar: Metadata (lg+) */}
               <aside className="hidden lg:block w-64 shrink-0 border-l border-border/30 bg-muted/5">
                 <div className="p-4 space-y-5">
                   {/* Author */}
@@ -211,10 +228,12 @@ export function CreatePostDialog({
                       <span>Author</span>
                     </div>
                     <AuthorSelector
-                      members={members}
                       value={authorPrincipalId}
                       onChange={setAuthorPrincipalId}
                       fallbackName={currentUser.name}
+                      onCreateUser={handleCreateUser}
+                      onEditUser={handleEditUser}
+                      isCreating={userMutationPending}
                     />
                   </div>
 
@@ -344,6 +363,123 @@ export function CreatePostDialog({
                   )}
                 </div>
               </aside>
+            </div>
+
+            {/* Inline metadata strip (below lg) */}
+            <div className="lg:hidden border-t border-border/30 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <AuthorSelector
+                  value={authorPrincipalId}
+                  onChange={setAuthorPrincipalId}
+                  fallbackName={currentUser.name}
+                  onCreateUser={handleCreateUser}
+                  onEditUser={handleEditUser}
+                  isCreating={userMutationPending}
+                />
+                <FormField
+                  control={form.control}
+                  name="boardId"
+                  render={({ field }) => (
+                    <FormItem className="flex-none">
+                      <Select onValueChange={field.onChange} value={field.value as string}>
+                        <FormControl>
+                          <SelectTrigger size="sm" className="text-xs">
+                            <FolderIcon className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                            <SelectValue placeholder="Board">
+                              {selectedBoard?.name || 'Board'}
+                            </SelectValue>
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {boards.map((board) => (
+                            <SelectItem key={board.id} value={board.id} className="text-xs">
+                              {board.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="statusId"
+                  render={({ field }) => (
+                    <FormItem className="flex-none">
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value as string | undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger size="sm" className="text-xs">
+                            <SelectValue placeholder="Status">
+                              {selectedStatus && (
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="h-2 w-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: selectedStatus.color }}
+                                  />
+                                  {selectedStatus.name}
+                                </div>
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {statuses.map((status) => (
+                            <SelectItem key={status.id} value={status.id} className="text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                {tags.length > 0 && (
+                  <Controller
+                    control={form.control}
+                    name="tagIds"
+                    render={({ field }) => {
+                      const selectedIds = (field.value ?? []) as string[]
+                      return (
+                        <div className="flex flex-wrap gap-1">
+                          {tags.map((tag) => {
+                            const isSelected = selectedIds.includes(tag.id)
+                            return (
+                              <Badge
+                                key={tag.id}
+                                variant="secondary"
+                                className={cn(
+                                  'cursor-pointer text-[11px] font-normal transition-colors',
+                                  isSelected
+                                    ? 'bg-foreground text-background hover:bg-foreground/90'
+                                    : 'hover:bg-muted/80'
+                                )}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    field.onChange(selectedIds.filter((id) => id !== tag.id))
+                                  } else {
+                                    field.onChange([...selectedIds, tag.id])
+                                  }
+                                }}
+                              >
+                                {tag.name}
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      )
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             <ModalFooter

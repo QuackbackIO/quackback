@@ -8,12 +8,47 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import type { PrincipalId } from '@quackback/ids'
 import type { PortalUserListResultView, PortalUserListItemView } from '@/lib/server/domains/users'
-import { deletePortalUserFn } from '@/lib/server/functions/admin'
+import {
+  createPortalUserFn,
+  deletePortalUserFn,
+  updatePortalUserFn,
+} from '@/lib/server/functions/admin'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
 
 // ============================================================================
 // Mutation Hooks
 // ============================================================================
+
+/**
+ * Hook to create a new portal user (for admin author attribution).
+ */
+export function useCreatePortalUser() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { name: string; email?: string }) => createPortalUserFn({ data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'team', 'members'] })
+      queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
+    },
+  })
+}
+
+/**
+ * Hook to update a portal user's details (name, email).
+ */
+export function useUpdatePortalUser() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { principalId: string; name?: string; email?: string | null }) =>
+      updatePortalUserFn({ data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: usersKeys.details() })
+    },
+  })
+}
 
 /**
  * Hook to remove a portal user from an organization.

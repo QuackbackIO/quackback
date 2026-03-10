@@ -7,6 +7,7 @@ import {
   fetchTagsList,
   fetchStatusesList,
   fetchTeamMembers,
+  searchMembersFn,
   fetchOnboardingStatus,
   fetchIntegrationsList,
   fetchIntegrationCatalog,
@@ -154,6 +155,16 @@ export const adminQueries = {
       queryKey: ['admin', 'team', 'members'],
       queryFn: () => fetchTeamMembers(),
       staleTime: 5 * 60 * 1000, // 5min - reference data for filters/assignments
+    }),
+
+  /**
+   * Search members (typeahead for author selector)
+   */
+  searchMembers: (params: { search?: string; limit?: number }) =>
+    queryOptions({
+      queryKey: ['admin', 'members', 'search', params],
+      queryFn: () => searchMembersFn({ data: params }),
+      staleTime: 30 * 1000,
     }),
 
   /**
