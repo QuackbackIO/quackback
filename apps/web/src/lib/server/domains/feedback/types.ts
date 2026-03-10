@@ -81,6 +81,7 @@ export type FeedbackIngestJob =
 export type FeedbackAiJob =
   | { type: 'extract-signals'; rawItemId: string }
   | { type: 'interpret-signal'; signalId: string }
+  | { type: 'retention-cleanup' }
 
 export type FeedbackMaintenanceJob =
   | { type: 'recover-stuck-items' }

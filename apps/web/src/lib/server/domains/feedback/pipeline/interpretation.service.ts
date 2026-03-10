@@ -14,9 +14,11 @@ import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, rawFeedbackItems } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { embedSignal, findSimilarPosts, findSimilarPendingSuggestions } from './embedding.service'
 import { createPostSuggestion, createVoteSuggestion } from './suggestion.service'
+import { logPipelineEvent } from './pipeline-log'
 import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
 import type { SuggestionGenerationResult } from '../types'
 import type { FeedbackSignalId, RawFeedbackItemId, BoardId, PostId } from '@quackback/ids'
@@ -33,9 +35,24 @@ const SIMILAR_POST_MIN_SIMILARITY = 0.55
  * Interpret a single signal: embed, find similar posts, generate suggestions.
  * Called by the {feedback-ai} queue worker.
  */
-export async function interpretSignal(signalId: FeedbackSignalId): Promise<void> {
+export async function interpretSignal(
+  signalId: FeedbackSignalId,
+  attemptContext?: { currentAttempt: number; maxAttempts: number }
+): Promise<void> {
   const signal = await db.query.feedbackSignals.findFirst({
     where: eq(feedbackSignals.id, signalId),
+    columns: {
+      id: true,
+      rawFeedbackItemId: true,
+      signalType: true,
+      summary: true,
+      evidence: true,
+      implicitNeed: true,
+      sentiment: true,
+      urgency: true,
+      processingState: true,
+      // Exclude embedding — fetched separately by embedSignal when needed
+    },
   })
 
   if (!signal) {
@@ -54,7 +71,7 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
 
   try {
     // Step 1: Embed the signal (always, for storage/dedup purposes)
-    const signalEmbedding = await embedSignal(signalId)
+    const signalEmbedding = await embedSignal(signalId, signal.rawFeedbackItemId)
 
     // Step 2: For external sources, check similarity and generate create_post suggestions.
     // Quackback posts only need embedding — duplicate detection is handled by the
@@ -75,7 +92,14 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
       ?.metadata as Record<string, unknown> | undefined
     const userProvidedBoardId = contextMetadata?.boardId as string | undefined
 
-    if (!isQuackback) {
+    if (isQuackback) {
+      await logPipelineEvent({
+        eventType: 'interpretation.skipped_quackback',
+        rawFeedbackItemId: signal.rawFeedbackItemId,
+        signalId,
+        detail: {},
+      })
+    } else {
       // External source: find similar posts and always create a suggestion.
       // High similarity → vote_on_post, low/none → create_post.
       const similarPosts = signalEmbedding
@@ -94,6 +118,17 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
 
       const bestMatch = similarPosts[0]
 
+      await logPipelineEvent({
+        eventType: 'interpretation.similar_posts',
+        rawFeedbackItemId: signal.rawFeedbackItemId,
+        signalId,
+        detail: {
+          postMatches: similarPostsJson,
+          bestSimilarity: bestMatch?.similarity ?? null,
+          threshold: VOTE_SUGGESTION_THRESHOLD,
+        },
+      })
+
       const signalData = {
         signalType: signal.signalType,
         summary: signal.summary,
@@ -108,11 +143,13 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
           type: 'vote_on_post',
           signalId,
           rawFeedbackItemId: signal.rawFeedbackItemId as RawFeedbackItemId,
+          sourceType: rawItem.sourceType,
           signal: signalData,
           sourceContent,
           embedding: signalEmbedding ?? undefined,
           userProvidedBoardId,
           resultPostId: bestMatch.id as PostId,
+          bestSimilarity: bestMatch.similarity,
           similarPosts: similarPostsJson,
         })
       } else {
@@ -134,16 +171,29 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
               `similar pending suggestion ${similarSuggestions[0].id} exists ` +
               `(${Math.round(similarSuggestions[0].similarity * 100)}% similar)`
           )
+
+          await logPipelineEvent({
+            eventType: 'interpretation.suggestion_skipped',
+            rawFeedbackItemId: signal.rawFeedbackItemId,
+            signalId,
+            detail: {
+              reason: 'duplicate_pending',
+              similarSuggestionId: similarSuggestions[0].id,
+              similarity: similarSuggestions[0].similarity,
+            },
+          })
         } else {
           // No similar posts or suggestions — create new post
           await generateSuggestion({
             type: 'create_post',
             signalId,
             rawFeedbackItemId: signal.rawFeedbackItemId as RawFeedbackItemId,
+            sourceType: rawItem.sourceType,
             signal: signalData,
             sourceContent,
             embedding: signalEmbedding ?? undefined,
             userProvidedBoardId,
+            bestSimilarity: bestMatch?.similarity,
             similarPosts: similarPostsJson.length > 0 ? similarPostsJson : undefined,
           })
         }
@@ -165,6 +215,17 @@ export async function interpretSignal(signalId: FeedbackSignalId): Promise<void>
 
     console.log(`[Interpretation] Completed signal ${signalId}`)
   } catch (error) {
+    await logPipelineEvent({
+      eventType: 'interpretation.failed',
+      rawFeedbackItemId: signal.rawFeedbackItemId,
+      signalId,
+      detail: {
+        error: error instanceof Error ? error.message : String(error),
+        currentAttempt: attemptContext?.currentAttempt,
+        maxAttempts: attemptContext?.maxAttempts,
+      },
+    })
+
     await db
       .update(feedbackSignals)
       .set({ processingState: 'failed', updatedAt: new Date() })
@@ -184,6 +245,7 @@ async function generateSuggestion(opts: {
   type: 'create_post' | 'vote_on_post'
   signalId: FeedbackSignalId
   rawFeedbackItemId: RawFeedbackItemId
+  sourceType: string
   signal: {
     signalType: string
     summary: string
@@ -194,6 +256,7 @@ async function generateSuggestion(opts: {
   embedding?: number[]
   userProvidedBoardId?: string
   resultPostId?: PostId
+  bestSimilarity?: number
   similarPosts?: Array<{ postId: string; title: string; similarity: number; voteCount: number }>
 }): Promise<void> {
   const openai = getOpenAI()
@@ -213,6 +276,7 @@ async function generateSuggestion(opts: {
   let suggestedBody = opts.sourceContent.text?.slice(0, 500) ?? opts.signal.summary
   let reasoning = `Auto-generated from ${opts.signal.signalType} signal`
   let boardId = (validUserBoardId ?? allBoards[0]?.id) as BoardId | undefined
+  let usedFallback = true
 
   if (openai) {
     const prompt = buildSuggestionPrompt({
@@ -222,23 +286,40 @@ async function generateSuggestion(opts: {
     })
 
     try {
-      const completion = await withRetry(() =>
-        openai.chat.completions.create({
+      const completion = await withUsageLogging(
+        {
+          pipelineStep: 'suggestion',
+          callType: 'chat_completion',
           model: SUGGESTION_MODEL,
-          messages: [{ role: 'user', content: prompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_completion_tokens: 2000,
+          rawFeedbackItemId: opts.rawFeedbackItemId,
+          signalId: opts.signalId,
+          metadata: { suggestionType: opts.type },
+        },
+        () =>
+          withRetry(() =>
+            openai.chat.completions.create({
+              model: SUGGESTION_MODEL,
+              messages: [{ role: 'user', content: prompt }],
+              response_format: { type: 'json_object' },
+              temperature: 0.3,
+              max_completion_tokens: 2000,
+            })
+          ),
+        (r) => ({
+          inputTokens: r.usage?.prompt_tokens ?? 0,
+          outputTokens: r.usage?.completion_tokens,
+          totalTokens: r.usage?.total_tokens ?? 0,
         })
       )
 
-      const responseText = (completion as any).choices?.[0]?.message?.content
+      const responseText = completion.choices?.[0]?.message?.content
       if (responseText) {
         const result: SuggestionGenerationResult = JSON.parse(stripCodeFences(responseText))
         suggestedTitle = result.title
         suggestedBody = result.body
         reasoning = result.reasoning
         boardId = (validUserBoardId ?? result.boardId) as BoardId | undefined
+        usedFallback = false
       }
     } catch (err) {
       console.warn(`[Interpretation] LLM suggestion generation failed, using fallback:`, err)
@@ -269,6 +350,19 @@ async function generateSuggestion(opts: {
       similarPosts: opts.similarPosts,
     })
   }
+
+  await logPipelineEvent({
+    eventType: 'interpretation.suggestion_created',
+    rawFeedbackItemId: opts.rawFeedbackItemId,
+    signalId: opts.signalId,
+    detail: {
+      suggestionType: opts.type,
+      sourceType: opts.sourceType,
+      bestSimilarity: opts.bestSimilarity ?? null,
+      usedFallback,
+      boardId: boardId ?? null,
+    },
+  })
 }
 
 /**

@@ -17,7 +17,15 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+  withRetry: vi.fn((fn: () => Promise<unknown>) =>
+    fn().then((result: unknown) => ({ result, retryCount: 0 }))
+  ),
+}))
+
+vi.mock('@/lib/server/domains/ai/usage-log', () => ({
+  withUsageLogging: vi.fn((_params: unknown, fn: () => Promise<{ result: unknown }>) =>
+    fn().then(({ result }) => result)
+  ),
 }))
 
 vi.mock('../prompts/quality-gate.prompt', () => ({
@@ -39,7 +47,12 @@ describe('quality-gate.service', () => {
     const { shouldExtract } = await import('../quality-gate.service')
     const result = await shouldExtract(makeItem('ok thanks'))
     expect(result.extract).toBe(false)
+    expect(result.tier).toBe(1)
     expect(result.reason).toContain('insufficient content')
+
+    // Tier 1 skips should not call the LLM or usage logging
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).not.toHaveBeenCalled()
   })
 
   it('should hard skip empty content', async () => {
@@ -53,9 +66,12 @@ describe('quality-gate.service', () => {
     const longText = 'word '.repeat(20).trim()
     const result = await shouldExtract(makeItem(longText, 'quackback'))
     expect(result.extract).toBe(true)
+    expect(result.tier).toBe(2)
     expect(result.reason).toContain('high-intent')
-    // Should not call LLM
+    // Should not call LLM or usage logging
     expect(mockOpenAI.chat.completions.create).not.toHaveBeenCalled()
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).not.toHaveBeenCalled()
   })
 
   it('should auto-pass api source with 15+ words', async () => {
@@ -89,7 +105,20 @@ describe('quality-gate.service', () => {
       makeItem('I really wish you would add dark mode to the app please', 'intercom')
     )
     expect(result.extract).toBe(true)
+    expect(result.tier).toBe(3)
     expect(result.reason).toBe('contains feedback')
+
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineStep: 'quality_gate',
+        callType: 'chat_completion',
+        model: expect.any(String),
+        metadata: expect.objectContaining({ promptVersion: 'v1' }),
+      }),
+      expect.any(Function),
+      expect.any(Function)
+    )
   })
 
   it('should return LLM gate result when extract=false', async () => {
@@ -102,7 +131,30 @@ describe('quality-gate.service', () => {
       makeItem('Hey there how are you doing today friend', 'intercom')
     )
     expect(result.extract).toBe(false)
+    expect(result.tier).toBe(3)
     expect(result.reason).toBe('just a greeting')
+  })
+
+  it('should thread rawFeedbackItemId to usage logging', async () => {
+    mockOpenAI.chat.completions.create.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"extract": true, "reason": "ok"}' } }],
+    })
+
+    const { shouldExtract } = await import('../quality-gate.service')
+    await shouldExtract({
+      ...makeItem('I really want this feature added to the app please', 'intercom'),
+      rawFeedbackItemId: 'raw_item_abc',
+    })
+
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineStep: 'quality_gate',
+        rawFeedbackItemId: 'raw_item_abc',
+      }),
+      expect.any(Function),
+      expect.any(Function)
+    )
   })
 
   it('should pass through on LLM error', async () => {

@@ -35,7 +35,9 @@ function createUpdateChain() {
     updateSetCalls.push(args)
     return chain
   })
-  chain.returning = vi.fn().mockResolvedValue([{ id: 'suggestion_1' }])
+  chain.returning = vi
+    .fn()
+    .mockResolvedValue([{ id: 'suggestion_1', rawFeedbackItemId: 'raw_item_1' }])
   chain.where = vi.fn(() => chain)
   return chain
 }
@@ -93,6 +95,10 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
   createActivity: vi.fn(),
 }))
 
+vi.mock('../pipeline-log', () => ({
+  logPipelineEvent: vi.fn().mockResolvedValue(undefined),
+}))
+
 describe('suggestion.service', () => {
   beforeEach(() => {
     insertValuesCalls.length = 0
@@ -130,7 +136,9 @@ describe('suggestion.service', () => {
       const { db } = await import('@/lib/server/db')
       // Make insert return the new post ID
       vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_1' as PostId }]) as any
+        createInsertChain([{ id: 'new_post_1' as PostId }]) as unknown as ReturnType<
+          (typeof db)['insert']
+        >
       )
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
@@ -156,12 +164,31 @@ describe('suggestion.service', () => {
       expect(mockSubscribeToPost).toHaveBeenCalled()
       // Should send email (different principals)
       expect(mockSendAttributionEmail).toHaveBeenCalled()
+
+      // Should log suggestion.accepted pipeline event
+      const { logPipelineEvent } = await import('../pipeline-log')
+      expect(logPipelineEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'suggestion.accepted',
+          suggestionId: 'suggestion_1',
+          detail: expect.objectContaining({
+            suggestionType: 'create_post',
+            resolvedByPrincipalId: adminPrincipalId,
+            edits: expect.objectContaining({
+              titleChanged: false,
+              bodyChanged: false,
+            }),
+          }),
+        })
+      )
     })
 
     it('should use edits over suggestion defaults', async () => {
       const { db } = await import('@/lib/server/db')
       vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_2' as PostId }]) as any
+        createInsertChain([{ id: 'new_post_2' as PostId }]) as unknown as ReturnType<
+          (typeof db)['insert']
+        >
       )
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
@@ -184,12 +211,28 @@ describe('suggestion.service', () => {
       const postValues = insertValuesCalls[0][0] as Record<string, unknown>
       expect(postValues.title).toBe('Custom Title')
       expect(postValues.content).toBe('Custom body')
+
+      // Should log edit deltas in suggestion.accepted
+      const { logPipelineEvent } = await import('../pipeline-log')
+      expect(logPipelineEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'suggestion.accepted',
+          detail: expect.objectContaining({
+            edits: expect.objectContaining({
+              titleChanged: true,
+              bodyChanged: true,
+            }),
+          }),
+        })
+      )
     })
 
     it('should not send email when author is the admin', async () => {
       const { db } = await import('@/lib/server/db')
       vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_3' as PostId }]) as any
+        createInsertChain([{ id: 'new_post_3' as PostId }]) as unknown as ReturnType<
+          (typeof db)['insert']
+        >
       )
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
@@ -238,6 +281,18 @@ describe('suggestion.service', () => {
       const setArgs = updateSetCalls[0][0] as Record<string, unknown>
       expect(setArgs.status).toBe('dismissed')
       expect(setArgs.resolvedAt).toBeInstanceOf(Date)
+
+      // Should log suggestion.dismissed pipeline event
+      const { logPipelineEvent } = await import('../pipeline-log')
+      expect(logPipelineEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'suggestion.dismissed',
+          suggestionId: 'suggestion_1',
+          detail: expect.objectContaining({
+            resolvedByPrincipalId: adminPrincipalId,
+          }),
+        })
+      )
     })
   })
 
@@ -245,8 +300,13 @@ describe('suggestion.service', () => {
     it('should expire old pending suggestions and return count', async () => {
       const { db } = await import('@/lib/server/db')
       const chain = createUpdateChain()
-      chain.returning = vi.fn().mockResolvedValue([{ id: 'a' }, { id: 'b' }])
-      vi.mocked(db.update).mockReturnValueOnce(chain as any)
+      chain.returning = vi.fn().mockResolvedValue([
+        { id: 'a', rawFeedbackItemId: 'raw_1', createdAt: new Date(Date.now() - 45 * 86400000) },
+        { id: 'b', rawFeedbackItemId: 'raw_2', createdAt: new Date(Date.now() - 60 * 86400000) },
+      ])
+      vi.mocked(db.update).mockReturnValueOnce(
+        chain as unknown as ReturnType<(typeof db)['update']>
+      )
 
       const { expireStaleSuggestions } = await import('../suggestion.service')
       const count = await expireStaleSuggestions()
@@ -254,6 +314,20 @@ describe('suggestion.service', () => {
       expect(count).toBe(2)
       const setArgs = updateSetCalls[0][0] as Record<string, unknown>
       expect(setArgs.status).toBe('expired')
+
+      // Should log one suggestion.expired event per expired suggestion
+      const { logPipelineEvent } = await import('../pipeline-log')
+      expect(logPipelineEvent).toHaveBeenCalledTimes(2)
+      expect(logPipelineEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'suggestion.expired',
+          detail: expect.objectContaining({
+            expiredBy: 'system',
+            reasonCode: 'stale',
+            ageDays: expect.any(Number),
+          }),
+        })
+      )
     })
   })
 })

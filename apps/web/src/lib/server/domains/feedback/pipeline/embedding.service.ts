@@ -8,18 +8,19 @@
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, sql } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import { getOpenAI } from '@/lib/server/domains/ai/config'
-import { withRetry } from '@/lib/server/domains/ai/retry'
-import { EMBEDDING_MODEL } from '@/lib/server/domains/embeddings/embedding.service'
-import type { FeedbackSignalId } from '@quackback/ids'
+import {
+  generateEmbedding,
+  EMBEDDING_MODEL,
+} from '@/lib/server/domains/embeddings/embedding.service'
+import { toUuid, type FeedbackSignalId } from '@quackback/ids'
 
 /**
  * Generate and store an embedding for a feedback signal.
  */
-export async function embedSignal(signalId: FeedbackSignalId): Promise<number[] | null> {
-  const openai = getOpenAI()
-  if (!openai) return null
-
+export async function embedSignal(
+  signalId: FeedbackSignalId,
+  rawFeedbackItemId?: string
+): Promise<number[] | null> {
   const signal = await db.query.feedbackSignals.findFirst({
     where: eq(feedbackSignals.id, signalId),
     columns: { summary: true, implicitNeed: true },
@@ -32,21 +33,18 @@ export async function embedSignal(signalId: FeedbackSignalId): Promise<number[] 
   const textToEmbed = [signal.summary, signal.implicitNeed].filter(Boolean).join(' - ')
   if (!textToEmbed.trim()) return null
 
-  const response = await withRetry(() =>
-    openai.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: textToEmbed.slice(0, 8000),
-    })
-  )
-
-  const embedding = response.data[0]?.embedding
+  const embedding = await generateEmbedding(textToEmbed, {
+    pipelineStep: 'signal_embedding',
+    rawFeedbackItemId,
+    signalId,
+  })
   if (!embedding) return null
 
   const vectorStr = `[${embedding.join(',')}]`
   await db
     .update(feedbackSignals)
     .set({
-      embedding: sql`${vectorStr}::vector` as any,
+      embedding: sql<number[]>`${vectorStr}::vector`,
       embeddingModel: EMBEDDING_MODEL,
       embeddingUpdatedAt: new Date(),
       updatedAt: new Date(),
@@ -81,7 +79,9 @@ export async function findSimilarPosts(
   const minSimilarity = opts?.minSimilarity ?? 0.7
   const vectorStr = `[${embedding.join(',')}]`
 
-  const excludeClause = opts?.excludePostId ? sql`AND p.id != ${opts.excludePostId}::uuid` : sql``
+  const excludeClause = opts?.excludePostId
+    ? sql`AND p.id != ${toUuid(opts.excludePostId)}::uuid`
+    : sql``
 
   const results = await db.execute(sql`
     SELECT
@@ -143,7 +143,7 @@ export async function findSimilarPendingSuggestions(
   const vectorStr = `[${embedding.join(',')}]`
 
   const excludeClause = opts?.excludeRawItemId
-    ? sql`AND fs.raw_feedback_item_id != ${opts.excludeRawItemId}::uuid`
+    ? sql`AND fs.raw_feedback_item_id != ${toUuid(opts.excludeRawItemId)}::uuid`
     : sql``
 
   const results = await db.execute(sql`

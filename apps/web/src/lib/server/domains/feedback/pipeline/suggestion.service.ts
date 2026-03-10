@@ -6,9 +6,11 @@
  */
 
 import { db, eq, and, feedbackSuggestions, posts, votes, sql } from '@/lib/server/db'
+import type { SQL } from 'drizzle-orm'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
+import { logPipelineEvent } from './pipeline-log'
 import { sendFeedbackAttributionEmail } from './feedback-attribution-email'
 import type {
   FeedbackSuggestionId,
@@ -48,8 +50,8 @@ export async function createPostSuggestion(opts: {
       suggestedBody: opts.suggestedBody,
       reasoning: opts.reasoning,
       similarPosts: opts.similarPosts ?? null,
-      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as any }),
-    } as any)
+      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as SQL<number[]> }),
+    } as typeof feedbackSuggestions.$inferInsert)
     .returning({ id: feedbackSuggestions.id })
 
   return inserted.id
@@ -83,8 +85,8 @@ export async function createVoteSuggestion(opts: {
       suggestedBody: opts.suggestedBody,
       reasoning: opts.reasoning,
       similarPosts: opts.similarPosts ?? null,
-      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as any }),
-    } as any)
+      ...(vectorStr && { embedding: sql`${vectorStr}::vector` as SQL<number[]> }),
+    } as typeof feedbackSuggestions.$inferInsert)
     .returning({ id: feedbackSuggestions.id })
 
   return inserted.id
@@ -106,9 +108,10 @@ export async function acceptCreateSuggestion(
 ): Promise<{ success: boolean; resultPostId: PostId }> {
   const suggestion = await db.query.feedbackSuggestions.findFirst({
     where: eq(feedbackSuggestions.id, suggestionId),
+    columns: { embedding: false },
     with: {
       rawItem: {
-        columns: { principalId: true },
+        columns: { principalId: true, sourceType: true },
       },
     },
   })
@@ -200,6 +203,25 @@ export async function acceptCreateSuggestion(
     })
     .where(eq(feedbackSuggestions.id, suggestionId))
 
+  await logPipelineEvent({
+    eventType: 'suggestion.accepted',
+    rawFeedbackItemId: suggestion.rawFeedbackItemId,
+    suggestionId,
+    postId: newPostId,
+    detail: {
+      suggestionType: suggestion.suggestionType,
+      sourceType: suggestion.rawItem?.sourceType ?? null,
+      resultPostId: newPostId,
+      resolvedByPrincipalId,
+      edits: {
+        titleChanged: (edits?.title ?? null) !== null && edits?.title !== suggestion.suggestedTitle,
+        bodyChanged: (edits?.body ?? null) !== null && edits?.body !== suggestion.suggestedBody,
+        boardChanged: (edits?.boardId ?? null) !== null && edits?.boardId !== suggestion.boardId,
+        authorChanged: (edits?.authorPrincipalId ?? null) !== null,
+      },
+    },
+  })
+
   return { success: true, resultPostId: newPostId }
 }
 
@@ -213,6 +235,7 @@ export async function acceptVoteSuggestion(
 ): Promise<{ success: boolean; resultPostId: PostId }> {
   const suggestion = await db.query.feedbackSuggestions.findFirst({
     where: eq(feedbackSuggestions.id, suggestionId),
+    columns: { embedding: false },
     with: {
       rawItem: {
         columns: { principalId: true, sourceType: true, externalUrl: true, author: true },
@@ -278,6 +301,19 @@ export async function acceptVoteSuggestion(
     })
     .where(eq(feedbackSuggestions.id, suggestionId))
 
+  await logPipelineEvent({
+    eventType: 'suggestion.accepted',
+    rawFeedbackItemId: suggestion.rawFeedbackItemId,
+    suggestionId,
+    postId: targetPostId,
+    detail: {
+      suggestionType: 'vote_on_post',
+      sourceType,
+      resultPostId: targetPostId,
+      resolvedByPrincipalId,
+    },
+  })
+
   return { success: true, resultPostId: targetPostId }
 }
 
@@ -288,7 +324,7 @@ export async function dismissSuggestion(
   suggestionId: FeedbackSuggestionId,
   resolvedByPrincipalId: PrincipalId
 ): Promise<void> {
-  await db
+  const [updated] = await db
     .update(feedbackSuggestions)
     .set({
       status: 'dismissed',
@@ -297,13 +333,59 @@ export async function dismissSuggestion(
       updatedAt: new Date(),
     })
     .where(and(eq(feedbackSuggestions.id, suggestionId), eq(feedbackSuggestions.status, 'pending')))
+    .returning({
+      id: feedbackSuggestions.id,
+      rawFeedbackItemId: feedbackSuggestions.rawFeedbackItemId,
+    })
+
+  if (updated) {
+    await logPipelineEvent({
+      eventType: 'suggestion.dismissed',
+      rawFeedbackItemId: updated.rawFeedbackItemId,
+      suggestionId,
+      detail: { resolvedByPrincipalId },
+    })
+  }
+}
+
+/**
+ * Restore a dismissed suggestion back to pending.
+ */
+export async function restoreSuggestion(
+  suggestionId: FeedbackSuggestionId,
+  restoredByPrincipalId: PrincipalId
+): Promise<void> {
+  const [updated] = await db
+    .update(feedbackSuggestions)
+    .set({
+      status: 'pending',
+      resolvedAt: null,
+      resolvedByPrincipalId: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(feedbackSuggestions.id, suggestionId), eq(feedbackSuggestions.status, 'dismissed'))
+    )
+    .returning({
+      id: feedbackSuggestions.id,
+      rawFeedbackItemId: feedbackSuggestions.rawFeedbackItemId,
+    })
+
+  if (updated) {
+    await logPipelineEvent({
+      eventType: 'suggestion.restored',
+      rawFeedbackItemId: updated.rawFeedbackItemId,
+      suggestionId,
+      detail: { restoredByPrincipalId },
+    })
+  }
 }
 
 /**
  * Expire stale pending suggestions older than 30 days.
  */
 export async function expireStaleSuggestions(): Promise<number> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
   const result = await db
     .update(feedbackSuggestions)
@@ -315,10 +397,30 @@ export async function expireStaleSuggestions(): Promise<number> {
     .where(
       and(
         eq(feedbackSuggestions.status, 'pending'),
-        sql`${feedbackSuggestions.createdAt} < ${thirtyDaysAgo}`
+        sql`${feedbackSuggestions.createdAt} < ${thirtyDaysAgo.toISOString()}`
       )
     )
-    .returning({ id: feedbackSuggestions.id })
+    .returning({
+      id: feedbackSuggestions.id,
+      rawFeedbackItemId: feedbackSuggestions.rawFeedbackItemId,
+      createdAt: feedbackSuggestions.createdAt,
+    })
+
+  for (const expired of result) {
+    const ageDays = Math.floor(
+      (Date.now() - new Date(expired.createdAt).getTime()) / (24 * 60 * 60 * 1000)
+    )
+    await logPipelineEvent({
+      eventType: 'suggestion.expired',
+      rawFeedbackItemId: expired.rawFeedbackItemId,
+      suggestionId: expired.id,
+      detail: {
+        expiredBy: 'system',
+        reasonCode: 'stale',
+        ageDays,
+      },
+    })
+  }
 
   return result.length
 }

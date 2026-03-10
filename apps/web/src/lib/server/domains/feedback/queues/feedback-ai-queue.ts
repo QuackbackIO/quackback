@@ -59,7 +59,15 @@ async function initializeQueue() {
         }
         case 'interpret-signal': {
           const { interpretSignal } = await import('../pipeline/interpretation.service')
-          await interpretSignal(data.signalId as FeedbackSignalId)
+          await interpretSignal(data.signalId as FeedbackSignalId, {
+            currentAttempt: job.attemptsMade + 1,
+            maxAttempts: job.opts.attempts ?? 1,
+          })
+          break
+        }
+        case 'retention-cleanup': {
+          const { cleanupExpiredLogs } = await import('../../ai/usage-retention')
+          await cleanupExpiredLogs()
           break
         }
         default:
@@ -67,6 +75,17 @@ async function initializeQueue() {
       }
     },
     { connection: connOpts, concurrency: CONCURRENCY }
+  )
+
+  // Register daily retention cleanup as a repeatable job
+  await queue.add(
+    'ai:retention-cleanup',
+    { type: 'retention-cleanup' },
+    {
+      repeat: { pattern: '0 3 * * *' }, // 3 AM daily
+      removeOnComplete: true,
+      removeOnFail: { age: 7 * 86400 },
+    }
   )
 
   try {

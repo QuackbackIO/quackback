@@ -92,7 +92,19 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+  withRetry: vi.fn((fn: () => Promise<unknown>) =>
+    fn().then((result: unknown) => ({ result, retryCount: 0 }))
+  ),
+}))
+
+vi.mock('@/lib/server/domains/ai/usage-log', () => ({
+  withUsageLogging: vi.fn((_params: unknown, fn: () => Promise<{ result: unknown }>) =>
+    fn().then(({ result }) => result)
+  ),
+}))
+
+vi.mock('../pipeline-log', () => ({
+  logPipelineEvent: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('interpretation.service', () => {
@@ -132,9 +144,20 @@ describe('interpretation.service', () => {
     await interpretSignal(signalId)
 
     // Quackback posts only get embedded — duplicate detection handled by merge_suggestions system
-    expect(mockEmbedSignal).toHaveBeenCalledWith(signalId)
+    expect(mockEmbedSignal).toHaveBeenCalledWith(signalId, rawItemId)
     expect(mockFindSimilarPosts).not.toHaveBeenCalled()
     expect(mockCreatePostSuggestion).not.toHaveBeenCalled()
+
+    // Should log skipped_quackback pipeline event
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.skipped_quackback',
+        rawFeedbackItemId: rawItemId,
+        signalId,
+        detail: {},
+      })
+    )
   })
 
   it('should create vote_on_post suggestion for external source with high-similarity match', async () => {
@@ -187,6 +210,40 @@ describe('interpretation.service', () => {
         ]),
       })
     )
+
+    // Verify pipeline logging
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.similar_posts',
+        detail: expect.objectContaining({
+          bestSimilarity: 0.85,
+          threshold: 0.8,
+        }),
+      })
+    )
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.suggestion_created',
+        detail: expect.objectContaining({
+          suggestionType: 'vote_on_post',
+          sourceType: 'intercom',
+        }),
+      })
+    )
+
+    // Verify AI usage logging for suggestion generation
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineStep: 'suggestion',
+        rawFeedbackItemId: rawItemId,
+        signalId,
+        metadata: expect.objectContaining({ suggestionType: 'vote_on_post' }),
+      }),
+      expect.any(Function),
+      expect.any(Function)
+    )
   })
 
   it('should create post suggestion for external source with no match', async () => {
@@ -227,6 +284,28 @@ describe('interpretation.service', () => {
         suggestedTitle: 'Add CSV Export',
       })
     )
+
+    // Should log similar_posts and suggestion_created events
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.similar_posts',
+        detail: expect.objectContaining({
+          postMatches: [],
+          bestSimilarity: null,
+        }),
+      })
+    )
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.suggestion_created',
+        detail: expect.objectContaining({
+          suggestionType: 'create_post',
+          sourceType: 'intercom',
+          usedFallback: false,
+        }),
+      })
+    )
   })
 
   it('should use fallback when LLM fails for create_post suggestion', async () => {
@@ -250,6 +329,17 @@ describe('interpretation.service', () => {
     expect(mockCreatePostSuggestion).toHaveBeenCalledWith(
       expect.objectContaining({
         suggestedTitle: expect.stringContaining('CSV export needed'),
+      })
+    )
+
+    // Should log suggestion_created with usedFallback=true
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.suggestion_created',
+        detail: expect.objectContaining({
+          usedFallback: true,
+        }),
       })
     )
   })
@@ -350,6 +440,19 @@ describe('interpretation.service', () => {
         limit: 1,
         minSimilarity: 0.8,
         excludeRawItemId: rawItemId,
+      })
+    )
+
+    // Should log suggestion_skipped pipeline event
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.suggestion_skipped',
+        detail: expect.objectContaining({
+          reason: 'duplicate_pending',
+          similarSuggestionId: 'existing_suggestion_1',
+          similarity: 0.92,
+        }),
       })
     )
   })

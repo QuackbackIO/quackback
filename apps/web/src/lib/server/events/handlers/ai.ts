@@ -49,7 +49,7 @@ export const aiHook: HookHandler = {
  * Process sentiment analysis for a post.
  */
 async function processSentiment(postId: PostId, title: string, content: string): Promise<boolean> {
-  const result = await analyzeSentiment(title, content)
+  const result = await analyzeSentiment(title, content, postId)
   if (!result) return false
 
   await saveSentiment(postId, result)
