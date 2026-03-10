@@ -22,6 +22,7 @@ import {
   and,
   inArray,
   isNull,
+  isNotNull,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -214,17 +215,25 @@ export async function getSubscribersForEvent(
     .from(postSubscriptions)
     .innerJoin(principal, eq(postSubscriptions.principalId, principal.id))
     .innerJoin(user, eq(principal.userId, user.id))
-    .where(and(eq(postSubscriptions.postId, postId), eq(notifyColumn, true)))
+    .where(
+      and(
+        eq(postSubscriptions.postId, postId),
+        eq(notifyColumn, true),
+        isNotNull(user.email) // Only subscribers with real email addresses
+      )
+    )
 
-  return rows.map((row) => ({
-    principalId: row.principalId,
-    userId: row.userId!, // INNER JOIN on user guarantees non-null
-    email: row.email,
-    name: row.name,
-    reason: row.reason as SubscriptionReason,
-    notifyComments: row.notifyComments,
-    notifyStatusChanges: row.notifyStatusChanges,
-  }))
+  return rows
+    .filter((row): row is typeof row & { email: string } => row.email !== null)
+    .map((row) => ({
+      principalId: row.principalId,
+      userId: row.userId!, // INNER JOIN on user guarantees non-null
+      email: row.email,
+      name: row.name,
+      reason: row.reason as SubscriptionReason,
+      notifyComments: row.notifyComments,
+      notifyStatusChanges: row.notifyStatusChanges,
+    }))
 }
 
 /**

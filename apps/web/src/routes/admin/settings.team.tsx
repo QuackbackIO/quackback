@@ -42,7 +42,7 @@ type TeamRow =
       type: 'member'
       id: string
       name: string
-      email: string
+      email: string | null
       role: string
       userId: UserId | null
       principalId: PrincipalId
@@ -61,10 +61,10 @@ type TeamRow =
 const teamFilterFn: FilterFn<TeamRow> = (row, _columnId, filterValue: string) => {
   const query = filterValue.toLowerCase()
   const r = row.original
-  const name = r.type === 'member' ? r.name : (r.name || '')
+  const name = r.type === 'member' ? r.name : r.name || ''
   return (
     name.toLowerCase().includes(query) ||
-    r.email.toLowerCase().includes(query) ||
+    (r.email?.toLowerCase().includes(query) ?? false) ||
     (r.role?.toLowerCase().includes(query) ?? false)
   )
 }
@@ -126,9 +126,7 @@ function TeamPage() {
   }, [members, invitations])
 
   const handleResent = (id: string, lastSentAt: string) => {
-    setInvitations((prev) =>
-      prev.map((inv) => (inv.id === id ? { ...inv, lastSentAt } : inv))
-    )
+    setInvitations((prev) => prev.map((inv) => (inv.id === id ? { ...inv, lastSentAt } : inv)))
   }
 
   const handleCancelled = (id: string) => {
@@ -143,7 +141,8 @@ function TeamPage() {
     () => [
       {
         id: 'name',
-        accessorFn: (row) => `${row.type === 'member' ? row.name : (row.name || '')} ${row.email} ${row.role || ''}`,
+        accessorFn: (row) =>
+          `${row.type === 'member' ? row.name : row.name || ''} ${row.email || ''} ${row.role || ''}`,
         header: 'Name',
         cell: ({ row }) => {
           const r = row.original
@@ -160,7 +159,7 @@ function TeamPage() {
                       <span className="ml-2 text-xs text-muted-foreground">(you)</span>
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground truncate">{r.email}</p>
+                  {r.email && <p className="text-sm text-muted-foreground truncate">{r.email}</p>}
                 </div>
               </div>
             )
@@ -176,13 +175,14 @@ function TeamPage() {
               <div className="min-w-0">
                 <p className="font-medium text-foreground truncate">
                   {r.name || r.email}
-                  <Badge variant="outline" className="ml-2 bg-amber-500/10 text-amber-600 border-amber-500/30">
+                  <Badge
+                    variant="outline"
+                    className="ml-2 bg-amber-500/10 text-amber-600 border-amber-500/30"
+                  >
                     Invited
                   </Badge>
                 </p>
-                {r.name && (
-                  <p className="text-sm text-muted-foreground truncate">{r.email}</p>
-                )}
+                {r.name && <p className="text-sm text-muted-foreground truncate">{r.email}</p>}
                 <p className="text-xs text-muted-foreground">
                   Sent {formatInviteDate(r.lastSentAt || r.createdAt)}
                   <span className="mx-1">&middot;</span>
@@ -204,9 +204,7 @@ function TeamPage() {
             <Badge
               variant="outline"
               className={
-                isAdmin(role)
-                  ? 'bg-primary/10 text-primary border-primary/30'
-                  : 'bg-muted/50'
+                isAdmin(role) ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted/50'
               }
             >
               {role}
@@ -242,7 +240,7 @@ function TeamPage() {
             <div className="flex justify-end">
               <MemberActions
                 principalId={r.principalId}
-                memberName={r.name || r.email}
+                memberName={r.name || r.email || 'Unnamed'}
                 memberRole={r.role as 'admin' | 'member'}
                 isLastAdmin={isLastAdmin && isAdmin(r.role)}
               />
@@ -303,7 +301,10 @@ function TeamPage() {
           <TableBody>
             {table.getRowModel().rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   {data.length === 0 ? 'No team members yet' : 'No results found'}
                 </TableCell>
               </TableRow>
@@ -318,15 +319,15 @@ function TeamPage() {
                       {row.getVisibleCells().map((cell) => (
                         <TableCell
                           key={cell.id}
-                          className={(cell.column.columnDef.meta as { className?: string })?.className}
+                          className={
+                            (cell.column.columnDef.meta as { className?: string })?.className
+                          }
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
                       ))}
                     </TableRow>
-                    {inviteLink && (
-                      <InviteLinkRow link={inviteLink} colSpan={columns.length} />
-                    )}
+                    {inviteLink && <InviteLinkRow link={inviteLink} colSpan={columns.length} />}
                   </Fragment>
                 )
               })

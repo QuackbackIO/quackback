@@ -48,7 +48,7 @@ export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificati
 export interface UserProfile {
   id: string
   name: string | null
-  email: string
+  email: string | null
   image: string | null
   imageKey: string | null
   hasCustomAvatar: boolean

@@ -18,7 +18,7 @@ interface ProfileFormProps {
   user: {
     id: string
     name: string
-    email: string
+    email: string | null
   }
 }
 
@@ -243,7 +243,13 @@ export function ProfileForm({ user }: ProfileFormProps) {
                 <label htmlFor="email" className="text-sm font-medium">
                   Email
                 </label>
-                <Input id="email" type="email" defaultValue={user.email} disabled />
+                <Input
+                  id="email"
+                  type="email"
+                  defaultValue={user.email ?? ''}
+                  disabled
+                  placeholder="No email"
+                />
               </div>
             </div>
             <div className="flex justify-end">

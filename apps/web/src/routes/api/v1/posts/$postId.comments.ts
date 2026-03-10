@@ -123,7 +123,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
               userId: principalRecord.user?.id,
               displayName: principalRecord.displayName ?? undefined,
               name: principalRecord.user?.name,
-              email: principalRecord.user?.email,
+              email: principalRecord.user?.email ?? undefined,
               role: principalRecord.role as 'admin' | 'member' | 'user',
             }
           )

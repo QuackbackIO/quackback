@@ -21,7 +21,8 @@ export const user = pgTable(
   {
     id: typeIdWithDefault('user')('id').primaryKey(),
     name: text('name').notNull(),
-    email: text('email').notNull(),
+    /** Nullable — external users (Slack, etc.) may not have a real email */
+    email: text('email'),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
     // Profile image - S3 storage key (e.g., "avatars/2026/02/abc123-avatar.png")
@@ -35,8 +36,10 @@ export const user = pgTable(
     metadata: text('metadata'),
   },
   (table) => [
-    // Email is unique globally
-    uniqueIndex('user_email_idx').on(table.email),
+    // Email is unique when present (partial index — nulls are allowed)
+    uniqueIndex('user_email_idx')
+      .on(table.email)
+      .where(sql`email IS NOT NULL`),
   ]
 )
 

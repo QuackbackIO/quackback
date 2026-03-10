@@ -73,7 +73,7 @@ export async function getWidgetSession(): Promise<WidgetAuthContext | null> {
       },
       user: {
         id: userId,
-        email: sessionRecord.user.email,
+        email: sessionRecord.user.email!, // Session users always have email
         name: sessionRecord.user.name,
         image: sessionRecord.user.image ?? null,
       },

@@ -12,7 +12,7 @@ import { getIntegration, getIntegrationTypesWithSegmentSync } from './index'
 import { decryptSecrets } from './encryption'
 
 interface UserRef {
-  email: string
+  email: string | null
   externalUserId?: string
 }
 
@@ -44,12 +44,20 @@ export async function notifyUserSyncIntegrations(
     const secrets = integration.secrets ? decryptSecrets(integration.secrets) : {}
     const sync = def.userSync.syncSegmentMembership
 
+    // Only sync users with real email addresses
+    const addedWithEmail = addedUsers.filter(
+      (u): u is typeof u & { email: string } => u.email !== null
+    )
+    const removedWithEmail = removedUsers.filter(
+      (u): u is typeof u & { email: string } => u.email !== null
+    )
+
     const calls: Promise<void>[] = []
-    if (addedUsers.length > 0) {
-      calls.push(sync(addedUsers, segmentName, true, config, secrets))
+    if (addedWithEmail.length > 0) {
+      calls.push(sync(addedWithEmail, segmentName, true, config, secrets))
     }
-    if (removedUsers.length > 0) {
-      calls.push(sync(removedUsers, segmentName, false, config, secrets))
+    if (removedWithEmail.length > 0) {
+      calls.push(sync(removedWithEmail, segmentName, false, config, secrets))
     }
 
     await Promise.allSettled(calls).then((results) => {
