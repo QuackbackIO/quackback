@@ -85,10 +85,11 @@ export function AuthorSelector({
     return () => clearTimeout(timer)
   }, [search])
 
-  // Server-side member search
+  // Server-side member search (only when popover is open)
   const { data: searchResults = [] } = useQuery({
     ...adminQueries.searchMembers({ search: debouncedSearch || undefined, limit: 20 }),
     placeholderData: keepPreviousData, // Keep previous results visible while loading new search
+    enabled: open,
   })
 
   // Sync initialNewUsers into state when prop changes (handles late-arriving data)

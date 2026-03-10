@@ -291,12 +291,14 @@ export function MergeOthersDialog({
     if (selectedIds.size === 0) return
     setIsMerging(true)
     try {
-      for (const duplicateId of selectedIds) {
-        await merge.mutateAsync({
-          duplicatePostId: duplicateId as PostId,
-          canonicalPostId: postId,
-        })
-      }
+      await Promise.all(
+        [...selectedIds].map((duplicateId) =>
+          merge.mutateAsync({
+            duplicatePostId: duplicateId as PostId,
+            canonicalPostId: postId,
+          })
+        )
+      )
       queryClient.invalidateQueries({ queryKey: ['merged-posts'] })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: ['merge-suggestions'] })

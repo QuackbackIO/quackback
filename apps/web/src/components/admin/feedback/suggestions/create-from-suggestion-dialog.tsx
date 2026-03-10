@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { FolderIcon, UserIcon } from '@heroicons/react/24/outline'
@@ -87,15 +87,9 @@ function CreateFromSuggestionContent({
   // Default author: feedback author principal > current admin
   const [authorPrincipalId, setAuthorPrincipalId] = useState(feedbackAuthorId || currentPrincipalId)
 
-  const defaultStatusId = statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
-  const [statusId, setStatusId] = useState('')
-
-  // Set default status once loaded
-  useEffect(() => {
-    if (!statusId && defaultStatusId) {
-      setStatusId(defaultStatusId)
-    }
-  }, [defaultStatusId, statusId])
+  const [statusId, setStatusId] = useState<string>(
+    () => statuses.find((s) => s.isDefault)?.id || statuses[0]?.id || ''
+  )
 
   const selectedBoard = boards.find((b) => b.id === boardId)
   const selectedStatus = statuses.find((s) => s.id === statusId)

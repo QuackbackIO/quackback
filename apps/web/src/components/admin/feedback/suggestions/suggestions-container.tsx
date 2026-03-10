@@ -61,17 +61,16 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   const allSuggestions = flattenSuggestions(paginatedData) as unknown as SuggestionListItem[]
 
   // Use server-provided per-source-type counts from the first page
-  const countsBySourceJson = JSON.stringify(paginatedData?.pages[0]?.countsBySource)
+  const countsBySource = paginatedData?.pages[0]?.countsBySource ?? null
   const countsBySourceType = useMemo(() => {
     const counts = new Map<string, number>()
-    const parsed = JSON.parse(countsBySourceJson ?? 'null') as Record<string, number> | null
-    if (parsed) {
-      for (const [sourceType, cnt] of Object.entries(parsed)) {
+    if (countsBySource) {
+      for (const [sourceType, cnt] of Object.entries(countsBySource)) {
         counts.set(sourceType, cnt)
       }
     }
     return counts
-  }, [countsBySourceJson])
+  }, [countsBySource])
 
   // Client-side filtering for source and search
   const suggestions = useMemo(() => {

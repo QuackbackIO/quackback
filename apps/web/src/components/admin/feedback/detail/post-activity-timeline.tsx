@@ -271,7 +271,7 @@ function MergedInCard({ activity, isUnmerged }: { activity: ActivityItem; isUnme
     if (!duplicatePostId) return
     try {
       await unmerge.mutateAsync(duplicatePostId as PostId)
-      queryClient.invalidateQueries({ queryKey: ['activity'] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'post'] })
       toast.success('Post unmerged successfully')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to unmerge post')

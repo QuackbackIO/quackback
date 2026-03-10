@@ -66,9 +66,6 @@ export function createActivity(opts: CreateActivityOpts): void {
       type: opts.type,
       metadata: opts.metadata ?? {},
     })
-    .then(() => {
-      console.log(`[domain:activity] created: type=${opts.type} postId=${opts.postId}`)
-    })
     .catch((err) => {
       console.error(`[domain:activity] failed to create activity: type=${opts.type}`, err)
     })
