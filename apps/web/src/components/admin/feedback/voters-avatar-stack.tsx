@@ -75,6 +75,10 @@ export function VotersAvatarStack({
   const displayVoters = voters?.slice(0, 5) ?? []
   const remainingCount = Math.max(0, (voters?.length ?? voteCount) - 5)
 
+  // Exclude existing voters from the add-voter member list
+  const voterPrincipalIds = new Set(voters?.map((v) => v.principalId))
+  const filteredSearchResults = searchResults.filter((m) => !voterPrincipalIds.has(m.id))
+
   function handleProxyVote(principalId: string) {
     if (voters?.some((v) => v.principalId === principalId)) {
       toast.info('This user has already voted')
@@ -178,12 +182,12 @@ export function VotersAvatarStack({
                 className="max-h-56 overflow-y-auto p-1 scrollbar-thin"
                 onWheel={(e) => e.stopPropagation()}
               >
-                {searchResults.length === 0 ? (
+                {filteredSearchResults.length === 0 ? (
                   <p className="text-xs text-muted-foreground/60 text-center py-4">
                     No members found
                   </p>
                 ) : (
-                  searchResults.map((member) => (
+                  filteredSearchResults.map((member) => (
                     <button
                       key={member.id}
                       type="button"
