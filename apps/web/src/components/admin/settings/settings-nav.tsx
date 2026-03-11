@@ -41,14 +41,12 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
       { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
+      { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
     ],
   },
   {
     label: 'Appearance',
-    items: [
-      { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
-      { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
-    ],
+    items: [{ label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon }],
   },
   {
     label: 'Users',

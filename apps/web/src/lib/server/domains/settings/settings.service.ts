@@ -273,7 +273,6 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       enabled: config.enabled,
       defaultBoard: config.defaultBoard,
       position: config.position,
-      buttonText: config.buttonText,
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicWidgetConfig failed:`, error)
@@ -716,7 +715,6 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         enabled: widgetConfig.enabled,
         defaultBoard: widgetConfig.defaultBoard,
         position: widgetConfig.position,
-        buttonText: widgetConfig.buttonText,
       },
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,

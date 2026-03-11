@@ -427,7 +427,6 @@ const updateWidgetConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
-  buttonText: z.string().max(30).optional(),
   identifyVerification: z.boolean().optional(),
 })
 

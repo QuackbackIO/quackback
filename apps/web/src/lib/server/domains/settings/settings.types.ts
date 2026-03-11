@@ -222,8 +222,6 @@ export interface WidgetConfig {
   defaultBoard?: string
   /** Trigger button position */
   position?: 'bottom-right' | 'bottom-left'
-  /** Trigger button text */
-  buttonText?: string
   /** Whether to require HMAC verification on identify calls */
   identifyVerification?: boolean
 }
@@ -232,10 +230,7 @@ export interface WidgetConfig {
  * Public subset of widget config — safe to include in TenantSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Pick<
-  WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'buttonText'
->
+export type PublicWidgetConfig = Pick<WidgetConfig, 'enabled' | 'defaultBoard' | 'position'>
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   enabled: false,
@@ -249,7 +244,6 @@ export interface UpdateWidgetConfigInput {
   enabled?: boolean
   defaultBoard?: string
   position?: 'bottom-right' | 'bottom-left'
-  buttonText?: string
   identifyVerification?: boolean
 }
 
