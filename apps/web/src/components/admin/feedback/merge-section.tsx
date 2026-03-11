@@ -106,13 +106,13 @@ export function MergeIntoDialog({ postId, postTitle, open, onOpenChange }: Merge
             />
           </div>
 
-          <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/40">
+          <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/50">
             {isLoading && searchQuery.length >= 3 && (
               <p className="text-sm text-muted-foreground py-6 text-center">Searching...</p>
             )}
 
             {suggestions && suggestions.length > 0 && (
-              <div className="divide-y divide-border/30">
+              <div className="divide-y divide-border/50">
                 {suggestions.map((suggestion) => (
                   <button
                     key={suggestion.id}
@@ -335,14 +335,14 @@ export function MergeOthersDialog({
           />
         </div>
 
-        <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/40">
+        <div className="min-h-[200px] max-h-[400px] overflow-y-auto border-t border-border/50">
           {/* AI Suggested section */}
           {hasAiSuggestions && (
             <>
               <div className="px-4 py-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider bg-muted/20">
                 AI Suggested
               </div>
-              <div className="divide-y divide-border/30">
+              <div className="divide-y divide-border/50">
                 {aiPosts.map((post) => (
                   <MergeOthersRow
                     key={post.id}
@@ -371,7 +371,7 @@ export function MergeOthersDialog({
                   Search Results
                 </div>
               )}
-              <div className="divide-y divide-border/30">
+              <div className="divide-y divide-border/50">
                 {filteredSearchResults.map((post) => (
                   <MergeOthersRow
                     key={post.id}
@@ -408,7 +408,7 @@ export function MergeOthersDialog({
         </div>
 
         {/* Footer with merge button */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/40">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/50">
           <Button
             variant="outline"
             size="sm"

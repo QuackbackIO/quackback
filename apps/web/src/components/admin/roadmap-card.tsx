@@ -25,7 +25,7 @@ export const RoadmapCard = memo(function RoadmapCard({
       ref={setNodeRef}
       onClick={onClick}
       style={{ opacity: isDragging ? 0.4 : 1 }}
-      className="flex bg-card rounded-lg border shadow-sm cursor-pointer hover:bg-card/80 transition-opacity duration-150"
+      className="flex bg-card rounded-lg border border-border/50 shadow-sm cursor-pointer hover:bg-card/80 transition-opacity duration-150"
       {...attributes}
       {...listeners}
     >
@@ -56,7 +56,7 @@ function CardContent({ post }: { post: RoadmapPostEntry }) {
 
 export function RoadmapCardOverlay({ post }: { post: RoadmapPostEntry }) {
   return (
-    <div className="flex bg-card rounded-lg border shadow-lg cursor-grabbing w-[320px]">
+    <div className="flex bg-card rounded-lg border border-border/50 shadow-lg cursor-grabbing w-[320px]">
       <CardContent post={post} />
     </div>
   )

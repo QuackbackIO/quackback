@@ -67,7 +67,7 @@ export function SuggestionList({
   const headerContent = (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 border border-border/40 rounded-lg p-0.5">
+        <div className="flex items-center gap-1 border border-border/50 rounded-lg p-0.5">
           {(['pending', 'dismissed'] as const).map((s) => (
             <button
               key={s}
@@ -133,7 +133,7 @@ export function SuggestionList({
         />
       ) : (
         <div className="p-3">
-          <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
             {groups.map((group, index) => (
               <div
                 key={group.rawItemId}

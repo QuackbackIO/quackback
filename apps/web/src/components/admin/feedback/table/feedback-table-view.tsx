@@ -42,7 +42,7 @@ interface FeedbackTableViewProps {
 function TableSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
         {Array.from({ length: 6 }).map((_, rowIdx) => (
           <div key={rowIdx} className="flex py-1 px-3">
             {/* Vote button */}
@@ -242,7 +242,7 @@ export function FeedbackTableView({
 
       {/* Post List */}
       <div className="p-3">
-        <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
           {filteredPosts.map((post, index) => (
             <div
               key={post.id}
