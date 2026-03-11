@@ -92,21 +92,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
   function createTrigger() {
     var placement = (config && config.placement) || "right";
-    var text = (config && config.buttonText) || "Feedback";
     var colors = getThemeColors();
-
-    // Compute border radius — scale theme radius for pill-like button, min 8px
-    var radius = THEME.radius;
-    var btnRadius = "24px";
-    if (radius && radius !== "24px") {
-      var parsed = parseFloat(radius);
-      if (!isNaN(parsed)) {
-        // Convert rem to px (assume 16px base), scale up for button height
-        var unit = radius.replace(/[0-9.]+/, "");
-        var px = unit === "rem" ? parsed * 16 : parsed;
-        btnRadius = Math.max(8, Math.min(24, px * 3)) + "px";
-      }
-    }
 
     trigger = createElement("button", {
       position: "fixed",
@@ -115,11 +101,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       zIndex: "2147483647",
       display: "flex",
       alignItems: "center",
-      gap: "8px",
+      justifyContent: "center",
+      width: "48px",
       height: "48px",
-      padding: "0 20px",
+      padding: "0",
       border: "none",
-      borderRadius: btnRadius,
+      borderRadius: "50%",
       backgroundColor: colors.bg,
       color: colors.fg,
       fontSize: "14px",
@@ -133,8 +120,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       "aria-expanded": "false",
     });
 
-    // Chat icon SVG
-    trigger.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' + '<span>' + text + '</span>';
+    // Chat bubbles icon (Heroicons solid)
+    trigger.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 0 0-1.032-.211 50.89 50.89 0 0 0-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 0 0 2.433 3.984L7.28 21.53A.75.75 0 0 1 6 21v-4.03a48.527 48.527 0 0 1-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979Z"/><path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z"/></svg>';
 
     trigger.addEventListener("mouseenter", function() {
       trigger.style.transform = "translateY(-2px)";
@@ -318,7 +305,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
   function dispatch(command, options) {
     switch (command) {
-      case "initialize_feedback_widget":
+      case "init":
         config = options || {};
         isMobile = window.innerWidth < 640;
         createTrigger();
