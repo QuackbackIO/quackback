@@ -77,8 +77,8 @@ export function AuthCommentsSection({
     },
   })
 
-  // Get user from session
-  const user = session?.user
+  // Get user from session (anonymous sessions can vote but can't comment)
+  const user = session?.user && !session.user.isAnonymous ? session.user : null
   const isLoggedIn = !!user
 
   // Can comment only if logged in (reactive check)

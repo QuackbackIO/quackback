@@ -74,9 +74,9 @@ export function PortalHeader({
     },
   })
 
-  // Get user info from session
+  // Get user info from session (anonymous sessions don't count as logged in)
   const user = session?.user
-  const isLoggedIn = !!user
+  const isLoggedIn = !!user && !user.isAnonymous
 
   // Use initialUserData (which includes properly fetched avatar from blob storage)
   // falling back to session data

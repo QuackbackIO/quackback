@@ -113,7 +113,7 @@ export function VotersModal({
           ) : voters && voters.length > 0 ? (
             <div className="space-y-3">
               {voters.map((voter) => {
-                const isAnonymous = !voter.email && !voter.displayName
+                const isAnonymous = voter.isAnonymous || (!voter.email && !voter.displayName)
                 return (
                   <div key={voter.principalId} className="group flex items-center gap-3">
                     <Avatar

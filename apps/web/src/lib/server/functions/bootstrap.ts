@@ -40,6 +40,7 @@ async function getSessionInternal(): Promise<Session | null> {
         email: session.user.email,
         emailVerified: session.user.emailVerified,
         image: session.user.image ?? null,
+        isAnonymous: (session.user as Record<string, unknown>).isAnonymous === true,
         createdAt: session.user.createdAt.toISOString(),
         updatedAt: session.user.updatedAt.toISOString(),
       },

@@ -50,10 +50,11 @@ export function FeedbackHeader({
 
   const createPost = useCreatePublicPost()
 
-  // Get user from session
-  const effectiveUser = session?.user
-    ? { name: session.user.name, email: session.user.email }
-    : user
+  // Get user from session (anonymous sessions can vote but can't create posts)
+  const effectiveUser =
+    session?.user && !session.user.isAnonymous
+      ? { name: session.user.name, email: session.user.email }
+      : user
 
   // Listen for auth success to refetch session (no page reload)
   useAuthBroadcast({

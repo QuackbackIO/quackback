@@ -31,6 +31,7 @@ export interface VoterInfo {
   displayName: string | null
   email: string | null
   avatarUrl: string | null
+  isAnonymous: boolean
   sourceType: string | null
   sourceExternalUrl: string | null
   addedByName: string | null
@@ -103,10 +104,16 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       WHERE id = ${postUuid}::uuid
       RETURNING vote_count
     ),
+    anon_check AS (
+      SELECT 1 FROM ${user} u
+      JOIN ${principal} p ON p.user_id = u.id
+      WHERE p.id = ${principalUuid}::uuid AND u.is_anonymous = true
+    ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
       SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
+        AND NOT EXISTS (SELECT 1 FROM anon_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
     )
@@ -307,6 +314,7 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       displayName: principal.displayName,
       email: user.email,
       avatarUrl: principal.avatarUrl,
+      isAnonymous: user.isAnonymous,
       sourceType: votes.sourceType,
       sourceExternalUrl: votes.sourceExternalUrl,
       addedByName: sql<string | null>`(
@@ -332,16 +340,16 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
 
   return rows.map((row) => ({
     principalId: row.principalId,
-    displayName: row.displayName,
+    displayName: row.isAnonymous ? null : row.displayName,
     email: row.email,
-    avatarUrl: row.avatarUrl,
+    avatarUrl: row.isAnonymous ? null : row.avatarUrl,
+    isAnonymous: row.isAnonymous ?? false,
     sourceType: row.sourceType,
     sourceExternalUrl: row.sourceExternalUrl,
     addedByName: row.addedByName,
     createdAt: row.createdAt,
-    subscriptionLevel: levelFromFlags(
-      row.notifyComments ?? false,
-      row.notifyStatusChanges ?? false
-    ),
+    subscriptionLevel: row.isAnonymous
+      ? ('none' as const)
+      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
   }))
 }
