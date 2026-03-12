@@ -68,6 +68,8 @@ export interface PortalFeatures {
   comments: boolean
   /** Whether portal users can vote on posts */
   voting: boolean
+  /** Whether unauthenticated visitors can vote without signing in */
+  anonymousVoting: boolean
   /** Allow users to edit posts even after receiving votes/comments */
   allowEditAfterEngagement: boolean
   /** Allow users to delete posts even after receiving votes/comments */
@@ -105,6 +107,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     allowEditAfterEngagement: false,
     allowDeleteAfterEngagement: false,
     showPublicEditHistory: false,
+    anonymousVoting: true,
   },
 }
 

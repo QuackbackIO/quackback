@@ -34,6 +34,8 @@ interface FeedbackContainerProps {
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
+  /** Whether anonymous voting is enabled (visitors can vote without signing in) */
+  anonymousVotingEnabled?: boolean
 }
 
 export function FeedbackContainer({
@@ -50,6 +52,7 @@ export function FeedbackContainer({
   currentSort = 'top',
   defaultBoardId,
   user,
+  anonymousVotingEnabled = false,
 }: FeedbackContainerProps): React.ReactElement {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
@@ -266,6 +269,7 @@ export function FeedbackContainer({
                         boardSlug={post.board?.slug || ''}
                         tags={post.tags}
                         isAuthenticated={!!effectiveUser}
+                        canVote={!!effectiveUser || anonymousVotingEnabled}
                         showAvatar={false}
                       />
                     </div>

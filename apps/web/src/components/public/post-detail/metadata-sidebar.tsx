@@ -290,6 +290,7 @@ export function MetadataSidebar({
   })
 
   const isMember = sidebarData?.isMember ?? false
+  const canVote = sidebarData?.canVote ?? false
   const subscriptionStatus = sidebarData?.subscriptionStatus ?? {
     subscribed: false,
     level: 'none' as const,
@@ -391,7 +392,13 @@ export function MetadataSidebar({
                 <span>Upvotes</span>
               </div>
               {/* Portal mode: interactive vote button with auth */}
-              <AuthVoteButton postId={postId} voteCount={voteCount} disabled={!isMember} compact />
+              <AuthVoteButton
+                postId={postId}
+                voteCount={voteCount}
+                disabled={!canVote}
+                canVote={canVote}
+                compact
+              />
             </div>
           ))}
 

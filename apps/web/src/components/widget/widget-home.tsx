@@ -10,6 +10,7 @@ import {
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { authClient } from '@/lib/server/auth/client'
 import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetPost {
@@ -74,6 +75,7 @@ export function WidgetHome({
   const [pendingVotes, setPendingVotes] = useState<Set<string>>(new Set())
   const [voteCountOverrides, setVoteCountOverrides] = useState<Map<string, number>>(new Map())
   const [authPromptPostId, setAuthPromptPostId] = useState<string | null>(null)
+  const [hasAnonSession, setHasAnonSession] = useState(false)
 
   // Board dropdown state
   const [boardOpen, setBoardOpen] = useState(false)
@@ -86,15 +88,18 @@ export function WidgetHome({
     return () => clearTimeout(timer)
   }, [])
 
-  // Fetch voted post IDs
+  // Fetch voted post IDs (for identified users and anonymous sessions)
   useEffect(() => {
-    if (!isIdentified) {
+    if (!isIdentified && !hasAnonSession) {
       setVotedPostIds(new Set())
       return
     }
 
     let cancelled = false
-    widgetFetch('/api/widget/voted-posts')
+    // For identified users, use widgetFetch (sends Bearer token)
+    // For anonymous sessions, use regular fetch (sends session cookie)
+    const fetchFn = isIdentified ? widgetFetch : fetch
+    fetchFn('/api/widget/voted-posts')
       .then((res) => res.json())
       .then((json) => {
         if (!cancelled && json.data?.votedPostIds) {
@@ -106,7 +111,7 @@ export function WidgetHome({
     return () => {
       cancelled = true
     }
-  }, [isIdentified, widgetFetch])
+  }, [isIdentified, hasAnonSession, widgetFetch])
 
   // Debounced search
   useEffect(() => {
@@ -151,12 +156,44 @@ export function WidgetHome({
 
   const handleVote = useCallback(
     async (postId: string) => {
-      if (!isIdentified) {
-        setAuthPromptPostId(postId)
-        setTimeout(() => setAuthPromptPostId(null), 3000)
-        return
-      }
       if (pendingVotes.has(postId)) return
+
+      // If not identified and no anonymous session, create anonymous session first
+      if (!isIdentified && !hasAnonSession) {
+        setPendingVotes((prev) => new Set(prev).add(postId))
+        try {
+          const result = await authClient.signIn.anonymous()
+          if (result.error) {
+            console.error('[widget] Anonymous sign-in failed:', result.error)
+            setAuthPromptPostId(postId)
+            setTimeout(() => setAuthPromptPostId(null), 3000)
+            setPendingVotes((prev) => {
+              const next = new Set(prev)
+              next.delete(postId)
+              return next
+            })
+            return
+          }
+          setHasAnonSession(true)
+          // Let the browser commit the session cookie
+          await new Promise((r) => setTimeout(r, 0))
+          // Remove from pending so the vote logic below can re-add it
+          setPendingVotes((prev) => {
+            const next = new Set(prev)
+            next.delete(postId)
+            return next
+          })
+        } catch {
+          setAuthPromptPostId(postId)
+          setTimeout(() => setAuthPromptPostId(null), 3000)
+          setPendingVotes((prev) => {
+            const next = new Set(prev)
+            next.delete(postId)
+            return next
+          })
+          return
+        }
+      }
 
       const wasVoted = votedPostIds.has(postId)
       const delta = wasVoted ? -1 : 1
@@ -177,7 +214,10 @@ export function WidgetHome({
       })
 
       try {
-        const res = await widgetFetch('/api/widget/vote', {
+        // For identified users, use widgetFetch (sends Bearer token)
+        // For anonymous sessions, use regular fetch (sends session cookie)
+        const voteFn = isIdentified ? widgetFetch : fetch
+        const res = await voteFn('/api/widget/vote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId }),
@@ -219,7 +259,7 @@ export function WidgetHome({
         })
       }
     },
-    [isIdentified, widgetFetch, votedPostIds, pendingVotes]
+    [isIdentified, hasAnonSession, widgetFetch, votedPostIds, pendingVotes]
   )
 
   function getPostVoteCount(postId: string): number {
@@ -437,7 +477,7 @@ export function WidgetHome({
                   </div>
                   {authPromptPostId === post.id && (
                     <p className="text-[11px] text-muted-foreground ml-14 -mt-0.5 mb-1 animate-in fade-in">
-                      Sign in to your app to vote
+                      Unable to vote right now, please try again
                     </p>
                   )}
                 </div>

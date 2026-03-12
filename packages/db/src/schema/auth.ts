@@ -34,6 +34,8 @@ export const user = pgTable(
       .notNull(),
     // General user metadata (JSON)
     metadata: text('metadata'),
+    // Anonymous user flag (Better Auth anonymous plugin)
+    isAnonymous: boolean('is_anonymous').default(false).notNull(),
   },
   (table) => [
     // Email is unique when present (partial index — nulls are allowed)

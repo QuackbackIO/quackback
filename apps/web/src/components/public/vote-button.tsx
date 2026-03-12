@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
@@ -9,6 +10,8 @@ interface VoteButtonProps {
   disabled?: boolean
   /** Called when user tries to vote but isn't authenticated */
   onAuthRequired?: () => void
+  /** Async callback before voting (e.g. anonymous sign-in). Return false to cancel. */
+  onBeforeVote?: () => Promise<boolean>
   /** Compact horizontal variant for inline use */
   compact?: boolean
   /** Static display with no interactivity */
@@ -20,6 +23,7 @@ export function VoteButton({
   voteCount: initialVoteCount,
   disabled = false,
   onAuthRequired,
+  onBeforeVote,
   compact = false,
   readonly = false,
 }: VoteButtonProps): React.ReactElement {
@@ -30,11 +34,22 @@ export function VoteButton({
   })
 
   const displayCount = readonly ? initialVoteCount : voteCount
+  const isHandlingRef = useRef(false)
 
-  function handleClick(): void {
+  async function handleClick(): Promise<void> {
     if (disabled) {
       onAuthRequired?.()
       return
+    }
+    if (isHandlingRef.current) return
+    if (onBeforeVote) {
+      isHandlingRef.current = true
+      try {
+        const proceed = await onBeforeVote()
+        if (!proceed) return
+      } finally {
+        isHandlingRef.current = false
+      }
     }
     handleVote()
   }

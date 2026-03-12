@@ -1,6 +1,13 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { emailOTP, oneTimeToken, magicLink, jwt, genericOAuth } from 'better-auth/plugins'
+import {
+  anonymous,
+  emailOTP,
+  oneTimeToken,
+  magicLink,
+  jwt,
+  genericOAuth,
+} from 'better-auth/plugins'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
@@ -217,16 +224,22 @@ async function createAuth() {
             })
 
             if (!existingPrincipal) {
+              const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
               await db.insert(principalTable).values({
                 id: generateId('principal'),
                 userId,
                 role: 'user', // Always 'user' - team access via invitations only
-                displayName: user.name,
-                avatarUrl: user.image ?? null,
-                avatarKey: (user as Record<string, unknown>).imageKey as string | null,
+                type: isAnonymous ? 'anonymous' : 'user',
+                displayName: isAnonymous ? null : user.name,
+                avatarUrl: isAnonymous ? null : (user.image ?? null),
+                avatarKey: isAnonymous
+                  ? null
+                  : ((user as Record<string, unknown>).imageKey as string | null),
                 createdAt: new Date(),
               })
-              console.log(`[auth] Created principal record: userId=${user.id}, role=user`)
+              console.log(
+                `[auth] Created principal record: userId=${user.id}, role=user, type=${isAnonymous ? 'anonymous' : 'user'}`
+              )
             }
           },
         },
@@ -327,6 +340,22 @@ async function createAuth() {
 
       // Generic OAuth plugin for custom OIDC providers (Okta, Auth0, Keycloak, etc.)
       ...(genericOAuthConfigs.length > 0 ? [genericOAuth({ config: genericOAuthConfigs })] : []),
+
+      // Anonymous authentication plugin — enables voting without sign-up
+      anonymous({
+        emailDomainName: 'anon.quackback.io',
+        disableDeleteAnonymousUser: true, // we handle cleanup ourselves
+        async onLinkAccount({ anonymousUser }) {
+          // When anonymous user signs up with real credentials,
+          // update their principal from anonymous → user
+          const anonUserId = anonymousUser.user.id as ReturnType<typeof generateId<'user'>>
+          await db
+            .update(principalTable)
+            .set({ type: 'user' })
+            .where(eq(principalTable.userId, anonUserId))
+          console.log(`[auth] Linked anonymous account: userId=${anonUserId} → type=user`)
+        },
+      }),
 
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),

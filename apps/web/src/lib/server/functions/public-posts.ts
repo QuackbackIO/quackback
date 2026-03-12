@@ -15,6 +15,7 @@ import {
 } from '@quackback/ids'
 import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
 import { getSettings } from './workspace'
 import {
@@ -25,6 +26,7 @@ import {
 } from '@/lib/server/domains/posts/post.public'
 import { createPost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
+import { checkAnonVoteRateLimit } from '@/lib/server/utils/anon-rate-limit'
 import {
   getPostPermissions,
   userEditPost,
@@ -279,7 +281,9 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Toggle vote on a post. Requires authentication.
+ * Toggle vote on a post. Requires authentication (including anonymous sessions).
+ * Anonymous users sign in via Better Auth's anonymous plugin on the client side
+ * before calling this function.
  */
 export const toggleVoteFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleVoteSchema)
@@ -288,9 +292,22 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
       console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
       try {
         const ctx = await requireAuth()
+
+        // Rate limit anonymous voters by IP
+        if (ctx.principal.type === 'anonymous') {
+          const headers = getRequestHeaders()
+          const ip =
+            headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+            headers.get('x-real-ip') ||
+            '0.0.0.0'
+          if (!(await checkAnonVoteRateLimit(ip))) {
+            throw new Error('Too many votes, please try again later')
+          }
+        }
+
         const result = await voteOnPost(data.postId as PostId, ctx.principal.id)
         console.log(
-          `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}`
+          `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}, type=${ctx.principal.type}`
         )
         return result
       } catch (error) {
@@ -372,28 +389,24 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Get all post IDs the user has voted on (optional auth).
+ * Get all post IDs the user has voted on (optional auth, includes anonymous sessions).
  */
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
     console.log(`[fn:public-posts] getVotedPostsFn`)
     try {
-      // Early bailout: no session cookie = no votes (skip DB queries)
       if (!hasSessionCookie()) {
         console.log(`[fn:public-posts] getVotedPostsFn: no session cookie, skipping auth`)
         return { votedPostIds: [] }
       }
 
       const ctx = await getOptionalAuth()
-
-      // Optional auth - return empty if not authenticated
       if (!ctx?.user || !ctx?.principal) {
         console.log(`[fn:public-posts] getVotedPostsFn: no auth`)
         return { votedPostIds: [] }
       }
 
       const result = await getAllUserVotedPostIds(ctx.principal.id)
-
       console.log(`[fn:public-posts] getVotedPostsFn: count=${result.size}`)
       return { votedPostIds: Array.from(result) }
     } catch (error) {
@@ -507,61 +520,61 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Get vote sidebar data for a post (optional auth).
- * Returns membership status, vote status, and subscription status.
+ * Get vote sidebar data for a post (optional auth, supports anonymous sessions).
+ * Returns membership status, vote ability, vote status, and subscription status.
  */
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
     try {
-      // Early bailout: no session cookie = anonymous user (skip all DB queries)
-      if (!hasSessionCookie()) {
-        console.log(`[fn:public-posts] getVoteSidebarDataFn: no session cookie, returning defaults`)
-        return {
-          isMember: false,
-          hasVoted: false,
-          subscriptionStatus: {
-            subscribed: false,
-            level: 'none' as const,
-            reason: null,
-          },
-        }
-      }
-
-      const ctx = await getOptionalAuth()
       const postId = data.postId as PostId
-      console.log(`[fn:public-posts] getVoteSidebarDataFn: auth resolved`)
+      const noSub = { subscribed: false, level: 'none' as const, reason: null }
 
-      // No authenticated user (invalid/expired session)
-      if (!ctx?.user || !ctx?.principal) {
-        console.log(`[fn:public-posts] getVoteSidebarDataFn: no auth context`)
+      // No session cookie — check if anonymous voting is enabled
+      if (!hasSessionCookie()) {
+        const settings = await getSettings()
+        const parsed =
+          typeof settings?.portalConfig === 'string'
+            ? JSON.parse(settings.portalConfig)
+            : settings?.portalConfig
+        const anonEnabled = parsed?.features?.anonymousVoting ?? true
+        console.log(`[fn:public-posts] getVoteSidebarDataFn: no session, canVote=${anonEnabled}`)
         return {
           isMember: false,
+          canVote: anonEnabled,
           hasVoted: false,
-          subscriptionStatus: {
-            subscribed: false,
-            level: 'none' as const,
-            reason: null,
-          },
+          subscriptionStatus: noSub,
         }
       }
 
-      // Authenticated user - fetch vote and subscription data in a single query
+      // Has session (could be regular or anonymous)
+      const ctx = await getOptionalAuth()
+      if (!ctx?.user || !ctx?.principal) {
+        console.log(`[fn:public-posts] getVoteSidebarDataFn: invalid session`)
+        return { isMember: false, canVote: false, hasVoted: false, subscriptionStatus: noSub }
+      }
+
+      const isAnonymous = ctx.principal.type === 'anonymous'
       const { hasVoted, subscription } = await getVoteAndSubscriptionStatus(
         postId,
         ctx.principal.id
       )
 
-      console.log(`[fn:public-posts] getVoteSidebarDataFn: isMember=true, hasVoted=${hasVoted}`)
+      console.log(
+        `[fn:public-posts] getVoteSidebarDataFn: isMember=${!isAnonymous}, hasVoted=${hasVoted}`
+      )
       return {
-        isMember: true,
+        isMember: !isAnonymous,
+        canVote: true,
         hasVoted,
-        subscriptionStatus: {
-          subscribed: subscription.subscribed,
-          level: subscription.level,
-          reason: subscription.reason,
-        },
+        subscriptionStatus: isAnonymous
+          ? noSub
+          : {
+              subscribed: subscription.subscribed,
+              level: subscription.level,
+              reason: subscription.reason,
+            },
       }
     } catch (error) {
       const errorName = error instanceof Error ? error.name : 'Unknown'

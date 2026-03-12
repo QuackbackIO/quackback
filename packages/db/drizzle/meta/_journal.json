@@ -232,6 +232,13 @@
       "when": 1772950000000,
       "tag": "0033_vote_added_by_principal",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1773304587850,
+      "tag": "0033_jittery_archangel",
+      "breakpoints": true
     }
   ]
 }

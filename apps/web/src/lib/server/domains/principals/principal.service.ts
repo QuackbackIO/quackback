@@ -4,7 +4,7 @@
  * Provides principal lookup operations.
  */
 
-import { db, eq, and, or, sql, ilike, principal, user, type Principal } from '@/lib/server/db'
+import { db, eq, ne, and, or, sql, ilike, principal, user, type Principal } from '@/lib/server/db'
 import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
@@ -145,11 +145,14 @@ export async function searchMembers(params: {
 }
 
 /**
- * Count all principals (no auth required)
+ * Count all principals excluding anonymous voters (no auth required)
  */
 export async function countMembers(): Promise<number> {
   try {
-    const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(principal)
+    const result = await db
+      .select({ count: sql<number>`count(*)`.as('count') })
+      .from(principal)
+      .where(ne(principal.type, 'anonymous'))
 
     return Number(result[0]?.count ?? 0)
   } catch (error) {

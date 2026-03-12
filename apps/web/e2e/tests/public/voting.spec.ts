@@ -300,34 +300,87 @@ test.describe('Public Voting', () => {
   })
 })
 
-test.describe('Unauthenticated Voting', () => {
+test.describe('Anonymous Voting (unauthenticated)', () => {
+  // Anonymous voting is enabled by default — unauthenticated users can vote
+  // without seeing an auth dialog (a silent anonymous session is created).
+  test.setTimeout(60000)
+
   test.beforeEach(async ({ page }) => {
-    // Navigate to the public portal without authentication
     await page.goto('/')
-    // Wait for posts to load
     await page.waitForLoadState('networkidle')
   })
 
   test('shows vote count for unauthenticated users', async ({ page }) => {
-    // Look for vote buttons using data-testid
     const voteButtons = page.getByTestId('vote-button')
     await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
 
-    // Vote count should be displayed as a number
     const voteCount = voteButtons.first().getByTestId('vote-count')
     await expect(voteCount).toBeVisible()
     const countText = await voteCount.textContent()
     expect(countText).toMatch(/^\d+$/)
   })
 
-  test('clicking vote button opens auth dialog', async ({ page }) => {
-    // Click on a vote button
+  test('anonymous user can vote without signing in', async ({ page }) => {
+    // Use 10th post to avoid conflicts with authenticated voting tests
     const voteButtons = page.getByTestId('vote-button')
-    await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
-    await voteButtons.first().click()
+    const voteButton = voteButtons.nth(9)
+    await expect(voteButton).toBeVisible({ timeout: 10000 })
 
-    // Auth dialog should open - look for OTP input or sign in form
+    const voteCountSpan = voteButton.getByTestId('vote-count')
+
+    // Ensure we start from unvoted state
+    const isAlreadyVoted = await voteButton.evaluate((el) =>
+      el.classList.contains('post-card__vote--voted')
+    )
+    if (isAlreadyVoted) {
+      await voteButton.click()
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+    }
+
+    const baselineCountText = await voteCountSpan.textContent()
+    const baselineCount = parseInt(baselineCountText || '0', 10)
+
+    // Click vote — anonymous sign-in happens silently, then vote fires
+    await voteButton.click()
+
+    // Vote count should increase (no auth dialog shown)
+    await expect(voteCountSpan).toHaveText(String(baselineCount + 1), { timeout: 10000 })
+    await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+
+    // Auth dialog should NOT appear
     const authDialog = page.locator('[role="dialog"]').filter({ hasText: /sign in|log in|email/i })
-    await expect(authDialog).toBeVisible({ timeout: 5000 })
+    await expect(authDialog).not.toBeVisible()
+  })
+
+  test('anonymous user can toggle vote off', async ({ page }) => {
+    // Use 11th post to avoid conflicts
+    const voteButtons = page.getByTestId('vote-button')
+    const voteButton = voteButtons.nth(10)
+    await expect(voteButton).toBeVisible({ timeout: 10000 })
+
+    const voteCountSpan = voteButton.getByTestId('vote-count')
+
+    // Ensure we start from unvoted state
+    const isAlreadyVoted = await voteButton.evaluate((el) =>
+      el.classList.contains('post-card__vote--voted')
+    )
+    if (isAlreadyVoted) {
+      await voteButton.click()
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+    }
+
+    const baselineCountText = await voteCountSpan.textContent()
+    const baselineCount = parseInt(baselineCountText || '0', 10)
+
+    // First click — vote
+    await voteButton.click()
+    await expect(voteCountSpan).toHaveText(String(baselineCount + 1), { timeout: 10000 })
+
+    // Second click — unvote
+    await voteButton.click()
+    await expect(voteCountSpan).toHaveText(String(baselineCount), { timeout: 10000 })
+    await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
   })
 })

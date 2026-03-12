@@ -24,11 +24,16 @@ interface VoteSidebarProps {
 
 export function VoteSidebar({ postId, voteCount, disabled }: VoteSidebarProps): React.ReactElement {
   const { data: sidebarData } = useSuspenseQuery(portalDetailQueries.voteSidebarData(postId))
-  const isMember = sidebarData?.isMember ?? false
+  const canVote = sidebarData?.canVote ?? false
 
   return (
     <div className={`${SIDEBAR_CLASS} animate-in fade-in duration-200 fill-mode-backwards`}>
-      <AuthVoteButton postId={postId} voteCount={voteCount} disabled={disabled || !isMember} />
+      <AuthVoteButton
+        postId={postId}
+        voteCount={voteCount}
+        disabled={disabled || !canVote}
+        canVote={!disabled && canVote}
+      />
     </div>
   )
 }
