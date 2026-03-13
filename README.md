@@ -43,27 +43,21 @@
 Most feedback tools are expensive, closed-source, and lock you in. Quackback gives you a modern feedback system you actually own.
 
 - **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
-- **Own your data.** Your feedback lives in your PostgreSQL database. No vendor lock-in.
-- **AI-powered.** Automatic duplicate detection, AI summaries, feedback extraction from external sources, and a 23-tool [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
+- **Own your data.** Your feedback lives in your own database. No vendor lock-in.
+- **AI-powered.** Automatic duplicate detection, AI summaries, feedback extraction from external sources, and an [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
 - **24 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
 
 ## Features
 
-- **Feedback boards.** Public voting, status tracking, nested comments, reactions, and comment locking.
-- **AI duplicate detection.** Automatically finds duplicate posts using hybrid vector + full-text search and suggests which to merge, with bidirectional merge support.
-- **AI summaries.** Key quotes, suggested next steps, and staleness detection on feedback posts.
-- **Feedback pipeline.** Ingest feedback from Slack, email, and other sources. AI extracts structured signals, matches to existing posts, and creates actionable suggestions for your team to review.
-- **Embeddable widget.** Drop a [script tag](https://quackback.io/docs/widget/installation) into your app and collect feedback without leaving the page. Desktop popover panel, mobile bottom sheet, with optional HMAC identity verification.
-- **Admin inbox.** Unified triage view with filtering, suggestion grouping, dismiss-with-undo, and soft delete with 30-day restore.
-- **Activity timeline.** Full audit trail on every post - status changes, merges, tag changes, owner assignments, proxy votes, and more.
-- **Proxy voting.** Vote on behalf of users with full attribution tracking. Admins can also remove any vote from the voters list.
-- **Roadmap.** Show users what you're planning, working on, and what's shipped.
-- **Changelog.** Publish updates, schedule for later, and close the loop when features ship.
-- **Integrations.** [24 integrations](#integrations) including Slack message shortcuts, channel monitoring, and two-way status sync with your issue tracker via inbound webhooks.
-- **API & webhooks.** REST API with suggestion management and activity log endpoints, API keys, and outbound webhooks for custom workflows.
-- **MCP server.** 23 tools for AI agents to search, triage, comment, merge posts, review AI suggestions, view activity logs, manage roadmaps, and publish changelogs via the [Model Context Protocol](https://quackback.io/docs/mcp). Supports API key and OAuth 2.1 authentication.
-- **Flexible auth.** Password, email OTP, OAuth social logins (Google, GitHub), and custom OIDC providers (Okta, Auth0, Keycloak).
-- **SEO-ready.** Auto-generated sitemap, Open Graph and Twitter Card meta tags, and robots.txt on every portal page.
+- **Feedback boards.** Let users vote, comment, and track status on feature requests. Vote on behalf of customers and see a full activity timeline on every post.
+- **AI-powered.** Automatically detect duplicates, summarize key themes, and ingest feedback from Slack, email, and other sources so nothing slips through the cracks.
+- **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile.
+- **Admin inbox.** Triage incoming feedback in one place. Filter, group, dismiss, and restore deleted posts.
+- **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
+- **Integrations.** [24 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
+- **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 23-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
+- **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
+- **SEO-ready.** Auto-generated sitemap and social sharing previews on every portal page.
 
 ## Integrations
 
