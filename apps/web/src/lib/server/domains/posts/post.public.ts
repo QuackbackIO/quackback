@@ -470,7 +470,10 @@ export async function getPublicPostDetail(
     reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
 
-  const commentTree = buildCommentTree(commentsResult, principalId, {
+  // Raw SQL returns principal_id as UUIDs, but principalId from auth is a TypeID.
+  // Convert to UUID so aggregateReactions can match the current user's reactions.
+  const principalUuid = principalId ? toUuid(principalId) : undefined
+  const commentTree = buildCommentTree(commentsResult, principalUuid, {
     pruneDeleted: !options?.includePrivateComments,
   })
 

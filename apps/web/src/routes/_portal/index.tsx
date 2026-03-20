@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 
 const searchSchema = z.object({
@@ -44,6 +45,13 @@ export const Route = createFileRoute('/_portal/')({
         tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
         userId: session?.user?.id,
       })
+    )
+
+    // Seed the votedPosts cache so usePostVote has data during SSR rendering.
+    // This ensures vote highlights appear in the server-rendered HTML.
+    queryClient.setQueryData(
+      votedPostsKeys.byWorkspace(),
+      new Set(portalData.votedPostIds)
     )
 
     const anonymousVotingEnabled =

@@ -45,21 +45,21 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     }
     const postId = postIdParam as PostId
 
-    // Fire prefetches immediately (don't await - components handle their own loading)
+    // Fire non-critical prefetches (don't await - components handle their own loading via Suspense)
     queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId))
     queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId))
-    queryClient.prefetchQuery(portalDetailQueries.votedPosts())
     queryClient.prefetchQuery({
       queryKey: postPermissionsKeys.detail(postId),
       queryFn: () => getPostPermissionsFn({ data: { postId } }),
       staleTime: 30_000,
     })
 
-    // Await only critical data needed for initial render
-    // Note: Post detail already includes board data (JOINed), so no separate board query needed
+    // Await critical data needed for initial render.
+    // votedPosts must be awaited so usePostVote (non-Suspense) has data during SSR.
     const [post] = await Promise.all([
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
+      queryClient.ensureQueryData(portalDetailQueries.votedPosts()),
     ])
 
     if (!post || post.board.slug !== slug) {
