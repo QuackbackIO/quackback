@@ -288,7 +288,8 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
 
 export async function getPublicPostDetail(
   postId: PostId,
-  principalId?: PrincipalId
+  principalId?: PrincipalId,
+  options?: { includePrivateComments?: boolean }
 ): Promise<PublicPostDetail | null> {
   const postUuid = toUuid(postId)
 
@@ -354,6 +355,7 @@ export async function getPublicPostDetail(
       author_name: string | null
       content: string
       is_team_member: boolean
+      is_private: boolean
       created_at: Date | string
       deleted_at: Date | string | null
       deleted_by_principal_id: string | null
@@ -373,6 +375,7 @@ export async function getPublicPostDetail(
         m.display_name as author_name,
         c.content,
         c.is_team_member,
+        c.is_private,
         c.created_at,
         c.deleted_at,
         c.deleted_by_principal_id,
@@ -398,7 +401,7 @@ export async function getPublicPostDetail(
         SELECT p.id FROM ${posts} p
         WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
       )
-      AND c.is_private = false
+      ${options?.includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
       ORDER BY c.created_at ASC
     `),
@@ -426,6 +429,7 @@ export async function getPublicPostDetail(
     author_name: string | null
     content: string
     is_team_member: boolean
+    is_private: boolean
     created_at: Date | string
     deleted_at: Date | string | null
     deleted_by_principal_id: string | null
@@ -451,7 +455,7 @@ export async function getPublicPostDetail(
     authorName: comment.author_name,
     content: comment.content,
     isTeamMember: comment.is_team_member,
-    isPrivate: false as const, // Portal query filters out private comments at SQL level
+    isPrivate: comment.is_private,
     createdAt: ensureDate(comment.created_at),
     deletedAt: comment.deleted_at ? ensureDate(comment.deleted_at) : null,
     deletedByPrincipalId: comment.deleted_by_principal_id,

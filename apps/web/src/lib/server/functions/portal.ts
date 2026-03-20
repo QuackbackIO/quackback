@@ -164,8 +164,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:portal] fetchPublicPostDetail: postId=${data.postId}`)
     // Only fetch auth if user has a session cookie (for highlighting own comments)
-    const principalId = hasAuthCredentials() ? (await getOptionalAuth())?.principal?.id : undefined
-    const result = await getPublicPostDetail(data.postId as PostId, principalId)
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+    const principalId = auth?.principal?.id
+    const isTeamMember = auth?.principal?.role === 'admin' || auth?.principal?.role === 'member'
+    const result = await getPublicPostDetail(data.postId as PostId, principalId, {
+      includePrivateComments: isTeamMember,
+    })
 
     if (!result) return null
 
