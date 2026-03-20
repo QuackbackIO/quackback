@@ -132,23 +132,21 @@ export function SuggestionList({
           }
         />
       ) : (
-        <div className="p-3">
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-            {groups.map((group, index) => (
-              <div
-                key={group.rawItemId}
-                className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-                style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-              >
-                <SuggestionSourceGroup
-                  group={group}
-                  onCreatePost={onCreatePost}
-                  onResolved={onResolved}
-                  readOnly={isDismissed}
-                />
-              </div>
-            ))}
-          </div>
+        <div className="p-3 space-y-3">
+          {groups.map((group, index) => (
+            <div
+              key={group.rawItemId}
+              className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50 animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+              style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+            >
+              <SuggestionSourceGroup
+                group={group}
+                onCreatePost={onCreatePost}
+                onResolved={onResolved}
+                readOnly={isDismissed}
+              />
+            </div>
+          ))}
         </div>
       )}
 
