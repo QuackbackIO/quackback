@@ -131,12 +131,19 @@ export function WidgetPostDetail({
   const canVote = isIdentified || anonymousVotingEnabled
   const canComment = isIdentified || anonymousCommentingEnabled
 
-  // Scroll to top when navigating between posts or when data loads
+  // Scroll to top when navigating to a new post.
+  // We track the last scrolled postId so we scroll exactly once per navigation,
+  // even if the ScrollArea isn't mounted yet during the loading state.
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const scrolledForRef = useRef<string | null>(null)
   useEffect(() => {
+    if (scrolledForRef.current === postId) return
     const viewport = scrollAreaRef.current?.querySelector('[data-slot="scroll-area-viewport"]')
-    if (viewport) viewport.scrollTop = 0
-  }, [postId, post])
+    if (viewport) {
+      viewport.scrollTop = 0
+      scrolledForRef.current = postId
+    }
+  })
 
   const liveCommentCount = post?.comments ? countLiveComments(post.comments) : 0
 
