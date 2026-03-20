@@ -31,6 +31,8 @@ interface WidgetAuthContextValue {
   emitEvent: <T extends WidgetEventName>(name: T, payload: WidgetEventMap[T]) => void
   /** Session metadata set by the host app */
   metadata: WidgetMetadata | null
+  /** Increments when the session token changes — use in query keys to trigger refetch */
+  sessionVersion: number
 }
 
 const WidgetAuthContext = createContext<WidgetAuthContextValue | null>(null)
@@ -43,12 +45,14 @@ export function useWidgetAuth(): WidgetAuthContextValue {
 
 export function WidgetAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<WidgetUser | null>(null)
+  const [sessionVersion, setSessionVersion] = useState(0)
   const isIdentified = user !== null
   const sessionReadyRef = useRef(false)
 
   const storeToken = useCallback((token: string) => {
     setWidgetToken(token)
     sessionReadyRef.current = true
+    setSessionVersion((v) => v + 1)
   }, [])
 
   /**
@@ -204,8 +208,8 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
   }, [storeToken])
 
   const contextValue = useMemo(
-    () => ({ user, isIdentified, ensureSession, closeWidget, emitEvent, metadata: widgetMetadata }),
-    [user, isIdentified, ensureSession, closeWidget, emitEvent, widgetMetadata]
+    () => ({ user, isIdentified, ensureSession, closeWidget, emitEvent, metadata: widgetMetadata, sessionVersion }),
+    [user, isIdentified, ensureSession, closeWidget, emitEvent, widgetMetadata, sessionVersion]
   )
 
   return <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>

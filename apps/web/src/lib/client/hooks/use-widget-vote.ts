@@ -8,7 +8,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toggleVoteFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
+import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { voteCountKeys } from './use-post-vote'
 import type { PostId } from '@quackback/ids'
 
@@ -16,6 +17,7 @@ import type { PostId } from '@quackback/ids'
 export const widgetVotedPostsKeys = {
   all: ['widget', 'votedPosts'] as const,
   byWorkspace: () => widgetVotedPostsKeys.all,
+  bySession: (version: number) => [...widgetVotedPostsKeys.all, version] as const,
 }
 
 interface UseWidgetVoteOptions {
@@ -26,6 +28,7 @@ interface UseWidgetVoteOptions {
 
 export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVoteOptions) {
   const queryClient = useQueryClient()
+  const { sessionVersion } = useWidgetAuth()
 
   const { data: cachedVoteCount } = useQuery({
     queryKey: voteCountKeys.byPost(postId),
@@ -35,8 +38,11 @@ export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVo
     enabled,
   })
 
+  // Include sessionVersion in the key so this refetches after identify.
+  // Don't fetch until a token exists — avoids caching an empty set pre-auth.
+  const hasToken = hasWidgetToken()
   const { data: votedPosts } = useQuery<Set<string>>({
-    queryKey: widgetVotedPostsKeys.byWorkspace(),
+    queryKey: widgetVotedPostsKeys.bySession(sessionVersion),
     queryFn: async () => {
       const headers = getWidgetAuthHeaders()
       if (!headers.Authorization) return new Set<string>()
@@ -44,7 +50,7 @@ export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVo
       return new Set(result.votedPostIds)
     },
     staleTime: 5 * 60 * 1000,
-    enabled,
+    enabled: enabled && hasToken,
   })
 
   const hasVoted = votedPosts?.has(postId) ?? false
@@ -56,7 +62,7 @@ export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVo
       const previouslyVoted = votedPosts?.has(id) ?? false
 
       // Optimistic: update votedPosts
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.byWorkspace(), (old) => {
+      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
         const next = new Set(old || [])
         if (!previouslyVoted) next.add(id)
         else next.delete(id)
@@ -67,7 +73,7 @@ export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVo
     },
     onError: (_err, id, context) => {
       // Revert votedPosts using pre-mutation state from context
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.byWorkspace(), (old) => {
+      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
         const next = new Set(old || [])
         if (context?.previouslyVoted) next.add(id)
         else next.delete(id)
@@ -76,7 +82,7 @@ export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVo
     },
     onSuccess: (data, id) => {
       queryClient.setQueryData<number>(voteCountKeys.byPost(id), data.voteCount)
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.byWorkspace(), (old) => {
+      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
         const next = new Set(old || [])
         if (data.voted) next.add(id)
         else next.delete(id)

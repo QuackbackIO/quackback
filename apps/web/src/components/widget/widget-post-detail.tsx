@@ -7,9 +7,10 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PostContent } from '@/components/public/post-content'
-import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
+import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
 import { createCommentFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
+import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -34,7 +35,7 @@ export function WidgetPostDetail({
   anonymousVotingEnabled = true,
   anonymousCommentingEnabled = false,
 }: WidgetPostDetailProps) {
-  const { isIdentified, user, ensureSession, emitEvent } = useWidgetAuth()
+  const { isIdentified, user, ensureSession, emitEvent, sessionVersion } = useWidgetAuth()
   const queryClient = useQueryClient()
 
   // Comment state (root-level comment form only; replies are inline in the comment list)
@@ -42,11 +43,25 @@ export function WidgetPostDetail({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
 
+  // Widget-specific post detail query that injects Bearer headers so the server
+  // can resolve principalId for reaction hasReacted highlights.
+  // Re-keyed on sessionVersion so it refetches after identify.
   const {
     data: post,
     isLoading,
     error,
-  } = useQuery(portalDetailQueries.postDetail(postId as PostId))
+  } = useQuery({
+    queryKey: ['widget', 'post', postId, sessionVersion],
+    queryFn: async (): Promise<PublicPostDetailView> => {
+      const result = await fetchPublicPostDetail({
+        data: { postId },
+        headers: getWidgetAuthHeaders(),
+      })
+      if (!result) throw new Error('Post not found')
+      return result as PublicPostDetailView
+    },
+    staleTime: 30 * 1000,
+  })
 
   const status = post?.statusId ? (statuses.find((s) => s.id === post.statusId) ?? null) : null
 
@@ -81,7 +96,7 @@ export function WidgetPostDetail({
         commentId: result.comment.id,
         parentId: parentId ?? null,
       })
-      queryClient.invalidateQueries({ queryKey: ['portal', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['widget', 'post', postId] })
     },
     [isIdentified, ensureSession, emitEvent, postId, queryClient]
   )
