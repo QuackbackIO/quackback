@@ -6,6 +6,7 @@
  * Authorization: Bearer headers via the server function's headers option.
  */
 
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toggleVoteFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
 import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
@@ -29,6 +30,10 @@ interface UseWidgetVoteOptions {
 
 export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled = true }: UseWidgetVoteOptions) {
   const queryClient = useQueryClient()
+  // Ref tracks latest sessionVersion so mutation callbacks always write to the
+  // current cache key, even if ensureSession() bumped the version mid-render.
+  const sessionVersionRef = useRef(sessionVersion)
+  sessionVersionRef.current = sessionVersion
 
   const { data: cachedVoteCount } = useQuery({
     queryKey: voteCountKeys.byPost(postId),
@@ -60,9 +65,10 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       toggleVoteFn({ data: { postId: id }, headers: getWidgetAuthHeaders() }),
     onMutate: async (id) => {
       const previouslyVoted = votedPosts?.has(id) ?? false
+      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
 
       // Optimistic: update votedPosts
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
+      queryClient.setQueryData<Set<string>>(key, (old) => {
         const next = new Set(old || [])
         if (!previouslyVoted) next.add(id)
         else next.delete(id)
@@ -72,8 +78,8 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       return { previouslyVoted }
     },
     onError: (_err, id, context) => {
-      // Revert votedPosts using pre-mutation state from context
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
+      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
+      queryClient.setQueryData<Set<string>>(key, (old) => {
         const next = new Set(old || [])
         if (context?.previouslyVoted) next.add(id)
         else next.delete(id)
@@ -81,8 +87,9 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       })
     },
     onSuccess: (data, id) => {
+      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
       queryClient.setQueryData<number>(voteCountKeys.byPost(id), data.voteCount)
-      queryClient.setQueryData<Set<string>>(widgetVotedPostsKeys.bySession(sessionVersion), (old) => {
+      queryClient.setQueryData<Set<string>>(key, (old) => {
         const next = new Set(old || [])
         if (data.voted) next.add(id)
         else next.delete(id)

@@ -200,6 +200,8 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
           clearWidgetToken()
           sessionReadyRef.current = false
           sessionPromiseRef.current = null
+          sessionVersionRef.current += 1
+          setSessionVersion(sessionVersionRef.current)
           setUser(null)
           window.parent.postMessage(
             { type: 'quackback:identify-result', success: true, user: null },
