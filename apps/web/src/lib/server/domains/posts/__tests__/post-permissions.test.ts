@@ -47,6 +47,9 @@ vi.mock('@/lib/server/db', async () => {
         },
         comments: { findFirst: vi.fn().mockResolvedValue(null) },
         settings: { findFirst: vi.fn().mockResolvedValue(null) },
+        boards: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'board_mock', slug: 'feedback' }),
+        },
       },
       update: vi.fn(() => createChainMock()),
       select: vi.fn(() => ({
@@ -67,6 +70,7 @@ vi.mock('@/lib/server/db', async () => {
       boardId: 'board_id',
       statusId: 'status_id',
     },
+    boards: { id: 'board_id', slug: 'board_slug' },
     comments: { postId: 'post_id', principalId: 'principal_id', deletedAt: 'deleted_at' },
     postEditHistory: {},
     postStatuses: { id: 'id', isDefault: 'is_default' },
@@ -76,6 +80,12 @@ vi.mock('@/lib/server/db', async () => {
 
 vi.mock('@/lib/server/domains/activity/activity.service', () => ({
   createActivity: vi.fn(),
+}))
+
+vi.mock('@/lib/server/events/dispatch', () => ({
+  dispatchPostDeleted: vi.fn(),
+  dispatchPostRestored: vi.fn(),
+  buildEventActor: vi.fn((actor) => actor),
 }))
 
 // Constants

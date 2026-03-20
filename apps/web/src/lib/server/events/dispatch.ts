@@ -127,6 +127,150 @@ export async function dispatchCommentCreated(
   })
 }
 
+export interface PostUpdatedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostUpdated(
+  actor: EventActor,
+  post: PostUpdatedInput,
+  changedFields: string[]
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.updated',
+    data: { post, changedFields },
+  })
+}
+
+export interface PostDeletedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostDeleted(
+  actor: EventActor,
+  post: PostDeletedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.deleted',
+    data: { post },
+  })
+}
+
+export interface PostRestoredInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostRestored(
+  actor: EventActor,
+  post: PostRestoredInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.restored',
+    data: { post },
+  })
+}
+
+export interface PostMergedDuplicateInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export interface PostMergedCanonicalInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostMerged(
+  actor: EventActor,
+  duplicatePost: PostMergedDuplicateInput,
+  canonicalPost: PostMergedCanonicalInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.merged',
+    data: { duplicatePost, canonicalPost },
+  })
+}
+
+export interface PostUnmergedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export interface PostUnmergedFormerCanonicalInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+}
+
+export async function dispatchPostUnmerged(
+  actor: EventActor,
+  post: PostUnmergedInput,
+  formerCanonicalPost: PostUnmergedFormerCanonicalInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.unmerged',
+    data: { post, formerCanonicalPost },
+  })
+}
+
+export interface CommentUpdatedInput {
+  id: CommentId
+  content: string
+  authorEmail?: string
+  authorName?: string
+  isPrivate?: boolean
+}
+
+export async function dispatchCommentUpdated(
+  actor: EventActor,
+  comment: CommentUpdatedInput,
+  post: CommentPostInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'comment.updated',
+    data: { comment, post },
+  })
+}
+
+export interface CommentDeletedInput {
+  id: CommentId
+  isPrivate?: boolean
+}
+
+export async function dispatchCommentDeleted(
+  actor: EventActor,
+  comment: CommentDeletedInput,
+  post: CommentPostInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'comment.deleted',
+    data: { comment, post },
+  })
+}
+
 export interface ChangelogPublishedInput {
   id: ChangelogId
   title: string

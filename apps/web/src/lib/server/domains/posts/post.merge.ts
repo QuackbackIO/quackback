@@ -22,11 +22,16 @@ import {
   sql,
   principal as principalTable,
 } from '@/lib/server/db'
-import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
+import { type BoardId, type PostId, type PrincipalId, toUuid } from '@quackback/ids'
 import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import {
+  dispatchPostMerged,
+  dispatchPostUnmerged,
+  buildEventActor,
+} from '@/lib/server/events/dispatch'
 import { getPostWithDetails, getCommentsWithReplies } from './post.query'
 import { hasUserVoted } from './post.public'
 import type {
@@ -140,6 +145,35 @@ export async function mergePost(
     metadata: { canonicalPostId, canonicalPostTitle: canonicalPost.title },
   })
 
+  // Dispatch post.merged event for webhooks and integrations
+  const [dupBoard, canBoard] = await Promise.all([
+    db.query.boards.findFirst({
+      where: eq(boards.id, duplicatePost.boardId),
+      columns: { slug: true },
+    }),
+    db.query.boards.findFirst({
+      where: eq(boards.id, canonicalPost.boardId),
+      columns: { slug: true },
+    }),
+  ])
+  if (dupBoard && canBoard) {
+    dispatchPostMerged(
+      buildEventActor({ principalId: actorPrincipalId }),
+      {
+        id: duplicatePostId,
+        title: duplicatePost.title,
+        boardId: duplicatePost.boardId,
+        boardSlug: dupBoard.slug,
+      },
+      {
+        id: canonicalPostId,
+        title: canonicalPost.title,
+        boardId: canonicalPost.boardId,
+        boardSlug: canBoard.slug,
+      }
+    )
+  }
+
   return {
     canonicalPost: { id: canonicalPostId, voteCount: newVoteCount },
     duplicatePost: { id: duplicatePostId },
@@ -204,10 +238,10 @@ export async function unmergePost(
   // Recalculate canonical post's vote count
   const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
 
-  // Look up the canonical post title for the activity metadata
+  // Look up the canonical post title and board for the activity metadata and event
   const canonicalPost = await db.query.posts.findFirst({
     where: eq(posts.id, canonicalPostId),
-    columns: { title: true },
+    columns: { title: true, boardId: true },
   })
 
   // Record activity on both posts
@@ -223,6 +257,37 @@ export async function unmergePost(
     type: 'post.unmerged',
     metadata: { otherPostId: postId, otherPostTitle: post.title },
   })
+
+  // Dispatch post.unmerged event for webhooks and integrations
+  if (canonicalPost) {
+    const [postBoard, canonicalBoard] = await Promise.all([
+      db.query.boards.findFirst({
+        where: eq(boards.id, post.boardId),
+        columns: { slug: true },
+      }),
+      db.query.boards.findFirst({
+        where: eq(boards.id, canonicalPost.boardId as BoardId),
+        columns: { slug: true },
+      }),
+    ])
+    if (postBoard && canonicalBoard) {
+      dispatchPostUnmerged(
+        buildEventActor({ principalId: actorPrincipalId }),
+        {
+          id: postId,
+          title: post.title,
+          boardId: post.boardId,
+          boardSlug: postBoard.slug,
+        },
+        {
+          id: canonicalPostId,
+          title: canonicalPost.title,
+          boardId: canonicalPost.boardId as BoardId,
+          boardSlug: canonicalBoard.slug,
+        }
+      )
+    }
+  }
 
   return {
     post: { id: postId },

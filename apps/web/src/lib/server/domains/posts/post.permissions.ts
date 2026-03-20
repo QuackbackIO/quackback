@@ -7,6 +7,7 @@
 import {
   db,
   posts,
+  boards,
   comments,
   postEditHistory,
   eq,
@@ -20,6 +21,11 @@ import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import {
+  dispatchPostDeleted,
+  dispatchPostRestored,
+  buildEventActor,
+} from '@/lib/server/events/dispatch'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult, UserEditPostInput } from './post.types'
 
@@ -476,6 +482,20 @@ export async function softDeletePost(
     principalId: actor.principalId,
     type: 'post.deleted',
   })
+
+  // Dispatch post.deleted event for webhooks and integrations
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, existingPost.boardId),
+    columns: { slug: true },
+  })
+  if (board) {
+    dispatchPostDeleted(buildEventActor({ principalId: actor.principalId }), {
+      id: postId,
+      title: existingPost.title,
+      boardId: existingPost.boardId,
+      boardSlug: board.slug,
+    })
+  }
 }
 
 /**
@@ -526,6 +546,22 @@ export async function restorePost(postId: PostId, actorPrincipalId?: PrincipalId
     principalId: actorPrincipalId ?? null,
     type: 'post.restored',
   })
+
+  // Dispatch post.restored event for webhooks and integrations
+  if (actorPrincipalId) {
+    const board = await db.query.boards.findFirst({
+      where: eq(boards.id, restoredPost.boardId),
+      columns: { slug: true },
+    })
+    if (board) {
+      dispatchPostRestored(buildEventActor({ principalId: actorPrincipalId }), {
+        id: postId,
+        title: restoredPost.title,
+        boardId: restoredPost.boardId,
+        boardSlug: board.slug,
+      })
+    }
+  }
 
   return restoredPost
 }

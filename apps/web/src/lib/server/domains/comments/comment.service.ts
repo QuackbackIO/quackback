@@ -37,6 +37,8 @@ import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   dispatchCommentCreated,
+  dispatchCommentUpdated,
+  dispatchCommentDeleted,
   dispatchPostStatusChanged,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
@@ -362,6 +364,24 @@ export async function updateComment(
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
   }
 
+  // Dispatch comment.updated event for webhooks and integrations
+  const post = existingComment.post
+  const board = post.board
+  dispatchCommentUpdated(
+    buildEventActor({ principalId: actor.principalId }),
+    {
+      id: updatedComment.id,
+      content: updatedComment.content,
+      isPrivate: updatedComment.isPrivate ?? undefined,
+    },
+    {
+      id: post.id,
+      title: post.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    }
+  )
+
   return updatedComment
 }
 
@@ -426,6 +446,23 @@ export async function deleteComment(
         .where(eq(posts.id, existingComment.postId))
     }
   })
+
+  // Dispatch comment.deleted event for webhooks and integrations
+  const post = existingComment.post
+  const board = post.board
+  dispatchCommentDeleted(
+    buildEventActor({ principalId: actor.principalId }),
+    {
+      id,
+      isPrivate: existingComment.isPrivate ?? undefined,
+    },
+    {
+      id: post.id,
+      title: post.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    }
+  )
 }
 
 /**

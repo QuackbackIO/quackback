@@ -29,6 +29,7 @@ import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackba
 import {
   dispatchPostCreated,
   dispatchPostStatusChanged,
+  dispatchPostUpdated,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -388,6 +389,26 @@ export async function updatePost(
         })
       }
     }
+  }
+
+  // Dispatch post.updated for non-status field changes
+  const changedFields: string[] = []
+  if (input.title !== undefined && input.title.trim() !== existingPost.title) changedFields.push('title')
+  if (input.content !== undefined && input.content.trim() !== existingPost.content) changedFields.push('content')
+  if (input.tagIds !== undefined) changedFields.push('tags')
+  if (input.ownerPrincipalId !== undefined && input.ownerPrincipalId !== existingPost.ownerPrincipalId) changedFields.push('owner')
+
+  if (changedFields.length > 0) {
+    dispatchPostUpdated(
+      buildEventActor(actor),
+      {
+        id: updatedPost.id,
+        title: updatedPost.title,
+        boardId: board.id,
+        boardSlug: board.slug,
+      },
+      changedFields
+    )
   }
 
   return updatedPost

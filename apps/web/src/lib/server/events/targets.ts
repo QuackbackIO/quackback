@@ -125,7 +125,12 @@ async function getIntegrationTargets(
   context: HookContext
 ): Promise<HookTarget[]> {
   // Never forward private comments to external integrations
-  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+  if (
+    (event.type === 'comment.created' ||
+      event.type === 'comment.updated' ||
+      event.type === 'comment.deleted') &&
+    event.data.comment.isPrivate
+  ) {
     return []
   }
 
@@ -296,6 +301,9 @@ async function buildEmailTargets(
 function extractPostId(event: EventData): PostId | null {
   if ('post' in event.data) {
     return event.data.post.id as PostId
+  }
+  if ('duplicatePost' in event.data) {
+    return event.data.duplicatePost.id as PostId
   }
   return null
 }
@@ -593,7 +601,12 @@ async function getChangelogSubscriberTargets(
  */
 async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
   // Never deliver private comments to external webhooks
-  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+  if (
+    (event.type === 'comment.created' ||
+      event.type === 'comment.updated' ||
+      event.type === 'comment.deleted') &&
+    event.data.comment.isPrivate
+  ) {
     return []
   }
 
@@ -660,6 +673,10 @@ function extractBoardId(event: EventData): string | null {
   // All event types now include boardId in post reference
   if ('post' in event.data) {
     return event.data.post.boardId
+  }
+  // post.merged events use duplicatePost instead of post
+  if ('duplicatePost' in event.data) {
+    return event.data.duplicatePost.boardId
   }
   return null
 }

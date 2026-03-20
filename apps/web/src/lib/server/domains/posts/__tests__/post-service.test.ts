@@ -59,6 +59,7 @@ vi.mock('@/lib/server/db', async () => {
 vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchPostCreated: vi.fn(),
   dispatchPostStatusChanged,
+  dispatchPostUpdated: vi.fn(),
   buildEventActor,
 }))
 

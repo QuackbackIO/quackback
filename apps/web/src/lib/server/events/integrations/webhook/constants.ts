@@ -33,9 +33,44 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When a post status is updated',
   },
   {
+    id: 'post.updated',
+    label: 'Post Updated',
+    description: 'When a post title, content, tags, or owner is changed',
+  },
+  {
+    id: 'post.deleted',
+    label: 'Post Deleted',
+    description: 'When a post is soft-deleted',
+  },
+  {
+    id: 'post.restored',
+    label: 'Post Restored',
+    description: 'When a deleted post is restored',
+  },
+  {
+    id: 'post.merged',
+    label: 'Post Merged',
+    description: 'When a duplicate post is merged into a canonical post',
+  },
+  {
+    id: 'post.unmerged',
+    label: 'Post Unmerged',
+    description: 'When a merged post is separated back out',
+  },
+  {
     id: 'comment.created',
     label: 'New Comment',
     description: 'When a comment is posted',
+  },
+  {
+    id: 'comment.updated',
+    label: 'Comment Updated',
+    description: 'When a comment is edited',
+  },
+  {
+    id: 'comment.deleted',
+    label: 'Comment Deleted',
+    description: 'When a comment is deleted',
   },
   {
     id: 'changelog.published',

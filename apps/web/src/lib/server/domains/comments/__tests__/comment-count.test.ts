@@ -137,6 +137,8 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
 // Mock event dispatch
 vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchCommentCreated: vi.fn(),
+  dispatchCommentUpdated: vi.fn(),
+  dispatchCommentDeleted: vi.fn(),
   dispatchPostStatusChanged: vi.fn(),
   buildEventActor: vi.fn(() => ({ type: 'user', id: 'mock' })),
 }))
