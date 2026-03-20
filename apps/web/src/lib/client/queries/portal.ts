@@ -39,6 +39,7 @@ export const portalQueries = {
         params.sort,
         params.statusSlugs,
         params.tagIds,
+        params.userId,
       ],
       queryFn: async () => {
         const data = await fetchPortalData({ data: params })

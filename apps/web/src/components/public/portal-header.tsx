@@ -23,6 +23,7 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 
@@ -55,6 +56,7 @@ export function PortalHeader({
   showThemeToggle = true,
 }: PortalHeaderProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
@@ -70,6 +72,9 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
+      // Invalidate user-scoped queries so reaction highlights and vote data refresh
+      queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+      queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
       router.invalidate() // Refetch loaders (includes session and userRole)
     },
   })
@@ -89,6 +94,9 @@ export function PortalHeader({
 
   const handleSignOut = async () => {
     await signOut()
+    // Clear user-scoped caches so stale reaction/vote highlights don't persist
+    queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+    queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
     router.invalidate() // Refetch session
     router.navigate({ to: '/' })
   }
