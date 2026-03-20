@@ -207,6 +207,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         borderRadius: "12px",
         overflow: "hidden",
         boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+        display: "none",
         opacity: "0",
         transform: "scale(0.95)",
         transformOrigin: placement === "left" ? "bottom left" : "bottom right",
@@ -362,6 +363,10 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
               else trigger.style.display = "flex";
             }
           }
+          // Eagerly create the iframe so it loads, hydrates, and completes
+          // the identify round-trip in the background — before the user opens
+          // the panel. This eliminates the visible delay on vote highlights.
+          if (!panel) createPanel();
           if (isReady) sendToWidget("quackback:identify", options);
           else pendingIdentify = options;
         }
