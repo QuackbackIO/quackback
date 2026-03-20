@@ -470,7 +470,9 @@ export async function getPublicPostDetail(
     reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
 
-  const commentTree = buildCommentTree(commentsResult, principalId, { pruneDeleted: true })
+  const commentTree = buildCommentTree(commentsResult, principalId, {
+    pruneDeleted: !options?.includePrivateComments,
+  })
 
   const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => {
     const deleted = !!node.deletedAt

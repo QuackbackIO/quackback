@@ -130,6 +130,7 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
         {
           principalId: auth.principal.id,
           role: auth.principal.role,
+          userId: auth.user.id,
         }
       )
       console.log(`[fn:comments] updateCommentFn: updated id=${data.id}`)
@@ -150,6 +151,7 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
       await deleteComment(data.id as CommentId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
+        userId: auth.user.id,
       })
       console.log(`[fn:comments] deleteCommentFn: deleted id=${data.id}`)
       return { id: data.id }

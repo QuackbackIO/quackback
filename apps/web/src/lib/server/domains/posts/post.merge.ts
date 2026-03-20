@@ -22,7 +22,7 @@ import {
   sql,
   principal as principalTable,
 } from '@/lib/server/db'
-import { type BoardId, type PostId, type PrincipalId, toUuid } from '@quackback/ids'
+import { type BoardId, type PostId, type PrincipalId, type UserId, toUuid } from '@quackback/ids'
 import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
@@ -60,7 +60,8 @@ import type { CommentTreeNode } from '@/lib/shared'
 export async function mergePost(
   duplicatePostId: PostId,
   canonicalPostId: PostId,
-  actorPrincipalId: PrincipalId
+  actorPrincipalId: PrincipalId,
+  actorUserId?: UserId
 ): Promise<MergePostResult> {
   // Prevent self-merge
   if (duplicatePostId === canonicalPostId) {
@@ -158,7 +159,7 @@ export async function mergePost(
   ])
   if (dupBoard && canBoard) {
     dispatchPostMerged(
-      buildEventActor({ principalId: actorPrincipalId }),
+      buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }),
       {
         id: duplicatePostId,
         title: duplicatePost.title,
@@ -208,7 +209,8 @@ function schedulePostMergeRecheck(canonicalPostId: PostId): void {
  */
 export async function unmergePost(
   postId: PostId,
-  actorPrincipalId: PrincipalId
+  actorPrincipalId: PrincipalId,
+  actorUserId?: UserId
 ): Promise<UnmergePostResult> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -272,7 +274,7 @@ export async function unmergePost(
     ])
     if (postBoard && canonicalBoard) {
       dispatchPostUnmerged(
-        buildEventActor({ principalId: actorPrincipalId }),
+        buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }),
         {
           id: postId,
           title: post.title,

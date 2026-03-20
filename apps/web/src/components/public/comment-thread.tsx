@@ -298,9 +298,9 @@ function CommentItem({
   const canNest = depth < MAX_NESTING_DEPTH
   const hasReplies = comment.replies.length > 0
   const isPinned = pinnedCommentId === comment.id
-  // Can pin: admin mode enabled, team member comment, root-level (no parent), not deleted
+  // Can pin: admin mode enabled, team member comment, root-level (no parent), not deleted, not private
   const canPin =
-    canPinComments && comment.isTeamMember && !comment.parentId && depth === 0 && !isDeleted
+    canPinComments && comment.isTeamMember && !comment.parentId && depth === 0 && !isDeleted && !comment.isPrivate
   // Can delete: not already deleted, and user is author or team member
   const canDelete =
     !isDeleted &&

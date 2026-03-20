@@ -401,6 +401,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       await softDeletePost(data.id as PostId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
+        userId: auth.user.id,
       })
       console.log(`[fn:posts] deletePostFn: deleted id=${data.id}`)
       return { id: data.id }
@@ -446,7 +447,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await restorePost(data.id as PostId, auth.principal.id)
+      const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
       console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {

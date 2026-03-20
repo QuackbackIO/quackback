@@ -269,6 +269,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
       const actor = {
         principalId: ctx.principal.id,
         role: ctx.principal.role,
+        userId: ctx.user.id,
       }
 
       await softDeletePost(postId, actor)

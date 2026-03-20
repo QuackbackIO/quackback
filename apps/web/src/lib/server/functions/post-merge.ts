@@ -73,7 +73,8 @@ export const mergePostFn = createServerFn({ method: 'POST' })
       const result = await mergePost(
         data.duplicatePostId as PostId,
         data.canonicalPostId as PostId,
-        auth.principal.id as PrincipalId
+        auth.principal.id as PrincipalId,
+        auth.user.id
       )
 
       console.log(
@@ -97,7 +98,7 @@ export const unmergePostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await unmergePost(data.postId as PostId, auth.principal.id as PrincipalId)
+      const result = await unmergePost(data.postId as PostId, auth.principal.id as PrincipalId, auth.user.id)
 
       console.log(`[fn:post-merge] unmergePostFn: unmerged ${data.postId}`)
       return result

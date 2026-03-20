@@ -158,15 +158,15 @@ async function getIntegrationTargets(
   }
 
   const targets: HookTarget[] = []
-  const boardId = extractBoardId(event)
+  const boardIds = extractBoardIds(event)
 
   // Track seen (integrationType, channelId) pairs to deduplicate
   const seen = new Set<string>()
 
   for (const m of mappings) {
-    // Apply board filter
+    // Apply board filter — match if any event board overlaps with filter
     const filters = m.filters as { boardIds?: string[] } | null
-    if (filters?.boardIds?.length && boardId && !filters.boardIds.includes(boardId)) {
+    if (filters?.boardIds?.length && boardIds.length > 0 && !boardIds.some((id) => filters.boardIds!.includes(id))) {
       continue
     }
 
@@ -620,8 +620,8 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
       return []
     }
 
-    // Extract boardId from event for filtering
-    const boardId = extractBoardId(event)
+    // Extract boardId(s) from event for filtering
+    const boardIds = extractBoardIds(event)
 
     // Filter webhooks by event type and board
     const matchingWebhooks = activeWebhooks.filter((webhook) => {
@@ -630,9 +630,9 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
         return false
       }
 
-      // If webhook has board filter, must match
+      // If webhook has board filter, must match at least one event board
       if (webhook.boardIds && webhook.boardIds.length > 0) {
-        if (!boardId || !webhook.boardIds.includes(boardId)) {
+        if (boardIds.length === 0 || !boardIds.some((id) => webhook.boardIds!.includes(id))) {
           return false
         }
       }
@@ -641,7 +641,7 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
     })
 
     console.log(
-      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardId ? ` (board: ${boardId})` : ''}`
+      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardIds.length ? ` (boards: ${boardIds.join(', ')})` : ''}`
     )
 
     // Build targets - decrypt secrets for delivery
@@ -667,16 +667,20 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
 }
 
 /**
- * Extract board ID from event data.
+ * Extract board ID(s) from event data.
+ * Returns multiple IDs for merge events (duplicate + canonical may be on different boards).
  */
-function extractBoardId(event: EventData): string | null {
-  // All event types now include boardId in post reference
+function extractBoardIds(event: EventData): string[] {
   if ('post' in event.data) {
-    return event.data.post.boardId
+    return [event.data.post.boardId]
   }
-  // post.merged events use duplicatePost instead of post
-  if ('duplicatePost' in event.data) {
-    return event.data.duplicatePost.boardId
+  // post.merged / post.unmerged events have both duplicatePost and canonicalPost
+  if ('duplicatePost' in event.data && 'canonicalPost' in event.data) {
+    const ids = new Set([
+      (event.data as { duplicatePost: { boardId: string } }).duplicatePost.boardId,
+      (event.data as { canonicalPost: { boardId: string } }).canonicalPost.boardId,
+    ])
+    return [...ids]
   }
-  return null
+  return []
 }

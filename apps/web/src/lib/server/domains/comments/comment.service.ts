@@ -313,7 +313,7 @@ export async function createComment(
 export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<Comment> {
   console.log(`[domain:comments] updateComment: id=${id}`)
   // Get existing comment with post and board in single query
@@ -368,7 +368,7 @@ export async function updateComment(
   const post = existingComment.post
   const board = post.board
   dispatchCommentUpdated(
-    buildEventActor({ principalId: actor.principalId }),
+    buildEventActor({ principalId: actor.principalId, userId: actor.userId }),
     {
       id: updatedComment.id,
       content: updatedComment.content,
@@ -400,7 +400,7 @@ export async function updateComment(
  */
 export async function deleteComment(
   id: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<void> {
   console.log(`[domain:comments] deleteComment: id=${id}`)
   // Get existing comment with post and board in single query
@@ -451,7 +451,7 @@ export async function deleteComment(
   const post = existingComment.post
   const board = post.board
   dispatchCommentDeleted(
-    buildEventActor({ principalId: actor.principalId }),
+    buildEventActor({ principalId: actor.principalId, userId: actor.userId }),
     {
       id,
       isPrivate: existingComment.isPrivate ?? undefined,
