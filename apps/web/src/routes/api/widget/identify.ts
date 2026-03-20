@@ -2,8 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { z } from 'zod'
 import { generateId } from '@quackback/ids'
-import type { UserId } from '@quackback/ids'
-import { db, user, session, principal, eq, and, gt } from '@/lib/server/db'
+import type { UserId, PrincipalId } from '@quackback/ids'
+import { db, user, session, principal, eq, and, gt, votes } from '@/lib/server/db'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.service'
 
 // Accept either legacy HMAC fields or a JWT ssoToken
@@ -203,47 +203,60 @@ export const Route = createFileRoute('/api/widget/identify')({
         const userId = userRecord.id as UserId
 
         // Ensure principal record exists
-        const principalRecord = await db.query.principal.findFirst({
+        let principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, userId),
         })
 
         if (!principalRecord) {
-          await db.insert(principal).values({
-            id: generateId('principal'),
-            userId,
-            role: 'user',
-            displayName: userRecord.name,
-            avatarUrl: userRecord.image ?? null,
-            createdAt: new Date(),
-          })
+          const [created] = await db
+            .insert(principal)
+            .values({
+              id: generateId('principal'),
+              userId,
+              role: 'user',
+              displayName: userRecord.name,
+              avatarUrl: userRecord.image ?? null,
+              createdAt: new Date(),
+            })
+            .returning()
+          principalRecord = created
         }
 
-        // Find existing valid session or create new one
-        let sessionToken: string
-        const existingSession = await db.query.session.findFirst({
-          where: and(eq(session.userId, userId), gt(session.expiresAt, new Date())),
-        })
+        // Find/create session and fetch voted posts in parallel
+        const [sessionResult, votedPostIds] = await Promise.all([
+          (async () => {
+            const existingSession = await db.query.session.findFirst({
+              where: and(eq(session.userId, userId), gt(session.expiresAt, new Date())),
+            })
+            if (existingSession) {
+              await db
+                .update(session)
+                .set({ updatedAt: new Date() })
+                .where(eq(session.id, existingSession.id))
+              return existingSession.token
+            }
+            const token = crypto.randomUUID()
+            const now = new Date()
+            await db.insert(session).values({
+              id: crypto.randomUUID(),
+              token,
+              userId,
+              expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
+              createdAt: now,
+              updatedAt: now,
+              ipAddress: request.headers.get('x-forwarded-for') ?? null,
+              userAgent: request.headers.get('user-agent') ?? null,
+            })
+            return token
+          })(),
+          db
+            .select({ postId: votes.postId })
+            .from(votes)
+            .where(eq(votes.principalId, principalRecord.id as PrincipalId))
+            .then((rows) => rows.map((r) => String(r.postId))),
+        ])
 
-        if (existingSession) {
-          sessionToken = existingSession.token
-          await db
-            .update(session)
-            .set({ updatedAt: new Date() })
-            .where(eq(session.id, existingSession.id))
-        } else {
-          sessionToken = crypto.randomUUID()
-          const now = new Date()
-          await db.insert(session).values({
-            id: crypto.randomUUID(),
-            token: sessionToken,
-            userId,
-            expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
-            createdAt: now,
-            updatedAt: now,
-            ipAddress: request.headers.get('x-forwarded-for') ?? null,
-            userAgent: request.headers.get('user-agent') ?? null,
-          })
-        }
+        const sessionToken = sessionResult
 
         // Set the session cookie so server functions (requireAuth) work for identified users.
         // This matches Better Auth's cookie format so auth.api.getSession() can read it.
@@ -265,6 +278,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               email: userRecord.email,
               avatarUrl: userRecord.image ?? null,
             },
+            votedPostIds,
           }),
           {
             headers: {

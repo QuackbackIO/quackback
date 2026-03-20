@@ -10,7 +10,9 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { setWidgetToken, clearWidgetToken } from '@/lib/client/widget-auth'
+import { widgetVotedPostsKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/server/auth/client'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
 
@@ -44,15 +46,18 @@ export function useWidgetAuth(): WidgetAuthContextValue {
 }
 
 export function WidgetAuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<WidgetUser | null>(null)
   const [sessionVersion, setSessionVersion] = useState(0)
   const isIdentified = user !== null
   const sessionReadyRef = useRef(false)
 
+  const sessionVersionRef = useRef(0)
   const storeToken = useCallback((token: string) => {
     setWidgetToken(token)
     sessionReadyRef.current = true
-    setSessionVersion((v) => v + 1)
+    sessionVersionRef.current += 1
+    setSessionVersion(sessionVersionRef.current)
   }, [])
 
   /**
@@ -124,6 +129,14 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
         const result = await response.json()
         storeToken(result.sessionToken)
         setUser(result.user)
+
+        // Seed voted posts cache immediately — no second round-trip needed
+        if (result.votedPostIds) {
+          queryClient.setQueryData(
+            widgetVotedPostsKeys.bySession(sessionVersionRef.current),
+            new Set<string>(result.votedPostIds)
+          )
+        }
 
         window.parent.postMessage(
           { type: 'quackback:identify-result', success: true, user: result.user },
