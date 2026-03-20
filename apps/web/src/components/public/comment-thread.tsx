@@ -23,6 +23,74 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
+/**
+ * Groups root-level comments so consecutive private comments are wrapped
+ * in a single PrivateNoteCard. Public comments render individually.
+ */
+function renderGroupedComments(
+  comments: PublicCommentView[],
+  itemProps: Omit<CommentItemProps, 'comment' | 'depth' | 'insidePrivateCard'>
+) {
+  const groups: Array<{ type: 'public'; comment: PublicCommentView } | { type: 'private'; comments: PublicCommentView[] }> = []
+
+  for (const comment of comments) {
+    if (comment.isPrivate) {
+      const lastGroup = groups[groups.length - 1]
+      if (lastGroup?.type === 'private') {
+        lastGroup.comments.push(comment)
+      } else {
+        groups.push({ type: 'private', comments: [comment] })
+      }
+    } else {
+      groups.push({ type: 'public', comment })
+    }
+  }
+
+  return groups.map((group, i) => {
+    if (group.type === 'public') {
+      return (
+        <CommentItem
+          key={group.comment.id}
+          {...itemProps}
+          comment={group.comment}
+        />
+      )
+    }
+
+    return (
+      <PrivateNoteCard key={`private-group-${i}`}>
+        {group.comments.map((comment) => (
+          <CommentItem
+            key={comment.id}
+            {...itemProps}
+            comment={comment}
+            insidePrivateCard
+          />
+        ))}
+      </PrivateNoteCard>
+    )
+  })
+}
+
+function PrivateNoteCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.04] dark:bg-amber-950/30 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-amber-500/20 bg-amber-500/[0.06] dark:bg-amber-500/[0.08]">
+        <LockClosedIcon className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          Internal note
+        </span>
+        <span className="text-xs text-amber-600/60 dark:text-amber-500/50">
+          &middot; only visible to your team
+        </span>
+      </div>
+      <div className="px-3 py-1 space-y-0">
+        {children}
+      </div>
+    </div>
+  )
+}
+
 interface CommentThreadProps {
   postId: PostId
   comments: PublicCommentView[]
@@ -143,27 +211,23 @@ export function CommentThread({
         </p>
       ) : (
         <div className="space-y-4">
-          {sortedComments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              postId={postId}
-              comment={comment}
-              allowCommenting={allowCommenting}
-              user={user}
-              teamBadgeLogoUrl={teamBadgeLogoUrl}
-              createComment={createComment}
-              pinnedCommentId={pinnedCommentId}
-              canPinComments={canPinComments}
-              onPinComment={onPinComment}
-              onUnpinComment={onUnpinComment}
-              isPinPending={isPinPending}
-              isTeamMember={isTeamMember}
-              onDeleteComment={onDeleteComment}
-              deletingCommentId={deletingCommentId}
-              onRestoreComment={onRestoreComment}
-              restoringCommentId={restoringCommentId}
-            />
-          ))}
+          {renderGroupedComments(sortedComments, {
+            postId,
+            allowCommenting,
+            user,
+            teamBadgeLogoUrl,
+            createComment,
+            pinnedCommentId,
+            canPinComments,
+            onPinComment,
+            onUnpinComment,
+            isPinPending,
+            isTeamMember,
+            onDeleteComment,
+            deletingCommentId,
+            onRestoreComment,
+            restoringCommentId,
+          })}
         </div>
       )}
     </div>
@@ -194,6 +258,8 @@ interface CommentItemProps {
   onRestoreComment?: (commentId: CommentId) => void
   /** ID of the comment currently being restored */
   restoringCommentId?: CommentId | null
+  /** Whether this comment is rendered inside a PrivateNoteCard (suppresses per-comment private styling) */
+  insidePrivateCard?: boolean
 }
 
 const MAX_NESTING_DEPTH = 5
@@ -216,6 +282,7 @@ function CommentItem({
   deletingCommentId,
   onRestoreComment,
   restoringCommentId,
+  insidePrivateCard = false,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -349,12 +416,7 @@ function CommentItem({
   return (
     <div
       id={`comment-${comment.id}`}
-      className={cn(
-        'group/thread scroll-mt-20 transition-colors duration-500',
-        comment.isPrivate &&
-          depth === 0 &&
-          'border-l-2 border-amber-400 bg-amber-50/50 dark:bg-amber-950/20 rounded-r-md'
-      )}
+      className="group/thread scroll-mt-20 transition-colors duration-500"
     >
       {/* Thread container with visual thread line */}
       <div
@@ -392,7 +454,7 @@ function CommentItem({
                 Team
               </Badge>
             )}
-            {comment.isPrivate && (
+            {comment.isPrivate && !insidePrivateCard && (
               <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
                 <LockClosedIcon className="h-2.5 w-2.5 mr-0.5" />
                 Internal note
@@ -608,6 +670,7 @@ function CommentItem({
                   deletingCommentId={deletingCommentId}
                   onRestoreComment={onRestoreComment}
                   restoringCommentId={restoringCommentId}
+                  insidePrivateCard={insidePrivateCard}
                 />
               ))}
             </div>
