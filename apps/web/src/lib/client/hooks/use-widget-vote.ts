@@ -13,11 +13,19 @@ import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
 import { voteCountKeys } from './use-post-vote'
 import type { PostId } from '@quackback/ids'
 
-// Query keys — reuse voteCountKeys from use-post-vote, add widget-specific votedPosts
-export const widgetVotedPostsKeys = {
-  all: ['widget', 'votedPosts'] as const,
-  byWorkspace: () => widgetVotedPostsKeys.all,
-  bySession: (version: number) => [...widgetVotedPostsKeys.all, version] as const,
+/** Initial sessionVersion before any identify() call */
+export const INITIAL_SESSION_VERSION = 0
+
+// Query keys for widget queries
+export const widgetQueryKeys = {
+  votedPosts: {
+    all: ['widget', 'votedPosts'] as const,
+    bySession: (version: number) => ['widget', 'votedPosts', version] as const,
+  },
+  postDetail: {
+    all: ['widget', 'post'] as const,
+    byId: (postId: string, version: number) => ['widget', 'post', postId, version] as const,
+  },
 }
 
 interface UseWidgetVoteOptions {
@@ -47,7 +55,7 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
   // Don't fetch until a token exists — avoids caching an empty set pre-auth.
   const hasToken = hasWidgetToken()
   const { data: votedPosts } = useQuery<Set<string>>({
-    queryKey: widgetVotedPostsKeys.bySession(sessionVersion),
+    queryKey: widgetQueryKeys.votedPosts.bySession(sessionVersion),
     queryFn: async () => {
       const headers = getWidgetAuthHeaders()
       if (!headers.Authorization) return new Set<string>()
@@ -65,7 +73,7 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       toggleVoteFn({ data: { postId: id }, headers: getWidgetAuthHeaders() }),
     onMutate: async (id) => {
       const previouslyVoted = votedPosts?.has(id) ?? false
-      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
+      const key = widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current)
 
       // Optimistic: update votedPosts
       queryClient.setQueryData<Set<string>>(key, (old) => {
@@ -78,7 +86,7 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       return { previouslyVoted }
     },
     onError: (_err, id, context) => {
-      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
+      const key = widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current)
       queryClient.setQueryData<Set<string>>(key, (old) => {
         const next = new Set(old || [])
         if (context?.previouslyVoted) next.add(id)
@@ -87,7 +95,7 @@ export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled =
       })
     },
     onSuccess: (data, id) => {
-      const key = widgetVotedPostsKeys.bySession(sessionVersionRef.current)
+      const key = widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current)
       queryClient.setQueryData<number>(voteCountKeys.byPost(id), data.voteCount)
       queryClient.setQueryData<Set<string>>(key, (old) => {
         const next = new Set(old || [])

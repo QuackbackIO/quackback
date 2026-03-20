@@ -10,6 +10,7 @@ import { PostContent } from '@/components/public/post-content'
 import { fetchPublicPostDetail } from '@/lib/server/functions/portal'
 import { createCommentFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
@@ -51,7 +52,7 @@ export function WidgetPostDetail({
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['widget', 'post', postId, sessionVersion],
+    queryKey: widgetQueryKeys.postDetail.byId(postId, sessionVersion),
     queryFn: async (): Promise<PublicPostDetailView> => {
       const result = await fetchPublicPostDetail({
         data: { postId },
@@ -96,7 +97,7 @@ export function WidgetPostDetail({
         commentId: result.comment.id,
         parentId: parentId ?? null,
       })
-      queryClient.invalidateQueries({ queryKey: ['widget', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: widgetQueryKeys.postDetail.all })
     },
     [isIdentified, ensureSession, emitEvent, postId, queryClient]
   )

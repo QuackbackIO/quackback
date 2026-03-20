@@ -10,7 +10,7 @@ import { WidgetNewPostForm } from '@/components/widget/widget-new-post-form'
 import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
-import { widgetVotedPostsKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
 import { generateOneTimeToken } from '@/lib/client/widget-auth'
 
 const searchSchema = z.object({
@@ -34,13 +34,10 @@ export const Route = createFileRoute('/widget/')({
     )
 
     // Seed the widget votedPosts cache for SSR vote highlights.
-    // sessionVersion 0 matches the initial mount before any identify call.
-    if (portalData.votedPostIds.length > 0) {
-      queryClient.setQueryData(
-        widgetVotedPostsKeys.bySession(0),
-        new Set(portalData.votedPostIds)
-      )
-    }
+    queryClient.setQueryData(
+      widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
+      new Set(portalData.votedPostIds)
+    )
 
     return {
       posts: portalData.posts.items.map((p) => ({

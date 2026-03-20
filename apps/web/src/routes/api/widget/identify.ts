@@ -3,8 +3,9 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { z } from 'zod'
 import { generateId } from '@quackback/ids'
 import type { UserId, PrincipalId } from '@quackback/ids'
-import { db, user, session, principal, eq, and, gt, votes } from '@/lib/server/db'
+import { db, user, session, principal, eq, and, gt } from '@/lib/server/db'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.service'
+import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 
 // Accept either legacy HMAC fields or a JWT ssoToken
 const identifySchema = z
@@ -27,6 +28,32 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
 function jsonError(code: string, message: string, status: number): Response {
   return Response.json({ error: { code, message } }, { status })
+}
+
+async function findOrCreateSession(userId: UserId, request: Request): Promise<string> {
+  const existingSession = await db.query.session.findFirst({
+    where: and(eq(session.userId, userId), gt(session.expiresAt, new Date())),
+  })
+  if (existingSession) {
+    await db
+      .update(session)
+      .set({ updatedAt: new Date() })
+      .where(eq(session.id, existingSession.id))
+    return existingSession.token
+  }
+  const token = crypto.randomUUID()
+  const now = new Date()
+  await db.insert(session).values({
+    id: crypto.randomUUID(),
+    token,
+    userId,
+    expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
+    createdAt: now,
+    updatedAt: now,
+    ipAddress: request.headers.get('x-forwarded-for') ?? null,
+    userAgent: request.headers.get('user-agent') ?? null,
+  })
+  return token
 }
 
 /**
@@ -223,40 +250,12 @@ export const Route = createFileRoute('/api/widget/identify')({
         }
 
         // Find/create session and fetch voted posts in parallel
-        const [sessionResult, votedPostIds] = await Promise.all([
-          (async () => {
-            const existingSession = await db.query.session.findFirst({
-              where: and(eq(session.userId, userId), gt(session.expiresAt, new Date())),
-            })
-            if (existingSession) {
-              await db
-                .update(session)
-                .set({ updatedAt: new Date() })
-                .where(eq(session.id, existingSession.id))
-              return existingSession.token
-            }
-            const token = crypto.randomUUID()
-            const now = new Date()
-            await db.insert(session).values({
-              id: crypto.randomUUID(),
-              token,
-              userId,
-              expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
-              createdAt: now,
-              updatedAt: now,
-              ipAddress: request.headers.get('x-forwarded-for') ?? null,
-              userAgent: request.headers.get('user-agent') ?? null,
-            })
-            return token
-          })(),
-          db
-            .select({ postId: votes.postId })
-            .from(votes)
-            .where(eq(votes.principalId, principalRecord.id as PrincipalId))
-            .then((rows) => rows.map((r) => String(r.postId))),
+        const principalId = principalRecord.id as PrincipalId
+        const [sessionToken, votedPostIdSet] = await Promise.all([
+          findOrCreateSession(userId, request),
+          getAllUserVotedPostIds(principalId),
         ])
-
-        const sessionToken = sessionResult
+        const votedPostIds = Array.from(votedPostIdSet)
 
         // Set the session cookie so server functions (requireAuth) work for identified users.
         // This matches Better Auth's cookie format so auth.api.getSession() can read it.

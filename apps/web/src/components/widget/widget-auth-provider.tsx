@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setWidgetToken, clearWidgetToken } from '@/lib/client/widget-auth'
-import { widgetVotedPostsKeys } from '@/lib/client/hooks/use-widget-vote'
+import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/server/auth/client'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
 
@@ -133,7 +133,7 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
         // Seed voted posts cache immediately — no second round-trip needed
         if (result.votedPostIds) {
           queryClient.setQueryData(
-            widgetVotedPostsKeys.bySession(sessionVersionRef.current),
+            widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current),
             new Set<string>(result.votedPostIds)
           )
         }
