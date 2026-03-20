@@ -131,12 +131,12 @@ export function WidgetPostDetail({
   const canVote = isIdentified || anonymousVotingEnabled
   const canComment = isIdentified || anonymousCommentingEnabled
 
-  // Scroll to top when navigating between posts
+  // Scroll to top when navigating between posts or when data loads
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-slot="scroll-area-viewport"]')
     if (viewport) viewport.scrollTop = 0
-  }, [postId])
+  }, [postId, post])
 
   const liveCommentCount = post?.comments ? countLiveComments(post.comments) : 0
 
