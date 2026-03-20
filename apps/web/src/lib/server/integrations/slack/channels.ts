@@ -5,30 +5,46 @@
 import { WebClient } from '@slack/web-api'
 
 /**
- * List channels accessible to the bot.
+ * List all channels accessible to the bot.
+ * Uses cursor-based pagination to fetch every channel, filters out
+ * Slack Connect / externally shared channels, and sorts alphabetically.
  */
 export async function listSlackChannels(
   accessToken: string
 ): Promise<Array<{ id: string; name: string; isPrivate: boolean }>> {
   const client = new WebClient(accessToken)
+  const channels: Array<{ id: string; name: string; isPrivate: boolean }> = []
+  let cursor: string | undefined
 
-  const result = await client.conversations.list({
-    types: 'public_channel,private_channel',
-    exclude_archived: true,
-    limit: 200,
-  })
-
-  if (!result.ok) {
-    throw new Error(`Failed to list channels: ${result.error}`)
-  }
-
-  return (result.channels || []).map(
-    (channel: { id?: string; name?: string; is_private?: boolean }) => ({
-      id: channel.id!,
-      name: channel.name!,
-      isPrivate: channel.is_private || false,
+  do {
+    const result = await client.conversations.list({
+      types: 'public_channel,private_channel',
+      exclude_archived: true,
+      limit: 200,
+      cursor,
     })
-  )
+
+    if (!result.ok) {
+      throw new Error(`Failed to list channels: ${result.error}`)
+    }
+
+    for (const ch of result.channels || []) {
+      // Skip Slack Connect / externally shared channels
+      if (ch.is_ext_shared || ch.is_org_shared) continue
+
+      channels.push({
+        id: ch.id!,
+        name: ch.name!,
+        isPrivate: ch.is_private || false,
+      })
+    }
+
+    cursor = result.response_metadata?.next_cursor || undefined
+  } while (cursor)
+
+  channels.sort((a, b) => a.name.localeCompare(b.name))
+
+  return channels
 }
 
 /**

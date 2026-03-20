@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   ArrowPathIcon,
   HashtagIcon,
@@ -6,6 +6,8 @@ import {
   XMarkIcon,
   PlusIcon,
   ChevronRightIcon,
+  MagnifyingGlassIcon,
+  ChevronUpDownIcon,
 } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -26,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   useUpdateIntegration,
   useAddNotificationChannel,
@@ -145,6 +148,120 @@ function useSlackChannels() {
   }, [fetch])
 
   return { channels, loading, error, refresh: fetch }
+}
+
+// ============================================
+// Searchable Channel Picker
+// ============================================
+
+function ChannelPicker({
+  channels,
+  value,
+  onSelect,
+  loading,
+  onRefresh,
+  placeholder = 'Select a channel...',
+}: {
+  channels: SlackChannel[]
+  value: string
+  onSelect: (channelId: string) => void
+  loading?: boolean
+  onRefresh?: () => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const selected = channels.find((c) => c.id === value)
+  const filtered = search
+    ? channels.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    : channels
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {loading ? (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+              Loading channels...
+            </span>
+          ) : selected ? (
+            <span className="flex items-center gap-2">
+              <ChannelIcon isPrivate={selected.isPrivate} />
+              {selected.name}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+          <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          inputRef.current?.focus()
+        }}
+      >
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search channels..."
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              title="Refresh channels"
+            >
+              <ArrowPathIcon className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
+        <div className="max-h-[200px] overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+              {search ? 'No channels match your search.' : 'No channels available.'}
+            </div>
+          ) : (
+            filtered.map((channel) => (
+              <button
+                key={channel.id}
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors ${
+                  channel.id === value
+                    ? 'bg-accent text-accent-foreground'
+                    : 'hover:bg-muted/50'
+                }`}
+                onClick={() => {
+                  onSelect(channel.id)
+                  setOpen(false)
+                  setSearch('')
+                }}
+              >
+                <ChannelIcon isPrivate={channel.isPrivate} />
+                <span className="truncate">{channel.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 // ============================================
@@ -542,45 +659,14 @@ function AddChannelDialog({
         <div className="space-y-4">
           {/* Channel selector */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Channel</Label>
-              <button
-                type="button"
-                onClick={onRefreshChannels}
-                disabled={loadingChannels}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1"
-              >
-                <ArrowPathIcon className={`h-3 w-3 ${loadingChannels ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
-            <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
-              <SelectTrigger>
-                {loadingChannels ? (
-                  <div className="flex items-center gap-2">
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    <span>Loading channels...</span>
-                  </div>
-                ) : (
-                  <SelectValue placeholder="Select a channel" />
-                )}
-              </SelectTrigger>
-              <SelectContent>
-                {availableChannels.map((channel) => (
-                  <SelectItem key={channel.id} value={channel.id}>
-                    <div className="flex items-center gap-2">
-                      <ChannelIcon isPrivate={channel.isPrivate} />
-                      <span>{channel.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-                {availableChannels.length === 0 && !loadingChannels && (
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No available channels
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
+            <Label>Channel</Label>
+            <ChannelPicker
+              channels={availableChannels}
+              value={selectedChannelId}
+              onSelect={setSelectedChannelId}
+              loading={loadingChannels}
+              onRefresh={onRefreshChannels}
+            />
           </div>
 
           {/* Events — compact 2-column grid */}
@@ -872,45 +958,14 @@ function AddMonitoredChannelDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Channel</Label>
-              <button
-                type="button"
-                onClick={onRefreshChannels}
-                disabled={loadingChannels}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1"
-              >
-                <ArrowPathIcon className={`h-3 w-3 ${loadingChannels ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
-            <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
-              <SelectTrigger>
-                {loadingChannels ? (
-                  <div className="flex items-center gap-2">
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    <span>Loading channels...</span>
-                  </div>
-                ) : (
-                  <SelectValue placeholder="Select a channel" />
-                )}
-              </SelectTrigger>
-              <SelectContent>
-                {availableChannels.map((channel) => (
-                  <SelectItem key={channel.id} value={channel.id}>
-                    <div className="flex items-center gap-2">
-                      <ChannelIcon isPrivate={channel.isPrivate} />
-                      <span>{channel.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-                {availableChannels.length === 0 && !loadingChannels && (
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No available channels
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
+            <Label>Channel</Label>
+            <ChannelPicker
+              channels={availableChannels}
+              value={selectedChannelId}
+              onSelect={setSelectedChannelId}
+              loading={loadingChannels}
+              onRefresh={onRefreshChannels}
+            />
           </div>
 
           {selectedChannel?.isPrivate && (
