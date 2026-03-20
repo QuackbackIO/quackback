@@ -255,5 +255,24 @@ describe('post.permissions', () => {
 
       await expect(softDeletePost(POST_ID, USER_ACTOR)).rejects.toThrow('only delete your own')
     })
+
+    it('should dispatch post.deleted event', async () => {
+      const { dispatchPostDeleted } = await import('@/lib/server/events/dispatch')
+      mockFindFirst.mockResolvedValueOnce({
+        id: POST_ID,
+        title: 'Test Post',
+        boardId: 'board_id',
+        deletedAt: null,
+        postStatus: { isDefault: true },
+      })
+      const { softDeletePost } = await import('../post.permissions')
+
+      await softDeletePost(POST_ID, TEAM_ACTOR)
+
+      expect(dispatchPostDeleted).toHaveBeenCalledWith(
+        expect.objectContaining({ principalId: TEAM_ACTOR.principalId }),
+        expect.objectContaining({ id: POST_ID, title: 'Test Post', boardSlug: 'feedback' })
+      )
+    })
   })
 })

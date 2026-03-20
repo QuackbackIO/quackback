@@ -208,6 +208,24 @@ describe('mergePost', () => {
       duplicatePost: { id: POST_A },
     })
   })
+
+  it('dispatches post.merged event with board data', async () => {
+    const { dispatchPostMerged } = await import('@/lib/server/events/dispatch')
+    mockPostsFindFirst
+      .mockResolvedValueOnce(mockPost({ id: POST_A, title: 'Dup', boardId: 'board_a' }))
+      .mockResolvedValueOnce(mockPost({ id: POST_B, title: 'Canon', boardId: 'board_b' }))
+    mockBoardsFindFirst
+      .mockResolvedValueOnce({ slug: 'board-a' })
+      .mockResolvedValueOnce({ slug: 'board-b' })
+
+    await mergePost(POST_A, POST_B, ACTOR)
+
+    expect(dispatchPostMerged).toHaveBeenCalledWith(
+      expect.objectContaining({ principalId: ACTOR }),
+      expect.objectContaining({ id: POST_A, title: 'Dup', boardId: 'board_a', boardSlug: 'board-a' }),
+      expect.objectContaining({ id: POST_B, title: 'Canon', boardId: 'board_b', boardSlug: 'board-b' })
+    )
+  })
 })
 
 describe('unmergePost', () => {
@@ -263,5 +281,23 @@ describe('unmergePost', () => {
       post: { id: POST_A },
       canonicalPost: { id: POST_B, voteCount: 3 },
     })
+  })
+
+  it('dispatches post.unmerged event with board data', async () => {
+    const { dispatchPostUnmerged } = await import('@/lib/server/events/dispatch')
+    mockPostsFindFirst
+      .mockResolvedValueOnce(mockPost({ id: POST_A, canonicalPostId: POST_B, title: 'Dup', boardId: 'board_a' }))
+      .mockResolvedValueOnce(mockPost({ id: POST_B, title: 'Canon', boardId: 'board_b' }))
+    mockBoardsFindFirst
+      .mockResolvedValueOnce({ slug: 'board-a' })
+      .mockResolvedValueOnce({ slug: 'board-b' })
+
+    await unmergePost(POST_A, ACTOR)
+
+    expect(dispatchPostUnmerged).toHaveBeenCalledWith(
+      expect.objectContaining({ principalId: ACTOR }),
+      expect.objectContaining({ id: POST_A, boardId: 'board_a' }),
+      expect.objectContaining({ id: POST_B, boardId: 'board_b' })
+    )
   })
 })
