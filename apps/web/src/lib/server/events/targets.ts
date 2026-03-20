@@ -27,7 +27,7 @@ import {
 import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
-import type { EventData, EventActor } from './types'
+import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 
 /**
@@ -675,10 +675,11 @@ function extractBoardIds(event: EventData): string[] {
     return [event.data.post.boardId]
   }
   // post.merged / post.unmerged events have both duplicatePost and canonicalPost
-  if ('duplicatePost' in event.data && 'canonicalPost' in event.data) {
+  if (event.type === 'post.merged' || event.type === 'post.unmerged') {
+    const data = event.data as PostMergedPayload | PostUnmergedPayload
     const ids = new Set([
-      (event.data as { duplicatePost: { boardId: string } }).duplicatePost.boardId,
-      (event.data as { canonicalPost: { boardId: string } }).canonicalPost.boardId,
+      'duplicatePost' in data ? data.duplicatePost.boardId : data.post.boardId,
+      'canonicalPost' in data ? data.canonicalPost.boardId : data.formerCanonicalPost.boardId,
     ])
     return [...ids]
   }

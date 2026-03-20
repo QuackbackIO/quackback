@@ -279,7 +279,7 @@ export function CommentForm({
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onClick={() => !isPrivateLocked && setIsPrivate(!isPrivate)}
+                      onClick={() => setIsPrivate(!isPrivate)}
                       disabled={isPrivateLocked}
                       className={cn(
                         'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
@@ -400,7 +400,7 @@ export function CommentForm({
                     type="button"
                     variant={isPrivate ? 'default' : 'ghost'}
                     size="sm"
-                    onClick={() => !isPrivateLocked && setIsPrivate(!isPrivate)}
+                    onClick={() => setIsPrivate(!isPrivate)}
                     disabled={isPrivateLocked}
                     className={cn(
                       isPrivate

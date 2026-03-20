@@ -11,7 +11,7 @@ import { randomUUID } from 'crypto'
 import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
 
 import { processEvent } from './process'
-import type { EventActor, EventData } from './types.js'
+import type { EventActor, EventData, EventPostRef } from './types.js'
 
 // Re-export EventActor for API routes that need to construct actor objects
 export type { EventActor } from './types.js'
@@ -127,16 +127,9 @@ export async function dispatchCommentCreated(
   })
 }
 
-export interface PostUpdatedInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
 export async function dispatchPostUpdated(
   actor: EventActor,
-  post: PostUpdatedInput,
+  post: EventPostRef,
   changedFields: string[]
 ): Promise<void> {
   await dispatchEvent({
@@ -146,16 +139,9 @@ export async function dispatchPostUpdated(
   })
 }
 
-export interface PostDeletedInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
 export async function dispatchPostDeleted(
   actor: EventActor,
-  post: PostDeletedInput
+  post: EventPostRef
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
@@ -164,16 +150,9 @@ export async function dispatchPostDeleted(
   })
 }
 
-export interface PostRestoredInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
 export async function dispatchPostRestored(
   actor: EventActor,
-  post: PostRestoredInput
+  post: EventPostRef
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
@@ -182,24 +161,10 @@ export async function dispatchPostRestored(
   })
 }
 
-export interface PostMergedDuplicateInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
-export interface PostMergedCanonicalInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
 export async function dispatchPostMerged(
   actor: EventActor,
-  duplicatePost: PostMergedDuplicateInput,
-  canonicalPost: PostMergedCanonicalInput
+  duplicatePost: EventPostRef,
+  canonicalPost: EventPostRef
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
@@ -208,24 +173,10 @@ export async function dispatchPostMerged(
   })
 }
 
-export interface PostUnmergedInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
-export interface PostUnmergedFormerCanonicalInput {
-  id: PostId
-  title: string
-  boardId: BoardId
-  boardSlug: string
-}
-
 export async function dispatchPostUnmerged(
   actor: EventActor,
-  post: PostUnmergedInput,
-  formerCanonicalPost: PostUnmergedFormerCanonicalInput
+  post: EventPostRef,
+  formerCanonicalPost: EventPostRef
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
