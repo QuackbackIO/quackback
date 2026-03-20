@@ -485,6 +485,7 @@ export async function getPublicPostDetail(
         deleted && !!node.deletedByPrincipalId && node.deletedByPrincipalId !== node.principalId,
       parentId: node.parentId as CommentId | null,
       isTeamMember: deleted ? false : node.isTeamMember,
+      isPrivate: node.isPrivate,
       avatarUrl: deleted ? null : (node.avatarUrl ?? null),
       statusChange: deleted ? null : (node.statusChange ?? null),
       replies: node.replies.map(mapToPublicComment),

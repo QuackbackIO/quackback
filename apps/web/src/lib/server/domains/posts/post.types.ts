@@ -216,6 +216,7 @@ export interface PublicComment {
   isRemovedByTeam: boolean
   parentId: CommentId | null
   isTeamMember: boolean
+  isPrivate: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
   replies: PublicComment[]
