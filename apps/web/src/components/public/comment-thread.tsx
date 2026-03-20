@@ -352,6 +352,7 @@ function CommentItem({
       className={cn(
         'group/thread scroll-mt-20 transition-colors duration-500',
         comment.isPrivate &&
+          depth === 0 &&
           'border-l-2 border-amber-400 bg-amber-50/50 dark:bg-amber-950/20 rounded-r-md'
       )}
     >
