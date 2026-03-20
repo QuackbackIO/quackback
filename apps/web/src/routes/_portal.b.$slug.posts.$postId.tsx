@@ -19,7 +19,12 @@ import { DeletePostDialog } from '@/components/public/post-detail/delete-post-di
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
 import { usePostActions } from '@/lib/client/mutations'
-import { useDeleteComment } from '@/lib/client/mutations/portal-comments'
+import {
+  useDeleteComment,
+  usePinComment,
+  useUnpinComment,
+  useRestoreComment,
+} from '@/lib/client/mutations/portal-comments'
 import { toast } from 'sonner'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
@@ -128,6 +133,21 @@ function PostDetailPage() {
     onError: (error) => toast.error(error.message || 'Failed to delete comment'),
   })
 
+  const pinComment = usePinComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to pin comment'),
+  })
+
+  const unpinComment = useUnpinComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to unpin comment'),
+  })
+
+  const restoreComment = useRestoreComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to restore comment'),
+  })
+
   const post = postQuery.data
   // Use board data from post (already JOINed in the query)
   const board = post?.board
@@ -227,9 +247,18 @@ function PostDetailPage() {
             pinnedCommentId={post.pinnedCommentId}
             disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
             lockedMessage={post.isCommentsLocked ? 'Comments are locked on this post' : undefined}
+            statuses={statusesQuery.data}
+            currentStatusId={post.statusId}
+            onPinComment={(commentId: CommentId) => pinComment.mutate(commentId)}
+            onUnpinComment={() => unpinComment.mutate()}
+            isPinPending={pinComment.isPending || unpinComment.isPending}
             onDeleteComment={(commentId: CommentId) => deleteComment.mutate(commentId)}
             deletingCommentId={
               deleteComment.isPending ? (deleteComment.variables as CommentId) : null
+            }
+            onRestoreComment={(commentId: CommentId) => restoreComment.mutate(commentId)}
+            restoringCommentId={
+              restoreComment.isPending ? (restoreComment.variables as CommentId) : null
             }
           />
         </Suspense>

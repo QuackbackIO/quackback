@@ -416,6 +416,8 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handle
 
     const ctx = await getOptionalAuth()
     const isMember = !!(ctx?.user && ctx?.principal)
+    const isTeamMember =
+      isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
 
     // Anonymous users can only comment if the setting is enabled
     let canComment = isMember
@@ -427,6 +429,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handle
 
     return {
       isMember,
+      isTeamMember,
       canComment,
       user: isMember
         ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }

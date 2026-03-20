@@ -120,6 +120,9 @@ export function CommentsSection({
     allowCommenting = data?.canComment
   }
 
+  // Use server-detected team membership when not in explicit admin mode
+  const effectiveIsTeamMember = isTeamMember ?? data?.isTeamMember ?? false
+
   return (
     <div
       className="p-6 animate-in fade-in duration-200 fill-mode-backwards"
@@ -136,13 +139,13 @@ export function CommentsSection({
         user={adminUser ?? data?.user}
         lockedMessage={lockedMessage}
         pinnedCommentId={pinnedCommentId}
-        canPinComments={canPinComments}
+        canPinComments={canPinComments || effectiveIsTeamMember}
         onPinComment={onPinComment}
         onUnpinComment={onUnpinComment}
         isPinPending={isPinPending}
         statuses={statuses}
         currentStatusId={currentStatusId}
-        isTeamMember={isTeamMember}
+        isTeamMember={effectiveIsTeamMember}
         onDeleteComment={onDeleteComment}
         deletingCommentId={deletingCommentId}
         onRestoreComment={onRestoreComment}
