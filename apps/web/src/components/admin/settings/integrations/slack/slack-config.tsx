@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   ArrowPathIcon,
   HashtagIcon,
@@ -174,9 +174,12 @@ function ChannelPicker({
   const inputRef = useRef<HTMLInputElement>(null)
 
   const selected = channels.find((c) => c.id === value)
-  const filtered = search
-    ? channels.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
-    : channels
+  const filtered = useMemo(
+    () => search
+      ? channels.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+      : channels,
+    [channels, search]
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
