@@ -22,6 +22,7 @@ export function toPortalComments(post: PostDetails): PublicCommentView[] {
       !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
     parentId: c.parentId as CommentId | null,
     isTeamMember: c.isTeamMember,
+    isPrivate: c.isPrivate,
     avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
     statusChange: c.statusChange ?? null,
     reactions: c.reactions,
