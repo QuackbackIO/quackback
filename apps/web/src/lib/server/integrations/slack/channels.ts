@@ -29,8 +29,8 @@ export async function listSlackChannels(
     }
 
     for (const ch of result.channels || []) {
-      // Skip Slack Connect / externally shared channels
-      if (ch.is_ext_shared || ch.is_org_shared) continue
+      // Skip Slack Connect (externally shared) channels
+      if (ch.is_ext_shared) continue
 
       channels.push({
         id: ch.id!,
