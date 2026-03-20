@@ -9,7 +9,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toggleVoteFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
 import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
-import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { voteCountKeys } from './use-post-vote'
 import type { PostId } from '@quackback/ids'
 
@@ -23,12 +22,13 @@ export const widgetVotedPostsKeys = {
 interface UseWidgetVoteOptions {
   postId: PostId
   voteCount: number
+  /** Session version from WidgetAuthProvider — triggers refetch after identify */
+  sessionVersion?: number
   enabled?: boolean
 }
 
-export function useWidgetVote({ postId, voteCount, enabled = true }: UseWidgetVoteOptions) {
+export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled = true }: UseWidgetVoteOptions) {
   const queryClient = useQueryClient()
-  const { sessionVersion } = useWidgetAuth()
 
   const { data: cachedVoteCount } = useQuery({
     queryKey: voteCountKeys.byPost(postId),

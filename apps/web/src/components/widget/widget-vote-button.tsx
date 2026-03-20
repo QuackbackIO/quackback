@@ -3,6 +3,7 @@
 import { useRef, useCallback } from 'react'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { useWidgetVote } from '@/lib/client/hooks/use-widget-vote'
+import { useWidgetAuth } from './widget-auth-provider'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
@@ -24,9 +25,11 @@ export function WidgetVoteButton({
   onAuthRequired,
   compact = false,
 }: WidgetVoteButtonProps) {
+  const { sessionVersion } = useWidgetAuth()
   const { voteCount, hasVoted, isPending, handleVote } = useWidgetVote({
     postId,
     voteCount: initialVoteCount,
+    sessionVersion,
   })
 
   const isHandlingRef = useRef(false)
