@@ -37,16 +37,7 @@ export const Route = createFileRoute('/widget')({
       googleFontsUrl: getGoogleFontsUrl(brandingConfig),
     }
   },
-  // Force theme via meta tag so the root's systemThemeScript applies it
-  // before first paint — prevents white flash in dark mode
-  head: ({ loaderData }) => {
-    const themeMode = loaderData?.themeMode ?? 'user'
-    const meta: Array<Record<string, string>> = []
-    if (themeMode !== 'user') {
-      meta.push({ name: 'theme-forced', content: themeMode })
-    }
-    return { meta }
-  },
+  head: () => ({ meta: [] }),
   component: WidgetLayout,
 })
 

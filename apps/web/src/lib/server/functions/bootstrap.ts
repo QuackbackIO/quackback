@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
+import { getThemeCookie, type Theme } from '@/lib/shared/theme'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
@@ -13,6 +14,7 @@ export interface BootstrapData {
   session: Session | null
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
+  themeCookie: Theme
 }
 
 async function getSessionInternal(): Promise<Session | null> {
@@ -87,7 +89,9 @@ export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
         }, 10_000)
       }
 
-      return { baseUrl: config.baseUrl, session, settings, userRole }
+      const themeCookie = getThemeCookie(getRequestHeaders().get('cookie') ?? null)
+
+      return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
     } catch (error) {
       console.error(`[fn:bootstrap] getBootstrapData failed:`, error)
       throw error

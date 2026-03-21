@@ -34,31 +34,13 @@ const ReactQueryDevtools = import.meta.env.DEV
     )
   : () => null
 
-// Script to handle theme preference
-// Checks for forced theme (from portal settings) first, then falls back to system preference
-const systemThemeScript = `
-  (function() {
-    var d = document.documentElement;
-    var forced = document.querySelector('meta[name="theme-forced"]');
-    if (forced) {
-      var theme = forced.getAttribute('content');
-      d.classList.remove('system', 'light', 'dark');
-      d.classList.add(theme);
-      d.style.colorScheme = theme;
-    } else if (d.classList.contains('system')) {
-      d.classList.remove('system');
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      d.classList.add(prefersDark ? 'dark' : 'light');
-    }
-  })()
-`
-
 export interface RouterContext {
   queryClient: QueryClient
   baseUrl?: string
   session?: BootstrapData['session']
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
+  themeCookie?: BootstrapData['themeCookie']
 }
 
 // Paths that are allowed before onboarding is complete
@@ -80,7 +62,7 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const { baseUrl, session, settings, userRole } = await getBootstrapData()
+    const { baseUrl, session, settings, userRole, themeCookie } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -89,7 +71,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    return { baseUrl, session, settings, userRole }
+    return { baseUrl, session, settings, userRole, themeCookie }
   },
   head: () => ({
     meta: [
@@ -208,27 +190,29 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 const NON_PORTAL_PREFIXES = ['/admin', '/auth', '/onboarding', '/api', '/complete-signup']
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings } = Route.useRouteContext()
+  const { settings, themeCookie } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
-  // Determine if we're on a portal route with a forced theme.
-  // The root ThemeProvider must be the one to set forcedTheme, because it controls
-  // the <html> class attribute. A nested ThemeProvider can't reliably override it
-  // since React fires child effects before parent effects.
+  // Portal routes can force a specific theme (light/dark) via branding config.
+  // Admin and other non-portal routes always respect the user's preference.
   const isPortalRoute = !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
   const forcedTheme = isPortalRoute && themeMode !== 'user' ? themeMode : undefined
 
+  // Resolve the SSR theme class so the first painted frame is correct.
+  // forcedTheme wins, then the user's cookie preference, falling back to 'system'
+  // which next-themes' inline script resolves via matchMedia before first paint.
+  const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
+
   return (
-    <html lang="en" className="system" suppressHydrationWarning>
+    <html lang="en" className={defaultTheme} suppressHydrationWarning>
       <head>
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       </head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme={defaultTheme}
           enableSystem={!forcedTheme}
           forcedTheme={forcedTheme}
           disableTransitionOnChange

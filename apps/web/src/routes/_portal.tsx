@@ -74,12 +74,10 @@ export const Route = createFileRoute('/_portal')({
     const faviconUrl =
       loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
 
-    const themeMode = loaderData?.themeMode ?? 'user'
     const workspaceName = loaderData?.org?.name ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
     const logoUrl = loaderData?.brandingData?.logoUrl || '/logo.png'
 
-    // Add meta tag for forced theme - read by root's systemThemeScript before hydration
     const meta: Array<Record<string, string>> = [
       { title: workspaceName },
       { name: 'description', content: description },
@@ -90,10 +88,6 @@ export const Route = createFileRoute('/_portal')({
       { name: 'twitter:title', content: workspaceName },
       { name: 'twitter:description', content: description },
     ]
-    if (themeMode !== 'user') {
-      meta.push({ name: 'theme-forced', content: themeMode })
-    }
-
     return {
       meta,
       links: [{ rel: 'icon', href: faviconUrl }],
