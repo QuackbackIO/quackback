@@ -35,6 +35,7 @@ export interface CascadeResult {
   integrationType: string
   externalId: string
   success: boolean
+  action?: 'closed' | 'archived'
   error?: string
 }
 
@@ -170,39 +171,41 @@ export async function executeCascadeDelete(
 
   const linkIds = toArchive.map((c) => c.linkId as LinkedEntityId)
 
-  // Fetch link rows scoped to this post — prevents targeting links from other posts
-  const linkRows = await db
+  // Single query: fetch links + integration secrets in one JOIN
+  const rows = await db
     .select({
       id: postExternalLinks.id,
       integrationId: postExternalLinks.integrationId,
       integrationType: postExternalLinks.integrationType,
       externalId: postExternalLinks.externalId,
       externalUrl: postExternalLinks.externalUrl,
+      integrationSecrets: integrations.secrets,
+      integrationConfig: integrations.config,
     })
     .from(postExternalLinks)
+    .innerJoin(integrations, eq(postExternalLinks.integrationId, integrations.id))
     .where(and(inArray(postExternalLinks.id, linkIds), eq(postExternalLinks.postId, postId)))
 
-  const linkMap = new Map(linkRows.map((l) => [l.id, l]))
+  const linkMap = new Map(rows.map((r) => [r.id, r]))
 
-  // Batch fetch integrations
-  const integrationIds = [
-    ...new Set(
-      linkRows.map((r) => r.integrationId).filter((id): id is NonNullable<typeof id> => id != null)
-    ),
-  ]
-  const integrationRows =
-    integrationIds.length > 0
-      ? await db
-          .select({
-            id: integrations.id,
-            secrets: integrations.secrets,
-            config: integrations.config,
-          })
-          .from(integrations)
-          .where(inArray(integrations.id, integrationIds))
-      : []
-
-  const integrationMap = new Map(integrationRows.map((i) => [i.id, i]))
+  // Dedupe token refresh per integration to avoid race conditions
+  const tokenCache = new Map<string, Promise<string>>()
+  function getToken(row: (typeof rows)[0]): Promise<string> {
+    const integrationId = row.integrationId as string
+    let promise = tokenCache.get(integrationId)
+    if (!promise) {
+      const secrets = decryptSecrets<Record<string, string>>(row.integrationSecrets!)
+      const config = (row.integrationConfig ?? {}) as Record<string, unknown>
+      promise = getValidAccessToken(
+        integrationId as IntegrationId,
+        row.integrationType,
+        secrets,
+        config
+      )
+      tokenCache.set(integrationId, promise)
+    }
+    return promise
+  }
 
   // Run all archive calls in parallel
   const results = await Promise.allSettled(
@@ -218,9 +221,7 @@ export async function executeCascadeDelete(
         }
       }
 
-      const integration = link.integrationId ? integrationMap.get(link.integrationId) : undefined
-
-      if (!integration?.secrets) {
+      if (!link.integrationSecrets) {
         return {
           linkId: choice.linkId,
           integrationType: link.integrationType,
@@ -230,15 +231,8 @@ export async function executeCascadeDelete(
         }
       }
 
-      const secrets = decryptSecrets<Record<string, string>>(integration.secrets)
-      const config = (integration.config ?? {}) as Record<string, unknown>
-
-      const accessToken = await getValidAccessToken(
-        integration.id as IntegrationId,
-        link.integrationType,
-        secrets,
-        config
-      )
+      const accessToken = await getToken(link)
+      const config = (link.integrationConfig ?? {}) as Record<string, unknown>
 
       const result = await archiveExternalIssue(link.integrationType, {
         externalId: link.externalId,
@@ -247,24 +241,18 @@ export async function executeCascadeDelete(
         integrationConfig: config,
       })
 
-      // Update link status in the database
-      const newStatus = result.success ? (result.action ?? 'archived') : 'error'
-      await db
-        .update(postExternalLinks)
-        .set({ status: newStatus })
-        .where(eq(postExternalLinks.id, choice.linkId as LinkedEntityId))
-
       return {
         linkId: choice.linkId,
         integrationType: link.integrationType,
         externalId: link.externalId,
         success: result.success,
+        action: result.action,
         error: result.error,
       }
     })
   )
 
-  return results.map((r, i) =>
+  const cascadeResults = results.map((r, i) =>
     r.status === 'fulfilled'
       ? r.value
       : {
@@ -276,4 +264,21 @@ export async function executeCascadeDelete(
           error: r.reason instanceof Error ? r.reason.message : 'Unknown error',
         }
   )
+
+  // Batch update link statuses
+  const updates = cascadeResults
+    .filter((r) => linkMap.has(r.linkId as LinkedEntityId))
+    .map((r) => ({
+      id: r.linkId as LinkedEntityId,
+      status: r.success ? (r.action ?? 'archived') : 'error',
+    }))
+  if (updates.length > 0) {
+    await Promise.all(
+      updates.map((u) =>
+        db.update(postExternalLinks).set({ status: u.status }).where(eq(postExternalLinks.id, u.id))
+      )
+    )
+  }
+
+  return cascadeResults
 }

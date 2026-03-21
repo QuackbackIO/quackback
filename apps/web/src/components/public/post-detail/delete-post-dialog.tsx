@@ -127,11 +127,12 @@ export function DeletePostDialog({
           {externalLinks.map((link) => {
             const disabled = !link.integrationActive
             const checked = choices[link.id] ?? false
-            const action = getIntegrationActionVerb(link.integrationType).toLowerCase()
+            const verb = getIntegrationActionVerb(link.integrationType)
             const name = getIntegrationDisplayName(link.integrationType)
             const noun = getIntegrationItemNoun(link.integrationType)
             const displayId = getDisplayId(link)
             const Icon = INTEGRATION_ICON_MAP[link.integrationType]
+            const pastTense = verb === 'Close' ? 'closed' : 'archived'
 
             return (
               <div key={link.id} className="flex items-start gap-3">
@@ -153,14 +154,14 @@ export function DeletePostDialog({
                     <span>
                       {disabled
                         ? `${name} ${noun} (disconnected)`
-                        : `${action.charAt(0).toUpperCase() + action.slice(1)} linked ${name} ${noun}`}
+                        : `${verb} linked ${name} ${noun}`}
                     </span>
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5 ml-6">
                     <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{displayId}</code>
                     {disabled
-                      ? ` — integration disconnected, cannot ${action}`
-                      : ` will be ${action}d in ${name}.`}
+                      ? ` — integration disconnected, cannot ${verb.toLowerCase()}`
+                      : ` will be ${pastTense} in ${name}.`}
                   </p>
                 </div>
               </div>
