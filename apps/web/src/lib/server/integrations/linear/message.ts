@@ -27,7 +27,6 @@ export function buildLinearIssueBody(
     '---',
     `**Submitted by:** ${author}`,
     `**Board:** ${post.boardSlug}`,
-    `**Votes:** ${post.voteCount}`,
     `[View in Quackback](${postUrl})`,
   ].join('\n')
 

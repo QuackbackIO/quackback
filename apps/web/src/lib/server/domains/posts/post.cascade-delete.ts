@@ -18,6 +18,7 @@ export interface PostExternalLink {
   id: string
   integrationType: string
   externalId: string
+  externalDisplayId: string | null
   externalUrl: string | null
   integrationActive: boolean
   onDeleteDefault: 'archive' | 'nothing'
@@ -50,6 +51,7 @@ export async function getPostExternalLinks(postId: PostId): Promise<PostExternal
       id: postExternalLinks.id,
       integrationType: postExternalLinks.integrationType,
       externalId: postExternalLinks.externalId,
+      externalDisplayId: postExternalLinks.externalDisplayId,
       externalUrl: postExternalLinks.externalUrl,
       integrationStatus: integrations.status,
       integrationConfig: integrations.config,
@@ -64,6 +66,7 @@ export async function getPostExternalLinks(postId: PostId): Promise<PostExternal
       id: link.id,
       integrationType: link.integrationType,
       externalId: link.externalId,
+      externalDisplayId: link.externalDisplayId,
       externalUrl: link.externalUrl,
       integrationActive: link.integrationStatus === 'active',
       onDeleteDefault: (config.onDeleteAction as string) === 'archive' ? 'archive' : 'nothing',

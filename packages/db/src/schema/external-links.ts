@@ -19,6 +19,8 @@ export const postExternalLinks = pgTable(
     integrationId: typeIdColumnNullable('integration')('integration_id'),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     externalId: text('external_id').notNull(),
+    /** Human-friendly display label (e.g. "QUA-24", "#142"). Falls back to externalId when null. */
+    externalDisplayId: text('external_display_id'),
     externalUrl: text('external_url'),
     status: varchar('status', { length: 20 }).notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

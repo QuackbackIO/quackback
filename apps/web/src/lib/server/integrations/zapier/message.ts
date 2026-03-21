@@ -18,7 +18,6 @@ interface ZapierPayload {
     url: string
     author_name?: string
     author_email?: string
-    vote_count?: number
   }
   status_change?: {
     previous: string
@@ -52,7 +51,6 @@ export function buildZapierPayload(event: EventData, rootUrl: string): ZapierPay
           url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
           author_name: post.authorName,
           author_email: post.authorEmail,
-          vote_count: post.voteCount,
         },
       }
     }

@@ -35,3 +35,23 @@ export function getIntegrationActionVerb(integrationType: string): string {
       return 'Archive'
   }
 }
+
+/** Get the item noun for a platform (issue, task, story, etc.) */
+export function getIntegrationItemNoun(integrationType: string): string {
+  switch (integrationType) {
+    case 'asana':
+    case 'clickup':
+    case 'trello':
+      return 'task'
+    case 'shortcut':
+      return 'story'
+    case 'azure_devops':
+      return 'work item'
+    case 'notion':
+      return 'page'
+    case 'monday':
+      return 'item'
+    default:
+      return 'issue'
+  }
+}

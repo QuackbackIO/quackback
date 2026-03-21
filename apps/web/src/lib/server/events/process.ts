@@ -202,6 +202,7 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
       integrationId: integration.id as import('@quackback/ids').IntegrationId,
       integrationType: data.hookType,
       externalId: result.externalId!,
+      externalDisplayId: result.externalDisplayId ?? null,
       externalUrl: result.externalUrl ?? null,
     })
     .onConflictDoNothing()

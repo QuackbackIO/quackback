@@ -75,13 +75,22 @@ export const linearHook: HookHandler = {
         }
       }
 
-      const issue = (result.data?.issueCreate as { issue?: { id: string; url: string } })?.issue
+      const issue = (
+        result.data?.issueCreate as {
+          issue?: { id: string; identifier: string; url: string }
+        }
+      )?.issue
       if (!issue) {
         return { success: false, error: 'No issue returned', shouldRetry: false }
       }
 
-      console.log(`[Linear] ✅ Created issue ${issue.id}`)
-      return { success: true, externalId: issue.id, externalUrl: issue.url }
+      console.log(`[Linear] ✅ Created issue ${issue.identifier}`)
+      return {
+        success: true,
+        externalId: issue.id,
+        externalDisplayId: issue.identifier,
+        externalUrl: issue.url,
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       const status = (error as { status?: number }).status
@@ -109,6 +118,7 @@ const CREATE_ISSUE_MUTATION = `
       success
       issue {
         id
+        identifier
         url
       }
     }
