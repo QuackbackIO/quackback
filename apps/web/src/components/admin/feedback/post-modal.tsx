@@ -498,6 +498,7 @@ function PostModalContent({
         isPending={deletePost.isPending}
         externalLinks={externalLinksQuery.data}
         isLoadingLinks={externalLinksQuery.isLoading}
+        isErrorLinks={externalLinksQuery.isError}
         description={
           <>
             This will delete &ldquo;{post.title}&rdquo; from the portal. You can restore it within

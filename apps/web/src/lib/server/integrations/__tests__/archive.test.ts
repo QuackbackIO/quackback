@@ -105,6 +105,13 @@ describe('linear archive', () => {
     const result = await archiveExternalIssue('linear', baseCtx())
     expect(result).toEqual({ success: false, error: 'Issue not found' })
   })
+
+  it('returns failure on non-OK response (e.g. 403, 429)', async () => {
+    vi.stubGlobal('fetch', mockFetch(429, { message: 'rate limited' }))
+    const result = await archiveExternalIssue('linear', baseCtx())
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Linear API 429')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -279,6 +286,13 @@ describe('monday archive', () => {
     const call = fetchMock.mock.calls[0]
     const headers = (call[1] as RequestInit).headers as Record<string, string>
     expect(headers.Authorization).toBe('my-monday-token')
+  })
+
+  it('returns failure on non-OK response (e.g. 403)', async () => {
+    vi.stubGlobal('fetch', mockFetch(403, { error: 'forbidden' }))
+    const result = await archiveExternalIssue('monday', baseCtx())
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Monday API 403')
   })
 })
 

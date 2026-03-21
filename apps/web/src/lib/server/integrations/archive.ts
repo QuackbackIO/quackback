@@ -84,6 +84,10 @@ async function archiveLinearIssue(ctx: ArchiveContext): Promise<ArchiveResult> {
 
   if (response.status === 401) return { success: false, error: 'Auth expired' }
   if (response.status === 404) return { success: true, action: 'archived' } // already gone
+  if (!response.ok) {
+    const text = await response.text()
+    return { success: false, error: `Linear API ${response.status}: ${text.slice(0, 200)}` }
+  }
 
   const json = (await response.json()) as {
     data?: { issueArchive?: { success: boolean } }
@@ -364,6 +368,10 @@ async function archiveMondayItem(ctx: ArchiveContext): Promise<ArchiveResult> {
 
   if (response.status === 401) return { success: false, error: 'Auth expired' }
   if (response.status === 404) return { success: true, action: 'archived' }
+  if (!response.ok) {
+    const text = await response.text()
+    return { success: false, error: `Monday API ${response.status}: ${text.slice(0, 200)}` }
+  }
 
   const json = (await response.json()) as {
     data?: { archive_item?: { id: string } }

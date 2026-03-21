@@ -51,6 +51,8 @@ interface DeletePostDialogProps {
   externalLinks?: ExternalLinkInfo[]
   /** Whether external links are still loading */
   isLoadingLinks?: boolean
+  /** Whether external links failed to load */
+  isErrorLinks?: boolean
 }
 
 export function DeletePostDialog({
@@ -62,6 +64,7 @@ export function DeletePostDialog({
   description,
   externalLinks,
   isLoadingLinks,
+  isErrorLinks,
 }: DeletePostDialogProps) {
   const [choices, setChoices] = useState<Record<string, boolean>>({})
 
@@ -100,9 +103,14 @@ export function DeletePostDialog({
       }
       variant="destructive"
       confirmLabel={isPending ? 'Deleting...' : isLoadingLinks ? 'Loading...' : 'Delete'}
-      isPending={isPending || isLoadingLinks}
+      isPending={isPending || isLoadingLinks || isErrorLinks}
       onConfirm={handleConfirm}
     >
+      {isErrorLinks && (
+        <p className="text-sm text-destructive">
+          Failed to load linked integrations. Please close and try again.
+        </p>
+      )}
       {hasLinks && (
         <div className="rounded-lg border border-border/50 p-4 space-y-3">
           <p className="text-sm font-medium">Linked integrations</p>
