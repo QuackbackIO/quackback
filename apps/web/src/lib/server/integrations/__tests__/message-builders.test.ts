@@ -150,15 +150,8 @@ describe('Jira message builder', () => {
   it('includes author, board, and link in ADF', () => {
     const { description } = buildJiraIssueBody(makeEvent(), ROOT)
     const texts = description.content
-      .filter(
-        (
-          n
-        ): n is {
-          type: 'paragraph'
-          content: Array<{ type: 'text'; text: string; marks?: unknown[] }>
-        } => n.type === 'paragraph'
-      )
-      .flatMap((p) => p.content.map((t) => t.text))
+      .filter((n) => n.type === 'paragraph')
+      .flatMap((p) => ('content' in p ? p.content.map((t) => t.text) : []))
     const joined = texts.join(' ')
     expect(joined).toContain('Jane Doe')
     expect(joined).toContain('features')

@@ -69,7 +69,7 @@ describe('linearInboundHandler.verifySignature', () => {
 describe('linearInboundHandler.parseStatusChange', () => {
   it('parses a state change event and returns UUID as externalId', async () => {
     const payload = stateChangePayload()
-    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload))
+    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
 
     expect(result).toEqual({
       externalId: 'uuid-issue-123',
@@ -80,26 +80,26 @@ describe('linearInboundHandler.parseStatusChange', () => {
 
   it('returns null for non-Issue types', async () => {
     const payload = stateChangePayload({ type: 'Comment' })
-    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload))
+    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
     expect(result).toBeNull()
   })
 
   it('returns null for non-update actions', async () => {
     const payload = stateChangePayload({ action: 'create' })
-    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload))
+    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
     expect(result).toBeNull()
   })
 
   it('returns null when updatedFrom has no stateId', async () => {
     const payload = stateChangePayload({ updatedFrom: {} })
-    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload))
+    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
     expect(result).toBeNull()
   })
 
   it('returns null when state name is missing', async () => {
     const payload = stateChangePayload()
     ;(payload.data as Record<string, unknown>).state = {}
-    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload))
+    const result = await linearInboundHandler.parseStatusChange(JSON.stringify(payload), {}, {})
     expect(result).toBeNull()
   })
 })
