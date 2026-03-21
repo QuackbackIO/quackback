@@ -223,7 +223,15 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
   }, [storeToken])
 
   const contextValue = useMemo(
-    () => ({ user, isIdentified, ensureSession, closeWidget, emitEvent, metadata: widgetMetadata, sessionVersion }),
+    () => ({
+      user,
+      isIdentified,
+      ensureSession,
+      closeWidget,
+      emitEvent,
+      metadata: widgetMetadata,
+      sessionVersion,
+    }),
     [user, isIdentified, ensureSession, closeWidget, emitEvent, widgetMetadata, sessionVersion]
   )
 

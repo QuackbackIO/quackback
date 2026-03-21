@@ -268,7 +268,7 @@ function PostDetailPage() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         postTitle={post.title}
-        onConfirm={deletePost}
+        onConfirm={() => deletePost()}
         isPending={isDeleting}
       />
     </div>

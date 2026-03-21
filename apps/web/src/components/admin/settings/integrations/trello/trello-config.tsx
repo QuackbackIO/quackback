@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 import {
   fetchTrelloBoardsFn,
   fetchTrelloListsFn,
@@ -270,6 +271,13 @@ export function TrelloConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <OnDeleteConfig
+        integrationId={integrationId}
+        integrationType="trello"
+        config={initialConfig}
+        enabled={integrationEnabled}
+      />
     </div>
   )
 }

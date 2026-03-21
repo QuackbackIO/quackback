@@ -260,6 +260,20 @@
       "when": 1773526215917,
       "tag": "0036_glossy_revanche",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1773526215918,
+      "tag": "0024_bored_human_cannonball",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1774132557224,
+      "tag": "0038_furry_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

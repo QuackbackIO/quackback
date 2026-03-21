@@ -49,10 +49,7 @@ export const Route = createFileRoute('/_portal/')({
 
     // Seed the votedPosts cache so usePostVote has data during SSR rendering.
     // This ensures vote highlights appear in the server-rendered HTML.
-    queryClient.setQueryData(
-      votedPostsKeys.byWorkspace(),
-      new Set(portalData.votedPostIds)
-    )
+    queryClient.setQueryData(votedPostsKeys.byWorkspace(), new Set(portalData.votedPostIds))
 
     const anonymousVotingEnabled =
       org.publicPortalConfig?.features?.anonymousVoting ??

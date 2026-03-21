@@ -36,7 +36,12 @@ interface UseWidgetVoteOptions {
   enabled?: boolean
 }
 
-export function useWidgetVote({ postId, voteCount, sessionVersion = 0, enabled = true }: UseWidgetVoteOptions) {
+export function useWidgetVote({
+  postId,
+  voteCount,
+  sessionVersion = 0,
+  enabled = true,
+}: UseWidgetVoteOptions) {
   const queryClient = useQueryClient()
   // Ref tracks latest sessionVersion so mutation callbacks always write to the
   // current cache key, even if ensureSession() bumped the version mid-render.

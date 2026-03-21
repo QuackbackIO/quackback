@@ -408,12 +408,32 @@ export function useRemoveVote(postId: PostId) {
 // Delete Post Mutation (admin soft delete)
 // ============================================================================
 
+interface DeletePostInput {
+  postId: PostId
+  cascadeChoices?: Array<{
+    linkId: string
+    shouldArchive: boolean
+  }>
+}
+
+export interface DeletePostResult {
+  id: string
+  cascadeResults?: Array<{
+    linkId: string
+    integrationType: string
+    externalId: string
+    success: boolean
+    error?: string
+  }>
+}
+
 export function useDeletePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (postId: PostId) => deletePostFn({ data: { id: postId } }),
-    onSuccess: (_data, postId) => {
+    mutationFn: async ({ postId, cascadeChoices }: DeletePostInput): Promise<DeletePostResult> =>
+      deletePostFn({ data: { id: postId, cascadeChoices } }),
+    onSuccess: (_data, { postId }) => {
       // Remove from all list caches
       queryClient.setQueriesData<InfiniteData<InboxPostListResult>>(
         { queryKey: inboxKeys.lists() },

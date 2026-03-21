@@ -17,10 +17,7 @@ interface AiSummaryCardProps {
   summaryUpdatedAt: Date | string | null
 }
 
-export function AiSummaryCard({
-  summaryJson,
-  summaryUpdatedAt,
-}: AiSummaryCardProps) {
+export function AiSummaryCard({ summaryJson, summaryUpdatedAt }: AiSummaryCardProps) {
   const [isOpen, setIsOpen] = useState(true)
 
   // Generating state: no summary yet

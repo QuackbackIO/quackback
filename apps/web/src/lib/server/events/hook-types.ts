@@ -13,8 +13,10 @@ import type { EventData } from './types'
  */
 export interface HookResult {
   success: boolean
-  /** External ID (Slack ts, Discord message id, email id, Linear issue id) */
+  /** External ID used for API lookups (may be opaque UUID/numeric ID) */
   externalId?: string
+  /** Human-friendly display label (e.g. "QUA-24", "#142"). Falls back to externalId in UI. */
+  externalDisplayId?: string
   /** External URL (Linear issue URL, etc.) */
   externalUrl?: string
   /** Error message if failed */

@@ -31,7 +31,10 @@ function renderGroupedComments(
   comments: PublicCommentView[],
   itemProps: Omit<CommentItemProps, 'comment' | 'depth' | 'insidePrivateCard'>
 ) {
-  const groups: Array<{ type: 'public'; comment: PublicCommentView } | { type: 'private'; comments: PublicCommentView[] }> = []
+  const groups: Array<
+    | { type: 'public'; comment: PublicCommentView }
+    | { type: 'private'; comments: PublicCommentView[] }
+  > = []
 
   for (const comment of comments) {
     if (comment.isPrivate) {
@@ -48,24 +51,13 @@ function renderGroupedComments(
 
   return groups.map((group, i) => {
     if (group.type === 'public') {
-      return (
-        <CommentItem
-          key={group.comment.id}
-          {...itemProps}
-          comment={group.comment}
-        />
-      )
+      return <CommentItem key={group.comment.id} {...itemProps} comment={group.comment} />
     }
 
     return (
       <PrivateNoteCard key={`private-group-${i}`}>
         {group.comments.map((comment) => (
-          <CommentItem
-            key={comment.id}
-            {...itemProps}
-            comment={comment}
-            insidePrivateCard
-          />
+          <CommentItem key={comment.id} {...itemProps} comment={comment} insidePrivateCard />
         ))}
       </PrivateNoteCard>
     )
@@ -84,9 +76,7 @@ function PrivateNoteCard({ children }: { children: React.ReactNode }) {
           &middot; only visible to your team
         </span>
       </div>
-      <div className="px-3 py-1 space-y-0">
-        {children}
-      </div>
+      <div className="px-3 py-1 space-y-0">{children}</div>
     </div>
   )
 }
@@ -300,7 +290,12 @@ function CommentItem({
   const isPinned = pinnedCommentId === comment.id
   // Can pin: admin mode enabled, team member comment, root-level (no parent), not deleted, not private
   const canPin =
-    canPinComments && comment.isTeamMember && !comment.parentId && depth === 0 && !isDeleted && !comment.isPrivate
+    canPinComments &&
+    comment.isTeamMember &&
+    !comment.parentId &&
+    depth === 0 &&
+    !isDeleted &&
+    !comment.isPrivate
   // Can delete: not already deleted, and user is author or team member
   const canDelete =
     !isDeleted &&

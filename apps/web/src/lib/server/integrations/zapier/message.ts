@@ -18,7 +18,6 @@ interface ZapierPayload {
     url: string
     author_name?: string
     author_email?: string
-    vote_count?: number
   }
   status_change?: {
     previous: string
@@ -30,6 +29,7 @@ interface ZapierPayload {
     author_name?: string
     author_email?: string
   }
+  deleted_by?: string
 }
 
 /**
@@ -51,7 +51,6 @@ export function buildZapierPayload(event: EventData, rootUrl: string): ZapierPay
           url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
           author_name: post.authorName,
           author_email: post.authorEmail,
-          vote_count: post.voteCount,
         },
       }
     }
@@ -72,6 +71,22 @@ export function buildZapierPayload(event: EventData, rootUrl: string): ZapierPay
           previous: formatStatus(previousStatus),
           new: formatStatus(newStatus),
         },
+      }
+    }
+
+    case 'post.deleted': {
+      const { post, deletedBy } = event.data
+      return {
+        event: 'post.deleted',
+        timestamp: event.timestamp,
+        portal_url: rootUrl,
+        post: {
+          id: post.id,
+          title: post.title,
+          board: post.boardSlug,
+          url: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+        },
+        deleted_by: deletedBy,
       }
     }
 

@@ -117,11 +117,7 @@ export function InvitationActions({
         disabled={resendDisabled}
         title={resendTitle}
       >
-        {loading === 'resend' ? (
-          <ArrowPathIcon className="h-4 w-4 animate-spin" />
-        ) : (
-          'Resend'
-        )}
+        {loading === 'resend' ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : 'Resend'}
       </Button>
 
       <TooltipProvider>

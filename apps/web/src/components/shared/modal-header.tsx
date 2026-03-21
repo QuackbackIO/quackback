@@ -25,7 +25,14 @@ async function handleCopyLink(): Promise<void> {
   }
 }
 
-export function ModalHeader({ section, title, onClose, viewUrl, children, hideCopyLink }: ModalHeaderProps) {
+export function ModalHeader({
+  section,
+  title,
+  onClose,
+  viewUrl,
+  children,
+  hideCopyLink,
+}: ModalHeaderProps) {
   return (
     <header className="sticky top-0 z-20 bg-gradient-to-b from-card/98 to-card/95 backdrop-blur-md border-b border-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-center justify-between px-6 py-2.5">

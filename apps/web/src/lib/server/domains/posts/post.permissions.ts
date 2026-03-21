@@ -506,7 +506,11 @@ export async function softDeletePost(
  * @param postId - Post ID to restore
  * @returns Restored post
  */
-export async function restorePost(postId: PostId, actorPrincipalId?: PrincipalId, actorUserId?: UserId): Promise<Post> {
+export async function restorePost(
+  postId: PostId,
+  actorPrincipalId?: PrincipalId,
+  actorUserId?: UserId
+): Promise<Post> {
   console.log(`[domain:post-permissions] restorePost: postId=${postId}`)
   // Get the post first to validate it exists and is deleted
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
@@ -554,12 +558,15 @@ export async function restorePost(postId: PostId, actorPrincipalId?: PrincipalId
       columns: { slug: true },
     })
     if (board) {
-      dispatchPostRestored(buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }), {
-        id: postId,
-        title: restoredPost.title,
-        boardId: restoredPost.boardId,
-        boardSlug: board.slug,
-      })
+      dispatchPostRestored(
+        buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }),
+        {
+          id: postId,
+          title: restoredPost.title,
+          boardId: restoredPost.boardId,
+          boardSlug: board.slug,
+        }
+      )
     }
   }
 

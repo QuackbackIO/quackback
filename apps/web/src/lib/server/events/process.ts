@@ -202,6 +202,7 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
       integrationId: integration.id as import('@quackback/ids').IntegrationId,
       integrationType: data.hookType,
       externalId: result.externalId!,
+      externalDisplayId: result.externalDisplayId ?? null,
       externalUrl: result.externalUrl ?? null,
     })
     .onConflictDoNothing()
@@ -341,9 +342,8 @@ async function handlePostMergeRecheck(hookConfig: Record<string, unknown>): Prom
   const postId = hookConfig.postId as string | undefined
   if (!postId) return
 
-  const { checkPostForMergeCandidates } = await import(
-    '@/lib/server/domains/merge-suggestions/merge-check.service'
-  )
+  const { checkPostForMergeCandidates } =
+    await import('@/lib/server/domains/merge-suggestions/merge-check.service')
   await checkPostForMergeCandidates(postId as import('@quackback/ids').PostId)
   console.log(`[PostMerge] Post-merge recheck complete for ${postId}`)
 }

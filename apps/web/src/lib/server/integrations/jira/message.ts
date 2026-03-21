@@ -72,10 +72,6 @@ export function buildJiraIssueBody(
       },
       {
         type: 'paragraph',
-        content: [{ type: 'text', text: `Votes: ${post.voteCount}` }],
-      },
-      {
-        type: 'paragraph',
         content: [
           {
             type: 'text',

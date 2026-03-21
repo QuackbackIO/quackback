@@ -97,6 +97,7 @@ export interface PostUpdatedPayload {
 
 export interface PostDeletedPayload {
   post: EventPostRef
+  deletedBy?: string
 }
 
 export interface PostRestoredPayload {

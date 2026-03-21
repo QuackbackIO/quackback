@@ -139,21 +139,18 @@ export async function dispatchPostUpdated(
   })
 }
 
-export async function dispatchPostDeleted(
-  actor: EventActor,
-  post: EventPostRef
-): Promise<void> {
+export async function dispatchPostDeleted(actor: EventActor, post: EventPostRef): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'post.deleted',
-    data: { post },
+    data: {
+      post,
+      deletedBy: actor.email || actor.displayName,
+    },
   })
 }
 
-export async function dispatchPostRestored(
-  actor: EventActor,
-  post: EventPostRef
-): Promise<void> {
+export async function dispatchPostRestored(actor: EventActor, post: EventPostRef): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'post.restored',

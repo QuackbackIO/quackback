@@ -162,9 +162,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
         blocks: [
           {
             type: 'context',
-            elements: [
-              { type: 'mrkdwn', text: `🔀 Post merged by *${escapeSlackMrkdwn(actor)}*` },
-            ],
+            elements: [{ type: 'mrkdwn', text: `🔀 Post merged by *${escapeSlackMrkdwn(actor)}*` }],
           },
           {
             type: 'section',

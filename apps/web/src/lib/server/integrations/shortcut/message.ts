@@ -28,7 +28,6 @@ export function buildShortcutStoryBody(
     '---',
     `**Submitted by:** ${author}`,
     `**Board:** ${post.boardSlug}`,
-    `**Votes:** ${post.voteCount}`,
     `[View in Quackback](${postUrl})`,
   ].join('\n')
 

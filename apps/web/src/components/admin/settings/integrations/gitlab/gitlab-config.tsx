@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 import {
   fetchGitLabProjectsFn,
   type GitLabProject,
@@ -199,6 +200,13 @@ export function GitLabConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <OnDeleteConfig
+        integrationId={integrationId}
+        integrationType="gitlab"
+        config={initialConfig}
+        enabled={integrationEnabled}
+      />
     </div>
   )
 }

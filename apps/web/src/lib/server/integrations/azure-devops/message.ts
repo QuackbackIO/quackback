@@ -24,7 +24,6 @@ export function buildAzureDevOpsWorkItemBody(
     '<hr>',
     `<p><strong>Submitted by:</strong> ${escapeHtml(author)}</p>`,
     `<p><strong>Board:</strong> ${escapeHtml(post.boardSlug)}</p>`,
-    `<p><strong>Votes:</strong> ${post.voteCount}</p>`,
     `<p><a href="${escapeHtml(postUrl)}">View in Quackback</a></p>`,
   ].join('\n')
 

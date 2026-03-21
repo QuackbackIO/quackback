@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { fetchGitHubReposFn, type GitHubRepo } from '@/lib/server/integrations/github/functions'
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
+import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 
 interface EventMapping {
   id: string
@@ -217,6 +218,13 @@ export function GitHubConfig({
           { id: 'Open', name: 'Open' },
           { id: 'Closed', name: 'Closed' },
         ]}
+      />
+
+      <OnDeleteConfig
+        integrationId={integrationId}
+        integrationType="github"
+        config={initialConfig}
+        enabled={integrationEnabled}
       />
     </div>
   )
