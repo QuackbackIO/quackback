@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { getIntegrationDisplayName, getIntegrationActionVerb } from '../integrations'
+import {
+  getIntegrationDisplayName,
+  getIntegrationActionVerb,
+  getIntegrationItemNoun,
+} from '../integrations'
 
 describe('getIntegrationDisplayName', () => {
   it.each([
@@ -44,5 +48,27 @@ describe('getIntegrationActionVerb', () => {
 
   it('returns Archive for unknown integrations', () => {
     expect(getIntegrationActionVerb('something_else')).toBe('Archive')
+  })
+})
+
+describe('getIntegrationItemNoun', () => {
+  it.each([
+    ['asana', 'task'],
+    ['clickup', 'task'],
+    ['trello', 'task'],
+    ['shortcut', 'story'],
+    ['azure_devops', 'work item'],
+    ['notion', 'page'],
+    ['monday', 'item'],
+  ])('returns %s for %s', (type, expected) => {
+    expect(getIntegrationItemNoun(type)).toBe(expected)
+  })
+
+  it.each(['linear', 'github', 'jira', 'gitlab'])('returns issue for %s', (type) => {
+    expect(getIntegrationItemNoun(type)).toBe('issue')
+  })
+
+  it('returns issue for unknown integrations', () => {
+    expect(getIntegrationItemNoun('something_else')).toBe('issue')
   })
 })
