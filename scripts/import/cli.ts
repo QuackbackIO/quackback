@@ -33,10 +33,12 @@ import type {
   ImportOptions,
 } from './schema/types'
 import { convertUserVoice, printStats as printUserVoiceStats } from './adapters/uservoice'
+import { convertCanny, printStats as printCannyStats } from './adapters/canny'
+import { runApiImport } from './adapters/canny/api-importer'
 
 // CLI argument parsing
 interface CliArgs {
-  command: 'intermediate' | 'uservoice' | 'help'
+  command: 'intermediate' | 'uservoice' | 'canny' | 'help'
   // Common options
   board?: string
   dryRun: boolean
@@ -55,6 +57,11 @@ interface CliArgs {
   // UserVoice files
   suggestions?: string // Full export (denormalized)
   users?: string // Subdomain users export
+  // Canny options
+  apiKey?: string
+  // Quackback API options (for API-to-API mode)
+  quackbackUrl?: string
+  quackbackKey?: string
 }
 
 function printUsage(): void {
@@ -67,6 +74,7 @@ Usage:
 Commands:
   intermediate    Import from intermediate CSV format
   uservoice       Import from UserVoice export files
+  canny           Import from Canny via API
   help            Show this help message
 
 Common Options:
@@ -111,8 +119,27 @@ Examples:
     --board features \\
     --verbose
 
+  # Import from Canny API (direct DB)
+  bun scripts/import/cli.ts canny \\
+    --api-key YOUR_CANNY_API_KEY \\
+    --dry-run --verbose
+
+  # Import from Canny via Quackback API (no DB needed)
+  bun scripts/import/cli.ts canny \\
+    --api-key YOUR_CANNY_API_KEY \\
+    --quackback-url https://app.quackback.io \\
+    --quackback-key qb_xxx \\
+    --verbose
+
+Canny Options:
+  --api-key <key>         Canny API key (or set CANNY_API_KEY env var)
+  --quackback-url <url>   Quackback API URL (enables API-to-API mode, no DB needed)
+  --quackback-key <key>   Quackback admin API key (or set QUACKBACK_API_KEY env var)
+
 Environment:
-  DATABASE_URL    PostgreSQL connection string (required)
+  DATABASE_URL        PostgreSQL connection string (required unless using API mode)
+  CANNY_API_KEY       Canny API key (alternative to --api-key flag)
+  QUACKBACK_API_KEY   Quackback API key (alternative to --quackback-key flag)
 `)
 }
 
@@ -135,7 +162,7 @@ function parseArgs(args: string[]): CliArgs {
 
   // First positional arg is command
   const cmd = args[0]
-  if (cmd === 'intermediate' || cmd === 'uservoice' || cmd === 'help') {
+  if (cmd === 'intermediate' || cmd === 'uservoice' || cmd === 'canny' || cmd === 'help') {
     result.command = cmd
   } else if (cmd === '--help' || cmd === '-h') {
     result.command = 'help'
@@ -204,6 +231,15 @@ function parseArgs(args: string[]): CliArgs {
       case '--users':
         result.users = getNextArg(i++, '--users')
         break
+      case '--api-key':
+        result.apiKey = getNextArg(i++, '--api-key')
+        break
+      case '--quackback-url':
+        result.quackbackUrl = getNextArg(i++, '--quackback-url')
+        break
+      case '--quackback-key':
+        result.quackbackKey = getNextArg(i++, '--quackback-key')
+        break
       case '--help':
       case '-h':
         result.command = 'help'
@@ -262,6 +298,7 @@ async function runIntermediateImport(args: CliArgs): Promise<void> {
     votes: [],
     notes: [],
     users: [],
+    changelogs: [],
   }
 
   // Helper to parse and log a file
@@ -336,6 +373,79 @@ async function runUserVoiceImport(args: CliArgs): Promise<void> {
   await executeImport(result.data, args)
 }
 
+async function runCannyImport(args: CliArgs): Promise<void> {
+  const apiKey = args.apiKey ?? process.env.CANNY_API_KEY
+  if (!apiKey) {
+    console.error('Error: Canny API key is required (--api-key or CANNY_API_KEY env var)')
+    process.exit(1)
+  }
+
+  // Check if API-to-API mode
+  const quackbackUrl = args.quackbackUrl
+  const quackbackKey = args.quackbackKey ?? process.env.QUACKBACK_API_KEY
+
+  if (quackbackUrl) {
+    if (!quackbackKey) {
+      console.error(
+        'Error: --quackback-key is required when using --quackback-url (or set QUACKBACK_API_KEY env var)'
+      )
+      process.exit(1)
+    }
+
+    console.log('🔄 Running Canny import via Quackback API...')
+    console.log(`   Quackback URL: ${quackbackUrl}`)
+
+    try {
+      const result = await runApiImport({
+        cannyApiKey: apiKey,
+        quackbackUrl,
+        quackbackKey,
+        dryRun: args.dryRun,
+        verbose: args.verbose,
+      })
+
+      const totalErrors =
+        result.posts.errors +
+        result.comments.errors +
+        result.votes.errors +
+        result.notes.errors +
+        result.changelogs.errors
+
+      if (totalErrors > 0) {
+        process.exit(1)
+      }
+    } catch (error) {
+      console.error('\n❌ Import failed:', error instanceof Error ? error.message : String(error))
+      process.exit(1)
+    }
+    return
+  }
+
+  // Direct DB mode
+  args.createBoards = true
+  args.createStatuses = true
+  args.createUsers = true
+
+  console.log('🔄 Fetching data from Canny API...')
+
+  const result = await convertCanny({
+    apiKey,
+    verbose: args.verbose,
+  })
+
+  if (args.verbose) {
+    printCannyStats(result.stats)
+  }
+
+  console.log(
+    `\n📊 Fetched: ${result.stats.posts} posts, ${result.stats.comments} comments, ` +
+      `${result.stats.votes} votes, ${result.stats.notes} notes, ` +
+      `${result.stats.changelogs} changelog entries`
+  )
+
+  await executeImport(result.data, args)
+}
+
 async function executeImport(data: IntermediateData, args: CliArgs): Promise<void> {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) {
@@ -364,7 +474,11 @@ async function executeImport(data: IntermediateData, args: CliArgs): Promise<voi
 
     // Exit with error code if there were errors
     const totalErrors =
-      result.posts.errors + result.comments.errors + result.votes.errors + result.notes.errors
+      result.posts.errors +
+      result.comments.errors +
+      result.votes.errors +
+      result.notes.errors +
+      result.changelogs.errors
 
     if (totalErrors > 0) {
       process.exit(1)
@@ -390,6 +504,10 @@ async function main(): Promise<void> {
 
     case 'uservoice':
       await runUserVoiceImport(args)
+      break
+
+    case 'canny':
+      await runCannyImport(args)
       break
 
     default:

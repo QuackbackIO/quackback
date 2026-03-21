@@ -9,6 +9,16 @@
   cursor: text;
 }
 
+/* Collapse empty paragraphs in editor to match static prose rendering.
+   Static HTML renders empty <p></p> with zero height, allowing CSS margin
+   collapsing. ProseMirror adds <br> to empty paragraphs giving them a full
+   line of height. This collapses them to match the read-only view. */
+.tiptap p:has(> br:only-child):not(:only-child) {
+  margin: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 /* Placeholder text */
 .tiptap p.is-editor-empty:first-child::before {
   color: color-mix(in oklch, var(--muted-foreground), transparent 50%);

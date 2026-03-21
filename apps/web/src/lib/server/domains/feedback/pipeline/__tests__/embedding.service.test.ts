@@ -49,18 +49,11 @@ vi.mock('@/lib/server/utils/execute-rows', () => ({
   getExecuteRows: vi.fn((result: { rows?: unknown[] }) => result.rows ?? []),
 }))
 
-const mockOpenAI = {
-  embeddings: {
-    create: vi.fn(),
-  },
-}
+const mockGenerateEmbedding = vi.fn()
 
-vi.mock('@/lib/server/domains/ai/config', () => ({
-  getOpenAI: vi.fn(() => mockOpenAI),
-}))
-
-vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
+  generateEmbedding: (...args: unknown[]) => mockGenerateEmbedding(...args),
+  EMBEDDING_MODEL: 'openai/text-embedding-3-small',
 }))
 
 describe('embedding.service', () => {
@@ -79,15 +72,16 @@ describe('embedding.service', () => {
         summary: 'Users want CSV export',
         implicitNeed: 'Data portability',
       })
-      mockOpenAI.embeddings.create.mockResolvedValueOnce({
-        data: [{ embedding: mockEmbedding }],
-      })
+      mockGenerateEmbedding.mockResolvedValueOnce(mockEmbedding)
 
       const { embedSignal } = await import('../embedding.service')
       const result = await embedSignal(signalId)
 
       expect(result).toEqual(mockEmbedding)
-      expect(mockOpenAI.embeddings.create).toHaveBeenCalled()
+      expect(mockGenerateEmbedding).toHaveBeenCalledWith(
+        'Users want CSV export\n\nUsers want CSV export\n\nData portability',
+        expect.objectContaining({ pipelineStep: 'signal_embedding', signalId })
+      )
       // Should update DB with embedding
       expect(updateSetCalls.length).toBe(1)
     })
@@ -97,17 +91,15 @@ describe('embedding.service', () => {
         summary: 'Login page crashes',
         implicitNeed: null,
       })
-      mockOpenAI.embeddings.create.mockResolvedValueOnce({
-        data: [{ embedding: mockEmbedding }],
-      })
+      mockGenerateEmbedding.mockResolvedValueOnce(mockEmbedding)
 
       const { embedSignal } = await import('../embedding.service')
       const result = await embedSignal(signalId)
 
       expect(result).toEqual(mockEmbedding)
       // Verify the input text doesn't have "null"
-      const createCall = mockOpenAI.embeddings.create.mock.calls[0][0]
-      expect(createCall.input).not.toContain('null')
+      const callArgs = mockGenerateEmbedding.mock.calls[0][0]
+      expect(callArgs).not.toContain('null')
     })
 
     it('should return null when signal not found', async () => {
@@ -117,9 +109,12 @@ describe('embedding.service', () => {
       await expect(embedSignal(signalId)).rejects.toThrow('not found')
     })
 
-    it('should return null when AI not configured', async () => {
-      const { getOpenAI } = await import('@/lib/server/domains/ai/config')
-      vi.mocked(getOpenAI).mockReturnValueOnce(null)
+    it('should return null when generateEmbedding returns null', async () => {
+      mockFindFirst.mockResolvedValueOnce({
+        summary: 'Some summary',
+        implicitNeed: null,
+      })
+      mockGenerateEmbedding.mockResolvedValueOnce(null)
 
       const { embedSignal } = await import('../embedding.service')
       const result = await embedSignal(signalId)
@@ -151,7 +146,7 @@ describe('embedding.service', () => {
             similarity: 0.8,
           },
         ],
-      } as any)
+      } as unknown as Awaited<ReturnType<typeof db.execute>>)
 
       const { findSimilarPosts } = await import('../embedding.service')
       const results = await findSimilarPosts(mockEmbedding, { minSimilarity: 0.75 })
@@ -164,7 +159,9 @@ describe('embedding.service', () => {
 
     it('should return empty array when no matches', async () => {
       const { db } = await import('@/lib/server/db')
-      vi.mocked(db.execute).mockResolvedValueOnce({ rows: [] } as any)
+      vi.mocked(db.execute).mockResolvedValueOnce({ rows: [] } as unknown as Awaited<
+        ReturnType<typeof db.execute>
+      >)
 
       const { findSimilarPosts } = await import('../embedding.service')
       const results = await findSimilarPosts(mockEmbedding)

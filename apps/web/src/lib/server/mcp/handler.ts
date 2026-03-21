@@ -143,7 +143,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       principalId: authResult.principalId,
       userId: principalRecord.user?.id,
       name: principalRecord.displayName ?? principalRecord.user?.name ?? 'Unknown',
-      email: principalRecord.user?.email,
+      email: principalRecord.user?.email ?? undefined,
       role: authResult.role as 'admin' | 'member' | 'user',
       authMethod: 'api-key',
       scopes: ALL_SCOPES,

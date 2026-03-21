@@ -49,11 +49,11 @@ type AttributeType = (typeof ATTRIBUTE_TYPES)[number]['value']
 const CURRENCY_CODES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL']
 
 const TYPE_BADGE_COLORS: Record<AttributeType, string> = {
-  string: 'bg-blue-50 text-blue-700 border-blue-200',
-  number: 'bg-green-50 text-green-700 border-green-200',
-  boolean: 'bg-purple-50 text-purple-700 border-purple-200',
-  date: 'bg-orange-50 text-orange-700 border-orange-200',
-  currency: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  string: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  number: 'bg-green-500/10 text-green-500 border-green-500/20',
+  boolean: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  date: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  currency: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
 }
 
 interface AttributeFormValues {
@@ -252,7 +252,7 @@ function AttributeRow({
   const badgeClass = TYPE_BADGE_COLORS[attribute.type as AttributeType] ?? ''
 
   return (
-    <div className="flex items-center gap-4 py-3 border-b border-border/30 last:border-0">
+    <div className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm text-foreground">{attribute.label}</span>
@@ -381,7 +381,7 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
           className="py-10"
         />
       ) : (
-        <div className="divide-y divide-border/30">
+        <div className="divide-y divide-border/50">
           {attributes.map((attr) => (
             <AttributeRow
               key={attr.id}

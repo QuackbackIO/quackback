@@ -45,8 +45,24 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
   var panel = null;
   var isOpen = false;
   var isReady = false;
+  var isIdentified = false;
   var pendingIdentify = null;
+  var metadata = null;
+  var listeners = {};
+  var pendingOpen = null;
   var isMobile = window.innerWidth < 640;
+
+  // =========================================================================
+  // Event System
+  // =========================================================================
+
+  function emit(name, payload) {
+    var fns = listeners[name];
+    if (!fns) return;
+    for (var i = 0; i < fns.length; i++) {
+      try { fns[i](payload); } catch(e) {}
+    }
+  }
 
   // =========================================================================
   // DOM Helpers
@@ -92,21 +108,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
   function createTrigger() {
     var placement = (config && config.placement) || "right";
-    var text = (config && config.buttonText) || "Feedback";
     var colors = getThemeColors();
-
-    // Compute border radius — scale theme radius for pill-like button, min 8px
-    var radius = THEME.radius;
-    var btnRadius = "24px";
-    if (radius && radius !== "24px") {
-      var parsed = parseFloat(radius);
-      if (!isNaN(parsed)) {
-        // Convert rem to px (assume 16px base), scale up for button height
-        var unit = radius.replace(/[0-9.]+/, "");
-        var px = unit === "rem" ? parsed * 16 : parsed;
-        btnRadius = Math.max(8, Math.min(24, px * 3)) + "px";
-      }
-    }
 
     trigger = createElement("button", {
       position: "fixed",
@@ -115,11 +117,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       zIndex: "2147483647",
       display: "flex",
       alignItems: "center",
-      gap: "8px",
+      justifyContent: "center",
+      width: "48px",
       height: "48px",
-      padding: "0 20px",
+      padding: "0",
       border: "none",
-      borderRadius: btnRadius,
+      borderRadius: "50%",
       backgroundColor: colors.bg,
       color: colors.fg,
       fontSize: "14px",
@@ -133,8 +136,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       "aria-expanded": "false",
     });
 
-    // Chat icon SVG
-    trigger.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' + '<span>' + text + '</span>';
+    // Chat bubbles icon (Heroicons solid)
+    trigger.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 0 0-1.032-.211 50.89 50.89 0 0 0-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 0 0 2.433 3.984L7.28 21.53A.75.75 0 0 1 6 21v-4.03a48.527 48.527 0 0 1-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979Z"/><path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z"/></svg>';
 
     trigger.addEventListener("mouseenter", function() {
       trigger.style.transform = "translateY(-2px)";
@@ -204,6 +207,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         borderRadius: "12px",
         overflow: "hidden",
         boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+        display: "none",
         opacity: "0",
         transform: "scale(0.95)",
         transformOrigin: placement === "left" ? "bottom left" : "bottom right",
@@ -250,13 +254,15 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       panel.style.opacity = "1";
       panel.style.transform = "scale(1)";
     }
+
+    emit("open", {});
   }
 
   function hidePanel() {
     if (!isOpen) return;
     isOpen = false;
 
-    if (trigger) {
+    if (trigger && isIdentified && !(config && config.trigger === false)) {
       trigger.style.display = "flex";
       trigger.setAttribute("aria-expanded", "false");
     }
@@ -270,6 +276,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       panel.style.transform = "scale(0.95)";
       setTimeout(function() { if (!isOpen && panel) panel.style.display = "none"; }, 200);
     }
+
+    emit("close", {});
   }
 
   // =========================================================================
@@ -296,6 +304,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
           sendToWidget("quackback:identify", pendingIdentify);
           pendingIdentify = null;
         }
+        if (metadata) sendToWidget("quackback:metadata", metadata);
+        if (pendingOpen) {
+          sendToWidget("quackback:open", pendingOpen);
+          pendingOpen = null;
+        }
+        emit("ready", {});
         break;
 
       case "quackback:close":
@@ -303,7 +317,16 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         break;
 
       case "quackback:identify-result":
-        // Could dispatch to callbacks, but for v1 just log
+        emit("identify", {
+          success: msg.success,
+          user: msg.user || null,
+          anonymous: msg.success && !msg.user,
+          error: msg.error,
+        });
+        break;
+
+      case "quackback:event":
+        if (msg.name) emit(msg.name, msg.payload || {});
         break;
 
       case "quackback:navigate":
@@ -316,31 +339,82 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
   // Command Dispatcher
   // =========================================================================
 
-  function dispatch(command, options) {
+  function dispatch(command, options, extra) {
     switch (command) {
-      case "initialize_feedback_widget":
+      case "init":
         config = options || {};
         isMobile = window.innerWidth < 640;
-        createTrigger();
         break;
 
       case "identify":
         if (options === null || options === undefined) {
-          // Clear identity
+          // Clear identity — close panel and hide trigger
+          isIdentified = false;
+          hidePanel();
+          if (trigger) trigger.style.display = "none";
           if (isReady) sendToWidget("quackback:identify", null);
           else pendingIdentify = null;
         } else {
+          // Show trigger on first identify
+          if (!isIdentified) {
+            isIdentified = true;
+            if (!(config && config.trigger === false)) {
+              if (!trigger) createTrigger();
+              else trigger.style.display = "flex";
+            }
+          }
+          // Eagerly create the iframe so it loads, hydrates, and completes
+          // the identify round-trip in the background — before the user opens
+          // the panel. This eliminates the visible delay on vote highlights.
+          if (!panel) createPanel();
           if (isReady) sendToWidget("quackback:identify", options);
           else pendingIdentify = options;
         }
         break;
 
       case "open":
+        if (options && typeof options === "object") {
+          if (isReady) sendToWidget("quackback:open", options);
+          else pendingOpen = options;
+        }
         showPanel();
         break;
 
       case "close":
         hidePanel();
+        break;
+
+      case "on":
+        var onName = options;
+        var onHandler = extra;
+        if (typeof onName === "string" && typeof onHandler === "function") {
+          if (!listeners[onName]) listeners[onName] = [];
+          listeners[onName].push(onHandler);
+          return function() {
+            listeners[onName] = listeners[onName].filter(function(h) { return h !== onHandler; });
+          };
+        }
+        break;
+
+      case "off":
+        var offName = options;
+        var offHandler = extra;
+        if (offHandler) {
+          listeners[offName] = (listeners[offName] || []).filter(function(h) { return h !== offHandler; });
+        } else {
+          delete listeners[offName];
+        }
+        break;
+
+      case "metadata":
+        if (options && typeof options === "object") {
+          if (!metadata) metadata = {};
+          for (var k in options) {
+            if (options[k] === null) delete metadata[k];
+            else metadata[k] = String(options[k]);
+          }
+          if (isReady) sendToWidget("quackback:metadata", metadata);
+        }
         break;
 
       case "destroy":
@@ -353,8 +427,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         trigger = null;
         backdrop = null;
         config = null;
+        metadata = null;
+        listeners = {};
         isOpen = false;
         isReady = false;
+        isIdentified = false;
+        pendingOpen = null;
         break;
     }
   }
@@ -367,7 +445,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
   window.Quackback = function() {
     var args = Array.prototype.slice.call(arguments);
-    dispatch(args[0], args[1]);
+    return dispatch(args[0], args[1], args[2]);
   };
 
   // Replay queued commands

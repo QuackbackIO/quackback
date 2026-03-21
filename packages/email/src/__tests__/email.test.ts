@@ -6,6 +6,7 @@ import {
   sendSigninCodeEmail,
   sendStatusChangeEmail,
   sendNewCommentEmail,
+  sendPasswordResetEmail,
 } from '../index'
 
 /** Save and restore env vars around each test. */
@@ -122,6 +123,14 @@ describe('console mode returns { sent: false }', () => {
       isTeamMember: false,
       workspaceName: 'TestWorkspace',
       unsubscribeUrl: 'https://example.com/unsubscribe',
+    })
+    expect(result).toEqual({ sent: false })
+  })
+
+  it('sendPasswordResetEmail returns { sent: false }', async () => {
+    const result = await sendPasswordResetEmail({
+      to: 'test@example.com',
+      resetLink: 'https://example.com/auth/reset-password?token=abc',
     })
     expect(result).toEqual({ sent: false })
   })

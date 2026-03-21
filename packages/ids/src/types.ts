@@ -64,6 +64,9 @@ export type LinkedEntityId = TypeId<'linked_entity'>
 /** Sync log ID - e.g., sync_log_01h455vb4pex5vsknk084sn02q */
 export type SyncLogId = TypeId<'sync_log'>
 
+/** Slack channel monitor ID - e.g., slack_monitor_01h455vb4pex5vsknk084sn02q */
+export type SlackMonitorId = TypeId<'slack_monitor'>
+
 /** Post subscription ID - e.g., post_sub_01h455vb4pex5vsknk084sn02q */
 export type PostSubscriptionId = TypeId<'post_sub'>
 
@@ -97,6 +100,15 @@ export type UserAttributeId = TypeId<'user_attr'>
 
 /** Post sentiment analysis ID - e.g., sentiment_01h455vb4pex5vsknk084sn02q */
 export type SentimentId = TypeId<'sentiment'>
+
+/** AI usage log entry ID - e.g., ailog_01h455vb4pex5vsknk084sn02q */
+export type AiUsageLogId = TypeId<'ailog'>
+
+/** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
+export type PipelineLogId = TypeId<'plog'>
+
+/** Post activity log ID - e.g., activity_01h455vb4pex5vsknk084sn02q */
+export type ActivityId = TypeId<'activity'>
 
 // ============================================
 // Feedback Aggregation Entity IDs
@@ -196,6 +208,9 @@ export interface EntityIdMap {
   segment: SegmentId
   user_attr: UserAttributeId
   sentiment: SentimentId
+  ai_usage: AiUsageLogId
+  pipeline_log: PipelineLogId
+  activity: ActivityId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId
@@ -210,6 +225,7 @@ export interface EntityIdMap {
   event_mapping: EventMappingId
   linked_entity: LinkedEntityId
   sync_log: SyncLogId
+  slack_monitor: SlackMonitorId
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId

@@ -21,6 +21,7 @@ const createPostSchema = z.object({
   content: z.string().max(10000).optional().default(''),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
+  createdAt: z.string().datetime().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/posts/')({
@@ -106,6 +107,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
               authorName: post.authorName ?? null,
               ownerId: post.ownerPrincipalId,
               tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
+              summaryJson: post.summaryJson ?? null,
+              canonicalPostId: post.canonicalPostId ?? null,
+              mergedAt: post.mergedAt?.toISOString() ?? null,
+              isCommentsLocked: post.isCommentsLocked,
               createdAt: post.createdAt.toISOString(),
               updatedAt: post.updatedAt.toISOString(),
               deletedAt: post.deletedAt?.toISOString() ?? null,
@@ -165,6 +170,12 @@ export const Route = createFileRoute('/api/v1/posts/')({
             return badRequestResponse('Principal not found')
           }
 
+          // Only admins can set createdAt (for imports)
+          const createdAt =
+            parsed.data.createdAt && authResult.role === 'admin'
+              ? new Date(parsed.data.createdAt)
+              : undefined
+
           const result = await createPost(
             {
               boardId: parsed.data.boardId as BoardId,
@@ -172,14 +183,16 @@ export const Route = createFileRoute('/api/v1/posts/')({
               content: parsed.data.content,
               statusId: parsed.data.statusId as StatusId | undefined,
               tagIds: parsed.data.tagIds as TagId[] | undefined,
+              createdAt,
             },
             {
               principalId,
               userId: principalRecord.user?.id,
               displayName: principalRecord.displayName ?? undefined,
               name: principalRecord.user?.name,
-              email: principalRecord.user?.email,
-            }
+              email: principalRecord.user?.email ?? undefined,
+            },
+            { skipDispatch: authResult.importMode }
           )
 
           // Events are dispatched by the service layer

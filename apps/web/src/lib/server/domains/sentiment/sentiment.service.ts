@@ -2,13 +2,16 @@
  * Sentiment analysis service.
  *
  * Analyzes customer feedback to classify sentiment as positive, neutral, or negative.
- * Uses OpenAI google/gemini-3-flash-preview via Cloudflare AI Gateway.
+ * Uses OpenAI google/gemini-3.1-flash-lite-preview via Cloudflare AI Gateway.
  */
 
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+
+const SENTIMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
@@ -55,11 +58,12 @@ function isValidSentiment(value: unknown): value is Sentiment {
 }
 
 /**
- * Analyze sentiment using OpenAI google/gemini-3-flash-preview.
+ * Analyze sentiment using OpenAI google/gemini-3.1-flash-lite-preview.
  */
 export async function analyzeSentiment(
   title: string,
-  content: string
+  content: string,
+  postId?: string
 ): Promise<SentimentResult | null> {
   const openai = getOpenAI()
   if (!openai) return null
@@ -68,15 +72,29 @@ export async function analyzeSentiment(
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`
 
   try {
-    const response = await withRetry(() =>
-      openai.chat.completions.create({
-        model: 'google/gemini-3-flash-preview',
-        max_completion_tokens: 1000,
-        messages: [
-          { role: 'system', content: SENTIMENT_PROMPT },
-          { role: 'user', content: text },
-        ],
-        response_format: { type: 'json_object' },
+    const response = await withUsageLogging(
+      {
+        pipelineStep: 'sentiment',
+        callType: 'chat_completion',
+        model: SENTIMENT_MODEL,
+        postId,
+      },
+      () =>
+        withRetry(() =>
+          openai.chat.completions.create({
+            model: SENTIMENT_MODEL,
+            max_completion_tokens: 1000,
+            messages: [
+              { role: 'system', content: SENTIMENT_PROMPT },
+              { role: 'user', content: text },
+            ],
+            response_format: { type: 'json_object' },
+          })
+        ),
+      (r) => ({
+        inputTokens: r.usage?.prompt_tokens ?? 0,
+        outputTokens: r.usage?.completion_tokens,
+        totalTokens: r.usage?.total_tokens ?? 0,
       })
     )
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{}')
@@ -89,7 +107,7 @@ export async function analyzeSentiment(
     return {
       sentiment: parsed.sentiment,
       confidence: parsed.confidence,
-      model: 'google/gemini-3-flash-preview',
+      model: SENTIMENT_MODEL,
       inputTokens: response.usage?.prompt_tokens,
       outputTokens: response.usage?.completion_tokens,
     }

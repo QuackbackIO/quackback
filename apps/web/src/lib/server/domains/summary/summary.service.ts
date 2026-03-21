@@ -11,7 +11,7 @@ import { withRetry } from '@/lib/server/domains/ai/retry'
 import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import type { PostId } from '@quackback/ids'
 
-const SUMMARY_MODEL = 'google/gemini-2.5-flash'
+const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 const SYSTEM_PROMPT = `You are a product feedback analyst writing post briefs for a PM's triage queue.
 Your job is to surface what matters for prioritization, not restate the obvious.
@@ -30,7 +30,7 @@ Rules for "summary" (1-3 sentences):
 - If there is disagreement or pushback in the thread, note the tension.
 - Write for a PM who has 5 seconds to decide whether to dig deeper.
 - BAD: "Users are requesting improvements to the export functionality."
-- GOOD: "CSV exports silently drop columns with special characters, affecting 3 users doing financial reporting. Team acknowledged but no fix timeline given."
+- GOOD: "CSV exports silently drop columns with special characters, affecting 3 users. Team acknowledged but no fix timeline given."
 
 Rules for "keyQuotes" (0-2):
 - Only quote user/customer text, never team replies.
@@ -105,7 +105,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
       '\n\nA previous summary is included. Update it to reflect the current state of the discussion — preserve existing context that is still relevant, and incorporate any new information from recent comments.'
     : SYSTEM_PROMPT
 
-  const completion = await withRetry(() =>
+  const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
       model: SUMMARY_MODEL,
       messages: [

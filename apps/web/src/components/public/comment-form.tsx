@@ -15,11 +15,10 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { CheckIcon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/solid'
+import { CheckIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { signOut } from '@/lib/server/auth/client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
-import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { cn } from '@/lib/shared/utils'
 import type { PostId, CommentId } from '@quackback/ids'
 
@@ -52,8 +51,8 @@ interface CommentFormProps {
   currentStatusId?: string | null
   /** Whether the current user is a team member (enables status selector and private toggle) */
   isTeamMember?: boolean
-  /** Force comment to be private (for replies to private comments) */
-  forcePrivate?: boolean
+  /** Default the private toggle to on (e.g. replying to a private comment) */
+  defaultPrivate?: boolean
 }
 
 export function CommentForm({
@@ -66,17 +65,14 @@ export function CommentForm({
   statuses,
   currentStatusId,
   isTeamMember,
-  forcePrivate,
+  defaultPrivate,
 }: CommentFormProps) {
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
   const [selectedStatusId, setSelectedStatusId] = useState<string | null>(null)
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false)
-  const [isPrivate, setIsPrivate] = useState(false)
-  const effectiveIsPrivate = forcePrivate || isPrivate
-
-  const authPopover = useAuthPopoverSafe()
+  const [isPrivate, setIsPrivate] = useState(defaultPrivate ?? false)
 
   // Get user from session
   // Note: principalId is only available from the server-provided `user` prop, not from client session
@@ -104,9 +100,11 @@ export function CommentForm({
   const currentStatus = statuses?.find((s) => s.id === currentStatusId) ?? null
   const showStatusSelector = isTeamMember && !parentId && statuses && statuses.length > 0
 
+  const isPrivateLocked = defaultPrivate === true
+
   function privateTooltipText(): string {
-    if (forcePrivate) return 'Replies to private comments are always private'
-    if (effectiveIsPrivate) return 'Only visible to team members'
+    if (isPrivateLocked) return 'Replies to private comments are always private'
+    if (isPrivate) return 'Only visible to team members'
     return 'Make this comment private (team-only)'
   }
 
@@ -127,7 +125,7 @@ export function CommentForm({
         authorEmail: effectiveUser?.email || null,
         principalId: effectiveUser?.principalId || null,
         statusId: selectedStatusId,
-        isPrivate: effectiveIsPrivate,
+        isPrivate: isPrivate,
       },
       {
         onSuccess: () => {
@@ -142,23 +140,11 @@ export function CommentForm({
     )
   }
 
-  // If not authenticated, show sign-in prompt
-  if (!effectiveUser) {
-    return (
-      <div className="flex items-center justify-center py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-        <p className="text-sm text-muted-foreground mr-3">Sign in to comment</p>
-        {authPopover && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => authPopover.openAuthPopover({ mode: 'login' })}
-          >
-            Sign in
-          </Button>
-        )}
-      </div>
-    )
-  }
+  // If not authenticated and the form was rendered (allowCommenting=true from parent),
+  // show the form for anonymous commenting. The anonymous session is created on submit.
+  // Only show sign-in prompt if the parent explicitly didn't render a form (this code
+  // path is reached only for edge cases — normally CommentThread handles the locked state).
+  const isAnonymousCommenter = !effectiveUser || (session?.user?.isAnonymous ?? false)
 
   // Team member composer: unified card with toolbar
   if (showStatusSelector) {
@@ -194,7 +180,7 @@ export function CommentForm({
               {/* Left: Identity */}
               <p className="text-xs text-muted-foreground mr-auto truncate">
                 <span className="font-medium text-foreground">
-                  {effectiveUser.name || effectiveUser.email}
+                  {effectiveUser?.name || effectiveUser?.email || 'Anonymous'}
                 </span>
               </p>
 
@@ -287,6 +273,30 @@ export function CommentForm({
                 </PopoverContent>
               </Popover>
 
+              {/* Private toggle */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(!isPrivate)}
+                      disabled={isPrivateLocked}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors',
+                        isPrivate
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
+                        isPrivateLocked && 'opacity-70 cursor-not-allowed'
+                      )}
+                    >
+                      <LockClosedIcon className="h-3 w-3" />
+                      Private
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{privateTooltipText()}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               {/* Submit */}
               {onCancel && (
                 <Button
@@ -342,27 +352,33 @@ export function CommentForm({
 
         <div className="flex items-center justify-end gap-2">
           <p className="text-xs text-muted-foreground mr-auto">
-            Posting as{' '}
-            <span className="font-medium text-foreground">
-              {effectiveUser.name || effectiveUser.email}
-            </span>
-            {' ('}
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => {
-                signOut({
-                  fetchOptions: {
-                    onSuccess: () => {
-                      router.invalidate()
-                    },
-                  },
-                })
-              }}
-            >
-              sign out
-            </button>
-            {')'}
+            {isAnonymousCommenter ? (
+              'Posting anonymously'
+            ) : (
+              <>
+                Posting as{' '}
+                <span className="font-medium text-foreground">
+                  {effectiveUser?.name || effectiveUser?.email}
+                </span>
+                {' ('}
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={() => {
+                    signOut({
+                      fetchOptions: {
+                        onSuccess: () => {
+                          router.invalidate()
+                        },
+                      },
+                    })
+                  }}
+                >
+                  sign out
+                </button>
+                {')'}
+              </>
+            )}
           </p>
           {onCancel && (
             <Button
@@ -382,21 +398,18 @@ export function CommentForm({
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    variant={effectiveIsPrivate ? 'default' : 'ghost'}
+                    variant={isPrivate ? 'default' : 'ghost'}
                     size="sm"
-                    disabled={forcePrivate}
                     onClick={() => setIsPrivate(!isPrivate)}
-                    className={
-                      effectiveIsPrivate
+                    disabled={isPrivateLocked}
+                    className={cn(
+                      isPrivate
                         ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 gap-1.5'
-                        : 'text-muted-foreground gap-1.5'
-                    }
-                  >
-                    {effectiveIsPrivate ? (
-                      <LockClosedIcon className="h-3.5 w-3.5" />
-                    ) : (
-                      <LockOpenIcon className="h-3.5 w-3.5" />
+                        : 'text-muted-foreground gap-1.5',
+                      isPrivateLocked && 'opacity-70 cursor-not-allowed'
                     )}
+                  >
+                    <LockClosedIcon className="h-3.5 w-3.5" />
                     Private
                   </Button>
                 </TooltipTrigger>

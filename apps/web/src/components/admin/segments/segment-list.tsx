@@ -48,7 +48,7 @@ function SegmentRow({
   isEvaluating: boolean
 }) {
   return (
-    <div className="flex items-center gap-4 py-3 border-b border-border/30 last:border-0">
+    <div className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0">
       {/* Color dot + name */}
       <div className="flex items-center gap-2.5 flex-1 min-w-0">
         <span
@@ -202,28 +202,25 @@ export function SegmentList() {
   return (
     <div className="space-y-4">
       {/* Header actions */}
-      <div className="flex items-center justify-between gap-3">
-        <div />
-        <div className="flex items-center gap-2">
-          {dynamicSegments.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => evaluateAll.mutate()}
-              disabled={evaluateAll.isPending}
-            >
-              <ArrowPathIcon
-                className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`}
-              />
-              Re-evaluate all
-            </Button>
-          )}
-          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="h-3.5 w-3.5" />
-            New segment
+      <div className="flex items-center justify-end gap-2">
+        {dynamicSegments.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => evaluateAll.mutate()}
+            disabled={evaluateAll.isPending}
+          >
+            <ArrowPathIcon
+              className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`}
+            />
+            Re-evaluate all
           </Button>
-        </div>
+        )}
+        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+          <PlusIcon className="h-3.5 w-3.5" />
+          New segment
+        </Button>
       </div>
 
       {/* List */}
@@ -241,7 +238,7 @@ export function SegmentList() {
           className="py-12"
         />
       ) : (
-        <div className="border border-border/50 rounded-lg overflow-hidden bg-card">
+        <div className="border border-border/50 rounded-xl overflow-hidden bg-card shadow-sm">
           <div className="px-4">
             {segments.map((seg) => (
               <SegmentRow

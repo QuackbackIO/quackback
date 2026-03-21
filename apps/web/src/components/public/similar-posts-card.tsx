@@ -1,19 +1,18 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronUpIcon, LightBulbIcon } from '@heroicons/react/24/solid'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { LightBulbIcon } from '@heroicons/react/24/solid'
+import { CompactPostCard } from '@/components/shared/compact-post-card'
+import { VoteButton } from '@/components/public/vote-button'
 import type { MatchStrength, SimilarPost } from '@/lib/client/hooks/use-similar-posts'
-import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 
-const MATCH_STRENGTH_CONFIG: Record<MatchStrength, { label: string; textClass: string }> = {
-  strong: { label: 'Very similar', textClass: 'text-green-600 dark:text-green-500' },
-  good: { label: 'Similar', textClass: 'text-blue-600 dark:text-blue-500' },
-  weak: { label: 'Related', textClass: 'text-muted-foreground' },
+const MATCH_STRENGTH_LABELS: Record<MatchStrength, string> = {
+  strong: 'Very similar',
+  good: 'Similar',
+  weak: 'Related',
 }
 
 interface SimilarPostItemProps {
@@ -21,53 +20,19 @@ interface SimilarPostItemProps {
 }
 
 function SimilarPostItem({ post }: SimilarPostItemProps): React.ReactElement {
-  const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
-    postId: post.id as PostId,
-    voteCount: post.voteCount,
-  })
-
-  const postUrl = `/b/${post.boardSlug}/posts/${post.id}`
-  const matchConfig = post.matchStrength ? MATCH_STRENGTH_CONFIG[post.matchStrength] : null
+  const matchLabel = post.matchStrength ? MATCH_STRENGTH_LABELS[post.matchStrength] : null
 
   return (
-    <div className="flex gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50 min-w-0 -mx-2">
-      <button
-        type="button"
-        onClick={handleVote}
-        disabled={isPending}
-        aria-label={hasVoted ? 'Remove vote' : 'Vote for this post'}
-        aria-pressed={hasVoted}
-        className={cn(
-          'flex flex-col items-center justify-center shrink-0 w-10 rounded transition-colors',
-          hasVoted
-            ? 'bg-primary/10 text-primary'
-            : 'bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60',
-          isPending && 'opacity-50 cursor-wait'
-        )}
-      >
-        <ChevronUpIcon className={cn('h-4 w-4', hasVoted && 'text-primary')} />
-        <span className="text-xs font-semibold tabular-nums">{voteCount}</span>
-      </button>
-
-      <Link to={postUrl} target="_blank" className="flex-1 min-w-0 py-0.5 group">
-        <p className="text-sm text-foreground truncate group-hover:text-primary transition-colors">
-          {post.title}
-        </p>
-        <p className="flex items-center gap-1.5 text-[11px] mt-0.5">
-          {matchConfig && (
-            <span className={cn('font-medium', matchConfig.textClass)}>{matchConfig.label}</span>
-          )}
-          {matchConfig && post.status && <span className="text-muted-foreground/40">·</span>}
-          {post.status && (
-            <StatusBadge
-              name={post.status.name}
-              color={post.status.color}
-              className="text-[10px]"
-            />
-          )}
-        </p>
-      </Link>
-    </div>
+    <CompactPostCard
+      title={post.title}
+      voteCount={post.voteCount}
+      voteSlot={<VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />}
+      label={matchLabel ?? undefined}
+      statusName={post.status?.name}
+      statusColor={post.status?.color}
+      onClick={() => window.open(`/b/${post.boardSlug}/posts/${post.id}`, '_blank')}
+      className="border-0 bg-transparent p-0"
+    />
   )
 }
 

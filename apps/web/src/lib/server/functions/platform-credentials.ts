@@ -32,38 +32,46 @@ const fetchPlatformCredentialsMaskedSchema = z.object({
 export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(savePlatformCredentialsSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:platform-credentials] savePlatformCredentialsFn: integrationType=${data.integrationType}`
+    )
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
 
-    // Validate required fields against the integration definition
-    const { getIntegration } = await import('@/lib/server/integrations')
-    const definition = getIntegration(data.integrationType)
-    if (!definition) {
-      throw new Error(`Unknown integration type: ${data.integrationType}`)
-    }
-
-    const requiredFields = definition.platformCredentials
-    for (const field of requiredFields) {
-      if (!data.credentials[field.key]?.trim()) {
-        throw new Error(`${field.label} is required`)
+      // Validate required fields against the integration definition
+      const { getIntegration } = await import('@/lib/server/integrations')
+      const definition = getIntegration(data.integrationType)
+      if (!definition) {
+        throw new Error(`Unknown integration type: ${data.integrationType}`)
       }
-    }
 
-    // Strip any extra keys not defined in platformCredentials
-    const allowedKeys = new Set(definition.platformCredentials.map((f) => f.key))
-    const cleaned: Record<string, string> = {}
-    for (const [key, value] of Object.entries(data.credentials)) {
-      if (allowedKeys.has(key)) {
-        cleaned[key] = value.trim()
+      const requiredFields = definition.platformCredentials
+      for (const field of requiredFields) {
+        if (!data.credentials[field.key]?.trim()) {
+          throw new Error(`${field.label} is required`)
+        }
       }
+
+      // Strip any extra keys not defined in platformCredentials
+      const allowedKeys = new Set(definition.platformCredentials.map((f) => f.key))
+      const cleaned: Record<string, string> = {}
+      for (const [key, value] of Object.entries(data.credentials)) {
+        if (allowedKeys.has(key)) {
+          cleaned[key] = value.trim()
+        }
+      }
+
+      await savePlatformCredentials({
+        integrationType: data.integrationType,
+        credentials: cleaned,
+        principalId: auth.principal.id,
+      })
+
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:platform-credentials] savePlatformCredentialsFn failed:`, error)
+      throw error
     }
-
-    await savePlatformCredentials({
-      integrationType: data.integrationType,
-      credentials: cleaned,
-      principalId: auth.principal.id,
-    })
-
-    return { success: true }
   })
 
 /**
@@ -72,11 +80,19 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
 export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePlatformCredentialsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:platform-credentials] deletePlatformCredentialsFn: integrationType=${data.integrationType}`
+    )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    await deletePlatformCredentials(data.integrationType)
+      await deletePlatformCredentials(data.integrationType)
 
-    return { success: true }
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:platform-credentials] deletePlatformCredentialsFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -86,35 +102,43 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
 export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' })
   .inputValidator(fetchPlatformCredentialsMaskedSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
-
-    const { getIntegration } = await import('@/lib/server/integrations')
-    const definition = getIntegration(data.integrationType)
-    if (!definition) {
-      throw new Error(`Unknown integration type: ${data.integrationType}`)
-    }
-
-    const credentials = await getPlatformCredentials(data.integrationType)
-
-    if (!credentials) {
-      return { configured: false as const, fields: null }
-    }
-
-    // Build a map of field definitions for lookup
-    const fieldDefs = new Map<string, PlatformCredentialField>(
-      definition.platformCredentials.map((f) => [f.key, f])
+    console.log(
+      `[fn:platform-credentials] fetchPlatformCredentialsMaskedFn: integrationType=${data.integrationType}`
     )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    // Mask sensitive values, show non-sensitive in full
-    const masked: Record<string, string> = {}
-    for (const [key, value] of Object.entries(credentials)) {
-      const fieldDef = fieldDefs.get(key)
-      if (fieldDef?.sensitive) {
-        masked[key] = value.length > 8 ? '****' + value.slice(-4) : '********'
-      } else {
-        masked[key] = value
+      const { getIntegration } = await import('@/lib/server/integrations')
+      const definition = getIntegration(data.integrationType)
+      if (!definition) {
+        throw new Error(`Unknown integration type: ${data.integrationType}`)
       }
-    }
 
-    return { configured: true as const, fields: masked }
+      const credentials = await getPlatformCredentials(data.integrationType)
+
+      if (!credentials) {
+        return { configured: false as const, fields: null }
+      }
+
+      // Build a map of field definitions for lookup
+      const fieldDefs = new Map<string, PlatformCredentialField>(
+        definition.platformCredentials.map((f) => [f.key, f])
+      )
+
+      // Mask sensitive values, show non-sensitive in full
+      const masked: Record<string, string> = {}
+      for (const [key, value] of Object.entries(credentials)) {
+        const fieldDef = fieldDefs.get(key)
+        if (fieldDef?.sensitive) {
+          masked[key] = value.length > 8 ? '****' + value.slice(-4) : '********'
+        } else {
+          masked[key] = value
+        }
+      }
+
+      return { configured: true as const, fields: masked }
+    } catch (error) {
+      console.error(`[fn:platform-credentials] fetchPlatformCredentialsMaskedFn failed:`, error)
+      throw error
+    }
   })

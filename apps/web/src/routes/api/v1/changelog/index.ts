@@ -6,15 +6,18 @@ import {
   createdResponse,
   badRequestResponse,
   handleDomainError,
-  decodeCursor,
-  encodeCursor,
 } from '@/lib/server/domains/api/responses'
+import { listChangelogs, createChangelog } from '@/lib/server/domains/changelog'
+import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
+import { db, principal, eq } from '@/lib/server/db'
+import type { PostId } from '@quackback/ids'
 
 // Input validation schema
 const createChangelogSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
+  linkedPostIds: z.array(z.string()).optional(),
 })
 
 export const Route = createFileRoute('/api/v1/changelog/')({
@@ -35,40 +38,19 @@ export const Route = createFileRoute('/api/v1/changelog/')({
           const published = url.searchParams.get('published')
           const cursor = url.searchParams.get('cursor') ?? undefined
           const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
-          const offset = decodeCursor(cursor)
 
-          // Import db
-          const { db, changelogEntries, desc, and, isNotNull, isNull } =
-            await import('@/lib/server/db')
-
-          // Build conditions
-          const conditions = []
+          // Map published filter to service status param
+          let status: 'draft' | 'published' | 'all' = 'all'
           if (published === 'true') {
-            conditions.push(isNotNull(changelogEntries.publishedAt))
+            status = 'published'
           } else if (published === 'false') {
-            conditions.push(isNull(changelogEntries.publishedAt))
+            status = 'draft'
           }
 
-          const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-
-          // Query entries
-          const entries = await db.query.changelogEntries.findMany({
-            where: whereClause,
-            orderBy: [desc(changelogEntries.createdAt)],
-            limit: limit + 1, // Fetch one extra to check hasMore
-            offset,
-          })
-
-          // Determine if there are more items
-          const hasMore = entries.length > limit
-          const items = hasMore ? entries.slice(0, limit) : entries
-
-          // Calculate next cursor
-          const nextOffset = offset + items.length
-          const nextCursor = hasMore ? encodeCursor(nextOffset) : null
+          const result = await listChangelogs({ status, cursor, limit })
 
           return successResponse(
-            items.map((entry) => ({
+            result.items.map((entry) => ({
               id: entry.id,
               title: entry.title,
               content: entry.content,
@@ -78,8 +60,8 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             })),
             {
               pagination: {
-                cursor: nextCursor,
-                hasMore,
+                cursor: result.nextCursor,
+                hasMore: result.hasMore,
               },
             }
           )
@@ -108,18 +90,28 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             })
           }
 
-          // Import db
-          const { db, changelogEntries } = await import('@/lib/server/db')
+          // Determine publish state from publishedAt
+          const publishState = publishedAtToPublishState(parsed.data.publishedAt)
 
-          // Create the changelog entry
-          const [entry] = await db
-            .insert(changelogEntries)
-            .values({
+          // Look up principal display name for author info
+          const principalRecord = await db.query.principal.findFirst({
+            where: eq(principal.id, authResult.principalId),
+            columns: { displayName: true },
+          })
+          const authorName = principalRecord?.displayName ?? 'API'
+
+          const entry = await createChangelog(
+            {
               title: parsed.data.title,
               content: parsed.data.content,
-              publishedAt: parsed.data.publishedAt ? new Date(parsed.data.publishedAt) : null,
-            })
-            .returning()
+              publishState,
+              linkedPostIds: parsed.data.linkedPostIds as PostId[] | undefined,
+            },
+            {
+              principalId: authResult.principalId,
+              name: authorName,
+            }
+          )
 
           return createdResponse({
             id: entry.id,

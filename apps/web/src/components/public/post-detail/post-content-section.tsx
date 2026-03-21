@@ -167,7 +167,7 @@ export function PostContentSection({
             maxLength={200}
             autoFocus
             disabled={isSaving}
-            className="w-full bg-transparent border-0 outline-none text-xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-2"
+            className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4"
           />
 
           {/* Rich text editor */}

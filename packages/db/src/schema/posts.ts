@@ -16,6 +16,7 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { boards, tags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
+import { feedbackSuggestions } from './feedback'
 import { principal } from './auth'
 import type { TiptapContent } from '../types'
 
@@ -83,6 +84,8 @@ export const posts = pgTable(
     })
       .default('published')
       .notNull(),
+    // Key-value metadata attached by the widget SDK
+    widgetMetadata: jsonb('widget_metadata').$type<Record<string, string>>(),
     // Merge/deduplication: points to the canonical post this was merged into
     canonicalPostId: typeIdColumnNullable('post')('canonical_post_id'),
     mergedAt: timestamp('merged_at', { withTimezone: true }),
@@ -198,6 +201,15 @@ export const votes = pgTable(
     // Source tracking for integration-created votes (e.g. Zendesk sidebar)
     sourceType: varchar('source_type', { length: 40 }),
     sourceExternalUrl: text('source_external_url'),
+    // Provenance: which feedback suggestion triggered this proxy vote
+    feedbackSuggestionId: typeIdColumnNullable('feedback_suggestion')(
+      'feedback_suggestion_id'
+    ).references(() => feedbackSuggestions.id, { onDelete: 'set null' }),
+    // Which admin/member added this vote on behalf of the voter
+    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id').references(
+      () => principal.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -240,6 +252,11 @@ export const comments = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // Who initiated the deletion (self-delete vs team-removed)
+    deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id').references(
+      () => principal.id,
+      { onDelete: 'set null' }
+    ),
   },
   (table) => [
     index('comments_post_id_idx').on(table.postId),
@@ -383,6 +400,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   roadmaps: many(postRoadmaps),
   notes: many(postNotes),
   externalLinks: many(postExternalLinks),
+  incomingSuggestions: many(feedbackSuggestions, { relationName: 'suggestionResult' }),
 }))
 
 export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
@@ -400,6 +418,11 @@ export const votesRelations = relations(votes, ({ one }) => ({
   post: one(posts, {
     fields: [votes.postId],
     references: [posts.id],
+  }),
+  feedbackSuggestion: one(feedbackSuggestions, {
+    fields: [votes.feedbackSuggestionId],
+    references: [feedbackSuggestions.id],
+    relationName: 'feedbackSuggestionVotes',
   }),
 }))
 
@@ -431,6 +454,11 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
     fields: [comments.statusChangeToId],
     references: [postStatuses.id],
     relationName: 'commentStatusChangeTo',
+  }),
+  deletedBy: one(principal, {
+    fields: [comments.deletedByPrincipalId],
+    references: [principal.id],
+    relationName: 'commentDeletedBy',
   }),
 }))
 

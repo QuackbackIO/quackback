@@ -1,293 +1,364 @@
-import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
-import { ArrowsRightLeftIcon, ChatBubbleLeftIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
-import { ChatBubbleLeftIcon as CommentIcon } from '@heroicons/react/24/outline'
+import { useCallback, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { HandThumbUpIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { CompactPostCard } from '@/components/shared/compact-post-card'
+import { ExpandableQuote } from '@/components/shared/expandable-quote'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { cn } from '@/lib/shared/utils'
-import { SourceTypeIcon } from '../source-type-icon'
+import { SourceTypeIcon, SOURCE_TYPE_LABELS } from '../source-type-icon'
 import { useSuggestionActions } from './use-suggestion-actions'
-import type { SuggestionListItem } from '../feedback-types'
+import { useDismissTimer } from './use-dismiss-timer'
+import { dismissSuggestionFn, restoreSuggestionFn } from '@/lib/server/functions/feedback'
+import { suggestionsKeys } from '@/lib/client/hooks/use-suggestions-query'
+import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
+import { feedbackQueries } from '@/lib/client/queries/feedback'
+import type { SuggestionListItem, SuggestionGroup } from '../feedback-types'
 
-interface SuggestionTriageRowProps {
-  suggestion: SuggestionListItem
+// ─── Group component ────────────────────────────────────────────────
+
+interface SuggestionSourceGroupProps {
+  group: SuggestionGroup
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
+  readOnly?: boolean
 }
 
-export function SuggestionTriageRow({
-  suggestion,
+export function SuggestionSourceGroup({
+  group,
   onCreatePost,
   onResolved,
-}: SuggestionTriageRowProps) {
-  const isDuplicate = suggestion.suggestionType === 'duplicate_post'
+  readOnly,
+}: SuggestionSourceGroupProps) {
+  const queryClient = useQueryClient()
+  const rawItem = group.rawItem
+  // Derive header info from rawItem when available, otherwise from the first suggestion
+  const firstSuggestion = group.suggestions[0]
+  const sourceType = rawItem?.sourceType ?? firstSuggestion.rawItem?.sourceType ?? 'api'
+  const author = rawItem?.author ?? firstSuggestion.rawItem?.author
+  const authorLabel = author?.name ?? author?.email ?? rawItem?.source?.name ?? sourceType
+  const headerDate = rawItem?.sourceCreatedAt ?? firstSuggestion.createdAt
+  const originalText = rawItem?.content?.text ?? ''
+  const allIds = group.suggestions.map((s) => s.id)
 
-  if (isDuplicate) {
-    return <DuplicateRow suggestion={suggestion} onResolved={onResolved} />
-  }
+  // Pending dismiss state
+  const [pendingDismissIds, setPendingDismissIds] = useState<Set<string>>(new Set())
+  const [capturedHeights, setCapturedHeights] = useState<Map<string, number>>(new Map())
 
-  return (
-    <CreatePostRow suggestion={suggestion} onCreatePost={onCreatePost} onResolved={onResolved} />
-  )
-}
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: suggestionsKeys.all })
+    queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+    queryClient.invalidateQueries({ queryKey: feedbackQueries.incomingCount().queryKey })
+  }, [queryClient])
 
-// ─── Duplicate post: side-by-side mini post cards ─────────────────────
-
-function DuplicateRow({
-  suggestion,
-  onResolved,
-}: {
-  suggestion: SuggestionListItem
-  onResolved: () => void
-}) {
-  const [swapped, setSwapped] = useState(false)
-  const similarity =
-    suggestion.similarityScore != null ? Math.round(suggestion.similarityScore * 100) : null
-
-  const { accept, dismiss, isPending } = useSuggestionActions({
-    suggestionId: suggestion.id,
-    isMerge: true,
-    onResolved,
+  // Timer only controls when the placeholder disappears + queries refetch
+  const { startTimer, cancelTimer } = useDismissTimer({
+    onConfirm: (id: string) => {
+      setPendingDismissIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      setCapturedHeights((prev) => {
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      invalidate()
+    },
   })
 
-  const leftPost = swapped ? suggestion.targetPost : suggestion.sourcePost
-  const rightPost = swapped ? suggestion.sourcePost : suggestion.targetPost
+  const handleStartDismiss = useCallback(
+    (id: string, height: number) => {
+      // Fire mutation immediately
+      dismissSuggestionFn({ data: { id } })
+      // Show placeholder
+      setPendingDismissIds((prev) => new Set(prev).add(id))
+      setCapturedHeights((prev) => new Map(prev).set(id, height))
+      startTimer(id)
+    },
+    [startTimer]
+  )
+
+  const handleUndo = useCallback(
+    (id: string) => {
+      cancelTimer(id)
+      setPendingDismissIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      setCapturedHeights((prev) => {
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+      // Restore server-side, then refetch
+      restoreSuggestionFn({ data: { id } }).then(() => invalidate())
+    },
+    [cancelTimer, invalidate]
+  )
+
+  const handleDismissAll = useCallback(() => {
+    for (const s of group.suggestions) {
+      if (!pendingDismissIds.has(s.id)) {
+        handleStartDismiss(s.id, capturedHeights.get(s.id) ?? 52)
+      }
+    }
+  }, [group.suggestions, handleStartDismiss, capturedHeights, pendingDismissIds])
+
+  const hasPending = pendingDismissIds.size > 0
 
   return (
     <div className="w-full px-4 py-3 space-y-2">
-      {/* Header: source */}
-      <div className="flex items-center gap-2">
-        <SourceTypeIcon sourceType="quackback" size="sm" />
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 shrink-0 border-violet-300/50 text-violet-600 dark:border-violet-700/50 dark:text-violet-400"
-        >
-          Merge posts
-        </Badge>
-      </div>
-
-      {/* Side-by-side post cards */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <MiniPostCard post={leftPost} />
-        <button
-          type="button"
-          onClick={() => setSwapped(!swapped)}
-          className={cn(
-            'flex items-center px-1 py-1 rounded transition-colors cursor-pointer',
-            'hover:bg-muted/60 text-muted-foreground/40 hover:text-muted-foreground/70',
-            swapped &&
-              'text-violet-500 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-300'
+      {/* Source header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <SourceTypeIcon sourceType={sourceType} size="sm" />
+          <span className="text-[11px] font-medium text-muted-foreground/70">
+            {SOURCE_TYPE_LABELS[sourceType] ?? sourceType}
+          </span>
+          <span className="text-[11px] text-muted-foreground/60 truncate">{authorLabel}</span>
+          <TimeAgo date={headerDate} className="text-[11px] text-muted-foreground/40 shrink-0" />
+          {rawItem?.externalUrl && (
+            <a
+              href={rawItem.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0"
+            >
+              Open in {SOURCE_TYPE_LABELS[sourceType] ?? sourceType}
+              <span aria-hidden>&rarr;</span>
+            </a>
           )}
-          title="Swap merge direction"
-        >
-          <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-        </button>
-        <MiniPostCard post={rightPost} />
-      </div>
-
-      {/* Footer: reasoning + match info + actions */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2 text-[11px] text-muted-foreground/50">
-          {suggestion.reasoning && (
-            <span className="truncate flex items-center gap-1.5">
-              <ChatBubbleLeftIcon className="h-3 w-3 shrink-0" />
-              {suggestion.reasoning}
-            </span>
-          )}
-          {similarity != null && (
-            <span className="font-semibold tabular-nums shrink-0 text-violet-600 dark:text-violet-400">
-              {similarity}%
-            </span>
-          )}
-          <span className="shrink-0 text-muted-foreground/40">&middot;</span>
-          <TimeAgo date={suggestion.createdAt} className="shrink-0 text-muted-foreground/40" />
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => accept(swapped ? { swapDirection: true } : undefined)}
-            disabled={isPending}
-          >
-            Merge
-          </Button>
+        {!readOnly && allIds.length > 1 && !hasPending && (
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => dismiss()}
-            disabled={isPending}
-            className="text-muted-foreground"
+            className="text-muted-foreground/50 hover:text-muted-foreground h-7 px-2 text-[11px]"
+            onClick={handleDismissAll}
           >
-            Dismiss
+            <XMarkIcon className="h-3 w-3 mr-1" />
+            Dismiss all
           </Button>
-        </div>
+        )}
+      </div>
+
+      {/* Original quote */}
+      {originalText && (
+        <ExpandableQuote
+          text={originalText}
+          className="border-l-2 border-muted-foreground/20 pl-2.5 italic"
+        />
+      )}
+
+      {/* Child suggestions */}
+      <div className="space-y-2 pl-1">
+        {group.suggestions.map((s) =>
+          s.suggestionType === 'vote_on_post' ? (
+            <VoteOnPostChild
+              key={s.id}
+              suggestion={s}
+              onCreatePost={onCreatePost}
+              onResolved={onResolved}
+              onStartDismiss={handleStartDismiss}
+              onUndo={handleUndo}
+              isPendingDismiss={pendingDismissIds.has(s.id)}
+              capturedHeight={capturedHeights.get(s.id)}
+              readOnly={readOnly}
+            />
+          ) : (
+            <CreatePostChild
+              key={s.id}
+              suggestion={s}
+              onCreatePost={onCreatePost}
+              onResolved={onResolved}
+              onStartDismiss={handleStartDismiss}
+              onUndo={handleUndo}
+              isPendingDismiss={pendingDismissIds.has(s.id)}
+              capturedHeight={capturedHeights.get(s.id)}
+              readOnly={readOnly}
+            />
+          )
+        )}
       </div>
     </div>
   )
 }
 
-/** Compact post card matching the real PostCard layout — clickable to open post modal. */
-function MiniPostCard({
-  post,
-}: {
-  post: SuggestionListItem['sourcePost'] | SuggestionListItem['targetPost']
-}) {
-  const navigate = useNavigate()
+// ─── Pending dismiss placeholder ────────────────────────────────────
 
-  if (!post) return <div className="min-w-0" />
-
-  const handleClick = () => {
-    navigate({
-      to: '/admin/feedback/suggestions',
-      search: (prev: Record<string, unknown>) => ({ ...prev, post: post.id }),
-    })
-  }
-
+function DismissedPlaceholder({ height, onUndo }: { height?: number; onUndo: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="min-w-0 rounded-md border border-border/60 bg-muted/30 p-2.5 text-left cursor-pointer transition-colors hover:bg-muted/50 hover:border-border"
+    <div
+      style={height ? { height } : undefined}
+      className="flex items-center justify-between rounded-md border border-dashed border-border/40 bg-muted/20 px-4"
     >
-      <div className="flex items-start gap-2.5">
-        {/* Vote pill */}
-        <div className="flex flex-col items-center shrink-0 rounded border border-border/50 bg-muted/40 px-1.5 py-1 gap-0">
-          <ChevronUpIcon className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs font-semibold tabular-nums text-foreground">
-            {post.voteCount}
-          </span>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {post.statusName && (
-            <StatusBadge
-              name={post.statusName}
-              color={post.statusColor}
-              className="text-[10px] mb-0.5"
-            />
-          )}
-          <p className="text-sm font-semibold text-foreground line-clamp-1">{post.title}</p>
-          {post.content && (
-            <p className="text-xs text-muted-foreground/60 line-clamp-1 mt-0.5">{post.content}</p>
-          )}
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 mt-1.5">
-            {post.boardName && <span className="truncate">{post.boardName}</span>}
-            {post.createdAt && (
-              <>
-                {post.boardName && <span className="text-muted-foreground/30">&middot;</span>}
-                <TimeAgo date={post.createdAt} className="shrink-0" />
-              </>
-            )}
-            {(post.commentCount ?? 0) > 0 && (
-              <span className="flex items-center gap-0.5 ml-auto shrink-0">
-                <CommentIcon className="h-3 w-3" />
-                {post.commentCount}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </button>
+      <span className="text-sm text-muted-foreground/60">Dismissed</span>
+      <Button size="sm" variant="ghost" onClick={onUndo} className="text-primary">
+        Undo
+      </Button>
+    </div>
   )
 }
 
-// ─── Create post: original layout ─────────────────────────────────────
+// ─── Child: Create post ─────────────────────────────────────────────
 
-function CreatePostRow({
-  suggestion,
-  onCreatePost,
-  onResolved,
-}: {
+interface SuggestionChildProps {
   suggestion: SuggestionListItem
   onCreatePost: (suggestion: SuggestionListItem) => void
   onResolved: () => void
-}) {
-  const rawItem = suggestion.rawItem
-  const content = rawItem?.content
-  const author = rawItem?.author
-  const sourceType = rawItem?.sourceType ?? 'api'
-  const originalText = content?.text ?? ''
+  onStartDismiss: (id: string, height: number) => void
+  onUndo: (id: string) => void
+  isPendingDismiss: boolean
+  capturedHeight?: number
+  readOnly?: boolean
+}
 
-  const { dismiss, isPending } = useSuggestionActions({
+function CreatePostChild({
+  suggestion,
+  onCreatePost,
+  onResolved,
+  onStartDismiss,
+  onUndo,
+  isPendingDismiss,
+  capturedHeight,
+  readOnly,
+}: SuggestionChildProps) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const { restore, isPending } = useSuggestionActions({
     suggestionId: suggestion.id,
     isMerge: false,
     onResolved,
   })
 
+  const handleDismiss = useCallback(() => {
+    const height = cardRef.current?.offsetHeight ?? 52
+    onStartDismiss(suggestion.id, height)
+  }, [suggestion.id, onStartDismiss])
+
+  if (isPendingDismiss) {
+    return <DismissedPlaceholder height={capturedHeight} onUndo={() => onUndo(suggestion.id)} />
+  }
+
+  const actions = readOnly ? (
+    <Button size="sm" variant="ghost" onClick={restore} disabled={isPending}>
+      Restore
+    </Button>
+  ) : (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => onCreatePost(suggestion)}
+        disabled={isPending}
+      >
+        Create post
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleDismiss}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Dismiss
+      </Button>
+    </div>
+  )
+
   return (
-    <div className="w-full px-4 py-3 space-y-2.5">
-      {/* Header: source icon + type badge + author + time */}
-      <div className="flex items-center gap-2">
-        <SourceTypeIcon sourceType={sourceType} size="sm" />
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 shrink-0 border-emerald-300/50 text-emerald-600 dark:border-emerald-700/50 dark:text-emerald-400"
-        >
-          Create post
-        </Badge>
-        <span className="text-[11px] text-muted-foreground/60 truncate">
-          {author?.name ?? author?.email ?? rawItem?.source?.name ?? sourceType}
-        </span>
-        <TimeAgo
-          date={suggestion.createdAt}
-          className="text-[11px] text-muted-foreground/40 shrink-0"
-        />
-      </div>
+    <div ref={cardRef}>
+      <CompactPostCard
+        dashed
+        label="Create post"
+        title={suggestion.suggestedTitle ?? 'Create post suggestion'}
+        voteCount={0}
+        boardName={suggestion.board?.name}
+        description={suggestion.suggestedBody}
+        actions={actions}
+      />
+    </div>
+  )
+}
 
-      {/* Original feedback quote */}
-      {originalText && (
-        <p className="text-xs text-muted-foreground/70 line-clamp-2 border-l-2 border-muted-foreground/20 pl-2.5 italic">
-          {originalText}
-        </p>
-      )}
+// ─── Child: Vote on post ────────────────────────────────────────────
 
-      {/* AI-derived title + reasoning */}
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground leading-snug">
-          {suggestion.suggestedTitle ?? 'Create post suggestion'}
-        </p>
-        {suggestion.reasoning && (
-          <p className="text-[11px] text-muted-foreground/50 line-clamp-1 flex items-center gap-1.5 mt-1">
-            <ChatBubbleLeftIcon className="h-3 w-3 shrink-0" />
-            {suggestion.reasoning}
-          </p>
-        )}
-      </div>
+function VoteOnPostChild({
+  suggestion,
+  onCreatePost,
+  onResolved,
+  onStartDismiss,
+  onUndo,
+  isPendingDismiss,
+  capturedHeight,
+  readOnly,
+}: SuggestionChildProps) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const targetPost = suggestion.targetPost
+  const { accept, restore, isPending } = useSuggestionActions({
+    suggestionId: suggestion.id,
+    isMerge: false,
+    onResolved,
+  })
 
-      {/* Footer: board + actions */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2">
-          {suggestion.board && (
-            <Badge variant="outline" className="text-[10px]">
-              {suggestion.board.name}
-            </Badge>
-          )}
-        </div>
+  const handleDismiss = useCallback(() => {
+    const height = cardRef.current?.offsetHeight ?? 52
+    onStartDismiss(suggestion.id, height)
+  }, [suggestion.id, onStartDismiss])
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onCreatePost(suggestion)}
-            disabled={isPending}
-          >
-            Create post
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => dismiss()}
-            disabled={isPending}
-            className="text-muted-foreground"
-          >
-            Dismiss
-          </Button>
-        </div>
-      </div>
+  if (isPendingDismiss) {
+    return <DismissedPlaceholder height={capturedHeight} onUndo={() => onUndo(suggestion.id)} />
+  }
+
+  if (!targetPost) return null
+
+  const similarity = suggestion.similarPosts?.find((p) => p.postId === targetPost?.id)?.similarity
+  const similarityLabel = similarity != null ? ` ${Math.round(similarity * 100)}%` : ''
+
+  const actions = readOnly ? (
+    <Button size="sm" variant="ghost" onClick={restore} disabled={isPending}>
+      Restore
+    </Button>
+  ) : (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <Button size="sm" variant="outline" onClick={() => accept(undefined)} disabled={isPending}>
+        <HandThumbUpIcon className="h-3.5 w-3.5 mr-1" />
+        Vote
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onCreatePost(suggestion)}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Create instead
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleDismiss}
+        disabled={isPending}
+        className="text-muted-foreground"
+      >
+        Dismiss
+      </Button>
+    </div>
+  )
+
+  return (
+    <div ref={cardRef}>
+      <CompactPostCard
+        label={`Vote on post${similarityLabel}`}
+        title={targetPost.title}
+        voteCount={targetPost.voteCount}
+        boardName={targetPost.boardName}
+        statusName={targetPost.statusName}
+        statusColor={targetPost.statusColor}
+        description={undefined}
+        actions={actions}
+      />
     </div>
   )
 }

@@ -121,7 +121,7 @@ function ConsentPage() {
       }
 
       const data = await response.json()
-      const redirectTo = data.uri ?? data.redirectUrl
+      const redirectTo = data.url ?? data.uri ?? data.redirectUrl
       if (redirectTo) {
         window.location.href = redirectTo
       }

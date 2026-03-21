@@ -32,9 +32,13 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   dispatchCommentCreated,
+  dispatchCommentUpdated,
+  dispatchCommentDeleted,
   dispatchPostStatusChanged,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
@@ -100,8 +104,12 @@ export async function createComment(
     email?: string
     displayName?: string
     role: 'admin' | 'member' | 'user'
-  }
+  },
+  options?: { skipDispatch?: boolean }
 ): Promise<CreateCommentResult> {
+  console.log(
+    `[domain:comments] createComment: postId=${input.postId}, parentId=${input.parentId ?? 'none'}`
+  )
   // Validate post exists (and is not deleted) and eagerly load board in single query
   const post = await db.query.posts.findFirst({
     where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
@@ -147,14 +155,14 @@ export async function createComment(
   }
 
   // Determine if user is a team member
-  const isTeamMember = ['admin', 'member'].includes(author.role)
+  const authorIsTeamMember = isTeamMember(author.role)
 
   // Inherit privacy from parent: replies to private comments are always private
   const isPrivate = parentIsPrivate || (input.isPrivate ?? false)
 
   // Enforce team-only for private comments (after inheritance, so replying to
   // a private parent with isPrivate omitted is also caught)
-  if (isPrivate && !isTeamMember) {
+  if (isPrivate && !authorIsTeamMember) {
     throw new ForbiddenError(
       'PRIVATE_COMMENT_FORBIDDEN',
       'Only team members can post private comments'
@@ -163,7 +171,7 @@ export async function createComment(
 
   // Determine if a status change should be applied
   // Only for team members, root-level comments, with a valid statusId
-  const shouldChangeStatus = !!(input.statusId && isTeamMember && !input.parentId)
+  const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
 
   let comment: Comment
   let previousStatusName: string | null = null
@@ -194,10 +202,11 @@ export async function createComment(
           content: input.content.trim(),
           parentId: input.parentId || null,
           principalId: author.principalId,
-          isTeamMember,
+          isTeamMember: authorIsTeamMember,
           isPrivate,
           statusChangeFromId: prevStatus?.id ?? null,
           statusChangeToId: newStatus.id,
+          ...(input.createdAt && { createdAt: input.createdAt }),
         })
         .returning()
 
@@ -224,8 +233,9 @@ export async function createComment(
           content: input.content.trim(),
           parentId: input.parentId || null,
           principalId: author.principalId,
-          isTeamMember,
+          isTeamMember: authorIsTeamMember,
           isPrivate,
+          ...(input.createdAt && { createdAt: input.createdAt }),
         })
         .returning()
 
@@ -243,43 +253,45 @@ export async function createComment(
     comment = result
   }
 
-  // Auto-subscribe commenter to the post
-  if (author.principalId) {
-    await subscribeToPost(author.principalId, input.postId, 'comment')
-  }
-
-  // Dispatch comment.created event for webhooks, Slack, etc.
-  const actorName = author.displayName ?? author.name
-  await dispatchCommentCreated(
-    buildEventActor(author),
-    {
-      id: comment.id,
-      content: comment.content,
-      authorName: actorName,
-      authorEmail: author.email,
-      isPrivate,
-    },
-    {
-      id: post.id,
-      title: post.title,
-      boardId: board.id,
-      boardSlug: board.slug,
+  if (!options?.skipDispatch) {
+    // Auto-subscribe commenter to the post
+    if (author.principalId) {
+      await subscribeToPost(author.principalId, input.postId, 'comment')
     }
-  )
 
-  // Dispatch status change event if status was changed
-  if (shouldChangeStatus && previousStatusName && newStatusName) {
-    await dispatchPostStatusChanged(
+    // Dispatch comment.created event for webhooks, Slack, etc.
+    const actorName = author.displayName ?? author.name
+    await dispatchCommentCreated(
       buildEventActor(author),
+      {
+        id: comment.id,
+        content: comment.content,
+        authorName: actorName,
+        authorEmail: author.email,
+        isPrivate,
+      },
       {
         id: post.id,
         title: post.title,
         boardId: board.id,
         boardSlug: board.slug,
-      },
-      previousStatusName,
-      newStatusName
+      }
     )
+
+    // Dispatch status change event if status was changed
+    if (shouldChangeStatus && previousStatusName && newStatusName) {
+      await dispatchPostStatusChanged(
+        buildEventActor(author),
+        {
+          id: post.id,
+          title: post.title,
+          boardId: board.id,
+          boardSlug: board.slug,
+        },
+        previousStatusName,
+        newStatusName
+      )
+    }
   }
 
   return { comment, post: { id: post.id, title: post.title, boardSlug: board.slug } }
@@ -301,8 +313,9 @@ export async function createComment(
 export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<Comment> {
+  console.log(`[domain:comments] updateComment: id=${id}`)
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),
@@ -321,9 +334,8 @@ export async function updateComment(
 
   // Authorization check - user must be comment author or team member
   const isAuthor = existingComment.principalId === actor.principalId
-  const isTeamMember = ['admin', 'member'].includes(actor.role)
 
-  if (!isAuthor && !isTeamMember) {
+  if (!isAuthor && !isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to update this comment')
   }
 
@@ -352,6 +364,24 @@ export async function updateComment(
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
   }
 
+  // Dispatch comment.updated event for webhooks and integrations
+  const post = existingComment.post
+  const board = post.board
+  dispatchCommentUpdated(
+    buildEventActor({ principalId: actor.principalId, userId: actor.userId }),
+    {
+      id: updatedComment.id,
+      content: updatedComment.content,
+      isPrivate: updatedComment.isPrivate ?? undefined,
+    },
+    {
+      id: post.id,
+      title: post.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    }
+  )
+
   return updatedComment
 }
 
@@ -370,8 +400,9 @@ export async function updateComment(
  */
 export async function deleteComment(
   id: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<void> {
+  console.log(`[domain:comments] deleteComment: id=${id}`)
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),
@@ -390,9 +421,8 @@ export async function deleteComment(
 
   // Authorization check - user must be comment author or team member
   const isAuthor = existingComment.principalId === actor.principalId
-  const isTeamMember = ['admin', 'member'].includes(actor.role)
 
-  if (!isAuthor && !isTeamMember) {
+  if (!isAuthor && !isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
   }
 
@@ -416,6 +446,23 @@ export async function deleteComment(
         .where(eq(posts.id, existingComment.postId))
     }
   })
+
+  // Dispatch comment.deleted event for webhooks and integrations
+  const post = existingComment.post
+  const board = post.board
+  dispatchCommentDeleted(
+    buildEventActor({ principalId: actor.principalId, userId: actor.userId }),
+    {
+      id,
+      isPrivate: existingComment.isPrivate ?? undefined,
+    },
+    {
+      id: post.id,
+      title: post.title,
+      boardId: board.id,
+      boardSlug: board.slug,
+    }
+  )
 }
 
 /**
@@ -517,6 +564,8 @@ export async function getCommentsByPost(
     isTeamMember: comment.isTeamMember,
     isPrivate: comment.isPrivate,
     createdAt: comment.createdAt,
+    deletedAt: comment.deletedAt ?? null,
+    deletedByPrincipalId: comment.deletedByPrincipalId ?? null,
     statusChange: toStatusChange(comment.statusChangeFrom, comment.statusChangeTo),
     reactions: comment.reactions.map((r) => ({
       emoji: r.emoji,
@@ -548,6 +597,7 @@ export async function addReaction(
   emoji: string,
   principalId: PrincipalId
 ): Promise<ReactionResult> {
+  console.log(`[domain:comments] addReaction: commentId=${commentId}, emoji=${emoji}`)
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -608,6 +658,7 @@ export async function removeReaction(
   emoji: string,
   principalId: PrincipalId
 ): Promise<ReactionResult> {
+  console.log(`[domain:comments] removeReaction: commentId=${commentId}, emoji=${emoji}`)
   // Verify comment exists with post and board in single query
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -667,6 +718,7 @@ export async function canEditComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
+  console.log(`[domain:comments] canEditComment: commentId=${commentId}`)
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -682,7 +734,7 @@ export async function canEditComment(
   }
 
   // Team members (admin, member) can always edit
-  if (actor.role && ['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -715,6 +767,7 @@ export async function canDeleteComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
+  console.log(`[domain:comments] canDeleteComment: commentId=${commentId}`)
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -730,7 +783,7 @@ export async function canDeleteComment(
   }
 
   // Team members (admin, member) can always delete
-  if (actor.role && ['admin', 'member'].includes(actor.role)) {
+  if (isTeamMember(actor.role)) {
     return { allowed: true }
   }
 
@@ -765,6 +818,7 @@ export async function userEditComment(
   content: string,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Comment> {
+  console.log(`[domain:comments] userEditComment: commentId=${commentId}`)
   // Check permission first
   const permResult = await canEditComment(commentId, actor)
   if (!permResult.allowed) {
@@ -824,6 +878,7 @@ export async function softDeleteComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
+  console.log(`[domain:comments] softDeleteComment: commentId=${commentId}`)
   // Check permission first
   const permResult = await canDeleteComment(commentId, actor)
   if (!permResult.allowed) {
@@ -842,18 +897,19 @@ export async function softDeleteComment(
 
   // Atomic transaction: soft-delete comment + decrement comment count + auto-unpin
   // Guard: only update comments that aren't already soft-deleted (idempotent)
-  await db.transaction(async (tx) => {
+  const wasDeleted = await db.transaction(async (tx) => {
     const [updatedComment] = await tx
       .update(comments)
       .set({
         deletedAt: new Date(),
+        deletedByPrincipalId: actor.principalId,
       })
       .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)))
       .returning()
 
     if (!updatedComment) {
       // Already soft-deleted or gone — no-op
-      return
+      return false
     }
 
     // Decrement comment count (only for public comments) and auto-unpin if this comment was pinned
@@ -872,6 +928,89 @@ export async function softDeleteComment(
         })
         .where(eq(posts.id, comment.postId))
     }
+
+    return true
+  })
+
+  if (!wasDeleted) return
+
+  // Record activity (fire-and-forget)
+  const isSelfDelete = actor.principalId === comment.principalId
+  createActivity({
+    postId: comment.postId,
+    principalId: actor.principalId,
+    type: isSelfDelete ? 'comment.deleted' : 'comment.removed',
+    metadata: {
+      commentId,
+      commentAuthorPrincipalId: comment.principalId,
+    },
+  })
+}
+
+/**
+ * Restore a soft-deleted comment
+ * Only team members can restore comments.
+ *
+ * @param commentId - Comment ID to restore
+ * @param actor - Actor information with principalId and role
+ */
+export async function restoreComment(
+  commentId: CommentId,
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+): Promise<void> {
+  console.log(`[domain:comments] restoreComment: commentId=${commentId}`)
+
+  if (!isTeamMember(actor.role)) {
+    throw new ForbiddenError('UNAUTHORIZED', 'Only team members can restore comments')
+  }
+
+  const comment = await db.query.comments.findFirst({
+    where: eq(comments.id, commentId),
+    with: { post: true },
+  })
+
+  if (!comment) {
+    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
+
+  if (!comment.deletedAt) {
+    throw new ValidationError('NOT_DELETED', 'Comment is not deleted')
+  }
+
+  // Atomic transaction: restore comment + re-increment comment count
+  const wasRestored = await db.transaction(async (tx) => {
+    const [updatedComment] = await tx
+      .update(comments)
+      .set({
+        deletedAt: null,
+        deletedByPrincipalId: null,
+      })
+      .where(and(eq(comments.id, commentId), sql`${comments.deletedAt} IS NOT NULL`))
+      .returning()
+
+    if (!updatedComment) return false
+
+    // Re-increment comment count (only for public comments)
+    if (!comment.isPrivate) {
+      await tx
+        .update(posts)
+        .set({ commentCount: sql`${posts.commentCount} + 1` })
+        .where(eq(posts.id, comment.postId))
+    }
+
+    return true
+  })
+
+  if (!wasRestored) return
+
+  createActivity({
+    postId: comment.postId,
+    principalId: actor.principalId,
+    type: 'comment.restored',
+    metadata: {
+      commentId,
+      commentAuthorPrincipalId: comment.principalId,
+    },
   })
 }
 
@@ -894,6 +1033,7 @@ export async function canPinComment(commentId: CommentId): Promise<{
   canPin: boolean
   reason?: string
 }> {
+  console.log(`[domain:comments] canPinComment: commentId=${commentId}`)
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
   })
@@ -936,8 +1076,9 @@ export async function pinComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<{ postId: PostId }> {
+  console.log(`[domain:comments] pinComment: commentId=${commentId}`)
   // Only team members can pin comments
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can pin comments')
   }
 
@@ -977,8 +1118,9 @@ export async function unpinComment(
   postId: PostId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
+  console.log(`[domain:comments] unpinComment: postId=${postId}`)
   // Only team members can unpin comments
-  if (!['admin', 'member'].includes(actor.role)) {
+  if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can unpin comments')
   }
 

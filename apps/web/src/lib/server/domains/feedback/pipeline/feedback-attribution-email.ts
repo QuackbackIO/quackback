@@ -31,9 +31,6 @@ export async function sendFeedbackAttributionEmail(
     })
     if (!userRow?.email) return
 
-    // Skip synthetic emails that have no real inbox
-    if (userRow.email.endsWith('@external.quackback.io')) return
-
     // Look up the team member who attributed the feedback
     let attributedByName: string | undefined
     if (resolvedByPrincipalId) {

@@ -25,47 +25,55 @@ export interface ExternalStatusItem {
 export const fetchExternalStatusesFn = createServerFn({ method: 'POST' })
   .inputValidator(fetchExternalStatusesSchema)
   .handler(async ({ data }): Promise<ExternalStatusItem[]> => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:external-statuses] fetchExternalStatusesFn: integrationType=${data.integrationType}`
+    )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    const integration = await db.query.integrations.findFirst({
-      where: eq(integrations.integrationType, data.integrationType),
-    })
-    if (!integration?.secrets || integration.status !== 'active') {
-      return []
-    }
-
-    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-    if (!secrets.accessToken) return []
-
-    const config = (integration.config ?? {}) as Record<string, unknown>
-
-    switch (data.integrationType) {
-      case 'linear':
-        return fetchLinearStatuses(secrets.accessToken, config.channelId as string | undefined)
-      case 'github':
-        // GitHub has fixed statuses
-        return [
-          { id: 'Open', name: 'Open' },
-          { id: 'Closed', name: 'Closed' },
-        ]
-      case 'jira':
-        return fetchJiraStatuses(secrets.accessToken, config)
-      case 'clickup':
-        return fetchClickUpStatuses(secrets.accessToken, config)
-      case 'asana':
-        return fetchAsanaSections(secrets.accessToken, config)
-      case 'shortcut':
-        return fetchShortcutStates(secrets.accessToken)
-      case 'azure_devops':
-        // Azure DevOps common states — can be customized per project
-        return [
-          { id: 'New', name: 'New' },
-          { id: 'Active', name: 'Active' },
-          { id: 'Resolved', name: 'Resolved' },
-          { id: 'Closed', name: 'Closed' },
-        ]
-      default:
+      const integration = await db.query.integrations.findFirst({
+        where: eq(integrations.integrationType, data.integrationType),
+      })
+      if (!integration?.secrets || integration.status !== 'active') {
         return []
+      }
+
+      const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+      if (!secrets.accessToken) return []
+
+      const config = (integration.config ?? {}) as Record<string, unknown>
+
+      switch (data.integrationType) {
+        case 'linear':
+          return fetchLinearStatuses(secrets.accessToken, config.channelId as string | undefined)
+        case 'github':
+          // GitHub has fixed statuses
+          return [
+            { id: 'Open', name: 'Open' },
+            { id: 'Closed', name: 'Closed' },
+          ]
+        case 'jira':
+          return fetchJiraStatuses(secrets.accessToken, config)
+        case 'clickup':
+          return fetchClickUpStatuses(secrets.accessToken, config)
+        case 'asana':
+          return fetchAsanaSections(secrets.accessToken, config)
+        case 'shortcut':
+          return fetchShortcutStates(secrets.accessToken)
+        case 'azure_devops':
+          // Azure DevOps common states — can be customized per project
+          return [
+            { id: 'New', name: 'New' },
+            { id: 'Active', name: 'Active' },
+            { id: 'Resolved', name: 'Resolved' },
+            { id: 'Closed', name: 'Closed' },
+          ]
+        default:
+          return []
+      }
+    } catch (error) {
+      console.error(`[fn:external-statuses] fetchExternalStatusesFn failed:`, error)
+      throw error
     }
   })
 

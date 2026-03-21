@@ -99,7 +99,6 @@ export function PortalAuthFormInline({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
-  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState(0)
@@ -259,7 +258,7 @@ export function PortalAuthFormInline({
     }
   }
 
-  // --- Forgot/reset password handlers ---
+  // --- Forgot password handler ---
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -271,49 +270,17 @@ export function PortalAuthFormInline({
 
     setLoadingAction('forgot')
     try {
-      const result = await authClient.emailOtp.sendVerificationOtp({
+      const result = await authClient.requestPasswordReset({
         email,
-        type: 'forget-password',
+        redirectTo: '/auth/reset-password',
       })
       if (result.error) {
-        throw new Error(result.error.message || 'Failed to send reset code')
+        throw new Error(result.error.message || 'Failed to send reset link')
       }
       setStep('reset')
-      setResendCooldown(60)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset code')
+      setError(err instanceof Error ? err.message : 'Failed to send reset link')
     } finally {
-      setLoadingAction(null)
-    }
-  }
-
-  const handleResetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!code.trim() || code.length !== 6) {
-      setError('Please enter the 6-digit code')
-      return
-    }
-    if (!newPassword || newPassword.length < 8) {
-      setError('New password must be at least 8 characters')
-      return
-    }
-
-    setLoadingAction('reset')
-    try {
-      const result = await authClient.emailOtp.resetPassword({
-        email,
-        otp: code,
-        password: newPassword,
-      })
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to reset password')
-      }
-      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
-      postAuthSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password')
       setLoadingAction(null)
     }
   }
@@ -343,25 +310,9 @@ export function PortalAuthFormInline({
     sendCode()
   }
 
-  const handleResendForgot = () => {
-    if (resendCooldown > 0) return
-    setCode('')
-    setNewPassword('')
-    setLoadingAction('forgot')
-    authClient.emailOtp
-      .sendVerificationOtp({ email, type: 'forget-password' })
-      .then((result) => {
-        if (result.error) setError(result.error.message || 'Failed to resend code')
-        else setResendCooldown(60)
-      })
-      .catch(() => setError('Failed to resend code'))
-      .finally(() => setLoadingAction(null))
-  }
-
   const handleBack = () => {
     setError('')
     setCode('')
-    setNewPassword('')
     setStep(defaultStep)
   }
 
@@ -803,7 +754,7 @@ export function PortalAuthFormInline({
           <div className="text-center">
             <h2 className="text-lg font-semibold">Reset your password</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Enter your email and we&apos;ll send you a code to reset your password.
+              Enter your email and we&apos;ll send you a link to reset your password.
             </p>
           </div>
 
@@ -832,103 +783,37 @@ export function PortalAuthFormInline({
             {loadingAction === 'forgot' ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Sending code...
+                Sending link...
               </>
             ) : (
-              'Send reset code'
+              'Send reset link'
             )}
           </Button>
         </form>
       )}
 
-      {/* Reset password: enter code + new password */}
+      {/* Reset password: check email confirmation */}
       {step === 'reset' && (
-        <form onSubmit={handleResetSubmit} className="space-y-4">
+        <div className="space-y-4">
           <button
             type="button"
-            onClick={() => {
-              setError('')
-              setCode('')
-              setNewPassword('')
-              setStep('forgot')
-            }}
+            onClick={handleBack}
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
             Back
           </button>
 
-          <div className="rounded-lg bg-muted/50 p-4">
-            <p className="text-sm text-center">
-              We sent a reset code to <span className="font-medium text-foreground">{email}</span>
+          <div className="text-center space-y-3">
+            <EnvelopeIcon className="h-10 w-10 text-primary mx-auto" />
+            <h2 className="text-lg font-semibold">Check your email</h2>
+            <p className="text-sm text-muted-foreground">
+              We sent a password reset link to{' '}
+              <span className="font-medium text-foreground">{email}</span>. The link expires in 24
+              hours.
             </p>
           </div>
-
-          {error && <FormError message={error} />}
-
-          <div className="space-y-2">
-            <label htmlFor="inline-reset-code" className="text-sm font-medium">
-              Reset code
-            </label>
-            <Input
-              ref={codeInputRef}
-              id="inline-reset-code"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              placeholder="000000"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loadingAction !== null}
-              className="text-center text-2xl tracking-widest"
-              autoComplete="one-time-code"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="inline-new-password" className="text-sm font-medium">
-              New password
-            </label>
-            <Input
-              id="inline-new-password"
-              type="password"
-              placeholder="At least 8 characters"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={loadingAction !== null}
-              autoComplete="new-password"
-            />
-          </div>
-
-          <Button
-            type="submit"
-            disabled={loadingAction !== null || code.length !== 6 || newPassword.length < 8}
-            className="w-full"
-          >
-            {loadingAction === 'reset' ? (
-              <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Resetting password...
-              </>
-            ) : (
-              'Reset password'
-            )}
-          </Button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={handleResendForgot}
-              disabled={resendCooldown > 0 || loadingAction !== null}
-              className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {resendCooldown > 0
-                ? `Resend code in ${resendCooldown}s`
-                : "Didn't receive a code? Resend"}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
     </div>
   )

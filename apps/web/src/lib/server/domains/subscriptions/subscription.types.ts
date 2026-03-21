@@ -37,6 +37,16 @@ export interface Subscription {
  */
 export type SubscriptionLevel = 'all' | 'status_only' | 'none'
 
+/** Derive a SubscriptionLevel from the two boolean notification columns */
+export function levelFromFlags(
+  notifyComments: boolean,
+  notifyStatusChanges: boolean
+): SubscriptionLevel {
+  if (notifyComments && notifyStatusChanges) return 'all'
+  if (notifyStatusChanges) return 'status_only'
+  return 'none'
+}
+
 export interface NotificationPreferencesData {
   emailStatusChange: boolean
   emailNewComment: boolean

@@ -5,7 +5,7 @@
  * to internal Quackback TypeIDs.
  */
 
-import type { PostId } from '@quackback/ids'
+import type { PostId, CommentId } from '@quackback/ids'
 
 /**
  * Simple ID map from external to internal IDs
@@ -31,4 +31,5 @@ export class IdMap<T extends string> {
  */
 export class ImportIdMaps {
   readonly posts = new IdMap<PostId>()
+  readonly comments = new IdMap<CommentId>()
 }

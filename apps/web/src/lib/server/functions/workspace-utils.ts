@@ -31,32 +31,40 @@ const requireWorkspaceRoleSchema = z.object({
 export const requireWorkspaceRole = createServerFn({ method: 'GET' })
   .inputValidator(requireWorkspaceRoleSchema)
   .handler(async ({ data }) => {
-    const session = await getSession()
-    if (!session?.user) {
-      throw redirect({ to: '/' })
-    }
+    console.log(
+      `[fn:workspace-utils] requireWorkspaceRole: allowedRoles=${data.allowedRoles.join(',')}`
+    )
+    try {
+      const session = await getSession()
+      if (!session?.user) {
+        throw redirect({ to: '/' })
+      }
 
-    const appSettings = await db.query.settings.findFirst()
-    if (!appSettings) {
-      throw redirect({ to: '/' })
-    }
+      const appSettings = await db.query.settings.findFirst()
+      if (!appSettings) {
+        throw redirect({ to: '/' })
+      }
 
-    // Note: Onboarding check is handled in __root.tsx beforeLoad
+      // Note: Onboarding check is handled in __root.tsx beforeLoad
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, session.user.id),
-    })
-    if (!principalRecord) {
-      throw redirect({ to: '/' })
-    }
+      const principalRecord = await db.query.principal.findFirst({
+        where: eq(principal.userId, session.user.id),
+      })
+      if (!principalRecord) {
+        throw redirect({ to: '/' })
+      }
 
-    if (!data.allowedRoles.includes(principalRecord.role)) {
-      throw redirect({ to: '/admin/login', search: { error: 'not_team_member' } })
-    }
+      if (!data.allowedRoles.includes(principalRecord.role)) {
+        throw redirect({ to: '/admin/login', search: { error: 'not_team_member' } })
+      }
 
-    return {
-      settings: appSettings,
-      principal: principalRecord,
-      user: session.user,
+      return {
+        settings: appSettings,
+        principal: principalRecord,
+        user: session.user,
+      }
+    } catch (error) {
+      console.error(`[fn:workspace-utils] requireWorkspaceRole failed:`, error)
+      throw error
     }
   })

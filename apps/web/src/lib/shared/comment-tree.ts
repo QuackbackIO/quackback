@@ -54,6 +54,8 @@ export interface CommentWithReactions {
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
+  deletedAt?: Date | null
+  deletedByPrincipalId?: string | null
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
   reactions: Array<{
@@ -75,6 +77,8 @@ export interface CommentTreeNode {
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
+  deletedAt: Date | null
+  deletedByPrincipalId: string | null
   avatarUrl?: string | null
   statusChange?: CommentStatusChange | null
   replies: CommentTreeNode[]
@@ -111,16 +115,29 @@ export function aggregateReactions(
 }
 
 /**
+ * Recursively prune deleted leaf comments and fully-deleted subtrees.
+ * A deleted comment is kept only if it has at least one live descendant
+ * (preserving the thread structure for context).
+ */
+function pruneDeletedSubtrees(nodes: CommentTreeNode[]): CommentTreeNode[] {
+  return nodes
+    .map((node) => ({ ...node, replies: pruneDeletedSubtrees(node.replies) }))
+    .filter((node) => !node.deletedAt || node.replies.length > 0)
+}
+
+/**
  * Build a nested comment tree from a flat list of comments.
  * Uses two-pass algorithm for O(n) complexity.
  *
  * @param comments - Flat array of comments with reactions
  * @param principalId - Optional principal ID for reaction status
+ * @param options - Options: pruneDeleted removes deleted leaves/subtrees (for portal view)
  * @returns Array of root comments with nested replies
  */
 export function buildCommentTree<T extends CommentWithReactions>(
   comments: T[],
-  principalId?: string
+  principalId?: string,
+  options?: { pruneDeleted?: boolean }
 ): CommentTreeNode[] {
   const commentMap = new Map<string, CommentTreeNode>()
   const rootComments: CommentTreeNode[] = []
@@ -137,6 +154,8 @@ export function buildCommentTree<T extends CommentWithReactions>(
       isTeamMember: comment.isTeamMember,
       isPrivate: comment.isPrivate,
       createdAt: comment.createdAt,
+      deletedAt: comment.deletedAt ?? null,
+      deletedByPrincipalId: comment.deletedByPrincipalId ?? null,
       avatarUrl: comment.avatarUrl,
       statusChange: comment.statusChange,
       replies: [],
@@ -158,5 +177,8 @@ export function buildCommentTree<T extends CommentWithReactions>(
     }
   }
 
+  if (options?.pruneDeleted) {
+    return pruneDeletedSubtrees(rootComments)
+  }
   return rootComments
 }

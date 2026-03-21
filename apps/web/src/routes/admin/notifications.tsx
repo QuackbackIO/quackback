@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { BellIcon, InboxIcon } from '@heroicons/react/24/outline'
+import { InboxIcon } from '@heroicons/react/24/outline'
+import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotificationItem } from '@/components/notifications/notification-item'
 import { useNotifications } from '@/lib/client/hooks/use-notifications-queries'
@@ -25,19 +25,20 @@ function NotificationsPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border/60 bg-card/50">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <BellIcon className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Notifications</h1>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {total} total
-            </Badge>
-            {unreadCount > 0 && (
-              <Badge variant="default" className="text-xs">
-                {unreadCount} unread
-              </Badge>
-            )}
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <BellIconSolid className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold">Notifications</h1>
+            <p className="text-xs text-muted-foreground">
+              {total === 0
+                ? 'No notifications'
+                : unreadCount > 0
+                  ? `${unreadCount} unread of ${total}`
+                  : `${total} notifications — all caught up`}
+            </p>
           </div>
         </div>
         {unreadCount > 0 && (
@@ -59,7 +60,7 @@ function NotificationsPage() {
         </div>
       ) : notifications.length > 0 ? (
         <ScrollArea className="flex-1">
-          <div className="divide-y divide-border/40">
+          <div className="divide-y divide-border/50">
             {notifications.map((notification) => (
               <NotificationItem
                 key={notification.id}

@@ -73,6 +73,11 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
     tags: [],
     roadmapIds: [],
     pinnedComment: null,
+    summaryJson: null,
+    summaryUpdatedAt: null,
+    canonicalPostId: null,
+    mergedAt: null,
+    isCommentsLocked: false,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
   }),
@@ -98,6 +103,8 @@ vi.mock('@/lib/server/domains/posts/post.service', () => ({
 
 vi.mock('@/lib/server/domains/posts/post.voting', () => ({
   voteOnPost: vi.fn().mockResolvedValue({ voted: true, voteCount: 6 }),
+  addVoteOnBehalf: vi.fn().mockResolvedValue({ voted: true, voteCount: 7 }),
+  removeVote: vi.fn().mockResolvedValue({ removed: true, voteCount: 4 }),
 }))
 
 vi.mock('@/lib/server/domains/posts/post.merge', () => ({
@@ -109,6 +116,25 @@ vi.mock('@/lib/server/domains/posts/post.merge', () => ({
     post: { id: 'post_dup' },
     canonicalPost: { id: 'post_canon', voteCount: 5 },
   }),
+  getMergedPosts: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  getActivityForPost: vi.fn().mockResolvedValue([]),
+  createActivity: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/feedback/pipeline/suggestion.service', () => ({
+  acceptCreateSuggestion: vi.fn().mockResolvedValue({ success: true, resultPostId: 'post_new' }),
+  acceptVoteSuggestion: vi.fn().mockResolvedValue({ success: true, resultPostId: 'post_test' }),
+  dismissSuggestion: vi.fn().mockResolvedValue(undefined),
+  restoreSuggestion: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/server/domains/merge-suggestions/merge-suggestion.service', () => ({
+  acceptMergeSuggestion: vi.fn().mockResolvedValue(undefined),
+  dismissMergeSuggestion: vi.fn().mockResolvedValue(undefined),
+  restoreMergeSuggestion: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/domains/posts/post.permissions', () => ({
@@ -130,6 +156,7 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
       parentId: null,
       principalId: 'principal_test',
       isTeamMember: true,
+      isPrivate: false,
       createdAt: new Date('2026-01-01'),
     },
     post: { id: 'post_test', title: 'Test Post', boardSlug: 'bugs' },
@@ -526,6 +553,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('get_details')
       expect(toolNames).toContain('triage_post')
       expect(toolNames).toContain('vote_post')
+      expect(toolNames).toContain('proxy_vote')
       expect(toolNames).toContain('add_comment')
       expect(toolNames).toContain('create_post')
       expect(toolNames).toContain('create_changelog')
@@ -539,7 +567,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unmerge_post')
       expect(toolNames).toContain('delete_post')
       expect(toolNames).toContain('restore_post')
-      expect(toolNames).toHaveLength(17)
+      expect(toolNames).toHaveLength(23)
     })
 
     it('should handle resources/list request', async () => {
@@ -788,6 +816,85 @@ describe('MCP HTTP Handler', () => {
       expect(text.voteCount).toBe(6)
     })
 
+    // ── proxy_vote tool ─────────────────────────────────────────────────
+
+    it('should handle tools/call for proxy_vote (add)', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'proxy_vote',
+            arguments: {
+              postId: 'post_test',
+              voterPrincipalId: 'principal_voter',
+            },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.voted).toBe(true)
+      expect(text.voteCount).toBe(7)
+      expect(text.voterPrincipalId).toBe('principal_voter')
+    })
+
+    it('should handle tools/call for proxy_vote (remove)', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'proxy_vote',
+            arguments: {
+              action: 'remove',
+              postId: 'post_test',
+              voterPrincipalId: 'principal_voter',
+            },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.removed).toBe(true)
+      expect(text.voteCount).toBe(4)
+      expect(text.voterPrincipalId).toBe('principal_voter')
+    })
+
+    it('should handle proxy_vote with source attribution', async () => {
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'proxy_vote',
+            arguments: {
+              postId: 'post_test',
+              voterPrincipalId: 'principal_voter',
+              sourceType: 'zendesk',
+              sourceExternalUrl: 'https://zendesk.com/ticket/123',
+            },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.voted).toBe(true)
+      expect(text.voteCount).toBe(7)
+    })
+
     // ── add_comment tool ────────────────────────────────────────────────
 
     it('should handle tools/call for add_comment', async () => {
@@ -809,6 +916,54 @@ describe('MCP HTTP Handler', () => {
       const text = JSON.parse(body.result.content[0].text)
       expect(text.id).toBe('comment_new')
       expect(text.content).toBe('Great feedback!')
+      expect(text.isPrivate).toBe(false)
+    })
+
+    it('should handle tools/call for add_comment with isPrivate', async () => {
+      const { createComment } = await import('@/lib/server/domains/comments/comment.service')
+      const mockCreateComment = createComment as ReturnType<typeof vi.fn>
+      mockCreateComment.mockResolvedValueOnce({
+        comment: {
+          id: 'comment_private',
+          postId: 'post_test',
+          content: 'Internal discussion note',
+          parentId: null,
+          principalId: 'principal_test',
+          isTeamMember: true,
+          isPrivate: true,
+          createdAt: new Date('2026-01-01'),
+        },
+        post: { id: 'post_test', title: 'Test Post', boardSlug: 'bugs' },
+      })
+
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'add_comment',
+            arguments: {
+              postId: 'post_test',
+              content: 'Internal discussion note',
+              isPrivate: true,
+            },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { content: Array<{ text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('comment_private')
+      expect(text.isPrivate).toBe(true)
+
+      // Verify isPrivate was passed through to the service
+      expect(mockCreateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: true }),
+        expect.any(Object)
+      )
     })
 
     // ── update_comment tool ─────────────────────────────────────────────
@@ -1001,7 +1156,7 @@ describe('MCP HTTP Handler', () => {
       expect(text.restored).toBe(true)
       expect(text.postId).toBe('post_test')
       expect(text.title).toBe('Restored Post')
-      expect(vi.mocked(restorePost)).toHaveBeenCalledWith('post_test')
+      expect(vi.mocked(restorePost)).toHaveBeenCalledWith('post_test', expect.any(String))
     })
 
     // ── delete_post error handling ──────────────────────────────────

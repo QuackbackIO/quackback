@@ -23,6 +23,7 @@ import { listTags } from '@/lib/server/domains/tags/tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
 import {
   listTeamMembers,
+  searchMembers,
   updateMemberRole,
   removeTeamMember,
 } from '@/lib/server/domains/principals/principal.service'
@@ -56,6 +57,9 @@ import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
 import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
+
+/** Invitation expiry duration — 7 days in milliseconds */
+const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * Server functions for admin data fetching.
@@ -234,6 +238,18 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
   }
 })
 
+const searchMembersSchema = z.object({
+  search: z.string().optional(),
+  limit: z.number().optional(),
+})
+
+export const searchMembersFn = createServerFn({ method: 'GET' })
+  .inputValidator(searchMembersSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    return searchMembers(data)
+  })
+
 // Schema for team member operations
 const principalIdSchema = z.object({
   principalId: z.string(),
@@ -320,7 +336,7 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const orgBoards = await db.query.boards.findMany()
+    const orgBoards = await listBoards()
     console.log(`[fn:admin] fetchBoardsForSettings: count=${orgBoards.length}`)
     return orgBoards.map((b) => ({
       ...b,
@@ -389,6 +405,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
         where: eq(integrations.integrationType, data.type),
         with: {
           eventMappings: true,
+          slackChannelMonitors: true,
         },
       })
 
@@ -441,6 +458,14 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
 
       const notificationChannels = [...channelMap.values()]
 
+      // Map monitored channels for Slack
+      const monitoredChannels = (integration.slackChannelMonitors ?? []).map((m) => ({
+        channelId: m.channelId,
+        channelName: m.channelName,
+        boardId: m.boardId,
+        enabled: m.enabled,
+      }))
+
       return {
         integration: {
           id: integration.id,
@@ -453,6 +478,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
             enabled: m.enabled,
           })),
           notificationChannels,
+          monitoredChannels,
         },
         platformCredentialFields,
         platformCredentialsConfigured,
@@ -636,6 +662,134 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   })
 
 /**
+ * Update a portal user's details (admin-only).
+ */
+const updatePortalUserSchema = z.object({
+  principalId: z.string(),
+  name: z.string().min(1).max(200).optional(),
+  email: z.string().email().nullable().optional(),
+})
+
+export const updatePortalUserFn = createServerFn({ method: 'POST' })
+  .inputValidator(updatePortalUserSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] updatePortalUserFn: principalId=${data.principalId}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      // Look up the principal to get userId
+      const p = await db.query.principal.findFirst({
+        where: eq(principal.id, data.principalId as PrincipalId),
+        columns: { userId: true },
+      })
+      if (!p?.userId) throw new Error('User not found')
+
+      // Build update set
+      const updates: Record<string, unknown> = {}
+      if (data.name !== undefined) updates.name = data.name.trim()
+      if (data.email !== undefined) {
+        // If setting an email, check uniqueness
+        if (data.email !== null) {
+          const normalized = data.email.toLowerCase().trim()
+          const existing = await db
+            .select({ id: user.id })
+            .from(user)
+            .where(eq(user.email, normalized))
+            .limit(1)
+          if (existing.length > 0 && existing[0].id !== p.userId) {
+            throw new Error('Email already in use')
+          }
+          updates.email = normalized
+        } else {
+          updates.email = null
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return { success: true }
+      }
+
+      await db.update(user).set(updates).where(eq(user.id, p.userId))
+
+      // Sync display name to principal if name changed
+      if (data.name !== undefined) {
+        await db
+          .update(principal)
+          .set({ displayName: data.name.trim() })
+          .where(eq(principal.id, data.principalId as PrincipalId))
+      }
+
+      console.log(`[fn:admin] updatePortalUserFn: updated`)
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ updatePortalUserFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Create a new portal user (admin-only).
+ * Used by the AuthorSelector when the admin wants to attribute feedback to someone not yet in the system.
+ */
+const createPortalUserSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().optional(),
+})
+
+export const createPortalUserFn = createServerFn({ method: 'POST' })
+  .inputValidator(createPortalUserSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] createPortalUserFn: name=${data.name}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
+
+      // Check email uniqueness if provided
+      if (data.email) {
+        const normalized = data.email.toLowerCase().trim()
+        const existing = await db
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.email, normalized))
+          .limit(1)
+        if (existing.length > 0) {
+          throw new Error('A user with this email already exists')
+        }
+      }
+
+      const userId = generateId('user')
+      const principalId = generateId('principal')
+      const trimmedName = data.name.trim()
+
+      await db.insert(user).values({
+        id: userId,
+        name: trimmedName,
+        email: data.email ? data.email.toLowerCase().trim() : null,
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+
+      await db.insert(principal).values({
+        id: principalId,
+        userId,
+        role: 'user' as const,
+        displayName: trimmedName,
+        createdAt: new Date(),
+      })
+
+      console.log(`[fn:admin] createPortalUserFn: created principalId=${principalId}`)
+      return {
+        principalId: principalId as string,
+        name: trimmedName,
+        email: data.email?.toLowerCase().trim() ?? null,
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ createPortalUserFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
  * Delete (remove) a portal user.
  */
 export const deletePortalUserFn = createServerFn({ method: 'POST' })
@@ -679,7 +833,7 @@ export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
  * Uses Better Auth's API to generate the token and stores it for later URL construction.
  *
  * @param email - The invitee's email address
- * @param callbackPath - Relative path to redirect to after authentication (e.g., /accept-invitation/{id})
+ * @param callbackPath - Relative path to redirect to after authentication (e.g., /complete-signup/{id})
  * @param portalUrl - The base portal URL (workspace domain)
  * @returns The magic link URL with the correct workspace domain
  */
@@ -725,7 +879,7 @@ async function generateInvitationMagicLink(
 
   // Construct the magic link URL with the workspace domain
   const absoluteCallbackURL = `${portalUrl}${callbackPath}`
-  const verifyUrl = new URL('/api/auth/magic-link/verify', portalUrl)
+  const verifyUrl = new URL('/verify-magic-link', portalUrl)
   verifyUrl.searchParams.set('token', token)
   verifyUrl.searchParams.set('callbackURL', absoluteCallbackURL)
   verifyUrl.searchParams.set('errorCallbackURL', absoluteCallbackURL)
@@ -771,7 +925,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       }
 
       const invitationId = generateId('invite')
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
       const now = new Date()
 
       await db.insert(invitation).values({
@@ -788,7 +942,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
 
       // Generate magic link for one-click authentication
       const portalUrl = getBaseUrl()
-      const callbackURL = `/accept-invitation/${invitationId}`
+      const callbackURL = `/complete-signup/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
       const result = await sendInvitationEmail({
@@ -865,7 +1019,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
 
       // Generate new magic link for one-click authentication
       const portalUrl = getBaseUrl()
-      const callbackURL = `/accept-invitation/${invitationId}`
+      const callbackURL = `/complete-signup/${invitationId}`
       const inviteLink = await generateInvitationMagicLink(
         invitationRecord.email,
         callbackURL,
@@ -882,7 +1036,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
 
       await db
         .update(invitation)
-        .set({ lastSentAt: new Date() })
+        .set({ lastSentAt: new Date(), expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS) })
         .where(eq(invitation.id, invitationId))
 
       console.log(

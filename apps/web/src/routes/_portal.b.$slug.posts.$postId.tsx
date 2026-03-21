@@ -19,9 +19,16 @@ import { DeletePostDialog } from '@/components/public/post-detail/delete-post-di
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
 import { usePostActions } from '@/lib/client/mutations'
+import {
+  useDeleteComment,
+  usePinComment,
+  useUnpinComment,
+  useRestoreComment,
+} from '@/lib/client/mutations/portal-comments'
+import { toast } from 'sonner'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
-import { isValidTypeId, type PostId } from '@quackback/ids'
+import { isValidTypeId, type CommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
@@ -38,21 +45,21 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
     }
     const postId = postIdParam as PostId
 
-    // Fire prefetches immediately (don't await - components handle their own loading)
+    // Fire non-critical prefetches (don't await - components handle their own loading via Suspense)
     queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId))
     queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId))
-    queryClient.prefetchQuery(portalDetailQueries.votedPosts())
     queryClient.prefetchQuery({
       queryKey: postPermissionsKeys.detail(postId),
       queryFn: () => getPostPermissionsFn({ data: { postId } }),
       staleTime: 30_000,
     })
 
-    // Await only critical data needed for initial render
-    // Note: Post detail already includes board data (JOINed), so no separate board query needed
+    // Await critical data needed for initial render.
+    // votedPosts must be awaited so usePostVote (non-Suspense) has data during SSR.
     const [post] = await Promise.all([
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
+      queryClient.ensureQueryData(portalDetailQueries.votedPosts()),
     ])
 
     if (!post || post.board.slug !== slug) {
@@ -119,6 +126,26 @@ function PostDetailPage() {
     boardSlug: slug,
     onEditSuccess: () => setIsEditingPost(false),
     onDeleteSuccess: () => setDeleteDialogOpen(false),
+  })
+
+  const deleteComment = useDeleteComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to delete comment'),
+  })
+
+  const pinComment = usePinComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to pin comment'),
+  })
+
+  const unpinComment = useUnpinComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to unpin comment'),
+  })
+
+  const restoreComment = useRestoreComment({
+    postId,
+    onError: (error) => toast.error(error.message || 'Failed to restore comment'),
   })
 
   const post = postQuery.data
@@ -220,6 +247,19 @@ function PostDetailPage() {
             pinnedCommentId={post.pinnedCommentId}
             disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
             lockedMessage={post.isCommentsLocked ? 'Comments are locked on this post' : undefined}
+            statuses={statusesQuery.data}
+            currentStatusId={post.statusId}
+            onPinComment={(commentId: CommentId) => pinComment.mutate(commentId)}
+            onUnpinComment={() => unpinComment.mutate()}
+            isPinPending={pinComment.isPending || unpinComment.isPending}
+            onDeleteComment={(commentId: CommentId) => deleteComment.mutate(commentId)}
+            deletingCommentId={
+              deleteComment.isPending ? (deleteComment.variables as CommentId) : null
+            }
+            onRestoreComment={(commentId: CommentId) => restoreComment.mutate(commentId)}
+            restoringCommentId={
+              restoreComment.isPending ? (restoreComment.variables as CommentId) : null
+            }
           />
         </Suspense>
       </div>

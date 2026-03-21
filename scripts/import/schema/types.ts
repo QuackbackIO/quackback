@@ -51,14 +51,20 @@ export interface IntermediatePost {
   responseAt?: string
   /** Official response author email */
   responseBy?: string
+  /** External post ID this post was merged into (for merge relationships) */
+  mergedIntoId?: string
 }
 
 /**
  * Intermediate comment format
  */
 export interface IntermediateComment {
+  /** External comment ID (used for threading via parentId) */
+  id?: string
   /** External post ID this comment belongs to */
   postId: string
+  /** External parent comment ID (for threaded replies) */
+  parentId?: string
   /** Comment author email */
   authorEmail?: string
   /** Comment author display name */
@@ -67,6 +73,8 @@ export interface IntermediateComment {
   body: string
   /** Whether the author is a staff/team member (defaults to false if not provided) */
   isStaff: boolean
+  /** Whether the comment is private/hidden from public view */
+  isPrivate?: boolean
   /** Creation timestamp (ISO 8601) */
   createdAt?: string
 }
@@ -112,6 +120,28 @@ export interface IntermediateUser {
 }
 
 /**
+ * Intermediate changelog entry format
+ */
+export interface IntermediateChangelog {
+  /** External changelog entry ID */
+  id: string
+  /** Entry title */
+  title: string
+  /** Entry body (markdown or plain text) */
+  body: string
+  /** Publication timestamp (ISO 8601, null = draft) */
+  publishedAt?: string
+  /** Creation timestamp (ISO 8601) */
+  createdAt?: string
+  /** External post IDs linked to this entry */
+  linkedPostIds: string[]
+  /** Author email */
+  authorEmail?: string
+  /** Author display name */
+  authorName?: string
+}
+
+/**
  * Complete intermediate dataset for import
  */
 export interface IntermediateData {
@@ -120,6 +150,7 @@ export interface IntermediateData {
   votes: IntermediateVote[]
   notes: IntermediateNote[]
   users: IntermediateUser[]
+  changelogs: IntermediateChangelog[]
 }
 
 /**
@@ -154,6 +185,7 @@ export interface ImportResult {
   comments: { imported: number; skipped: number; errors: number }
   votes: { imported: number; skipped: number; errors: number }
   notes: { imported: number; skipped: number; errors: number }
+  changelogs: { imported: number; skipped: number; errors: number }
   duration: number
   errors: ImportError[]
 }
@@ -162,7 +194,7 @@ export interface ImportResult {
  * Import error details
  */
 export interface ImportError {
-  type: 'post' | 'comment' | 'vote' | 'note'
+  type: 'post' | 'comment' | 'vote' | 'note' | 'changelog'
   externalId: string
   message: string
   row?: number

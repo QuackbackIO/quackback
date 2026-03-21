@@ -24,6 +24,7 @@ export function useInboxFilters() {
       minComments: search.minComments ? parseInt(search.minComments, 10) : undefined,
       responded: search.responded,
       updatedBefore: search.updatedBefore,
+      hasDuplicates: search.hasDuplicates,
       sort: search.sort,
       showDeleted: search.deleted,
     }),
@@ -49,6 +50,7 @@ export function useInboxFilters() {
           ...('minComments' in updates && { minComments: updates.minComments?.toString() }),
           ...('responded' in updates && { responded: updates.responded }),
           ...('updatedBefore' in updates && { updatedBefore: updates.updatedBefore }),
+          ...('hasDuplicates' in updates && { hasDuplicates: updates.hasDuplicates || undefined }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('showDeleted' in updates && { deleted: updates.showDeleted || undefined }),
         },
@@ -82,6 +84,7 @@ export function useInboxFilters() {
       filters.minComments ||
       (filters.responded && filters.responded !== 'all') ||
       filters.updatedBefore ||
+      filters.hasDuplicates ||
       filters.showDeleted
     )
   }, [filters])

@@ -10,6 +10,9 @@ import {
   GlobeAltIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/solid'
+import { useQuery } from '@tanstack/react-query'
+import { feedbackQueries } from '@/lib/client/queries/feedback'
+import { formatBadgeCount } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -35,7 +38,7 @@ interface AdminSidebarProps {
 }
 
 const navItems = [
-  { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
+  { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon, hasBadge: true },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
@@ -50,12 +53,14 @@ function NavItem({
   icon: Icon,
   label,
   isActive,
+  badge,
   onClick,
 }: {
   href: string
   icon: typeof ChatBubbleLeftIcon
   label: string
   isActive: boolean
+  badge?: number
   onClick?: () => void
 }) {
   return (
@@ -65,12 +70,17 @@ function NavItem({
           to={href}
           onClick={onClick}
           className={cn(
-            'flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200',
+            'relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200',
             'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
             isActive && 'bg-muted/80 text-foreground'
           )}
         >
           <Icon className="h-5 w-5" />
+          {badge != null && badge > 0 && (
+            <span className="absolute top-1 right-1 flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold rounded-full bg-primary text-primary-foreground">
+              {formatBadgeCount(badge)}
+            </span>
+          )}
           <span className="sr-only">{label}</span>
         </Link>
       </TooltipTrigger>
@@ -91,6 +101,10 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
   const name = user?.name ?? initialUserData?.name ?? null
   const email = user?.email ?? initialUserData?.email ?? null
   const avatarUrl = user?.image ?? initialUserData?.avatarUrl ?? null
+
+  // Incoming badge count — pending create_post suggestions
+  const { data: incomingStats } = useQuery(feedbackQueries.incomingCount())
+  const incomingCount = incomingStats?.count ?? 0
 
   const handleSignOut = async () => {
     await signOut()
@@ -120,6 +134,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 icon={item.icon}
                 label={item.label}
                 isActive={isNavActive(pathname, item.href)}
+                badge={item.hasBadge ? incomingCount : undefined}
               />
             ))}
           </nav>
@@ -216,6 +231,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
               {navItems.map((item) => {
                 const isActive = isNavActive(pathname, item.href)
                 const Icon = item.icon
+                const badge = item.hasBadge ? incomingCount : 0
                 return (
                   <Link
                     key={item.href}
@@ -229,6 +245,11 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                   >
                     <Icon className="h-5 w-5" />
                     {item.label}
+                    {badge > 0 && (
+                      <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-semibold rounded-full bg-primary/10 text-primary">
+                        {formatBadgeCount(badge)}
+                      </span>
+                    )}
                   </Link>
                 )
               })}

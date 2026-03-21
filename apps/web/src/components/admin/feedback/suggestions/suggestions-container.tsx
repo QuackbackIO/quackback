@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { SuggestionsLayout } from './suggestions-layout'
 import { SuggestionsFiltersSidebar } from './suggestions-filter-sidebar'
 import { SuggestionList } from './suggestion-list'
@@ -35,16 +35,16 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
   }, [])
 
   const shouldUseInitialData =
-    isInitialRender.current && !filters.search && !filters.sourceIds?.length
+    isInitialRender.current && !filters.search && !filters.sourceTypes?.length && !filters.status
 
-  // Server-side query filters (type + sort go to server, source/board/search are client-side)
+  // Server-side query filters — all feedback suggestions (create_post + vote_on_post)
   const queryFilters = useMemo(
     () => ({
-      status: 'pending' as const,
-      suggestionType: filters.suggestionType,
+      status: (filters.status ?? 'pending') as 'pending' | 'dismissed',
+      sourceTypes: filters.sourceTypes,
       sort: filters.sort,
     }),
-    [filters.suggestionType, filters.sort]
+    [filters.status, filters.sourceTypes, filters.sort]
   )
 
   // Infinite query for paginated suggestions
@@ -60,56 +60,39 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
 
   const allSuggestions = flattenSuggestions(paginatedData) as unknown as SuggestionListItem[]
 
-  // Use server-provided per-source counts from the first page (reflects totals, not just current page)
-  const suggestionCountsBySource = useMemo(() => {
+  // Use server-provided per-source-type counts from the first page
+  const countsBySource = paginatedData?.pages[0]?.countsBySource ?? null
+  const countsBySourceType = useMemo(() => {
     const counts = new Map<string, number>()
-    const firstPage = paginatedData?.pages[0]
-    if (firstPage?.countsBySource) {
-      for (const [sourceId, cnt] of Object.entries(firstPage.countsBySource)) {
-        counts.set(sourceId, cnt as number)
+    if (countsBySource) {
+      for (const [sourceType, cnt] of Object.entries(countsBySource)) {
+        counts.set(sourceType, cnt)
       }
     }
     return counts
-  }, [paginatedData?.pages[0]?.countsBySource])
+  }, [countsBySource])
 
-  // Client-side filtering for source, board, and search
+  // Client-side filtering for source and search
   const suggestions = useMemo(() => {
     let filtered = allSuggestions
 
-    if (filters.sourceIds?.length) {
-      // Find if quackback source is among selected sources
-      const quackbackSource = sources.find((s) => s.sourceType === 'quackback')
-      const includesQuackback = !!quackbackSource && filters.sourceIds.includes(quackbackSource.id)
-
-      filtered = filtered.filter((s) => {
-        // Merge suggestions belong to quackback source
-        if (s.suggestionType === 'duplicate_post') return includesQuackback
-        return s.rawItem?.source && filters.sourceIds!.includes(s.rawItem.source.id)
-      })
+    if (filters.sourceTypes?.length) {
+      filtered = filtered.filter(
+        (s) => s.rawItem?.sourceType && filters.sourceTypes!.includes(s.rawItem.sourceType)
+      )
     }
 
     if (filters.search) {
       const q = filters.search.toLowerCase()
       filtered = filtered.filter((s) => {
-        const title =
-          s.suggestionType === 'duplicate_post'
-            ? (s.sourcePost?.title ?? '')
-            : (s.suggestedTitle ?? '')
-        const body =
-          s.suggestionType === 'duplicate_post'
-            ? (s.sourcePost?.content ?? s.targetPost?.content ?? '')
-            : (s.rawItem?.content?.text ?? s.suggestedBody ?? '')
-        const target = s.targetPost?.title ?? ''
-        return (
-          title.toLowerCase().includes(q) ||
-          body.toLowerCase().includes(q) ||
-          target.toLowerCase().includes(q)
-        )
+        const title = s.suggestedTitle ?? ''
+        const body = s.rawItem?.content?.text ?? s.suggestedBody ?? ''
+        return title.toLowerCase().includes(q) || body.toLowerCase().includes(q)
       })
     }
 
     return filtered
-  }, [allSuggestions, filters.sourceIds, filters.search])
+  }, [allSuggestions, filters.sourceTypes, filters.search])
 
   const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -131,6 +114,15 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
     [setFilters]
   )
 
+  const handleStatusChange = useCallback(
+    (status: 'pending' | 'dismissed') => setFilters({ status }),
+    [setFilters]
+  )
+
+  // Dismissed count for the toggle badge
+  const { data: countData } = useQuery(feedbackQueries.incomingCount())
+  const dismissedCount = countData?.dismissedCount ?? 0
+
   return (
     <>
       <SuggestionsLayout
@@ -140,7 +132,7 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
             filters={filters}
             onFiltersChange={setFilters}
             sources={sources}
-            suggestionCountsBySource={suggestionCountsBySource}
+            countsBySourceType={countsBySourceType}
           />
         }
         content={
@@ -162,6 +154,9 @@ export function SuggestionsContainer({ initialSuggestions }: SuggestionsContaine
               onSearchChange={handleSearchChange}
               sort={filters.sort}
               onSortChange={handleSortChange}
+              status={filters.status ?? 'pending'}
+              onStatusChange={handleStatusChange}
+              dismissedCount={dismissedCount}
             />
           </Suspense>
         }

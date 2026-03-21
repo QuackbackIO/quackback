@@ -28,6 +28,8 @@ export function McpServerSettings({ initialEnabled }: McpServerSettingsProps) {
     }
   }
 
+  const isBusy = saving || isPending
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
@@ -39,21 +41,17 @@ export function McpServerSettings({ initialEnabled }: McpServerSettingsProps) {
             Allow AI tools like Claude Code to interact with your feedback data via the MCP protocol
           </p>
         </div>
-        <Switch
-          id="mcp-toggle"
-          checked={enabled}
-          onCheckedChange={handleToggle}
-          disabled={saving || isPending}
-          aria-label="MCP Server"
-        />
-      </div>
-
-      {(saving || isPending) && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          <span>Saving...</span>
+        <div className="flex items-center gap-2">
+          {isBusy && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          <Switch
+            id="mcp-toggle"
+            checked={enabled}
+            onCheckedChange={handleToggle}
+            disabled={isBusy}
+            aria-label="MCP Server"
+          />
         </div>
-      )}
+      </div>
     </div>
   )
 }

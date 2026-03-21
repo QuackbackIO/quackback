@@ -94,6 +94,7 @@ export function convertUserVoice(options: UserVoiceAdapterOptions): AdapterResul
       comments: commentsData,
       notes: notesData,
       users: usersData,
+      changelogs: [],
     },
     stats,
   }

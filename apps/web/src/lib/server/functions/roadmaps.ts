@@ -98,33 +98,13 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
  * List all roadmaps for the workspace
  */
 export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin', 'member'] })
-
-  const roadmaps = await listRoadmaps()
-  // Serialize branded types to plain strings for turbo-stream
-  return roadmaps.map((roadmap) => ({
-    id: String(roadmap.id),
-    name: roadmap.name,
-    slug: roadmap.slug,
-    description: roadmap.description,
-    isPublic: roadmap.isPublic,
-    position: roadmap.position,
-    createdAt: roadmap.createdAt.toISOString(),
-    updatedAt: roadmap.updatedAt.toISOString(),
-  }))
-})
-
-/**
- * Get a single roadmap by ID
- */
-export const fetchRoadmap = createServerFn({ method: 'GET' })
-  .inputValidator(getRoadmapSchema)
-  .handler(async ({ data }) => {
+  console.log(`[fn:roadmaps] fetchRoadmaps`)
+  try {
     await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await getRoadmap(data.id as RoadmapId)
+    const roadmaps = await listRoadmaps()
     // Serialize branded types to plain strings for turbo-stream
-    return {
+    return roadmaps.map((roadmap) => ({
       id: String(roadmap.id),
       name: roadmap.name,
       slug: roadmap.slug,
@@ -133,6 +113,38 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
       position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
+    }))
+  } catch (error) {
+    console.error(`[fn:roadmaps] fetchRoadmaps failed:`, error)
+    throw error
+  }
+})
+
+/**
+ * Get a single roadmap by ID
+ */
+export const fetchRoadmap = createServerFn({ method: 'GET' })
+  .inputValidator(getRoadmapSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:roadmaps] fetchRoadmap: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+
+      const roadmap = await getRoadmap(data.id as RoadmapId)
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        id: String(roadmap.id),
+        name: roadmap.name,
+        slug: roadmap.slug,
+        description: roadmap.description,
+        isPublic: roadmap.isPublic,
+        position: roadmap.position,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] fetchRoadmap failed:`, error)
+      throw error
     }
   })
 
@@ -146,24 +158,30 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 export const createRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(createRoadmapSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:roadmaps] createRoadmapFn: name=${data.name}, slug=${data.slug}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await createRoadmap({
-      name: data.name,
-      slug: data.slug,
-      description: data.description,
-      isPublic: data.isPublic,
-    })
-    // Serialize branded types to plain strings for turbo-stream
-    return {
-      id: String(roadmap.id),
-      name: roadmap.name,
-      slug: roadmap.slug,
-      description: roadmap.description,
-      isPublic: roadmap.isPublic,
-      position: roadmap.position,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      const roadmap = await createRoadmap({
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        isPublic: data.isPublic,
+      })
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        id: String(roadmap.id),
+        name: roadmap.name,
+        slug: roadmap.slug,
+        description: roadmap.description,
+        isPublic: roadmap.isPublic,
+        position: roadmap.position,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] createRoadmapFn failed:`, error)
+      throw error
     }
   })
 
@@ -173,23 +191,29 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(updateRoadmapSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:roadmaps] updateRoadmapFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const roadmap = await updateRoadmap(data.id as RoadmapId, {
-      name: data.name,
-      description: data.description,
-      isPublic: data.isPublic,
-    })
-    // Serialize branded types to plain strings for turbo-stream
-    return {
-      id: String(roadmap.id),
-      name: roadmap.name,
-      slug: roadmap.slug,
-      description: roadmap.description,
-      isPublic: roadmap.isPublic,
-      position: roadmap.position,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      const roadmap = await updateRoadmap(data.id as RoadmapId, {
+        name: data.name,
+        description: data.description,
+        isPublic: data.isPublic,
+      })
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        id: String(roadmap.id),
+        name: roadmap.name,
+        slug: roadmap.slug,
+        description: roadmap.description,
+        isPublic: roadmap.isPublic,
+        position: roadmap.position,
+        createdAt: roadmap.createdAt.toISOString(),
+        updatedAt: roadmap.updatedAt.toISOString(),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] updateRoadmapFn failed:`, error)
+      throw error
     }
   })
 
@@ -199,10 +223,16 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteRoadmapSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:roadmaps] deleteRoadmapFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await deleteRoadmap(data.id as RoadmapId)
-    return { id: String(data.id) }
+      await deleteRoadmap(data.id as RoadmapId)
+      return { id: String(data.id) }
+    } catch (error) {
+      console.error(`[fn:roadmaps] deleteRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -211,13 +241,24 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(addPostToRoadmapSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(
+      `[fn:roadmaps] addPostToRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
+    )
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    await addPostToRoadmap({
-      roadmapId: data.roadmapId as RoadmapId,
-      postId: data.postId as PostId,
-    })
-    return { success: true }
+      await addPostToRoadmap(
+        {
+          roadmapId: data.roadmapId as RoadmapId,
+          postId: data.postId as PostId,
+        },
+        auth.principal.id
+      )
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:roadmaps] addPostToRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -226,10 +267,22 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(removePostFromRoadmapSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(
+      `[fn:roadmaps] removePostFromRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
+    )
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-    await removePostFromRoadmap(data.postId as PostId, data.roadmapId as RoadmapId)
-    return { success: true }
+      await removePostFromRoadmap(
+        data.postId as PostId,
+        data.roadmapId as RoadmapId,
+        auth.principal.id
+      )
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:roadmaps] removePostFromRoadmapFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -238,10 +291,16 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderRoadmapsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:roadmaps] reorderRoadmapsFn: count=${data.roadmapIds.length}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    await reorderRoadmaps(data.roadmapIds as RoadmapId[])
-    return { success: true }
+      await reorderRoadmaps(data.roadmapIds as RoadmapId[])
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:roadmaps] reorderRoadmapsFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -250,37 +309,45 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(
+      `[fn:roadmaps] getRoadmapPostsFn: roadmapId=${data.roadmapId}, limit=${data.limit}, offset=${data.offset}`
+    )
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
-      statusId: data.statusId as StatusId | undefined,
-      limit: data.limit,
-      offset: data.offset,
-      search: data.search,
-      boardIds: data.boardIds as BoardId[] | undefined,
-      tagIds: data.tagIds as TagId[] | undefined,
-      segmentIds: data.segmentIds as SegmentId[] | undefined,
-      sort: data.sort,
-    })
+      const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
+        statusId: data.statusId as StatusId | undefined,
+        limit: data.limit,
+        offset: data.offset,
+        search: data.search,
+        boardIds: data.boardIds as BoardId[] | undefined,
+        tagIds: data.tagIds as TagId[] | undefined,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
+        sort: data.sort,
+      })
 
-    // Serialize branded types to plain strings for turbo-stream
-    return {
-      ...result,
-      items: result.items.map((item) => ({
-        id: String(item.id),
-        title: item.title,
-        voteCount: item.voteCount,
-        statusId: item.statusId ? String(item.statusId) : null,
-        board: {
-          id: String(item.board.id),
-          name: item.board.name,
-          slug: item.board.slug,
-        },
-        roadmapEntry: {
-          postId: String(item.roadmapEntry.postId),
-          roadmapId: String(item.roadmapEntry.roadmapId),
-          position: item.roadmapEntry.position,
-        },
-      })),
+      // Serialize branded types to plain strings for turbo-stream
+      return {
+        ...result,
+        items: result.items.map((item) => ({
+          id: String(item.id),
+          title: item.title,
+          voteCount: item.voteCount,
+          statusId: item.statusId ? String(item.statusId) : null,
+          board: {
+            id: String(item.board.id),
+            name: item.board.name,
+            slug: item.board.slug,
+          },
+          roadmapEntry: {
+            postId: String(item.roadmapEntry.postId),
+            roadmapId: String(item.roadmapEntry.roadmapId),
+            position: item.roadmapEntry.position,
+          },
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:roadmaps] getRoadmapPostsFn failed:`, error)
+      throw error
     }
   })

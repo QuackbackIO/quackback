@@ -68,6 +68,12 @@ export interface PortalFeatures {
   comments: boolean
   /** Whether portal users can vote on posts */
   voting: boolean
+  /** Whether unauthenticated visitors can vote without signing in */
+  anonymousVoting: boolean
+  /** Whether unauthenticated visitors can comment without signing in */
+  anonymousCommenting: boolean
+  /** Whether unauthenticated visitors can create posts without signing in */
+  anonymousPosting: boolean
   /** Allow users to edit posts even after receiving votes/comments */
   allowEditAfterEngagement: boolean
   /** Allow users to delete posts even after receiving votes/comments */
@@ -105,6 +111,9 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     allowEditAfterEngagement: false,
     allowDeleteAfterEngagement: false,
     showPublicEditHistory: false,
+    anonymousVoting: true,
+    anonymousCommenting: false,
+    anonymousPosting: false,
   },
 }
 
@@ -222,8 +231,6 @@ export interface WidgetConfig {
   defaultBoard?: string
   /** Trigger button position */
   position?: 'bottom-right' | 'bottom-left'
-  /** Trigger button text */
-  buttonText?: string
   /** Whether to require HMAC verification on identify calls */
   identifyVerification?: boolean
 }
@@ -232,10 +239,7 @@ export interface WidgetConfig {
  * Public subset of widget config — safe to include in TenantSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Pick<
-  WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'buttonText'
->
+export type PublicWidgetConfig = Pick<WidgetConfig, 'enabled' | 'defaultBoard' | 'position'>
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   enabled: false,
@@ -249,7 +253,6 @@ export interface UpdateWidgetConfigInput {
   enabled?: boolean
   defaultBoard?: string
   position?: 'bottom-right' | 'bottom-left'
-  buttonText?: string
   identifyVerification?: boolean
 }
 

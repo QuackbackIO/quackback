@@ -48,7 +48,7 @@ const SORT_OPTIONS = [
 function UserListSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-start gap-3 p-3">
             <Skeleton className="h-10 w-10 rounded-full shrink-0" />
@@ -74,7 +74,7 @@ function UsersEmptyState({
 }) {
   return (
     <div className="p-3">
-      <div className="rounded-lg overflow-hidden bg-card border border-border/40">
+      <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
         <EmptyState
           icon={UsersIcon}
           title={hasActiveFilters ? 'No users match your filters' : 'No portal users yet'}
@@ -262,7 +262,7 @@ export function UsersList({
 
       {/* User List */}
       <div className="p-3">
-        <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
           {users.map((user, index) => (
             <div
               key={user.principalId}

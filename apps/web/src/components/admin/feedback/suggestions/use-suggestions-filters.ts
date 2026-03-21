@@ -13,9 +13,9 @@ export function useSuggestionsFilters() {
   const filters: SuggestionsFilters = useMemo(
     () => ({
       search: search.suggestionSearch,
-      suggestionType: search.suggestionType,
-      sourceIds: search.suggestionSource?.length ? search.suggestionSource : undefined,
+      sourceTypes: search.source ? [search.source] : undefined,
       sort: search.suggestionSort,
+      status: search.suggestionStatus,
     }),
     [search]
   )
@@ -23,13 +23,15 @@ export function useSuggestionsFilters() {
   const setFilters = useCallback(
     (updates: Partial<SuggestionsFilters>) => {
       void navigate({
-        to: '/admin/feedback/suggestions',
+        to: '/admin/feedback/incoming',
         search: {
           ...search,
           ...('search' in updates && { suggestionSearch: updates.search }),
-          ...('suggestionType' in updates && { suggestionType: updates.suggestionType }),
-          ...('sourceIds' in updates && { suggestionSource: updates.sourceIds }),
+          ...('sourceTypes' in updates && {
+            source: updates.sourceTypes?.[0],
+          }),
           ...('sort' in updates && { suggestionSort: updates.sort }),
+          ...('status' in updates && { suggestionStatus: updates.status }),
         },
         replace: true,
       })
@@ -39,23 +41,24 @@ export function useSuggestionsFilters() {
 
   const clearFilters = useCallback(() => {
     void navigate({
-      to: '/admin/feedback/suggestions',
+      to: '/admin/feedback/incoming',
       search: {
         suggestionSort: search.suggestionSort,
+        suggestionStatus: search.suggestionStatus,
       },
       replace: true,
     })
   }, [navigate, search])
 
   const hasActiveFilters = useMemo(() => {
-    return !!(filters.search || filters.suggestionType || filters.sourceIds?.length)
+    return !!(filters.search || filters.sourceTypes?.length)
   }, [filters])
 
   const toggleSource = useCallback(
     (sourceId: string) => {
-      setFilters({ sourceIds: toggleItem(filters.sourceIds, sourceId) })
+      setFilters({ sourceTypes: toggleItem(filters.sourceTypes, sourceId) })
     },
-    [filters.sourceIds, setFilters]
+    [filters.sourceTypes, setFilters]
   )
 
   return {

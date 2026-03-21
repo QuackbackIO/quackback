@@ -20,7 +20,6 @@ describe('Widget Config Types', () => {
     it('should not have optional fields set', () => {
       expect(DEFAULT_WIDGET_CONFIG.defaultBoard).toBeUndefined()
       expect(DEFAULT_WIDGET_CONFIG.position).toBeUndefined()
-      expect(DEFAULT_WIDGET_CONFIG.buttonText).toBeUndefined()
     })
   })
 
@@ -30,7 +29,6 @@ describe('Widget Config Types', () => {
         enabled: true,
         defaultBoard: 'feature-requests',
         position: 'bottom-right',
-        buttonText: 'Feedback',
         identifyVerification: true,
       }
       expect(config.enabled).toBe(true)
@@ -67,10 +65,9 @@ describe('Widget Config Types', () => {
         enabled: true,
         defaultBoard: 'bugs',
         position: 'bottom-left',
-        buttonText: 'Report',
         identifyVerification: true,
       }
-      expect(update.buttonText).toBe('Report')
+      expect(update.position).toBe('bottom-left')
     })
   })
 
@@ -80,7 +77,6 @@ describe('Widget Config Types', () => {
         enabled: true,
         defaultBoard: 'bugs',
         position: 'bottom-right',
-        buttonText: 'Send Feedback',
       }
       expect(publicConfig.enabled).toBe(true)
       // identifyVerification is NOT in PublicWidgetConfig (type-level check)

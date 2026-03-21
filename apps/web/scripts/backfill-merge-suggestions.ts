@@ -46,7 +46,7 @@ const LLM_CONFIDENCE_THRESHOLD = 0.75
 const CANDIDATE_LIMIT = 5
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
-const ASSESSMENT_MODEL = 'google/gemini-2.5-flash'
+const ASSESSMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 // Parse CLI arguments
 const args = process.argv.slice(2)
@@ -236,8 +236,8 @@ async function findMergeCandidates(postId: PostId): Promise<MergeCandidate[]> {
 // LLM assessment
 // ============================================
 
-const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform.
-You will be given a source post and a list of candidate posts. For each candidate, determine whether it is truly a DUPLICATE — meaning they request the exact same thing, just worded differently.
+const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform used by product managers.
+You will be given a reference post and one or more posts to compare. For each comparison post, determine whether it is truly a DUPLICATE of the reference — meaning they request the exact same thing, just worded differently.
 
 Return strict JSON only — an array of objects:
 [
@@ -252,10 +252,10 @@ Return strict JSON only — an array of objects:
 Rules:
 - A TRUE duplicate means the posts request the EXACT SAME feature, fix, or change. If merged into one post, every voter on both posts would agree they wanted the same thing.
 - "confidence" is 0-1 where 1 means certain duplicate.
-- "reasoning" should be 1 sentence explaining your determination.
+- "reasoning" is a 1-sentence summary shown to product managers. Describe the shared customer need — e.g. "Both request the ability to export data as PDF." NEVER use labels like "source post", "candidate post", "Post A", "Post B", or "reference post". Just describe what the posts have in common.
 - Be VERY conservative: when in doubt, mark isDuplicate as false.
 - NOT duplicates: posts about the same product/area but different features, posts with overlapping keywords but different actual requests, posts that are merely related or in the same category.
-- Example: "Add Amazon Japan marketplace" and "Amazon Japan integration" ARE duplicates (same request). "Add Amazon Japan" and "Simplified Amazon Upload" are NOT (different features on the same platform).`
+- Example: "Add dark mode to the dashboard" and "Support dark theme across the app" ARE duplicates (same request). "Add dark mode" and "Improve dashboard loading speed" are NOT (same area, different requests).`
 
 interface Assessment {
   candidatePostId: PostId
@@ -269,9 +269,9 @@ async function assessCandidates(
 ): Promise<Assessment[]> {
   if (candidates.length === 0) return []
 
-  let prompt = `## Source Post\nID: ${sourcePost.id}\nTitle: ${sourcePost.title}\nContent: ${truncate(sourcePost.content, 2000)}\n\n## Candidates\n`
+  let prompt = `## Post A\nID: ${sourcePost.id}\nTitle: ${sourcePost.title}\nContent: ${truncate(sourcePost.content, 2000)}\n\n## Posts to compare\n`
   for (const c of candidates) {
-    prompt += `\n### Candidate\nID: ${c.postId}\nTitle: ${c.title}\nContent: ${truncate(c.content, 2000)}\n`
+    prompt += `\n### Post B\nID: ${c.postId}\nTitle: ${c.title}\nContent: ${truncate(c.content, 2000)}\n`
   }
 
   const completion = await withRetry(() =>
@@ -501,7 +501,10 @@ async function main() {
       } catch (err) {
         failed++
         const errMsg = err instanceof Error ? err.message : String(err)
-        const cause = err instanceof Error && 'cause' in err ? (err as any).cause : undefined
+        const cause =
+          err instanceof Error && 'cause' in err
+            ? (err as Error & { cause: unknown }).cause
+            : undefined
         console.error(
           `  [${processed + failed}/${totalToProcess}] ${truncate(post.title, 45)} - FAILED: ${errMsg}`
         )

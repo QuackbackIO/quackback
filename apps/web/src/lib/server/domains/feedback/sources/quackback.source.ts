@@ -8,6 +8,7 @@
 
 import { db, eq, feedbackSources } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
+import { hashCode } from '@/lib/server/utils'
 
 /**
  * Ensure the quackback feedback source exists.
@@ -43,13 +44,4 @@ export async function ensureQuackbackFeedbackSource(): Promise<void> {
 
     console.log('[QuackbackSource] Created quackback feedback source:', created.id)
   })
-}
-
-/** Simple hash code for advisory lock key. */
-function hashCode(s: string): number {
-  let hash = 0
-  for (let i = 0; i < s.length; i++) {
-    hash = (Math.imul(31, hash) + s.charCodeAt(i)) | 0
-  }
-  return hash
 }

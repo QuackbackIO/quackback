@@ -9,6 +9,18 @@ import { db, eq, user, principal, externalUserMappings } from '@/lib/server/db'
 import { createId, type PrincipalId } from '@quackback/ids'
 import type { FeedbackSourceType } from '@/lib/server/integrations/feedback-source-types'
 
+export type AuthorResolutionMethod =
+  | 'pre_resolved'
+  | 'email'
+  | 'external_id'
+  | 'created_new'
+  | 'unresolvable'
+
+export interface AuthorResolutionResult {
+  principalId: PrincipalId | null
+  method: AuthorResolutionMethod
+}
+
 /**
  * Resolve a feedback author to a principalId.
  *
@@ -26,29 +38,42 @@ export async function resolveAuthorPrincipal(
     name?: string
   },
   sourceType: FeedbackSourceType
-): Promise<PrincipalId | null> {
+): Promise<AuthorResolutionResult> {
   // 1. Already resolved (quackback/API sources pass principalId directly)
   if (author.principalId) {
-    return author.principalId as PrincipalId
+    return { principalId: author.principalId as PrincipalId, method: 'pre_resolved' }
   }
 
   // 2. Email-based resolution
   if (author.email) {
     const normalizedEmail = author.email.toLowerCase().trim()
     if (normalizedEmail) {
-      return resolveByEmail(normalizedEmail, author.name)
+      const result = await resolveByEmail(normalizedEmail, author.name)
+      return { principalId: result.principalId, method: result.created ? 'created_new' : 'email' }
     }
   }
 
   // 3. External ID-based resolution (Slack users without email)
   if (author.externalUserId) {
-    return resolveByExternalId(sourceType, author.externalUserId, author.name, author.email)
+    const result = await resolveByExternalId(
+      sourceType,
+      author.externalUserId,
+      author.name,
+      author.email
+    )
+    return {
+      principalId: result.principalId,
+      method: result.created ? 'created_new' : 'external_id',
+    }
   }
 
-  return null
+  return { principalId: null, method: 'unresolvable' }
 }
 
-async function resolveByEmail(email: string, name?: string): Promise<PrincipalId> {
+async function resolveByEmail(
+  email: string,
+  name?: string
+): Promise<{ principalId: PrincipalId; created: boolean }> {
   // Look up existing principal by email
   const existing = await db
     .select({ principalId: principal.id })
@@ -58,7 +83,7 @@ async function resolveByEmail(email: string, name?: string): Promise<PrincipalId
     .limit(1)
 
   if (existing.length > 0) {
-    return existing[0].principalId as PrincipalId
+    return { principalId: existing[0].principalId as PrincipalId, created: false }
   }
 
   // Create new user + principal
@@ -82,7 +107,7 @@ async function resolveByEmail(email: string, name?: string): Promise<PrincipalId
     createdAt: new Date(),
   })
 
-  return principalId
+  return { principalId, created: true }
 }
 
 async function resolveByExternalId(
@@ -90,7 +115,7 @@ async function resolveByExternalId(
   externalUserId: string,
   name?: string,
   email?: string
-): Promise<PrincipalId> {
+): Promise<{ principalId: PrincipalId; created: boolean }> {
   // Check existing mapping
   const existing = await db.query.externalUserMappings.findFirst({
     where: (t, { and, eq }) =>
@@ -99,12 +124,12 @@ async function resolveByExternalId(
   })
 
   if (existing) {
-    return existing.principalId as PrincipalId
+    return { principalId: existing.principalId as PrincipalId, created: false }
   }
 
   // If we also have an email, resolve by email first
   if (email) {
-    const principalId = await resolveByEmail(email.toLowerCase().trim(), name)
+    const result = await resolveByEmail(email.toLowerCase().trim(), name)
 
     // Create the external mapping for future lookups
     await db
@@ -112,23 +137,23 @@ async function resolveByExternalId(
       .values({
         sourceType,
         externalUserId,
-        principalId,
+        principalId: result.principalId,
         externalName: name,
         externalEmail: email,
       })
       .onConflictDoNothing()
 
-    return principalId
+    return result
   }
 
-  // Create a new user from external ID only (no email)
+  // Create a new user from external ID only (no real email)
   const userId = createId('user')
   const principalId = createId('principal')
   const displayName = name?.trim() || `${sourceType}:${externalUserId}`
 
   await db.insert(user).values({
     id: userId,
-    email: `${sourceType}+${externalUserId}@external.quackback.io`,
+    email: null,
     name: displayName,
     emailVerified: false,
     createdAt: new Date(),
@@ -154,5 +179,5 @@ async function resolveByExternalId(
     })
     .onConflictDoNothing()
 
-  return principalId
+  return { principalId, created: true }
 }

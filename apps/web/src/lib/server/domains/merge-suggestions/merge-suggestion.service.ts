@@ -16,8 +16,10 @@ import {
   inArray,
   desc,
   sql,
+  count,
 } from '@/lib/server/db'
 import { mergePost } from '@/lib/server/domains/posts/post.merge'
+import { NotFoundError } from '@/lib/shared/errors'
 import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
 
 export interface MergeSuggestionPostView {
@@ -67,6 +69,9 @@ export interface MergeSuggestionView {
  * Create a merge suggestion. Uses onConflictDoNothing for the partial unique index.
  */
 export async function createMergeSuggestion(opts: CreateMergeSuggestionOpts): Promise<void> {
+  console.log(
+    `[domain:merge-suggestions] createMergeSuggestion: sourcePostId=${opts.sourcePostId} targetPostId=${opts.targetPostId} hybridScore=${opts.hybridScore}`
+  )
   await db
     .insert(mergeSuggestions)
     .values({
@@ -90,12 +95,18 @@ export async function acceptMergeSuggestion(
   principalId: PrincipalId,
   opts?: { swapDirection?: boolean }
 ): Promise<void> {
+  console.log(
+    `[domain:merge-suggestions] acceptMergeSuggestion: id=${id} principalId=${principalId} swapDirection=${opts?.swapDirection ?? false}`
+  )
   const suggestion = await db.query.mergeSuggestions.findFirst({
     where: (s, { eq }) => eq(s.id, id),
   })
 
   if (!suggestion || suggestion.status !== 'pending') {
-    throw new Error('Merge suggestion not found or already resolved')
+    throw new NotFoundError(
+      'SUGGESTION_NOT_FOUND',
+      'Merge suggestion not found or already resolved'
+    )
   }
 
   // Perform the actual merge (swap source/target if user toggled direction)
@@ -143,6 +154,9 @@ export async function dismissMergeSuggestion(
   id: MergeSuggestionId,
   principalId: PrincipalId
 ): Promise<void> {
+  console.log(
+    `[domain:merge-suggestions] dismissMergeSuggestion: id=${id} principalId=${principalId}`
+  )
   await db
     .update(mergeSuggestions)
     .set({
@@ -155,9 +169,31 @@ export async function dismissMergeSuggestion(
 }
 
 /**
+ * Restore a dismissed merge suggestion back to pending.
+ */
+export async function restoreMergeSuggestion(
+  id: MergeSuggestionId,
+  principalId: PrincipalId
+): Promise<void> {
+  console.log(
+    `[domain:merge-suggestions] restoreMergeSuggestion: id=${id} principalId=${principalId}`
+  )
+  await db
+    .update(mergeSuggestions)
+    .set({
+      status: 'pending',
+      resolvedAt: null,
+      resolvedByPrincipalId: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(mergeSuggestions.id, id), eq(mergeSuggestions.status, 'dismissed')))
+}
+
+/**
  * Get pending merge suggestions for a post (where the post is source OR target).
  */
 export async function getPendingSuggestionsForPost(postId: PostId): Promise<MergeSuggestionView[]> {
+  console.log(`[domain:merge-suggestions] getPendingSuggestionsForPost: postId=${postId}`)
   const sourcePostsAlias = db
     .select({
       id: posts.id,
@@ -243,6 +279,9 @@ export async function getPendingMergeSuggestions(opts: {
   }>
   total: number
 }> {
+  console.log(
+    `[domain:merge-suggestions] getPendingMergeSuggestions: sort=${opts.sort ?? 'newest'} limit=${opts.limit ?? 50}`
+  )
   // Step 1: Fetch count + merge suggestion rows in parallel
   const orderBy =
     opts.sort === 'relevance'
@@ -322,6 +361,7 @@ export async function getPendingMergeSuggestions(opts: {
  * Expire stale pending suggestions (older than 30 days).
  */
 export async function expireStaleMergeSuggestions(): Promise<number> {
+  console.log(`[domain:merge-suggestions] expireStaleMergeSuggestions`)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const result = await db
     .update(mergeSuggestions)
@@ -338,4 +378,61 @@ export async function expireStaleMergeSuggestions(): Promise<number> {
     .returning({ id: mergeSuggestions.id })
 
   return result.length
+}
+
+/**
+ * Get total count of pending merge suggestions (for summary bar).
+ */
+export async function getPendingMergeSuggestionSummary(): Promise<{ count: number }> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(mergeSuggestions)
+    .where(eq(mergeSuggestions.status, 'pending'))
+
+  return { count: Number(row?.count ?? 0) }
+}
+
+/**
+ * Get pending merge suggestion counts per post (for inbox badges).
+ * Counts suggestions where the post is either source or target.
+ */
+export async function getMergeSuggestionCountsForPosts(
+  postIds: PostId[]
+): Promise<Array<{ postId: PostId; count: number }>> {
+  if (postIds.length === 0) return []
+
+  // Use two separate queries with inArray() (safe for Drizzle) then merge in JS.
+  // Avoids raw SQL IN ${array} which Drizzle spreads without parens.
+  const [sourceRows, targetRows] = await Promise.all([
+    db
+      .select({
+        postId: mergeSuggestions.sourcePostId,
+        count: count(),
+      })
+      .from(mergeSuggestions)
+      .where(
+        and(eq(mergeSuggestions.status, 'pending'), inArray(mergeSuggestions.sourcePostId, postIds))
+      )
+      .groupBy(mergeSuggestions.sourcePostId),
+    db
+      .select({
+        postId: mergeSuggestions.targetPostId,
+        count: count(),
+      })
+      .from(mergeSuggestions)
+      .where(
+        and(eq(mergeSuggestions.status, 'pending'), inArray(mergeSuggestions.targetPostId, postIds))
+      )
+      .groupBy(mergeSuggestions.targetPostId),
+  ])
+
+  // Merge counts from both sides
+  const countMap = new Map<string, number>()
+  for (const row of [...sourceRows, ...targetRows]) {
+    countMap.set(row.postId, (countMap.get(row.postId) ?? 0) + Number(row.count))
+  }
+
+  return Array.from(countMap.entries())
+    .filter(([, c]) => c > 0)
+    .map(([postId, c]) => ({ postId: postId as PostId, count: c }))
 }

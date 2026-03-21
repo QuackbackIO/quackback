@@ -5,6 +5,8 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
 import {
   addReaction,
@@ -15,12 +17,14 @@ import {
   deleteComment,
   pinComment,
   removeReaction,
+  restoreComment,
   softDeleteComment,
   unpinComment,
   updateComment,
   userEditComment,
 } from '@/lib/server/domains/comments/comment.service'
-import { getOptionalAuth, requireAuth, hasSessionCookie } from './auth-helpers'
+import { NotFoundError } from '@/lib/shared/errors'
+import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers'
 
 // Schemas
 const createCommentSchema = z.object({
@@ -75,6 +79,15 @@ export const createCommentFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
 
+      // Block anonymous users unless anonymousCommenting is enabled
+      if (auth.principal.type === 'anonymous') {
+        const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+        const config = await getPortalConfig()
+        if (!config.features.anonymousCommenting) {
+          throw new Error('Anonymous commenting is not enabled')
+        }
+      }
+
       const result = await createComment(
         {
           postId: data.postId as PostId,
@@ -117,6 +130,7 @@ export const updateCommentFn = createServerFn({ method: 'POST' })
         {
           principalId: auth.principal.id,
           role: auth.principal.role,
+          userId: auth.user.id,
         }
       )
       console.log(`[fn:comments] updateCommentFn: updated id=${data.id}`)
@@ -137,6 +151,7 @@ export const deleteCommentFn = createServerFn({ method: 'POST' })
       await deleteComment(data.id as CommentId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
+        userId: auth.user.id,
       })
       console.log(`[fn:comments] deleteCommentFn: deleted id=${data.id}`)
       return { id: data.id }
@@ -187,7 +202,7 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
     console.log(`[fn:comments] getCommentPermissionsFn: commentId=${data.commentId}`)
     try {
       // Early bailout: no session cookie = no permissions (skip DB queries)
-      if (!hasSessionCookie()) {
+      if (!hasAuthCredentials()) {
         console.log(`[fn:comments] getCommentPermissionsFn: no session cookie, skipping auth`)
         return { canEdit: false, canDelete: false }
       }
@@ -212,8 +227,12 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
         canDelete: deleteResult.allowed,
       }
     } catch (error) {
+      if (error instanceof NotFoundError) {
+        console.log(`[fn:comments] getCommentPermissionsFn: comment not found`)
+        return { canEdit: false, canDelete: false }
+      }
       console.error(`[fn:comments] getCommentPermissionsFn failed:`, error)
-      return { canEdit: false, canDelete: false }
+      throw error
     }
   })
 
@@ -251,6 +270,32 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
     }
   })
 
+// Restore Operations
+const restoreCommentSchema = z.object({
+  commentId: z.string(),
+})
+
+export type RestoreCommentInput = z.infer<typeof restoreCommentSchema>
+
+export const restoreCommentFn = createServerFn({ method: 'POST' })
+  .inputValidator(restoreCommentSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:comments] restoreCommentFn: commentId=${data.commentId}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+      await restoreComment(data.commentId as CommentId, {
+        principalId: auth.principal.id,
+        role: auth.principal.role,
+      })
+      console.log(`[fn:comments] restoreCommentFn: restored id=${data.commentId}`)
+      return { id: data.commentId }
+    } catch (error) {
+      console.error(`[fn:comments] ❌ restoreCommentFn failed:`, error)
+      throw error
+    }
+  })
+
 // Pin/Unpin Operations
 const pinCommentSchema = z.object({
   commentId: z.string(),
@@ -279,6 +324,14 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
+
+      createActivity({
+        postId: result.postId,
+        principalId: auth.principal.id,
+        type: 'comment.pinned',
+        metadata: { commentId: data.commentId },
+      })
+
       console.log(
         `[fn:comments] pinCommentFn: pinned comment ${data.commentId} on post ${result.postId}`
       )
@@ -300,6 +353,13 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
+
+      createActivity({
+        postId: data.postId as PostId,
+        principalId: auth.principal.id,
+        type: 'comment.unpinned',
+      })
+
       console.log(`[fn:comments] unpinCommentFn: unpinned comment from post ${data.postId}`)
       return { postId: data.postId }
     } catch (error) {
@@ -314,14 +374,14 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
     console.log(`[fn:comments] canPinCommentFn: commentId=${data.commentId}`)
     try {
       // Early bailout: no session cookie = can't pin (skip DB queries)
-      if (!hasSessionCookie()) {
+      if (!hasAuthCredentials()) {
         console.log(`[fn:comments] canPinCommentFn: no session cookie, skipping auth`)
         return { canPin: false, reason: 'Only team members can pin comments' }
       }
 
       const ctx = await getOptionalAuth()
       // Must be a team member to pin
-      if (!ctx?.principal || !['admin', 'member'].includes(ctx.principal.role)) {
+      if (!ctx?.principal || !isTeamMember(ctx.principal.role)) {
         return { canPin: false, reason: 'Only team members can pin comments' }
       }
 
@@ -329,7 +389,11 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
       console.log(`[fn:comments] canPinCommentFn: canPin=${result.canPin}`)
       return result
     } catch (error) {
+      if (error instanceof NotFoundError) {
+        console.log(`[fn:comments] canPinCommentFn: comment not found`)
+        return { canPin: false, reason: 'Comment not found' }
+      }
       console.error(`[fn:comments] canPinCommentFn failed:`, error)
-      return { canPin: false, reason: 'An error occurred' }
+      throw error
     }
   })

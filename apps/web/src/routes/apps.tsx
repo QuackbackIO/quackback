@@ -1,11 +1,14 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
+
+const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
+  setResponseHeader('X-Frame-Options', 'ALLOWALL')
+})
 
 export const Route = createFileRoute('/apps')({
-  loader: async () => {
-    const { setResponseHeader } = await import('@tanstack/react-start/server')
-    setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
-    setResponseHeader('X-Frame-Options', 'ALLOWALL')
-  },
+  loader: () => setIframeHeaders(),
   component: AppsLayout,
 })
 

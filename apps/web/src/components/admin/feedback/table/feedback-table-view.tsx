@@ -13,6 +13,7 @@ import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db
 import type { TeamMember } from '@/lib/server/domains/principals'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import type { PostId } from '@quackback/ids'
 
 interface FeedbackTableViewProps {
   posts: PostListItem[]
@@ -34,12 +35,14 @@ interface FeedbackTableViewProps {
   onToggleStatus: (slug: string) => void
   onToggleBoard: (id: string) => void
   onToggleSegment?: (id: string) => void
+  /** Duplicate counts per post (for badges) */
+  duplicateCountByPostId?: Map<PostId, number>
 }
 
 function TableSkeleton() {
   return (
     <div className="p-3">
-      <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
+      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
         {Array.from({ length: 6 }).map((_, rowIdx) => (
           <div key={rowIdx} className="flex py-1 px-3">
             {/* Vote button */}
@@ -91,6 +94,7 @@ export function FeedbackTableView({
   headerAction,
   onToggleStatus,
   onToggleBoard,
+  duplicateCountByPostId,
   onToggleSegment,
 }: FeedbackTableViewProps): React.ReactElement {
   const sort = filters.sort
@@ -185,6 +189,20 @@ export function FeedbackTableView({
     </div>
   )
 
+  // Filter posts by duplicates if active
+  const filteredPosts =
+    filters.hasDuplicates && duplicateCountByPostId
+      ? posts.filter((p) => (duplicateCountByPostId.get(p.id) ?? 0) > 0)
+      : posts
+  const isSearchingForDuplicateMatches =
+    !!filters.hasDuplicates && filteredPosts.length === 0 && (hasMore || isLoadingMore)
+
+  useEffect(() => {
+    if (isSearchingForDuplicateMatches && !isLoading && !isLoadingMore) {
+      onLoadMore()
+    }
+  }, [isSearchingForDuplicateMatches, isLoading, isLoadingMore, onLoadMore])
+
   if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto w-full">
@@ -194,7 +212,7 @@ export function FeedbackTableView({
     )
   }
 
-  if (posts.length === 0) {
+  if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
       <div className="max-w-5xl mx-auto w-full">
         {headerContent}
@@ -206,14 +224,26 @@ export function FeedbackTableView({
     )
   }
 
+  if (isSearchingForDuplicateMatches) {
+    return (
+      <div className="max-w-5xl mx-auto w-full">
+        {headerContent}
+        <div className="px-3 py-12 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <Spinner />
+          <p>Searching for posts with duplicate suggestions…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-5xl mx-auto w-full">
       {headerContent}
 
       {/* Post List */}
       <div className="p-3">
-        <div className="rounded-lg overflow-hidden divide-y divide-border/30 bg-card border border-border/40">
-          {posts.map((post, index) => (
+        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+          {filteredPosts.map((post, index) => (
             <div
               key={post.id}
               className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
@@ -222,6 +252,7 @@ export function FeedbackTableView({
               <FeedbackRow
                 post={post}
                 statuses={statuses}
+                duplicateCount={duplicateCountByPostId?.get(post.id)}
                 onClick={() => onNavigateToPost(post.id)}
               />
             </div>

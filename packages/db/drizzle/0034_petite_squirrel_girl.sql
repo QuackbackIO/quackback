@@ -1,0 +1,2 @@
+ALTER TABLE "comments" ADD COLUMN "deleted_by_principal_id" uuid;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_deleted_by_principal_id_principal_id_fk" FOREIGN KEY ("deleted_by_principal_id") REFERENCES "public"."principal"("id") ON DELETE set null ON UPDATE no action;

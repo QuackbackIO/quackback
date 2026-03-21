@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
-import type { BoardId, TagId, StatusId } from '@quackback/ids'
+import type { StatusId } from '@quackback/ids'
 import type { boards, roadmaps, tags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -251,20 +251,6 @@ export type PostWithDetails = Post & {
 }
 
 // Inbox query types
-export interface InboxPostListParams {
-  boardIds?: BoardId[]
-  statusIds?: StatusId[]
-  tagIds?: TagId[]
-  ownerId?: string | null // null = unassigned (legacy field, raw text)
-  search?: string
-  dateFrom?: Date
-  dateTo?: Date
-  minVotes?: number
-  sort?: 'newest' | 'oldest' | 'votes'
-  cursor?: string
-  limit?: number
-}
-
 export type PostListItem = Post & {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<Tag, 'id' | 'name' | 'color'>[]

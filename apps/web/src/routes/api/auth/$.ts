@@ -43,14 +43,37 @@ export const Route = createFileRoute('/api/auth/$')({
        * Better-auth catch-all route handler
        */
       POST: async ({ request }) => {
-        // Rate-limit OAuth dynamic client registration to prevent spam/phishing
         const url = new URL(request.url)
+
+        // Rate-limit OAuth dynamic client registration to prevent spam/phishing
         if (url.pathname.endsWith('/oauth2/register')) {
           if (isRegistrationRateLimited(request)) {
             return Response.json(
               { error: 'Too many client registrations. Try again later.' },
               { status: 429 }
             )
+          }
+        }
+
+        // Ensure `resource` is present in token exchange requests.
+        // Without it, better-auth issues opaque tokens instead of JWTs,
+        // breaking `verifyAccessToken` in the MCP handler.
+        // Reading the body consumes the stream, so we always reconstruct
+        // the request to avoid passing a consumed body to better-auth.
+        if (url.pathname.endsWith('/oauth2/token')) {
+          const contentType = request.headers.get('content-type') ?? ''
+          if (contentType.includes('application/x-www-form-urlencoded')) {
+            const body = await request.text()
+            const params = new URLSearchParams(body)
+            if (!params.has('resource')) {
+              const { config } = await import('@/lib/server/config')
+              params.set('resource', `${config.baseUrl}/api/mcp`)
+            }
+            request = new Request(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: params.toString(),
+            })
           }
         }
 

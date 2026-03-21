@@ -6,6 +6,8 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
+import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -45,11 +47,20 @@ export const Route = createFileRoute('/_portal/')({
       })
     )
 
+    // Seed the votedPosts cache so usePostVote has data during SSR rendering.
+    // This ensures vote highlights appear in the server-rendered HTML.
+    queryClient.setQueryData(votedPostsKeys.byWorkspace(), new Set(portalData.votedPostIds))
+
+    const anonymousVotingEnabled =
+      org.publicPortalConfig?.features?.anonymousVoting ??
+      DEFAULT_PORTAL_CONFIG.features.anonymousVoting
+
     return {
       org,
       baseUrl: context.baseUrl ?? '',
       isEmpty: portalData.boards.length === 0,
       session,
+      anonymousVotingEnabled,
     }
   },
   head: ({ loaderData }) => {
@@ -77,7 +88,7 @@ export const Route = createFileRoute('/_portal/')({
 function PublicPortalPage() {
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session } = loaderData
+  const { org, session, anonymousVotingEnabled } = loaderData
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board
@@ -143,6 +154,7 @@ function PublicPortalPage() {
         currentSort={currentSort}
         defaultBoardId={portalData.boards[0]?.id}
         user={user}
+        anonymousVotingEnabled={anonymousVotingEnabled}
       />
     </div>
   )

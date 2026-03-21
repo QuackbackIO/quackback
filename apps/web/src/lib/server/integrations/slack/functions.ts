@@ -6,6 +6,7 @@
  * inside handlers to avoid bundling Node.js-only code into the client.
  */
 import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
 
 /**
@@ -61,16 +62,21 @@ export const getSlackConnectUrl = createServerFn({ method: 'GET' }).handler(
 )
 
 /**
- * Fetch available Slack channels for the connected workspace
+ * Fetch available Slack channels for the connected workspace.
+ * Pass `{ data: { force: true } }` to bypass the Dragonfly cache.
  */
-export const fetchSlackChannelsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<SlackChannel[]> => {
+const fetchSlackChannelsSchema = z.object({ force: z.boolean().optional().default(false) })
+type FetchSlackChannelsInput = z.infer<typeof fetchSlackChannelsSchema>
+
+export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
+  .inputValidator(fetchSlackChannelsSchema)
+  .handler(async ({ data }: { data: FetchSlackChannelsInput }): Promise<SlackChannel[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets } = await import('../encryption')
     const { listSlackChannels } = await import('./channels')
 
-    console.log(`[fn:integrations] fetchSlackChannelsFn`)
+    console.log(`[fn:integrations] fetchSlackChannelsFn (force=${data.force})`)
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -90,9 +96,8 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' }).handler(
       throw new Error('Slack access token missing')
     }
 
-    const channels = await listSlackChannels(secrets.accessToken)
+    const channels = await listSlackChannels(secrets.accessToken, { force: data.force })
 
     console.log(`[fn:integrations] fetchSlackChannelsFn: ${channels.length} channels`)
     return channels
-  }
-)
+  })

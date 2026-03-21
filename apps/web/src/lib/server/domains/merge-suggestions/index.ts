@@ -6,6 +6,8 @@ export {
   dismissMergeSuggestion,
   getPendingSuggestionsForPost,
   expireStaleMergeSuggestions,
+  getPendingMergeSuggestionSummary,
+  getMergeSuggestionCountsForPosts,
   type MergeSuggestionView,
 } from './merge-suggestion.service'
 export { checkPostForMergeCandidates, sweepMergeSuggestions } from './merge-check.service'

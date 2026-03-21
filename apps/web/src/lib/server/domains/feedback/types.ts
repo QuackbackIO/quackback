@@ -23,6 +23,7 @@ export type RawFeedbackProcessingState =
   | 'extracting'
   | 'interpreting'
   | 'completed'
+  | 'dismissed'
   | 'failed'
 
 export type SignalProcessingState =
@@ -31,7 +32,7 @@ export type SignalProcessingState =
   | 'completed'
   | 'failed'
 
-export type SuggestionType = 'merge_post' | 'create_post'
+export type SuggestionType = 'create_post' | 'vote_on_post'
 export type SuggestionStatus = 'pending' | 'accepted' | 'dismissed' | 'expired'
 
 export type SignalType =
@@ -80,6 +81,7 @@ export type FeedbackIngestJob =
 export type FeedbackAiJob =
   | { type: 'extract-signals'; rawItemId: string }
   | { type: 'interpret-signal'; signalId: string }
+  | { type: 'retention-cleanup' }
 
 export type FeedbackMaintenanceJob =
   | { type: 'recover-stuck-items' }

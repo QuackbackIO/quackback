@@ -21,8 +21,10 @@ import {
   and,
   isNull,
   isNotNull,
+  lt,
   lte,
   gt,
+  or,
   desc,
   inArray,
   sql,
@@ -135,9 +137,9 @@ export async function updateChangelog(
   id: ChangelogId,
   input: UpdateChangelogInput
 ): Promise<ChangelogEntryWithDetails> {
-  // Get existing entry
+  // Get existing entry (exclude soft-deleted)
   const existing = await db.query.changelogEntries.findFirst({
-    where: eq(changelogEntries.id, id),
+    where: and(eq(changelogEntries.id, id), isNull(changelogEntries.deletedAt)),
   })
   if (!existing) {
     throw new NotFoundError('CHANGELOG_NOT_FOUND', `Changelog entry with ID ${id} not found`)
@@ -255,9 +257,9 @@ export async function deleteChangelog(id: ChangelogId): Promise<void> {
  * @returns Changelog entry with details
  */
 export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryWithDetails> {
-  // Get the changelog entry
+  // Get the changelog entry (exclude soft-deleted)
   const entry = await db.query.changelogEntries.findFirst({
-    where: eq(changelogEntries.id, id),
+    where: and(eq(changelogEntries.id, id), isNull(changelogEntries.deletedAt)),
   })
 
   if (!entry) {
@@ -363,14 +365,22 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       columns: { createdAt: true },
     })
     if (cursorEntry) {
-      conditions.push(lte(changelogEntries.createdAt, cursorEntry.createdAt))
+      conditions.push(
+        or(
+          lt(changelogEntries.createdAt, cursorEntry.createdAt),
+          and(
+            eq(changelogEntries.createdAt, cursorEntry.createdAt),
+            lt(changelogEntries.id, cursor as ChangelogId)
+          )
+        )!
+      )
     }
   }
 
   // Fetch entries
   const entries = await db.query.changelogEntries.findMany({
     where: and(...conditions),
-    orderBy: [desc(changelogEntries.createdAt)],
+    orderBy: [desc(changelogEntries.createdAt), desc(changelogEntries.id)],
     limit: limit + 1, // Fetch one extra to check hasMore
   })
 
@@ -583,14 +593,22 @@ export async function listPublicChangelogs(params: {
       columns: { publishedAt: true },
     })
     if (cursorEntry?.publishedAt) {
-      conditions.push(lte(changelogEntries.publishedAt, cursorEntry.publishedAt))
+      conditions.push(
+        or(
+          lt(changelogEntries.publishedAt, cursorEntry.publishedAt),
+          and(
+            eq(changelogEntries.publishedAt, cursorEntry.publishedAt),
+            lt(changelogEntries.id, cursor as ChangelogId)
+          )
+        )!
+      )
     }
   }
 
   // Fetch entries
   const entries = await db.query.changelogEntries.findMany({
     where: and(...conditions),
-    orderBy: [desc(changelogEntries.publishedAt)],
+    orderBy: [desc(changelogEntries.publishedAt), desc(changelogEntries.id)],
     limit: limit + 1,
   })
 
@@ -714,7 +732,7 @@ function getPublishedAtFromState(state: PublishState): Date | null {
     case 'scheduled':
       return state.publishAt
     case 'published':
-      return new Date()
+      return state.publishAt ?? new Date()
   }
 }
 

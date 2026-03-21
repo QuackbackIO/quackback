@@ -35,6 +35,7 @@ const getPresignedUploadUrlSchema = z.object({
  * Use this to conditionally show/hide upload features in the UI.
  */
 export const checkS3ConfiguredFn = createServerFn({ method: 'GET' }).handler(async () => {
+  console.log(`[fn:uploads] checkS3ConfiguredFn`)
   return { configured: isS3Configured() }
 })
 
@@ -51,28 +52,36 @@ export const checkS3ConfiguredFn = createServerFn({ method: 'GET' }).handler(asy
 export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
   .inputValidator(getPresignedUploadUrlSchema)
   .handler(async ({ data }) => {
-    // Require admin or member authentication
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(
+      `[fn:uploads] getPresignedUploadUrlFn: prefix=${data.prefix}, contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      // Require admin or member authentication
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    // Check S3 is configured
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      // Check S3 is configured
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      // Validate content type for images
+      if (data.prefix.includes('image') && !isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid file type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      // Generate storage key
+      const key = generateStorageKey(data.prefix, data.filename)
+
+      // Generate presigned URL
+      const result = await generatePresignedUploadUrl(key, data.contentType)
+
+      return result
+    } catch (error) {
+      console.error(`[fn:uploads] getPresignedUploadUrlFn failed:`, error)
+      throw error
     }
-
-    // Validate content type for images
-    if (data.prefix.includes('image') && !isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid file type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    // Generate storage key
-    const key = generateStorageKey(data.prefix, data.filename)
-
-    // Generate presigned URL
-    const result = await generatePresignedUploadUrl(key, data.contentType)
-
-    return result
   })
 
 /**
@@ -88,28 +97,36 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    // Require admin authentication for changelog images
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:uploads] getChangelogImageUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      // Require admin authentication for changelog images
+      await requireAuth({ roles: ['admin'] })
 
-    // Check S3 is configured
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      // Check S3 is configured
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      // Validate image type
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      // Generate storage key with changelog prefix
+      const key = generateStorageKey('changelog-images', data.filename)
+
+      // Generate presigned URL
+      const result = await generatePresignedUploadUrl(key, data.contentType)
+
+      return result
+    } catch (error) {
+      console.error(`[fn:uploads] getChangelogImageUploadUrlFn failed:`, error)
+      throw error
     }
-
-    // Validate image type
-    if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    // Generate storage key with changelog prefix
-    const key = generateStorageKey('changelog-images', data.filename)
-
-    // Generate presigned URL
-    const result = await generatePresignedUploadUrl(key, data.contentType)
-
-    return result
   })
 
 // ============================================================================
@@ -128,20 +145,28 @@ const brandingImageSchema = z.object({
 export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
   .inputValidator(brandingImageSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:uploads] getLogoUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('logos', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      console.error(`[fn:uploads] getLogoUploadUrlFn failed:`, error)
+      throw error
     }
-
-    if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    const key = generateStorageKey('logos', data.filename)
-    return generatePresignedUploadUrl(key, data.contentType)
   })
 
 /**
@@ -150,20 +175,28 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
 export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
   .inputValidator(brandingImageSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:uploads] getFaviconUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('favicons', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      console.error(`[fn:uploads] getFaviconUploadUrlFn failed:`, error)
+      throw error
     }
-
-    if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    const key = generateStorageKey('favicons', data.filename)
-    return generatePresignedUploadUrl(key, data.contentType)
   })
 
 /**
@@ -172,20 +205,28 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
 export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   .inputValidator(brandingImageSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(
+      `[fn:uploads] getHeaderLogoUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('header-logos', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      console.error(`[fn:uploads] getHeaderLogoUploadUrlFn failed:`, error)
+      throw error
     }
-
-    if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    const key = generateStorageKey('header-logos', data.filename)
-    return generatePresignedUploadUrl(key, data.contentType)
   })
 
 /**
@@ -194,19 +235,27 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
 export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
   .inputValidator(brandingImageSchema)
   .handler(async ({ data }) => {
-    // Any authenticated user can upload their own avatar
-    await requireAuth()
+    console.log(
+      `[fn:uploads] getAvatarUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      // Any authenticated user can upload their own avatar
+      await requireAuth()
 
-    if (!isS3Configured()) {
-      throw new Error('File storage is not configured. Contact your administrator.')
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('avatars', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      console.error(`[fn:uploads] getAvatarUploadUrlFn failed:`, error)
+      throw error
     }
-
-    if (!isAllowedImageType(data.contentType)) {
-      throw new Error(
-        `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
-      )
-    }
-
-    const key = generateStorageKey('avatars', data.filename)
-    return generatePresignedUploadUrl(key, data.contentType)
   })

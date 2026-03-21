@@ -5,22 +5,16 @@
  * integrationType -> connector from integration registry.
  */
 
+import type { InferSelectModel } from 'drizzle-orm'
 import { db, eq, feedbackSources, integrations } from '@/lib/server/db'
 import { getIntegration } from '@/lib/server/integrations'
 import type { FeedbackSourceId } from '@quackback/ids'
 import type { FeedbackConnector } from '@/lib/server/integrations/feedback-source-types'
 
+type FeedbackSource = InferSelectModel<typeof feedbackSources>
+
 interface SourceWithConnector {
-  source: {
-    id: string
-    sourceType: string
-    deliveryMode: string
-    name: string
-    config: Record<string, unknown>
-    secrets: string | null
-    cursor: string | null
-    integrationId: string | null
-  }
+  source: FeedbackSource
   connector: FeedbackConnector | null
 }
 
@@ -39,7 +33,7 @@ export async function getConnectorForSource(
 
   // Non-integration sources (quackback, csv, api) have no connector via IntegrationDefinition
   if (!source.integrationId) {
-    return { source: source as any, connector: null }
+    return { source, connector: null }
   }
 
   // Resolve integration type
@@ -49,13 +43,13 @@ export async function getConnectorForSource(
   })
 
   if (!integration) {
-    return { source: source as any, connector: null }
+    return { source, connector: null }
   }
 
   // Get connector from integration registry
   const definition = getIntegration(integration.integrationType)
   return {
-    source: source as any,
+    source,
     connector: definition?.feedbackSource ?? null,
   }
 }

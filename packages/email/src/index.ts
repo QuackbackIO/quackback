@@ -18,6 +18,7 @@ import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
+import { PasswordResetEmail } from './templates/password-reset'
 
 /**
  * Get environment variable at runtime.
@@ -253,6 +254,38 @@ export async function sendSigninCodeEmail(params: SendSigninCodeParams): Promise
 }
 
 // ============================================================================
+// Password Reset Email
+// ============================================================================
+
+interface SendPasswordResetParams {
+  to: string
+  resetLink: string
+}
+
+export async function sendPasswordResetEmail(
+  params: SendPasswordResetParams
+): Promise<EmailResult> {
+  const { to, resetLink } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Password Reset Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Reset link: ${resetLink}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  console.log(`[Email] Sending password reset to ${to}`)
+  return sendEmail({
+    to,
+    subject: 'Reset your Quackback password',
+    react: PasswordResetEmail({ resetLink }),
+  })
+}
+
+// ============================================================================
 // Status Change Email
 // ============================================================================
 
@@ -458,3 +491,4 @@ export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
+export { PasswordResetEmail } from './templates/password-reset'

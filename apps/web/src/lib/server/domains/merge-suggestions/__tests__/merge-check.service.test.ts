@@ -219,7 +219,7 @@ describe('merge-check.service', () => {
           hybridScore: 0.93,
           llmConfidence: 0.9,
           llmReasoning: 'Both about dark mode',
-          llmModel: 'google/gemini-2.5-flash',
+          llmModel: 'google/gemini-3.1-flash-lite-preview',
         })
       )
     })

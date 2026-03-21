@@ -14,6 +14,8 @@ import {
   tags,
   comments,
   userSegments,
+  feedbackSuggestions,
+  rawFeedbackItems,
   eq,
   and,
   inArray,
@@ -29,6 +31,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
 import type {
   PostWithDetails,
+  PostListItem,
   InboxPostListParams,
   InboxPostListResult,
   PostForExport,
@@ -43,8 +46,30 @@ import type {
  * @returns Result containing the post with details or an error
  */
 export async function getPostWithDetails(postId: PostId): Promise<PostWithDetails> {
-  // Get the post with author relation
+  // Get the post with author relation (exclude internal/heavy fields)
   const post = await db.query.posts.findFirst({
+    columns: {
+      id: true,
+      boardId: true,
+      title: true,
+      content: true,
+      contentJson: true,
+      principalId: true,
+      statusId: true,
+      ownerPrincipalId: true,
+      voteCount: true,
+      commentCount: true,
+      pinnedCommentId: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+      isCommentsLocked: true,
+      moderationState: true,
+      canonicalPostId: true,
+      mergedAt: true,
+      summaryJson: true,
+      summaryUpdatedAt: true,
+    },
     where: eq(posts.id, postId),
     with: {
       author: {
@@ -120,7 +145,9 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     }
   }
 
-  const postWithDetails: PostWithDetails = {
+  // Cast needed: columns selection omits heavy internal fields (embedding, searchVector,
+  // etc.) that no caller reads, but PostWithDetails extends the full Post type.
+  const postWithDetails = {
     ...post,
     board: {
       id: board.id,
@@ -136,7 +163,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     pinnedComment,
     authorName: post.author?.displayName ?? null,
     authorEmail: post.author?.user?.email ?? null,
-  }
+  } as unknown as PostWithDetails
 
   return postWithDetails
 }
@@ -368,6 +395,28 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Fetch limit+1 to determine hasMore without a COUNT query
   const rawPosts = await db.query.posts.findMany({
+    columns: {
+      id: true,
+      boardId: true,
+      title: true,
+      content: true,
+      contentJson: true,
+      principalId: true,
+      statusId: true,
+      ownerPrincipalId: true,
+      voteCount: true,
+      commentCount: true,
+      pinnedCommentId: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+      isCommentsLocked: true,
+      moderationState: true,
+      canonicalPostId: true,
+      mergedAt: true,
+      summaryJson: true,
+      summaryUpdatedAt: true,
+    },
     where: whereClause,
     orderBy: orderByMap[sort],
     limit: limit + 1,
@@ -393,13 +442,15 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
 
   // Transform to PostListItem format
   // Use denormalized commentCount field (maintained by comment.service.ts)
+  // Cast needed: columns selection omits heavy fields (embedding, searchVector, etc.)
+  // that no caller reads from list items, but PostListItem extends the full Post type.
   const items = sliced.map((post) => ({
     ...post,
     board: post.board,
     tags: post.tags.map((pt) => pt.tag),
     commentCount: post.commentCount,
     authorName: post.author?.displayName ?? null,
-  }))
+  })) as unknown as PostListItem[]
 
   const lastItem = items[items.length - 1]
   const nextCursor = hasMore && lastItem ? lastItem.id : null
@@ -434,6 +485,20 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
   // Get posts with board and tags (limit to prevent memory exhaustion)
   const MAX_EXPORT_POSTS = 10000
   const rawPosts = await db.query.posts.findMany({
+    columns: {
+      id: true,
+      boardId: true,
+      title: true,
+      content: true,
+      principalId: true,
+      statusId: true,
+      voteCount: true,
+      commentCount: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+      canonicalPostId: true,
+    },
     where: and(inArray(posts.boardId, allBoardIds), isNull(posts.deletedAt)),
     orderBy: desc(posts.createdAt),
     limit: MAX_EXPORT_POSTS,
@@ -492,4 +557,48 @@ export async function listPostsForExport(boardId: BoardId | undefined): Promise<
       statusDetails: post.statusId ? statusMap.get(post.statusId) : undefined,
     })
   )
+}
+
+export interface PostFeedbackSource {
+  sourceType: string
+  authorName: string | null
+  quote: string
+  externalUrl: string | null
+  createdAt: Date
+}
+
+/**
+ * Get the feedback source for a post, if it was created from a feedback suggestion.
+ * Returns the original quote, source type (e.g. "slack"), and author info.
+ */
+export async function getPostFeedbackSource(postId: PostId): Promise<PostFeedbackSource | null> {
+  const row = await db
+    .select({
+      sourceType: rawFeedbackItems.sourceType,
+      authorName: sql<string | null>`${rawFeedbackItems.author}->>'name'`,
+      quote: sql<string>`${rawFeedbackItems.content}->>'text'`,
+      externalUrl: rawFeedbackItems.externalUrl,
+      createdAt: rawFeedbackItems.sourceCreatedAt,
+    })
+    .from(feedbackSuggestions)
+    .innerJoin(rawFeedbackItems, eq(rawFeedbackItems.id, feedbackSuggestions.rawFeedbackItemId))
+    .where(
+      and(
+        eq(feedbackSuggestions.resultPostId, postId),
+        eq(feedbackSuggestions.status, 'accepted'),
+        eq(feedbackSuggestions.suggestionType, 'create_post')
+      )
+    )
+    .limit(1)
+    .then((rows) => rows[0] ?? null)
+
+  if (!row) return null
+
+  return {
+    sourceType: row.sourceType,
+    authorName: row.authorName,
+    quote: row.quote,
+    externalUrl: row.externalUrl,
+    createdAt: row.createdAt,
+  }
 }

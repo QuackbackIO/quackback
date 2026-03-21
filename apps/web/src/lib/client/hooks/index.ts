@@ -99,4 +99,5 @@ export {
   useArchiveNotification,
   // User mutations
   useRemovePortalUser,
+  useUpdatePortalUser,
 } from '@/lib/client/mutations'

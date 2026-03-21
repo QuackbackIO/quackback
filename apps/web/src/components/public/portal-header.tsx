@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/shared/utils'
+import { isTeamMember } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/server/auth/client'
 import {
@@ -22,6 +23,7 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
 
@@ -54,6 +56,7 @@ export function PortalHeader({
   showThemeToggle = true,
 }: PortalHeaderProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { session } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
@@ -69,13 +72,16 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
+      // Invalidate user-scoped queries so reaction highlights and vote data refresh
+      queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+      queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
       router.invalidate() // Refetch loaders (includes session and userRole)
     },
   })
 
-  // Get user info from session
+  // Get user info from session (anonymous sessions don't count as logged in)
   const user = session?.user
-  const isLoggedIn = !!user
+  const isLoggedIn = !!user && !user.isAnonymous
 
   // Use initialUserData (which includes properly fetched avatar from blob storage)
   // falling back to session data
@@ -84,10 +90,13 @@ export function PortalHeader({
   const avatarUrl = initialUserData?.avatarUrl ?? user?.image ?? null
 
   // Team members (admin, member) can access admin dashboard
-  const canAccessAdmin = isLoggedIn && ['admin', 'member'].includes(userRole || '')
+  const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
 
   const handleSignOut = async () => {
     await signOut()
+    // Clear user-scoped caches so stale reaction/vote highlights don't persist
+    queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
+    queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
     router.invalidate() // Refetch session
     router.navigate({ to: '/' })
   }

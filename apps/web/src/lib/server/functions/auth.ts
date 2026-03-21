@@ -18,6 +18,7 @@ export interface SessionUser {
   email: string
   emailVerified: boolean
   image: string | null
+  isAnonymous: boolean
   createdAt: string
   updatedAt: string
 }
@@ -40,6 +41,7 @@ export interface Session {
  */
 export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Session | null> => {
+    console.log(`[fn:auth] getSession`)
     try {
       const session = await auth.api.getSession({
         headers: getRequestHeaders(),
@@ -65,6 +67,7 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
           email: session.user.email,
           emailVerified: session.user.emailVerified,
           image: session.user.image ?? null,
+          isAnonymous: (session.user as Record<string, unknown>).isAnonymous === true,
           createdAt: session.user.createdAt.toISOString(),
           updatedAt: session.user.updatedAt.toISOString(),
         },

@@ -32,10 +32,10 @@ function createUpdateChain(returnValue?: unknown[]) {
 
 const mockMergeSuggestionFindFirst = vi.fn()
 const mockMergePost = vi.fn()
-const mockDbUpdate = vi.fn((_table?: any) => createUpdateChain())
+const mockDbUpdate = vi.fn((_table?: unknown) => createUpdateChain())
 
 function createSelectChain() {
-  const chain: Record<string, any> = {}
+  const chain: Record<string, unknown> = {}
   chain.from = vi.fn(() => chain)
   chain.innerJoin = vi.fn(() => chain)
   chain.where = vi.fn(() => chain)
@@ -54,7 +54,7 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
     insert: vi.fn(() => createInsertChain()),
-    update: (table: any) => mockDbUpdate(table),
+    update: (table: unknown) => mockDbUpdate(table),
     select: vi.fn(() => createSelectChain()),
   },
   eq: vi.fn(),
@@ -126,7 +126,7 @@ describe('merge-suggestion.service', () => {
         hybridScore: 0.93,
         llmConfidence: 0.9,
         llmReasoning: 'Both request dark mode',
-        llmModel: 'google/gemini-2.5-flash',
+        llmModel: 'google/gemini-3.1-flash-lite-preview',
       })
 
       expect(insertValuesCalls).toHaveLength(1)
@@ -205,7 +205,7 @@ describe('merge-suggestion.service', () => {
   describe('expireStaleMergeSuggestions', () => {
     it('should expire old pending suggestions and return count', async () => {
       const chain = createUpdateChain([{ id: 'a' }, { id: 'b' }, { id: 'c' }])
-      mockDbUpdate.mockReturnValueOnce(chain as any)
+      mockDbUpdate.mockReturnValueOnce(chain as unknown as ReturnType<typeof mockDbUpdate>)
 
       const { expireStaleMergeSuggestions } = await import('../merge-suggestion.service')
       const count = await expireStaleMergeSuggestions()

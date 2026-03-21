@@ -43,10 +43,9 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         // TanStack Router SSR code imports node builtins (node:stream, node:async_hooks)
-        // that end up in the client bundle. Vite 7 errors on named imports from
-        // browser-externalized modules. Mark node: imports as external since they're
+        // that end up in the client bundle. Mark node: imports as external since they're
         // SSR-only code paths that never execute in the browser.
         external: [/^node:/],
       },

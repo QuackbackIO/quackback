@@ -8,6 +8,7 @@
 
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import {
   encryptPlatformCredentials,
   decryptPlatformCredentials,
@@ -49,6 +50,8 @@ export async function savePlatformCredentials({
         updatedAt: now,
       },
     })
+
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
 }
 
 /**
@@ -104,4 +107,6 @@ export async function deletePlatformCredentials(integrationType: string): Promis
   await db
     .delete(integrationPlatformCredentials)
     .where(eq(integrationPlatformCredentials.integrationType, integrationType))
+
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
 }

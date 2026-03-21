@@ -32,6 +32,9 @@ export async function findMergeCandidates(
   postId: PostId,
   opts?: { limit?: number; sourcePost?: { title: string; embedding: unknown } }
 ): Promise<MergeCandidate[]> {
+  console.log(
+    `[domain:merge-search] findMergeCandidates: postId=${postId} limit=${opts?.limit ?? DEFAULT_LIMIT}`
+  )
   const limit = opts?.limit ?? DEFAULT_LIMIT
   const fetchLimit = limit * 2
 

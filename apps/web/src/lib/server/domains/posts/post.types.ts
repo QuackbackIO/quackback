@@ -16,6 +16,9 @@ export interface CreatePostInput {
   contentJson?: TiptapContent | null
   statusId?: StatusId
   tagIds?: TagId[]
+  widgetMetadata?: Record<string, string>
+  /** Override creation timestamp (admin-only, for imports) */
+  createdAt?: Date
 }
 
 /**
@@ -209,8 +212,11 @@ export interface PublicComment {
   authorName: string | null
   principalId: string | null
   createdAt: Date
+  deletedAt: Date | null
+  isRemovedByTeam: boolean
   parentId: CommentId | null
   isTeamMember: boolean
+  isPrivate: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
   replies: PublicComment[]

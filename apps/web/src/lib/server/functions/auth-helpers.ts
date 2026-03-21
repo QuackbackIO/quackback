@@ -28,6 +28,18 @@ export function hasSessionCookie(): boolean {
 }
 
 /**
+ * Check if the request has any form of authentication (cookie or Bearer token).
+ * Use this instead of hasSessionCookie() when the endpoint should support
+ * both portal (cookie) and widget (Bearer token) authentication.
+ */
+export function hasAuthCredentials(): boolean {
+  const headers = getRequestHeaders()
+  const cookie = headers.get('cookie') ?? ''
+  const auth = headers.get('authorization') ?? ''
+  return cookie.includes('better-auth.session_token') || auth.startsWith('Bearer ')
+}
+
+/**
  * Get session directly from better-auth (not through server function).
  * This avoids nested server function call issues.
  */
@@ -57,6 +69,7 @@ export interface AuthContext {
   principal: {
     id: PrincipalId
     role: Role
+    type: string
   }
 }
 
@@ -75,47 +88,54 @@ export interface AuthContext {
  * const auth = await requireAuth()
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
-  const session = await getSessionDirect()
-  if (!session?.user) {
-    throw new Error('Authentication required')
-  }
-  const userId = session.user.id as UserId
+  console.log(`[fn:auth-helpers] requireAuth: roles=${options?.roles?.join(',') ?? 'any'}`)
+  try {
+    const session = await getSessionDirect()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
+    const userId = session.user.id as UserId
 
-  const appSettings = await getSettings()
-  if (!appSettings) {
-    throw new Error('Workspace not configured')
-  }
+    const appSettings = await getSettings()
+    if (!appSettings) {
+      throw new Error('Workspace not configured')
+    }
 
-  const principalRecord = await db.query.principal.findFirst({
-    where: eq(principal.userId, userId),
-  })
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, userId),
+    })
 
-  if (!principalRecord) {
-    throw new Error('Access denied: Not a team member')
-  }
+    if (!principalRecord) {
+      throw new Error('Access denied: Not a team member')
+    }
 
-  if (options?.roles && !options.roles.includes(principalRecord.role as Role)) {
-    throw new Error(
-      `Access denied: Requires [${options.roles.join(', ')}], got ${principalRecord.role}`
-    )
-  }
+    if (options?.roles && !options.roles.includes(principalRecord.role as Role)) {
+      throw new Error(
+        `Access denied: Requires [${options.roles.join(', ')}], got ${principalRecord.role}`
+      )
+    }
 
-  return {
-    settings: {
-      id: appSettings.id as WorkspaceId,
-      slug: appSettings.slug,
-      name: appSettings.name,
-    },
-    user: {
-      id: userId,
-      email: session.user.email,
-      name: session.user.name,
-      image: session.user.image ?? null,
-    },
-    principal: {
-      id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
-    },
+    return {
+      settings: {
+        id: appSettings.id as WorkspaceId,
+        slug: appSettings.slug,
+        name: appSettings.name,
+      },
+      user: {
+        id: userId,
+        email: session.user.email,
+        name: session.user.name,
+        image: session.user.image ?? null,
+      },
+      principal: {
+        id: principalRecord.id as PrincipalId,
+        role: principalRecord.role as Role,
+        type: principalRecord.type,
+      },
+    }
+  } catch (error) {
+    console.error(`[fn:auth-helpers] requireAuth failed:`, error)
+    throw error
   }
 }
 
@@ -127,53 +147,60 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  * who don't have one (e.g., users who signed up via OTP).
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
-  const session = await getSessionDirect()
-  if (!session?.user) {
-    return null
-  }
-  const userId = session.user.id as UserId
+  console.log(`[fn:auth-helpers] getOptionalAuth`)
+  try {
+    const session = await getSessionDirect()
+    if (!session?.user) {
+      return null
+    }
+    const userId = session.user.id as UserId
 
-  const appSettings = await getSettings()
-  if (!appSettings) {
-    return null
-  }
+    const appSettings = await getSettings()
+    if (!appSettings) {
+      return null
+    }
 
-  let principalRecord = await db.query.principal.findFirst({
-    where: eq(principal.userId, userId),
-  })
+    let principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, userId),
+    })
 
-  // Auto-create principal record for authenticated users without one
-  if (!principalRecord) {
-    const newPrincipalId = generateId('principal')
-    const [created] = await db
-      .insert(principal)
-      .values({
-        id: newPrincipalId,
-        userId,
-        role: 'user',
-        displayName: session.user.name,
-        avatarUrl: session.user.image ?? null,
-        createdAt: new Date(),
-      })
-      .returning()
-    principalRecord = created
-  }
+    // Auto-create principal record for authenticated users without one
+    if (!principalRecord) {
+      const newPrincipalId = generateId('principal')
+      const [created] = await db
+        .insert(principal)
+        .values({
+          id: newPrincipalId,
+          userId,
+          role: 'user',
+          displayName: session.user.name,
+          avatarUrl: session.user.image ?? null,
+          createdAt: new Date(),
+        })
+        .returning()
+      principalRecord = created
+    }
 
-  return {
-    settings: {
-      id: appSettings.id as WorkspaceId,
-      slug: appSettings.slug,
-      name: appSettings.name,
-    },
-    user: {
-      id: userId,
-      email: session.user.email,
-      name: session.user.name,
-      image: session.user.image ?? null,
-    },
-    principal: {
-      id: principalRecord.id as PrincipalId,
-      role: principalRecord.role as Role,
-    },
+    return {
+      settings: {
+        id: appSettings.id as WorkspaceId,
+        slug: appSettings.slug,
+        name: appSettings.name,
+      },
+      user: {
+        id: userId,
+        email: session.user.email,
+        name: session.user.name,
+        image: session.user.image ?? null,
+      },
+      principal: {
+        id: principalRecord.id as PrincipalId,
+        role: principalRecord.role as Role,
+        type: principalRecord.type,
+      },
+    }
+  } catch (error) {
+    console.error(`[fn:auth-helpers] getOptionalAuth failed:`, error)
+    throw error
   }
 }

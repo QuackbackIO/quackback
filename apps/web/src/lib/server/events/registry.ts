@@ -32,7 +32,6 @@ const lazyHooks: Record<string, () => Promise<HookHandler>> = {
   feedback_pipeline: () =>
     import('./handlers/feedback-pipeline').then((m) => m.feedbackPipelineHook),
   summary: () => import('./handlers/summary').then((m) => m.summaryHook),
-  merge_suggestion: () => import('./handlers/merge-suggestion').then((m) => m.mergeSuggestionHook),
 }
 
 /**

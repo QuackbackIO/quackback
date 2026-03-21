@@ -1,6 +1,13 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
+
+const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
+  setResponseHeader('X-Frame-Options', 'ALLOWALL')
+})
 
 export const Route = createFileRoute('/widget')({
   loader: async ({ context }) => {
@@ -11,9 +18,7 @@ export const Route = createFileRoute('/widget')({
       throw redirect({ to: '/onboarding' })
     }
 
-    const { setResponseHeader } = await import('@tanstack/react-start/server')
-    setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
-    setResponseHeader('X-Frame-Options', 'ALLOWALL')
+    await setIframeHeaders()
 
     const brandingData = settings.brandingData ?? null
     const brandingConfig = settings.brandingConfig ?? {}
@@ -32,16 +37,7 @@ export const Route = createFileRoute('/widget')({
       googleFontsUrl: getGoogleFontsUrl(brandingConfig),
     }
   },
-  // Force theme via meta tag so the root's systemThemeScript applies it
-  // before first paint — prevents white flash in dark mode
-  head: ({ loaderData }) => {
-    const themeMode = loaderData?.themeMode ?? 'user'
-    const meta: Array<Record<string, string>> = []
-    if (themeMode !== 'user') {
-      meta.push({ name: 'theme-forced', content: themeMode })
-    }
-    return { meta }
-  },
+  head: () => ({ meta: [] }),
   component: WidgetLayout,
 })
 

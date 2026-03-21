@@ -93,6 +93,26 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       }
     }
 
+    case 'post.updated': {
+      const { post, changedFields } = event.data
+      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const actor = event.actor.email || 'System'
+      const fields = changedFields.join(', ')
+
+      return {
+        embeds: [
+          {
+            title: truncateTitle(post.title),
+            url: postUrl,
+            description: `Changed: ${fields}`,
+            color: COLORS.yellow,
+            author: { name: `✏️ Post updated by ${actor}` },
+            timestamp: event.timestamp,
+          },
+        ],
+      }
+    }
+
     case 'post.deleted': {
       const { post } = event.data
       const actor = event.actor.email || 'System'
@@ -103,6 +123,25 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
             title: truncateTitle(post.title),
             color: COLORS.grey,
             author: { name: `🗑️ Post deleted by ${actor}` },
+            timestamp: event.timestamp,
+          },
+        ],
+      }
+    }
+
+    case 'post.merged': {
+      const { duplicatePost, canonicalPost } = event.data
+      const canonicalUrl = `${rootUrl}/b/${canonicalPost.boardSlug}/posts/${canonicalPost.id}`
+      const actor = event.actor.email || 'System'
+
+      return {
+        embeds: [
+          {
+            title: truncateTitle(canonicalPost.title),
+            url: canonicalUrl,
+            description: `"${duplicatePost.title}" merged into this post`,
+            color: COLORS.orange,
+            author: { name: `🔀 Post merged by ${actor}` },
             timestamp: event.timestamp,
           },
         ],

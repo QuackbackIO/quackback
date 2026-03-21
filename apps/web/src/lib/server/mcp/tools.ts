@@ -1,11 +1,12 @@
 /**
  * MCP Tools for Quackback
  *
- * 17 tools calling domain services directly (no HTTP self-loop):
+ * 23 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts and changelogs
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, and owner
  * - vote_post: Toggle vote on a post
+ * - proxy_vote: Add or remove a vote on behalf of another user
  * - add_comment: Post a comment on a post
  * - create_post: Submit new feedback
  * - delete_post: Soft-delete a post
@@ -19,6 +20,11 @@
  * - manage_roadmap_post: Add or remove a post from a roadmap
  * - merge_post: Merge a duplicate post into a canonical post
  * - unmerge_post: Restore a merged post to independent state
+ * - list_suggestions: List AI-generated feedback suggestions
+ * - accept_suggestion: Accept a feedback or merge suggestion
+ * - dismiss_suggestion: Dismiss a suggestion
+ * - restore_suggestion: Restore a dismissed suggestion to pending
+ * - get_post_activity: Get activity log for a post
  */
 
 import { z } from 'zod'
@@ -30,9 +36,21 @@ import {
   getCommentsWithReplies,
 } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
-import { voteOnPost } from '@/lib/server/domains/posts/post.voting'
-import { mergePost, unmergePost } from '@/lib/server/domains/posts/post.merge'
+import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import { mergePost, unmergePost, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
+import { getActivityForPost, createActivity } from '@/lib/server/domains/activity/activity.service'
+import {
+  acceptCreateSuggestion,
+  acceptVoteSuggestion,
+  dismissSuggestion as dismissFeedbackSuggestion,
+  restoreSuggestion as restoreFeedbackSuggestion,
+} from '@/lib/server/domains/feedback/pipeline/suggestion.service'
+import {
+  acceptMergeSuggestion,
+  dismissMergeSuggestion,
+  restoreMergeSuggestion,
+} from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import {
   createComment,
   updateComment,
@@ -51,7 +69,8 @@ import {
   addPostToRoadmap,
   removePostFromRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
-import { getTypeIdPrefix } from '@quackback/ids'
+import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -62,16 +81,25 @@ import type {
   CommentId,
   ChangelogId,
   RoadmapId,
+  FeedbackSuggestionId,
+  MergeSuggestionId,
 } from '@quackback/ids'
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Wrap a data object as a successful MCP tool result. */
+/** Wrap a data object as a successful MCP tool result (pretty-printed, for single-entity responses). */
 function jsonResult(data: unknown): CallToolResult {
   return {
     content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+  }
+}
+
+/** Wrap a data object as a compact MCP tool result (no pretty-print, for list responses). */
+function compactJsonResult(data: unknown): CallToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(data) }],
   }
 }
 
@@ -111,7 +139,7 @@ function requireScope(auth: McpAuthContext, scope: McpScope): CallToolResult | n
 
 /** Return an error if the user doesn't have an admin or member role. */
 function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
-  if (auth.role === 'admin' || auth.role === 'member') return null
+  if (isTeamMember(auth.role)) return null
   return {
     isError: true,
     content: [
@@ -209,6 +237,10 @@ const addCommentSchema = {
   postId: z.string().describe('Post TypeID to comment on'),
   content: z.string().max(5000).describe('Comment text (max 5,000 characters)'),
   parentId: z.string().optional().describe('Parent comment TypeID for threaded reply'),
+  isPrivate: z
+    .boolean()
+    .optional()
+    .describe('If true, comment is an internal note visible only to team members'),
 }
 
 const createPostSchema = {
@@ -221,6 +253,17 @@ const createPostSchema = {
 
 const votePostSchema = {
   postId: z.string().describe('Post TypeID to vote on'),
+}
+
+const proxyVoteSchema = {
+  action: z
+    .enum(['add', 'remove'])
+    .default('add')
+    .describe('Whether to add or remove the proxy vote'),
+  postId: z.string().describe('Post TypeID to vote on'),
+  voterPrincipalId: z.string().describe('Principal TypeID of the user to vote on behalf of'),
+  sourceType: z.string().optional().describe('Attribution source type (e.g. "zendesk", "slack")'),
+  sourceExternalUrl: z.string().optional().describe('URL linking to the originating record'),
 }
 
 const createChangelogSchema = {
@@ -292,6 +335,52 @@ const restorePostSchema = {
   postId: z.string().describe('Post TypeID to restore'),
 }
 
+const listSuggestionsSchema = {
+  status: z
+    .enum(['pending', 'dismissed'])
+    .default('pending')
+    .describe('Filter by status: pending or dismissed'),
+  suggestionType: z
+    .enum(['create_post', 'vote_on_post', 'duplicate_post'])
+    .optional()
+    .describe('Filter by suggestion type'),
+  sort: z.enum(['newest', 'relevance']).default('newest').describe('Sort order'),
+  limit: z.number().min(1).max(100).default(20).describe('Max results per page'),
+  cursor: z.string().optional().describe('Pagination cursor from previous response'),
+}
+
+const acceptSuggestionSchema = {
+  id: z.string().describe('Suggestion TypeID (feedback_suggestion_xxx or merge_sug_xxx)'),
+  edits: z
+    .object({
+      title: z.string().optional(),
+      body: z.string().optional(),
+      boardId: z.string().optional(),
+      statusId: z.string().optional(),
+    })
+    .optional()
+    .describe('Optional edits to apply before accepting (create_post type only)'),
+  swapDirection: z.boolean().optional().describe('Swap merge direction (duplicate_post type only)'),
+}
+
+const dismissSuggestionSchema = {
+  id: z
+    .string()
+    .describe('Suggestion TypeID to dismiss (feedback_suggestion_xxx or merge_sug_xxx)'),
+}
+
+const restoreSuggestionSchema = {
+  id: z
+    .string()
+    .describe(
+      'Suggestion TypeID to restore from dismissed to pending (feedback_suggestion_xxx or merge_sug_xxx)'
+    ),
+}
+
+const getPostActivitySchema = {
+  postId: z.string().describe('Post TypeID to get activity for'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion.
 // WARNING: These must stay in sync with the Zod schemas above.
@@ -325,6 +414,7 @@ type AddCommentArgs = {
   postId: string
   content: string
   parentId?: string
+  isPrivate?: boolean
 }
 
 type CreatePostArgs = {
@@ -336,6 +426,14 @@ type CreatePostArgs = {
 }
 
 type VotePostArgs = { postId: string }
+
+type ProxyVoteArgs = {
+  action: 'add' | 'remove'
+  postId: string
+  voterPrincipalId: string
+  sourceType?: string
+  sourceExternalUrl?: string
+}
 
 type CreateChangelogArgs = {
   title: string
@@ -382,6 +480,31 @@ type UnmergePostArgs = { postId: string }
 type DeletePostArgs = { postId: string }
 
 type RestorePostArgs = { postId: string }
+
+type ListSuggestionsArgs = {
+  status: 'pending' | 'dismissed'
+  suggestionType?: 'create_post' | 'vote_on_post' | 'duplicate_post'
+  sort: 'newest' | 'relevance'
+  limit: number
+  cursor?: string
+}
+
+type AcceptSuggestionArgs = {
+  id: string
+  edits?: {
+    title?: string
+    body?: string
+    boardId?: string
+    statusId?: string
+  }
+  swapDirection?: boolean
+}
+
+type DismissSuggestionArgs = { id: string }
+
+type RestoreSuggestionArgs = { id: string }
+
+type GetPostActivityArgs = { postId: string }
 
 // ============================================================================
 // Tool registration
@@ -478,11 +601,20 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
-        const result = await updatePost(args.postId as PostId, {
-          statusId: args.statusId as StatusId | undefined,
-          tagIds: args.tagIds as TagId[] | undefined,
-          ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
-        })
+        const result = await updatePost(
+          args.postId as PostId,
+          {
+            statusId: args.statusId as StatusId | undefined,
+            tagIds: args.tagIds as TagId[] | undefined,
+            ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
+          },
+          {
+            principalId: auth.principalId,
+            userId: auth.userId,
+            email: auth.email,
+            displayName: auth.name,
+          }
+        )
 
         return jsonResult({
           id: result.id,
@@ -524,14 +656,84 @@ Examples:
     }
   )
 
+  // proxy_vote
+  server.tool(
+    'proxy_vote',
+    `Add or remove a vote on behalf of another user. Requires team role.
+
+Examples:
+- Add proxy vote: proxy_vote({ postId: "post_01abc...", voterPrincipalId: "principal_01xyz..." })
+- Add with attribution: proxy_vote({ postId: "post_01abc...", voterPrincipalId: "principal_01xyz...", sourceType: "zendesk", sourceExternalUrl: "https://..." })
+- Remove vote: proxy_vote({ action: "remove", postId: "post_01abc...", voterPrincipalId: "principal_01xyz..." })`,
+    proxyVoteSchema,
+    WRITE,
+    async (args: ProxyVoteArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (args.action === 'remove') {
+          const result = await removeVote(
+            args.postId as PostId,
+            args.voterPrincipalId as PrincipalId
+          )
+          if (result.removed) {
+            createActivity({
+              postId: args.postId as PostId,
+              principalId: auth.principalId,
+              type: 'vote.removed',
+              metadata: { voterPrincipalId: args.voterPrincipalId },
+            })
+          }
+          return jsonResult({
+            postId: args.postId,
+            voterPrincipalId: args.voterPrincipalId,
+            removed: result.removed,
+            voteCount: result.voteCount,
+          })
+        }
+
+        const source = args.sourceType
+          ? { type: args.sourceType, externalUrl: args.sourceExternalUrl ?? '' }
+          : { type: 'proxy', externalUrl: '' }
+
+        const result = await addVoteOnBehalf(
+          args.postId as PostId,
+          args.voterPrincipalId as PrincipalId,
+          source,
+          null,
+          auth.principalId
+        )
+        if (result.voted) {
+          createActivity({
+            postId: args.postId as PostId,
+            principalId: auth.principalId,
+            type: 'vote.proxy',
+            metadata: { voterPrincipalId: args.voterPrincipalId },
+          })
+        }
+        return jsonResult({
+          postId: args.postId,
+          voterPrincipalId: args.voterPrincipalId,
+          voted: result.voted,
+          voteCount: result.voteCount,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
   // add_comment
   server.tool(
     'add_comment',
-    `Post a comment on a feedback post. Supports threaded replies via parentId.
+    `Post a comment on a feedback post. Supports threaded replies via parentId. Set isPrivate to create an internal note visible only to team members.
 
 Examples:
 - Top-level comment: add_comment({ postId: "post_01abc...", content: "Thanks for the feedback!" })
-- Threaded reply: add_comment({ postId: "post_01abc...", content: "Good point.", parentId: "comment_01xyz..." })`,
+- Threaded reply: add_comment({ postId: "post_01abc...", content: "Good point.", parentId: "comment_01xyz..." })
+- Internal note: add_comment({ postId: "post_01abc...", content: "Discussed in standup, prioritizing for Q3.", isPrivate: true })`,
     addCommentSchema,
     WRITE,
     async (args: AddCommentArgs): Promise<CallToolResult> => {
@@ -543,6 +745,7 @@ Examples:
             postId: args.postId as PostId,
             content: args.content,
             parentId: args.parentId as CommentId | undefined,
+            isPrivate: args.isPrivate,
           },
           {
             principalId: auth.principalId,
@@ -559,6 +762,7 @@ Examples:
           postId: result.comment.postId,
           content: result.comment.content,
           parentId: result.comment.parentId,
+          isPrivate: result.comment.isPrivate,
           isTeamMember: result.comment.isTeamMember,
           createdAt: result.comment.createdAt,
         })
@@ -822,12 +1026,19 @@ Examples:
       if (roleDenied) return roleDenied
       try {
         if (args.action === 'add') {
-          await addPostToRoadmap({
-            postId: args.postId as PostId,
-            roadmapId: args.roadmapId as RoadmapId,
-          })
+          await addPostToRoadmap(
+            {
+              postId: args.postId as PostId,
+              roadmapId: args.roadmapId as RoadmapId,
+            },
+            auth.principalId
+          )
         } else {
-          await removePostFromRoadmap(args.postId as PostId, args.roadmapId as RoadmapId)
+          await removePostFromRoadmap(
+            args.postId as PostId,
+            args.roadmapId as RoadmapId,
+            auth.principalId
+          )
         }
 
         return jsonResult({
@@ -941,9 +1152,245 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
-        const result = await restorePost(args.postId as PostId)
+        const result = await restorePost(args.postId as PostId, auth.principalId)
 
         return jsonResult({ restored: true, postId: args.postId, title: result.title })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // list_suggestions
+  server.tool(
+    'list_suggestions',
+    `List AI-generated feedback suggestions. Suggestions are created when feedback is ingested from external sources (Slack, email, etc.) and processed by the AI pipeline.
+
+Types:
+- create_post: AI suggests creating a new post from extracted feedback
+- vote_on_post: AI suggests adding a vote to an existing similar post
+- duplicate_post: AI detected two existing posts that may be duplicates
+
+Examples:
+- List pending: list_suggestions()
+- Filter by type: list_suggestions({ suggestionType: "create_post" })
+- Show dismissed: list_suggestions({ status: "dismissed" })`,
+    listSuggestionsSchema,
+    READ_ONLY,
+    async (args: ListSuggestionsArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'read:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const { listSuggestions } = await import('@/lib/server/domains/feedback/suggestion.query')
+
+        const decoded = decodeSearchCursor(args.cursor)
+        const offset =
+          typeof decoded.value === 'number'
+            ? decoded.value
+            : parseInt(String(decoded.value), 10) || 0
+
+        const result = await listSuggestions({
+          status: args.status,
+          suggestionType: args.suggestionType,
+          sort: args.sort,
+          limit: args.limit,
+          offset,
+        })
+
+        const nextCursor = result.hasMore
+          ? encodeSearchCursor('suggestions', offset + args.limit)
+          : null
+
+        return jsonResult({
+          suggestions: result.items,
+          total: result.total,
+          countsBySource: result.countsBySource,
+          nextCursor,
+          hasMore: result.hasMore,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // accept_suggestion
+  server.tool(
+    'accept_suggestion',
+    `Accept an AI-generated suggestion. Behavior depends on the suggestion type:
+- create_post: Creates a new post from the extracted feedback. Optional edits can override the suggested title/body/board.
+- vote_on_post: Adds a proxy vote to the matched existing post.
+- duplicate_post: Merges the source post into the target post. Use swapDirection to reverse which post is kept.
+
+Examples:
+- Accept as-is: accept_suggestion({ id: "feedback_suggestion_01abc..." })
+- Accept with edits: accept_suggestion({ id: "feedback_suggestion_01abc...", edits: { title: "Better title" } })
+- Accept merge: accept_suggestion({ id: "merge_sug_01abc..." })
+- Accept merge swapped: accept_suggestion({ id: "merge_sug_01abc...", swapDirection: true })`,
+    acceptSuggestionSchema,
+    WRITE,
+    async (args: AcceptSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        // Route to merge suggestion handler
+        if (isTypeId(args.id, 'merge_sug')) {
+          await acceptMergeSuggestion(args.id as MergeSuggestionId, auth.principalId, {
+            swapDirection: args.swapDirection,
+          })
+          return jsonResult({ accepted: true, id: args.id })
+        }
+
+        // Validate feedback suggestion ID
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        const suggestionId = args.id as FeedbackSuggestionId
+
+        // Look up suggestion to determine type
+        const { db, feedbackSuggestions, eq } = await import('@/lib/server/db')
+        const suggestion = await db.query.feedbackSuggestions.findFirst({
+          where: eq(feedbackSuggestions.id, suggestionId),
+          columns: { id: true, suggestionType: true, status: true },
+        })
+
+        if (!suggestion || suggestion.status !== 'pending') {
+          return errorResult(new Error('Suggestion not found or already resolved'))
+        }
+
+        // vote_on_post with no edits → proxy vote
+        if (suggestion.suggestionType === 'vote_on_post' && !args.edits) {
+          const result = await acceptVoteSuggestion(suggestionId, auth.principalId)
+          return jsonResult({
+            accepted: true,
+            id: args.id,
+            resultPostId: result.resultPostId,
+          })
+        }
+
+        // create_post or vote_on_post with edits → create post
+        const result = await acceptCreateSuggestion(suggestionId, auth.principalId, args.edits)
+        return jsonResult({
+          accepted: true,
+          id: args.id,
+          resultPostId: result.resultPostId,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // dismiss_suggestion
+  server.tool(
+    'dismiss_suggestion',
+    `Dismiss an AI-generated suggestion. The suggestion can be restored later via restore_suggestion.
+
+Examples:
+- Dismiss: dismiss_suggestion({ id: "feedback_suggestion_01abc..." })
+- Dismiss merge: dismiss_suggestion({ id: "merge_sug_01abc..." })`,
+    dismissSuggestionSchema,
+    WRITE,
+    async (args: DismissSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (isTypeId(args.id, 'merge_sug')) {
+          await dismissMergeSuggestion(args.id as MergeSuggestionId, auth.principalId)
+          return jsonResult({ dismissed: true, id: args.id })
+        }
+
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        await dismissFeedbackSuggestion(args.id as FeedbackSuggestionId, auth.principalId)
+        return jsonResult({ dismissed: true, id: args.id })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // restore_suggestion
+  server.tool(
+    'restore_suggestion',
+    `Restore a dismissed suggestion back to pending status.
+
+Examples:
+- Restore: restore_suggestion({ id: "feedback_suggestion_01abc..." })
+- Restore merge: restore_suggestion({ id: "merge_sug_01abc..." })`,
+    restoreSuggestionSchema,
+    WRITE,
+    async (args: RestoreSuggestionArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        if (isTypeId(args.id, 'merge_sug')) {
+          await restoreMergeSuggestion(args.id as MergeSuggestionId, auth.principalId)
+          return jsonResult({ restored: true, id: args.id })
+        }
+
+        if (!isValidTypeId(args.id, 'feedback_suggestion')) {
+          return errorResult(
+            new Error(
+              'Invalid suggestion ID. Expected feedback_suggestion_xxx or merge_sug_xxx format.'
+            )
+          )
+        }
+
+        await restoreFeedbackSuggestion(args.id as FeedbackSuggestionId, auth.principalId)
+        return jsonResult({ restored: true, id: args.id })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // get_post_activity
+  server.tool(
+    'get_post_activity',
+    `Get the activity log for a post. Shows status changes, merges, tag changes, owner assignments, proxy votes, and other events.
+
+Examples:
+- Get activity: get_post_activity({ postId: "post_01abc..." })`,
+    getPostActivitySchema,
+    READ_ONLY,
+    async (args: GetPostActivityArgs): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'read:feedback')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const activities = await getActivityForPost(args.postId as PostId)
+
+        return jsonResult({
+          postId: args.postId,
+          activities: activities.map((a) => ({
+            id: a.id,
+            type: a.type,
+            actorName: a.actorName,
+            metadata: a.metadata,
+            createdAt: a.createdAt,
+          })),
+        })
       } catch (err) {
         return errorResult(err)
       }
@@ -989,11 +1436,15 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
   const lastItem = result.items[result.items.length - 1]
   const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('posts', lastItem.id) : null
 
-  return jsonResult({
+  return compactJsonResult({
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
-      content: p.content,
+      excerpt: p.content
+        ? p.content.length > 200
+          ? p.content.slice(0, 200) + '...'
+          : p.content
+        : '',
       voteCount: p.voteCount,
       commentCount: p.commentCount,
       boardId: p.boardId,
@@ -1002,6 +1453,9 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
       authorName: p.authorName,
       ownerPrincipalId: p.ownerPrincipalId,
       tags: p.tags?.map((t) => ({ id: t.id, name: t.name })),
+      summary: p.summaryJson?.summary ?? null,
+      canonicalPostId: p.canonicalPostId ?? null,
+      isCommentsLocked: p.isCommentsLocked,
       createdAt: p.createdAt,
       deletedAt: p.deletedAt ?? null,
     })),
@@ -1037,11 +1491,15 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
   const nextCursor =
     result.hasMore && lastItem ? encodeSearchCursor('changelogs', lastItem.id) : null
 
-  return jsonResult({
+  return compactJsonResult({
     changelogs: result.items.map((c) => ({
       id: c.id,
       title: c.title,
-      content: c.content,
+      excerpt: c.content
+        ? c.content.length > 200
+          ? c.content.slice(0, 200) + '...'
+          : c.content
+        : '',
       status: c.status,
       authorName: c.author?.name ?? null,
       linkedPosts: c.linkedPosts.map((p) => ({
@@ -1062,9 +1520,10 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
 // ============================================================================
 
 async function getPostDetails(postId: PostId): Promise<CallToolResult> {
-  const [post, comments] = await Promise.all([
+  const [post, comments, mergedPosts] = await Promise.all([
     getPostWithDetails(postId),
     getCommentsWithReplies(postId),
+    getMergedPosts(postId),
   ])
 
   return jsonResult({
@@ -1089,6 +1548,18 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
           createdAt: post.pinnedComment.createdAt,
         }
       : null,
+    summaryJson: post.summaryJson ?? null,
+    summaryUpdatedAt: post.summaryUpdatedAt ?? null,
+    canonicalPostId: post.canonicalPostId ?? null,
+    mergedAt: post.mergedAt ?? null,
+    isCommentsLocked: post.isCommentsLocked,
+    mergedPosts: mergedPosts.map((mp) => ({
+      id: mp.id,
+      title: mp.title,
+      voteCount: mp.voteCount,
+      authorName: mp.authorName,
+      mergedAt: mp.mergedAt,
+    })),
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     deletedAt: post.deletedAt ?? null,

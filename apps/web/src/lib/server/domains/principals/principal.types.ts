@@ -14,7 +14,7 @@ export interface TeamMember {
   id: PrincipalId
   userId: UserId
   name: string | null
-  email: string
+  email: string | null
   image: string | null
   role: string
   createdAt: Date

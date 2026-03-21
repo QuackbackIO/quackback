@@ -17,6 +17,8 @@ export interface PublicCommentView {
   authorName: string | null
   principalId: string | null
   createdAt: Date | string
+  deletedAt: Date | string | null
+  isRemovedByTeam: boolean
   parentId: CommentId | null
   isTeamMember: boolean
   isPrivate?: boolean

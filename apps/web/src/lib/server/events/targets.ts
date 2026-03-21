@@ -24,10 +24,11 @@ import {
   type Subscriber,
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
 import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
-import type { EventData, EventActor } from './types'
+import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 
 /**
@@ -55,8 +56,6 @@ const SUBSCRIBER_EVENT_TYPES = [
 ] as const
 const AI_EVENT_TYPES = ['post.created'] as const
 const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
-const MERGE_SUGGESTION_EVENT_TYPES = ['post.created'] as const
-
 /**
  * Get all hook targets for an event.
  * Gracefully handles errors - returns empty array on failure.
@@ -108,20 +107,6 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       })
     }
 
-    // Merge suggestion targets - AI duplicate detection
-    if (
-      getOpenAI() &&
-      MERGE_SUGGESTION_EVENT_TYPES.includes(
-        event.type as (typeof MERGE_SUGGESTION_EVENT_TYPES)[number]
-      )
-    ) {
-      targets.push({
-        type: 'merge_suggestion',
-        target: { type: 'merge_suggestion' },
-        config: {},
-      })
-    }
-
     // Webhook targets - external HTTP endpoints (all event types)
     const webhookTargets = await getWebhookTargets(event)
     targets.push(...webhookTargets)
@@ -133,21 +118,25 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
   }
 }
 
-/**
- * Get integration hook targets (Slack, Discord, etc.).
- */
-async function getIntegrationTargets(
-  event: EventData,
-  context: HookContext
-): Promise<HookTarget[]> {
-  // Never forward private comments to external integrations
-  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
-    return []
+type CachedIntegrationMapping = {
+  eventType: string
+  integrationType: string
+  secrets: string | null
+  integrationConfig: unknown
+  actionConfig: unknown
+  filters: unknown
+}
+
+async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[]> {
+  const cached = await cacheGet<CachedIntegrationMapping[]>(CACHE_KEYS.INTEGRATION_MAPPINGS)
+  if (cached) {
+    console.log(`[Targets] Integration mappings: cache hit (${cached.length} mappings)`)
+    return cached
   }
 
-  // Single query: get active, enabled mappings with integration data
   const mappings = await db
     .select({
+      eventType: integrationEventMappings.eventType,
       integrationType: integrations.integrationType,
       secrets: integrations.secrets,
       integrationConfig: integrations.config,
@@ -156,28 +145,52 @@ async function getIntegrationTargets(
     })
     .from(integrationEventMappings)
     .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
-    .where(
-      and(
-        eq(integrationEventMappings.eventType, event.type),
-        eq(integrationEventMappings.enabled, true),
-        eq(integrations.status, 'active')
-      )
-    )
+    .where(and(eq(integrationEventMappings.enabled, true), eq(integrations.status, 'active')))
+
+  console.log(`[Targets] Integration mappings: cache miss, fetched ${mappings.length} from DB`)
+  await cacheSet(CACHE_KEYS.INTEGRATION_MAPPINGS, mappings, 300)
+  return mappings
+}
+
+/**
+ * Get integration hook targets (Slack, Discord, etc.).
+ */
+async function getIntegrationTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  // Never forward private comments to external integrations
+  if (
+    (event.type === 'comment.created' ||
+      event.type === 'comment.updated' ||
+      event.type === 'comment.deleted') &&
+    event.data.comment.isPrivate
+  ) {
+    return []
+  }
+
+  // Get all active mappings from cache or DB, then filter by event type
+  const allMappings = await getCachedIntegrationMappings()
+  const mappings = allMappings.filter((m) => m.eventType === event.type)
 
   if (mappings.length === 0) {
     return []
   }
 
   const targets: HookTarget[] = []
-  const boardId = extractBoardId(event)
+  const boardIds = extractBoardIds(event)
 
   // Track seen (integrationType, channelId) pairs to deduplicate
   const seen = new Set<string>()
 
   for (const m of mappings) {
-    // Apply board filter
+    // Apply board filter — match if any event board overlaps with filter
     const filters = m.filters as { boardIds?: string[] } | null
-    if (filters?.boardIds?.length && boardId && !filters.boardIds.includes(boardId)) {
+    if (
+      filters?.boardIds?.length &&
+      boardIds.length > 0 &&
+      !boardIds.some((id) => filters.boardIds!.includes(id))
+    ) {
       continue
     }
 
@@ -312,6 +325,9 @@ async function buildEmailTargets(
 function extractPostId(event: EventData): PostId | null {
   if ('post' in event.data) {
     return event.data.post.id as PostId
+  }
+  if ('duplicatePost' in event.data) {
+    return event.data.duplicatePost.id as PostId
   }
   return null
 }
@@ -609,22 +625,36 @@ async function getChangelogSubscriberTargets(
  */
 async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
   // Never deliver private comments to external webhooks
-  if (event.type === 'comment.created' && event.data.comment.isPrivate) {
+  if (
+    (event.type === 'comment.created' ||
+      event.type === 'comment.updated' ||
+      event.type === 'comment.deleted') &&
+    event.data.comment.isPrivate
+  ) {
     return []
   }
 
   try {
-    // Get all active, non-deleted webhooks (we filter in JS for simplicity)
-    const activeWebhooks = await db.query.webhooks.findMany({
-      where: and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)),
-    })
+    // Get all active, non-deleted webhooks from cache or DB (filter in JS)
+    let activeWebhooks = await cacheGet<(typeof webhooks.$inferSelect)[]>(
+      CACHE_KEYS.ACTIVE_WEBHOOKS
+    )
+    if (activeWebhooks) {
+      console.log(`[Targets] Active webhooks: cache hit (${activeWebhooks.length} webhooks)`)
+    } else {
+      activeWebhooks = await db.query.webhooks.findMany({
+        where: and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)),
+      })
+      console.log(`[Targets] Active webhooks: cache miss, fetched ${activeWebhooks.length} from DB`)
+      await cacheSet(CACHE_KEYS.ACTIVE_WEBHOOKS, activeWebhooks, 300)
+    }
 
     if (activeWebhooks.length === 0) {
       return []
     }
 
-    // Extract boardId from event for filtering
-    const boardId = extractBoardId(event)
+    // Extract boardId(s) from event for filtering
+    const boardIds = extractBoardIds(event)
 
     // Filter webhooks by event type and board
     const matchingWebhooks = activeWebhooks.filter((webhook) => {
@@ -633,9 +663,9 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
         return false
       }
 
-      // If webhook has board filter, must match
+      // If webhook has board filter, must match at least one event board
       if (webhook.boardIds && webhook.boardIds.length > 0) {
-        if (!boardId || !webhook.boardIds.includes(boardId)) {
+        if (boardIds.length === 0 || !boardIds.some((id) => webhook.boardIds!.includes(id))) {
           return false
         }
       }
@@ -644,7 +674,7 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
     })
 
     console.log(
-      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardId ? ` (board: ${boardId})` : ''}`
+      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardIds.length ? ` (boards: ${boardIds.join(', ')})` : ''}`
     )
 
     // Build targets - decrypt secrets for delivery
@@ -670,12 +700,21 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
 }
 
 /**
- * Extract board ID from event data.
+ * Extract board ID(s) from event data.
+ * Returns multiple IDs for merge events (duplicate + canonical may be on different boards).
  */
-function extractBoardId(event: EventData): string | null {
-  // All event types now include boardId in post reference
+function extractBoardIds(event: EventData): string[] {
   if ('post' in event.data) {
-    return event.data.post.boardId
+    return [event.data.post.boardId]
   }
-  return null
+  // post.merged / post.unmerged events have both duplicatePost and canonicalPost
+  if (event.type === 'post.merged' || event.type === 'post.unmerged') {
+    const data = event.data as PostMergedPayload | PostUnmergedPayload
+    const ids = new Set([
+      'duplicatePost' in data ? data.duplicatePost.boardId : data.post.boardId,
+      'canonicalPost' in data ? data.canonicalPost.boardId : data.formerCanonicalPost.boardId,
+    ])
+    return [...ids]
+  }
+  return []
 }

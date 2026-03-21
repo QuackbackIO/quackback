@@ -43,30 +43,25 @@
 Most feedback tools are expensive, closed-source, and lock you in. Quackback gives you a modern feedback system you actually own.
 
 - **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
-- **Own your data.** Your feedback lives in your PostgreSQL database. No vendor lock-in.
-- **AI-native.** Built-in [MCP server](https://quackback.io/docs/mcp) lets AI agents search, triage, and act on feedback directly.
-- **14 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and more out of the box.
+- **Own your data.** Your feedback lives in your own database. No vendor lock-in.
+- **AI-powered.** Automatic duplicate detection, AI summaries, feedback extraction from external sources, and an [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
+- **24 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
 
 ## Features
 
-- **Feedback boards.** Public voting, status tracking, nested comments, reactions, and official responses.
-- **Embeddable widget.** Drop a script tag into your app and collect feedback without leaving the page.
-- **Admin inbox.** Unified triage view with filtering, bulk actions, and automatic deduplication.
-- **Roadmap.** Show users what you're planning, working on, and what's shipped.
-- **Changelog.** Publish updates and close the loop when features ship.
-- **Integrations.** Sync with Slack, Linear, Jira, GitHub, Asana, ClickUp, Intercom, Zendesk, HubSpot, Discord, Teams, Shortcut, Azure DevOps, and Zapier.
-- **Inbound webhooks.** Two-way status sync with your issue tracker.
-- **API & webhooks.** API keys and outbound webhooks for custom workflows.
-- **MCP server.** Let AI agents interact with your feedback data via the [Model Context Protocol](https://quackback.io/docs/mcp).
+- **Feedback boards.** Let users vote, comment, and track status on feature requests. Vote on behalf of customers and see a full activity timeline on every post.
+- **AI-powered.** Automatically detect duplicates, summarize key themes, and ingest feedback from Slack, email, and other sources so nothing slips through the cracks.
+- **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile.
+- **Admin inbox.** Triage incoming feedback in one place. Filter, group, dismiss, and restore deleted posts.
+- **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
+- **Integrations.** [24 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
+- **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 23-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
+- **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
+- **SEO-ready.** Auto-generated sitemap and social sharing previews on every portal page.
 
-## Tech Stack
+## Integrations
 
-- [TanStack Start](https://tanstack.com/start) + [TanStack Router](https://tanstack.com/router) · Full-stack React framework
-- [PostgreSQL](https://www.postgresql.org/) + [Drizzle ORM](https://orm.drizzle.team/) · Database and type-safe ORM
-- [BullMQ](https://docs.bullmq.io/) · Background job processing
-- [Better Auth](https://www.better-auth.com/) · Authentication
-- [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) · Styling
-- [Bun](https://bun.sh/) · Runtime and package manager
+Slack, Linear, Jira, GitHub, GitLab, Asana, ClickUp, Monday, Trello, Notion, Shortcut, Azure DevOps, Intercom, Zendesk, Freshdesk, HubSpot, Salesforce, Stripe, Discord, Teams, Segment, Zapier, Make, and n8n.
 
 ## Self-Hosted
 
@@ -80,11 +75,17 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 git clone https://github.com/QuackbackIO/quackback.git
 cd quackback
 cp .env.example .env   # Edit with your configuration
-docker build -t quackback .
+docker build -t quackback -f apps/web/Dockerfile .
 docker run -p 3000:3000 --env-file .env quackback
 ```
 
-Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`.
+Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`. Migrations run automatically on startup.
+
+## Contributing
+
+See the [Contributing Guide](CONTRIBUTING.md) to get started.
+
+- [GitHub Discussions](https://github.com/QuackbackIO/quackback/discussions) — ask questions, share ideas
 
 ### Local Development
 
@@ -100,11 +101,14 @@ bun run dev      # http://localhost:3000
 
 Log in with `demo@example.com` / `password`.
 
-## Contributing
+### Tech Stack
 
-See the [Contributing Guide](CONTRIBUTING.md) to get started.
-
-- [GitHub Discussions](https://github.com/QuackbackIO/quackback/discussions) — ask questions, share ideas
+- [TanStack Start](https://tanstack.com/start) + [TanStack Router](https://tanstack.com/router) · Full-stack React framework
+- [PostgreSQL](https://www.postgresql.org/) + [Drizzle ORM](https://orm.drizzle.team/) · Database and type-safe ORM
+- [BullMQ](https://docs.bullmq.io/) · Background job processing
+- [Better Auth](https://www.better-auth.com/) · Authentication
+- [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) · Styling
+- [Bun](https://bun.sh/) · Runtime and package manager
 
 <a href="https://github.com/QuackbackIO/quackback/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=QuackbackIO/quackback" alt="Contributors" />

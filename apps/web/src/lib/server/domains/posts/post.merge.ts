@@ -22,15 +22,26 @@ import {
   sql,
   principal as principalTable,
 } from '@/lib/server/db'
-import { type PostId, type PrincipalId, toUuid } from '@quackback/ids'
+import { type BoardId, type PostId, type PrincipalId, type UserId, toUuid } from '@quackback/ids'
+import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import {
+  dispatchPostMerged,
+  dispatchPostUnmerged,
+  buildEventActor,
+} from '@/lib/server/events/dispatch'
+import { getPostWithDetails, getCommentsWithReplies } from './post.query'
+import { hasUserVoted } from './post.public'
 import type {
   MergePostResult,
   UnmergePostResult,
   MergedPostSummary,
   PostMergeInfo,
+  PostWithDetails,
 } from './post.types'
+import type { CommentTreeNode } from '@/lib/shared'
 
 /**
  * Merge a duplicate post into a canonical post.
@@ -49,7 +60,8 @@ import type {
 export async function mergePost(
   duplicatePostId: PostId,
   canonicalPostId: PostId,
-  actorPrincipalId: PrincipalId
+  actorPrincipalId: PrincipalId,
+  actorUserId?: UserId
 ): Promise<MergePostResult> {
   // Prevent self-merge
   if (duplicatePostId === canonicalPostId) {
@@ -99,13 +111,90 @@ export async function mergePost(
     })
     .where(eq(posts.id, duplicatePostId))
 
-  // Recalculate canonical post's vote count
-  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
+  // Recalculate canonical post's vote count and reset merge check in one update
+  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId, {
+    resetMergeCheck: true,
+  })
+
+  // Queue a delayed re-check for additional duplicates (e.g. 3 similar posts where only 1 was caught)
+  schedulePostMergeRecheck(canonicalPostId)
+
+  // Look up the duplicate post's author name for activity metadata
+  const duplicateAuthor = duplicatePost.principalId
+    ? await db.query.principal.findFirst({
+        where: eq(principalTable.id, duplicatePost.principalId),
+        columns: { displayName: true },
+      })
+    : null
+
+  // Record activity on both posts
+  createActivity({
+    postId: canonicalPostId,
+    principalId: actorPrincipalId,
+    type: 'post.merged_in',
+    metadata: {
+      duplicatePostId,
+      duplicatePostTitle: duplicatePost.title,
+      duplicateVoteCount: duplicatePost.voteCount,
+      duplicateAuthorName: duplicateAuthor?.displayName ?? null,
+    },
+  })
+  createActivity({
+    postId: duplicatePostId,
+    principalId: actorPrincipalId,
+    type: 'post.merged_away',
+    metadata: { canonicalPostId, canonicalPostTitle: canonicalPost.title },
+  })
+
+  // Dispatch post.merged event for webhooks and integrations
+  const [dupBoard, canBoard] = await Promise.all([
+    db.query.boards.findFirst({
+      where: eq(boards.id, duplicatePost.boardId),
+      columns: { slug: true },
+    }),
+    db.query.boards.findFirst({
+      where: eq(boards.id, canonicalPost.boardId),
+      columns: { slug: true },
+    }),
+  ])
+  if (dupBoard && canBoard) {
+    dispatchPostMerged(
+      buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }),
+      {
+        id: duplicatePostId,
+        title: duplicatePost.title,
+        boardId: duplicatePost.boardId,
+        boardSlug: dupBoard.slug,
+      },
+      {
+        id: canonicalPostId,
+        title: canonicalPost.title,
+        boardId: canonicalPost.boardId,
+        boardSlug: canBoard.slug,
+      }
+    )
+  }
 
   return {
     canonicalPost: { id: canonicalPostId, voteCount: newVoteCount },
     duplicatePost: { id: duplicatePostId },
   }
+}
+
+/**
+ * Schedule a delayed duplicate re-check for a canonical post after merge.
+ * Uses BullMQ for persistence and retry. The 3s delay lets the DB transaction
+ * settle and avoids re-finding just-dismissed suggestions.
+ */
+function schedulePostMergeRecheck(canonicalPostId: PostId): void {
+  scheduleDispatch({
+    jobId: `merge-recheck:${canonicalPostId}`,
+    handler: '__post_merge_recheck__',
+    delayMs: 3000,
+    payload: { postId: canonicalPostId },
+  }).catch((err) =>
+    console.error(`[PostMerge] Failed to schedule recheck for ${canonicalPostId}:`, err)
+  )
 }
 
 /**
@@ -120,7 +209,8 @@ export async function mergePost(
  */
 export async function unmergePost(
   postId: PostId,
-  _actorPrincipalId: PrincipalId
+  actorPrincipalId: PrincipalId,
+  actorUserId?: UserId
 ): Promise<UnmergePostResult> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -136,18 +226,70 @@ export async function unmergePost(
 
   const canonicalPostId = post.canonicalPostId as PostId
 
-  // Clear merge fields
+  // Clear merge fields and reset merge check so the post gets re-evaluated
   await db
     .update(posts)
     .set({
       canonicalPostId: null,
       mergedAt: null,
       mergedByPrincipalId: null,
+      mergeCheckedAt: null,
     })
     .where(eq(posts.id, postId))
 
   // Recalculate canonical post's vote count
   const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
+
+  // Look up the canonical post title and board for the activity metadata and event
+  const canonicalPost = await db.query.posts.findFirst({
+    where: eq(posts.id, canonicalPostId),
+    columns: { title: true, boardId: true },
+  })
+
+  // Record activity on both posts
+  createActivity({
+    postId,
+    principalId: actorPrincipalId,
+    type: 'post.unmerged',
+    metadata: { otherPostId: canonicalPostId, otherPostTitle: canonicalPost?.title ?? '' },
+  })
+  createActivity({
+    postId: canonicalPostId,
+    principalId: actorPrincipalId,
+    type: 'post.unmerged',
+    metadata: { otherPostId: postId, otherPostTitle: post.title },
+  })
+
+  // Dispatch post.unmerged event for webhooks and integrations
+  if (canonicalPost) {
+    const [postBoard, canonicalBoard] = await Promise.all([
+      db.query.boards.findFirst({
+        where: eq(boards.id, post.boardId),
+        columns: { slug: true },
+      }),
+      db.query.boards.findFirst({
+        where: eq(boards.id, canonicalPost.boardId as BoardId),
+        columns: { slug: true },
+      }),
+    ])
+    if (postBoard && canonicalBoard) {
+      dispatchPostUnmerged(
+        buildEventActor({ principalId: actorPrincipalId, userId: actorUserId }),
+        {
+          id: postId,
+          title: post.title,
+          boardId: post.boardId,
+          boardSlug: postBoard.slug,
+        },
+        {
+          id: canonicalPostId,
+          title: canonicalPost.title,
+          boardId: canonicalPost.boardId as BoardId,
+          boardSlug: canonicalBoard.slug,
+        }
+      )
+    }
+  }
 
   return {
     post: { id: postId },
@@ -229,13 +371,86 @@ export async function getPostMergeInfo(postId: PostId): Promise<PostMergeInfo | 
 }
 
 /**
+ * Result of a merge preview — simulates what the canonical post would look like after merging.
+ */
+export interface MergePreviewResult {
+  /** Canonical post with full details (vote count reflects deduplicated merge) */
+  post: PostWithDetails & {
+    hasVoted: boolean
+    comments: CommentTreeNode[]
+    mergedPosts?: undefined
+    mergeInfo?: undefined
+  }
+  /** Comments from the duplicate post (shown under a divider in the UI) */
+  duplicateComments: CommentTreeNode[]
+  /** Title of the duplicate post (used for the divider label) */
+  duplicatePostTitle: string
+}
+
+/**
+ * Preview what the merged post would look like without actually performing the merge.
+ *
+ * Loads full details for both posts, computes the deduplicated vote count
+ * (same logic as recalculateCanonicalVoteCount), and returns separate comment
+ * arrays so the UI can show them with a divider.
+ *
+ * @param canonicalPostId - The post that would remain after merge
+ * @param duplicatePostId - The post that would be absorbed
+ * @param viewerPrincipalId - The principal viewing the preview (for hasVoted check)
+ */
+export async function previewMergedPost(
+  canonicalPostId: PostId,
+  duplicatePostId: PostId,
+  viewerPrincipalId: PrincipalId
+): Promise<MergePreviewResult> {
+  // Load both posts' full details and comments in parallel
+  const [canonicalDetails, duplicateDetails, canonicalComments, duplicateComments, hasVoted] =
+    await Promise.all([
+      getPostWithDetails(canonicalPostId),
+      getPostWithDetails(duplicatePostId),
+      getCommentsWithReplies(canonicalPostId, viewerPrincipalId),
+      getCommentsWithReplies(duplicatePostId, viewerPrincipalId),
+      hasUserVoted(canonicalPostId, viewerPrincipalId),
+    ])
+
+  // Compute deduplicated vote count across both posts (same SQL as real merge)
+  const canonicalUuid = toUuid(canonicalPostId)
+  const duplicateUuid = toUuid(duplicatePostId)
+  const result = await db.execute<{ unique_voters: number }>(sql`
+    SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
+    FROM ${votes} v
+    WHERE v.post_id IN (${canonicalUuid}::uuid, ${duplicateUuid}::uuid)
+  `)
+  const rows = getExecuteRows<{ unique_voters: number }>(result)
+  const mergedVoteCount = rows[0]?.unique_voters ?? 0
+
+  // Combine comment counts from both posts
+  const combinedCommentCount = canonicalDetails.commentCount + duplicateDetails.commentCount
+
+  return {
+    post: {
+      ...canonicalDetails,
+      voteCount: mergedVoteCount,
+      commentCount: combinedCommentCount,
+      hasVoted,
+      comments: canonicalComments,
+    },
+    duplicateComments,
+    duplicatePostTitle: duplicateDetails.title,
+  }
+}
+
+/**
  * Recalculate the vote count for a canonical post.
  * Counts unique voters across the canonical post and all its merged duplicates.
  *
  * @param canonicalPostId - The canonical post to recalculate
  * @returns The new vote count
  */
-async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<number> {
+async function recalculateCanonicalVoteCount(
+  canonicalPostId: PostId,
+  options?: { resetMergeCheck?: boolean }
+): Promise<number> {
   // Count unique member votes across canonical + all merged duplicates
   // Note: must convert TypeID to raw UUID for use in raw SQL
   const canonicalUuid = toUuid(canonicalPostId)
@@ -255,8 +470,14 @@ async function recalculateCanonicalVoteCount(canonicalPostId: PostId): Promise<n
   const rows = getExecuteRows<{ unique_voters: number }>(result)
   const newCount = rows[0]?.unique_voters ?? 0
 
-  // Update the canonical post's vote count
-  await db.update(posts).set({ voteCount: newCount }).where(eq(posts.id, canonicalPostId))
+  // Update the canonical post's vote count (and optionally reset mergeCheckedAt)
+  await db
+    .update(posts)
+    .set({
+      voteCount: newCount,
+      ...(options?.resetMergeCheck && { mergeCheckedAt: null }),
+    })
+    .where(eq(posts.id, canonicalPostId))
 
   return newCount
 }

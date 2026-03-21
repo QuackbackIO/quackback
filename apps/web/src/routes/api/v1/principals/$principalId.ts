@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { validateTypeId } from '@/lib/server/domains/api/validation'
 import type { PrincipalId } from '@quackback/ids'
+import { isTeamMember } from '@/lib/shared/roles'
 
 // Input validation schema for updating member role
 const updateMemberSchema = z.object({
@@ -23,7 +24,7 @@ async function fetchTeamMemberWithUser(principalId: PrincipalId) {
 
   const member = await getMemberById(principalId)
   if (!member) return notFoundResponse('Member not found')
-  if (member.role !== 'admin' && member.role !== 'member') {
+  if (!isTeamMember(member.role)) {
     return notFoundResponse('Team member not found')
   }
   if (!member.userId) return notFoundResponse('User not found')

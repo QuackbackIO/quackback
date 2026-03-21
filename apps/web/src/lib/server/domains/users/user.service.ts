@@ -841,7 +841,7 @@ export async function identifyPortalUser(
   async function applyUpdates(record: {
     id: UserId
     name: string
-    email: string
+    email: string | null
     image: string | null
     emailVerified: boolean
     metadata: string | null
@@ -951,7 +951,7 @@ export async function identifyPortalUser(
     principalId: principalRecord!.id as PrincipalId,
     userId: userRecord.id,
     name: userRecord.name ?? defaultName,
-    email: userRecord.email,
+    email: userRecord.email ?? normalizedEmail, // identify always provides email
     image: userRecord.image ?? null,
     emailVerified: userRecord.emailVerified,
     externalId: extractExternalId(userRecord.metadata ?? null),
@@ -1043,7 +1043,7 @@ export async function updatePortalUser(
   return {
     principalId,
     userId: updated.id,
-    name: updated.name ?? updated.email.split('@')[0],
+    name: updated.name ?? updated.email?.split('@')[0] ?? 'User',
     email: updated.email,
     image: updated.image ?? null,
     emailVerified: updated.emailVerified,

@@ -49,13 +49,13 @@ export function logStartupBanner(): void {
   ])
     .then(([{ recoverStuckItems }, { expireStaleSuggestions }]) => {
       setTimeout(() => {
-        recoverStuckItems().catch((err) =>
+        recoverStuckItems().catch((err: unknown) =>
           console.error('[Startup] Initial stuck-item recovery failed:', err)
         )
       }, 20_000) // 20s delay
       setInterval(
         () => {
-          recoverStuckItems().catch((err) =>
+          recoverStuckItems().catch((err: unknown) =>
             console.error('[Startup] Stuck-item recovery failed:', err)
           )
         },
@@ -63,7 +63,7 @@ export function logStartupBanner(): void {
       ) // Every 15 minutes
       setInterval(
         () => {
-          expireStaleSuggestions().catch((err) =>
+          expireStaleSuggestions().catch((err: unknown) =>
             console.error('[Startup] Suggestion expiry failed:', err)
           )
         },

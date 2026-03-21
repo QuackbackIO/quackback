@@ -22,6 +22,7 @@ interface WidgetNewPostFormProps {
     statusId: string | null
     board: { id: string; name: string; slug: string }
   }) => void
+  anonymousPostingEnabled?: boolean
 }
 
 export function WidgetNewPostForm({
@@ -29,8 +30,10 @@ export function WidgetNewPostForm({
   prefilledTitle,
   selectedBoardSlug,
   onSuccess,
+  anonymousPostingEnabled = false,
 }: WidgetNewPostFormProps) {
-  const { isIdentified, user, widgetFetch } = useWidgetAuth()
+  const { isIdentified, user, emitEvent, metadata } = useWidgetAuth()
+  const canPost = isIdentified || anonymousPostingEnabled
 
   const defaultBoard = selectedBoardSlug
     ? boards.find((b) => b.slug === selectedBoardSlug)
@@ -57,13 +60,24 @@ export function WidgetNewPostForm({
     return () => clearTimeout(timer)
   }, [prefilledTitle])
 
-  if (!isIdentified) {
+  if (!canPost) {
+    const boardSlug = selectedBoardSlug || defaultBoard?.slug || boards[0]?.slug
+    const portalUrl = boardSlug
+      ? `${window.location.origin}/b/${boardSlug}`
+      : window.location.origin
+
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-        <p className="text-sm font-medium text-foreground">Sign in to submit your idea</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Authentication is required to create posts
-        </p>
+        <p className="text-sm font-medium text-foreground">Want to share an idea?</p>
+        <button
+          type="button"
+          onClick={() =>
+            window.parent.postMessage({ type: 'quackback:navigate', url: portalUrl }, '*')
+          }
+          className="text-xs text-primary hover:text-primary/80 transition-colors mt-1"
+        >
+          Log in to submit your feedback
+        </button>
       </div>
     )
   }
@@ -76,19 +90,32 @@ export function WidgetNewPostForm({
     setError(null)
 
     try {
-      const res = await widgetFetch('/api/widget/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ boardId, title: title.trim(), content: content.trim() }),
+      const { getWidgetAuthHeaders } = await import('@/lib/client/widget-auth')
+      const { createPublicPostFn } = await import('@/lib/server/functions/public-posts')
+      const result = await createPublicPostFn({
+        data: {
+          boardId,
+          title: title.trim(),
+          content: content.trim(),
+          metadata: metadata ?? undefined,
+        },
+        headers: getWidgetAuthHeaders(),
       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error?.message || 'Failed to create post')
-        return
-      }
+      emitEvent('post:created', {
+        id: result.id,
+        title: result.title,
+        board: result.board,
+        statusId: result.statusId ?? null,
+      })
 
-      onSuccess(json.data)
+      onSuccess({
+        id: result.id,
+        title: result.title,
+        voteCount: 0,
+        statusId: result.statusId ?? null,
+        board: result.board,
+      })
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -158,7 +185,9 @@ export function WidgetNewPostForm({
       </ScrollArea>
 
       <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-center justify-between shrink-0">
-        <span className="text-xs text-muted-foreground truncate">Posting as {user?.email}</span>
+        <span className="text-xs text-muted-foreground truncate">
+          {user ? `Posting as ${user.name || user.email}` : 'Posting anonymously'}
+        </span>
         <button
           type="submit"
           disabled={!title.trim() || isSubmitting}

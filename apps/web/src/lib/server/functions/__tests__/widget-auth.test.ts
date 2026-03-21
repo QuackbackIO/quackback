@@ -97,6 +97,7 @@ describe('getWidgetSession', () => {
     mockPrincipalFindFirst.mockResolvedValue({
       id: 'principal_1',
       role: 'user',
+      type: 'user',
     })
 
     const result = await getWidgetSession()
@@ -104,7 +105,7 @@ describe('getWidgetSession', () => {
     expect(result).toEqual({
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: 'https://avatar.url' },
-      principal: { id: 'principal_1', role: 'user' },
+      principal: { id: 'principal_1', role: 'user', type: 'user' },
     })
   })
 
@@ -132,7 +133,7 @@ describe('getWidgetSession', () => {
     expect(result).toEqual({
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
-      principal: { id: 'principal_mock123', role: 'user' },
+      principal: { id: 'principal_mock123', role: 'user', type: 'user' },
     })
   })
 
@@ -145,11 +146,13 @@ describe('getWidgetSession', () => {
     mockPrincipalFindFirst.mockResolvedValue({
       id: 'principal_1',
       role: 'member',
+      type: 'user',
     })
 
     const result = await getWidgetSession()
 
     expect(result?.user.image).toBeNull()
     expect(result?.principal.role).toBe('member')
+    expect(result?.principal.type).toBe('user')
   })
 })

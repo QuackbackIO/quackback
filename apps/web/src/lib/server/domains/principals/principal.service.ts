@@ -4,10 +4,11 @@
  * Provides principal lookup operations.
  */
 
-import { db, eq, and, sql, principal, user, type Principal } from '@/lib/server/db'
+import { db, eq, ne, and, or, sql, ilike, principal, user, type Principal } from '@/lib/server/db'
 import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { isTeamMember, isAdmin } from '@/lib/shared/roles'
 import type { TeamMember } from './principal.types'
 
 // Re-export types for backwards compatibility
@@ -111,11 +112,47 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 }
 
 /**
- * Count all principals (no auth required)
+ * Search members (all human principals) by name or email.
+ * Returns a limited result set for use in typeahead/combobox components.
+ */
+export async function searchMembers(params: {
+  search?: string
+  limit?: number
+}): Promise<TeamMember[]> {
+  const limit = Math.min(params.limit ?? 20, 50)
+  const conditions = [eq(principal.type, 'user')]
+
+  if (params.search?.trim()) {
+    const q = `%${params.search.trim()}%`
+    conditions.push(or(ilike(user.name, q), ilike(user.email, q))!)
+  }
+
+  return db
+    .select({
+      id: principal.id,
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      role: principal.role,
+      createdAt: principal.createdAt,
+    })
+    .from(principal)
+    .innerJoin(user, eq(principal.userId, user.id))
+    .where(and(...conditions))
+    .orderBy(user.name)
+    .limit(limit)
+}
+
+/**
+ * Count all principals excluding anonymous voters (no auth required)
  */
 export async function countMembers(): Promise<number> {
   try {
-    const result = await db.select({ count: sql<number>`count(*)`.as('count') }).from(principal)
+    const result = await db
+      .select({ count: sql<number>`count(*)`.as('count') })
+      .from(principal)
+      .where(ne(principal.type, 'anonymous'))
 
     return Number(result[0]?.count ?? 0)
   } catch (error) {
@@ -151,12 +188,12 @@ export async function updateMemberRole(
     }
 
     // Ensure target is a team member (admin or member), not a portal user
-    if (targetMember.role !== 'admin' && targetMember.role !== 'member') {
+    if (!isTeamMember(targetMember.role)) {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
     // If demoting an admin to member, ensure at least one human admin remains
-    if (targetMember.role === 'admin' && newRole === 'member') {
+    if (isAdmin(targetMember.role) && newRole === 'member') {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
         .from(principal)
@@ -204,12 +241,12 @@ export async function removeTeamMember(
     }
 
     // Ensure target is a team member (admin or member), not a portal user
-    if (targetMember.role !== 'admin' && targetMember.role !== 'member') {
+    if (!isTeamMember(targetMember.role)) {
       throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
     }
 
     // If removing an admin, ensure at least one human admin remains
-    if (targetMember.role === 'admin') {
+    if (isAdmin(targetMember.role)) {
       const adminCount = await db
         .select({ count: sql<number>`count(*)`.as('count') })
         .from(principal)

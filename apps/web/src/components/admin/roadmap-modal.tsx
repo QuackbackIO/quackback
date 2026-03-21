@@ -69,6 +69,9 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
       authorName: c.authorName,
       principalId: c.principalId,
       createdAt: c.createdAt,
+      deletedAt: c.deletedAt ?? null,
+      isRemovedByTeam:
+        !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
       parentId: c.parentId as CommentId | null,
       isTeamMember: c.isTeamMember,
       avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
@@ -79,6 +82,9 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
         authorName: r.authorName,
         principalId: r.principalId,
         createdAt: r.createdAt,
+        deletedAt: r.deletedAt ?? null,
+        isRemovedByTeam:
+          !!r.deletedAt && !!r.deletedByPrincipalId && r.deletedByPrincipalId !== r.principalId,
         parentId: r.parentId as CommentId | null,
         isTeamMember: r.isTeamMember,
         avatarUrl: (r.principalId && post.avatarUrls?.[r.principalId]) || null,
@@ -196,6 +202,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
               board={post.board}
               authorName={post.authorName}
               authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
+              authorPrincipalId={post.principalId}
               createdAt={new Date(post.createdAt)}
               tags={post.tags}
               roadmaps={postRoadmaps}

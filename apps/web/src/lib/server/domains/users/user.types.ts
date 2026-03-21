@@ -27,7 +27,7 @@ export interface PortalUserListItem {
   principalId: PrincipalId
   userId: string
   name: string | null
-  email: string
+  email: string | null
   image: string | null
   emailVerified: boolean
   joinedAt: Date
@@ -46,7 +46,7 @@ export interface PortalUserListItemView {
   principalId: PrincipalId
   userId: string
   name: string | null
-  email: string
+  email: string | null
   image: string | null
   emailVerified: boolean
   joinedAt: Date | string
@@ -212,7 +212,7 @@ export interface UpdatePortalUserResult {
   principalId: PrincipalId
   userId: string
   name: string
-  email: string
+  email: string | null
   image: string | null
   emailVerified: boolean
   externalId: string | null

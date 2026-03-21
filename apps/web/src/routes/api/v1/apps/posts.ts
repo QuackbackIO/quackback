@@ -81,7 +81,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
               userId: principalRecord?.user?.id,
               displayName: principalRecord?.displayName ?? undefined,
               name: principalRecord?.user?.name,
-              email: principalRecord?.user?.email,
+              email: principalRecord?.user?.email ?? undefined,
             }
           )
 

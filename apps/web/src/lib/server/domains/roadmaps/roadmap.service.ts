@@ -25,8 +25,9 @@ import {
   userSegments,
   type Roadmap,
 } from '@/lib/server/db'
-import { toUuid, type RoadmapId, type PostId } from '@quackback/ids'
+import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
@@ -44,6 +45,7 @@ import type {
  * Create a new roadmap
  */
 export async function createRoadmap(input: CreateRoadmapInput): Promise<Roadmap> {
+  console.log(`[domain:roadmaps] createRoadmap: slug=${input.slug}`)
   // Validate input
   if (!input.name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Name is required')
@@ -94,6 +96,7 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<Roadmap>
  * Update an existing roadmap
  */
 export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): Promise<Roadmap> {
+  console.log(`[domain:roadmaps] updateRoadmap: id=${id}`)
   // Validate input
   if (input.name !== undefined && !input.name.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Name cannot be empty')
@@ -124,6 +127,7 @@ export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): P
  * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteRoadmap(id: RoadmapId): Promise<void> {
+  console.log(`[domain:roadmaps] deleteRoadmap: id=${id}`)
   const result = await db
     .update(roadmaps)
     .set({ deletedAt: new Date() })
@@ -186,6 +190,7 @@ export async function listPublicRoadmaps(): Promise<Roadmap[]> {
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
+  console.log(`[domain:roadmaps] reorderRoadmaps: count=${roadmapIds.length}`)
   if (roadmapIds.length === 0) return
 
   // Build CASE WHEN clause for batch update
@@ -209,7 +214,13 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
 /**
  * Add a post to a roadmap
  */
-export async function addPostToRoadmap(input: AddPostToRoadmapInput): Promise<void> {
+export async function addPostToRoadmap(
+  input: AddPostToRoadmapInput,
+  actorPrincipalId?: PrincipalId
+): Promise<void> {
+  console.log(
+    `[domain:roadmaps] addPostToRoadmap: postId=${input.postId}, roadmapId=${input.roadmapId}`
+  )
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {
@@ -246,12 +257,24 @@ export async function addPostToRoadmap(input: AddPostToRoadmapInput): Promise<vo
     roadmapId: input.roadmapId,
     position,
   })
+
+  createActivity({
+    postId: input.postId,
+    principalId: actorPrincipalId ?? null,
+    type: 'roadmap.added',
+    metadata: { roadmapName: roadmap.name },
+  })
 }
 
 /**
  * Remove a post from a roadmap
  */
-export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId): Promise<void> {
+export async function removePostFromRoadmap(
+  postId: PostId,
+  roadmapId: RoadmapId,
+  actorPrincipalId?: PrincipalId
+): Promise<void> {
+  console.log(`[domain:roadmaps] removePostFromRoadmap: postId=${postId}, roadmapId=${roadmapId}`)
   // Remove the post from the roadmap (single delete, check result)
   const result = await db
     .delete(postRoadmaps)
@@ -261,6 +284,19 @@ export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId
   if (result.length === 0) {
     throw new NotFoundError('POST_NOT_IN_ROADMAP', `Post ${postId} is not in roadmap ${roadmapId}`)
   }
+
+  // Look up roadmap name for the activity record
+  const roadmap = await db.query.roadmaps.findFirst({
+    where: eq(roadmaps.id, roadmapId),
+    columns: { name: true },
+  })
+
+  createActivity({
+    postId,
+    principalId: actorPrincipalId ?? null,
+    type: 'roadmap.removed',
+    metadata: { roadmapName: roadmap?.name ?? '' },
+  })
 }
 
 /**
@@ -268,6 +304,9 @@ export async function removePostFromRoadmap(postId: PostId, roadmapId: RoadmapId
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<void> {
+  console.log(
+    `[domain:roadmaps] reorderPostsInColumn: roadmapId=${input.roadmapId}, count=${input.postIds.length}`
+  )
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {

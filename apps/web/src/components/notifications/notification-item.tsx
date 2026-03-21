@@ -128,38 +128,34 @@ function FullContent({ notification, icon: Icon, iconClass, bgClass, isUnread }:
   return (
     <div
       className={cn(
-        'flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/30',
-        isUnread && 'bg-primary/[0.02]'
+        'flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/30 border-l-2',
+        isUnread ? 'border-l-primary bg-primary/[0.02]' : 'border-l-transparent'
       )}
     >
       <div
-        className={cn(
-          'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
-          bgClass
-        )}
+        className={cn('flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center', bgClass)}
       >
-        <Icon className={cn('h-5 w-5', iconClass)} />
+        <Icon className={cn('h-4.5 w-4.5', iconClass)} />
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <p className={cn('text-sm leading-tight', isUnread && 'font-medium')}>
+          <div className="space-y-0.5">
+            <p
+              className={cn('text-sm leading-tight', isUnread ? 'font-medium' : 'text-foreground')}
+            >
               {notification.title}
             </p>
             {notification.body && (
-              <p className="text-sm text-muted-foreground line-clamp-2">{notification.body}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2">{notification.body}</p>
             )}
             {notification.post && (
-              <p className="text-xs text-muted-foreground/70">Post: {notification.post.title}</p>
+              <p className="text-[11px] text-muted-foreground/60 mt-1">{notification.post.title}</p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {isUnread && <div className="w-2 h-2 rounded-full bg-primary" />}
-            <span className="text-xs text-muted-foreground/70 whitespace-nowrap">
-              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-            </span>
-          </div>
+          <span className="text-[11px] text-muted-foreground/60 whitespace-nowrap flex-shrink-0 mt-0.5">
+            {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+          </span>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import {
   type TagId,
   type StatusId,
 } from '@quackback/ids'
+import { ValidationError } from '@/lib/shared/errors'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
 import { ImportUserResolver } from './user-resolver'
 
@@ -101,7 +102,10 @@ export function parseCSV(csvContent: string): Record<string, string>[] {
   })
 
   if (parseResult.errors.length > 0) {
-    throw new Error(`CSV parsing failed: ${parseResult.errors[0].message}`)
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      `CSV parsing failed: ${parseResult.errors[0].message}`
+    )
   }
 
   return parseResult.data
@@ -334,7 +338,7 @@ export function mergeResults(current: ImportResult, batch: BatchResult): ImportR
 export async function processImport(data: ImportInput): Promise<ImportResult> {
   const validation = validateImportInput(data)
   if (!validation.success) {
-    throw new Error(`Invalid import data: ${validation.error}`)
+    throw new ValidationError('VALIDATION_ERROR', `Invalid import data: ${validation.error}`)
   }
 
   const rows = parseCSV(data.csvContent)

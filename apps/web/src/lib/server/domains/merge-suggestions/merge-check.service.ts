@@ -4,7 +4,7 @@
  * Mirrors the AI summary pattern: event-driven + periodic sweep.
  */
 
-import { db, posts, and, or, isNull, isNotNull, desc, eq, sql } from '@/lib/server/db'
+import { db, posts, and, isNull, isNotNull, desc, eq } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
@@ -95,7 +95,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       hybridScore: bestCandidate.hybridScore,
       llmConfidence: bestAssessment.confidence,
       llmReasoning: bestAssessment.reasoning,
-      llmModel: 'google/gemini-2.5-flash',
+      llmModel: 'google/gemini-3.1-flash-lite-preview',
     })
   }
 
@@ -121,7 +121,6 @@ export async function sweepMergeSuggestions(): Promise<void> {
 }
 
 async function _doSweep(): Promise<void> {
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   let totalProcessed = 0
   let totalFailed = 0
 
@@ -135,7 +134,7 @@ async function _doSweep(): Promise<void> {
           isNull(posts.deletedAt),
           isNull(posts.canonicalPostId),
           isNotNull(posts.embedding),
-          or(isNull(posts.mergeCheckedAt), sql`${posts.mergeCheckedAt} < ${twentyFourHoursAgo}`)
+          isNull(posts.mergeCheckedAt)
         )
       )
       .orderBy(desc(posts.updatedAt))

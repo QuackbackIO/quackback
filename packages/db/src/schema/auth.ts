@@ -21,7 +21,8 @@ export const user = pgTable(
   {
     id: typeIdWithDefault('user')('id').primaryKey(),
     name: text('name').notNull(),
-    email: text('email').notNull(),
+    /** Nullable — external users (Slack, etc.) may not have a real email */
+    email: text('email'),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
     // Profile image - S3 storage key (e.g., "avatars/2026/02/abc123-avatar.png")
@@ -33,10 +34,14 @@ export const user = pgTable(
       .notNull(),
     // General user metadata (JSON)
     metadata: text('metadata'),
+    // Anonymous user flag (Better Auth anonymous plugin)
+    isAnonymous: boolean('is_anonymous').default(false).notNull(),
   },
   (table) => [
-    // Email is unique globally
-    uniqueIndex('user_email_idx').on(table.email),
+    // Email is unique when present (partial index — nulls are allowed)
+    uniqueIndex('user_email_idx')
+      .on(table.email)
+      .where(sql`email IS NOT NULL`),
   ]
 )
 
@@ -323,6 +328,7 @@ export const oauthClient = pgTable('oauth_client', {
   responseTypes: text('response_types').array(),
   public: boolean('public'),
   type: text('type'),
+  requirePKCE: boolean('require_pkce'),
   referenceId: text('reference_id'),
   metadata: jsonb('metadata'),
 })
@@ -344,6 +350,7 @@ export const oauthRefreshToken = pgTable('oauth_refresh_token', {
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }),
   revoked: timestamp('revoked', { withTimezone: true }),
+  authTime: timestamp('auth_time', { withTimezone: true }),
   scopes: text('scopes').array().notNull(),
 })
 

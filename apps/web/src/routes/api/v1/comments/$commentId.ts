@@ -140,7 +140,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
           if (validationError) return validationError
 
           // Import service and get member details
-          const { deleteComment } = await import('@/lib/server/domains/comments/comment.service')
+          const { softDeleteComment } =
+            await import('@/lib/server/domains/comments/comment.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
           // Get member info for role
@@ -148,7 +149,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             where: eq(principal.id, principalId),
           })
 
-          await deleteComment(commentId as CommentId, {
+          await softDeleteComment(commentId as CommentId, {
             principalId,
             role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
           })

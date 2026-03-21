@@ -17,11 +17,14 @@ import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/po
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import {
   listInboxPosts,
   getPostWithDetails,
   getCommentsWithReplies,
+  getPostFeedbackSource,
 } from '@/lib/server/domains/posts/post.query'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
@@ -32,32 +35,8 @@ import {
 import { buildEventActor, dispatchPostDeleted } from '@/lib/server/events/dispatch'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
-import { getPostVoters } from '@/lib/server/domains/posts/post.voting'
-
-// ============================================
-// Helpers
-// ============================================
-
-/**
- * Safely convert a date value to ISO string.
- * Handles both Date objects and ISO strings (Neon HTTP driver returns strings).
- */
-function toIsoString(value: Date | string): string {
-  if (typeof value === 'string') {
-    return value // Already an ISO string
-  }
-  return value.toISOString()
-}
-
-/**
- * Safely convert an optional date value to ISO string or null.
- */
-function toIsoStringOrNull(value: Date | string | null | undefined): string | null {
-  if (value == null) {
-    return null
-  }
-  return toIsoString(value)
-}
+import { getPostVoters, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 /**
  * Serialize common post date fields for API responses.
@@ -116,6 +95,7 @@ const createPostSchema = z.object({
   boardId: z.string(),
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional().default([]),
+  authorPrincipalId: z.string().optional(),
 })
 
 const getPostSchema = z.object({
@@ -313,6 +293,21 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
     }))
   })
 
+/**
+ * Get feedback source for a post (if created from feedback pipeline)
+ */
+export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const source = await getPostFeedbackSource(data.id as PostId)
+    if (!source) return null
+    return {
+      ...source,
+      createdAt: toIsoString(source.createdAt),
+    }
+  })
+
 // ============================================
 // Write Operations
 // ============================================
@@ -327,6 +322,33 @@ export const createPostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
+      // Resolve author: use specified principal or fall back to authenticated user
+      let author: {
+        principalId: PrincipalId
+        userId?: UserId
+        name?: string
+        email?: string
+      } = {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        name: auth.user.name,
+        email: auth.user.email,
+      }
+
+      if (
+        data.authorPrincipalId &&
+        data.authorPrincipalId !== auth.principal.id &&
+        auth.principal.role === 'admin'
+      ) {
+        const selectedPrincipal = await getMemberById(data.authorPrincipalId as PrincipalId)
+        if (selectedPrincipal) {
+          author = {
+            principalId: selectedPrincipal.id,
+            name: selectedPrincipal.displayName ?? undefined,
+          }
+        }
+      }
+
       const result = await createPost(
         {
           title: data.title,
@@ -336,12 +358,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
           statusId: data.statusId as StatusId | undefined,
           tagIds: data.tagIds as TagId[] | undefined,
         },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          name: auth.user.name,
-          email: auth.user.email,
-        }
+        author
       )
       console.log(`[fn:posts] createPostFn: id=${result.id}`)
 
@@ -362,14 +379,23 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await updatePost(data.id as PostId, {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-        ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
-      })
+      const result = await updatePost(
+        data.id as PostId,
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
+        },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
       console.log(`[fn:posts] updatePostFn: updated id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -400,6 +426,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       await softDeletePost(postId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
+        userId: auth.user.id,
       })
       console.log(`[fn:posts] deletePostFn: deleted id=${data.id}`)
 
@@ -502,9 +529,9 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] restorePostFn: id=${data.id}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await restorePost(data.id as PostId)
+      const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
       console.log(`[fn:posts] restorePostFn: restored id=${result.id}`)
       return serializePostDates(result)
     } catch (error) {
@@ -521,17 +548,89 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] updatePostTagsFn: id=${data.id}, tagCount=${data.tagIds.length}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      await updatePost(data.id as PostId, {
-        tagIds: data.tagIds as TagId[],
-      })
+      await updatePost(
+        data.id as PostId,
+        {
+          tagIds: data.tagIds as TagId[],
+        },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
       console.log(`[fn:posts] updatePostTagsFn: updated id=${data.id}`)
       return { id: data.id }
     } catch (error) {
       console.error(`[fn:posts] ❌ updatePostTagsFn failed:`, error)
       throw error
     }
+  })
+
+/**
+ * Proxy vote: admin votes on behalf of another user
+ */
+export const proxyVoteFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const postId = data.postId as PostId
+    const voterPrincipalId = data.voterPrincipalId as PrincipalId
+
+    const result = await addVoteOnBehalf(
+      postId,
+      voterPrincipalId,
+      { type: 'proxy', externalUrl: '' },
+      null,
+      auth.principal.id
+    )
+
+    // Fire-and-forget activity if a new vote was actually inserted
+    if (result.voted) {
+      const voter = await getMemberById(voterPrincipalId)
+      createActivity({
+        postId,
+        principalId: auth.principal.id,
+        type: 'vote.proxy',
+        metadata: {
+          voterPrincipalId,
+          voterName: voter?.displayName ?? null,
+        },
+      })
+    }
+
+    return result
+  })
+
+/**
+ * Remove a vote: admin removes any user's vote from a post
+ */
+export const removeVoteFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const postId = data.postId as PostId
+    const voterPrincipalId = data.voterPrincipalId as PrincipalId
+
+    const result = await removeVote(postId, voterPrincipalId)
+
+    if (result.removed) {
+      const voter = await getMemberById(voterPrincipalId)
+      createActivity({
+        postId,
+        principalId: auth.principal.id,
+        type: 'vote.removed',
+        metadata: {
+          voterPrincipalId,
+          voterName: voter?.displayName ?? null,
+        },
+      })
+    }
+
+    return result
   })
 
 /**
@@ -542,12 +641,18 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     console.log(`[fn:posts] toggleCommentsLockFn: id=${data.id}, locked=${data.locked}`)
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
 
       await db
         .update(posts)
         .set({ isCommentsLocked: data.locked })
         .where(eq(posts.id, data.id as PostId))
+
+      createActivity({
+        postId: data.id as PostId,
+        principalId: auth.principal.id,
+        type: data.locked ? 'comments.locked' : 'comments.unlocked',
+      })
 
       console.log(`[fn:posts] toggleCommentsLockFn: updated id=${data.id}`)
       return { id: data.id, isCommentsLocked: data.locked }

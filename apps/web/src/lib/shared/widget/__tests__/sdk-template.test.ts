@@ -25,12 +25,12 @@ describe('buildWidgetSDK', () => {
 
   it('should include the command dispatcher', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    expect(result).toContain('function dispatch(command, options)')
+    expect(result).toContain('function dispatch(command, options, extra)')
   })
 
-  it('should handle the initialize_feedback_widget command', () => {
+  it('should handle the init command', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    expect(result).toContain('"initialize_feedback_widget"')
+    expect(result).toContain('"init"')
   })
 
   it('should handle identify command', () => {

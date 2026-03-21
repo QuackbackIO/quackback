@@ -29,30 +29,7 @@ import {
   deleteChangelogSchema,
   listPublicChangelogsSchema,
 } from '@/lib/shared/schemas/changelog'
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Safely convert a date value to ISO string.
- */
-function toIsoString(value: Date | string): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  return value.toISOString()
-}
-
-/**
- * Safely convert an optional date value to ISO string or null.
- */
-function toIsoStringOrNull(value: Date | string | null | undefined): string | null {
-  if (value == null) {
-    return null
-  }
-  return toIsoString(value)
-}
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 // ============================================================================
 // Admin Server Functions (Require Auth)
@@ -64,30 +41,38 @@ function toIsoStringOrNull(value: Date | string | null | undefined): string | nu
 export const createChangelogFn = createServerFn({ method: 'POST' })
   .inputValidator(createChangelogSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
-
-    // Get author name from user via member
-    const authorName = auth.user.name
-
-    const entry = await createChangelog(
-      {
-        title: data.title,
-        content: data.content,
-        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : null,
-        linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
-        publishState: data.publishState as PublishState,
-      },
-      {
-        principalId: auth.principal.id,
-        name: authorName,
-      }
+    console.log(
+      `[fn:changelog] createChangelogFn: title=${data.title}, publishState=${data.publishState}`
     )
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
 
-    return {
-      ...entry,
-      createdAt: toIsoString(entry.createdAt),
-      updatedAt: toIsoString(entry.updatedAt),
-      publishedAt: toIsoStringOrNull(entry.publishedAt),
+      // Get author name from user via member
+      const authorName = auth.user.name
+
+      const entry = await createChangelog(
+        {
+          title: data.title,
+          content: data.content,
+          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : null,
+          linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
+          publishState: data.publishState as PublishState,
+        },
+        {
+          principalId: auth.principal.id,
+          name: authorName,
+        }
+      )
+
+      return {
+        ...entry,
+        createdAt: toIsoString(entry.createdAt),
+        updatedAt: toIsoString(entry.updatedAt),
+        publishedAt: toIsoStringOrNull(entry.publishedAt),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] createChangelogFn failed:`, error)
+      throw error
     }
   })
 
@@ -97,21 +82,27 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
 export const updateChangelogFn = createServerFn({ method: 'POST' })
   .inputValidator(updateChangelogSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(`[fn:changelog] updateChangelogFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    const entry = await updateChangelog(data.id as ChangelogId, {
-      title: data.title,
-      content: data.content,
-      contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-      linkedPostIds: data.linkedPostIds as PostId[] | undefined,
-      publishState: data.publishState as PublishState | undefined,
-    })
+      const entry = await updateChangelog(data.id as ChangelogId, {
+        title: data.title,
+        content: data.content,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+        linkedPostIds: data.linkedPostIds as PostId[] | undefined,
+        publishState: data.publishState as PublishState | undefined,
+      })
 
-    return {
-      ...entry,
-      createdAt: toIsoString(entry.createdAt),
-      updatedAt: toIsoString(entry.updatedAt),
-      publishedAt: toIsoStringOrNull(entry.publishedAt),
+      return {
+        ...entry,
+        createdAt: toIsoString(entry.createdAt),
+        updatedAt: toIsoString(entry.updatedAt),
+        publishedAt: toIsoStringOrNull(entry.publishedAt),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] updateChangelogFn failed:`, error)
+      throw error
     }
   })
 
@@ -121,11 +112,17 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
 export const deleteChangelogFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteChangelogSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    console.log(`[fn:changelog] deleteChangelogFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin'] })
 
-    await deleteChangelog(data.id as ChangelogId)
+      await deleteChangelog(data.id as ChangelogId)
 
-    return { success: true }
+      return { success: true }
+    } catch (error) {
+      console.error(`[fn:changelog] deleteChangelogFn failed:`, error)
+      throw error
+    }
   })
 
 /**
@@ -134,15 +131,21 @@ export const deleteChangelogFn = createServerFn({ method: 'POST' })
 export const getChangelogFn = createServerFn({ method: 'GET' })
   .inputValidator(getChangelogSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:changelog] getChangelogFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const entry = await getChangelogById(data.id as ChangelogId)
+      const entry = await getChangelogById(data.id as ChangelogId)
 
-    return {
-      ...entry,
-      createdAt: toIsoString(entry.createdAt),
-      updatedAt: toIsoString(entry.updatedAt),
-      publishedAt: toIsoStringOrNull(entry.publishedAt),
+      return {
+        ...entry,
+        createdAt: toIsoString(entry.createdAt),
+        updatedAt: toIsoString(entry.updatedAt),
+        publishedAt: toIsoStringOrNull(entry.publishedAt),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] getChangelogFn failed:`, error)
+      throw error
     }
   })
 
@@ -152,22 +155,28 @@ export const getChangelogFn = createServerFn({ method: 'GET' })
 export const listChangelogsFn = createServerFn({ method: 'GET' })
   .inputValidator(listChangelogsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:changelog] listChangelogsFn: status=${data.status}, limit=${data.limit}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    const result = await listChangelogs({
-      status: data.status,
-      cursor: data.cursor,
-      limit: data.limit,
-    })
+      const result = await listChangelogs({
+        status: data.status,
+        cursor: data.cursor,
+        limit: data.limit,
+      })
 
-    return {
-      ...result,
-      items: result.items.map((entry) => ({
-        ...entry,
-        createdAt: toIsoString(entry.createdAt),
-        updatedAt: toIsoString(entry.updatedAt),
-        publishedAt: toIsoStringOrNull(entry.publishedAt),
-      })),
+      return {
+        ...result,
+        items: result.items.map((entry) => ({
+          ...entry,
+          createdAt: toIsoString(entry.createdAt),
+          updatedAt: toIsoString(entry.updatedAt),
+          publishedAt: toIsoStringOrNull(entry.publishedAt),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] listChangelogsFn failed:`, error)
+      throw error
     }
   })
 
@@ -181,11 +190,17 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
 export const getPublicChangelogFn = createServerFn({ method: 'GET' })
   .inputValidator(getChangelogSchema)
   .handler(async ({ data }) => {
-    const entry = await getPublicChangelogById(data.id as ChangelogId)
+    console.log(`[fn:changelog] getPublicChangelogFn: id=${data.id}`)
+    try {
+      const entry = await getPublicChangelogById(data.id as ChangelogId)
 
-    return {
-      ...entry,
-      publishedAt: toIsoString(entry.publishedAt),
+      return {
+        ...entry,
+        publishedAt: toIsoString(entry.publishedAt),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] getPublicChangelogFn failed:`, error)
+      throw error
     }
   })
 
@@ -195,17 +210,23 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
 export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
   .inputValidator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
-    const result = await listPublicChangelogs({
-      cursor: data.cursor,
-      limit: data.limit,
-    })
+    console.log(`[fn:changelog] listPublicChangelogsFn: limit=${data.limit}`)
+    try {
+      const result = await listPublicChangelogs({
+        cursor: data.cursor,
+        limit: data.limit,
+      })
 
-    return {
-      ...result,
-      items: result.items.map((entry) => ({
-        ...entry,
-        publishedAt: toIsoString(entry.publishedAt),
-      })),
+      return {
+        ...result,
+        items: result.items.map((entry) => ({
+          ...entry,
+          publishedAt: toIsoString(entry.publishedAt),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:changelog] listPublicChangelogsFn failed:`, error)
+      throw error
     }
   })
 
@@ -225,11 +246,17 @@ const searchShippedPostsSchema = z.object({
 export const searchShippedPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(searchShippedPostsSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    console.log(`[fn:changelog] searchShippedPostsFn: query=${data.query}, boardId=${data.boardId}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
 
-    return searchShippedPosts({
-      query: data.query,
-      boardId: data.boardId as BoardId | undefined,
-      limit: data.limit,
-    })
+      return searchShippedPosts({
+        query: data.query,
+        boardId: data.boardId as BoardId | undefined,
+        limit: data.limit,
+      })
+    } catch (error) {
+      console.error(`[fn:changelog] searchShippedPostsFn failed:`, error)
+      throw error
+    }
   })

@@ -10,6 +10,7 @@ import {
   createCommentFn,
   userEditCommentFn,
   userDeleteCommentFn,
+  restoreCommentFn,
   addReactionFn,
   removeReactionFn,
   pinCommentFn,
@@ -62,7 +63,7 @@ interface UseEditCommentOptions {
 }
 
 interface UseDeleteCommentOptions {
-  commentId: CommentId
+  commentId?: CommentId
   postId: PostId
   onSuccess?: () => void
   onError?: (error: Error) => void
@@ -215,11 +216,10 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           ),
         }
       })
-      // If a status change was included, invalidate to pick up new status + status badge
-      if (input.statusId) {
-        queryClient.invalidateQueries({ queryKey })
-        queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
-      }
+      // Always invalidate to ensure fresh server data replaces optimistic state
+      queryClient.invalidateQueries({ queryKey })
+      // Also invalidate admin inbox detail so comments appear in admin context
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.(data)
     },
   })
@@ -235,6 +235,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
     mutationFn: (content: string) => userEditCommentFn({ data: { commentId, content } }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       queryClient.invalidateQueries({ queryKey: commentKeys.permission(commentId) })
       onSuccess?.(data)
     },
@@ -246,7 +247,7 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
  * Hook for a user to soft-delete their own comment.
  */
 export function useDeleteComment({
-  commentId,
+  commentId: fixedCommentId,
   postId,
   onSuccess,
   onError,
@@ -254,9 +255,38 @@ export function useDeleteComment({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => userDeleteCommentFn({ data: { commentId } }),
+    mutationFn: (dynamicCommentId?: CommentId) =>
+      userDeleteCommentFn({ data: { commentId: dynamicCommentId ?? fixedCommentId! } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'post', postId] })
+      onSuccess?.()
+    },
+    onError,
+  })
+}
+
+/**
+ * Hook for a team member to restore a soft-deleted comment.
+ */
+export function useRestoreComment({
+  postId,
+  onSuccess,
+  onError,
+}: {
+  postId: PostId
+  onSuccess?: () => void
+  onError?: (error: Error) => void
+}) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (commentId: CommentId) => restoreCommentFn({ data: { commentId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
+      queryClient.invalidateQueries({ queryKey: ['activity', 'post', postId] })
       onSuccess?.()
     },
     onError,
@@ -281,6 +311,7 @@ export function useToggleReaction({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.(data)
     },
     onError,
@@ -298,7 +329,7 @@ export function usePinComment({ postId, onSuccess, onError }: UsePinCommentOptio
     onSuccess: () => {
       // Invalidate both portal and admin queries
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.()
     },
     onError,
@@ -316,7 +347,7 @@ export function useUnpinComment({ postId, onSuccess, onError }: UseUnpinCommentO
     onSuccess: () => {
       // Invalidate both portal and admin queries
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
-      queryClient.invalidateQueries({ queryKey: ['admin', 'post', postId] })
+      queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
       onSuccess?.()
     },
     onError,

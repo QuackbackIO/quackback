@@ -13,7 +13,8 @@ import { fetchSuggestions } from '@/lib/server/functions/feedback'
 
 export interface SuggestionsQueryFilters {
   status?: 'pending' | 'accepted' | 'dismissed' | 'expired'
-  suggestionType?: 'create_post' | 'duplicate_post'
+  suggestionType?: 'create_post' | 'vote_on_post' | 'duplicate_post'
+  sourceTypes?: string[]
   sort?: 'newest' | 'relevance'
 }
 
@@ -54,6 +55,7 @@ async function fetchSuggestionsPage(
     data: {
       status: filters.status ?? 'pending',
       suggestionType: filters.suggestionType,
+      sourceTypes: filters.sourceTypes,
       sort: filters.sort,
       offset: cursor ? parseInt(cursor) : 0,
       limit: PAGE_SIZE,

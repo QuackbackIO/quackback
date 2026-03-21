@@ -6,6 +6,7 @@
  */
 
 import { db, eq, rawFeedbackItems, feedbackSignals } from '@/lib/server/db'
+import { logPipelineEvent } from './pipeline-log'
 import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
 
 const STUCK_THRESHOLD_MINUTES = 30
@@ -39,6 +40,17 @@ export async function recoverStuckItems(): Promise<void> {
           updatedAt: new Date(),
         })
         .where(eq(rawFeedbackItems.id, item.id))
+
+      await logPipelineEvent({
+        eventType: 'recovery.max_attempts_exceeded',
+        rawFeedbackItemId: item.id,
+        detail: {
+          previousState: item.processingState,
+          attemptCount: item.attemptCount,
+          maxAttempts: MAX_ATTEMPTS,
+          error: `Stuck in ${item.processingState} state after ${item.attemptCount} attempts`,
+        },
+      })
       continue
     }
 
@@ -52,6 +64,17 @@ export async function recoverStuckItems(): Promise<void> {
       })
       .where(eq(rawFeedbackItems.id, item.id))
 
+    await logPipelineEvent({
+      eventType: 'recovery.raw_item_reset',
+      rawFeedbackItemId: item.id,
+      detail: {
+        previousState: item.processingState,
+        attemptCount: item.attemptCount,
+        maxAttempts: MAX_ATTEMPTS,
+        nextState: 'ready_for_extraction',
+      },
+    })
+
     await enqueueFeedbackAiJob({ type: 'extract-signals', rawItemId: item.id })
   }
 
@@ -59,7 +82,7 @@ export async function recoverStuckItems(): Promise<void> {
   const stuckSignals = await db.query.feedbackSignals.findMany({
     where: (t, { and, eq, lt }) =>
       and(eq(t.processingState, 'interpreting'), lt(t.updatedAt, threshold)),
-    columns: { id: true },
+    columns: { id: true, rawFeedbackItemId: true },
   })
 
   for (const signal of stuckSignals) {
@@ -67,6 +90,16 @@ export async function recoverStuckItems(): Promise<void> {
       .update(feedbackSignals)
       .set({ processingState: 'pending_interpretation', updatedAt: new Date() })
       .where(eq(feedbackSignals.id, signal.id))
+
+    await logPipelineEvent({
+      eventType: 'recovery.signal_reset',
+      rawFeedbackItemId: signal.rawFeedbackItemId,
+      signalId: signal.id,
+      detail: {
+        previousState: 'interpreting',
+        nextState: 'pending_interpretation',
+      },
+    })
 
     await enqueueFeedbackAiJob({ type: 'interpret-signal', signalId: signal.id })
   }

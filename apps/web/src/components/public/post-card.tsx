@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ChevronUpIcon,
@@ -26,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn, getInitials } from '@/lib/shared/utils'
+import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import type { PostId, StatusId } from '@quackback/ids'
 
 interface PostCardProps {
@@ -45,6 +47,8 @@ interface PostCardProps {
   // Portal mode props
   /** Whether the user is authenticated (shows login dialog on vote if false) */
   isAuthenticated?: boolean
+  /** Whether the user can vote (true if authenticated or anonymous voting enabled) */
+  canVote?: boolean
   /** Whether the current user is the author of this post */
   isCurrentUserAuthor?: boolean
   /** Whether the user can edit this post */
@@ -92,6 +96,7 @@ export function PostCard({
   boardSlug,
   tags,
   isAuthenticated = true,
+  canVote = true,
   isCurrentUserAuthor = false,
   canEdit = false,
   canDelete = false,
@@ -109,6 +114,7 @@ export function PostCard({
   showAvatar = true,
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
+
   const authPopover = useAuthPopoverSafe()
   const isAdminMode = canChangeStatus || !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
@@ -122,11 +128,28 @@ export function PostCard({
     handleVote,
   } = usePostVote({ postId: id, voteCount })
 
-  function handleVoteClick(e: React.MouseEvent): void {
+  const [isAnonSigningIn, setIsAnonSigningIn] = useState(false)
+  const ensureAnonSession = useEnsureAnonSession()
+
+  async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !canVote) {
       e.preventDefault()
       authPopover?.openAuthPopover({ mode: 'login' })
+      return
+    }
+    if (!isAuthenticated && canVote) {
+      // Anonymous voting: sign in silently, then vote
+      e.preventDefault()
+      if (isAnonSigningIn) return
+      setIsAnonSigningIn(true)
+      try {
+        const ok = await ensureAnonSession()
+        if (!ok) return
+      } finally {
+        setIsAnonSigningIn(false)
+      }
+      handleVote()
       return
     }
     handleVote(e)
@@ -154,20 +177,20 @@ export function PostCard({
       }
       aria-pressed={currentHasVoted}
       onClick={handleVoteClick}
-      disabled={isVotePending}
+      disabled={isVotePending || isAnonSigningIn}
       className={cn(
-        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border-2 transition-colors duration-200',
+        'group/vote flex flex-col items-center justify-center shrink-0 rounded-md border transition-colors duration-200',
         'w-12 py-2 gap-0.5',
         currentHasVoted
-          ? 'post-card__vote--voted text-[var(--post-card-voted-color)] bg-[var(--post-card-voted-color)]/10 border-[var(--post-card-voted-color)]'
-          : 'text-muted-foreground border-border/50 bg-muted/40 hover:border-border hover:text-foreground/80',
-        isVotePending && 'opacity-70 cursor-wait'
+          ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15'
+          : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+        (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait'
       )}
     >
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
-          currentHasVoted && 'fill-[var(--post-card-voted-color)]',
+          currentHasVoted && 'fill-post-card-voted',
           !isVotePending && 'group-hover/vote:-translate-y-0.5'
         )}
       />

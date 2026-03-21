@@ -94,6 +94,7 @@ describe('API Auth', () => {
         apiKey: mockApiKey,
         principalId: mockApiKey.principalId,
         role: 'admin',
+        importMode: false,
       })
     })
 
@@ -163,6 +164,7 @@ describe('API Auth', () => {
         apiKey: mockApiKey,
         principalId: mockApiKey.principalId,
         role: 'admin',
+        importMode: false,
       })
     })
 

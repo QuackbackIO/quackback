@@ -14,21 +14,29 @@ import {
   user,
   sql,
   eq,
+  and,
   desc,
 } from '@/lib/server/db'
 import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { VoteResult } from './post.types'
+import {
+  levelFromFlags,
+  type SubscriptionLevel,
+} from '@/lib/server/domains/subscriptions/subscription.types'
 
 export interface VoterInfo {
   principalId: string
   displayName: string | null
   email: string | null
   avatarUrl: string | null
+  isAnonymous: boolean
   sourceType: string | null
   sourceExternalUrl: string | null
+  addedByName: string | null
   createdAt: Date | string
+  subscriptionLevel: SubscriptionLevel
 }
 
 /**
@@ -96,10 +104,16 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       WHERE id = ${postUuid}::uuid
       RETURNING vote_count
     ),
+    anon_check AS (
+      SELECT 1 FROM ${user} u
+      JOIN ${principal} p ON p.user_id = u.id
+      WHERE p.id = ${principalUuid}::uuid AND u.is_anonymous = true
+    ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
       SELECT ${subscriptionId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, 'vote', true, true
       WHERE EXISTS (SELECT 1 FROM inserted)
+        AND NOT EXISTS (SELECT 1 FROM anon_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
       RETURNING 1
     )
@@ -150,7 +164,10 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
 export async function addVoteOnBehalf(
   postId: PostId,
   principalId: PrincipalId,
-  source?: { type: string; externalUrl: string }
+  source?: { type: string; externalUrl: string },
+  feedbackSuggestionId?: string | null,
+  addedByPrincipalId?: PrincipalId,
+  createdAt?: Date
 ): Promise<VoteResult> {
   const postUuid = toUuid(postId)
   const principalUuid = toUuid(principalId)
@@ -159,6 +176,9 @@ export async function addVoteOnBehalf(
 
   const sourceType = source?.type ?? null
   const sourceExternalUrl = source?.externalUrl ?? null
+  const suggestionUuid = feedbackSuggestionId ? toUuid(feedbackSuggestionId) : null
+  const addedByUuid = addedByPrincipalId ? toUuid(addedByPrincipalId) : null
+  const createdAtSql = createdAt ? sql`${createdAt.toISOString()}::timestamptz` : sql`NOW()`
 
   // Single atomic CTE: validate post/board, insert vote (never delete), update count, auto-subscribe
   const result = await db.execute<{
@@ -176,8 +196,8 @@ export async function addVoteOnBehalf(
       WHERE id = (SELECT board_id FROM post_check)
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, updated_at)
-      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, NOW()
+      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, added_by_principal_id, created_at, updated_at)
+      SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${suggestionUuid}::uuid, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
       ON CONFLICT (post_id, principal_id) DO NOTHING
@@ -225,6 +245,67 @@ export async function addVoteOnBehalf(
 }
 
 /**
+ * Remove a vote from a post (any source: proxy, integration, or direct)
+ *
+ * Used by admins to rescind any vote from the voter list.
+ * Does NOT remove the voter's subscription.
+ *
+ * @param postId - Post ID to remove vote from
+ * @param principalId - Principal ID of the voter whose vote to remove
+ * @returns Result containing whether a vote was removed and new count
+ */
+export async function removeVote(
+  postId: PostId,
+  principalId: PrincipalId
+): Promise<{ removed: boolean; voteCount: number }> {
+  const postUuid = toUuid(postId)
+  const principalUuid = toUuid(principalId)
+
+  const result = await db.execute<{
+    post_exists: boolean
+    deleted: boolean
+    vote_count: number
+  }>(sql`
+    WITH post_check AS (
+      SELECT id, vote_count FROM ${posts}
+      WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+    ),
+    deleted AS (
+      DELETE FROM ${votes}
+      WHERE post_id = ${postUuid}::uuid
+        AND principal_id = ${principalUuid}::uuid
+        AND EXISTS (SELECT 1 FROM post_check)
+      RETURNING id
+    ),
+    updated_post AS (
+      UPDATE ${posts}
+      SET vote_count = GREATEST(0, vote_count - 1)
+      WHERE id = ${postUuid}::uuid
+        AND EXISTS (SELECT 1 FROM deleted)
+      RETURNING vote_count
+    )
+    SELECT
+      EXISTS(SELECT 1 FROM post_check) as post_exists,
+      EXISTS(SELECT 1 FROM deleted) as deleted,
+      COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
+  `)
+
+  type RemoveVoteRow = {
+    post_exists: boolean
+    deleted: boolean
+    vote_count: number
+  }
+  const rows = getExecuteRows<RemoveVoteRow>(result)
+  const row = rows[0]
+
+  if (!row?.post_exists) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  return { removed: row.deleted, voteCount: row.vote_count ?? 0 }
+}
+
+/**
  * Get all voters for a post with their identity and source attribution.
  * Returns newest votes first.
  */
@@ -235,15 +316,42 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       displayName: principal.displayName,
       email: user.email,
       avatarUrl: principal.avatarUrl,
+      isAnonymous: user.isAnonymous,
       sourceType: votes.sourceType,
       sourceExternalUrl: votes.sourceExternalUrl,
+      addedByName: sql<string | null>`(
+        SELECT p2.display_name FROM ${principal} p2
+        WHERE p2.id = ${votes.addedByPrincipalId}
+      )`.as('added_by_name'),
       createdAt: votes.createdAt,
+      notifyComments: postSubscriptions.notifyComments,
+      notifyStatusChanges: postSubscriptions.notifyStatusChanges,
     })
     .from(votes)
     .innerJoin(principal, eq(principal.id, votes.principalId))
     .leftJoin(user, eq(user.id, principal.userId))
+    .leftJoin(
+      postSubscriptions,
+      and(
+        eq(postSubscriptions.postId, votes.postId),
+        eq(postSubscriptions.principalId, votes.principalId)
+      )
+    )
     .where(eq(votes.postId, postId))
     .orderBy(desc(votes.createdAt))
 
-  return rows
+  return rows.map((row) => ({
+    principalId: row.principalId,
+    displayName: row.isAnonymous ? null : row.displayName,
+    email: row.email,
+    avatarUrl: row.isAnonymous ? null : row.avatarUrl,
+    isAnonymous: row.isAnonymous ?? false,
+    sourceType: row.sourceType,
+    sourceExternalUrl: row.sourceExternalUrl,
+    addedByName: row.addedByName,
+    createdAt: row.createdAt,
+    subscriptionLevel: row.isAnonymous
+      ? ('none' as const)
+      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
+  }))
 }

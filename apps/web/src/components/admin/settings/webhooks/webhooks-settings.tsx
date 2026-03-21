@@ -22,6 +22,7 @@ const EVENT_LABELS: Record<string, string> = {
   'post.created': 'New Post',
   'post.status_changed': 'Status Changed',
   'comment.created': 'New Comment',
+  'changelog.published': 'Changelog Published',
 }
 
 interface WebhooksSettingsProps {

@@ -47,6 +47,9 @@ vi.mock('@/lib/server/db', async () => {
         },
         comments: { findFirst: vi.fn().mockResolvedValue(null) },
         settings: { findFirst: vi.fn().mockResolvedValue(null) },
+        boards: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'board_mock', slug: 'feedback' }),
+        },
       },
       update: vi.fn(() => createChainMock()),
       select: vi.fn(() => ({
@@ -67,11 +70,23 @@ vi.mock('@/lib/server/db', async () => {
       boardId: 'board_id',
       statusId: 'status_id',
     },
+    boards: { id: 'board_id', slug: 'board_slug' },
     comments: { postId: 'post_id', principalId: 'principal_id', deletedAt: 'deleted_at' },
     postEditHistory: {},
     postStatuses: { id: 'id', isDefault: 'is_default' },
+    postActivity: {},
   }
 })
+
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  createActivity: vi.fn(),
+}))
+
+vi.mock('@/lib/server/events/dispatch', () => ({
+  dispatchPostDeleted: vi.fn(),
+  dispatchPostRestored: vi.fn(),
+  buildEventActor: vi.fn((actor) => actor),
+}))
 
 // Constants
 const TEAM_ACTOR = {
@@ -239,6 +254,25 @@ describe('post.permissions', () => {
       const { softDeletePost } = await import('../post.permissions')
 
       await expect(softDeletePost(POST_ID, USER_ACTOR)).rejects.toThrow('only delete your own')
+    })
+
+    it('should dispatch post.deleted event', async () => {
+      const { dispatchPostDeleted } = await import('@/lib/server/events/dispatch')
+      mockFindFirst.mockResolvedValueOnce({
+        id: POST_ID,
+        title: 'Test Post',
+        boardId: 'board_id',
+        deletedAt: null,
+        postStatus: { isDefault: true },
+      })
+      const { softDeletePost } = await import('../post.permissions')
+
+      await softDeletePost(POST_ID, TEAM_ACTOR)
+
+      expect(dispatchPostDeleted).toHaveBeenCalledWith(
+        expect.objectContaining({ principalId: TEAM_ACTOR.principalId }),
+        expect.objectContaining({ id: POST_ID, title: 'Test Post', boardSlug: 'feedback' })
+      )
     })
   })
 })

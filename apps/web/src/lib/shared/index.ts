@@ -26,6 +26,9 @@ export {
   InternalError,
 } from './errors'
 
+// Role check helpers
+export { isTeamMember, isAdmin } from './roles'
+
 // Comment tree utilities (used by PostService and CommentService)
 export {
   buildCommentTree,

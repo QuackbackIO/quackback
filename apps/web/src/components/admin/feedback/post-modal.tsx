@@ -6,33 +6,33 @@ import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { JSONContent } from '@tiptap/react'
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DocumentDuplicateIcon,
-  LockClosedIcon,
-  LockOpenIcon,
-  TrashIcon,
-  ArrowPathIcon,
-} from '@heroicons/react/24/solid'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import {
   MetadataSidebar,
   MetadataSidebarSkeleton,
+  ManagePostActions,
 } from '@/components/public/post-detail/metadata-sidebar'
 import {
   CommentsSection,
   CommentsSectionSkeleton,
 } from '@/components/public/post-detail/comments-section'
-import { MergeActions, MergeInfoBanner } from '@/components/admin/feedback/merge-section'
-import { MergeSuggestionBanner } from '@/components/admin/feedback/merge-suggestion-banner'
+import {
+  MergeActions,
+  MergeInfoBanner,
+  MergeOthersDialog,
+} from '@/components/admin/feedback/merge-section'
 import { AiSummaryCard } from '@/components/admin/feedback/ai-summary-card'
+import { SimilarPostsCard } from '@/components/admin/feedback/similar-posts-card'
+import { PostActivityTimeline } from '@/components/admin/feedback/detail/post-activity-timeline'
 import { useNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
 import {
   useUpdatePost,
@@ -59,8 +59,12 @@ import {
   type RoadmapId,
   type CommentId,
 } from '@quackback/ids'
+import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
-import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
+import {
+  toPortalComments,
+  getInitialContentJson,
+} from '@/components/admin/feedback/detail/post-utils'
 
 interface PostModalProps {
   postId: string | undefined
@@ -72,44 +76,6 @@ interface PostModalContentProps {
   currentUser: CurrentUser
   onNavigateToPost: (postId: string) => void
   onClose: () => void
-}
-
-/** Convert admin comments to portal-compatible format */
-function toPortalComments(post: PostDetails): PublicCommentView[] {
-  const mapComment = (c: PostDetails['comments'][0]): PublicCommentView => ({
-    id: c.id as CommentId,
-    content: c.content,
-    authorName: c.authorName,
-    principalId: c.principalId,
-    createdAt: c.createdAt,
-    parentId: c.parentId as CommentId | null,
-    isTeamMember: c.isTeamMember,
-    avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
-    statusChange: c.statusChange ?? null,
-    reactions: c.reactions,
-    replies: c.replies.map(mapComment),
-  })
-  return post.comments.map(mapComment)
-}
-
-/** Convert plain text to TipTap JSON format for posts without contentJson */
-function getInitialContentJson(post: {
-  contentJson?: unknown
-  content: string
-}): JSONContent | null {
-  if (post.contentJson) {
-    return post.contentJson as JSONContent
-  }
-  if (post.content) {
-    return {
-      type: 'doc',
-      content: post.content.split('\n').map((line) => ({
-        type: 'paragraph',
-        content: line ? [{ type: 'text', text: line }] : [],
-      })),
-    }
-  }
-  return null
 }
 
 function PostModalContent({
@@ -125,6 +91,7 @@ function PostModalContent({
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
+  const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
 
   const post = postQuery.data as PostDetails
 
@@ -137,7 +104,13 @@ function PostModalContent({
   const [isUpdating, setIsUpdating] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [showMergeOthersDialog, setShowMergeOthersDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments')
+
+  // Duplicate badge indicator — derived from merge suggestions (deduped by React Query with SimilarPostsCard)
+  const { data: mergeSuggestionsData } = useQuery(mergeSuggestionQueries.forPost(postId))
+  const hasDuplicateSignals = (mergeSuggestionsData?.length ?? 0) > 0
 
   // Navigation context
   const navigationContext = useNavigationContext(post.id)
@@ -148,6 +121,14 @@ function PostModalContent({
   const updateTags = useUpdatePostTags()
   const pinComment = usePinComment({ postId: post.id as PostId })
   const unpinComment = useUnpinComment({ postId: post.id as PostId })
+  const deleteCommentMutation = useDeleteComment({
+    postId: post.id as PostId,
+    onError: (error) => toast.error(error.message || 'Failed to delete comment'),
+  })
+  const restoreCommentMutation = useRestoreComment({
+    postId: post.id as PostId,
+    onError: (error) => toast.error(error.message || 'Failed to restore comment'),
+  })
   const toggleCommentsLock = useToggleCommentsLock()
   const deletePost = useDeletePost()
   const restorePostMutation = useRestorePost()
@@ -169,6 +150,7 @@ function PostModalContent({
     setTitle(post.title)
     setContentJson(getInitialContentJson(post))
     setShowMergeDialog(false)
+    setShowMergeOthersDialog(false)
   }, [post.id, post.title, post.contentJson])
 
   // Keyboard navigation
@@ -256,6 +238,31 @@ function PostModalContent({
   const postRoadmaps = (post.roadmapIds || [])
     .map((id) => roadmaps.find((r) => r.id === id))
     .filter(Boolean) as Array<{ id: string; name: string; slug: string }>
+  const manageActions = {
+    onMergeOthers: () => setShowMergeOthersDialog(true),
+    onMergeInto: () => setShowMergeDialog(true),
+    onToggleLock: () =>
+      toggleCommentsLock.mutate({
+        postId: post.id as PostId,
+        locked: !post.isCommentsLocked,
+      }),
+    isCommentsLocked: !!post.isCommentsLocked,
+    isLockPending: toggleCommentsLock.isPending,
+    onDelete: () => setShowDeleteDialog(true),
+    onRestore: async () => {
+      try {
+        await restorePostMutation.mutateAsync(post.id as PostId)
+        toast.success('Post restored')
+        onClose()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to restore post')
+      }
+    },
+    isDeleted: !!post.deletedAt,
+    isRestorePending: restorePostMutation.isPending,
+    isMerged: !!post.mergeInfo,
+    hasDuplicateSignals,
+  }
 
   // Check if there are changes
   const originalPlainText = post.contentJson
@@ -273,77 +280,7 @@ function PostModalContent({
         onClose={onClose}
         viewUrl={`/b/${post.board.slug}/posts/${post.id}`}
       >
-        {!post.canonicalPostId && !post.mergeInfo && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMergeDialog(true)}
-            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
-          >
-            <DocumentDuplicateIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Mark as duplicate</span>
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            toggleCommentsLock.mutate({
-              postId: post.id as PostId,
-              locked: !post.isCommentsLocked,
-            })
-          }
-          disabled={toggleCommentsLock.isPending}
-          className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
-        >
-          {post.isCommentsLocked ? (
-            <>
-              <LockClosedIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Unlock comments</span>
-            </>
-          ) : (
-            <>
-              <LockOpenIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Lock comments</span>
-            </>
-          )}
-        </Button>
-        {post.deletedAt ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={async () => {
-              try {
-                await restorePostMutation.mutateAsync(post.id as PostId)
-                toast.success('Post restored')
-                onClose()
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : 'Failed to restore post')
-              }
-            }}
-            disabled={restorePostMutation.isPending}
-            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowPathIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">
-              {restorePostMutation.isPending ? 'Restoring...' : 'Restore'}
-            </span>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            className="gap-1.5 h-8 text-muted-foreground hover:text-destructive"
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Delete</span>
-          </Button>
-        )}
+        <ManagePostActions actions={manageActions} showLabel={false} className="lg:hidden" />
         {navigationContext.total > 0 && (
           <div className="hidden sm:flex items-center gap-0.5 mr-2 px-2 py-1 rounded-lg bg-muted/30">
             <span className="text-xs tabular-nums text-muted-foreground font-medium px-1">
@@ -380,7 +317,7 @@ function PostModalContent({
       </ModalHeader>
 
       {/* Main content area - scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <ScrollArea className="flex-1 min-h-0">
         {/* Merge info banner (if this post has been merged into another) */}
         {post.mergeInfo && (
           <MergeInfoBanner mergeInfo={post.mergeInfo} onNavigateToPost={onNavigateToPost} />
@@ -426,19 +363,15 @@ function PostModalContent({
                 }}
               />
 
-              {/* AI section — merge suggestions + summary */}
+              {/* AI section — summary + similar posts */}
               <div className="mt-8 space-y-3">
-                {!post.mergeInfo && <MergeSuggestionBanner postId={post.id as PostId} />}
-
-                {/* AI Summary */}
                 {post.summaryJson && (
                   <AiSummaryCard
                     summaryJson={post.summaryJson}
                     summaryUpdatedAt={post.summaryUpdatedAt ?? null}
-                    summaryCommentCount={post.summaryCommentCount ?? null}
-                    currentCommentCount={post.commentCount ?? 0}
                   />
                 )}
+                <SimilarPostsCard postId={postId} onNavigateToPost={onNavigateToPost} />
               </div>
             </div>
 
@@ -447,28 +380,72 @@ function PostModalContent({
               postId={postId}
               postTitle={post.title}
               canonicalPostId={post.canonicalPostId as PostId | undefined}
-              mergedPosts={post.mergedPosts}
               showDialog={showMergeDialog}
               onShowDialogChange={setShowMergeDialog}
             />
 
-            {/* Comments section */}
+            {/* Merge others dialog */}
+            <MergeOthersDialog
+              postId={postId}
+              postTitle={post.title}
+              open={showMergeOthersDialog}
+              onOpenChange={setShowMergeOthersDialog}
+            />
+
+            {/* Comments / Activity tabs */}
             <div>
-              <Suspense fallback={<CommentsSectionSkeleton />}>
-                <CommentsSection
-                  postId={postId}
-                  comments={toPortalComments(post)}
-                  pinnedCommentId={post.pinnedCommentId}
-                  canPinComments
-                  onPinComment={(commentId) => pinComment.mutate(commentId)}
-                  onUnpinComment={() => unpinComment.mutate()}
-                  isPinPending={pinComment.isPending || unpinComment.isPending}
-                  adminUser={{ name: currentUser.name, email: currentUser.email }}
-                  statuses={statuses}
-                  currentStatusId={post.statusId}
-                  isTeamMember
-                />
-              </Suspense>
+              <div className="flex gap-4 px-6 mb-3">
+                {(['comments', 'activity'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={`pb-2 text-sm font-medium transition-colors ${
+                      activeTab === tab
+                        ? 'border-b-2 border-foreground text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab === 'comments' ? 'Comments' : 'Activity'}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === 'comments' ? (
+                <Suspense fallback={<CommentsSectionSkeleton />}>
+                  <CommentsSection
+                    postId={postId}
+                    comments={toPortalComments(post)}
+                    pinnedCommentId={post.pinnedCommentId}
+                    canPinComments
+                    onPinComment={(commentId) => pinComment.mutate(commentId)}
+                    onUnpinComment={() => unpinComment.mutate()}
+                    isPinPending={pinComment.isPending || unpinComment.isPending}
+                    adminUser={{ name: currentUser.name, email: currentUser.email }}
+                    statuses={statuses}
+                    currentStatusId={post.statusId}
+                    isTeamMember
+                    onDeleteComment={(commentId: CommentId) =>
+                      deleteCommentMutation.mutate(commentId)
+                    }
+                    deletingCommentId={
+                      deleteCommentMutation.isPending
+                        ? (deleteCommentMutation.variables as CommentId)
+                        : null
+                    }
+                    onRestoreComment={(commentId: CommentId) =>
+                      restoreCommentMutation.mutate(commentId)
+                    }
+                    restoringCommentId={
+                      restoreCommentMutation.isPending
+                        ? (restoreCommentMutation.variables as CommentId)
+                        : null
+                    }
+                  />
+                </Suspense>
+              ) : (
+                <PostActivityTimeline postId={postId} />
+              )}
             </div>
           </div>
 
@@ -481,6 +458,7 @@ function PostModalContent({
               board={post.board}
               authorName={post.authorName}
               authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
+              authorPrincipalId={post.principalId}
               createdAt={new Date(post.createdAt)}
               tags={post.tags}
               roadmaps={postRoadmaps}
@@ -495,10 +473,12 @@ function PostModalContent({
               isUpdating={isUpdating || !!pendingRoadmapId}
               hideSubscribe
               variant="card"
+              manageActions={manageActions}
+              feedbackSource={feedbackSource}
             />
           </Suspense>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Footer */}
       <ModalFooter

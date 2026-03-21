@@ -7,6 +7,7 @@ import {
   fetchTagsList,
   fetchStatusesList,
   fetchTeamMembers,
+  searchMembersFn,
   fetchOnboardingStatus,
   fetchIntegrationsList,
   fetchIntegrationCatalog,
@@ -23,7 +24,12 @@ import {
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
-import { fetchPostWithDetails, fetchPostVotersFn } from '@/lib/server/functions/posts'
+import {
+  fetchPostWithDetails,
+  fetchPostVotersFn,
+  fetchPostFeedbackSourceFn,
+} from '@/lib/server/functions/posts'
+import { fetchMergePreviewFn } from '@/lib/server/functions/post-merge'
 import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/server/domains/users/user.types'
 
@@ -65,7 +71,7 @@ export const adminQueries = {
         // Deserialize date strings from server response
         return {
           ...data,
-          items: data.items.map((p) => ({
+          items: (data?.items ?? []).map((p) => ({
             ...p,
             createdAt: new Date(p.createdAt),
             updatedAt: new Date(p.updatedAt),
@@ -149,6 +155,16 @@ export const adminQueries = {
       queryKey: ['admin', 'team', 'members'],
       queryFn: () => fetchTeamMembers(),
       staleTime: 5 * 60 * 1000, // 5min - reference data for filters/assignments
+    }),
+
+  /**
+   * Search members (typeahead for author selector)
+   */
+  searchMembers: (params: { search?: string; limit?: number }) =>
+    queryOptions({
+      queryKey: ['admin', 'members', 'search', params],
+      queryFn: () => searchMembersFn({ data: params }),
+      staleTime: 30 * 1000,
     }),
 
   /**
@@ -288,6 +304,59 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['inbox', 'voters', postId],
       queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
+      staleTime: 30 * 1000,
+    }),
+
+  /** Feedback source for a post (if created from the feedback pipeline) */
+  postFeedbackSource: (postId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'feedback-source', postId],
+      queryFn: () => fetchPostFeedbackSourceFn({ data: { id: postId } }),
+      staleTime: 60 * 1000,
+    }),
+
+  /**
+   * Preview what a merged post would look like (admin/member only)
+   */
+  mergePreview: (canonicalPostId: PostId, duplicatePostId: PostId) =>
+    queryOptions({
+      queryKey: ['inbox', 'merge-preview', canonicalPostId, duplicatePostId],
+      queryFn: async () => {
+        const data = await fetchMergePreviewFn({
+          data: { canonicalPostId, duplicatePostId },
+        })
+        // Deserialize nested date strings (same pattern as postDetail)
+        type ServerComment = (typeof data.post.comments)[0]
+        type DeserializedComment = Omit<ServerComment, 'createdAt' | 'replies'> & {
+          createdAt: Date
+          replies: DeserializedComment[]
+        }
+        const deserializeComment = (c: ServerComment): DeserializedComment => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          replies: c.replies.map(deserializeComment),
+        })
+        return {
+          post: {
+            ...data.post,
+            createdAt: new Date(data.post.createdAt),
+            updatedAt: new Date(data.post.updatedAt),
+            deletedAt: data.post.deletedAt ? new Date(data.post.deletedAt) : null,
+            summaryUpdatedAt: data.post.summaryUpdatedAt
+              ? new Date(data.post.summaryUpdatedAt)
+              : null,
+            comments: data.post.comments.map(deserializeComment),
+            pinnedComment: data.post.pinnedComment
+              ? {
+                  ...data.post.pinnedComment,
+                  createdAt: new Date(data.post.pinnedComment.createdAt),
+                }
+              : null,
+          },
+          duplicateComments: data.duplicateComments.map(deserializeComment),
+          duplicatePostTitle: data.duplicatePostTitle,
+        }
+      },
       staleTime: 30 * 1000,
     }),
 

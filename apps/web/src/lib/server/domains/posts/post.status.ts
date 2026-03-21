@@ -8,6 +8,7 @@ import { db, posts, boards, postStatuses, eq } from '@/lib/server/db'
 import { type PostId, type StatusId, type UserId, type PrincipalId } from '@quackback/ids'
 import { dispatchPostStatusChanged, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError } from '@/lib/shared/errors'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type { ChangeStatusResult } from './post.types'
 
 /**
@@ -83,6 +84,18 @@ export async function changeStatus(
     previousStatusName,
     newStatus.name
   )
+
+  createActivity({
+    postId,
+    principalId: actor.principalId,
+    type: 'status.changed',
+    metadata: {
+      fromName: previousStatusName,
+      fromColor: prevStatus?.color ?? null,
+      toName: newStatus.name,
+      toColor: newStatus.color ?? null,
+    },
+  })
 
   return {
     ...updatedPost,

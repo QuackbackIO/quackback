@@ -288,7 +288,8 @@ export async function listPublicPosts(params: PostListParams): Promise<PublicPos
 
 export async function getPublicPostDetail(
   postId: PostId,
-  principalId?: PrincipalId
+  principalId?: PrincipalId,
+  options?: { includePrivateComments?: boolean }
 ): Promise<PublicPostDetail | null> {
   const postUuid = toUuid(postId)
 
@@ -354,8 +355,10 @@ export async function getPublicPostDetail(
       author_name: string | null
       content: string
       is_team_member: boolean
+      is_private: boolean
       created_at: Date | string
       deleted_at: Date | string | null
+      deleted_by_principal_id: string | null
       avatar_key: string | null
       avatar_url: string | null
       reactions_json: string
@@ -372,8 +375,10 @@ export async function getPublicPostDetail(
         m.display_name as author_name,
         c.content,
         c.is_team_member,
+        c.is_private,
         c.created_at,
         c.deleted_at,
+        c.deleted_by_principal_id,
         m.avatar_key,
         m.avatar_url,
         COALESCE(
@@ -396,7 +401,7 @@ export async function getPublicPostDetail(
         SELECT p.id FROM ${posts} p
         WHERE p.canonical_post_id = ${postUuid}::uuid AND p.deleted_at IS NULL
       )
-      AND c.is_private = false
+      ${options?.includePrivateComments ? sql`` : sql`AND c.is_private = false`}
       GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
       ORDER BY c.created_at ASC
     `),
@@ -424,8 +429,10 @@ export async function getPublicPostDetail(
     author_name: string | null
     content: string
     is_team_member: boolean
+    is_private: boolean
     created_at: Date | string
     deleted_at: Date | string | null
+    deleted_by_principal_id: string | null
     avatar_key: string | null
     avatar_url: string | null
     reactions_json: string
@@ -448,8 +455,10 @@ export async function getPublicPostDetail(
     authorName: comment.author_name,
     content: comment.content,
     isTeamMember: comment.is_team_member,
-    isPrivate: false as const, // Portal query filters out private comments at SQL level
+    isPrivate: comment.is_private,
     createdAt: ensureDate(comment.created_at),
+    deletedAt: comment.deleted_at ? ensureDate(comment.deleted_at) : null,
+    deletedByPrincipalId: comment.deleted_by_principal_id,
     avatarUrl: resolveAvatarUrl({
       avatarKey: comment.avatar_key,
       avatarUrl: comment.avatar_url,
@@ -461,21 +470,33 @@ export async function getPublicPostDetail(
     reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
   }))
 
-  const commentTree = buildCommentTree(commentsResult, principalId)
-
-  const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => ({
-    id: node.id as CommentId,
-    content: node.content,
-    authorName: node.authorName,
-    principalId: node.principalId,
-    createdAt: node.createdAt,
-    parentId: node.parentId as CommentId | null,
-    isTeamMember: node.isTeamMember,
-    avatarUrl: node.avatarUrl ?? null,
-    statusChange: node.statusChange ?? null,
-    replies: node.replies.map(mapToPublicComment),
-    reactions: node.reactions,
+  // Raw SQL returns principal_id as UUIDs, but principalId from auth is a TypeID.
+  // Convert to UUID so aggregateReactions can match the current user's reactions.
+  const principalUuid = principalId ? toUuid(principalId) : undefined
+  const commentTree = buildCommentTree(commentsResult, principalUuid, {
+    pruneDeleted: !options?.includePrivateComments,
   })
+
+  const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => {
+    const deleted = !!node.deletedAt
+    return {
+      id: node.id as CommentId,
+      content: deleted ? '' : node.content,
+      authorName: deleted ? null : node.authorName,
+      principalId: deleted ? null : node.principalId,
+      createdAt: node.createdAt,
+      deletedAt: node.deletedAt,
+      isRemovedByTeam:
+        deleted && !!node.deletedByPrincipalId && node.deletedByPrincipalId !== node.principalId,
+      parentId: node.parentId as CommentId | null,
+      isTeamMember: deleted ? false : node.isTeamMember,
+      isPrivate: node.isPrivate,
+      avatarUrl: deleted ? null : (node.avatarUrl ?? null),
+      statusChange: deleted ? null : (node.statusChange ?? null),
+      replies: node.replies.map(mapToPublicComment),
+      reactions: deleted ? [] : node.reactions,
+    }
+  }
 
   const rootComments = commentTree.map(mapToPublicComment)
 

@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
+import { getThemeCookie, type Theme } from '@/lib/shared/theme'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
@@ -13,6 +14,7 @@ export interface BootstrapData {
   session: Session | null
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
+  themeCookie: Theme
 }
 
 async function getSessionInternal(): Promise<Session | null> {
@@ -40,6 +42,7 @@ async function getSessionInternal(): Promise<Session | null> {
         email: session.user.email,
         emailVerified: session.user.emailVerified,
         image: session.user.image ?? null,
+        isAnonymous: (session.user as Record<string, unknown>).isAnonymous === true,
         createdAt: session.user.createdAt.toISOString(),
         updatedAt: session.user.updatedAt.toISOString(),
       },
@@ -56,34 +59,42 @@ let _initialized = false
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
-    // Fetch session and settings in parallel
-    const [session, settings] = await Promise.all([getSessionInternal(), getTenantSettings()])
+    console.log(`[fn:bootstrap] getBootstrapData`)
+    try {
+      // Fetch session and settings in parallel
+      const [session, settings] = await Promise.all([getSessionInternal(), getTenantSettings()])
 
-    // Get user role
-    const userRole = session
-      ? await db.query.principal
-          .findFirst({
-            where: eq(principal.userId, session.user.id as UserId),
-            columns: { role: true },
-          })
-          .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
-      : null
+      // Get user role
+      const userRole = session
+        ? await db.query.principal
+            .findFirst({
+              where: eq(principal.userId, session.user.id as UserId),
+              columns: { role: true },
+            })
+            .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
+        : null
 
-    // One-time initialization on first request
-    if (!_initialized) {
-      _initialized = true
+      // One-time initialization on first request
+      if (!_initialized) {
+        _initialized = true
 
-      // Delay telemetry to let the DB connection initialize
-      setTimeout(async () => {
-        try {
-          const { startTelemetry } = await import('@/lib/server/telemetry')
-          await startTelemetry()
-        } catch {
-          // Silent failure -- telemetry must never affect the application
-        }
-      }, 10_000)
+        // Delay telemetry to let the DB connection initialize
+        setTimeout(async () => {
+          try {
+            const { startTelemetry } = await import('@/lib/server/telemetry')
+            await startTelemetry()
+          } catch {
+            // Silent failure -- telemetry must never affect the application
+          }
+        }, 10_000)
+      }
+
+      const themeCookie = getThemeCookie(getRequestHeaders().get('cookie') ?? null)
+
+      return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
+    } catch (error) {
+      console.error(`[fn:bootstrap] getBootstrapData failed:`, error)
+      throw error
     }
-
-    return { baseUrl: config.baseUrl, session, settings, userRole }
   }
 )

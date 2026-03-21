@@ -91,6 +91,22 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
       )
     }
 
+    case 'post.updated': {
+      const { post, changedFields } = event.data
+      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const actor = event.actor.email || 'System'
+      const fields = changedFields.join(', ')
+
+      return buildCard(
+        [
+          textBlock(`✏️ Post updated by ${actor}`, { weight: 'Bolder', size: 'Small' }),
+          textBlock(post.title, { weight: 'Bolder', size: 'Medium' }),
+          textBlock(`Changed: ${fields}`),
+        ],
+        [{ type: 'Action.OpenUrl', title: 'View in Portal', url: postUrl }]
+      )
+    }
+
     case 'post.deleted': {
       const { post } = event.data
       const actor = event.actor.email || 'System'
@@ -99,6 +115,23 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
         textBlock(`🗑️ Post deleted by ${actor}`, { weight: 'Bolder', size: 'Small' }),
         textBlock(post.title, { weight: 'Bolder', size: 'Medium' }),
       ])
+    }
+
+    case 'post.merged': {
+      const { duplicatePost, canonicalPost } = event.data
+      const canonicalUrl = `${rootUrl}/b/${canonicalPost.boardSlug}/posts/${canonicalPost.id}`
+      const actor = event.actor.email || 'System'
+
+      return buildCard(
+        [
+          textBlock(`🔀 Post merged by ${actor}`, { weight: 'Bolder', size: 'Small' }),
+          textBlock(`"${duplicatePost.title}" → "${canonicalPost.title}"`, {
+            weight: 'Bolder',
+            size: 'Medium',
+          }),
+        ],
+        [{ type: 'Action.OpenUrl', title: 'View Canonical Post', url: canonicalUrl }]
+      )
     }
 
     case 'comment.created': {

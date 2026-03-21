@@ -12,12 +12,13 @@ import { useRouter } from '@tanstack/react-router'
 import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { PasswordForm } from '@/components/settings/password-form'
 
 interface ProfileFormProps {
   user: {
     id: string
     name: string
-    email: string
+    email: string | null
   }
 }
 
@@ -242,7 +243,13 @@ export function ProfileForm({ user }: ProfileFormProps) {
                 <label htmlFor="email" className="text-sm font-medium">
                   Email
                 </label>
-                <Input id="email" type="email" defaultValue={user.email} disabled />
+                <Input
+                  id="email"
+                  type="email"
+                  defaultValue={user.email ?? ''}
+                  disabled
+                  placeholder="No email"
+                />
               </div>
             </div>
             <div className="flex justify-end">
@@ -260,6 +267,9 @@ export function ProfileForm({ user }: ProfileFormProps) {
           </div>
         </div>
       </form>
+
+      {/* Password */}
+      <PasswordForm />
 
       {/* Image Cropper Modal */}
       {cropImageSrc && (

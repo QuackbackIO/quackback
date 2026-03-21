@@ -84,7 +84,19 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
+  withRetry: vi.fn((fn: () => Promise<unknown>) =>
+    fn().then((result: unknown) => ({ result, retryCount: 0 }))
+  ),
+}))
+
+vi.mock('@/lib/server/domains/ai/usage-log', () => ({
+  withUsageLogging: vi.fn((_params: unknown, fn: () => Promise<{ result: unknown }>) =>
+    fn().then(({ result }) => result)
+  ),
+}))
+
+vi.mock('../pipeline-log', () => ({
+  logPipelineEvent: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../prompts/extraction.prompt', () => ({
@@ -121,7 +133,7 @@ describe('extraction.service', () => {
 
   it('should extract signals and enqueue interpret jobs', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: true, reason: 'ok' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({
       choices: [
         {
@@ -158,11 +170,49 @@ describe('extraction.service', () => {
 
     // Should enqueue 2 interpret jobs
     expect(mockEnqueue).toHaveBeenCalledTimes(2)
+
+    // Verify pipeline logging
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'quality_gate.passed',
+        rawFeedbackItemId: rawItemId,
+        detail: expect.objectContaining({
+          tier: 2,
+          sourceType: 'intercom',
+        }),
+      })
+    )
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'extraction.completed',
+        rawFeedbackItemId: rawItemId,
+        detail: expect.objectContaining({
+          signalsExtracted: 2,
+          signalsBelowThreshold: 0,
+          signalsCapped: 0,
+          signalTypes: ['feature_request', 'usability_issue'],
+          confidences: [0.9, 0.7],
+        }),
+      })
+    )
+
+    // Verify AI usage logging
+    const { withUsageLogging } = await import('@/lib/server/domains/ai/usage-log')
+    expect(withUsageLogging).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineStep: 'extraction',
+        callType: 'chat_completion',
+        rawFeedbackItemId: rawItemId,
+      }),
+      expect.any(Function),
+      expect.any(Function)
+    )
   })
 
   it('should skip when quality gate rejects', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: false, reason: 'not feedback' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: false, tier: 3, reason: 'not feedback' })
 
     const { extractSignals } = await import('../extraction.service')
     await extractSignals(rawItemId)
@@ -173,6 +223,20 @@ describe('extraction.service', () => {
     expect(updateSetCalls.length).toBeGreaterThanOrEqual(2)
     const lastSet = updateSetCalls[updateSetCalls.length - 1][0] as Record<string, unknown>
     expect(lastSet.processingState).toBe('completed')
+
+    // Should log quality_gate.rejected pipeline event
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'quality_gate.rejected',
+        rawFeedbackItemId: rawItemId,
+        detail: expect.objectContaining({
+          tier: 3,
+          reason: 'not feedback',
+          sourceType: 'intercom',
+        }),
+      })
+    )
   })
 
   it('should throw UnrecoverableError when item not found', async () => {
@@ -192,9 +256,9 @@ describe('extraction.service', () => {
     expect(updateSetCalls.length).toBe(0)
   })
 
-  it('should filter low-confidence signals', async () => {
+  it('should filter low-confidence signals and log filter counts', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: true, reason: 'ok' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({
       choices: [
         {
@@ -217,11 +281,26 @@ describe('extraction.service', () => {
     // Only high-confidence signal should be inserted
     const signalValues = insertValuesCalls[0][0] as unknown[]
     expect(signalValues).toHaveLength(1)
+
+    // Should log extraction.completed with filter counts
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'extraction.completed',
+        detail: expect.objectContaining({
+          signalsExtracted: 1,
+          signalsBelowThreshold: 1,
+          signalsCapped: 0,
+          signalTypes: ['feature_request', 'question'],
+          confidences: [0.8, 0.3],
+        }),
+      })
+    )
   })
 
   it('should limit to 5 signals max', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: true, reason: 'ok' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({
       choices: [
         {
@@ -249,7 +328,7 @@ describe('extraction.service', () => {
 
   it('should parse JSON wrapped in code fences', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: true, reason: 'ok' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
     mockOpenAI.chat.completions.create.mockResolvedValueOnce({
       choices: [
         {
@@ -274,9 +353,9 @@ describe('extraction.service', () => {
     expect(insertValuesCalls.length).toBe(1)
   })
 
-  it('should mark as failed on LLM error', async () => {
+  it('should mark as failed on LLM error and log extraction.failed', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
-    mockShouldExtract.mockResolvedValueOnce({ extract: true, reason: 'ok' })
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
     mockOpenAI.chat.completions.create.mockRejectedValueOnce(new Error('API error'))
 
     const { extractSignals } = await import('../extraction.service')
@@ -287,6 +366,18 @@ describe('extraction.service', () => {
       (call) => (call[0] as Record<string, unknown>).processingState === 'failed'
     )
     expect(failedSet).toBeDefined()
+
+    // Should log extraction.failed pipeline event
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'extraction.failed',
+        rawFeedbackItemId: rawItemId,
+        detail: expect.objectContaining({
+          error: 'API error',
+        }),
+      })
+    )
   })
 
   it('should throw when AI not configured', async () => {

@@ -9,8 +9,14 @@
 export const EVENT_TYPES = [
   'post.created',
   'post.status_changed',
+  'post.updated',
   'post.deleted',
+  'post.restored',
+  'post.merged',
+  'post.unmerged',
   'comment.created',
+  'comment.updated',
+  'comment.deleted',
   'changelog.published',
 ] as const
 
@@ -84,9 +90,38 @@ export interface CommentCreatedPayload {
   post: EventPostRef
 }
 
+export interface PostUpdatedPayload {
+  post: EventPostRef
+  changedFields: string[]
+}
+
 export interface PostDeletedPayload {
   post: EventPostRef
   deletedBy?: string
+}
+
+export interface PostRestoredPayload {
+  post: EventPostRef
+}
+
+export interface PostMergedPayload {
+  duplicatePost: EventPostRef
+  canonicalPost: EventPostRef
+}
+
+export interface PostUnmergedPayload {
+  post: EventPostRef
+  formerCanonicalPost: EventPostRef
+}
+
+export interface CommentUpdatedPayload {
+  comment: EventCommentData
+  post: EventPostRef
+}
+
+export interface CommentDeletedPayload {
+  comment: { id: string; isPrivate?: boolean }
+  post: EventPostRef
 }
 
 export interface ChangelogPublishedPayload {
@@ -118,12 +153,36 @@ export interface PostStatusChangedEvent extends EventBase<'post.status_changed'>
   data: PostStatusChangedPayload
 }
 
-export interface CommentCreatedEvent extends EventBase<'comment.created'> {
-  data: CommentCreatedPayload
+export interface PostUpdatedEvent extends EventBase<'post.updated'> {
+  data: PostUpdatedPayload
 }
 
 export interface PostDeletedEvent extends EventBase<'post.deleted'> {
   data: PostDeletedPayload
+}
+
+export interface PostRestoredEvent extends EventBase<'post.restored'> {
+  data: PostRestoredPayload
+}
+
+export interface PostMergedEvent extends EventBase<'post.merged'> {
+  data: PostMergedPayload
+}
+
+export interface PostUnmergedEvent extends EventBase<'post.unmerged'> {
+  data: PostUnmergedPayload
+}
+
+export interface CommentCreatedEvent extends EventBase<'comment.created'> {
+  data: CommentCreatedPayload
+}
+
+export interface CommentUpdatedEvent extends EventBase<'comment.updated'> {
+  data: CommentUpdatedPayload
+}
+
+export interface CommentDeletedEvent extends EventBase<'comment.deleted'> {
+  data: CommentDeletedPayload
 }
 
 export interface ChangelogPublishedEvent extends EventBase<'changelog.published'> {
@@ -142,6 +201,12 @@ export interface ChangelogPublishedEvent extends EventBase<'changelog.published'
 export type EventData =
   | PostCreatedEvent
   | PostStatusChangedEvent
+  | PostUpdatedEvent
   | PostDeletedEvent
+  | PostRestoredEvent
+  | PostMergedEvent
+  | PostUnmergedEvent
   | CommentCreatedEvent
+  | CommentUpdatedEvent
+  | CommentDeletedEvent
   | ChangelogPublishedEvent

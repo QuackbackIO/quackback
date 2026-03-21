@@ -256,6 +256,8 @@ export function useAddComment() {
         isTeamMember: !!principalId,
         isPrivate: isPrivate ?? false,
         createdAt: new Date(),
+        deletedAt: null,
+        deletedByPrincipalId: null,
         replies: [],
         reactions: [],
       }
@@ -307,6 +309,10 @@ export function useAddComment() {
           ),
         }
       })
+      // Invalidate to ensure fresh server data (avatar, team badge, etc.)
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(typedPostId) })
+      // Also invalidate portal query so comments appear there too
+      queryClient.invalidateQueries({ queryKey: ['portal', 'post', typedPostId] })
     },
   })
 }

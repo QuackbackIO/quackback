@@ -8,12 +8,15 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { toIsoString } from '@/lib/shared/utils'
 import {
   mergePost,
   unmergePost,
   getMergedPosts,
   getPostMergeInfo,
+  previewMergedPost,
 } from '@/lib/server/domains/posts/post.merge'
+import { toIsoStringOrNull } from '@/lib/shared/utils'
 
 // ============================================
 // Schemas
@@ -36,6 +39,11 @@ const getPostMergeInfoSchema = z.object({
   postId: z.string(),
 })
 
+const mergePreviewSchema = z.object({
+  canonicalPostId: z.string(),
+  duplicatePostId: z.string(),
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -44,15 +52,6 @@ export type MergePostInput = z.infer<typeof mergePostSchema>
 export type UnmergePostInput = z.infer<typeof unmergePostSchema>
 export type GetMergedPostsInput = z.infer<typeof getMergedPostsSchema>
 export type GetPostMergeInfoInput = z.infer<typeof getPostMergeInfoSchema>
-
-// ============================================
-// Helpers
-// ============================================
-
-function toIsoString(value: Date | string): string {
-  if (typeof value === 'string') return value
-  return value.toISOString()
-}
 
 // ============================================
 // Server Functions
@@ -74,7 +73,8 @@ export const mergePostFn = createServerFn({ method: 'POST' })
       const result = await mergePost(
         data.duplicatePostId as PostId,
         data.canonicalPostId as PostId,
-        auth.principal.id as PrincipalId
+        auth.principal.id as PrincipalId,
+        auth.user.id
       )
 
       console.log(
@@ -98,7 +98,11 @@ export const unmergePostFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
-      const result = await unmergePost(data.postId as PostId, auth.principal.id as PrincipalId)
+      const result = await unmergePost(
+        data.postId as PostId,
+        auth.principal.id as PrincipalId,
+        auth.user.id
+      )
 
       console.log(`[fn:post-merge] unmergePostFn: unmerged ${data.postId}`)
       return result
@@ -157,5 +161,68 @@ export const getPostMergeInfoFn = createServerFn({ method: 'GET' })
     } catch (error) {
       console.error(`[fn:post-merge] getPostMergeInfoFn failed:`, error)
       return null
+    }
+  })
+
+/**
+ * Preview what a merged post would look like without actually merging.
+ * Loads full details for both posts, computes deduplicated vote count,
+ * and returns separate comment arrays.
+ * Requires admin/member role.
+ */
+export const fetchMergePreviewFn = createServerFn({ method: 'GET' })
+  .inputValidator(mergePreviewSchema)
+  .handler(async ({ data }) => {
+    console.log(
+      `[fn:post-merge] fetchMergePreviewFn: canonical=${data.canonicalPostId}, duplicate=${data.duplicatePostId}`
+    )
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+
+      const result = await previewMergedPost(
+        data.canonicalPostId as PostId,
+        data.duplicatePostId as PostId,
+        auth.principal.id
+      )
+
+      // Serialize dates for transport (matching fetchPostWithDetails pattern)
+      type RawComment = (typeof result.post.comments)[0]
+      type SerializedComment = Omit<RawComment, 'createdAt' | 'replies'> & {
+        createdAt: string
+        replies: SerializedComment[]
+      }
+      const serializeComment = (c: RawComment): SerializedComment => ({
+        ...c,
+        createdAt: toIsoString(c.createdAt),
+        replies: c.replies.map(serializeComment),
+      })
+
+      const serializedPinnedComment = result.post.pinnedComment
+        ? {
+            ...result.post.pinnedComment,
+            createdAt: toIsoString(result.post.pinnedComment.createdAt),
+          }
+        : null
+
+      console.log(
+        `[fn:post-merge] fetchMergePreviewFn: voteCount=${result.post.voteCount}, canonicalComments=${result.post.comments.length}, duplicateComments=${result.duplicateComments.length}`
+      )
+
+      return {
+        post: {
+          ...result.post,
+          createdAt: toIsoString(result.post.createdAt),
+          updatedAt: toIsoString(result.post.updatedAt),
+          deletedAt: toIsoStringOrNull(result.post.deletedAt),
+          summaryUpdatedAt: toIsoStringOrNull(result.post.summaryUpdatedAt),
+          comments: result.post.comments.map(serializeComment),
+          pinnedComment: serializedPinnedComment,
+        },
+        duplicateComments: result.duplicateComments.map(serializeComment),
+        duplicatePostTitle: result.duplicatePostTitle,
+      }
+    } catch (error) {
+      console.error(`[fn:post-merge] fetchMergePreviewFn failed:`, error)
+      throw error
     }
   })

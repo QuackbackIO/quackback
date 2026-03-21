@@ -22,6 +22,7 @@ import {
   and,
   inArray,
   isNull,
+  isNotNull,
   postSubscriptions,
   notificationPreferences,
   unsubscribeTokens,
@@ -32,12 +33,13 @@ import {
 } from '@/lib/server/db'
 import type { PrincipalId, PostId } from '@quackback/ids'
 import { randomUUID } from 'crypto'
-import type {
-  SubscriptionReason,
-  Subscriber,
-  Subscription,
-  NotificationPreferencesData,
-  SubscriptionLevel,
+import {
+  levelFromFlags,
+  type SubscriptionReason,
+  type Subscriber,
+  type Subscription,
+  type NotificationPreferencesData,
+  type SubscriptionLevel,
 } from './subscription.types'
 
 // Re-export types for backwards compatibility
@@ -70,6 +72,9 @@ export async function subscribeToPost(
   reason: SubscriptionReason,
   options?: SubscribeOptions
 ): Promise<void> {
+  console.log(
+    `[domain:subscriptions] subscribeToPost: postId=${postId} principalId=${principalId} reason=${reason}`
+  )
   const executor = options?.tx ?? db
   const level = options?.level ?? 'all'
 
@@ -92,6 +97,9 @@ export async function subscribeToPost(
  * Unsubscribe a member from a post
  */
 export async function unsubscribeFromPost(principalId: PrincipalId, postId: PostId): Promise<void> {
+  console.log(
+    `[domain:subscriptions] unsubscribeFromPost: postId=${postId} principalId=${principalId}`
+  )
   await db
     .delete(postSubscriptions)
     .where(
@@ -107,6 +115,9 @@ export async function updateSubscriptionLevel(
   postId: PostId,
   level: SubscriptionLevel
 ): Promise<void> {
+  console.log(
+    `[domain:subscriptions] updateSubscriptionLevel: postId=${postId} principalId=${principalId} level=${level}`
+  )
   if (level === 'none') {
     await unsubscribeFromPost(principalId, postId)
     return
@@ -140,6 +151,9 @@ export async function getSubscriptionStatus(
   reason: SubscriptionReason | null
   level: SubscriptionLevel
 }> {
+  console.log(
+    `[domain:subscriptions] getSubscriptionStatus: postId=${postId} principalId=${principalId}`
+  )
   const subscription = await db.query.postSubscriptions.findFirst({
     where: and(
       eq(postSubscriptions.principalId, principalId),
@@ -157,20 +171,12 @@ export async function getSubscriptionStatus(
     }
   }
 
-  // Determine level from flags
-  let level: SubscriptionLevel = 'none'
-  if (subscription.notifyComments && subscription.notifyStatusChanges) {
-    level = 'all'
-  } else if (subscription.notifyStatusChanges) {
-    level = 'status_only'
-  }
-
   return {
     subscribed: true,
     notifyComments: subscription.notifyComments,
     notifyStatusChanges: subscription.notifyStatusChanges,
     reason: subscription.reason as SubscriptionReason,
-    level,
+    level: levelFromFlags(subscription.notifyComments, subscription.notifyStatusChanges),
   }
 }
 
@@ -187,6 +193,9 @@ export async function getSubscribersForEvent(
   postId: PostId,
   eventType: NotificationEventType
 ): Promise<Subscriber[]> {
+  console.log(
+    `[domain:subscriptions] getSubscribersForEvent: postId=${postId} eventType=${eventType}`
+  )
   // Determine which column to filter by
   const notifyColumn =
     eventType === 'comment'
@@ -206,17 +215,25 @@ export async function getSubscribersForEvent(
     .from(postSubscriptions)
     .innerJoin(principal, eq(postSubscriptions.principalId, principal.id))
     .innerJoin(user, eq(principal.userId, user.id))
-    .where(and(eq(postSubscriptions.postId, postId), eq(notifyColumn, true)))
+    .where(
+      and(
+        eq(postSubscriptions.postId, postId),
+        eq(notifyColumn, true),
+        isNotNull(user.email) // Only subscribers with real email addresses
+      )
+    )
 
-  return rows.map((row) => ({
-    principalId: row.principalId,
-    userId: row.userId!, // INNER JOIN on user guarantees non-null
-    email: row.email,
-    name: row.name,
-    reason: row.reason as SubscriptionReason,
-    notifyComments: row.notifyComments,
-    notifyStatusChanges: row.notifyStatusChanges,
-  }))
+  return rows
+    .filter((row): row is typeof row & { email: string } => row.email !== null)
+    .map((row) => ({
+      principalId: row.principalId,
+      userId: row.userId!, // INNER JOIN on user guarantees non-null
+      email: row.email,
+      name: row.name,
+      reason: row.reason as SubscriptionReason,
+      notifyComments: row.notifyComments,
+      notifyStatusChanges: row.notifyStatusChanges,
+    }))
 }
 
 /**
@@ -287,6 +304,9 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
 export async function batchGetNotificationPreferences(
   principalIds: PrincipalId[]
 ): Promise<Map<PrincipalId, NotificationPreferencesData>> {
+  console.log(
+    `[domain:subscriptions] batchGetNotificationPreferences: count=${principalIds.length}`
+  )
   if (principalIds.length === 0) return new Map()
 
   const rows = await db
@@ -327,6 +347,7 @@ export async function updateNotificationPreferences(
   principalId: PrincipalId,
   preferences: Partial<NotificationPreferencesData>
 ): Promise<NotificationPreferencesData> {
+  console.log(`[domain:subscriptions] updateNotificationPreferences: principalId=${principalId}`)
   const existing = await db.query.notificationPreferences.findFirst({
     where: eq(notificationPreferences.principalId, principalId),
   })
@@ -373,6 +394,9 @@ export async function generateUnsubscribeToken(
   postId: PostId | null,
   action: 'unsubscribe_post' | 'unsubscribe_all'
 ): Promise<string> {
+  console.log(
+    `[domain:subscriptions] generateUnsubscribeToken: principalId=${principalId} postId=${postId} action=${action}`
+  )
   const token = randomUUID()
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
@@ -396,6 +420,7 @@ export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all'
 export async function batchGenerateUnsubscribeTokens(
   entries: Array<{ principalId: PrincipalId; postId: PostId; action: UnsubscribeAction }>
 ): Promise<Map<PrincipalId, string>> {
+  console.log(`[domain:subscriptions] batchGenerateUnsubscribeTokens: count=${entries.length}`)
   if (entries.length === 0) return new Map()
 
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
@@ -423,6 +448,7 @@ export async function processUnsubscribeToken(token: string): Promise<{
   postId: PostId | null
   post?: { title: string; boardSlug: string }
 } | null> {
+  console.log(`[domain:subscriptions] processUnsubscribeToken`)
   const tokenRecord = await db.query.unsubscribeTokens.findFirst({
     where: eq(unsubscribeTokens.token, token),
   })

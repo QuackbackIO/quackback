@@ -16,6 +16,8 @@ export interface CreateCommentInput {
   statusId?: StatusId | null
   /** Whether this comment is only visible to team members */
   isPrivate?: boolean
+  /** Override creation timestamp (admin-only, for imports) */
+  createdAt?: Date
 }
 
 /**

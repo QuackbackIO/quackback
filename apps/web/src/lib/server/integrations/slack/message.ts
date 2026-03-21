@@ -102,6 +102,32 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
       }
     }
 
+    case 'post.updated': {
+      const { post, changedFields } = event.data
+      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const actor = event.actor.email || 'System'
+      const fields = changedFields.join(', ')
+
+      return {
+        text: `Post updated by ${actor}: ${post.title}`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [
+              { type: 'mrkdwn', text: `✏️ Post updated by *${escapeSlackMrkdwn(actor)}*` },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *<${postUrl}|${escapeSlackMrkdwn(post.title)}>*\n> Changed: ${escapeSlackMrkdwn(fields)}`,
+            },
+          },
+        ],
+      }
+    }
+
     case 'post.deleted': {
       const { post } = event.data
       const actor = event.actor.email || 'System'
@@ -112,10 +138,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
           {
             type: 'context',
             elements: [
-              {
-                type: 'mrkdwn',
-                text: `🗑️ Post deleted by *${escapeSlackMrkdwn(actor)}*`,
-              },
+              { type: 'mrkdwn', text: `🗑️ Post deleted by *${escapeSlackMrkdwn(actor)}*` },
             ],
           },
           {
@@ -123,6 +146,29 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
             text: {
               type: 'mrkdwn',
               text: `> *${escapeSlackMrkdwn(post.title)}*`,
+            },
+          },
+        ],
+      }
+    }
+
+    case 'post.merged': {
+      const { duplicatePost, canonicalPost } = event.data
+      const canonicalUrl = `${rootUrl}/b/${canonicalPost.boardSlug}/posts/${canonicalPost.id}`
+      const actor = event.actor.email || 'System'
+
+      return {
+        text: `Post merged by ${actor}: "${duplicatePost.title}" → "${canonicalPost.title}"`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `🔀 Post merged by *${escapeSlackMrkdwn(actor)}*` }],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *${escapeSlackMrkdwn(duplicatePost.title)}* → *<${canonicalUrl}|${escapeSlackMrkdwn(canonicalPost.title)}>*`,
             },
           },
         ],

@@ -3,7 +3,7 @@
  */
 
 export { cn } from './cn'
-export { getInitials, stripHtml, normalizeStrength, strengthTier } from './string'
+export { getInitials, stripHtml, normalizeStrength, strengthTier, formatBadgeCount } from './string'
 export {
   escapeHtmlAttr,
   sanitizeUrl,
@@ -12,3 +12,4 @@ export {
   safePositiveInt,
   extractYoutubeId,
 } from './sanitize'
+export { toIsoString, toIsoStringOrNull } from './date'

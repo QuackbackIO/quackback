@@ -51,6 +51,7 @@ export class Progress {
     comments: ImportStats
     votes: ImportStats
     notes: ImportStats
+    changelogs?: ImportStats
     duration: number
   }): void {
     console.log(`\n━━━ Import Summary ━━━`)
@@ -58,9 +59,16 @@ export class Progress {
     this.logStats('Comments', result.comments)
     this.logStats('Votes', result.votes)
     this.logStats('Notes', result.notes)
+    if (result.changelogs) {
+      this.logStats('Changelogs', result.changelogs)
+    }
 
     const totalErrors =
-      result.posts.errors + result.comments.errors + result.votes.errors + result.notes.errors
+      result.posts.errors +
+      result.comments.errors +
+      result.votes.errors +
+      result.notes.errors +
+      (result.changelogs?.errors ?? 0)
 
     if (totalErrors > 0) {
       console.log(`\n⚠️  Completed with ${totalErrors} error(s)`)

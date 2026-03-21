@@ -52,6 +52,9 @@ export {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
   useRemoveNotificationChannel,
+  useAddMonitoredChannel,
+  useUpdateMonitoredChannel,
+  useRemoveMonitoredChannel,
 } from './integrations'
 
 // Status sync mutations
@@ -85,7 +88,7 @@ export {
 } from './notifications'
 
 // User mutations
-export { useRemovePortalUser } from './users'
+export { useCreatePortalUser, useRemovePortalUser, useUpdatePortalUser } from './users'
 
 // Avatar mutations
 export { useUploadAvatar, useDeleteAvatar } from './avatar'
@@ -107,3 +110,6 @@ export {
   useUpdateUserAttribute,
   useDeleteUserAttribute,
 } from './user-attributes'
+
+// Admin subscription mutations
+export { useUpdateVoterSubscription } from './admin-subscriptions'
