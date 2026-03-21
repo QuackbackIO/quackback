@@ -497,6 +497,7 @@ function PostModalContent({
         postTitle={post.title}
         isPending={deletePost.isPending}
         externalLinks={externalLinksQuery.data}
+        isLoadingLinks={externalLinksQuery.isLoading}
         description={
           <>
             This will delete &ldquo;{post.title}&rdquo; from the portal. You can restore it within
@@ -511,17 +512,8 @@ function PostModalContent({
             })
             toast.success('Post deleted')
             // Show warnings for failed cascade operations
-            const cascadeResults = (
-              result as {
-                cascadeResults?: Array<{
-                  success: boolean
-                  integrationType: string
-                  error?: string
-                }>
-              }
-            ).cascadeResults
-            if (cascadeResults) {
-              for (const r of cascadeResults) {
+            if (result.cascadeResults) {
+              for (const r of result.cascadeResults) {
                 if (!r.success) {
                   toast.warning(`Failed to close ${r.integrationType} issue: ${r.error}`)
                 }

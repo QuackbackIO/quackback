@@ -5,6 +5,7 @@ import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { getIntegrationActionVerb, getIntegrationDisplayName } from '@/lib/shared/integrations'
 
 // ============================================================================
 // Types
@@ -21,47 +22,12 @@ export interface ExternalLinkInfo {
 
 export interface CascadeChoice {
   linkId: string
-  integrationType: string
-  externalId: string
-  externalUrl?: string | null
   shouldArchive: boolean
 }
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Get a human-readable label for the platform action (Close vs Archive) */
-function getActionLabel(integrationType: string): string {
-  switch (integrationType) {
-    case 'github':
-    case 'jira':
-    case 'gitlab':
-    case 'clickup':
-    case 'azure_devops':
-      return 'Close'
-    default:
-      return 'Archive'
-  }
-}
-
-/** Get a display name for an integration type */
-function getIntegrationDisplayName(integrationType: string): string {
-  const names: Record<string, string> = {
-    linear: 'Linear',
-    github: 'GitHub',
-    jira: 'Jira',
-    gitlab: 'GitLab',
-    clickup: 'ClickUp',
-    asana: 'Asana',
-    shortcut: 'Shortcut',
-    azure_devops: 'Azure DevOps',
-    trello: 'Trello',
-    notion: 'Notion',
-    monday: 'Monday',
-  }
-  return names[integrationType] ?? integrationType
-}
 
 /** Format an external ID for display (e.g., "LIN-423", "#142") */
 function formatExternalId(integrationType: string, externalId: string): string {
@@ -83,6 +49,8 @@ interface DeletePostDialogProps {
   description?: React.ReactNode
   /** External links for cascade delete checkboxes */
   externalLinks?: ExternalLinkInfo[]
+  /** Whether external links are still loading */
+  isLoadingLinks?: boolean
 }
 
 export function DeletePostDialog({
@@ -93,6 +61,7 @@ export function DeletePostDialog({
   isPending,
   description,
   externalLinks,
+  isLoadingLinks,
 }: DeletePostDialogProps) {
   const [choices, setChoices] = useState<Record<string, boolean>>({})
 
@@ -110,9 +79,6 @@ export function DeletePostDialog({
   const handleConfirm = () => {
     const cascadeChoices: CascadeChoice[] = (externalLinks ?? []).map((link) => ({
       linkId: link.id,
-      integrationType: link.integrationType,
-      externalId: link.externalId,
-      externalUrl: link.externalUrl,
       shouldArchive: choices[link.id] ?? false,
     }))
     onConfirm(cascadeChoices)
@@ -133,8 +99,8 @@ export function DeletePostDialog({
         )
       }
       variant="destructive"
-      confirmLabel={isPending ? 'Deleting...' : 'Delete'}
-      isPending={isPending}
+      confirmLabel={isPending ? 'Deleting...' : isLoadingLinks ? 'Loading...' : 'Delete'}
+      isPending={isPending || isLoadingLinks}
       onConfirm={handleConfirm}
     >
       {hasLinks && (
@@ -144,7 +110,7 @@ export function DeletePostDialog({
             {externalLinks.map((link) => {
               const disabled = !link.integrationActive
               const checked = choices[link.id] ?? false
-              const action = getActionLabel(link.integrationType)
+              const action = getIntegrationActionVerb(link.integrationType)
               const name = getIntegrationDisplayName(link.integrationType)
               const displayId = formatExternalId(link.integrationType, link.externalId)
 

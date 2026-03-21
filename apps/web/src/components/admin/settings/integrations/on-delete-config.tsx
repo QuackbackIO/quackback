@@ -3,43 +3,13 @@
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateIntegration } from '@/lib/client/mutations'
+import { getIntegrationActionVerb, getIntegrationDisplayName } from '@/lib/shared/integrations'
 
 interface OnDeleteConfigProps {
   integrationId: string
   integrationType: string
   config: Record<string, unknown>
   enabled: boolean
-}
-
-/** Get the action verb for a platform (Close vs Archive) */
-function getActionVerb(integrationType: string): string {
-  switch (integrationType) {
-    case 'github':
-    case 'jira':
-    case 'gitlab':
-    case 'clickup':
-    case 'azure_devops':
-      return 'Close'
-    default:
-      return 'Archive'
-  }
-}
-
-function getDisplayName(integrationType: string): string {
-  const names: Record<string, string> = {
-    linear: 'Linear',
-    github: 'GitHub',
-    jira: 'Jira',
-    gitlab: 'GitLab',
-    clickup: 'ClickUp',
-    asana: 'Asana',
-    shortcut: 'Shortcut',
-    azure_devops: 'Azure DevOps',
-    trello: 'Trello',
-    notion: 'Notion',
-    monday: 'Monday',
-  }
-  return names[integrationType] ?? integrationType
 }
 
 export function OnDeleteConfig({
@@ -53,8 +23,8 @@ export function OnDeleteConfig({
   const isChecked = onDeleteAction === 'archive'
   const saving = updateMutation.isPending
 
-  const action = getActionVerb(integrationType)
-  const name = getDisplayName(integrationType)
+  const action = getIntegrationActionVerb(integrationType)
+  const name = getIntegrationDisplayName(integrationType)
 
   const handleToggle = (checked: boolean) => {
     updateMutation.mutate({

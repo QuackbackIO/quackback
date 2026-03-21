@@ -32,7 +32,6 @@ import {
   getPostExternalLinks,
   executeCascadeDelete,
 } from '@/lib/server/domains/posts/post.cascade-delete'
-import { buildEventActor, dispatchPostDeleted } from '@/lib/server/events/dispatch'
 import { hasUserVoted } from '@/lib/server/domains/posts/post.public'
 import { getMergedPosts, getPostMergeInfo } from '@/lib/server/domains/posts/post.merge'
 import { getPostVoters, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
@@ -116,9 +115,6 @@ const deletePostSchema = z.object({
     .array(
       z.object({
         linkId: z.string(),
-        integrationType: z.string(),
-        externalId: z.string(),
-        externalUrl: z.string().nullable().optional(),
         shouldArchive: z.boolean(),
       })
     )
@@ -405,7 +401,8 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Delete a post (soft delete) with optional cascade archive/close of linked issues
+ * Delete a post (soft delete) with optional cascade archive/close of linked issues.
+ * Note: softDeletePost already dispatches post.deleted — no duplicate dispatch here.
  */
 export const deletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePostSchema)
@@ -415,14 +412,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ roles: ['admin', 'member'] })
       const postId = data.id as PostId
 
-      // Fetch post info before deletion (needed for event dispatch)
-      const post = await db.query.posts.findFirst({
-        where: eq(posts.id, postId),
-        columns: { id: true, title: true, boardId: true },
-        with: { board: { columns: { slug: true } } },
-      })
-
-      // Soft delete the post (always succeeds or throws)
+      // Soft delete the post (always succeeds or throws; dispatches post.deleted event)
       await softDeletePost(postId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
@@ -440,7 +430,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       }> = []
       if (data.cascadeChoices && data.cascadeChoices.length > 0) {
         try {
-          cascadeResults = await executeCascadeDelete(data.cascadeChoices)
+          cascadeResults = await executeCascadeDelete(postId, data.cascadeChoices)
           const failed = cascadeResults.filter((r) => !r.success)
           if (failed.length > 0) {
             console.warn(
@@ -451,23 +441,6 @@ export const deletePostFn = createServerFn({ method: 'POST' })
         } catch (err) {
           console.error(`[fn:posts] deletePostFn: cascade archive error (non-blocking)`, err)
         }
-      }
-
-      // Dispatch post.deleted event for notifications (non-blocking)
-      if (post) {
-        const actor = buildEventActor({
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          email: auth.user.email,
-        })
-        dispatchPostDeleted(actor, {
-          id: postId,
-          title: post.title,
-          boardId: post.boardId,
-          boardSlug: post.board?.slug ?? '',
-        }).catch((err) =>
-          console.error(`[fn:posts] deletePostFn: event dispatch error (non-blocking)`, err)
-        )
       }
 
       return { id: data.id, cascadeResults }

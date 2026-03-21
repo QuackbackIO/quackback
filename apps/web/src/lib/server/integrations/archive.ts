@@ -77,7 +77,8 @@ async function archiveLinearIssue(ctx: ArchiveContext): Promise<ArchiveResult> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      query: `mutation { issueArchive(id: "${ctx.externalId}") { success } }`,
+      query: `mutation ArchiveIssue($id: String!) { issueArchive(id: $id) { success } }`,
+      variables: { id: ctx.externalId },
     }),
   })
 
@@ -356,7 +357,8 @@ async function archiveMondayItem(ctx: ArchiveContext): Promise<ArchiveResult> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      query: `mutation { archive_item(item_id: ${ctx.externalId}) { id } }`,
+      query: `mutation ArchiveItem($itemId: ID!) { archive_item(item_id: $itemId) { id } }`,
+      variables: { itemId: ctx.externalId },
     }),
   })
 

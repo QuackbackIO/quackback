@@ -412,10 +412,18 @@ interface DeletePostInput {
   postId: PostId
   cascadeChoices?: Array<{
     linkId: string
+    shouldArchive: boolean
+  }>
+}
+
+export interface DeletePostResult {
+  id: string
+  cascadeResults?: Array<{
+    linkId: string
     integrationType: string
     externalId: string
-    externalUrl?: string | null
-    shouldArchive: boolean
+    success: boolean
+    error?: string
   }>
 }
 
@@ -423,7 +431,7 @@ export function useDeletePost() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ postId, cascadeChoices }: DeletePostInput) =>
+    mutationFn: async ({ postId, cascadeChoices }: DeletePostInput): Promise<DeletePostResult> =>
       deletePostFn({ data: { id: postId, cascadeChoices } }),
     onSuccess: (_data, { postId }) => {
       // Remove from all list caches
