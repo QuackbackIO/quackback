@@ -10,7 +10,7 @@ import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
-import { db, principal, eq } from '@/lib/server/db'
+import { db, principal, session, eq, gt, and } from '@/lib/server/db'
 
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
@@ -35,17 +35,99 @@ export function hasSessionCookie(): boolean {
 export function hasAuthCredentials(): boolean {
   const headers = getRequestHeaders()
   const cookie = headers.get('cookie') ?? ''
-  const auth = headers.get('authorization') ?? ''
-  return cookie.includes('better-auth.session_token') || auth.startsWith('Bearer ')
+  const authHeader = headers.get('authorization') ?? ''
+  return cookie.includes('better-auth.session_token') || authHeader.startsWith('Bearer ')
 }
 
 /**
  * Get session directly from better-auth (not through server function).
  * This avoids nested server function call issues.
+ *
+ * Falls back to direct database lookup if Better Auth doesn't recognize the session.
+ * This handles sessions created by /api/widget/identify which bypass Better Auth's
+ * internal session creation.
  */
 async function getSessionDirect(): Promise<SessionResult | null> {
   try {
-    return await auth.api.getSession({ headers: getRequestHeaders() })
+    const headers = getRequestHeaders()
+    const cookieHeader = headers.get('cookie') ?? ''
+    const authHeader = headers.get('authorization') ?? ''
+
+    // Try Better Auth's getSession first
+    const baSession = await auth.api.getSession({ headers })
+    if (baSession?.user) {
+      return baSession
+    }
+
+    // Better Auth didn't find a session - try direct DB lookup as fallback
+    // This handles sessions created by widget identify endpoint
+
+    // Check for Bearer token (widget auth)
+    if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const sessionRecord = await db.query.session.findFirst({
+        where: and(eq(session.token, token), gt(session.expiresAt, new Date())),
+        with: { user: true },
+      })
+      if (sessionRecord?.user) {
+        return {
+          user: {
+            id: sessionRecord.user.id,
+            email: sessionRecord.user.email ?? '',
+            name: sessionRecord.user.name,
+            image: sessionRecord.user.image,
+            emailVerified: sessionRecord.user.emailVerified,
+            createdAt: sessionRecord.user.createdAt,
+            updatedAt: sessionRecord.user.updatedAt,
+          },
+          session: {
+            id: sessionRecord.id,
+            userId: sessionRecord.userId,
+            expiresAt: sessionRecord.expiresAt,
+            token: sessionRecord.token,
+            createdAt: sessionRecord.createdAt,
+            updatedAt: sessionRecord.updatedAt,
+            ipAddress: sessionRecord.ipAddress,
+            userAgent: sessionRecord.userAgent,
+          },
+        }
+      }
+    }
+
+    // Check for session cookie (portal auth with widget-created session)
+    const tokenMatch = cookieHeader.match(/better-auth\.session_token=([^;]+)/)
+    if (tokenMatch?.[1]) {
+      const tokenValue = tokenMatch[1]
+      const sessionRecord = await db.query.session.findFirst({
+        where: and(eq(session.token, tokenValue), gt(session.expiresAt, new Date())),
+        with: { user: true },
+      })
+      if (sessionRecord?.user) {
+        return {
+          user: {
+            id: sessionRecord.user.id,
+            email: sessionRecord.user.email ?? '',
+            name: sessionRecord.user.name,
+            image: sessionRecord.user.image,
+            emailVerified: sessionRecord.user.emailVerified,
+            createdAt: sessionRecord.user.createdAt,
+            updatedAt: sessionRecord.user.updatedAt,
+          },
+          session: {
+            id: sessionRecord.id,
+            userId: sessionRecord.userId,
+            expiresAt: sessionRecord.expiresAt,
+            token: sessionRecord.token,
+            createdAt: sessionRecord.createdAt,
+            updatedAt: sessionRecord.updatedAt,
+            ipAddress: sessionRecord.ipAddress,
+            userAgent: sessionRecord.userAgent,
+          },
+        }
+      }
+    }
+
+    return null
   } catch (error) {
     console.error('[auth] Failed to get session:', error)
     return null
