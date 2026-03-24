@@ -257,35 +257,19 @@ export const Route = createFileRoute('/api/widget/identify')({
         ])
         const votedPostIds = Array.from(votedPostIdSet)
 
-        // Set the session cookie so server functions (requireAuth) work for identified users.
-        // This matches Better Auth's cookie format so auth.api.getSession() can read it.
-        const isSecure = new URL(request.url).protocol === 'https:'
-        const cookieParts = [
-          `better-auth.session_token=${sessionToken}`,
-          'Path=/',
-          'SameSite=Lax',
-          `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
-        ]
-        if (isSecure) cookieParts.push('Secure')
-
-        return new Response(
-          JSON.stringify({
-            sessionToken,
-            user: {
-              id: userRecord.id,
-              name: userRecord.name,
-              email: userRecord.email,
-              avatarUrl: userRecord.image ?? null,
-            },
-            votedPostIds,
-          }),
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Set-Cookie': cookieParts.join('; '),
-            },
-          }
-        )
+        // No Set-Cookie — the widget sends the token as Bearer header.
+        // An unsigned cookie here would poison Better Auth's signed-cookie
+        // lookup in same-site deployments (#99).
+        return Response.json({
+          sessionToken,
+          user: {
+            id: userRecord.id,
+            name: userRecord.name,
+            email: userRecord.email,
+            avatarUrl: userRecord.image ?? null,
+          },
+          votedPostIds,
+        })
       },
     },
   },
