@@ -233,17 +233,32 @@ export interface WidgetConfig {
   position?: 'bottom-right' | 'bottom-left'
   /** Whether to require HMAC verification on identify calls */
   identifyVerification?: boolean
+  /** Which tabs to show in the widget bottom bar */
+  tabs?: {
+    feedback?: boolean
+    changelog?: boolean
+  }
 }
 
 /**
  * Public subset of widget config — safe to include in TenantSettings / bootstrap data
  * Does NOT include identifyVerification (admin-only concern)
  */
-export type PublicWidgetConfig = Pick<WidgetConfig, 'enabled' | 'defaultBoard' | 'position'>
+export type PublicWidgetConfig = Pick<
+  WidgetConfig,
+  'enabled' | 'defaultBoard' | 'position' | 'tabs'
+> & {
+  /** Whether HMAC verification is required (derived from identifyVerification) */
+  hmacRequired?: boolean
+}
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   enabled: false,
   identifyVerification: false,
+  tabs: {
+    feedback: true,
+    changelog: false,
+  },
 }
 
 /**
@@ -254,6 +269,10 @@ export interface UpdateWidgetConfigInput {
   defaultBoard?: string
   position?: 'bottom-right' | 'bottom-left'
   identifyVerification?: boolean
+  tabs?: {
+    feedback?: boolean
+    changelog?: boolean
+  }
 }
 
 // =============================================================================

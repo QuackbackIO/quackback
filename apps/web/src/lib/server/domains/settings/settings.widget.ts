@@ -46,6 +46,8 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       enabled: config.enabled,
       defaultBoard: config.defaultBoard,
       position: config.position,
+      tabs: config.tabs,
+      hmacRequired: config.identifyVerification ?? false,
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicWidgetConfig failed:`, error)

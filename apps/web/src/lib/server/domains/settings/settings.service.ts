@@ -323,6 +323,8 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         enabled: widgetConfig.enabled,
         defaultBoard: widgetConfig.defaultBoard,
         position: widgetConfig.position,
+        tabs: widgetConfig.tabs,
+        hmacRequired: widgetConfig.identifyVerification ?? false,
       },
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,

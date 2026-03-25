@@ -435,6 +435,12 @@ const updateWidgetConfigSchema = z.object({
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
   identifyVerification: z.boolean().optional(),
+  tabs: z
+    .object({
+      feedback: z.boolean().optional(),
+      changelog: z.boolean().optional(),
+    })
+    .optional(),
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })

@@ -5,10 +5,12 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
 import { WidgetVoteButton } from '@/components/widget/widget-vote-button'
 import type { PostId } from '@quackback/ids'
-import { WidgetShell } from '@/components/widget/widget-shell'
+import { WidgetShell, type WidgetTab } from '@/components/widget/widget-shell'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetNewPostForm } from '@/components/widget/widget-new-post-form'
 import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
+import { WidgetChangelog } from '@/components/widget/widget-changelog'
+import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
@@ -67,12 +69,17 @@ export const Route = createFileRoute('/widget/')({
         anonymousCommenting: settings?.publicPortalConfig?.features?.anonymousCommenting ?? false,
         anonymousPosting: settings?.publicPortalConfig?.features?.anonymousPosting ?? false,
       },
+      tabs: {
+        feedback: settings?.publicWidgetConfig?.tabs?.feedback ?? true,
+        changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
+      },
+      hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
     }
   },
   component: WidgetPage,
 })
 
-type WidgetView = 'home' | 'new-post' | 'post-detail' | 'success'
+type WidgetView = 'home' | 'new-post' | 'post-detail' | 'success' | 'changelog' | 'changelog-detail'
 
 interface SuccessPost {
   id: string
@@ -83,16 +90,20 @@ interface SuccessPost {
 }
 
 function WidgetPage() {
-  const { posts, statuses, boards, defaultBoard, orgSlug, features } = Route.useLoaderData()
+  const { posts, statuses, boards, defaultBoard, orgSlug, features, tabs, hmacRequired } =
+    Route.useLoaderData()
   const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
-  const [view, setView] = useState<WidgetView>('home')
+  const initialTab: WidgetTab = tabs.feedback ? 'feedback' : 'changelog'
+  const [view, setView] = useState<WidgetView>(initialTab === 'changelog' ? 'changelog' : 'home')
+  const [activeTab, setActiveTab] = useState<WidgetTab>(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBoardSlug, setSelectedBoardSlug] = useState<string | undefined>(defaultBoard)
   const [prefilledTitle, setPrefilledTitle] = useState('')
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   // Merge newly created posts with initial posts so they appear immediately
@@ -112,7 +123,11 @@ function WidgetPage() {
       if (opts.view === 'new-post') {
         if (opts.title) setPrefilledTitle(opts.title)
         if (opts.board) setSelectedBoardSlug(opts.board)
+        setActiveTab('feedback')
         setView('new-post')
+      } else if (opts.view === 'changelog' && tabs.changelog) {
+        setActiveTab('changelog')
+        setView('changelog')
       }
     }
     window.addEventListener('message', handleMessage)
@@ -155,16 +170,50 @@ function WidgetPage() {
   }, [])
 
   const handleBack = useCallback(() => {
+    if (view === 'changelog-detail') {
+      setSelectedChangelogId(null)
+      setView('changelog')
+      return
+    }
     setSelectedPostId(null)
     setSearchQuery('')
     setView('home')
+  }, [view])
+
+  const handleTabChange = useCallback((tab: WidgetTab) => {
+    setActiveTab(tab)
+    if (tab === 'feedback') {
+      setSelectedPostId(null)
+      setSearchQuery('')
+      setView('home')
+    } else {
+      setSelectedChangelogId(null)
+      setView('changelog')
+    }
+  }, [])
+
+  const handleChangelogEntrySelect = useCallback((entryId: string) => {
+    setSelectedChangelogId(entryId)
+    setView('changelog-detail')
   }, [])
 
   // Shell props based on view
-  const shellOnBack = view !== 'home' ? handleBack : undefined
+  const shellOnBack = view !== 'home' && view !== 'changelog' ? handleBack : undefined
 
   return (
-    <WidgetShell orgSlug={orgSlug} onBack={shellOnBack}>
+    <WidgetShell
+      orgSlug={orgSlug}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      onBack={shellOnBack}
+      enabledTabs={tabs}
+    >
+      {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
+
+      {view === 'changelog-detail' && selectedChangelogId && (
+        <WidgetChangelogDetail entryId={selectedChangelogId} />
+      )}
+
       {view === 'home' && (
         <WidgetHome
           initialPosts={allPosts}
@@ -178,6 +227,7 @@ function WidgetPage() {
           onSubmitNew={handleSubmitNew}
           onPostSelect={handlePostSelect}
           anonymousVotingEnabled={features.anonymousVoting}
+          hmacRequired={hmacRequired}
         />
       )}
 
@@ -187,6 +237,7 @@ function WidgetPage() {
           statuses={statuses}
           anonymousVotingEnabled={features.anonymousVoting}
           anonymousCommentingEnabled={features.anonymousCommenting}
+          hmacRequired={hmacRequired}
         />
       )}
 
@@ -197,6 +248,7 @@ function WidgetPage() {
           selectedBoardSlug={selectedBoardSlug}
           onSuccess={handlePostSuccess}
           anonymousPostingEnabled={features.anonymousPosting}
+          hmacRequired={hmacRequired}
         />
       )}
 
