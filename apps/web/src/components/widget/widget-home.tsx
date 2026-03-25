@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MagnifyingGlassIcon, Squares2X2Icon, XMarkIcon } from '@heroicons/react/24/solid'
+import { Squares2X2Icon } from '@heroicons/react/24/solid'
+import { PencilIcon } from '@heroicons/react/24/solid'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -83,6 +84,25 @@ export function WidgetHome({
   const canPost = isIdentified || anonymousPostingEnabled
   const needsEmail = !isIdentified && !hmacRequired && !anonymousPostingEnabled
 
+  // Title input — drives both search and create
+  const [title, setTitle] = useState('')
+  const [expanded, setExpanded] = useState(false)
+
+  // Create form state
+  const [selectedBoardId, setSelectedBoardId] = useState(boards[0]?.id ?? '')
+  const [content, setContent] = useState('')
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Search state — driven by title
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
+
   const handleAuthRequired = useCallback(
     (postId: string) => {
       if (!hmacRequired && onPostSelect) {
@@ -97,34 +117,11 @@ export function WidgetHome({
     [hmacRequired, onPostSelect]
   )
 
-  // Input + search state
-  const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
-  const [isSearching, setIsSearching] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
-
-  // Expanded create form state
-  const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(boards[0]?.id ?? '')
-  const [content, setContent] = useState('')
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
-
-  // Auto-focus input on mount
-  useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 100)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // Debounced search
+  // Debounced search driven by title
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
 
-    const q = query.trim()
+    const q = title.trim()
     if (!q) {
       setSearchResults(null)
       setIsSearching(false)
@@ -152,35 +149,16 @@ export function WidgetHome({
       } finally {
         setIsSearching(false)
       }
-    }, 250)
+    }, 300)
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [query])
-
-  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Escape') {
-      if (expanded) {
-        e.nativeEvent.stopImmediatePropagation()
-        collapseForm()
-      } else if (query) {
-        e.nativeEvent.stopImmediatePropagation()
-        setQuery('')
-      }
-    }
-    if (e.key === 'Enter' && query.trim() && !expanded) {
-      e.preventDefault()
-      expandForm()
-    }
-  }
-
-  function expandForm() {
-    setExpanded(true)
-  }
+  }, [title])
 
   function collapseForm() {
     setExpanded(false)
+    setTitle('')
     setContent('')
     setEmail('')
     setName('')
@@ -189,7 +167,7 @@ export function WidgetHome({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!query.trim() || !selectedBoardId || isSubmitting) return
+    if (!title.trim() || !selectedBoardId || isSubmitting) return
     if (needsEmail && !email.trim()) return
 
     setIsSubmitting(true)
@@ -226,7 +204,7 @@ export function WidgetHome({
       const result = await createPublicPostFn({
         data: {
           boardId: selectedBoardId,
-          title: query.trim(),
+          title: title.trim(),
           content: content.trim(),
           metadata: metadata ?? undefined,
         },
@@ -248,8 +226,6 @@ export function WidgetHome({
         board: result.board,
       })
 
-      // Reset form
-      setQuery('')
       collapseForm()
     } catch {
       setError('Network error. Please try again.')
@@ -258,61 +234,20 @@ export function WidgetHome({
     }
   }
 
-  const isSearchMode = query.trim().length > 0
-  const displayPosts = isSearchMode ? (searchResults?.posts ?? []) : initialPosts
-  const sectionLabel = isSearchMode
-    ? isSearching
-      ? 'Searching...'
-      : displayPosts.length > 0
-        ? 'Similar ideas'
-        : null
-    : 'Popular ideas'
-
-  const truncatedQuery = query.trim().length > 30 ? query.trim().slice(0, 30) + '...' : query.trim()
-
-  const canSubmitForm = query.trim() && (!needsEmail || email.trim()) && (canPost || needsEmail)
+  const isTyping = title.trim().length > 0
+  const displayPosts = isTyping ? (searchResults?.posts ?? []) : initialPosts
+  const canSubmitForm = title.trim() && (!needsEmail || email.trim()) && (canPost || needsEmail)
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
-      {/* Title input — doubles as search */}
-      <div className="px-3 pt-1 pb-1 shrink-0">
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleInputKeyDown}
-            placeholder="What's your idea?"
-            className={cn(
-              'w-full pl-8 pr-8 py-2 text-sm rounded-lg border bg-muted/30 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-background transition-colors',
-              expanded ? 'border-primary font-semibold bg-background' : 'border-border'
-            )}
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => {
-                setQuery('')
-                if (expanded) collapseForm()
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-sm hover:bg-muted transition-colors"
-              aria-label="Clear"
-            >
-              <XMarkIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Expanded create form */}
-      {expanded && (
-        <div className="px-3 shrink-0">
-          <div className="px-1 pb-2 space-y-2">
-            {boards.length > 1 && (
-              <div className="flex items-center">
-                <span className="text-[11px] text-muted-foreground/70">Posting to</span>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="px-3 pt-2 pb-3">
+          {/* Create card — portal-style expandable */}
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            {/* Board selector — visible when expanded */}
+            {expanded && boards.length > 1 && (
+              <div className="flex items-center px-3 pt-2.5 pb-0.5">
+                <span className="text-[11px] text-muted-foreground mr-1">Posting to</span>
                 <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
                   <SelectTrigger
                     size="xs"
@@ -330,163 +265,245 @@ export function WidgetHome({
                 </Select>
               </div>
             )}
-            <textarea
-              placeholder="Add more details..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              maxLength={10000}
-              rows={3}
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 border-0 outline-none caret-primary resize-none leading-relaxed"
-            />
+
+            {/* Icon + Title row */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5">
+              {!expanded && (
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                  <PencilIcon className="w-3.5 h-3.5 text-primary" />
+                </div>
+              )}
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="What's your idea?"
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  if (!expanded && e.target.value) setExpanded(true)
+                }}
+                onFocus={() => {
+                  if (title && !expanded) setExpanded(true)
+                }}
+                className={cn(
+                  'flex-1 bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground/50 placeholder:font-normal caret-primary',
+                  expanded ? 'text-base font-semibold' : 'text-sm'
+                )}
+              />
+            </div>
+
+            {/* Expanded: details textarea */}
+            {expanded && (
+              <div className="px-3 pb-2">
+                <textarea
+                  placeholder="Add more details..."
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  maxLength={10000}
+                  rows={3}
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 border-0 outline-none caret-primary resize-none leading-relaxed"
+                />
+              </div>
+            )}
+
+            {/* Expanded: similar posts inside the card */}
+            {expanded &&
+              isTyping &&
+              !isSearching &&
+              searchResults &&
+              searchResults.posts.length > 0 && (
+                <div className="px-3 pb-2">
+                  <p className="text-[10px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
+                    <LightBulbIcon className="w-3 h-3" />
+                    Similar ideas
+                  </p>
+                  <div className="space-y-0.5">
+                    {searchResults.posts.slice(0, 3).map((post) => {
+                      const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
+                      return (
+                        <div
+                          key={post.id}
+                          className="flex items-center gap-2 rounded-md hover:bg-muted/30 transition-colors px-1.5 py-1 cursor-pointer"
+                          onClick={() => onPostSelect?.(post.id)}
+                        >
+                          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                            <WidgetVoteButton
+                              postId={post.id as PostId}
+                              voteCount={post.voteCount}
+                              onBeforeVote={canVote ? ensureSession : undefined}
+                              onAuthRequired={
+                                !canVote ? () => handleAuthRequired(post.id) : undefined
+                              }
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground line-clamp-1">
+                              {post.title}
+                            </p>
+                            {status && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                <span
+                                  className="size-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
             {error && (
-              <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {error}
+              <div className="px-3 pb-2">
+                <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {error}
+                </div>
+              </div>
+            )}
+
+            {/* Expanded: footer with identity + submit */}
+            {expanded && (
+              <div className="border-t border-border bg-muted/30">
+                {needsEmail && (
+                  <div className="px-3 pt-2 pb-1 flex gap-2">
+                    <input
+                      type="email"
+                      required
+                      placeholder="Your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="flex-1 min-w-0 bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Name (optional)"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-[100px] bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors"
+                    />
+                  </div>
+                )}
+                <div className="flex items-center justify-between px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground truncate mr-2">
+                    {user ? (
+                      <>
+                        Posting as{' '}
+                        <span className="font-medium text-foreground">
+                          {user.name || user.email}
+                        </span>
+                      </>
+                    ) : needsEmail ? (
+                      email.trim() ? (
+                        <>
+                          Posting as{' '}
+                          <span className="font-medium text-foreground">{email.trim()}</span>
+                        </>
+                      ) : (
+                        'Your email is required'
+                      )
+                    ) : (
+                      'Posting anonymously'
+                    )}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={collapseForm}
+                      className="px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!canSubmitForm || isSubmitting}
+                      className="px-3 py-1 text-[11px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Submit'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* Post list */}
-      <ScrollArea className="flex-1 min-h-0 px-3 pb-2">
-        {sectionLabel && (
-          <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
-            {sectionLabel}
-          </p>
-        )}
+          {/* Post list — below the card */}
+          {!expanded && (
+            <div className="mt-2">
+              <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
+                {isTyping
+                  ? isSearching
+                    ? 'Searching...'
+                    : displayPosts.length > 0
+                      ? 'Similar ideas'
+                      : 'No matching ideas'
+                  : 'Popular ideas'}
+              </p>
 
-        {!isSearchMode && !expanded && displayPosts.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-            <p className="text-sm font-medium text-muted-foreground/70">No ideas yet</p>
-            <p className="text-xs text-muted-foreground/50 mt-0.5">Be the first to share one!</p>
-          </div>
-        )}
-
-        {displayPosts.length > 0 && (
-          <div className="space-y-1">
-            {displayPosts.map((post) => {
-              const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
-
-              return (
-                <div
-                  key={post.id}
-                  className="flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer"
-                  onClick={() => onPostSelect?.(post.id)}
-                >
-                  <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                    <WidgetVoteButton
-                      postId={post.id as PostId}
-                      voteCount={post.voteCount}
-                      onBeforeVote={canVote ? ensureSession : undefined}
-                      onAuthRequired={!canVote ? () => handleAuthRequired(post.id) : undefined}
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground line-clamp-1">
-                      {post.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {status && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          <span
-                            className="size-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          {status.name}
-                        </span>
-                      )}
-                      {post.board && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
-                          <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
-                          {post.board.name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+              {!isTyping && displayPosts.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-sm font-medium text-muted-foreground/70">No ideas yet</p>
+                  <p className="text-xs text-muted-foreground/50 mt-0.5">
+                    Be the first to share one!
+                  </p>
                 </div>
-              )
-            })}
-          </div>
-        )}
+              )}
 
-        {/* Search mode: show create CTA */}
-        {isSearchMode && !isSearching && searchResults && !expanded && (
-          <div
-            className={cn(
-              'mt-2 px-1',
-              searchResults.posts.length > 0 && 'border-t border-border/50 pt-2'
-            )}
-          >
-            {searchResults.posts.length === 0 && (
-              <p className="text-sm text-muted-foreground mb-1">No matching ideas found</p>
-            )}
-            {searchResults.posts.length > 0 && (
-              <p className="text-xs text-muted-foreground/60 mb-0.5">Don&apos;t see your idea?</p>
-            )}
-            <button
-              type="button"
-              onClick={expandForm}
-              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Submit &ldquo;{truncatedQuery}&rdquo; as new idea &rarr;
-            </button>
-          </div>
-        )}
-      </ScrollArea>
-
-      {/* Pinned footer — only when expanded */}
-      {expanded && (
-        <div className="border-t border-border bg-muted/30 shrink-0">
-          {needsEmail && (
-            <div className="px-4 pt-2.5 pb-1 flex gap-2">
-              <input
-                type="email"
-                required
-                placeholder="Your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 min-w-0 bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors"
-              />
-              <input
-                type="text"
-                placeholder="Name (optional)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-[110px] bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors"
-              />
+              {displayPosts.length > 0 && (
+                <div className="space-y-0.5">
+                  {displayPosts.map((post) => {
+                    const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
+                    return (
+                      <div
+                        key={post.id}
+                        className="flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer"
+                        onClick={() => onPostSelect?.(post.id)}
+                      >
+                        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                          <WidgetVoteButton
+                            postId={post.id as PostId}
+                            voteCount={post.voteCount}
+                            onBeforeVote={canVote ? ensureSession : undefined}
+                            onAuthRequired={
+                              !canVote ? () => handleAuthRequired(post.id) : undefined
+                            }
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-medium text-foreground line-clamp-1">
+                            {post.title}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {status && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                <span
+                                  className="size-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: status.color }}
+                                />
+                                {status.name}
+                              </span>
+                            )}
+                            {post.board && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+                                <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
+                                {post.board.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
-          <div className="flex items-center justify-between px-4 py-2.5">
-            <p className="text-xs text-muted-foreground truncate mr-2">
-              {user ? (
-                <>
-                  Posting as{' '}
-                  <span className="font-medium text-foreground">{user.name || user.email}</span>
-                </>
-              ) : needsEmail ? (
-                email.trim() ? (
-                  <>
-                    Posting as <span className="font-medium text-foreground">{email.trim()}</span>
-                  </>
-                ) : (
-                  'Your email is required'
-                )
-              ) : (
-                'Posting anonymously'
-              )}
-            </p>
-            <button
-              type="submit"
-              disabled={!canSubmitForm || isSubmitting}
-              className="px-4 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
-            </button>
-          </div>
         </div>
-      )}
+      </ScrollArea>
     </form>
   )
 }
