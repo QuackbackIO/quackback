@@ -210,47 +210,45 @@ export function WidgetNewPostForm({
         </div>
 
         {needsEmail && (
-          <>
-            <div>
-              <label htmlFor="widget-email" className="text-xs font-medium text-muted-foreground">
-                Email
-              </label>
-              <input
-                id="widget-email"
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="widget-name" className="text-xs font-medium text-muted-foreground">
-                Name (optional)
-              </label>
-              <input
-                id="widget-name"
-                type="text"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-          </>
+          <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-2.5">
+            <p className="text-[11px] font-medium text-muted-foreground">About you</p>
+            <input
+              id="widget-email"
+              type="email"
+              required
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+            />
+            <input
+              id="widget-name"
+              type="text"
+              placeholder="Name (optional)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={inputClass}
+            />
+            <p className="text-[10px] text-muted-foreground/60">
+              We&apos;ll notify you when there are updates.
+            </p>
+          </div>
         )}
 
         {error && <p className="text-xs text-destructive">{error}</p>}
       </ScrollArea>
 
       <div className="px-4 py-3 border-t border-border bg-muted/30 flex items-center justify-between shrink-0">
-        <span className="text-xs text-muted-foreground truncate">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
+          {(user || (needsEmail && email.trim())) && (
+            <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground shrink-0">
+              {(user?.name || name.trim() || email.trim() || '?').charAt(0).toUpperCase()}
+            </span>
+          )}
           {user
-            ? `Posting as ${user.name || user.email}`
+            ? user.name || user.email
             : needsEmail
-              ? email.trim() || 'Enter your email'
+              ? email.trim() || 'Your email is required'
               : 'Posting anonymously'}
         </span>
         <button
