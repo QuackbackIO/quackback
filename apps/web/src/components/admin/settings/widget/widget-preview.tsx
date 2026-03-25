@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
-import { LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/outline'
 import {
-  LightBulbIcon as LightBulbIconSolid,
-  NewspaperIcon as NewspaperIconSolid,
+  ChevronUpIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  LightBulbIcon,
+  NewspaperIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -118,12 +119,8 @@ export function WidgetPreview({
                       : 'text-muted-foreground/60 hover:text-muted-foreground'
                   )}
                 >
-                  {activeTab === 'feedback' ? (
-                    <LightBulbIconSolid className="w-3.5 h-3.5" />
-                  ) : (
-                    <LightBulbIcon className="w-3.5 h-3.5" />
-                  )}
-                  <span className="text-[7px] font-medium">Feedback</span>
+                  <LightBulbIcon className="w-3.5 h-3.5" />
+                  <span className="text-[8px] font-medium">Feedback</span>
                 </button>
                 <button
                   type="button"
@@ -135,12 +132,8 @@ export function WidgetPreview({
                       : 'text-muted-foreground/60 hover:text-muted-foreground'
                   )}
                 >
-                  {activeTab === 'changelog' ? (
-                    <NewspaperIconSolid className="w-3.5 h-3.5" />
-                  ) : (
-                    <NewspaperIcon className="w-3.5 h-3.5" />
-                  )}
-                  <span className="text-[7px] font-medium">Changelog</span>
+                  <NewspaperIcon className="w-3.5 h-3.5" />
+                  <span className="text-[8px] font-medium">Changelog</span>
                 </button>
               </div>
             )}

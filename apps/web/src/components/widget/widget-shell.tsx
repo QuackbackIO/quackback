@@ -1,12 +1,7 @@
 'use client'
 
 import { useEffect, type ReactNode } from 'react'
-import { ArrowLeftIcon, XMarkIcon } from '@heroicons/react/24/solid'
-import { LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/outline'
-import {
-  LightBulbIcon as LightBulbIconSolid,
-  NewspaperIcon as NewspaperIconSolid,
-} from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, XMarkIcon, LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { useWidgetAuth } from './widget-auth-provider'
 
@@ -95,12 +90,8 @@ export function WidgetShell({
                   : 'text-muted-foreground/60 hover:text-muted-foreground'
               )}
             >
-              {activeTab === 'feedback' ? (
-                <LightBulbIconSolid className="w-5 h-5" />
-              ) : (
-                <LightBulbIcon className="w-5 h-5" />
-              )}
-              <span className="text-[10px] font-medium">Feedback</span>
+              <LightBulbIcon className="w-5 h-5" />
+              <span className="text-xs font-medium">Feedback</span>
             </button>
             <button
               type="button"
@@ -112,12 +103,8 @@ export function WidgetShell({
                   : 'text-muted-foreground/60 hover:text-muted-foreground'
               )}
             >
-              {activeTab === 'changelog' ? (
-                <NewspaperIconSolid className="w-5 h-5" />
-              ) : (
-                <NewspaperIcon className="w-5 h-5" />
-              )}
-              <span className="text-[10px] font-medium">Changelog</span>
+              <NewspaperIcon className="w-5 h-5" />
+              <span className="text-xs font-medium">Changelog</span>
             </button>
           </div>
         )}
