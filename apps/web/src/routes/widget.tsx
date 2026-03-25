@@ -11,7 +11,7 @@ const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
 
 export const Route = createFileRoute('/widget')({
   loader: async ({ context }) => {
-    const { settings } = context
+    const { settings, session } = context
 
     const org = settings?.settings
     if (!org) {
@@ -28,6 +28,20 @@ export const Route = createFileRoute('/widget')({
     const hasThemeConfig = brandingConfig.light || brandingConfig.dark
     const themeStyles = hasThemeConfig ? generateThemeCSS(brandingConfig) : ''
 
+    // If user is logged into the portal, pass their identity (not the token)
+    // to the widget so it can exchange for a bearer token client-side.
+    // The token is NOT serialized into the HTML — the client fetches it via
+    // a server function that reads the session cookie.
+    const portalUser =
+      session?.user && !session.user.isAnonymous
+        ? {
+            id: session.user.id,
+            name: session.user.name,
+            email: session.user.email,
+            avatarUrl: session.user.image ?? null,
+          }
+        : null
+
     return {
       org,
       brandingData,
@@ -35,6 +49,7 @@ export const Route = createFileRoute('/widget')({
       themeStyles,
       customCss,
       googleFontsUrl: getGoogleFontsUrl(brandingConfig),
+      portalUser,
     }
   },
   head: () => ({ meta: [] }),
@@ -42,10 +57,10 @@ export const Route = createFileRoute('/widget')({
 })
 
 function WidgetLayout() {
-  const { themeStyles, customCss, googleFontsUrl } = Route.useLoaderData()
+  const { themeStyles, customCss, googleFontsUrl, portalUser } = Route.useLoaderData()
 
   return (
-    <WidgetAuthProvider>
+    <WidgetAuthProvider portalUser={portalUser}>
       {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}

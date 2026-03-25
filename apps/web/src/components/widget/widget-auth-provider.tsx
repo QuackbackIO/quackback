@@ -47,7 +47,13 @@ export function useWidgetAuth(): WidgetAuthContextValue {
   return ctx
 }
 
-export function WidgetAuthProvider({ children }: { children: ReactNode }) {
+interface WidgetAuthProviderProps {
+  /** Portal user identity — if set, the widget exchanges for a bearer token on mount */
+  portalUser?: WidgetUser | null
+  children: ReactNode
+}
+
+export function WidgetAuthProvider({ portalUser, children }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
   const [user, setUser] = useState<WidgetUser | null>(null)
   const [sessionVersion, setSessionVersion] = useState(0)
@@ -139,6 +145,16 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
     },
     [applyIdentifyResult]
   )
+
+  // If user is logged into the portal, exchange their identity for a bearer token on mount.
+  // This runs once — subsequent SDK identify() calls will override it.
+  const portalHydratedRef = useRef(false)
+  useEffect(() => {
+    if (portalUser && !portalHydratedRef.current && !sessionReadyRef.current) {
+      portalHydratedRef.current = true
+      identifyWithEmail(portalUser.email, portalUser.name)
+    }
+  }, [portalUser, identifyWithEmail])
 
   const closeWidget = useCallback(() => {
     window.parent.postMessage({ type: 'quackback:close' }, '*')

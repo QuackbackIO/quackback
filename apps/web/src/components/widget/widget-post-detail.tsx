@@ -292,7 +292,7 @@ export function WidgetPostDetail({
 
           {!canComment && !post.isCommentsLocked && !hmacRequired && (
             <div className="mb-3" data-email-capture>
-              <WidgetEmailCapture heading="Enter your email to vote and comment" />
+              <WidgetEmailCapture heading="Enter your email to vote and comment" compact />
             </div>
           )}
 
