@@ -42,6 +42,7 @@ interface WidgetHomeProps {
   onSubmitNew: (title: string) => void
   onPostSelect?: (postId: string) => void
   anonymousVotingEnabled?: boolean
+  hmacRequired?: boolean
 }
 
 interface SearchResult {
@@ -61,18 +62,24 @@ export function WidgetHome({
   onSubmitNew,
   onPostSelect,
   anonymousVotingEnabled = true,
+  hmacRequired = false,
 }: WidgetHomeProps) {
   const { ensureSession, isIdentified } = useWidgetAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const canVote = isIdentified || anonymousVotingEnabled
 
-  const openPostOnPortal = useCallback((post: WidgetPost) => {
-    const slug = post.board?.slug
-    const url = slug
-      ? `${window.location.origin}/b/${slug}/posts/${post.id}`
-      : `${window.location.origin}`
-    window.parent.postMessage({ type: 'quackback:navigate', url }, '*')
-  }, [])
+  const handleAuthRequired = useCallback(
+    (postId: string) => {
+      if (!hmacRequired && onPostSelect) {
+        // Navigate to post detail where the email capture form is shown
+        onPostSelect(postId)
+      } else {
+        const url = `${window.location.origin}/auth/login`
+        window.parent.postMessage({ type: 'quackback:navigate', url }, '*')
+      }
+    },
+    [hmacRequired, onPostSelect]
+  )
 
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
@@ -295,7 +302,7 @@ export function WidgetHome({
                       postId={post.id as PostId}
                       voteCount={post.voteCount}
                       onBeforeVote={canVote ? ensureSession : undefined}
-                      onAuthRequired={!canVote ? () => openPostOnPortal(post) : undefined}
+                      onAuthRequired={!canVote ? () => handleAuthRequired(post.id) : undefined}
                     />
                   </div>
 

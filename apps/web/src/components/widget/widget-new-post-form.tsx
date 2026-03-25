@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useWidgetAuth } from './widget-auth-provider'
+import { WidgetEmailCapture } from './widget-email-capture'
 
 interface WidgetNewPostFormProps {
   boards: { id: string; name: string; slug: string }[]
@@ -23,6 +24,7 @@ interface WidgetNewPostFormProps {
     board: { id: string; name: string; slug: string }
   }) => void
   anonymousPostingEnabled?: boolean
+  hmacRequired?: boolean
 }
 
 export function WidgetNewPostForm({
@@ -31,6 +33,7 @@ export function WidgetNewPostForm({
   selectedBoardSlug,
   onSuccess,
   anonymousPostingEnabled = false,
+  hmacRequired = false,
 }: WidgetNewPostFormProps) {
   const { isIdentified, user, emitEvent, metadata } = useWidgetAuth()
   const canPost = isIdentified || anonymousPostingEnabled
@@ -61,10 +64,9 @@ export function WidgetNewPostForm({
   }, [prefilledTitle])
 
   if (!canPost) {
-    const boardSlug = selectedBoardSlug || defaultBoard?.slug || boards[0]?.slug
-    const portalUrl = boardSlug
-      ? `${window.location.origin}/b/${boardSlug}`
-      : window.location.origin
+    if (!hmacRequired) {
+      return <WidgetEmailCapture heading="Enter your email to share an idea" />
+    }
 
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -72,7 +74,10 @@ export function WidgetNewPostForm({
         <button
           type="button"
           onClick={() =>
-            window.parent.postMessage({ type: 'quackback:navigate', url: portalUrl }, '*')
+            window.parent.postMessage(
+              { type: 'quackback:navigate', url: `${window.location.origin}/auth/login` },
+              '*'
+            )
           }
           className="text-xs text-primary hover:text-primary/80 transition-colors mt-1"
         >

@@ -15,6 +15,7 @@ import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
 import { useWidgetAuth } from './widget-auth-provider'
+import { WidgetEmailCapture } from './widget-email-capture'
 import type { PostId } from '@quackback/ids'
 
 interface StatusInfo {
@@ -28,6 +29,7 @@ interface WidgetPostDetailProps {
   statuses: StatusInfo[]
   anonymousVotingEnabled?: boolean
   anonymousCommentingEnabled?: boolean
+  hmacRequired?: boolean
 }
 
 export function WidgetPostDetail({
@@ -35,6 +37,7 @@ export function WidgetPostDetail({
   statuses,
   anonymousVotingEnabled = true,
   anonymousCommentingEnabled = false,
+  hmacRequired = false,
 }: WidgetPostDetailProps) {
   const { isIdentified, user, ensureSession, emitEvent, sessionVersion } = useWidgetAuth()
   const queryClient = useQueryClient()
@@ -199,7 +202,17 @@ export function WidgetPostDetail({
             postId={postId as PostId}
             voteCount={post.voteCount}
             onBeforeVote={canVote ? ensureSession : undefined}
-            onAuthRequired={!canVote ? handleViewOnPortal : undefined}
+            onAuthRequired={
+              !canVote
+                ? hmacRequired
+                  ? handleViewOnPortal
+                  : () => {
+                      // Scroll to the email capture form in the comments section
+                      const el = scrollAreaRef.current?.querySelector('[data-email-capture]')
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }
+                : undefined
+            }
             compact
           />
           <button
@@ -277,7 +290,13 @@ export function WidgetPostDetail({
             </div>
           )}
 
-          {!canComment && !post.isCommentsLocked && (
+          {!canComment && !post.isCommentsLocked && !hmacRequired && (
+            <div className="mb-3" data-email-capture>
+              <WidgetEmailCapture heading="Enter your email to vote and comment" />
+            </div>
+          )}
+
+          {!canComment && !post.isCommentsLocked && hmacRequired && (
             <button
               type="button"
               onClick={handleViewOnPortal}

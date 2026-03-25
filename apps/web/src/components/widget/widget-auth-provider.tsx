@@ -28,6 +28,8 @@ interface WidgetAuthContextValue {
   isIdentified: boolean
   /** Ensures a session exists (identified or anonymous). Returns true if ready. */
   ensureSession: () => Promise<boolean>
+  /** Identify by email (inline capture). Returns true on success. */
+  identifyWithEmail: (email: string, name?: string) => Promise<boolean>
   closeWidget: () => void
   /** Emit an event to the parent SDK via postMessage */
   emitEvent: <T extends WidgetEventName>(name: T, payload: WidgetEventMap[T]) => void
@@ -91,6 +93,53 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
     return p
   }, [storeToken])
 
+  /** Shared success path for both SDK identify and inline email capture */
+  const applyIdentifyResult = useCallback(
+    (result: { sessionToken: string; user: WidgetUser; votedPostIds?: string[] }) => {
+      storeToken(result.sessionToken)
+      setUser(result.user)
+      if (result.votedPostIds) {
+        queryClient.setQueryData(
+          widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current),
+          new Set<string>(result.votedPostIds)
+        )
+      }
+      window.parent.postMessage(
+        { type: 'quackback:identify-result', success: true, user: result.user },
+        '*'
+      )
+      window.parent.postMessage({ type: 'quackback:auth-change', user: result.user }, '*')
+    },
+    [storeToken, queryClient]
+  )
+
+  const identifyPromiseRef = useRef<Promise<boolean> | null>(null)
+  const identifyWithEmail = useCallback(
+    (email: string, name?: string): Promise<boolean> => {
+      if (identifyPromiseRef.current) return identifyPromiseRef.current
+
+      const p = (async () => {
+        try {
+          const response = await fetch('/api/widget/identify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: email, email, name: name || email.split('@')[0] }),
+          })
+          if (!response.ok) return false
+          applyIdentifyResult(await response.json())
+          return true
+        } catch {
+          return false
+        } finally {
+          identifyPromiseRef.current = null
+        }
+      })()
+      identifyPromiseRef.current = p
+      return p
+    },
+    [applyIdentifyResult]
+  )
+
   const closeWidget = useCallback(() => {
     window.parent.postMessage({ type: 'quackback:close' }, '*')
   }, [])
@@ -126,23 +175,7 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
-        const result = await response.json()
-        storeToken(result.sessionToken)
-        setUser(result.user)
-
-        // Seed voted posts cache immediately — no second round-trip needed
-        if (result.votedPostIds) {
-          queryClient.setQueryData(
-            widgetQueryKeys.votedPosts.bySession(sessionVersionRef.current),
-            new Set<string>(result.votedPostIds)
-          )
-        }
-
-        window.parent.postMessage(
-          { type: 'quackback:identify-result', success: true, user: result.user },
-          '*'
-        )
-        window.parent.postMessage({ type: 'quackback:auth-change', user: result.user }, '*')
+        applyIdentifyResult(await response.json())
       } catch {
         window.parent.postMessage(
           { type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' },
@@ -220,19 +253,29 @@ export function WidgetAuthProvider({ children }: { children: ReactNode }) {
     window.parent.postMessage({ type: 'quackback:ready' }, '*')
 
     return () => window.removeEventListener('message', handleMessage)
-  }, [storeToken])
+  }, [storeToken, applyIdentifyResult])
 
   const contextValue = useMemo(
     () => ({
       user,
       isIdentified,
       ensureSession,
+      identifyWithEmail,
       closeWidget,
       emitEvent,
       metadata: widgetMetadata,
       sessionVersion,
     }),
-    [user, isIdentified, ensureSession, closeWidget, emitEvent, widgetMetadata, sessionVersion]
+    [
+      user,
+      isIdentified,
+      ensureSession,
+      identifyWithEmail,
+      closeWidget,
+      emitEvent,
+      widgetMetadata,
+      sessionVersion,
+    ]
   )
 
   return <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>
