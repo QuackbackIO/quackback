@@ -120,7 +120,7 @@ function WidgetPage() {
       if (!msg || typeof msg !== 'object' || msg.type !== 'quackback:open' || !msg.data) return
 
       const opts = msg.data as { view?: string; title?: string; board?: string }
-      if (opts.view === 'new-post') {
+      if (opts.view === 'new-post' && tabs.feedback) {
         if (opts.title) setPrefilledTitle(opts.title)
         if (opts.board) setSelectedBoardSlug(opts.board)
         setActiveTab('feedback')
