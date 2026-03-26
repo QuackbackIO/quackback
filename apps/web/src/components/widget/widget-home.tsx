@@ -445,14 +445,14 @@ export function WidgetHome({
                           placeholder="Your email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className={`flex-[3] min-w-0 ${identityInputCls}`}
+                          className={`flex-[3_1_0%] min-w-0 ${identityInputCls}`}
                         />
                         <input
                           type="text"
                           placeholder="Name (optional)"
                           value={name}
                           onChange={(e) => setName(e.target.value)}
-                          className={`flex-[2] min-w-0 ${identityInputCls}`}
+                          className={`flex-[2_1_0%] min-w-0 ${identityInputCls}`}
                         />
                       </div>
                     )}
