@@ -25,8 +25,8 @@ function StatItem({
         {value ?? '-'}
       </span>
       <div className="flex items-center gap-0.5 mt-0.5">
-        <Icon className={cn('text-muted-foreground', compact ? 'w-2.5 h-2.5' : 'w-3 h-3')} />
-        <span className={cn('text-muted-foreground', compact ? 'text-[9px]' : 'text-[10px]')}>
+        <Icon className={cn('text-muted-foreground', compact ? 'w-3 h-3' : 'w-3.5 h-3.5')} />
+        <span className={cn('text-muted-foreground', compact ? 'text-[10px]' : 'text-xs')}>
           {label}
         </span>
       </div>
@@ -50,7 +50,9 @@ export function UserStatsBar({ compact, className, headers }: UserStatsBarProps)
   return (
     <div className={cn('flex items-center justify-around', className)}>
       <StatItem icon={LightBulbIcon} value={data?.ideas} label="Ideas" compact={compact} />
+      <div className={cn('w-px bg-border', compact ? 'h-6' : 'h-8')} />
       <StatItem icon={ChevronUpIcon} value={data?.votes} label="Votes" compact={compact} />
+      <div className={cn('w-px bg-border', compact ? 'h-6' : 'h-8')} />
       <StatItem
         icon={ChatBubbleLeftIcon}
         value={data?.comments}
