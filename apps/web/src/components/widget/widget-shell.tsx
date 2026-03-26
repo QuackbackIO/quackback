@@ -112,17 +112,17 @@ export function WidgetShell({
           <a
             href={`https://quackback.io?utm_campaign=${encodeURIComponent(orgSlug || 'unknown')}&utm_content=widget&utm_medium=referral&utm_source=powered-by`}
             target="_blank"
-            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            className="group inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"
           >
+            <span>Powered by</span>
             <img
               src="/logo.png"
               alt=""
-              width={12}
-              height={12}
-              className="opacity-60"
-              aria-hidden="true"
+              width={11}
+              height={11}
+              className="opacity-60 group-hover:opacity-100 transition-opacity"
             />
-            Powered by Quackback
+            <span className="font-medium">Quackback</span>
           </a>
         </div>
       </div>
