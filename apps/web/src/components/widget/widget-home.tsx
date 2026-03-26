@@ -178,7 +178,7 @@ export function WidgetHome({
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular'],
+    queryKey: ['widget', 'posts', 'popular', 'top'],
     queryFn: ({ pageParam }) =>
       listPublicPostsFn({ data: { sort: 'top', page: pageParam, limit: 20 } }),
     initialPageParam: 1,
@@ -198,8 +198,8 @@ export function WidgetHome({
             title: p.title,
             voteCount: p.voteCount,
             statusId: p.statusId ?? null,
-            commentCount: 'commentCount' in p ? (p.commentCount as number) : 0,
-            board: 'board' in p ? (p.board as WidgetPost['board']) : undefined,
+            commentCount: (p as WidgetPost).commentCount ?? 0,
+            board: (p as WidgetPost).board,
           })
         )
       ) ?? [],
