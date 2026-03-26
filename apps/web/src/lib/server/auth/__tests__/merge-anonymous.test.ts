@@ -10,16 +10,16 @@ const mockSelectFrom = vi.fn(() => ({ where: mockSelectWhere }))
 const mockSelect = vi.fn(() => ({ from: mockSelectFrom }))
 
 const mockDeleteWhere = vi.fn()
-const mockDelete = vi.fn(() => ({ where: mockDeleteWhere }))
+const mockDelete = vi.fn((_table?: unknown) => ({ where: mockDeleteWhere }))
 
 const mockUpdateWhere = vi.fn()
-const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }))
-const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }))
+const mockUpdateSet = vi.fn((_values?: unknown) => ({ where: mockUpdateWhere }))
+const mockUpdate = vi.fn((_table?: unknown) => ({ set: mockUpdateSet }))
 
 // The transaction function just calls the callback with itself (same API)
 const mockTx = {
-  select: (...args: unknown[]) => {
-    mockSelect(...args)
+  select: (..._args: unknown[]) => {
+    mockSelect()
     return { from: mockSelectFrom }
   },
   delete: (table: { __name?: string }) => {
@@ -34,16 +34,12 @@ const mockTx = {
   },
 }
 
-const mockTransaction = vi.fn(async (fn: (tx: typeof mockTx) => Promise<void>) => {
-  await fn(mockTx)
-})
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockTransaction = vi.fn(async (fn: any) => fn(mockTx))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
-    transaction: (...args: unknown[]) =>
-      mockTransaction(
-        ...(args as [typeof mockTransaction extends (...args: infer P) => unknown ? P[0] : never])
-      ),
+    transaction: (fn: unknown) => mockTransaction(fn),
   },
   votes: { principalId: 'principalId', postId: 'postId', __name: 'votes' },
   comments: { principalId: 'principalId', id: 'id', __name: 'comments' },
