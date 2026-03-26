@@ -66,8 +66,8 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <ScrollArea className="flex-1 min-h-0 px-3 pb-2">
+    <ScrollArea className="flex-1 min-h-0 h-full">
+      <div className="px-3 pt-2 pb-3">
         <div className="space-y-1">
           {entries.map((entry) => (
             <button
@@ -98,7 +98,7 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
             )}
           </div>
         )}
-      </ScrollArea>
-    </div>
+      </div>
+    </ScrollArea>
   )
 }
