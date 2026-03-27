@@ -237,47 +237,172 @@ New server function: `getAnalyticsData`
 
 **Route**: `/admin/analytics`
 
-**Sidebar**: New "Analytics" entry with chart icon, positioned between "Help Center" and "Users".
+**Sidebar**: New "Analytics" entry with a `BarChart3` (lucide) icon, positioned between "Help Center" and "Users".
 
-**Page layout**:
+#### Component Library
+
+Install the shadcn/ui `chart` component (`bunx shadcn@latest add chart`). This provides:
+
+- `ChartContainer` -- responsive wrapper with CSS variable theming
+- `ChartTooltip` + `ChartTooltipContent` -- styled tooltips matching the admin theme
+- `ChartLegend` + `ChartLegendContent` -- accessible chart legends
+- `ChartConfig` type -- defines color/label mapping per data series
+
+All charts use these wrappers around recharts primitives. No raw recharts components in page code -- everything goes through the shadcn chart layer for consistent theming, dark mode support, and accessible tooltips.
+
+#### Full Page Wireframe
 
 ```
-+----------------------------------------------------------+
-| Analytics                          [7d] [30d] [90d] [12m] |
-+----------------------------------------------------------+
-| [Posts: 142 +12%] [Votes: 891 +8%] [Comments: 67 -3%] [Users: 23 +15%] |
-+----------------------------------------------------------+
-|                                                          |
-|  Activity Over Time (LineChart)                          |
-|  - Posts line (blue)                                     |
-|  - Votes line (green)                                    |
-|  - Comments line (orange)                                |
-|                                                          |
-+----------------------------+-----------------------------+
-| Status Distribution        | Board Breakdown             |
-| (Horizontal BarChart)      | (Horizontal BarChart)       |
-| Uses status colors         |                             |
-+----------------------------+-----------------------------+
-| Source Breakdown            | Changelog                   |
-| (PieChart)                 | Total views + reactions      |
-| portal / widget / api      | in period                   |
-+----------------------------+-----------------------------+
-|                                                          |
-|  Top Posts (Table)                                       |
-|  Rank | Title | Votes | Comments | Board | Status        |
-|  Rows link to post detail                                |
-|                                                          |
-+----------------------------------------------------------+
-|                                                          |
-|  Top Contributors (Table)                                |
-|  Avatar | Name | Posts | Votes | Comments | Total        |
-|                                                          |
-+----------------------------------------------------------+
++------------------------------------------------------------------------+
+|  SIDEBAR  |                                                            |
+|           |  Analytics                                                 |
+|  ...      |                                                            |
+|  Feedback |  +------------------------------------------------------+ |
+|  Roadmap  |  |                  Period Selector                      | |
+|  Changelog|  |  [ 7 days ]  [ 30 days ]  [ 90 days ]  [ 12 months ] | |
+|  Help Ctr |  +------------------------------------------------------+ |
+| >Analytics|                                                            |
+|  Users    |  +------------+ +------------+ +------------+ +----------+ |
+|  Settings |  | Posts      | | Votes      | | Comments   | | Users    | |
+|           |  |            | |            | |            | |          | |
+|           |  |   142      | |   891      | |    67      | |   23     | |
+|           |  |  +12.4%  ^ | |   +8.1%  ^| |  -3.2%  v | | +15.0% ^ | |
+|           |  +------------+ +------------+ +------------+ +----------+ |
+|           |                                                            |
+|           |  +------------------------------------------------------+ |
+|           |  | Activity Over Time                                    | |
+|           |  |                                                       | |
+|           |  |  900 +                                                | |
+|           |  |      |            ..                                   | |
+|           |  |  600 +         ..    ..        Votes (green)           | |
+|           |  |      |      ..         ..  ..                         | |
+|           |  |  300 +   ..               .                           | |
+|           |  |      |                                                | |
+|           |  |  150 + --*---*---*--*---*---*- Posts (blue)            | |
+|           |  |      | __x___x___x__x___x___x_ Comments (orange)     | |
+|           |  |    0 +----+----+----+----+----+----+---               | |
+|           |  |      Mar 1   5    10   15   20   25  27               | |
+|           |  |                                                       | |
+|           |  |  [Legend: * Posts  . Votes  x Comments ]              | |
+|           |  +------------------------------------------------------+ |
+|           |                                                            |
+|           |  +-------------------------+ +-------------------------+  |
+|           |  | Status Distribution     | | Feedback by Board       |  |
+|           |  |                         | |                         |  |
+|           |  | Open        ========= 45| | Feature Req  ======= 38|  |
+|           |  | Under Review  ====    18| | Bug Reports    ====  22|  |
+|           |  | Planned       =====   24| | Integrations    ==   12|  |
+|           |  | In Progress    ===    14| | UI/UX            =    8|  |
+|           |  | Complete      =======  32| | Other            =    6|  |
+|           |  | Closed         ====   19| |                         |  |
+|           |  |                         | |                         |  |
+|           |  | (bars use status colors)| | (bars use board colors) |  |
+|           |  +-------------------------+ +-------------------------+  |
+|           |                                                            |
+|           |  +-------------------------+ +-------------------------+  |
+|           |  | Feedback Sources        | | Changelog               |  |
+|           |  |                         | |                         |  |
+|           |  |       .......           | |  Views     1,247        |  |
+|           |  |     ..  Portal ..       | |  Reactions    89        |  |
+|           |  |    .    62%      .      | |                         |  |
+|           |  |   .  .........    .     | |  "Last computed         |  |
+|           |  |    . Widget 28% .       | |   42 minutes ago"       |  |
+|           |  |     ..........         | |                         |  |
+|           |  |      API 10%           | |                         |  |
+|           |  +-------------------------+ +-------------------------+  |
+|           |                                                            |
+|           |  +------------------------------------------------------+ |
+|           |  | Top Posts                                             | |
+|           |  |                                                       | |
+|           |  | #  Title                    Votes  Cmnts Board Status | |
+|           |  | -- ------------------------ ------ ----- ----- ------ | |
+|           |  | 1  Dark mode support          128    24  UI/UX Plnnd | |
+|           |  | 2  API rate limit config       94    18  API   Open  | |
+|           |  | 3  Slack integration           87    31  Integ InProg| |
+|           |  | 4  Export to CSV               76    12  Feat  Open  | |
+|           |  | 5  Mobile responsive view      65     8  UI/UX Plnnd | |
+|           |  | ...                                                   | |
+|           |  +------------------------------------------------------+ |
+|           |                                                            |
+|           |  +------------------------------------------------------+ |
+|           |  | Top Contributors                                     | |
+|           |  |                                                       | |
+|           |  | Avatar  Name            Posts  Votes  Comments  Total | |
+|           |  | ------  --------------  -----  -----  --------  ----- | |
+|           |  | [JD]    Jane Doe            8     42        15     65 | |
+|           |  | [AS]    Alex Smith          5     38        21     64 | |
+|           |  | [MK]    Maria Kim           3     51         8     62 | |
+|           |  | [BW]    Bob Wilson          12     22        14     48 | |
+|           |  | [CL]    Chris Lee           2     35        10     47 | |
+|           |  +------------------------------------------------------+ |
+|           |                                                            |
++------------------------------------------------------------------------+
 ```
 
-**Granularity**: Date x-axis uses daily ticks for 7d/30d, weekly for 90d, monthly for 12m.
+#### Summary Cards Detail
 
-**Tech**: recharts (already installed), shadcn/ui cards and tables, TanStack Query for data fetching.
+Each summary card is a shadcn `Card` with:
+
+- Muted label text (e.g. "Posts") at top
+- Large numeric value (e.g. "142") as the focal point
+- Delta badge below: green with up arrow for positive, red with down arrow for negative
+- Delta compares the selected period to the equivalent previous period (e.g. last 30d vs the 30d before that)
+
+```
++-------------------+
+| Posts             |  <-- CardDescription, text-muted-foreground, text-sm
+|                   |
+|        142        |  <-- text-3xl font-bold tracking-tight
+|                   |
+|     +12.4%  ^     |  <-- Badge variant: green/destructive, text-xs
++-------------------+
+```
+
+#### Activity Chart Detail
+
+- `ChartContainer` wrapping a recharts `AreaChart` (filled area, not just lines -- more visually polished)
+- Smooth `monotone` curve type for organic feel
+- Semi-transparent fill under each line (10-15% opacity of the line color)
+- `ChartTooltip` shows all three values on hover with formatted date
+- `ChartLegend` below the chart, interactive -- click to toggle series visibility
+- X-axis: daily ticks for 7d/30d, weekly for 90d, monthly for 12m
+- Y-axis: auto-scaled, abbreviated labels (1.2k not 1200)
+- Grid lines: subtle horizontal only, no vertical
+
+#### Status & Board Charts Detail
+
+- Horizontal `BarChart` inside `ChartContainer`
+- Status bars use the status color from the DB (each status has a hex color)
+- Board bars use a generated palette from the chart config
+- Rounded bar corners (`radius={4}`)
+- Labels on left, count on right of each bar
+- `ChartTooltip` on hover showing count and percentage of total
+- Sorted descending by count
+
+#### Source Breakdown Detail
+
+- `PieChart` with `Pie` using `innerRadius` for a donut style
+- Center label shows total count
+- `ChartTooltip` on hover per segment
+- `ChartLegend` below with source name + percentage
+- Three colors from chart config: portal, widget, API
+
+#### Tables Detail
+
+- shadcn `Table` component with `TableHeader` / `TableBody` / `TableRow`
+- Top Posts: rank column is muted, title is a link to the post detail page, board and status shown as colored badges
+- Top Contributors: avatar (initials fallback), name, three metric columns, total column sorted descending
+- No pagination needed (capped at 10 and 5 rows respectively)
+
+#### UX Principles
+
+- **Instant feedback**: Period selector switches optimistically -- show stale data with a subtle loading indicator while new data fetches, don't blank the page
+- **Empty states**: Each chart card has a friendly empty state ("No data for this period" with a muted illustration) rather than broken/empty charts
+- **Loading state**: On initial load, show skeleton placeholders matching the card shapes (shadcn `Skeleton` component)
+- **Freshness indicator**: Small muted text at bottom of page: "Last updated 42 minutes ago" from `computed_at`
+- **Responsive**: Summary cards stack 2x2 on medium screens, 1-column on mobile. Chart grid goes single-column below `lg` breakpoint
+- **Consistent card style**: Every section is wrapped in a `Card` with `CardHeader` (title) and `CardContent` (chart/table). Uniform padding and spacing throughout.
+- **Dark mode**: All chart colors defined via CSS variables in `ChartConfig` so they adapt automatically
 
 ### 3e. Changelog Analytics
 
@@ -291,14 +416,14 @@ New server function: `getAnalyticsData`
 
 ## Scope Summary
 
-| Workstream       | Schema changes          | New files            | Modified files  |
-| ---------------- | ----------------------- | -------------------- | --------------- |
-| Auth cleanup     | None                    | None                 | ~8 files        |
-| Lazy sessions    | None                    | None                 | ~4 widget files |
-| Analytics tables | 2 new tables + 1 column | Migration file       | Schema index    |
-| Analytics job    | None                    | Queue + worker file  | `startup.ts`    |
-| Analytics API    | None                    | Server function file | None            |
-| Analytics UI     | None                    | Route + components   | Admin sidebar   |
+| Workstream       | Schema changes           | New files            | Modified files  |
+| ---------------- | ------------------------ | -------------------- | --------------- |
+| Auth cleanup     | None                     | None                 | ~8 files        |
+| Lazy sessions    | None                     | None                 | ~4 widget files |
+| Analytics tables | 2 new tables + 1 column  | Migration file       | Schema index    |
+| Analytics job    | None                     | Queue + worker file  | `startup.ts`    |
+| Analytics API    | None                     | Server function file | None            |
+| Analytics UI     | shadcn `chart` component | Route + components   | Admin sidebar   |
 
 ## Ordering
 
