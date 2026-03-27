@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftIcon, LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, XMarkIcon, LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
@@ -29,6 +29,7 @@ export function WidgetShell({
 }: WidgetShellProps) {
   const showTabBar = enabledTabs.feedback && enabledTabs.changelog
   const { user, closeWidget } = useWidgetAuth()
+  const showCloseButton = new URLSearchParams(window.location.search).get('showClose') === '1'
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
@@ -60,7 +61,19 @@ export function WidgetShell({
             </h2>
           )}
         </div>
-        <div className="flex items-center gap-1">{user && <UserAvatarPopover user={user} />}</div>
+        <div className="flex items-center gap-1">
+          {user && <UserAvatarPopover user={user} />}
+          {showCloseButton && (
+            <button
+              type="button"
+              onClick={closeWidget}
+              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+              aria-label="Close feedback widget"
+            >
+              <XMarkIcon className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden min-h-0">{children}</div>

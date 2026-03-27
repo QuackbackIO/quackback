@@ -169,8 +169,10 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     if (panel) return;
 
     var placement = (config && config.placement) || "right";
-    var boardParam = config && config.defaultBoard ? "?board=" + encodeURIComponent(config.defaultBoard) : "";
-    var iframeUrl = WIDGET_URL + boardParam;
+    var boardParam = config && config.defaultBoard ? "board=" + encodeURIComponent(config.defaultBoard) : "";
+    var closeParam = config && config.trigger === false ? "showClose=1" : "";
+    var queryParts = [boardParam, closeParam].filter(Boolean);
+    var iframeUrl = WIDGET_URL + (queryParts.length ? "?" + queryParts.join("&") : "");
 
     // Backdrop (mobile only)
     backdrop = createElement("div", {
@@ -273,9 +275,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
     if (trigger && isIdentified && !(config && config.trigger === false)) {
       trigger.setAttribute("aria-expanded", "false");
-      if (isMobile) {
-        trigger.style.display = "flex";
-      } else {
+      trigger.style.display = "flex"; // Always restore — handles mobile→desktop resize edge case
+      if (!isMobile) {
         trigger.setAttribute("aria-label", "Open feedback widget");
         trigger.innerHTML = CHAT_ICON;
       }
