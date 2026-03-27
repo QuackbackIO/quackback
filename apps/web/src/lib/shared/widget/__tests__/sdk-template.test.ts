@@ -115,9 +115,10 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('trigger.innerHTML = CHAT_ICON')
   })
 
-  it('hides trigger on mobile when panel opens', () => {
+  it('hides trigger on mobile when panel opens (conditional on isMobile)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // Mobile still hides trigger since full-screen panel covers it
+    // Mobile still hides trigger since full-screen panel covers it — must be conditional
+    expect(result).toContain('if (isMobile) {')
     expect(result).toContain('trigger.style.display = "none"')
   })
 
@@ -126,7 +127,7 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('if (isOpen) dispatch("close")')
   })
 
-  it('updates aria-label when open and closed', () => {
+  it('sets aria-label to "Close feedback widget" when panel opens on desktop', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     expect(result).toContain('Close feedback widget')
   })
