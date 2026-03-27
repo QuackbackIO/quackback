@@ -92,4 +92,42 @@ describe('buildWidgetSDK', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     expect(result).toContain('window.innerWidth < 640')
   })
+
+  it('positions desktop panel above the trigger button (bottom: 80px)', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    // Panel must be offset above the trigger (24px margin + 48px trigger + 8px gap)
+    expect(result).toContain('bottom: "80px"')
+  })
+
+  it('defines CHAT_ICON and CLOSE_ICON variables for icon swap', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('var CHAT_ICON =')
+    expect(result).toContain('var CLOSE_ICON =')
+  })
+
+  it('swaps trigger icon to CLOSE_ICON when panel opens on desktop', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('trigger.innerHTML = CLOSE_ICON')
+  })
+
+  it('restores trigger icon to CHAT_ICON when panel closes on desktop', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('trigger.innerHTML = CHAT_ICON')
+  })
+
+  it('hides trigger on mobile when panel opens', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    // Mobile still hides trigger since full-screen panel covers it
+    expect(result).toContain('trigger.style.display = "none"')
+  })
+
+  it('trigger click dispatches close when panel is open', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('if (isOpen) dispatch("close")')
+  })
+
+  it('updates aria-label when open and closed', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('Close feedback widget')
+  })
 })
