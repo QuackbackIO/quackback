@@ -64,7 +64,7 @@ export function AnalyticsPage() {
         </div>
 
         {/* Summary cards */}
-        <AnalyticsSummaryCards summary={data.summary} />
+        <AnalyticsSummaryCards summary={data.summary} dailyStats={data.dailyStats} />
 
         {/* Activity over time */}
         <Card>
