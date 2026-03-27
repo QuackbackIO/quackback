@@ -1,12 +1,19 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { Suspense } from 'react'
 import { AnalyticsPage } from '@/components/admin/analytics/analytics-page'
+import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
 export const Route = createFileRoute('/admin/analytics')({
   component: AnalyticsRoute,
 })
 
 function AnalyticsRoute() {
+  const { settings } = Route.useRouteContext()
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  if (!flags?.analytics) {
+    return <Navigate to="/admin/feedback" />
+  }
+
   return (
     <Suspense fallback={<AnalyticsPageSkeleton />}>
       <AnalyticsPage />

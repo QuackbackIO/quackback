@@ -10,6 +10,8 @@ import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
 import { WidgetChangelog } from '@/components/widget/widget-changelog'
 import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
+import { WidgetHelp } from '@/components/widget/widget-help'
+import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
@@ -68,13 +70,21 @@ export const Route = createFileRoute('/widget/')({
       tabs: {
         feedback: settings?.publicWidgetConfig?.tabs?.feedback ?? true,
         changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
+        help: (settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false,
       },
     }
   },
   component: WidgetPage,
 })
 
-type WidgetView = 'home' | 'post-detail' | 'success' | 'changelog' | 'changelog-detail'
+type WidgetView =
+  | 'home'
+  | 'post-detail'
+  | 'success'
+  | 'changelog'
+  | 'changelog-detail'
+  | 'help'
+  | 'help-detail'
 
 interface SuccessPost {
   id: string
@@ -89,12 +99,15 @@ function WidgetPage() {
   const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
-  const initialTab: WidgetTab = tabs.feedback ? 'feedback' : 'changelog'
-  const [view, setView] = useState<WidgetView>(initialTab === 'changelog' ? 'changelog' : 'home')
+  const initialTab: WidgetTab = tabs.feedback ? 'feedback' : tabs.changelog ? 'changelog' : 'help'
+  const [view, setView] = useState<WidgetView>(
+    initialTab === 'changelog' ? 'changelog' : initialTab === 'help' ? 'help' : 'home'
+  )
   const [activeTab, setActiveTab] = useState<WidgetTab>(initialTab)
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
+  const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -113,11 +126,14 @@ function WidgetPage() {
       if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
+      } else if (opts.view === 'help' && tabs.help) {
+        setActiveTab('help')
+        setView('help')
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [tabs.changelog])
+  }, [tabs.changelog, tabs.help])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
     setCreatedPosts((prev) => [
@@ -146,6 +162,11 @@ function WidgetPage() {
       setView('changelog')
       return
     }
+    if (view === 'help-detail') {
+      setSelectedHelpSlug(null)
+      setView('help')
+      return
+    }
     setSelectedPostId(null)
     setView('home')
   }, [view])
@@ -155,9 +176,12 @@ function WidgetPage() {
     if (tab === 'feedback') {
       setSelectedPostId(null)
       setView('home')
-    } else {
+    } else if (tab === 'changelog') {
       setSelectedChangelogId(null)
       setView('changelog')
+    } else {
+      setSelectedHelpSlug(null)
+      setView('help')
     }
   }, [])
 
@@ -166,7 +190,13 @@ function WidgetPage() {
     setView('changelog-detail')
   }, [])
 
-  const shellOnBack = view !== 'home' && view !== 'changelog' ? handleBack : undefined
+  const handleHelpArticleSelect = useCallback((articleSlug: string) => {
+    setSelectedHelpSlug(articleSlug)
+    setView('help-detail')
+  }, [])
+
+  const shellOnBack =
+    view !== 'home' && view !== 'changelog' && view !== 'help' ? handleBack : undefined
 
   return (
     <WidgetShell
@@ -180,6 +210,12 @@ function WidgetPage() {
 
       {view === 'changelog-detail' && selectedChangelogId && (
         <WidgetChangelogDetail entryId={selectedChangelogId} />
+      )}
+
+      {view === 'help' && <WidgetHelp onArticleSelect={handleHelpArticleSelect} />}
+
+      {view === 'help-detail' && selectedHelpSlug && (
+        <WidgetHelpDetail articleSlug={selectedHelpSlug} />
       )}
 
       {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}

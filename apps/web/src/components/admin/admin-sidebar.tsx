@@ -97,8 +97,15 @@ function NavItem({
 
 export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
   const router = useRouter()
-  const { session } = useRouteContext({ from: '__root__' })
+  const { session, settings } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const flags = settings?.featureFlags as { analytics?: boolean; helpCenter?: boolean } | undefined
+
+  const filteredNavItems = navItems.filter((item) => {
+    if (item.href === '/admin/analytics') return flags?.analytics ?? false
+    if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
+    return true
+  })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const user = session?.user
@@ -131,7 +138,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
 
           {/* Main Navigation */}
           <nav className="flex flex-col items-center gap-3">
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <NavItem
                 key={item.href}
                 href={item.href}
@@ -232,7 +239,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
               </SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1.5 px-4 py-3">
-              {navItems.map((item) => {
+              {filteredNavItems.map((item) => {
                 const isActive = isNavActive(pathname, item.href)
                 const Icon = item.icon
                 const badge = item.hasBadge ? incomingCount : 0
