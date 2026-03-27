@@ -1,20 +1,11 @@
 /**
- * Changelog Domain - Public API
+ * Changelog Domain - Types Only
  *
- * This module exports all public-facing types and functions for changelog operations.
+ * Import service functions directly:
+ *   - './changelog.service' for CRUD
+ *   - './changelog.query' for list/search
+ *   - './changelog.public' for public-facing queries
  */
-
-// Service functions
-export {
-  createChangelog,
-  updateChangelog,
-  deleteChangelog,
-  getChangelogById,
-} from './changelog.service'
-export { listChangelogs, searchShippedPosts } from './changelog.query'
-export { getPublicChangelogById, listPublicChangelogs } from './changelog.public'
-
-// Types
 export type {
   CreateChangelogInput,
   UpdateChangelogInput,
