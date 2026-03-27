@@ -38,5 +38,5 @@ export {
   DEFAULT_WIDGET_CONFIG,
 } from './settings.types'
 
-// Consolidated tenant settings type
-export type { TenantSettings, SettingsBrandingData } from './settings.service'
+// Consolidated tenant settings type (in types.ts to avoid server dep leak via barrel)
+export type { TenantSettings, SettingsBrandingData } from './settings.types'

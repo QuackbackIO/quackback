@@ -320,6 +320,51 @@ export interface PublicPortalConfig {
 }
 
 // =============================================================================
+// Branding Data (client-safe subset of settings)
+// =============================================================================
+
+export interface SettingsBrandingData {
+  name: string
+  logoUrl: string | null
+  faviconUrl: string | null
+  headerLogoUrl: string | null
+  headerDisplayMode: string | null
+  headerDisplayName: string | null
+}
+
+// =============================================================================
+// Tenant Settings (consolidated settings object)
+// =============================================================================
+
+/**
+ * Consolidated tenant settings, parsed from the database settings row.
+ * This interface is client-safe (no DB types) and can be imported from the barrel.
+ */
+export interface TenantSettings {
+  /** Raw settings record from database (opaque on client, typed on server) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  settings: Record<string, any>
+  /** Workspace name */
+  name: string
+  /** Workspace slug */
+  slug: string
+  authConfig: AuthConfig
+  portalConfig: PortalConfig
+  brandingConfig: BrandingConfig
+  developerConfig: DeveloperConfig
+  /** Custom CSS for portal styling */
+  customCss: string
+  publicAuthConfig: PublicAuthConfig
+  publicPortalConfig: PublicPortalConfig
+  /** Public widget config (no secret, safe for client) */
+  publicWidgetConfig: PublicWidgetConfig
+  /** Feature flags for experimental features */
+  featureFlags: FeatureFlags
+  brandingData: SettingsBrandingData
+  faviconData: { url: string } | null
+}
+
+// =============================================================================
 // Feature Flags (Experimental features)
 // =============================================================================
 

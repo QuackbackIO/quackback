@@ -12,8 +12,9 @@ import type {
   PublicPortalConfig,
   DeveloperConfig,
   UpdateDeveloperConfigInput,
-  PublicWidgetConfig,
   FeatureFlags,
+  TenantSettings,
+  SettingsBrandingData,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
@@ -228,37 +229,8 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   }
 }
 
-export interface SettingsBrandingData {
-  name: string
-  logoUrl: string | null
-  faviconUrl: string | null
-  headerLogoUrl: string | null
-  headerDisplayMode: string | null
-  headerDisplayName: string | null
-}
-
-export interface TenantSettings {
-  /** Raw settings record from database */
-  settings: Awaited<ReturnType<typeof requireSettings>>
-  /** Workspace name (convenience property) */
-  name: string
-  /** Workspace slug (convenience property) */
-  slug: string
-  authConfig: AuthConfig
-  portalConfig: PortalConfig
-  brandingConfig: BrandingConfig
-  developerConfig: DeveloperConfig
-  /** Custom CSS for portal styling */
-  customCss: string
-  publicAuthConfig: PublicAuthConfig
-  publicPortalConfig: PublicPortalConfig
-  /** Public widget config (no secret, safe for client) */
-  publicWidgetConfig: PublicWidgetConfig
-  /** Feature flags for experimental features */
-  featureFlags: FeatureFlags
-  brandingData: SettingsBrandingData
-  faviconData: { url: string } | null
-}
+// TenantSettings and SettingsBrandingData are defined in settings.types.ts
+// to prevent client-side barrel imports from pulling in this server-only module.
 
 export async function getTenantSettings(): Promise<TenantSettings | null> {
   try {
