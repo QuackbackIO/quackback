@@ -25,7 +25,7 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
         <span>Contributor</span>
         <span>Activity</span>
       </div>
@@ -35,10 +35,10 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
           return (
             <div
               key={c.principalId}
-              className="relative flex items-center gap-2 overflow-hidden py-1.5"
+              className="relative flex items-center gap-2.5 overflow-hidden py-2"
             >
               <div
-                className="absolute inset-y-0 left-0 rounded-sm bg-primary/10"
+                className="absolute inset-y-0 left-0 rounded-sm bg-foreground/[0.06]"
                 style={{ width: `${pct}%` }}
               />
               <Avatar
@@ -49,7 +49,7 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
               <span className="relative flex-1 truncate text-sm">
                 {c.displayName ?? 'Anonymous'}
               </span>
-              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+              <span className="relative ml-4 shrink-0 font-mono text-sm tabular-nums text-muted-foreground">
                 {c.total}
               </span>
             </div>

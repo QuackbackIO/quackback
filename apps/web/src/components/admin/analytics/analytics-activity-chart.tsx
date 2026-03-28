@@ -32,28 +32,41 @@ export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: Acti
   }
 
   return (
-    <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
+    <ChartContainer
+      key={activeMetric}
+      config={chartConfig}
+      className="aspect-auto h-[260px] w-full"
+    >
       <AreaChart data={dailyStats} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.4} />
         <XAxis
           dataKey="date"
           tickLine={false}
           axisLine={false}
-          tickMargin={8}
+          tickMargin={10}
+          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
           tickFormatter={formatDate}
         />
-        <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          allowDecimals={false}
+          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+          width={32}
+        />
         <ChartTooltip
           content={<ChartTooltipContent labelFormatter={(label) => formatDate(String(label))} />}
         />
         <Area
-          key={activeMetric}
-          type="monotone"
+          type="natural"
           dataKey={activeMetric}
           stroke={`var(--color-${activeMetric})`}
           fill={`var(--color-${activeMetric})`}
-          fillOpacity={0.12}
-          strokeWidth={2}
+          fillOpacity={0.05}
+          strokeWidth={1.5}
+          dot={false}
+          activeDot={{ r: 3, strokeWidth: 0 }}
         />
       </AreaChart>
     </ChartContainer>

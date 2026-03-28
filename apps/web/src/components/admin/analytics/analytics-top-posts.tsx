@@ -25,7 +25,7 @@ export function AnalyticsTopPosts({ posts }: TopPostsProps) {
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
         <span>Post</span>
         <span>Votes</span>
       </div>
@@ -33,9 +33,9 @@ export function AnalyticsTopPosts({ posts }: TopPostsProps) {
         {posts.map((post) => {
           const pct = (post.voteCount / maxVotes) * 100
           return (
-            <div key={post.postId} className="relative flex items-center overflow-hidden py-1.5">
+            <div key={post.postId} className="relative flex items-center overflow-hidden py-2">
               <div
-                className="absolute inset-y-0 left-0 rounded-sm bg-primary/10"
+                className="absolute inset-y-0 left-0 rounded-sm bg-foreground/[0.06]"
                 style={{ width: `${pct}%` }}
               />
               <Link
@@ -45,7 +45,7 @@ export function AnalyticsTopPosts({ posts }: TopPostsProps) {
               >
                 {post.title}
               </Link>
-              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+              <span className="relative ml-4 shrink-0 font-mono text-sm tabular-nums text-muted-foreground">
                 {post.voteCount}
               </span>
             </div>

@@ -32,18 +32,32 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
             type="button"
             onClick={() => onMetricChange(key)}
             className={cn(
-              'relative flex-1 px-5 py-4 text-left transition-colors',
-              isActive ? 'bg-muted/40' : 'hover:bg-muted/20'
+              'group relative flex-1 px-5 py-5 text-left transition-colors duration-150',
+              !isActive && 'hover:bg-muted/20'
             )}
+            style={
+              isActive
+                ? { backgroundColor: `color-mix(in srgb, ${color} 6%, transparent)` }
+                : undefined
+            }
           >
-            <p className="mb-1.5 text-xs text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tracking-tight">{total.toLocaleString()}</p>
-            {isActive && (
-              <div
-                className="absolute bottom-0 left-0 right-0 h-0.5"
-                style={{ background: color }}
-              />
-            )}
+            <p className="mb-2 text-[10px] font-medium tracking-widest uppercase text-muted-foreground">
+              {label}
+            </p>
+            <p className="font-mono text-[2rem] leading-none font-semibold tabular-nums tracking-tight">
+              {total.toLocaleString()}
+            </p>
+            {/* Active indicator */}
+            <div
+              className={cn(
+                'absolute bottom-0 left-0 right-0 h-[3px] transition-opacity duration-150',
+                isActive ? 'opacity-100' : 'opacity-0'
+              )}
+              style={{
+                background: color,
+                boxShadow: `0 0 10px 0 ${color}`,
+              }}
+            />
           </button>
         )
       })}
