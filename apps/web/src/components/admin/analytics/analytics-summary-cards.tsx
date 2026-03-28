@@ -53,10 +53,7 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
                 'absolute bottom-0 left-0 right-0 h-[3px] transition-opacity duration-150',
                 isActive ? 'opacity-100' : 'opacity-0'
               )}
-              style={{
-                background: color,
-                boxShadow: `0 0 10px 0 ${color}`,
-              }}
+              style={{ background: color }}
             />
           </button>
         )
