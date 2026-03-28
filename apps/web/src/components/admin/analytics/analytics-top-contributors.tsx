@@ -24,25 +24,38 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
   const maxTotal = Math.max(...contributors.map((c) => c.total), 1)
 
   return (
-    <div className="flex flex-col divide-y divide-border">
-      {contributors.map((c) => {
-        const barWidth = (c.total / maxTotal) * 100
-        return (
-          <div key={c.principalId} className="flex items-center gap-3 py-2.5">
-            <Avatar src={c.avatarUrl} name={c.displayName} className="size-7 shrink-0 text-xs" />
-            <span className="flex-1 truncate text-sm font-medium">
-              {c.displayName ?? 'Anonymous'}
-            </span>
-            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+    <div>
+      <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
+        <span>Contributor</span>
+        <span>Activity</span>
+      </div>
+      <div className="flex flex-col">
+        {contributors.map((c) => {
+          const pct = (c.total / maxTotal) * 100
+          return (
+            <div
+              key={c.principalId}
+              className="relative flex items-center gap-2 overflow-hidden py-1.5"
+            >
               <div
-                className="h-full rounded-full bg-primary/50"
-                style={{ width: `${barWidth}%` }}
+                className="absolute inset-y-0 left-0 rounded-sm bg-primary/10"
+                style={{ width: `${pct}%` }}
               />
+              <Avatar
+                src={c.avatarUrl}
+                name={c.displayName}
+                className="relative size-5 shrink-0 text-[10px]"
+              />
+              <span className="relative flex-1 truncate text-sm">
+                {c.displayName ?? 'Anonymous'}
+              </span>
+              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                {c.total}
+              </span>
             </div>
-            <span className="w-8 text-right text-sm font-bold tabular-nums">{c.total}</span>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }

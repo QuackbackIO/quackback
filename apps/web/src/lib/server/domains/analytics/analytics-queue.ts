@@ -4,6 +4,7 @@
 
 import { Queue, Worker } from 'bullmq'
 import { config } from '@/lib/server/config'
+import { refreshAnalytics } from './analytics.service'
 
 const QUEUE_NAME = '{analytics}'
 const CONCURRENCY = 1
@@ -37,7 +38,6 @@ async function initializeQueue() {
     QUEUE_NAME,
     async (job) => {
       if (job.data.type === 'refresh-analytics') {
-        const { refreshAnalytics } = await import('./analytics.service')
         await refreshAnalytics()
       }
     },

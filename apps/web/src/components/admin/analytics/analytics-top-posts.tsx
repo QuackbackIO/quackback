@@ -1,13 +1,4 @@
 import { Link } from '@tanstack/react-router'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 
 interface TopPostsProps {
   posts: Array<{
@@ -30,50 +21,37 @@ export function AnalyticsTopPosts({ posts }: TopPostsProps) {
     )
   }
 
+  const maxVotes = Math.max(...posts.map((p) => p.voteCount), 1)
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-12">#</TableHead>
-          <TableHead>Title</TableHead>
-          <TableHead className="w-20 text-right">Votes</TableHead>
-          <TableHead className="w-24 text-right">Comments</TableHead>
-          <TableHead className="w-28">Board</TableHead>
-          <TableHead className="w-28">Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {posts.map((post) => (
-          <TableRow key={post.postId}>
-            <TableCell className="text-muted-foreground">{post.rank}</TableCell>
-            <TableCell>
+    <div>
+      <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
+        <span>Post</span>
+        <span>Votes</span>
+      </div>
+      <div className="flex flex-col">
+        {posts.map((post) => {
+          const pct = (post.voteCount / maxVotes) * 100
+          return (
+            <div key={post.postId} className="relative flex items-center overflow-hidden py-1.5">
+              <div
+                className="absolute inset-y-0 left-0 rounded-sm bg-primary/10"
+                style={{ width: `${pct}%` }}
+              />
               <Link
                 to="/admin/feedback"
                 search={{ post: post.postId }}
-                className="font-medium hover:underline"
+                className="relative flex-1 truncate px-1 text-sm hover:text-primary transition-colors"
               >
                 {post.title}
               </Link>
-            </TableCell>
-            <TableCell className="text-right tabular-nums">{post.voteCount}</TableCell>
-            <TableCell className="text-right tabular-nums">{post.commentCount}</TableCell>
-            <TableCell>
-              {post.boardName ? (
-                <Badge variant="secondary">{post.boardName}</Badge>
-              ) : (
-                <span className="text-muted-foreground">-</span>
-              )}
-            </TableCell>
-            <TableCell>
-              {post.statusName ? (
-                <Badge variant="outline">{post.statusName}</Badge>
-              ) : (
-                <span className="text-muted-foreground">-</span>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                {post.voteCount}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }

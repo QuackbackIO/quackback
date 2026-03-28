@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon, InboxIcon, DocumentTextIcon, UsersIcon } from '@heroicons/react/24/solid'
-import { AnalyticsSummaryCards } from './analytics-summary-cards'
+import { AnalyticsSummaryCards, METRICS, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsActivityChart } from './analytics-activity-chart'
 import { AnalyticsStatusChart } from './analytics-status-chart'
 import { AnalyticsBoardChart } from './analytics-board-chart'
@@ -34,11 +34,14 @@ const navItems: Array<{ key: Section; label: string; icon: React.ElementType }> 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
   const [section, setSection] = useState<Section>('overview')
+  const [activeMetric, setActiveMetric] = useState<MetricKey>('posts')
 
   const { data, isLoading } = useQuery({
     ...analyticsQueries.data(period),
     placeholderData: keepPreviousData,
   })
+
+  const activeColor = METRICS.find((m) => m.key === activeMetric)?.color ?? 'hsl(var(--chart-1))'
 
   return (
     <div className="flex h-full bg-background">
@@ -46,7 +49,6 @@ export function AnalyticsPage() {
       <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-5 space-y-6">
-            {/* Section nav */}
             <div className="space-y-1">
               {navItems.map(({ key, label, icon: Icon }) => (
                 <button
@@ -98,22 +100,26 @@ export function AnalyticsPage() {
                 ))}
               </div>
             </div>
+
             {isLoading ? (
               <SectionSkeleton />
             ) : !data ? null : (
               <>
                 {section === 'overview' && (
-                  <div className="flex flex-col gap-6">
-                    <AnalyticsSummaryCards summary={data.summary} dailyStats={data.dailyStats} />
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Activity over time</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <AnalyticsActivityChart dailyStats={data.dailyStats} />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <Card className="overflow-hidden">
+                    <AnalyticsSummaryCards
+                      summary={data.summary}
+                      activeMetric={activeMetric}
+                      onMetricChange={setActiveMetric}
+                    />
+                    <div className="border-t border-border/50 p-6 pt-4">
+                      <AnalyticsActivityChart
+                        dailyStats={data.dailyStats}
+                        activeMetric={activeMetric}
+                        color={activeColor}
+                      />
+                    </div>
+                  </Card>
                 )}
 
                 {section === 'feedback' && (
@@ -182,13 +188,18 @@ export function AnalyticsPage() {
 
 function SectionSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <Card className="overflow-hidden">
+      <div className="flex divide-x divide-border/50">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 rounded-xl" />
+          <div key={i} className="flex-1 px-5 py-4">
+            <Skeleton className="mb-2 h-3 w-16" />
+            <Skeleton className="h-7 w-20" />
+          </div>
         ))}
       </div>
-      <Skeleton className="h-72 rounded-xl" />
-    </div>
+      <div className="border-t border-border/50 p-6 pt-4">
+        <Skeleton className="h-[280px] w-full rounded-lg" />
+      </div>
+    </Card>
   )
 }

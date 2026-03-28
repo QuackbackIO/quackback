@@ -4,38 +4,40 @@ interface ChangelogCardProps {
 }
 
 export function AnalyticsChangelogCard({ topEntries, totalViews }: ChangelogCardProps) {
-  const maxViews = Math.max(...topEntries.map((e) => e.viewCount), 1)
-
   if (topEntries.length === 0) {
     return (
-      <div className="flex h-[250px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
         No changelog entries yet
       </div>
     )
   }
 
+  const maxViews = Math.max(...topEntries.map((e) => e.viewCount), 1)
+
   return (
-    <div className="flex flex-col gap-2.5 py-2">
-      {topEntries.map((entry) => {
-        const barWidth = (entry.viewCount / maxViews) * 100
-        return (
-          <div key={entry.id} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate text-sm">{entry.title}</span>
-              <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+    <div>
+      <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
+        <span>Entry</span>
+        <span>Views</span>
+      </div>
+      <div className="flex flex-col">
+        {topEntries.map((entry) => {
+          const pct = (entry.viewCount / maxViews) * 100
+          return (
+            <div key={entry.id} className="relative flex items-center overflow-hidden py-1.5">
+              <div
+                className="absolute inset-y-0 left-0 rounded-sm bg-primary/10"
+                style={{ width: `${pct}%` }}
+              />
+              <span className="relative flex-1 truncate px-1 text-sm">{entry.title}</span>
+              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
                 {entry.viewCount.toLocaleString()}
               </span>
             </div>
-            <div className="h-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary/40"
-                style={{ width: `${barWidth}%` }}
-              />
-            </div>
-          </div>
-        )
-      })}
-      <p className="mt-1 text-right text-xs text-muted-foreground">
+          )
+        })}
+      </div>
+      <p className="mt-3 text-right text-xs text-muted-foreground">
         {totalViews.toLocaleString()} total views
       </p>
     </div>
