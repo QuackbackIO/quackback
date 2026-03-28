@@ -65,13 +65,22 @@ export function AnalyticsPage() {
                 </button>
               ))}
             </div>
+          </div>
+        </ScrollArea>
+      </aside>
 
-            {/* Period selector */}
-            <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Period
-              </p>
-              <div className="flex flex-wrap gap-1">
+      {/* Main content */}
+      <main className="flex-1 min-w-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-6 flex flex-col gap-6">
+            {/* Header: period selector + last updated */}
+            <div className="flex items-center justify-end gap-3">
+              {data?.computedAt && (
+                <p className="text-sm text-muted-foreground">
+                  Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
+                </p>
+              )}
+              <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
                 {periods.map(({ value, label }) => (
                   <button
                     key={value}
@@ -80,7 +89,7 @@ export function AnalyticsPage() {
                     className={cn(
                       'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                       period === value
-                        ? 'bg-muted text-foreground'
+                        ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     )}
                   >
@@ -89,21 +98,6 @@ export function AnalyticsPage() {
                 ))}
               </div>
             </div>
-
-            {/* Last updated */}
-            {data?.computedAt && (
-              <p className="text-[11px] text-muted-foreground">
-                Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
-              </p>
-            )}
-          </div>
-        </ScrollArea>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 min-w-0 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-6">
             {isLoading ? (
               <SectionSkeleton />
             ) : !data ? null : (
