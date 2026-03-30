@@ -15,6 +15,7 @@ import {
   ChatBubbleLeftRightIcon,
   AdjustmentsHorizontalIcon,
   ShieldCheckIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
@@ -68,6 +69,10 @@ const navSections: NavSection[] = [
       { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
       { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
     ],
+  },
+  {
+    label: 'Advanced',
+    items: [{ label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon }],
   },
 ]
 

@@ -7,8 +7,8 @@
 
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
-import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment'
-import { generatePostEmbedding } from '@/lib/server/domains/embeddings'
+import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment/sentiment.service'
+import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { PostId } from '@featurepool/ids'
 import { db, postTags, tags, eq } from '@/lib/server/db'
 

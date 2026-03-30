@@ -1,83 +1,114 @@
-'use client'
-
 import { Link } from '@tanstack/react-router'
-import { LinkIcon } from '@heroicons/react/24/outline'
+import { LinkIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { StatusBadge } from '@/components/ui/status-badge'
 import type { ChangelogId, PostId } from '@featurepool/ids'
+import type { JSONContent } from '@tiptap/react'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
+
+interface LinkedPost {
+  id: PostId
+  title: string
+  voteCount: number
+  boardSlug: string
+  status?: {
+    name: string
+    color: string
+  } | null
+}
 
 interface ChangelogEntryCardProps {
   id: ChangelogId
   title: string
   content: string
+  contentJson: TiptapContent | null
   publishedAt: string
-  linkedPosts: Array<{
-    id: PostId
-    title: string
-    voteCount: number
-    boardSlug: string
-  }>
+  linkedPosts: LinkedPost[]
   className?: string
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 export function ChangelogEntryCard({
   id,
   title,
   content,
+  contentJson,
   publishedAt,
   linkedPosts,
   className,
 }: ChangelogEntryCardProps) {
-  // Truncate content for preview
-  const contentPreview = content.length > 280 ? content.slice(0, 280).trim() + '...' : content
-
-  const date = new Date(publishedAt)
-  const month = date.toLocaleDateString('en-US', { month: 'short' })
-  const day = date.getDate()
-  const year = date.getFullYear()
-
   return (
-    <Link
-      to="/changelog/$entryId"
-      params={{ entryId: id }}
-      className={cn('group block', className)}
-    >
-      <article className="flex gap-6 py-6 border-b border-border/50">
-        {/* Date sidebar */}
-        <div className="hidden sm:flex flex-col items-center w-16 shrink-0 pt-1">
-          <span className="text-2xl font-bold text-foreground">{day}</span>
-          <span className="text-sm text-muted-foreground uppercase tracking-wide">{month}</span>
-          <span className="text-xs text-muted-foreground">{year}</span>
-        </div>
+    <article className={cn('flex gap-8 lg:gap-16', className)}>
+      {/* Date sidebar */}
+      <div className="hidden md:block w-40 shrink-0 pt-1">
+        <time dateTime={publishedAt} className="text-sm text-muted-foreground">
+          {formatDate(publishedAt)}
+        </time>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Mobile date */}
-          <time
-            dateTime={publishedAt}
-            className="sm:hidden text-sm text-muted-foreground mb-2 block"
-          >
-            {month} {day}, {year}
-          </time>
+      {/* Main content */}
+      <div className="flex-1 min-w-0">
+        {/* Mobile date */}
+        <time dateTime={publishedAt} className="md:hidden text-sm text-muted-foreground mb-4 block">
+          {formatDate(publishedAt)}
+        </time>
 
-          {/* Title */}
-          <h2 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors">
-            {title}
-          </h2>
+        {/* Title with permalink */}
+        <Link
+          to="/changelog/$entryId"
+          params={{ entryId: id }}
+          className="group inline-flex items-center gap-2"
+        >
+          <h2 className="text-2xl font-bold group-hover:text-primary transition-colors">{title}</h2>
+          <LinkIcon className="h-4 w-4 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        </Link>
 
-          {/* Content preview */}
-          <p className="text-muted-foreground text-sm leading-relaxed">{contentPreview}</p>
-
-          {/* Linked posts count */}
-          {linkedPosts.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-3 text-sm text-muted-foreground">
-              <LinkIcon className="h-3.5 w-3.5" />
-              <span>
-                {linkedPosts.length} linked feature{linkedPosts.length === 1 ? '' : 's'}
-              </span>
-            </div>
+        {/* Rich content body */}
+        <div className="mt-4">
+          {contentJson && isRichTextContent(contentJson) ? (
+            <RichTextContent content={contentJson as JSONContent} />
+          ) : (
+            <p className="whitespace-pre-wrap">{content}</p>
           )}
         </div>
-      </article>
-    </Link>
+
+        {/* Linked posts */}
+        {linkedPosts.length > 0 && (
+          <div className="mt-6 grid gap-2">
+            {linkedPosts.map((post) => (
+              <Link
+                key={post.id}
+                to="/b/$slug/posts/$postId"
+                params={{ slug: post.boardSlug, postId: post.id }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/50 hover:border-border hover:bg-muted/30 transition-all group/post"
+              >
+                <div className="flex items-center gap-0.5 text-muted-foreground">
+                  <ChevronUpIcon className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">{post.voteCount}</span>
+                </div>
+                <span className="flex-1 min-w-0 text-sm font-medium truncate group-hover/post:text-primary transition-colors">
+                  {post.title}
+                </span>
+                {post.status && (
+                  <StatusBadge
+                    name={post.status.name}
+                    color={post.status.color}
+                    className="shrink-0"
+                  />
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
   )
 }

@@ -14,12 +14,13 @@ import {
   updateChangelog,
   deleteChangelog,
   getChangelogById,
-  listChangelogs,
+} from '@/lib/server/domains/changelog/changelog.service'
+import { listChangelogs, searchShippedPosts } from '@/lib/server/domains/changelog/changelog.query'
+import {
   getPublicChangelogById,
   listPublicChangelogs,
-  searchShippedPosts,
-  type PublishState,
-} from '@/lib/server/domains/changelog'
+} from '@/lib/server/domains/changelog/changelog.public'
+import type { PublishState } from '@/lib/server/domains/changelog'
 import { z } from 'zod'
 import {
   createChangelogSchema,

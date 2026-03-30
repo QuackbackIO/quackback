@@ -17,6 +17,7 @@ export interface TelemetryPayload {
     widget: boolean
     mcp: boolean
   }
+  experimentalFeatures: Record<string, boolean>
   scale: {
     users: string
     posts: string
@@ -53,8 +54,8 @@ function toBracket(count: number): string {
 async function getFeatureFlags(): Promise<TelemetryPayload['features']> {
   try {
     const { config } = await import('@/lib/server/config')
-    const { getDeveloperConfig, getWidgetConfig } =
-      await import('@/lib/server/domains/settings/settings.service')
+    const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+    const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
 
     const [devConfig, widgetConfig] = await Promise.all([
       getDeveloperConfig().catch(() => null),
@@ -71,6 +72,16 @@ async function getFeatureFlags(): Promise<TelemetryPayload['features']> {
     }
   } catch {
     return { oauth: false, smtp: false, s3: false, ai: false, widget: false, mcp: false }
+  }
+}
+
+async function getExperimentalFeatures(): Promise<Record<string, boolean>> {
+  try {
+    const { getFeatureFlags: getFlags } =
+      await import('@/lib/server/domains/settings/settings.service')
+    return { ...(await getFlags()) }
+  } catch {
+    return {}
   }
 }
 
@@ -98,9 +109,10 @@ async function getScale(): Promise<TelemetryPayload['scale']> {
 }
 
 export async function buildPayload(): Promise<TelemetryPayload> {
-  const [instanceId, features, scale] = await Promise.all([
+  const [instanceId, features, experimentalFeatures, scale] = await Promise.all([
     getOrCreateInstanceId(),
     getFeatureFlags(),
+    getExperimentalFeatures(),
     getScale(),
   ])
 
@@ -113,6 +125,7 @@ export async function buildPayload(): Promise<TelemetryPayload> {
     deployMethod: detectDeployMethod(),
     instanceId,
     features,
+    experimentalFeatures,
     scale,
   }
 }

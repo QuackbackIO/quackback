@@ -3,7 +3,7 @@
  */
 
 import type { SegmentId } from '@featurepool/ids'
-import type { SegmentRules, EvaluationSchedule, SegmentWeightConfig } from '@/lib/server/db'
+import type { SegmentRules, EvaluationSchedule, SegmentWeightConfig } from '@/lib/shared/db-types'
 
 // ============================================
 // Core types

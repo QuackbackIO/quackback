@@ -10,12 +10,12 @@
  */
 
 import { createFileRoute } from '@tanstack/react-router'
-import { config } from '@/lib/server/config'
 
 export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
   server: {
     handlers: {
       GET: async () => {
+        const { config } = await import('@/lib/server/config')
         const baseUrl = config.baseUrl
 
         return new Response(

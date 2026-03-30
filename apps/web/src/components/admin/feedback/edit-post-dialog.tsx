@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { editPostSchema } from '@/lib/shared/schemas/posts'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { useUpdatePost, useUpdatePostTags } from '@/lib/client/mutations/posts'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
@@ -101,10 +100,9 @@ export function EditPostDialog({
   }, [open, post, form])
 
   const handleContentChange = useCallback(
-    (json: JSONContent) => {
+    (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
-      const plainText = richTextToPlainText(json)
-      form.setValue('content', plainText, { shouldValidate: true })
+      form.setValue('content', markdown, { shouldValidate: true })
     },
     [form]
   )

@@ -93,15 +93,12 @@ function makeSettingsRow(overrides: Record<string, unknown> = {}) {
 }
 
 // Import after mocks
+const { getTenantSettings, updateAuthConfig, updatePortalConfig, updateDeveloperConfig } =
+  await import('../settings.service')
+const { invalidateSettingsCache } = await import('../settings.helpers')
 const {
-  getTenantSettings,
-  invalidateSettingsCache,
-  updateAuthConfig,
-  updatePortalConfig,
   updateBrandingConfig,
   updateCustomCss,
-  updateDeveloperConfig,
-  updateWidgetConfig,
   updateWorkspaceName,
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
@@ -111,8 +108,8 @@ const {
   deleteFaviconKey,
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
-  regenerateWidgetSecret,
-} = await import('../settings.service')
+} = await import('../settings.media')
+const { updateWidgetConfig, regenerateWidgetSecret } = await import('../settings.widget')
 
 beforeEach(() => {
   vi.clearAllMocks()

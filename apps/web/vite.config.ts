@@ -35,7 +35,8 @@ export default defineConfig(({ mode }) => {
       __BUILD_TIME__: JSON.stringify(buildInfo.buildTime),
     },
     server: {
-      port: 5433,
+      port: Number(process.env.PORT || 3000),
+      cors: mode === 'development',
       allowedHosts: true,
       hmr: {
         overlay: false,
@@ -61,6 +62,17 @@ export default defineConfig(({ mode }) => {
         srcDirectory: 'src',
         router: {
           routesDirectory: 'routes',
+        },
+        importProtection: {
+          behavior: { dev: 'error', build: 'error' },
+          client: {
+            specifiers: [
+              'postgres',
+              '@quackback/db',
+              '@quackback/db/client',
+              '@quackback/db/schema',
+            ],
+          },
         },
       }),
       viteReact(),

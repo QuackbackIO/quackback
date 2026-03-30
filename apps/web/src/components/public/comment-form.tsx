@@ -144,7 +144,7 @@ export function CommentForm({
   // show the form for anonymous commenting. The anonymous session is created on submit.
   // Only show sign-in prompt if the parent explicitly didn't render a form (this code
   // path is reached only for edge cases — normally CommentThread handles the locked state).
-  const isAnonymousCommenter = !effectiveUser || (session?.user?.isAnonymous ?? false)
+  const isAnonymousCommenter = !effectiveUser || session?.user?.principalType === 'anonymous'
 
   // Team member composer: unified card with toolbar
   if (showStatusSelector) {

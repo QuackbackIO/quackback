@@ -1,5 +1,3 @@
-'use client'
-
 import { SidebarContainer, SidebarSkeleton } from '@/components/shared/sidebar-primitives'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import type { PostId } from '@featurepool/ids'

@@ -1,13 +1,11 @@
-export { findMergeCandidates, type MergeCandidate } from './merge-search.service'
-export { assessMergeCandidates, determineDirection } from './merge-assessment.service'
-export {
-  createMergeSuggestion,
-  acceptMergeSuggestion,
-  dismissMergeSuggestion,
-  getPendingSuggestionsForPost,
-  expireStaleMergeSuggestions,
-  getPendingMergeSuggestionSummary,
-  getMergeSuggestionCountsForPosts,
-  type MergeSuggestionView,
-} from './merge-suggestion.service'
-export { checkPostForMergeCandidates, sweepMergeSuggestions } from './merge-check.service'
+/**
+ * Merge Suggestions module - Types Only
+ *
+ * Import service functions directly:
+ *   - './merge-search.service' for findMergeCandidates
+ *   - './merge-assessment.service' for assessMergeCandidates
+ *   - './merge-suggestion.service' for CRUD
+ *   - './merge-check.service' for background checks
+ */
+export type { MergeCandidate } from './merge-search.service'
+export type { MergeSuggestionView } from './merge-suggestion.service'

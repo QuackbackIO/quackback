@@ -30,6 +30,7 @@ import {
   LockOpenIcon,
   ChatBubbleLeftIcon,
   HandThumbUpIcon,
+  FolderIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
 import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
@@ -147,6 +148,20 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
               {to}
             </span>
           )}
+        </span>
+      )
+    },
+  },
+  'post.board_changed': {
+    icon: FolderIcon,
+    label: (_, a) => `${actorLabel(a)} moved to a different board`,
+    detail: (m) => {
+      const from = m.fromBoardName as string | undefined
+      const to = m.toBoardName as string | undefined
+      if (!from && !to) return null
+      return (
+        <span className="text-xs text-muted-foreground">
+          {from} &rarr; {to}
         </span>
       )
     },

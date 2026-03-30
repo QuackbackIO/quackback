@@ -5,11 +5,7 @@ import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
-import {
-  RichTextEditor,
-  richTextToPlainText,
-  type EditorFeatures,
-} from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type EditorFeatures } from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { EditPostInput } from '@/lib/client/mutations'
@@ -110,27 +106,29 @@ export function PostContentSection({
   const [editContentJson, setEditContentJson] = useState<JSONContent | null>(
     getInitialContentJson(post)
   )
+  const [editMarkdown, setEditMarkdown] = useState(post.content ?? '')
 
   useEffect(() => {
     if (isEditing) {
       setEditTitle(post.title)
       setEditContentJson(getInitialContentJson(post))
+      setEditMarkdown(post.content ?? '')
     }
   }, [isEditing, post.title, post.contentJson])
 
   const showActionsMenu = (canEdit || canDelete) && onEditStart && onDelete && !isEditing
 
-  const handleContentChange = useCallback((json: JSONContent) => {
-    setEditContentJson(json)
+  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
+    setEditContentJson(_json)
+    setEditMarkdown(markdown)
   }, [])
 
   function handleSave(): void {
     if (!editTitle.trim() || !onEditSave) return
 
-    const plainText = editContentJson ? richTextToPlainText(editContentJson) : ''
     onEditSave({
       title: editTitle.trim(),
-      content: plainText,
+      content: editMarkdown,
       contentJson: editContentJson ?? undefined,
     })
   }
@@ -138,11 +136,7 @@ export function PostContentSection({
   const handleKeyDown = useKeyboardSubmit(handleSave, onEditCancel)
 
   const isValid = editTitle.trim().length > 0
-  const currentPlainText = editContentJson ? richTextToPlainText(editContentJson) : ''
-  const originalPlainText = post.contentJson
-    ? richTextToPlainText(post.contentJson as JSONContent)
-    : post.content
-  const hasChanges = editTitle !== post.title || currentPlainText !== originalPlainText
+  const hasChanges = editTitle !== post.title || editMarkdown !== (post.content ?? '')
 
   // When editing, use a different layout with footer
   if (isEditing) {

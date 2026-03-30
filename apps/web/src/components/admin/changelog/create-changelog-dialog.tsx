@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
@@ -12,7 +10,6 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { PlusIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
-import { richTextToPlainText } from '@/components/ui/rich-text-editor'
 import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
@@ -46,10 +43,9 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   })
 
   const handleContentChange = useCallback(
-    (json: JSONContent) => {
+    (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
-      const plainText = richTextToPlainText(json)
-      form.setValue('content', plainText, { shouldValidate: true })
+      form.setValue('content', markdown, { shouldValidate: true })
     },
     [form]
   )

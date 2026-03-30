@@ -30,6 +30,7 @@ COPY packages ./packages
 COPY scripts ./scripts
 
 # Install all dependencies (including devDependencies for build)
+ENV HUSKY=0
 RUN bun install --frozen-lockfile
 
 # Set build-time environment

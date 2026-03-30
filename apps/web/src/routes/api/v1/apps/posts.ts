@@ -53,7 +53,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
           // Resolve author: use requester if provided, else the API key principal
           let authorPrincipalId = principalId
           if (parsed.data.requester?.email) {
-            const { identifyPortalUser } = await import('@/lib/server/domains/users/user.service')
+            const { identifyPortalUser } = await import('@/lib/server/domains/users/user.identify')
             const identified = await identifyPortalUser({
               email: parsed.data.requester.email,
               name: parsed.data.requester.name,

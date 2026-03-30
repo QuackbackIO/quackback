@@ -23,7 +23,6 @@ import {
   tags,
   principal as principalTable,
   type Post,
-  type TiptapContent,
 } from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@featurepool/ids'
 import {
@@ -33,20 +32,10 @@ import {
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
-
-/** Convert plain text to TipTap JSON when contentJson is not provided */
-function plainTextToTipTap(text: string): TiptapContent {
-  return {
-    type: 'doc',
-    content: text.split('\n').map((line) => ({
-      type: 'paragraph',
-      content: line ? [{ type: 'text', text: line }] : [],
-    })),
-  }
-}
 
 /**
  * Create a new post
@@ -130,7 +119,7 @@ export async function createPost(
       boardId: input.boardId,
       title,
       content,
-      contentJson: input.contentJson ?? plainTextToTipTap(content),
+      contentJson: input.contentJson ?? markdownToTiptapJson(content),
       statusId,
       principalId: author.principalId,
       widgetMetadata: input.widgetMetadata ?? null,
@@ -256,7 +245,12 @@ export async function updatePost(
   const updateData: Partial<Post> = {}
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined) updateData.content = input.content.trim()
-  if (input.contentJson !== undefined) updateData.contentJson = input.contentJson
+  if (input.contentJson !== undefined) {
+    updateData.contentJson = input.contentJson
+  } else if (input.content !== undefined) {
+    // Derive contentJson from markdown when only content is provided (MCP/API path)
+    updateData.contentJson = markdownToTiptapJson(input.content.trim())
+  }
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
 

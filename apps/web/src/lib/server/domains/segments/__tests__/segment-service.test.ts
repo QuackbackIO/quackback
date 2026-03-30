@@ -65,7 +65,7 @@ describe('evaluateDynamicSegment', () => {
     ])
     mockNotifyUserSyncIntegrations.mockResolvedValue(undefined)
 
-    const { evaluateDynamicSegment } = await import('../segment.service')
+    const { evaluateDynamicSegment } = await import('../segment.evaluation')
 
     const result = await evaluateDynamicSegment('segment_test123' as never)
 

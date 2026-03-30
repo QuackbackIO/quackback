@@ -1,16 +1,11 @@
 /**
- * Webhooks module exports
+ * Webhooks module - Types Only
+ *
+ * Import service functions directly from './webhook.service' in server-only code.
  */
-
-export {
-  createWebhook,
-  listWebhooks,
-  getWebhookById,
-  updateWebhook,
-  deleteWebhook,
-  rotateWebhookSecret,
-  type Webhook,
-  type CreateWebhookInput,
-  type CreateWebhookResult,
-  type UpdateWebhookInput,
-} from './webhook.service'
+export type {
+  Webhook,
+  CreateWebhookInput,
+  CreateWebhookResult,
+  UpdateWebhookInput,
+} from './webhook.types'

@@ -20,19 +20,17 @@ import {
   getPublicBoardBySlug,
 } from '@/lib/server/domains/boards/board.public'
 import {
-  getPublicPostDetail,
   listPublicPosts,
   listPublicPostsWithVotesAndAvatars,
   getVotedPostIdsByUserId,
 } from '@/lib/server/domains/posts/post.public'
+import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
 import { listPublicTags } from '@/lib/server/domains/tags/tag.service'
 import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
-import {
-  listPublicRoadmaps,
-  getPublicRoadmapPosts,
-} from '@/lib/server/domains/roadmaps/roadmap.service'
+import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
+import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 
 // Schemas
 const sortSchema = z.enum(['top', 'new', 'trending'])

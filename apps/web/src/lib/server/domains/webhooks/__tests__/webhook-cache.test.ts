@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { PrincipalId, WebhookId } from '@quackback/ids'
 
 // --- Redis cache mocks ---
 const mockCacheDel = vi.fn()
@@ -99,7 +100,7 @@ describe('webhook service cache invalidation', () => {
 
     await createWebhook(
       { url: 'https://example.com/hook', events: ['post.created'] },
-      'principal_1' as any
+      'principal_1' as PrincipalId
     )
 
     expect(mockCacheDel).toHaveBeenCalledWith('hooks:webhooks-active')
@@ -114,7 +115,7 @@ describe('webhook service cache invalidation', () => {
       }),
     })
 
-    await updateWebhook('webhook_test1' as any, { status: 'disabled' })
+    await updateWebhook('webhook_test1' as WebhookId, { status: 'disabled' })
 
     expect(mockCacheDel).toHaveBeenCalledWith('hooks:webhooks-active')
   })
@@ -128,7 +129,7 @@ describe('webhook service cache invalidation', () => {
       }),
     })
 
-    await deleteWebhook('webhook_test1' as any)
+    await deleteWebhook('webhook_test1' as WebhookId)
 
     expect(mockCacheDel).toHaveBeenCalledWith('hooks:webhooks-active')
   })
@@ -142,7 +143,7 @@ describe('webhook service cache invalidation', () => {
       }),
     })
 
-    await rotateWebhookSecret('webhook_test1' as any)
+    await rotateWebhookSecret('webhook_test1' as WebhookId)
 
     expect(mockCacheDel).toHaveBeenCalledWith('hooks:webhooks-active')
   })

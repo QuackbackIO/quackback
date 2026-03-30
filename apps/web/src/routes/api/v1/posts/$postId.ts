@@ -186,7 +186,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           const validationError = validateTypeId(postId, 'post', 'post ID')
           if (validationError) return validationError
 
-          const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
+          const { softDeletePost } = await import('@/lib/server/domains/posts/post.user-actions')
 
           await softDeletePost(postId as PostId, { principalId, role })
 

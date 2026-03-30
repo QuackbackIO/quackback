@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -43,6 +43,7 @@ import {
   useToggleCommentsLock,
   useDeletePost,
   useRestorePost,
+  useChangePostBoard,
 } from '@/lib/client/mutations'
 import {
   DeletePostDialog,
@@ -58,6 +59,7 @@ import {
   type TagId,
   type RoadmapId,
   type CommentId,
+  type BoardId,
 } from '@featurepool/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
@@ -91,6 +93,7 @@ function PostModalContent({
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
+  const { data: boards = [] } = useQuery(adminQueries.boards())
   const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
 
   const post = postQuery.data as PostDetails
@@ -98,6 +101,7 @@ function PostModalContent({
   // Form state - always in edit mode
   const [title, setTitle] = useState(post.title)
   const [contentJson, setContentJson] = useState<JSONContent | null>(getInitialContentJson(post))
+  const [contentMarkdown, setContentMarkdown] = useState(post.content ?? '')
   const [hasInitialized, setHasInitialized] = useState(false)
 
   // UI state
@@ -132,6 +136,7 @@ function PostModalContent({
   const toggleCommentsLock = useToggleCommentsLock()
   const deletePost = useDeletePost()
   const restorePostMutation = useRestorePost()
+  const changePostBoard = useChangePostBoard()
 
   // External links for cascade delete
   const externalLinksQuery = usePostExternalLinks(post.id as PostId, showDeleteDialog)
@@ -188,6 +193,18 @@ function PostModalContent({
     }
   }
 
+  const handleBoardChange = async (boardId: BoardId) => {
+    setIsUpdating(true)
+    try {
+      await changePostBoard.mutateAsync({ postId: post.id as PostId, boardId })
+      toast.success('Board updated')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update board')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleRoadmapAdd = async (roadmapId: RoadmapId) => {
     setPendingRoadmapId(roadmapId)
     try {
@@ -208,8 +225,9 @@ function PostModalContent({
     }
   }
 
-  const handleContentChange = useCallback((json: JSONContent) => {
-    setContentJson(json)
+  const handleContentChange = useCallback((_json: JSONContent, _html: string, markdown: string) => {
+    setContentJson(_json)
+    setContentMarkdown(markdown)
   }, [])
 
   const handleSubmit = async () => {
@@ -219,11 +237,10 @@ function PostModalContent({
     }
 
     try {
-      const plainText = contentJson ? richTextToPlainText(contentJson) : ''
       await updatePost.mutateAsync({
         postId: post.id as PostId,
         title: title.trim(),
-        content: plainText,
+        content: contentMarkdown,
         contentJson: contentJson ?? null,
       })
       toast.success('Post updated')
@@ -265,11 +282,7 @@ function PostModalContent({
   }
 
   // Check if there are changes
-  const originalPlainText = post.contentJson
-    ? richTextToPlainText(post.contentJson as JSONContent)
-    : post.content
-  const currentPlainText = contentJson ? richTextToPlainText(contentJson) : ''
-  const hasChanges = title !== post.title || currentPlainText !== originalPlainText
+  const hasChanges = title !== post.title || contentMarkdown !== (post.content ?? '')
 
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
@@ -466,10 +479,12 @@ function PostModalContent({
               allStatuses={statuses}
               allTags={tags}
               allRoadmaps={roadmaps}
+              allBoards={boards}
               onStatusChange={handleStatusChange}
               onTagsChange={handleTagsChange}
               onRoadmapAdd={handleRoadmapAdd}
               onRoadmapRemove={handleRoadmapRemove}
+              onBoardChange={handleBoardChange}
               isUpdating={isUpdating || !!pendingRoadmapId}
               hideSubscribe
               variant="card"

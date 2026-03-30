@@ -5,7 +5,7 @@ import {
   type UpdateWidgetConfigInput,
   type PublicWidgetConfig,
 } from '../settings.types'
-import { generateWidgetSecret } from '../settings.service'
+import { generateWidgetSecret } from '../settings.widget'
 
 describe('Widget Config Types', () => {
   describe('DEFAULT_WIDGET_CONFIG', () => {

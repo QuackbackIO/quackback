@@ -21,7 +21,7 @@ interface PostFormFieldsProps {
   statuses: PostStatusEntity[]
   tags: Tag[]
   contentJson: JSONContent | null
-  onContentChange: (json: JSONContent) => void
+  onContentChange: (json: JSONContent, html: string, markdown: string) => void
   error?: string
 }
 

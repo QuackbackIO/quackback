@@ -39,8 +39,8 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
           if (validationError) return validationError
 
           // Import service function
-          const { getPortalUserDetail, parseUserAttributes } =
-            await import('@/lib/server/domains/users/user.service')
+          const { getPortalUserDetail } = await import('@/lib/server/domains/users/user.detail')
+          const { parseUserAttributes } = await import('@/lib/server/domains/users/user.attributes')
 
           const user = await getPortalUserDetail(principalId as PrincipalId)
 
@@ -111,7 +111,7 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
           }
 
           // Import service function
-          const { updatePortalUser } = await import('@/lib/server/domains/users/user.service')
+          const { updatePortalUser } = await import('@/lib/server/domains/users/user.identify')
 
           const result = await updatePortalUser(principalId as PrincipalId, parsed.data)
 

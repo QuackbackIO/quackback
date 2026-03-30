@@ -41,7 +41,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
           const offset = parseInt(url.searchParams.get('offset') || '0', 10)
 
           // Import service function
-          const { getRoadmapPosts } = await import('@/lib/server/domains/roadmaps/roadmap.service')
+          const { getRoadmapPosts } = await import('@/lib/server/domains/roadmaps/roadmap.query')
 
           const result = await getRoadmapPosts(roadmapId as RoadmapId, {
             statusId: statusId || undefined,

@@ -1,6 +1,6 @@
 /**
- * Notification module exports
+ * Notification module - Types Only
+ *
+ * Import service functions directly from './notification.service' in server-only code.
  */
-
-export * from './notification.types'
-export * from './notification.service'
+export type * from './notification.types'

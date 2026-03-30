@@ -195,6 +195,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         boxShadow: "0 -8px 30px rgba(0,0,0,0.12)",
         transform: "translateY(100%)",
         transition: "transform 300ms cubic-bezier(0.4,0,0.2,1)",
+      }, {
+        className: "quackback-widget-iframe-wrapper",
       });
     } else {
       panel = createElement("div", {
@@ -212,6 +214,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         transform: "scale(0.95)",
         transformOrigin: placement === "left" ? "bottom left" : "bottom right",
         transition: "opacity 200ms ease-out, transform 200ms ease-out",
+      }, {
+        className: "quackback-widget-iframe-wrapper",
       });
     }
 
@@ -225,6 +229,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       src: iframeUrl,
       title: "Feedback Widget",
       sandbox: "allow-scripts allow-forms allow-same-origin allow-popups",
+      className: "quackback-widget-iframe",
     });
 
     panel.appendChild(iframe);

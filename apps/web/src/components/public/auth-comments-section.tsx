@@ -96,7 +96,7 @@ export function AuthCommentsSection({
     settings?.publicPortalConfig?.features?.anonymousCommenting ?? false
 
   // Get user from session (anonymous sessions can comment only if the setting is enabled)
-  const isAnonymous = session?.user?.isAnonymous ?? false
+  const isAnonymous = session?.user?.principalType === 'anonymous'
   const user = session?.user && (!isAnonymous || anonymousCommentingEnabled) ? session.user : null
   const isLoggedIn = !!user
 

@@ -7,7 +7,8 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { listChangelogs, createChangelog } from '@/lib/server/domains/changelog'
+import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
+import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
 import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PostId } from '@featurepool/ids'

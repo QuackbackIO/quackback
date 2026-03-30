@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
-import { cn } from '@/lib/shared/utils'
+import { cn, slugify } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
 import type { Roadmap } from '@/lib/shared/db-types'
@@ -38,13 +38,6 @@ import type { Roadmap } from '@/lib/shared/db-types'
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null
   onSelectRoadmap: (roadmapId: string | null) => void
-}
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSidebarProps) {

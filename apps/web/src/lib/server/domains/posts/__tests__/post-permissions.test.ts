@@ -114,7 +114,7 @@ describe('post.permissions', () => {
   describe('restorePost', () => {
     it('should throw NotFoundError when post does not exist', async () => {
       mockFindFirst.mockResolvedValueOnce(null)
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       await expect(restorePost(POST_ID)).rejects.toThrow('not found')
     })
@@ -125,7 +125,7 @@ describe('post.permissions', () => {
         title: 'Test Post',
         deletedAt: null,
       })
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       await expect(restorePost(POST_ID)).rejects.toThrow('not deleted')
     })
@@ -137,7 +137,7 @@ describe('post.permissions', () => {
         title: 'Test Post',
         deletedAt: thirtyOneDaysAgo,
       })
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       await expect(restorePost(POST_ID)).rejects.toThrow('30 days')
     })
@@ -149,7 +149,7 @@ describe('post.permissions', () => {
         title: 'Test Post',
         deletedAt: fiveDaysAgo,
       })
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       const result = await restorePost(POST_ID)
       expect(result).toBeDefined()
@@ -164,7 +164,7 @@ describe('post.permissions', () => {
         title: 'Test Post',
         deletedAt: justUnder30Days,
       })
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       const result = await restorePost(POST_ID)
       expect(result).toBeDefined()
@@ -178,7 +178,7 @@ describe('post.permissions', () => {
         deletedAt: recentlyDeleted,
         deletedByPrincipalId: 'principal_admin',
       })
-      const { restorePost } = await import('../post.permissions')
+      const { restorePost } = await import('../post.user-actions')
 
       await restorePost(POST_ID)
 
@@ -197,7 +197,7 @@ describe('post.permissions', () => {
   describe('softDeletePost', () => {
     it('should throw NotFoundError when post does not exist', async () => {
       mockFindFirst.mockResolvedValueOnce(null)
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await expect(softDeletePost(POST_ID, TEAM_ACTOR)).rejects.toThrow('not found')
     })
@@ -209,7 +209,7 @@ describe('post.permissions', () => {
         deletedAt: new Date(),
         postStatus: { isDefault: true },
       })
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await expect(softDeletePost(POST_ID, TEAM_ACTOR)).rejects.toThrow('already been deleted')
     })
@@ -221,7 +221,7 @@ describe('post.permissions', () => {
         deletedAt: null,
         postStatus: { isDefault: true },
       })
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await expect(softDeletePost(POST_ID, TEAM_ACTOR)).resolves.not.toThrow()
     })
@@ -233,7 +233,7 @@ describe('post.permissions', () => {
         deletedAt: null,
         postStatus: { isDefault: true },
       })
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await softDeletePost(POST_ID, TEAM_ACTOR)
 
@@ -251,7 +251,7 @@ describe('post.permissions', () => {
         principalId: 'principal_other' as PrincipalId,
         postStatus: { isDefault: true },
       })
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await expect(softDeletePost(POST_ID, USER_ACTOR)).rejects.toThrow('only delete your own')
     })
@@ -265,7 +265,7 @@ describe('post.permissions', () => {
         deletedAt: null,
         postStatus: { isDefault: true },
       })
-      const { softDeletePost } = await import('../post.permissions')
+      const { softDeletePost } = await import('../post.user-actions')
 
       await softDeletePost(POST_ID, TEAM_ACTOR)
 

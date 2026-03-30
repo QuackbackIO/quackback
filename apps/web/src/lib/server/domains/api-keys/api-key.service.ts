@@ -6,42 +6,19 @@
  */
 
 import { db, apiKeys, principal, eq, and, isNull } from '@/lib/server/db'
-import type { PrincipalId, TypeId } from '@featurepool/ids'
+import type { PrincipalId } from '@featurepool/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
+import type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult } from './api-key.types'
+export type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult }
 
 /** API key prefix */
 const API_KEY_PREFIX = 'qb_'
 
 /** Length of the random part of the key (in bytes, will be hex encoded) */
 const KEY_RANDOM_BYTES = 24 // 48 hex chars
-
-export type ApiKeyId = TypeId<'api_key'>
-
-export interface ApiKey {
-  id: ApiKeyId
-  name: string
-  keyPrefix: string
-  createdById: PrincipalId | null
-  principalId: PrincipalId
-  lastUsedAt: Date | null
-  expiresAt: Date | null
-  createdAt: Date
-  revokedAt: Date | null
-}
-
-export interface CreateApiKeyInput {
-  name: string
-  expiresAt?: Date | null
-}
-
-export interface CreateApiKeyResult {
-  apiKey: ApiKey
-  /** The full API key - only returned on creation, never stored */
-  plainTextKey: string
-}
 
 /** Map a database row to the public ApiKey shape (strips keyHash). */
 function toApiKey(row: ApiKey & Record<string, unknown>): ApiKey {

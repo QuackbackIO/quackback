@@ -5,7 +5,8 @@
  * Used in /api/v1/* routes.
  */
 
-import { verifyApiKey, type ApiKey } from '@/lib/server/domains/api-keys'
+import { verifyApiKey } from '@/lib/server/domains/api-keys/api-key.service'
+import type { ApiKey } from '@/lib/server/domains/api-keys'
 import { unauthorizedResponse, forbiddenResponse, rateLimitedResponse } from './responses'
 import { checkRateLimit, getClientIp } from './rate-limit'
 import { db, principal, eq } from '@/lib/server/db'

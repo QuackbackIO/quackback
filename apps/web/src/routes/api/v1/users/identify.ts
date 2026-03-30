@@ -42,7 +42,7 @@ export const Route = createFileRoute('/api/v1/users/identify')({
           }
 
           // Import service function
-          const { identifyPortalUser } = await import('@/lib/server/domains/users/user.service')
+          const { identifyPortalUser } = await import('@/lib/server/domains/users/user.identify')
 
           const result = await identifyPortalUser(parsed.data)
 

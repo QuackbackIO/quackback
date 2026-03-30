@@ -3,6 +3,7 @@ import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { PostModal } from '@/components/admin/feedback/post-modal'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -81,19 +82,21 @@ function AdminLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      <AdminSidebar initialUserData={initialUserData} />
-      <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
-        {/* Mobile: Add padding for fixed header */}
-        <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden">
-          <Outlet />
-        </div>
-      </main>
-      {currentUser && (
-        <Suspense>
-          <PostModal postId={postId} currentUser={currentUser} />
-        </Suspense>
-      )}
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <div className="flex h-screen bg-background">
+        <AdminSidebar initialUserData={initialUserData} />
+        <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
+          {/* Mobile: Add padding for fixed header */}
+          <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden">
+            <Outlet />
+          </div>
+        </main>
+        {currentUser && (
+          <Suspense>
+            <PostModal postId={postId} currentUser={currentUser} />
+          </Suspense>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }

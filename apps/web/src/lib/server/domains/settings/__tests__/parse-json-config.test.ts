@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseJsonConfig } from '../settings.service'
+import { parseJsonConfig } from '../settings.helpers'
 import { DEFAULT_PORTAL_CONFIG, DEFAULT_WIDGET_CONFIG } from '../settings.types'
 
 describe('parseJsonConfig', () => {

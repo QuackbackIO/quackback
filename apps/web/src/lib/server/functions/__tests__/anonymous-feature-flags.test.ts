@@ -103,6 +103,9 @@ vi.mock('@/lib/server/domains/posts/post.public', () => ({
 
 vi.mock('@/lib/server/domains/posts/post.permissions', () => ({
   getPostPermissions: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/posts/post.user-actions', () => ({
   userEditPost: vi.fn(),
   softDeletePost: vi.fn(),
 }))
@@ -118,18 +121,27 @@ const mockCreateComment = vi.fn()
 
 vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   createComment: (...args: unknown[]) => mockCreateComment(...args),
+  deleteComment: vi.fn(),
+  updateComment: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.reactions', () => ({
   addReaction: vi.fn(),
+  removeReaction: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.permissions', () => ({
   canDeleteComment: vi.fn(),
   canEditComment: vi.fn(),
-  canPinComment: vi.fn(),
-  deleteComment: vi.fn(),
-  pinComment: vi.fn(),
-  removeReaction: vi.fn(),
-  restoreComment: vi.fn(),
   softDeleteComment: vi.fn(),
-  unpinComment: vi.fn(),
-  updateComment: vi.fn(),
   userEditComment: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.pin', () => ({
+  canPinComment: vi.fn(),
+  pinComment: vi.fn(),
+  restoreComment: vi.fn(),
+  unpinComment: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/activity/activity.service', () => ({

@@ -4,7 +4,18 @@ import { type UserId, type PrincipalId } from '@featurepool/ids'
 import { getSession } from './auth'
 import { requireAuth } from './auth-helpers'
 import { getCurrentUserRole } from './workspace'
-import { db, user, principal, eq } from '@/lib/server/db'
+import {
+  db,
+  user,
+  principal,
+  posts,
+  votes,
+  comments,
+  eq,
+  and,
+  isNull,
+  count,
+} from '@/lib/server/db'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { deleteObject } from '@/lib/server/storage/s3'
 import {
@@ -44,6 +55,12 @@ const updateNotificationPreferencesSchema = z.object({
 
 export type UpdateProfileNameInput = z.infer<typeof updateProfileNameSchema>
 export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>
+
+export interface UserEngagementStats {
+  ideas: number
+  votes: number
+  comments: number
+}
 
 export interface UserProfile {
   id: string
@@ -335,3 +352,37 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
       }
     }
   )
+
+// ============================================
+// User Engagement Stats
+// ============================================
+
+export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<UserEngagementStats> => {
+    console.log(`[fn:user] getUserStatsFn`)
+    try {
+      const principalId = await requirePrincipalId()
+
+      const [ideasResult, votesResult, commentsResult] = await Promise.all([
+        db
+          .select({ count: count() })
+          .from(posts)
+          .where(and(eq(posts.principalId, principalId), isNull(posts.deletedAt))),
+        db.select({ count: count() }).from(votes).where(eq(votes.principalId, principalId)),
+        db
+          .select({ count: count() })
+          .from(comments)
+          .where(and(eq(comments.principalId, principalId), isNull(comments.deletedAt))),
+      ])
+
+      return {
+        ideas: ideasResult[0]?.count ?? 0,
+        votes: votesResult[0]?.count ?? 0,
+        comments: commentsResult[0]?.count ?? 0,
+      }
+    } catch (error) {
+      console.error(`[fn:user] getUserStatsFn failed:`, error)
+      throw error
+    }
+  }
+)

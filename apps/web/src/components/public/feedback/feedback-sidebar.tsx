@@ -80,7 +80,6 @@ export function FeedbackSidebar({
             target="_blank"
             className="group inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-all px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50"
           >
-            <span>Powered by</span>
             <img
               src="/logo.png"
               alt=""
@@ -88,7 +87,9 @@ export function FeedbackSidebar({
               height={11}
               className="opacity-60 group-hover:opacity-100 transition-opacity"
             />
-            <span className="font-medium">Featurepool</span>
+            <span>
+              Powered by <span className="font-medium">Featurepool</span>
+            </span>
           </a>
         </div>
       </div>

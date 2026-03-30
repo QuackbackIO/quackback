@@ -1,10 +1,8 @@
-'use client'
-
 import { Link } from '@tanstack/react-router'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { BackLink } from '@/components/ui/back-link'
-import { CalendarIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { ChangelogId, PostId } from '@featurepool/ids'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/db-types'
@@ -29,6 +27,14 @@ interface ChangelogEntryDetailProps {
   linkedPosts: LinkedPost[]
 }
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function ChangelogEntryDetail({
   title,
   content,
@@ -36,73 +42,76 @@ export function ChangelogEntryDetail({
   publishedAt,
   linkedPosts,
 }: ChangelogEntryDetailProps) {
-  const formattedDate = new Date(publishedAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-
   return (
     <article>
       {/* Back link */}
-      <BackLink to="/changelog" className="mb-6">
+      <BackLink to="/changelog" className="mb-8">
         Changelog
       </BackLink>
 
-      {/* Header */}
-      <header className="mb-8">
-        {/* Date */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <CalendarIcon className="h-4 w-4" />
-          <time dateTime={publishedAt}>{formattedDate}</time>
+      <div className="flex gap-8 lg:gap-16">
+        {/* Date sidebar */}
+        <div className="hidden md:block w-40 shrink-0 pt-1">
+          <time dateTime={publishedAt} className="text-sm text-muted-foreground">
+            {formatDate(publishedAt)}
+          </time>
         </div>
 
-        {/* Title */}
-        <h1 className="text-3xl font-bold">{title}</h1>
-      </header>
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {/* Mobile date */}
+          <time
+            dateTime={publishedAt}
+            className="md:hidden text-sm text-muted-foreground mb-4 block"
+          >
+            {formatDate(publishedAt)}
+          </time>
 
-      {/* Content */}
-      <div className="prose prose-neutral dark:prose-invert max-w-none mb-8">
-        {contentJson && isRichTextContent(contentJson) ? (
-          <RichTextContent content={contentJson as JSONContent} />
-        ) : (
-          <p className="whitespace-pre-wrap">{content}</p>
-        )}
-      </div>
+          {/* Title */}
+          <h1 className="text-3xl font-bold leading-tight">{title}</h1>
 
-      {/* Linked posts section */}
-      {linkedPosts.length > 0 && (
-        <section className="border-t pt-8">
-          <h2 className="text-lg font-semibold mb-4">Shipped Features</h2>
-          <div className="grid gap-3">
-            {linkedPosts.map((post) => (
-              <Link
-                key={post.id}
-                to="/b/$slug/posts/$postId"
-                params={{ slug: post.boardSlug, postId: post.id }}
-                className="flex items-center gap-4 p-4 rounded-lg border border-border/50 hover:border-border hover:bg-muted/30 transition-all group"
-              >
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <ChevronUpIcon className="h-4 w-4" />
-                  <span className="text-sm font-medium">{post.voteCount}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium group-hover:text-primary transition-colors">
-                    {post.title}
-                  </span>
-                </div>
-                {post.status && (
-                  <StatusBadge
-                    name={post.status.name}
-                    color={post.status.color}
-                    className="shrink-0"
-                  />
-                )}
-              </Link>
-            ))}
+          {/* Rich content body */}
+          <div className="mt-6">
+            {contentJson && isRichTextContent(contentJson) ? (
+              <RichTextContent content={contentJson as JSONContent} />
+            ) : (
+              <p className="whitespace-pre-wrap">{content}</p>
+            )}
           </div>
-        </section>
-      )}
+
+          {/* Linked posts */}
+          {linkedPosts.length > 0 && (
+            <section className="mt-8 pt-8 border-t border-border/40">
+              <h2 className="text-lg font-semibold mb-4">Shipped Features</h2>
+              <div className="grid gap-2">
+                {linkedPosts.map((post) => (
+                  <Link
+                    key={post.id}
+                    to="/b/$slug/posts/$postId"
+                    params={{ slug: post.boardSlug, postId: post.id }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/50 hover:border-border hover:bg-muted/30 transition-all group"
+                  >
+                    <div className="flex items-center gap-0.5 text-muted-foreground">
+                      <ChevronUpIcon className="h-3.5 w-3.5" />
+                      <span className="text-xs font-medium">{post.voteCount}</span>
+                    </div>
+                    <span className="flex-1 min-w-0 text-sm font-medium truncate group-hover:text-primary transition-colors">
+                      {post.title}
+                    </span>
+                    {post.status && (
+                      <StatusBadge
+                        name={post.status.name}
+                        color={post.status.color}
+                        className="shrink-0"
+                      />
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
     </article>
   )
 }

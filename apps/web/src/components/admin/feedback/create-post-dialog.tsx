@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
-import { richTextToPlainText, RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import {
   Select,
@@ -92,10 +92,9 @@ export function CreatePostDialog({
   })
 
   const handleContentChange = useCallback(
-    (json: JSONContent) => {
+    (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
-      const plainText = richTextToPlainText(json)
-      form.setValue('content', plainText, { shouldValidate: true })
+      form.setValue('content', markdown, { shouldValidate: true })
     },
     [form]
   )

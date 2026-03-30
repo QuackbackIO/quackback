@@ -200,6 +200,8 @@ export const settings = pgTable('settings', {
    * Format: 'wgt_' + 64 hex chars
    */
   widgetSecret: text('widget_secret'),
+  /** Feature flags for experimental features (JSON) */
+  featureFlags: text('feature_flags'),
 })
 
 /**

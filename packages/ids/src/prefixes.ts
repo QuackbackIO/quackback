@@ -27,6 +27,11 @@ export const ID_PREFIXES = {
   roadmap: 'roadmap',
   changelog: 'changelog',
 
+  // Help center
+  helpcenter_category: 'helpcenter_category',
+  helpcenter_article: 'helpcenter_article',
+  helpcenter_feedback: 'helpcenter_feedback',
+
   // Integrations
   integration: 'integration',
   platform_cred: 'platform_cred',

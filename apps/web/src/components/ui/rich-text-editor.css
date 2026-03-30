@@ -7,16 +7,17 @@
 /* Text cursor for editable content */
 .tiptap.ProseMirror {
   cursor: text;
+  /* Prevent any element from overflowing the editor horizontally */
+  overflow-x: hidden;
 }
 
-/* Collapse empty paragraphs in editor to match static prose rendering.
-   Static HTML renders empty <p></p> with zero height, allowing CSS margin
-   collapsing. ProseMirror adds <br> to empty paragraphs giving them a full
-   line of height. This collapses them to match the read-only view. */
+/* Remove extra margins from empty paragraphs in the editor.
+   ProseMirror adds <br> to empty paragraphs to keep them focusable.
+   Without this rule those empty lines get full prose margins, creating
+   double-spacing. We zero the margin but keep the line height so the
+   cursor remains visible and the paragraph is still clickable. */
 .tiptap p:has(> br:only-child):not(:only-child) {
   margin: 0;
-  height: 0;
-  overflow: hidden;
 }
 
 /* Placeholder text */
@@ -165,67 +166,22 @@
   background: color-mix(in oklch, var(--primary), transparent 85%);
 }
 
-/* Resizable image styles */
-.tiptap .resizable-image-wrapper {
-  display: inline-block;
-  position: relative;
+/* Resizable image: constrain node wrapper to editor width */
+.tiptap .node-image {
   max-width: 100%;
-  cursor: default;
 }
 
-.tiptap .resizable-image-wrapper.ProseMirror-selectednode {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  border-radius: 0.5rem;
+.tiptap .image-component {
+  max-width: 100%;
 }
 
-.tiptap .resizable-image-wrapper img {
-  display: block;
-  max-width: 100%;
+/* Override the inline maxWidth the extension sets during resize so images
+   can never exceed the editor's content area. The !important is intentional:
+   the extension writes style.maxWidth = Npx directly on the element. */
+.tiptap .image-component img {
+  max-width: 100% !important;
   height: auto;
   border-radius: 0.5rem;
-}
-
-/* Resize handles */
-.tiptap .resizable-image-wrapper .resize-handle {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--primary);
-  border: 2px solid var(--background);
-  border-radius: 50%;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  z-index: 10;
-}
-
-.tiptap .resizable-image-wrapper:hover .resize-handle,
-.tiptap .resizable-image-wrapper.ProseMirror-selectednode .resize-handle {
-  opacity: 1;
-}
-
-.tiptap .resizable-image-wrapper .resize-handle.nw {
-  top: -6px;
-  left: -6px;
-  cursor: nw-resize;
-}
-
-.tiptap .resizable-image-wrapper .resize-handle.ne {
-  top: -6px;
-  right: -6px;
-  cursor: ne-resize;
-}
-
-.tiptap .resizable-image-wrapper .resize-handle.sw {
-  bottom: -6px;
-  left: -6px;
-  cursor: sw-resize;
-}
-
-.tiptap .resizable-image-wrapper .resize-handle.se {
-  bottom: -6px;
-  right: -6px;
-  cursor: se-resize;
 }
 
 /* Syntax highlighting colors */

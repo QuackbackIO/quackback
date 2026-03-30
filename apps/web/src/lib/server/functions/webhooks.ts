@@ -57,7 +57,7 @@ export const fetchWebhooks = createServerFn({ method: 'GET' }).handler(async () 
   try {
     await requireAuth({ roles: ['admin'] })
 
-    const { listWebhooks } = await import('@/lib/server/domains/webhooks')
+    const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
     const webhooks = await listWebhooks()
 
     console.log(`[fn:webhooks] fetchWebhooks: count=${webhooks.length}`)
@@ -83,7 +83,7 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
-      const { createWebhook } = await import('@/lib/server/domains/webhooks')
+      const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
       const result = await createWebhook(
         {
           url: data.url,
@@ -111,7 +111,7 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin'] })
 
-      const { updateWebhook } = await import('@/lib/server/domains/webhooks')
+      const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
       const webhook = await updateWebhook(data.webhookId as WebhookId, {
         url: data.url,
         events: data.events,
@@ -137,7 +137,7 @@ export const deleteWebhookFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin'] })
 
-      const { deleteWebhook } = await import('@/lib/server/domains/webhooks')
+      const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
       await deleteWebhook(data.webhookId as WebhookId)
 
       console.log(`[fn:webhooks] deleteWebhookFn: deleted`)
@@ -159,7 +159,7 @@ export const rotateWebhookSecretFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ roles: ['admin'] })
 
-      const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks')
+      const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks/webhook.service')
       const result = await rotateWebhookSecret(data.webhookId as WebhookId)
 
       console.log(`[fn:webhooks] rotateWebhookSecretFn: rotated`)

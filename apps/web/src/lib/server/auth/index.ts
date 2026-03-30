@@ -244,8 +244,7 @@ async function createAuth() {
       },
       defaultCookieAttributes: {
         sameSite: 'lax',
-        // Secure cookies only when served over HTTPS
-        secure: configuredBaseUrl.startsWith('https://'),
+        secure: baseURL.startsWith('https://'),
       },
     },
 
@@ -407,113 +406,16 @@ async function createAuth() {
           if (isExistingUser) {
             // SIGN-IN to existing account: transfer anonymous activity to the existing user,
             // then clean up the anonymous user.
-            const {
-              votes: votesTable,
-              comments: commentsTable,
-              posts: postsTable,
-              postSubscriptions,
-              inAppNotifications,
-              and: andOp,
-              inArray,
-            } = await import('@/lib/server/db')
             if (anonPrincipal) {
-              await db.transaction(async (tx) => {
-                // Delete anonymous votes that conflict with existing user's votes (same post)
-                const existingVotedPostIds = await tx
-                  .select({ postId: votesTable.postId })
-                  .from(votesTable)
-                  .where(eq(votesTable.principalId, existingPrincipal.id))
-                if (existingVotedPostIds.length > 0) {
-                  await tx.delete(votesTable).where(
-                    andOp(
-                      eq(votesTable.principalId, anonPrincipal.id),
-                      inArray(
-                        votesTable.postId,
-                        existingVotedPostIds.map((v) => v.postId)
-                      )
-                    )
-                  )
-                }
-                // Get comment IDs that belong to the anonymous principal (before transfer)
-                // so we can clean up stale notifications about them
-                const anonCommentIds = await tx
-                  .select({ id: commentsTable.id })
-                  .from(commentsTable)
-                  .where(eq(commentsTable.principalId, anonPrincipal.id))
-
-                // Transfer remaining anonymous votes, comments, posts to the existing principal
-                await Promise.all([
-                  tx
-                    .update(votesTable)
-                    .set({ principalId: existingPrincipal.id })
-                    .where(eq(votesTable.principalId, anonPrincipal.id)),
-                  tx
-                    .update(commentsTable)
-                    .set({ principalId: existingPrincipal.id })
-                    .where(eq(commentsTable.principalId, anonPrincipal.id)),
-                  tx
-                    .update(postsTable)
-                    .set({ principalId: existingPrincipal.id })
-                    .where(eq(postsTable.principalId, anonPrincipal.id)),
-                ])
-
-                if (anonCommentIds.length > 0) {
-                  const anonCIds = anonCommentIds.map((c) => c.id)
-                  const realName = newUser.user.name || 'User'
-
-                  // Delete self-notifications (where the recipient is the user who just logged in)
-                  await tx
-                    .delete(inAppNotifications)
-                    .where(
-                      andOp(
-                        eq(inAppNotifications.principalId, existingPrincipal.id),
-                        inArray(inAppNotifications.commentId, anonCIds)
-                      )
-                    )
-
-                  // Update remaining notifications: replace anonymous name with real name in title
-                  const anonDisplayName = anonPrincipal.displayName || 'Anonymous'
-                  const { sql } = await import('@/lib/server/db')
-                  await tx
-                    .update(inAppNotifications)
-                    .set({
-                      title: sql`REPLACE(${inAppNotifications.title}, ${anonDisplayName}, ${realName})`,
-                    })
-                    .where(inArray(inAppNotifications.commentId, anonCIds))
-                }
-                // Transfer subscriptions and notifications to existing principal
-                // (delete conflicts first for subscriptions which have a unique constraint)
-                const existingSubPostIds = await tx
-                  .select({ postId: postSubscriptions.postId })
-                  .from(postSubscriptions)
-                  .where(eq(postSubscriptions.principalId, existingPrincipal.id))
-                if (existingSubPostIds.length > 0) {
-                  await tx.delete(postSubscriptions).where(
-                    andOp(
-                      eq(postSubscriptions.principalId, anonPrincipal.id),
-                      inArray(
-                        postSubscriptions.postId,
-                        existingSubPostIds.map((s) => s.postId)
-                      )
-                    )
-                  )
-                }
-                await Promise.all([
-                  tx
-                    .update(postSubscriptions)
-                    .set({ principalId: existingPrincipal.id })
-                    .where(eq(postSubscriptions.principalId, anonPrincipal.id)),
-                  tx
-                    .update(inAppNotifications)
-                    .set({ principalId: existingPrincipal.id })
-                    .where(eq(inAppNotifications.principalId, anonPrincipal.id)),
-                ])
-                // Delete the anonymous principal, sessions, and user (atomically)
-                await tx.delete(principalTable).where(eq(principalTable.id, anonPrincipal.id))
-                await Promise.all([
-                  tx.delete(sessionTable).where(eq(sessionTable.userId, anonUserId)),
-                  tx.delete(userTable).where(eq(userTable.id, anonUserId)),
-                ])
+              const { mergeAnonymousToIdentified } = await import('./merge-anonymous')
+              await mergeAnonymousToIdentified({
+                anonPrincipalId: anonPrincipal.id as ReturnType<typeof generateId<'principal'>>,
+                targetPrincipalId: existingPrincipal.id as ReturnType<
+                  typeof generateId<'principal'>
+                >,
+                anonUserId,
+                anonDisplayName: anonPrincipal.displayName || 'Anonymous',
+                targetDisplayName: newUser.user.name || 'User',
               })
             }
 

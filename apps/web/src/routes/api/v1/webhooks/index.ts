@@ -31,7 +31,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
         if (authResult instanceof Response) return authResult
 
         try {
-          const { listWebhooks } = await import('@/lib/server/domains/webhooks')
+          const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
           const allWebhooks = await listWebhooks()
 
           return successResponse(allWebhooks.map(toWebhookListResponse))
@@ -67,7 +67,7 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             if (validationError) return validationError
           }
 
-          const { createWebhook } = await import('@/lib/server/domains/webhooks')
+          const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           const result = await createWebhook(
             {
               url: parsed.data.url,

@@ -4,7 +4,7 @@ import type { ApiKey } from '@/lib/server/domains/api-keys'
 import type { PrincipalId, ApiKeyId } from '@featurepool/ids'
 
 // Mock the verifyApiKey function
-vi.mock('@/lib/server/domains/api-keys', () => ({
+vi.mock('@/lib/server/domains/api-keys/api-key.service', () => ({
   verifyApiKey: vi.fn(),
 }))
 
@@ -64,7 +64,7 @@ describe('API Auth', () => {
     })
 
     it('should return null when API key is invalid', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(null)
 
       const request = new Request('https://example.com/api', {
@@ -79,7 +79,7 @@ describe('API Auth', () => {
     })
 
     it('should return auth context when API key is valid', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       const request = new Request('https://example.com/api', {
@@ -99,7 +99,7 @@ describe('API Auth', () => {
     })
 
     it('should handle Bearer token with extra whitespace', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       const request = new Request('https://example.com/api', {
@@ -114,7 +114,7 @@ describe('API Auth', () => {
     })
 
     it('should handle case-insensitive Bearer prefix', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       const request = new Request('https://example.com/api', {
@@ -147,7 +147,7 @@ describe('API Auth', () => {
     })
 
     it('should return auth context when authentication succeeds with team role', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       const request = new Request('https://example.com/api', {
@@ -181,7 +181,7 @@ describe('API Auth', () => {
     })
 
     it('should return 403 when admin role required but member is not admin', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       mockFindFirst.mockResolvedValue({ role: 'member' })
@@ -204,7 +204,7 @@ describe('API Auth', () => {
     })
 
     it('should return 403 when team role required but member is a portal user', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       mockFindFirst.mockResolvedValue({ role: 'user' })
@@ -227,7 +227,7 @@ describe('API Auth', () => {
     })
 
     it('should allow admin through for both team and admin roles', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
 
       mockFindFirst.mockResolvedValue({ role: 'admin' })

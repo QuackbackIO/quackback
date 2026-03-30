@@ -30,18 +30,28 @@ const mockCanDeleteComment = vi.fn()
 const mockCanPinComment = vi.fn()
 
 vi.mock('@/lib/server/domains/comments/comment.service', () => ({
-  canEditComment: (...args: unknown[]) => mockCanEditComment(...args),
-  canDeleteComment: (...args: unknown[]) => mockCanDeleteComment(...args),
-  canPinComment: (...args: unknown[]) => mockCanPinComment(...args),
-  addReaction: vi.fn(),
   createComment: vi.fn(),
   deleteComment: vi.fn(),
-  pinComment: vi.fn(),
-  removeReaction: vi.fn(),
-  softDeleteComment: vi.fn(),
-  unpinComment: vi.fn(),
   updateComment: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.reactions', () => ({
+  addReaction: vi.fn(),
+  removeReaction: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.permissions', () => ({
+  canEditComment: (...args: unknown[]) => mockCanEditComment(...args),
+  canDeleteComment: (...args: unknown[]) => mockCanDeleteComment(...args),
+  softDeleteComment: vi.fn(),
   userEditComment: vi.fn(),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.pin', () => ({
+  canPinComment: (...args: unknown[]) => mockCanPinComment(...args),
+  pinComment: vi.fn(),
+  restoreComment: vi.fn(),
+  unpinComment: vi.fn(),
 }))
 
 // --- Mock: auth helpers ---

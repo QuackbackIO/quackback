@@ -1,13 +1,34 @@
-import { useState } from 'react'
-import { ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { useEffect, useState } from 'react'
+import {
+  ChevronUpIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  LightBulbIcon,
+  NewspaperIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 interface WidgetPreviewProps {
   position: 'bottom-right' | 'bottom-left'
+  tabs?: { feedback: boolean; changelog: boolean }
 }
 
-export function WidgetPreview({ position }: WidgetPreviewProps) {
+type PreviewTab = 'feedback' | 'changelog'
+
+export function WidgetPreview({
+  position,
+  tabs = { feedback: true, changelog: false },
+}: WidgetPreviewProps) {
   const [isOpen, setIsOpen] = useState(true)
+  const showTabBar = tabs.feedback && tabs.changelog
+  const initialTab: PreviewTab = tabs.feedback ? 'feedback' : 'changelog'
+  const [activeTab, setActiveTab] = useState<PreviewTab>(initialTab)
+
+  // Reset to a valid tab when config changes
+  useEffect(() => {
+    if (activeTab === 'feedback' && !tabs.feedback) setActiveTab('changelog')
+    else if (activeTab === 'changelog' && !tabs.changelog) setActiveTab('feedback')
+  }, [tabs.feedback, tabs.changelog, activeTab])
 
   return (
     <div className="relative rounded-lg border border-border bg-muted/30 overflow-hidden h-[520px]">
@@ -23,14 +44,11 @@ export function WidgetPreview({ position }: WidgetPreviewProps) {
           )}
           style={{ height: '380px' }}
         >
-          {/* Search + close */}
-          <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1 shrink-0">
-            <div className="relative flex-1 min-w-0">
-              <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
-              <div className="w-full pl-6 pr-2 py-1.5 text-[10px] rounded-lg border border-border bg-muted/30 text-muted-foreground/60">
-                O que você está pensando?
-              </div>
-            </div>
+          {/* Header: title + close */}
+          <div className="flex items-center justify-between px-2.5 pt-2 pb-0.5 shrink-0">
+            <p className="text-[10px] font-semibold text-foreground px-0.5">
+              {activeTab === 'feedback' ? 'Share your ideas' : "What's new"}
+            </p>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
@@ -40,26 +58,91 @@ export function WidgetPreview({ position }: WidgetPreviewProps) {
             </button>
           </div>
 
-          {/* Post list */}
+          {/* Content area */}
           <div className="flex-1 overflow-hidden px-2.5 pb-1.5">
-            <p className="text-[8px] font-medium text-muted-foreground/60 uppercase tracking-wide px-0.5 py-1">
-              Ideias populares
-            </p>
-            <div className="space-y-0.5">
-              <MockPost title="Adicionar suporte a modo escuro" votes={42} voted />
-              <MockPost title="Melhorias no app mobile" votes={28} />
-              <MockPost title="Exportar dados para CSV" votes={19} />
-              <MockPost title="Atalhos de teclado" votes={14} voted />
-              <MockPost title="Regras personalizadas de notificação" votes={11} />
-            </div>
+            {activeTab === 'feedback' ? (
+              <>
+                <div className="relative mb-1.5">
+                  <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
+                  <div className="w-full pl-6 pr-2 py-1.5 text-[10px] rounded-lg border border-border bg-muted/30 text-muted-foreground/60">
+                    Search ideas...
+                  </div>
+                </div>
+                <p className="text-[8px] font-medium text-muted-foreground/60 uppercase tracking-wide px-0.5 py-1">
+                  Ideias populares
+                </p>
+                <div className="space-y-0.5">
+                  <MockPost title="Adicionar suporte a modo escuro" votes={42} voted />
+                  <MockPost title="Melhorias no app mobile" votes={28} />
+                  <MockPost title="Exportar dados para CSV" votes={19} />
+                  <MockPost title="Atalhos de teclado" votes={14} voted />
+                  <MockPost title="Regras personalizadas de notificação" votes={11} />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-1 pt-0.5">
+                <MockChangelogEntry
+                  title="Interactive setup guides"
+                  date="Mar 7"
+                  excerpt="Redesigned developer settings with live code examples..."
+                />
+                <MockChangelogEntry
+                  title="Capture feedback from Slack"
+                  date="Mar 1"
+                  excerpt="Forward messages or monitor channels automatically..."
+                />
+                <MockChangelogEntry
+                  title="AI duplicate detection"
+                  date="Feb 25"
+                  excerpt="Automatically find and merge duplicate feedback..."
+                />
+                <MockChangelogEntry
+                  title="Better SEO for your portal"
+                  date="Feb 24"
+                  excerpt="Open Graph tags, sitemaps, and canonical URLs..."
+                />
+              </div>
+            )}
           </div>
 
-          {/* Footer */}
-          <div className="px-2.5 py-1 border-t border-border text-center shrink-0">
-            <span className="inline-flex items-center gap-0.5 text-[8px] text-muted-foreground/60">
-              <img src="/logo.png" alt="" width={10} height={10} className="opacity-60" />
-              Desenvolvido com Featurepool
-            </span>
+          {/* Footer: Tab bar + Powered by */}
+          <div className="border-t border-border shrink-0">
+            {showTabBar && (
+              <div className="flex">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('feedback')}
+                  className={cn(
+                    'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
+                    activeTab === 'feedback'
+                      ? 'text-primary'
+                      : 'text-muted-foreground/60 hover:text-muted-foreground'
+                  )}
+                >
+                  <LightBulbIcon className="w-3.5 h-3.5" />
+                  <span className="text-[8px] font-medium">Feedback</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('changelog')}
+                  className={cn(
+                    'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
+                    activeTab === 'changelog'
+                      ? 'text-primary'
+                      : 'text-muted-foreground/60 hover:text-muted-foreground'
+                  )}
+                >
+                  <NewspaperIcon className="w-3.5 h-3.5" />
+                  <span className="text-[8px] font-medium">Changelog</span>
+                </button>
+              </div>
+            )}
+            <div className={cn('text-center', showTabBar ? 'pb-0.5' : 'py-1')}>
+              <span className="inline-flex items-center gap-0.5 text-[8px] text-muted-foreground/60">
+                <img src="/logo.png" alt="" width={10} height={10} className="opacity-60" />
+                Powered by Quackback
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -120,6 +203,28 @@ function MockPost({
           <span className="text-[7px] text-muted-foreground">Em andamento</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+function MockChangelogEntry({
+  title,
+  date,
+  excerpt,
+}: {
+  title: string
+  date: string
+  excerpt: string
+}) {
+  return (
+    <div className="rounded-lg hover:bg-muted/30 transition-colors px-1.5 py-1.5 cursor-pointer">
+      <p className="text-[7px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+        {date}
+      </p>
+      <p className="text-[10px] font-medium text-foreground line-clamp-1 mt-0.5">{title}</p>
+      <p className="text-[8px] text-muted-foreground/70 line-clamp-2 mt-0.5 leading-relaxed">
+        {excerpt}
+      </p>
     </div>
   )
 }

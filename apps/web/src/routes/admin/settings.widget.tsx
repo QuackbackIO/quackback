@@ -72,6 +72,10 @@ function WidgetSettingsPage() {
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>(
     (config.position as 'bottom-right' | 'bottom-left') ?? 'bottom-right'
   )
+  const [previewTabs, setPreviewTabs] = useState({
+    feedback: config.tabs?.feedback ?? true,
+    changelog: config.tabs?.changelog ?? false,
+  })
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -94,10 +98,11 @@ function WidgetSettingsPage() {
             boards={boardsQuery.data}
             position={position}
             onPositionChange={setPosition}
+            onTabsChange={setPreviewTabs}
           />
         </BrandingControlsPanel>
         <BrandingPreviewPanel label="Pré-visualização">
-          <WidgetPreview position={position} />
+          <WidgetPreview position={position} tabs={previewTabs} />
         </BrandingPreviewPanel>
       </BrandingLayout>
 
@@ -157,16 +162,26 @@ function WidgetAppearanceControls({
   boards,
   position,
   onPositionChange,
+  onTabsChange,
 }: {
-  config: { defaultBoard?: string; position?: string }
+  config: {
+    defaultBoard?: string
+    position?: string
+    tabs?: { feedback?: boolean; changelog?: boolean }
+  }
   boards: { id: string; name: string; slug: string }[]
   position: 'bottom-right' | 'bottom-left'
   onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
+  onTabsChange: (tabs: { feedback: boolean; changelog: boolean }) => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [defaultBoard, setDefaultBoard] = useState(config.defaultBoard ?? '')
+  const [widgetTabs, setWidgetTabs] = useState({
+    feedback: config.tabs?.feedback ?? true,
+    changelog: config.tabs?.changelog ?? false,
+  })
 
   async function save(updates: Record<string, unknown>) {
     setSaving(true)
@@ -215,7 +230,65 @@ function WidgetAppearanceControls({
 
       <div className="p-5 space-y-4">
         <div>
-          <h3 className="text-sm font-medium text-foreground">Board padrão</h3>
+          <h3 className="text-sm font-medium text-foreground">Tabs</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Choose which sections to show in the widget. The tab bar is hidden when only one is
+            enabled.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
+            <div>
+              <Label htmlFor="tab-feedback" className="text-xs font-medium cursor-pointer">
+                Feedback
+              </Label>
+              <p className="text-[11px] text-muted-foreground">Search, vote, and submit ideas</p>
+            </div>
+            <Switch
+              id="tab-feedback"
+              checked={widgetTabs.feedback}
+              onCheckedChange={(checked) => {
+                if (!checked && !widgetTabs.changelog) return
+                const next = { ...widgetTabs, feedback: checked }
+                setWidgetTabs(next)
+                onTabsChange(next)
+                save({ tabs: next })
+              }}
+              disabled={isBusy || (widgetTabs.feedback && !widgetTabs.changelog)}
+              aria-label="Feedback tab"
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
+            <div>
+              <Label htmlFor="tab-changelog" className="text-xs font-medium cursor-pointer">
+                Changelog
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Show product updates and shipped features
+              </p>
+            </div>
+            <Switch
+              id="tab-changelog"
+              checked={widgetTabs.changelog}
+              onCheckedChange={(checked) => {
+                if (!checked && !widgetTabs.feedback) return
+                const next = { ...widgetTabs, changelog: checked }
+                setWidgetTabs(next)
+                onTabsChange(next)
+                save({ tabs: next })
+              }}
+              disabled={isBusy || (widgetTabs.changelog && !widgetTabs.feedback)}
+              aria-label="Changelog tab"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">Default Board</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Para qual board os novos posts enviados pelo widget irão
           </p>

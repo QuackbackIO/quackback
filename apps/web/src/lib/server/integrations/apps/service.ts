@@ -10,7 +10,7 @@ import { db, eq, and, sql, posts, boards, postStatuses, postExternalLinks } from
 import { createId, fromUuid, type PostId, type PrincipalId } from '@featurepool/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
-import { identifyPortalUser } from '@/lib/server/domains/users/user.service'
+import { identifyPortalUser } from '@/lib/server/domains/users/user.identify'
 
 export interface LinkTicketInput {
   postId: PostId

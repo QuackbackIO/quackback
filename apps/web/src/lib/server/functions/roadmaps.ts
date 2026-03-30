@@ -18,12 +18,12 @@ import {
   createRoadmap,
   deleteRoadmap,
   getRoadmap,
-  getRoadmapPosts,
   listRoadmaps,
   removePostFromRoadmap,
   reorderRoadmaps,
   updateRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
+import { getRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 
 // ============================================
 // Schemas

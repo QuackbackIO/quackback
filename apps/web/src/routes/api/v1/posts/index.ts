@@ -64,7 +64,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
               : undefined
 
           // Import service function
-          const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
+          const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
 
           // Convert comma-separated tagIds to array (filter out invalid ones)
           const tagIdArray = tagIdsParam

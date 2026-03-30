@@ -228,12 +228,19 @@ export {
   aiUsageLog,
   // Schema tables - pipeline log
   pipelineLog,
+  // Schema tables - analytics
+  analyticsDailyStats,
+  analyticsTopPosts,
+  // Schema tables - help center
+  helpCenterCategories,
+  helpCenterCategoriesRelations,
+  helpCenterArticles,
+  helpCenterArticlesRelations,
+  helpCenterArticleFeedback,
+  helpCenterArticleFeedbackRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
-  // Client functions
-  createDb,
-  getMigrationDb,
 } from '@featurepool/db'
 
 // Re-export schema types not covered by @featurepool/db/types

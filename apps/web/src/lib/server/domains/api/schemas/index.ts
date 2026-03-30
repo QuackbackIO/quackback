@@ -10,6 +10,7 @@ export * from './common'
 
 // Resource schemas (register paths on import)
 import './posts'
+import './posts.votes'
 import './boards'
 import './comments'
 import './tags'

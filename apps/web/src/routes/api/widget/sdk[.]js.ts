@@ -47,8 +47,8 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
   server: {
     handlers: {
       GET: async () => {
-        const { getWidgetConfig, getBrandingConfig } =
-          await import('@/lib/server/domains/settings/settings.service')
+        const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
+        const { getBrandingConfig } = await import('@/lib/server/domains/settings/settings.media')
         const widgetConfig = await getWidgetConfig()
 
         if (!widgetConfig.enabled) {
@@ -81,7 +81,7 @@ export const Route = createFileRoute('/api/widget/sdk.js')({
           if (light?.radius) theme.radius = light.radius
 
           // Custom CSS overrides (if any)
-          const { getCustomCss } = await import('@/lib/server/domains/settings/settings.service')
+          const { getCustomCss } = await import('@/lib/server/domains/settings/settings.media')
           const customCss = await getCustomCss()
           if (customCss) {
             const cssOverrides = extractThemeFromCss(customCss)

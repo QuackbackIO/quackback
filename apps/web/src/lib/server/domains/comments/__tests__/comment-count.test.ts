@@ -216,7 +216,7 @@ describe('Comment count maintenance', () => {
 
   describe('softDeleteComment', () => {
     it('should use a transaction', async () => {
-      const { softDeleteComment } = await import('../comment.service')
+      const { softDeleteComment } = await import('../comment.permissions')
 
       await softDeleteComment('comment_mock' as CommentId, {
         principalId: 'principal_mock' as PrincipalId,
@@ -227,7 +227,7 @@ describe('Comment count maintenance', () => {
     })
 
     it('should decrement comment_count in the transaction', async () => {
-      const { softDeleteComment } = await import('../comment.service')
+      const { softDeleteComment } = await import('../comment.permissions')
 
       await softDeleteComment('comment_mock' as CommentId, {
         principalId: 'principal_mock' as PrincipalId,

@@ -7,6 +7,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import {
   changePostStatusFn,
+  changePostBoardFn,
   updatePostFn,
   updatePostTagsFn,
   createPostFn,
@@ -21,7 +22,7 @@ import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/shared/db-types'
-import type { PrincipalId, PostId, StatusId, TagId } from '@featurepool/ids'
+import type { PrincipalId, PostId, StatusId, TagId, BoardId } from '@featurepool/ids'
 import type { CreatePostInput } from '@/lib/server/domains/posts'
 
 // ============================================================================
@@ -125,6 +126,23 @@ export function useChangePostStatusId() {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+    },
+  })
+}
+
+// ============================================================================
+// Board Mutations
+// ============================================================================
+
+export function useChangePostBoard() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ postId, boardId }: { postId: PostId; boardId: BoardId }) =>
+      changePostBoardFn({ data: { id: postId, boardId } }),
+    onSuccess: (_data, { postId }) => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
     },
   })
 }

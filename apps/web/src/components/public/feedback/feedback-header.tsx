@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RichTextEditor, richTextToPlainText } from '@/components/ui/rich-text-editor'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -54,7 +54,7 @@ export function FeedbackHeader({
   const anonymousPostingEnabled = settings?.publicPortalConfig?.features?.anonymousPosting ?? false
 
   // Identified users post as themselves; anonymous posting is handled separately.
-  const isAnonymousSession = session?.user?.isAnonymous ?? false
+  const isAnonymousSession = session?.user?.principalType === 'anonymous'
   const effectiveUser =
     session?.user && !isAnonymousSession
       ? { name: session.user.name, email: session.user.email }
@@ -82,6 +82,7 @@ export function FeedbackHeader({
 
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const [contentMarkdown, setContentMarkdown] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   // Focus title input when form expands
@@ -100,8 +101,13 @@ export function FeedbackHeader({
     enabled: expanded,
   })
 
-  const handleContentChange = useCallback(function (json: JSONContent): void {
+  const handleContentChange = useCallback(function (
+    json: JSONContent,
+    _html: string,
+    markdown: string
+  ): void {
     setContentJson(json)
+    setContentMarkdown(markdown)
   }, [])
 
   async function handleSubmit() {
@@ -116,8 +122,6 @@ export function FeedbackHeader({
       setError('Adicione um título')
       return
     }
-
-    const plainText = contentJson ? richTextToPlainText(contentJson) : ''
 
     if (!effectiveUser && !anonymousPostingEnabled) {
       setError('Entre para enviar feedback')
@@ -136,7 +140,7 @@ export function FeedbackHeader({
       const result = await createPost.mutateAsync({
         boardId: selectedBoardId as BoardId,
         title: title.trim(),
-        content: plainText,
+        content: contentMarkdown,
         contentJson,
       })
 
@@ -159,6 +163,7 @@ export function FeedbackHeader({
     setSelectedBoardId(defaultBoardId || '')
     setTitle('')
     setContentJson(null)
+    setContentMarkdown('')
     setError('')
   }
 

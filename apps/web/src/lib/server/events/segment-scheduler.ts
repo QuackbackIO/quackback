@@ -80,7 +80,7 @@ async function initializeQueue() {
 
       // Lazy import to avoid circular deps
       const { evaluateDynamicSegment } =
-        await import('@/lib/server/domains/segments/segment.service')
+        await import('@/lib/server/domains/segments/segment.evaluation')
 
       try {
         const result = await evaluateDynamicSegment(segmentId as SegmentId)

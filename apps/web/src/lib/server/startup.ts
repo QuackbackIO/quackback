@@ -42,6 +42,11 @@ export function logStartupBanner(): void {
     .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
     .catch((err) => console.error('[Startup] Failed to init feedback AI worker:', err))
 
+  // Initialize analytics worker (hourly stats refresh)
+  import('./domains/analytics/analytics-queue')
+    .then(({ initAnalyticsWorker }) => initAnalyticsWorker())
+    .catch((err) => console.error('[Startup] Failed to init analytics worker:', err))
+
   // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily)
   Promise.all([
     import('./domains/feedback/pipeline/stuck-recovery.service'),

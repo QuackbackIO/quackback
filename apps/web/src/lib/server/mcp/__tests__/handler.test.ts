@@ -4,7 +4,7 @@ import type { PrincipalId, ApiKeyId, UserId } from '@featurepool/ids'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
-vi.mock('@/lib/server/domains/api-keys', () => ({
+vi.mock('@/lib/server/domains/api-keys/api-key.service', () => ({
   verifyApiKey: vi.fn(),
 }))
 
@@ -56,8 +56,11 @@ vi.mock('@/lib/server/config', () => ({
 }))
 
 // Mock all domain services called by tools/resources
-vi.mock('@/lib/server/domains/posts/post.query', () => ({
+vi.mock('@/lib/server/domains/posts/post.inbox', () => ({
   listInboxPosts: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+}))
+
+vi.mock('@/lib/server/domains/posts/post.query', () => ({
   getPostWithDetails: vi.fn().mockResolvedValue({
     id: 'post_test',
     title: 'Test Post',
@@ -137,7 +140,7 @@ vi.mock('@/lib/server/domains/merge-suggestions/merge-suggestion.service', () =>
   restoreMergeSuggestion: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@/lib/server/domains/posts/post.permissions', () => ({
+vi.mock('@/lib/server/domains/posts/post.user-actions', () => ({
   softDeletePost: vi.fn().mockResolvedValue(undefined),
   restorePost: vi.fn().mockResolvedValue({
     id: 'post_test',
@@ -168,6 +171,9 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
     updatedAt: new Date('2026-01-02'),
   }),
   deleteComment: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.reactions', () => ({
   addReaction: vi.fn().mockResolvedValue({
     added: true,
     reactions: [{ emoji: '👍', count: 1, hasReacted: true }],
@@ -175,6 +181,25 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
   removeReaction: vi.fn().mockResolvedValue({
     added: false,
     reactions: [],
+  }),
+}))
+
+vi.mock('@/lib/server/domains/changelog/changelog.query', () => ({
+  listChangelogs: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: 'changelog_01test',
+        title: 'v1.0 Release',
+        content: 'New features and improvements.',
+        status: 'published',
+        author: { name: 'Jane Admin' },
+        linkedPosts: [{ id: 'post_test', title: 'Test Post', voteCount: 5 }],
+        publishedAt: new Date('2026-01-15'),
+        createdAt: new Date('2026-01-10'),
+      },
+    ],
+    nextCursor: null,
+    hasMore: false,
   }),
 }))
 
@@ -194,22 +219,6 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
     updatedAt: new Date('2026-01-20'),
   }),
   deleteChangelog: vi.fn().mockResolvedValue(undefined),
-  listChangelogs: vi.fn().mockResolvedValue({
-    items: [
-      {
-        id: 'changelog_01test',
-        title: 'v1.0 Release',
-        content: 'New features and improvements.',
-        status: 'published',
-        author: { name: 'Jane Admin' },
-        linkedPosts: [{ id: 'post_test', title: 'Test Post', voteCount: 5 }],
-        publishedAt: new Date('2026-01-15'),
-        createdAt: new Date('2026-01-10'),
-      },
-    ],
-    nextCursor: null,
-    hasMore: false,
-  }),
   getChangelogById: vi.fn().mockResolvedValue({
     id: 'changelog_01test',
     title: 'v1.0 Release',
@@ -304,7 +313,7 @@ function mcpRequest(body: unknown, apiKey = 'qb_valid_key'): Request {
 }
 
 async function setupValidAuth() {
-  const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+  const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
   vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
   mockFindFirst.mockResolvedValue(MOCK_MEMBER_RECORD)
 }
@@ -381,7 +390,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 when API key is invalid', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(null)
 
       const { handleMcpRequest } = await import('../handler')
@@ -391,7 +400,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 403 when member is a portal user (not team)', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       // Return role: 'user' for the role lookup in withApiKeyAuth
       mockFindFirst.mockResolvedValue({ role: 'user' })
@@ -403,7 +412,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 when member record not found', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       // First call for role lookup in withApiKeyAuth → admin
       // Second call for full member record → null
@@ -615,7 +624,7 @@ describe('MCP HTTP Handler', () => {
     // ── search tool (showDeleted) ───────────────────────────────────────
 
     it('should pass showDeleted to listInboxPosts when showDeleted is true', async () => {
-      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
+      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
       const handleMcpRequest = await initializeSession()
 
       await handleMcpRequest(
@@ -633,7 +642,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should not pass showDeleted when showDeleted is false', async () => {
-      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.query')
+      const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
       const handleMcpRequest = await initializeSession()
 
       await handleMcpRequest(
@@ -1108,7 +1117,7 @@ describe('MCP HTTP Handler', () => {
     // ── delete_post tool ──────────────────────────────────────────────
 
     it('should handle tools/call for delete_post', async () => {
-      const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const { softDeletePost } = await import('@/lib/server/domains/posts/post.user-actions')
       const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
@@ -1136,7 +1145,7 @@ describe('MCP HTTP Handler', () => {
     // ── restore_post tool ─────────────────────────────────────────────
 
     it('should handle tools/call for restore_post', async () => {
-      const { restorePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const { restorePost } = await import('@/lib/server/domains/posts/post.user-actions')
       const handleMcpRequest = await initializeSession()
 
       const response = await handleMcpRequest(
@@ -1162,7 +1171,7 @@ describe('MCP HTTP Handler', () => {
     // ── delete_post error handling ──────────────────────────────────
 
     it('should return error when delete_post fails', async () => {
-      const { softDeletePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const { softDeletePost } = await import('@/lib/server/domains/posts/post.user-actions')
       vi.mocked(softDeletePost).mockRejectedValueOnce(new Error('Post has already been deleted'))
       const handleMcpRequest = await initializeSession()
 
@@ -1186,7 +1195,7 @@ describe('MCP HTTP Handler', () => {
     // ── restore_post error handling ─────────────────────────────────
 
     it('should return error when restore_post fails (expired)', async () => {
-      const { restorePost } = await import('@/lib/server/domains/posts/post.permissions')
+      const { restorePost } = await import('@/lib/server/domains/posts/post.user-actions')
       vi.mocked(restorePost).mockRejectedValueOnce(
         new Error('Posts can only be restored within 30 days of deletion')
       )

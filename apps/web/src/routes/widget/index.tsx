@@ -1,17 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { useState, useCallback, useEffect } from 'react'
-import { CheckCircleIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { WidgetVoteButton } from '@/components/widget/widget-vote-button'
 import type { PostId } from '@featurepool/ids'
-import { WidgetShell } from '@/components/widget/widget-shell'
+import { WidgetShell, type WidgetTab } from '@/components/widget/widget-shell'
 import { WidgetHome } from '@/components/widget/widget-home'
-import { WidgetNewPostForm } from '@/components/widget/widget-new-post-form'
 import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
+import { WidgetChangelog } from '@/components/widget/widget-changelog'
+import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
+import { WidgetHelp } from '@/components/widget/widget-help'
+import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
-import { generateOneTimeToken } from '@/lib/client/widget-auth'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -23,8 +26,6 @@ export const Route = createFileRoute('/widget/')({
     const { queryClient, settings, session } = context
     const search = location.search as z.infer<typeof searchSchema>
 
-    // Pass userId when session cookie is available (e.g. Chrome iframes,
-    // direct navigation) so votedPostIds are included in SSR data.
     const portalData = await queryClient.ensureQueryData(
       portalQueries.portalData({
         boardSlug: search.board,
@@ -33,7 +34,6 @@ export const Route = createFileRoute('/widget/')({
       })
     )
 
-    // Seed the widget votedPosts cache for SSR vote highlights.
     queryClient.setQueryData(
       widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
       new Set(portalData.votedPostIds)
@@ -48,6 +48,7 @@ export const Route = createFileRoute('/widget/')({
         commentCount: p.commentCount,
         board: p.board,
       })),
+      postsHasMore: portalData.posts.hasMore,
       statuses: portalData.statuses.map((s) => ({
         id: s.id as string,
         name: s.name,
@@ -60,19 +61,30 @@ export const Route = createFileRoute('/widget/')({
           name: b.name,
           slug: b.slug,
         })),
-      defaultBoard: search.board,
       orgSlug: settings?.slug ?? '',
       features: {
         anonymousVoting: settings?.publicPortalConfig?.features?.anonymousVoting ?? true,
         anonymousCommenting: settings?.publicPortalConfig?.features?.anonymousCommenting ?? false,
         anonymousPosting: settings?.publicPortalConfig?.features?.anonymousPosting ?? false,
       },
+      tabs: {
+        feedback: settings?.publicWidgetConfig?.tabs?.feedback ?? true,
+        changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
+        help: (settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false,
+      },
     }
   },
   component: WidgetPage,
 })
 
-type WidgetView = 'home' | 'new-post' | 'post-detail' | 'success'
+type WidgetView =
+  | 'home'
+  | 'post-detail'
+  | 'success'
+  | 'changelog'
+  | 'changelog-detail'
+  | 'help'
+  | 'help-detail'
 
 interface SuccessPost {
   id: string
@@ -83,16 +95,25 @@ interface SuccessPost {
 }
 
 function WidgetPage() {
-  const { posts, statuses, boards, defaultBoard, orgSlug, features } = Route.useLoaderData()
-  const { isIdentified, closeWidget, ensureSession } = useWidgetAuth()
+  const { posts, postsHasMore, statuses, boards, orgSlug, features, tabs } = Route.useLoaderData()
+  const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
-  const [view, setView] = useState<WidgetView>('home')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedBoardSlug, setSelectedBoardSlug] = useState<string | undefined>(defaultBoard)
-  const [prefilledTitle, setPrefilledTitle] = useState('')
+  const initialTab: WidgetTab = tabs.feedback ? 'feedback' : tabs.changelog ? 'changelog' : 'help'
+  const [view, setView] = useState<WidgetView>(
+    initialTab === 'changelog' ? 'changelog' : initialTab === 'help' ? 'help' : 'home'
+  )
+  const [activeTab, setActiveTab] = useState<WidgetTab>(initialTab)
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
+  const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
+  const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
+
+  const allPosts = useMemo(() => {
+    const createdIds = new Set(createdPosts.map((p) => p.id))
+    return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
+  }, [posts, createdPosts])
 
   // Listen for featurepool:open messages from the SDK
   useEffect(() => {
@@ -101,33 +122,31 @@ function WidgetPage() {
       const msg = event.data
       if (!msg || typeof msg !== 'object' || msg.type !== 'featurepool:open' || !msg.data) return
 
-      const opts = msg.data as { view?: string; title?: string; board?: string }
-      if (opts.view === 'new-post') {
-        if (opts.title) setPrefilledTitle(opts.title)
-        if (opts.board) setSelectedBoardSlug(opts.board)
-        setView('new-post')
+      const opts = msg.data as { view?: string }
+      if (opts.view === 'changelog' && tabs.changelog) {
+        setActiveTab('changelog')
+        setView('changelog')
+      } else if (opts.view === 'help' && tabs.help) {
+        setActiveTab('help')
+        setView('help')
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [tabs.changelog, tabs.help])
 
-  const canPost = isIdentified || features.anonymousPosting
-  const handleSubmitNew = useCallback(
-    async (title: string) => {
-      if (!canPost) return
-      // Ensure session exists for anonymous posters
-      if (!isIdentified) {
-        const ok = await ensureSession()
-        if (!ok) return
-      }
-      setPrefilledTitle(title)
-      setView('new-post')
-    },
-    [canPost, isIdentified, ensureSession]
-  )
-
-  const handlePostSuccess = useCallback((post: SuccessPost) => {
+  const handlePostCreated = useCallback((post: SuccessPost) => {
+    setCreatedPosts((prev) => [
+      {
+        id: post.id as (typeof prev)[number]['id'],
+        title: post.title,
+        voteCount: post.voteCount,
+        statusId: post.statusId as (typeof prev)[number]['statusId'],
+        commentCount: 0,
+        board: post.board as (typeof prev)[number]['board'],
+      },
+      ...prev,
+    ])
     setSuccessPost(post)
     setView('success')
   }, [])
@@ -138,30 +157,88 @@ function WidgetPage() {
   }, [])
 
   const handleBack = useCallback(() => {
+    if (view === 'changelog-detail') {
+      setSelectedChangelogId(null)
+      setView('changelog')
+      return
+    }
+    if (view === 'help-detail') {
+      setSelectedHelpSlug(null)
+      setView('help')
+      return
+    }
     setSelectedPostId(null)
     setView('home')
+  }, [view])
+
+  const handleTabChange = useCallback((tab: WidgetTab) => {
+    setActiveTab(tab)
+    if (tab === 'feedback') {
+      setSelectedPostId(null)
+      setView('home')
+    } else if (tab === 'changelog') {
+      setSelectedChangelogId(null)
+      setView('changelog')
+    } else {
+      setSelectedHelpSlug(null)
+      setView('help')
+    }
   }, [])
 
-  // Shell props based on view
-  const shellOnBack = view === 'new-post' || view === 'post-detail' ? handleBack : undefined
+  const handleChangelogEntrySelect = useCallback((entryId: string) => {
+    setSelectedChangelogId(entryId)
+    setView('changelog-detail')
+  }, [])
+
+  const handleHelpArticleSelect = useCallback((articleSlug: string) => {
+    setSelectedHelpSlug(articleSlug)
+    setView('help-detail')
+  }, [])
+
+  const shellOnBack =
+    view !== 'home' && view !== 'changelog' && view !== 'help' ? handleBack : undefined
 
   return (
-    <WidgetShell orgSlug={orgSlug} onBack={shellOnBack}>
-      {view === 'home' && (
+    <WidgetShell
+      orgSlug={orgSlug}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      onBack={shellOnBack}
+      enabledTabs={tabs}
+    >
+      {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
+
+      {view === 'changelog-detail' && selectedChangelogId && (
+        <WidgetChangelogDetail entryId={selectedChangelogId} />
+      )}
+
+      {view === 'help' && <WidgetHelp onArticleSelect={handleHelpArticleSelect} />}
+
+      {view === 'help-detail' && selectedHelpSlug && (
+        <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+      )}
+
+      {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}
+      <div
+        className={
+          view === 'home' || view === 'post-detail'
+            ? view === 'home'
+              ? 'flex flex-col h-full'
+              : 'hidden'
+            : 'hidden'
+        }
+      >
         <WidgetHome
-          initialPosts={posts}
+          initialPosts={allPosts}
+          initialHasMore={postsHasMore}
           statuses={statuses}
           boards={boards}
-          defaultBoard={defaultBoard}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          selectedBoardSlug={selectedBoardSlug}
-          onBoardChange={setSelectedBoardSlug}
-          onSubmitNew={handleSubmitNew}
           onPostSelect={handlePostSelect}
+          onPostCreated={handlePostCreated}
           anonymousVotingEnabled={features.anonymousVoting}
+          anonymousPostingEnabled={features.anonymousPosting}
         />
-      )}
+      </div>
 
       {view === 'post-detail' && selectedPostId && (
         <WidgetPostDetail
@@ -169,16 +246,6 @@ function WidgetPage() {
           statuses={statuses}
           anonymousVotingEnabled={features.anonymousVoting}
           anonymousCommentingEnabled={features.anonymousCommenting}
-        />
-      )}
-
-      {view === 'new-post' && (
-        <WidgetNewPostForm
-          boards={boards}
-          prefilledTitle={prefilledTitle}
-          selectedBoardSlug={selectedBoardSlug}
-          onSuccess={handlePostSuccess}
-          anonymousPostingEnabled={features.anonymousPosting}
         />
       )}
 
@@ -193,7 +260,6 @@ function WidgetPage() {
 
           return (
             <div className="flex flex-col h-full">
-              {/* Success header */}
               <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
                 <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 shrink-0">
                   <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
@@ -206,7 +272,6 @@ function WidgetPage() {
                 </div>
               </div>
 
-              {/* Post card — same format as the list view */}
               <div className="px-3">
                 <div
                   className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
@@ -220,14 +285,6 @@ function WidgetPage() {
                       postId={successPost.id as PostId}
                       voteCount={successPost.voteCount}
                       onBeforeVote={canVote ? ensureSession : undefined}
-                      onAuthRequired={
-                        !canVote
-                          ? () => {
-                              const url = `${window.location.origin}/b/${successPost.board.slug}/posts/${successPost.id}`
-                              window.parent.postMessage({ type: 'featurepool:navigate', url }, '*')
-                            }
-                          : undefined
-                      }
                     />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -252,31 +309,14 @@ function WidgetPage() {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="px-4 pt-3 space-y-2">
+              <div className="px-3 pt-3">
                 <button
                   type="button"
-                  onClick={async () => {
-                    let url = `${window.location.origin}/b/${successPost.board.slug}/posts/${successPost.id}`
-                    const ott = await generateOneTimeToken()
-                    if (ott) url += `?ott=${encodeURIComponent(ott)}`
-                    window.parent.postMessage({ type: 'featurepool:navigate', url }, '*')
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                  onClick={handleBack}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
                 >
-                  Ver no quadro de feedback
-                  <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-                </button>
-              </div>
-
-              {/* Spacer + close at bottom */}
-              <div className="mt-auto px-4 pb-4 pt-3 flex justify-center">
-                <button
-                  type="button"
-                  onClick={closeWidget}
-                  className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                >
-                  Fechar widget
+                  <ArrowLeftIcon className="w-3.5 h-3.5" />
+                  Back to ideas
                 </button>
               </div>
             </div>

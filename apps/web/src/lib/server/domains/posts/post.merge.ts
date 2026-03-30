@@ -33,7 +33,7 @@ import {
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { getPostWithDetails, getCommentsWithReplies } from './post.query'
-import { hasUserVoted } from './post.public'
+import { hasUserVoted } from './post.public.utils'
 import type {
   MergePostResult,
   UnmergePostResult,

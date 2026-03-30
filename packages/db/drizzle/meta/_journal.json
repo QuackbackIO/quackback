@@ -274,6 +274,27 @@
       "when": 1774132557224,
       "tag": "0038_furry_thunderbolts",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1774562002342,
+      "tag": "0039_swift_hiroim",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1774606361148,
+      "tag": "0040_tearful_wiccan",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1774609643895,
+      "tag": "0041_young_songbird",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { PrincipalId } from '@quackback/ids'
 
 // --- Redis cache mocks ---
 const mockCacheDel = vi.fn()
@@ -64,7 +65,7 @@ describe('platform credential cache invalidation', () => {
     await savePlatformCredentials({
       integrationType: 'slack',
       credentials: { clientId: 'id', clientSecret: 'secret' },
-      principalId: 'principal_1' as any,
+      principalId: 'principal_1' as PrincipalId,
     })
 
     expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')

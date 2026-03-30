@@ -2,67 +2,29 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { LightBulbIcon } from '@heroicons/react/24/solid'
-import { CompactPostCard } from '@/components/shared/compact-post-card'
+import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { VoteButton } from '@/components/public/vote-button'
-import type { MatchStrength, SimilarPost } from '@/lib/client/hooks/use-similar-posts'
+import type { SimilarPost } from '@/lib/client/hooks/use-similar-posts'
 import { cn } from '@/lib/shared/utils'
-import type { PostId } from '@featurepool/ids'
-
-const MATCH_STRENGTH_LABELS: Record<MatchStrength, string> = {
-  strong: 'Muito parecido',
-  good: 'Parecido',
-  weak: 'Relacionado',
-}
-
-interface SimilarPostItemProps {
-  post: SimilarPost
-}
-
-function SimilarPostItem({ post }: SimilarPostItemProps): React.ReactElement {
-  const matchLabel = post.matchStrength ? MATCH_STRENGTH_LABELS[post.matchStrength] : null
-
-  return (
-    <CompactPostCard
-      title={post.title}
-      voteCount={post.voteCount}
-      voteSlot={<VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />}
-      label={matchLabel ?? undefined}
-      statusName={post.status?.name}
-      statusColor={post.status?.color}
-      onClick={() => window.open(`/b/${post.boardSlug}/posts/${post.id}`, '_blank')}
-      className="border-0 bg-transparent p-0"
-    />
-  )
-}
+import type { PostId } from '@quackback/ids'
 
 interface SimilarPostsCardProps {
-  /** Similar posts to display */
   posts: SimilarPost[]
-  /** Whether to show the card */
   show: boolean
-  /** Optional className */
   className?: string
 }
 
-interface ContentHeightResult {
-  ref: React.RefObject<HTMLDivElement | null>
-  height: number
-}
-
-function useContentHeight(): ContentHeightResult {
+function useContentHeight() {
   const ref = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(0)
 
   useLayoutEffect(() => {
     const element = ref.current
     if (!element) return
-
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (entry) setHeight(entry.contentRect.height)
     })
-
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
@@ -72,9 +34,6 @@ function useContentHeight(): ContentHeightResult {
 
 const MAX_SIMILAR_POSTS = 3
 
-/**
- * Displays similar posts in a compact card above the submit button.
- */
 export function SimilarPostsCard({
   posts,
   show,
@@ -95,12 +54,35 @@ export function SimilarPostsCard({
         >
           <div ref={contentRef}>
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
-              <LightBulbIcon className="h-3 w-3 text-amber-500/70" />
-              Solicitações parecidas da comunidade
+              <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
+              Similar ideas
             </p>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
-                <SimilarPostItem key={post.id} post={post} />
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => window.open(`/b/${post.boardSlug}/posts/${post.id}`, '_blank')}
+                  className="flex items-center gap-2.5 w-full rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer text-left"
+                >
+                  <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                    <VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {post.status && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span
+                          className="size-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: post.status.color }}
+                        />
+                        {post.status.name}
+                      </span>
+                    )}
+                    <p className="text-sm font-semibold text-foreground line-clamp-1">
+                      {post.title}
+                    </p>
+                  </div>
+                </button>
               ))}
             </div>
           </div>

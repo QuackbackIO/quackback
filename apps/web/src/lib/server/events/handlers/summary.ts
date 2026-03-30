@@ -7,7 +7,7 @@
 
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
-import { generateAndSavePostSummary } from '@/lib/server/domains/summary'
+import { generateAndSavePostSummary } from '@/lib/server/domains/summary/summary.service'
 import type { PostId } from '@featurepool/ids'
 
 export const summaryHook: HookHandler = {

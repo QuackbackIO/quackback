@@ -4,8 +4,10 @@ import { z } from 'zod'
 import { generateId } from '@featurepool/ids'
 import type { UserId, PrincipalId } from '@featurepool/ids'
 import { db, user, session, principal, eq, and, gt } from '@/lib/server/db'
-import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.service'
+import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 
 // Accept either legacy HMAC fields or a JWT ssoToken
 const identifySchema = z
@@ -19,6 +21,8 @@ const identifySchema = z
     avatarURL: z.string().url().optional(),
     created: z.string().optional(),
     hash: z.string().optional(),
+    // Anonymous→identified merge: previous widget session token
+    previousToken: z.string().optional(),
   })
   .refine((data) => data.ssoToken || (data.id && data.email), {
     message: 'Either ssoToken or (id + email) is required',
@@ -60,7 +64,7 @@ async function findOrCreateSession(userId: UserId, request: Request): Promise<st
  * Verify a HS256 JWT without external libraries.
  * Returns the decoded payload or null if invalid.
  */
-function verifyHS256JWT(token: string, secret: string): Record<string, unknown> | null {
+export function verifyHS256JWT(token: string, secret: string): Record<string, unknown> | null {
   const parts = token.split('.')
   if (parts.length !== 3) return null
 
@@ -249,43 +253,50 @@ export const Route = createFileRoute('/api/widget/identify')({
           principalRecord = created
         }
 
-        // Find/create session and fetch voted posts in parallel
         const principalId = principalRecord.id as PrincipalId
+
+        // If the widget had a previous anonymous session, merge its activity.
+        // Ownership check: the caller must send the previousToken as both a body
+        // field AND the Authorization Bearer header to prove they own the session.
+        if (body.previousToken) {
+          const authHeader = request.headers.get('authorization') ?? ''
+          const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+          if (bearerToken && bearerToken === body.previousToken) {
+            await resolveAndMergeAnonymousToken({
+              previousToken: body.previousToken,
+              targetPrincipalId: principalId,
+              targetDisplayName: userRecord.name || 'User',
+            })
+          }
+        }
+
+        // Find/create session and fetch voted posts in parallel
+        // (voted posts include any merged anonymous votes)
         const [sessionToken, votedPostIdSet] = await Promise.all([
           findOrCreateSession(userId, request),
           getAllUserVotedPostIds(principalId),
         ])
         const votedPostIds = Array.from(votedPostIdSet)
 
-        // Set the session cookie so server functions (requireAuth) work for identified users.
-        // This matches Better Auth's cookie format so auth.api.getSession() can read it.
-        const isSecure = new URL(request.url).protocol === 'https:'
-        const cookieParts = [
-          `better-auth.session_token=${sessionToken}`,
-          'Path=/',
-          'SameSite=Lax',
-          `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
-        ]
-        if (isSecure) cookieParts.push('Secure')
+        // No Set-Cookie — the widget sends the token as Bearer header.
+        // An unsigned cookie here would poison Better Auth's signed-cookie
+        // lookup in same-site deployments (#99).
+        // Resolve avatar: custom upload (S3) takes priority over OAuth URL
+        const avatarUrl =
+          (userRecord.imageKey ? getPublicUrlOrNull(userRecord.imageKey) : null) ??
+          userRecord.image ??
+          null
 
-        return new Response(
-          JSON.stringify({
-            sessionToken,
-            user: {
-              id: userRecord.id,
-              name: userRecord.name,
-              email: userRecord.email,
-              avatarUrl: userRecord.image ?? null,
-            },
-            votedPostIds,
-          }),
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Set-Cookie': cookieParts.join('; '),
-            },
-          }
-        )
+        return Response.json({
+          sessionToken,
+          user: {
+            id: userRecord.id,
+            name: userRecord.name,
+            email: userRecord.email,
+            avatarUrl,
+          },
+          votedPostIds,
+        })
       },
     },
   },

@@ -71,7 +71,7 @@ vi.mock('./post.query', () => ({
   getCommentsWithReplies: vi.fn(),
 }))
 
-vi.mock('./post.public', () => ({
+vi.mock('./post.public.utils', () => ({
   hasUserVoted: vi.fn(),
 }))
 

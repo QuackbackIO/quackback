@@ -139,28 +139,28 @@ describe('user.service', () => {
 
   describe('parseUserAttributes', () => {
     it('should parse valid JSON metadata', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       const result = parseUserAttributes('{"plan":"enterprise","mrr":500}')
       expect(result).toEqual({ plan: 'enterprise', mrr: 500 })
     })
 
     it('should return empty object for null', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       expect(parseUserAttributes(null)).toEqual({})
     })
 
     it('should return empty object for invalid JSON', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       expect(parseUserAttributes('not-json')).toEqual({})
     })
 
     it('should return empty object for empty string', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       expect(parseUserAttributes('')).toEqual({})
     })
 
     it('should strip internal keys prefixed with _', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       const result = parseUserAttributes(
         '{"plan":"pro","_externalUserId":"ext123","_internal":"secret"}'
       )
@@ -170,7 +170,7 @@ describe('user.service', () => {
     })
 
     it('should return only public keys when metadata has only internal keys', async () => {
-      const { parseUserAttributes } = await import('../user.service')
+      const { parseUserAttributes } = await import('../user.attributes')
       const result = parseUserAttributes('{"_externalUserId":"ext123"}')
       expect(result).toEqual({})
     })
@@ -188,7 +188,7 @@ describe('user.service', () => {
         { key: 'mrr', type: 'number', externalKey: null },
       ])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ plan: 'enterprise', mrr: '500' })
 
       expect(result.valid).toEqual({ plan: 'enterprise', mrr: 500 })
@@ -199,7 +199,7 @@ describe('user.service', () => {
     it('should report errors for unknown attribute keys', async () => {
       mockSelectFrom.mockResolvedValueOnce([{ key: 'plan', type: 'string', externalKey: null }])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ plan: 'pro', unknown_key: 'value' })
 
       expect(result.valid).toEqual({ plan: 'pro' })
@@ -210,7 +210,7 @@ describe('user.service', () => {
     it('should handle null values as removals', async () => {
       mockSelectFrom.mockResolvedValueOnce([{ key: 'plan', type: 'string', externalKey: null }])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ plan: null })
 
       expect(result.removals).toEqual(['plan'])
@@ -220,7 +220,7 @@ describe('user.service', () => {
     it('should report errors for values that cannot be coerced', async () => {
       mockSelectFrom.mockResolvedValueOnce([{ key: 'mrr', type: 'number', externalKey: null }])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ mrr: 'not-a-number' })
 
       expect(result.errors).toHaveLength(1)
@@ -231,7 +231,7 @@ describe('user.service', () => {
     it('should coerce boolean strings', async () => {
       mockSelectFrom.mockResolvedValueOnce([{ key: 'active', type: 'boolean', externalKey: null }])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ active: 'true' })
 
       expect(result.valid).toEqual({ active: true })
@@ -242,7 +242,7 @@ describe('user.service', () => {
         { key: 'signup_date', type: 'date', externalKey: null },
       ])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ signup_date: '2024-06-15T00:00:00Z' })
 
       expect(result.valid.signup_date).toBe('2024-06-15T00:00:00.000Z')
@@ -251,7 +251,7 @@ describe('user.service', () => {
     it('should return empty results when no definitions exist', async () => {
       mockSelectFrom.mockResolvedValueOnce([])
 
-      const { validateAndCoerceAttributes } = await import('../user.service')
+      const { validateAndCoerceAttributes } = await import('../user.attributes')
       const result = await validateAndCoerceAttributes({ plan: 'pro' })
 
       expect(result.valid).toEqual({})
@@ -268,7 +268,7 @@ describe('user.service', () => {
       // No existing user
       mockFindFirst.mockResolvedValueOnce(undefined)
 
-      const { identifyPortalUser } = await import('../user.service')
+      const { identifyPortalUser } = await import('../user.identify')
       await identifyPortalUser({
         email: 'new@example.com',
         externalId: 'ext-new',
@@ -284,7 +284,7 @@ describe('user.service', () => {
     it('should set metadata to null when no externalId or attributes', async () => {
       mockFindFirst.mockResolvedValueOnce(undefined)
 
-      const { identifyPortalUser } = await import('../user.service')
+      const { identifyPortalUser } = await import('../user.identify')
       await identifyPortalUser({ email: 'plain@example.com' })
 
       const userInsert = insertValuesCalls[0][0] as Record<string, unknown>
@@ -305,7 +305,7 @@ describe('user.service', () => {
       // Find existing user, then re-read after update
       mockFindFirst.mockResolvedValueOnce(existingUser).mockResolvedValueOnce(existingUser)
 
-      const { identifyPortalUser } = await import('../user.service')
+      const { identifyPortalUser } = await import('../user.identify')
       await identifyPortalUser({
         email: 'existing@example.com',
         externalId: 'ext-456',
@@ -334,7 +334,7 @@ describe('user.service', () => {
       // Find existing user, then re-read after update
       mockFindFirst.mockResolvedValueOnce(existingUser).mockResolvedValueOnce(existingUser)
 
-      const { identifyPortalUser } = await import('../user.service')
+      const { identifyPortalUser } = await import('../user.identify')
       await identifyPortalUser({
         email: 'existing@example.com',
         attributes: { plan: 'enterprise' },
@@ -361,7 +361,7 @@ describe('user.service', () => {
       // Find existing user, then re-read after update
       mockFindFirst.mockResolvedValueOnce(existingUser).mockResolvedValueOnce(existingUser)
 
-      const { identifyPortalUser } = await import('../user.service')
+      const { identifyPortalUser } = await import('../user.identify')
       await identifyPortalUser({
         email: 'existing@example.com',
         externalId: null,

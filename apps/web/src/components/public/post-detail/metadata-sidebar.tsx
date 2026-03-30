@@ -13,6 +13,7 @@ import {
   UserIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import { CheckIcon } from '@heroicons/react/24/solid'
 import { IconGitMerge, IconLock, IconLockOpen, IconTrash, IconRestore } from '@tabler/icons-react'
 import {
   DropdownMenu,
@@ -37,7 +38,7 @@ import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-sta
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { PostId, StatusId, TagId, RoadmapId } from '@featurepool/ids'
+import type { PostId, StatusId, TagId, RoadmapId, BoardId } from '@featurepool/ids'
 
 export function MetadataSidebarSkeleton({
   variant = 'column',
@@ -199,7 +200,7 @@ interface MetadataSidebarProps {
   postId: PostId
   voteCount: number
   status?: { id: string; name: string; color: string | null } | null
-  board: { name: string; slug: string }
+  board: { id: string; name: string; slug: string }
   authorName: string | null
   authorAvatarUrl?: string | null
   /** Principal ID of the author (used to link to admin user detail) */
@@ -225,6 +226,10 @@ interface MetadataSidebarProps {
   onRoadmapAdd?: (roadmapId: RoadmapId) => Promise<void>
   /** Callback when roadmap removed */
   onRoadmapRemove?: (roadmapId: RoadmapId) => Promise<void>
+  /** All available boards for selection */
+  allBoards?: Array<{ id: string; name: string; slug: string }>
+  /** Callback when board changes */
+  onBoardChange?: (boardId: BoardId) => Promise<void>
   /** Whether metadata update is in progress */
   isUpdating?: boolean
   /** Hide subscribe section (for admin context) */
@@ -268,6 +273,8 @@ export function MetadataSidebar({
   onTagsChange,
   onRoadmapAdd,
   onRoadmapRemove,
+  allBoards,
+  onBoardChange,
   isUpdating = false,
   hideSubscribe = false,
   hideVote = false,
@@ -279,6 +286,7 @@ export function MetadataSidebar({
 }: MetadataSidebarProps) {
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
+  const [boardOpen, setBoardOpen] = useState(false)
   const [sourceQuoteOpen, setSourceQuoteOpen] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
@@ -331,6 +339,18 @@ export function MetadataSidebar({
     } finally {
       setPendingRoadmapId(null)
       setRoadmapOpen(false)
+    }
+  }
+
+  async function handleBoardChange(boardId: BoardId) {
+    if (!onBoardChange || boardId === (board.id as BoardId)) {
+      setBoardOpen(false)
+      return
+    }
+    try {
+      await onBoardChange(boardId)
+    } finally {
+      setBoardOpen(false)
     }
   }
 
@@ -426,7 +446,47 @@ export function MetadataSidebar({
             <FolderIcon className="h-4 w-4" />
             <span>Quadro</span>
           </div>
-          <span className="text-sm font-medium text-foreground">{board.name}</span>
+          {canEdit && onBoardChange && allBoards && allBoards.length > 0 ? (
+            <Popover open={boardOpen} onOpenChange={setBoardOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  className={cn(
+                    'text-sm font-medium text-foreground',
+                    'hover:text-primary transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {board.name}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-1" align="end" sideOffset={4}>
+                <div className="max-h-48 overflow-y-auto space-y-0.5">
+                  {allBoards.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => handleBoardChange(b.id as BoardId)}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
+                        'text-foreground/80 hover:text-foreground hover:bg-muted/60',
+                        'transition-all duration-100 text-left font-medium'
+                      )}
+                    >
+                      <FolderIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate flex-1">{b.name}</span>
+                      {b.id === board.id && (
+                        <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <span className="text-sm font-medium text-foreground">{board.name}</span>
+          )}
         </div>
 
         {/* Tags */}

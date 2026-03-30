@@ -21,7 +21,7 @@ export const publishStateSchema = z.discriminatedUnion('type', [
  */
 export const createChangelogSchema = z.object({
   title: z.string().min(1).max(200),
-  content: z.string().min(1),
+  content: z.string(),
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
@@ -33,7 +33,7 @@ export const createChangelogSchema = z.object({
 export const updateChangelogSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).max(200).optional(),
-  content: z.string().min(1).optional(),
+  content: z.string().optional(),
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),

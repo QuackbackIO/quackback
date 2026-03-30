@@ -17,7 +17,7 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
 import { db, invitation, principal, user, eq, and } from '@/lib/server/db'
-import { listInboxPosts } from '@/lib/server/domains/posts/post.query'
+import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
@@ -27,11 +27,8 @@ import {
   updateMemberRole,
   removeTeamMember,
 } from '@/lib/server/domains/principals/principal.service'
-import {
-  listPortalUsers,
-  getPortalUserDetail,
-  removePortalUser,
-} from '@/lib/server/domains/users/user.service'
+import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
+import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
 import {
   listSegments,
   createSegment,
@@ -39,9 +36,11 @@ import {
   deleteSegment,
   assignUsersToSegment,
   removeUsersFromSegment,
+} from '@/lib/server/domains/segments/segment.service'
+import {
   evaluateDynamicSegment,
   evaluateAllDynamicSegments,
-} from '@/lib/server/domains/segments/segment.service'
+} from '@/lib/server/domains/segments/segment.evaluation'
 import {
   upsertSegmentEvaluationSchedule,
   removeSegmentEvaluationSchedule,

@@ -10,7 +10,7 @@
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData, PostCreatedEvent } from '../types'
 import { db, eq, feedbackSources } from '@/lib/server/db'
-import { getCommentsByPost } from '@/lib/server/domains/comments/comment.service'
+import { getCommentsByPost } from '@/lib/server/domains/comments/comment.query'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
 import type { FeedbackSourceId, PostId } from '@featurepool/ids'
 import type { RawFeedbackThreadMessage } from '@/lib/server/db'
@@ -71,6 +71,12 @@ function collectCustomerMessages(
 export const feedbackPipelineHook: HookHandler = {
   async run(event: EventData, _target: unknown, _config: unknown): Promise<HookResult> {
     if (event.type !== 'post.created') return { success: true }
+
+    // Feature flag guard: skip pipeline if AI feedback extraction is disabled
+    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+    if (!(await isFeatureEnabled('aiFeedbackExtraction'))) {
+      return { success: true }
+    }
 
     const { post: eventPost } = (event as PostCreatedEvent).data
 

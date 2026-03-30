@@ -1,3 +1,9 @@
-export { getOpenAI } from './config'
-export { withRetry, isRetryableError, type RetryOptions } from './retry'
-export { stripCodeFences } from './parse'
+/**
+ * AI module - Types Only
+ *
+ * Import directly:
+ *   - './config' for getOpenAI
+ *   - './retry' for withRetry
+ *   - './parse' for stripCodeFences
+ */
+export type { RetryOptions } from './retry'

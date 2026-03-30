@@ -105,9 +105,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
       RETURNING vote_count
     ),
     anon_check AS (
-      SELECT 1 FROM ${user} u
-      JOIN ${principal} p ON p.user_id = u.id
-      WHERE p.id = ${principalUuid}::uuid AND u.is_anonymous = true
+      SELECT 1 FROM ${principal} p
+      WHERE p.id = ${principalUuid}::uuid AND p.type = 'anonymous'
     ),
     subscribed AS (
       INSERT INTO ${postSubscriptions} (id, post_id, principal_id, reason, notify_comments, notify_status_changes)
@@ -316,7 +315,7 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       displayName: principal.displayName,
       email: user.email,
       avatarUrl: principal.avatarUrl,
-      isAnonymous: user.isAnonymous,
+      principalType: principal.type,
       sourceType: votes.sourceType,
       sourceExternalUrl: votes.sourceExternalUrl,
       addedByName: sql<string | null>`(
@@ -340,18 +339,21 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
     .where(eq(votes.postId, postId))
     .orderBy(desc(votes.createdAt))
 
-  return rows.map((row) => ({
-    principalId: row.principalId,
-    displayName: row.isAnonymous ? null : row.displayName,
-    email: row.email,
-    avatarUrl: row.isAnonymous ? null : row.avatarUrl,
-    isAnonymous: row.isAnonymous ?? false,
-    sourceType: row.sourceType,
-    sourceExternalUrl: row.sourceExternalUrl,
-    addedByName: row.addedByName,
-    createdAt: row.createdAt,
-    subscriptionLevel: row.isAnonymous
-      ? ('none' as const)
-      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
-  }))
+  return rows.map((row) => {
+    const isAnonymous = row.principalType === 'anonymous'
+    return {
+      principalId: row.principalId,
+      displayName: isAnonymous ? null : row.displayName,
+      email: row.email,
+      avatarUrl: isAnonymous ? null : row.avatarUrl,
+      isAnonymous,
+      sourceType: row.sourceType,
+      sourceExternalUrl: row.sourceExternalUrl,
+      addedByName: row.addedByName,
+      createdAt: row.createdAt,
+      subscriptionLevel: isAnonymous
+        ? ('none' as const)
+        : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
+    }
+  })
 }

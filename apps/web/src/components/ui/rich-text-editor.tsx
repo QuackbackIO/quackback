@@ -21,6 +21,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Underline from '@tiptap/extension-underline'
 import Youtube from '@tiptap/extension-youtube'
+import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
@@ -59,7 +60,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Youtube as YoutubeIcon,
+  Play as YoutubeIcon,
   Download,
   Copy,
   Expand,
@@ -87,6 +88,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from './context-menu'
+import { ScrollArea } from './scroll-area'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -454,47 +456,50 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     return (
       <div
-        ref={containerRef}
-        className="z-50 w-72 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg"
+        className="z-50 w-72 overflow-hidden rounded-lg border bg-popover shadow-lg"
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {Object.entries(groupedItems).map(([group, groupItems]) => (
-          <div key={group}>
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              {groupLabels[group] || group}
-            </div>
-            {groupItems.map((item) => {
-              globalIndex++
-              const currentIndex = globalIndex
-              return (
-                <button
-                  key={item.title}
-                  type="button"
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
-                    'hover:bg-accent focus:bg-accent focus:outline-none',
-                    currentIndex === selectedIndex && 'bg-accent'
-                  )}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    selectItem(currentIndex)
-                  }}
-                  onMouseDown={(e) => e.preventDefault()}
-                >
-                  <span className="flex size-8 items-center justify-center rounded-md border bg-background">
-                    {item.icon}
-                  </span>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-xs text-muted-foreground">{item.description}</div>
-                  </div>
-                </button>
-              )
-            })}
+        <ScrollArea className="max-h-80">
+          <div ref={containerRef} className="p-1">
+            {Object.entries(groupedItems).map(([group, groupItems]) => (
+              <div key={group}>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {groupLabels[group] || group}
+                </div>
+                {groupItems.map((item) => {
+                  globalIndex++
+                  const currentIndex = globalIndex
+                  return (
+                    <button
+                      key={item.title}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
+                        'hover:bg-accent focus:bg-accent focus:outline-none',
+                        currentIndex === selectedIndex && 'bg-accent'
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        selectItem(currentIndex)
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      <span className="flex size-8 items-center justify-center rounded-md border bg-background">
+                        {item.icon}
+                      </span>
+                      <div className="flex-1 text-left">
+                        <div className="font-medium">{item.title}</div>
+                        <div className="text-xs text-muted-foreground">{item.description}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </div>
-        ))}
+        </ScrollArea>
       </div>
     )
   }
@@ -558,6 +563,7 @@ function createSlashCommands(
               }
 
               const { x, y } = await computePosition(virtualEl, floatingEl, {
+                strategy: 'fixed',
                 placement: 'bottom-start',
                 middleware: [offset(8), flip(), shift({ padding: 8 })],
               })
@@ -580,7 +586,7 @@ function createSlashCommands(
 
                 // Create container element
                 floatingEl = document.createElement('div')
-                floatingEl.style.position = 'absolute'
+                floatingEl.style.position = 'fixed'
                 floatingEl.style.zIndex = '50'
                 floatingEl.style.pointerEvents = 'auto'
                 floatingEl.appendChild(component.element)
@@ -622,7 +628,7 @@ function createSlashCommands(
 
 interface RichTextEditorProps {
   value?: string | JSONContent
-  onChange?: (json: JSONContent, html: string) => void
+  onChange?: (json: JSONContent, html: string, markdown: string) => void
   placeholder?: string
   className?: string
   disabled?: boolean
@@ -752,11 +758,14 @@ export function RichTextEditor({
         : []),
       // Conditionally add slash commands (enabled by default)
       ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+      // Markdown extension for bidirectional markdown support
+      Markdown,
     ],
     content: value ?? '',
     editable: !disabled,
     onUpdate: ({ editor }) => {
-      onChange?.(editor.getJSON(), editor.getHTML())
+      const markdown = editor.getMarkdown?.() ?? ''
+      onChange?.(editor.getJSON(), editor.getHTML(), markdown)
     },
     editorProps: {
       attributes: {
@@ -839,8 +848,7 @@ export function RichTextEditor({
       <ContextMenuTrigger asChild disabled={!features.images}>
         <div
           className={cn(
-            'overflow-hidden',
-            !borderless && 'rounded-md border border-input bg-background',
+            !borderless && 'overflow-hidden rounded-md border border-input bg-background',
             disabled && 'opacity-50 cursor-not-allowed',
             className
           )}
@@ -1715,8 +1723,16 @@ function generateContentHTML(content: JSONContent): string {
       case 'orderedList':
         return `<ol>${node.content?.map(renderNode).join('') ?? ''}</ol>`
 
-      case 'listItem':
-        return `<li>${node.content?.map(renderNode).join('') ?? ''}</li>`
+      case 'listItem': {
+        // Unwrap single-paragraph list items to avoid <li><p>…</p></li>
+        // which causes Tailwind prose to add large p margins inside li
+        const children = node.content ?? []
+        if (children.length === 1 && children[0].type === 'paragraph') {
+          const inlineHtml = children[0].content?.map(renderNode).join('') ?? ''
+          return `<li>${inlineHtml}</li>`
+        }
+        return `<li>${children.map(renderNode).join('')}</li>`
+      }
 
       case 'taskList':
         return `<ul class="not-prose list-none pl-0">${node.content?.map(renderNode).join('') ?? ''}</ul>`
@@ -1881,55 +1897,6 @@ export function RichTextContent({ content, className }: RichTextContentProps) {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-// Helper to convert TipTap JSON to plain text
-export function richTextToPlainText(content: JSONContent): string {
-  if (!content.content) return ''
-
-  return content.content
-    .map((node) => {
-      if (node.type === 'paragraph' && node.content) {
-        return node.content
-          .map((child) => {
-            if (child.type === 'text') return child.text || ''
-            return ''
-          })
-          .join('')
-      }
-      if (node.type === 'heading' && node.content) {
-        return node.content
-          .map((child) => {
-            if (child.type === 'text') return child.text || ''
-            return ''
-          })
-          .join('')
-      }
-      if (node.type === 'bulletList' || node.type === 'orderedList') {
-        return (
-          node.content
-            ?.map((item) => {
-              if (item.type === 'listItem' && item.content) {
-                return item.content
-                  .map((p) => {
-                    if (p.type === 'paragraph' && p.content) {
-                      return p.content.map((c) => c.text || '').join('')
-                    }
-                    return ''
-                  })
-                  .join('')
-              }
-              return ''
-            })
-            .join('\n') || ''
-        )
-      }
-      if (node.type === 'codeBlock' && node.content) {
-        return node.content.map((c) => c.text || '').join('')
-      }
-      return ''
-    })
-    .join('\n')
-}
 
 // Helper to check if content is TipTap JSON
 export function isRichTextContent(content: unknown): content is JSONContent {

@@ -30,15 +30,12 @@
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
-import {
-  listInboxPosts,
-  getPostWithDetails,
-  getCommentsWithReplies,
-} from '@/lib/server/domains/posts/post.query'
+import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
+import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
 import { mergePost, unmergePost, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
-import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.permissions'
+import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
 import { getActivityForPost, createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   acceptCreateSuggestion,
@@ -55,16 +52,16 @@ import {
   createComment,
   updateComment,
   deleteComment,
-  addReaction,
-  removeReaction,
 } from '@/lib/server/domains/comments/comment.service'
+import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import {
   createChangelog,
   updateChangelog,
   deleteChangelog,
-  listChangelogs,
   getChangelogById,
 } from '@/lib/server/domains/changelog/changelog.service'
+import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
+import { publishedAtToPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import {
   addPostToRoadmap,
   removePostFromRoadmap,
@@ -276,6 +273,12 @@ const createChangelogSchema = {
     .boolean()
     .default(false)
     .describe('Set to true to publish immediately. Defaults to draft.'),
+  publishedAt: z
+    .string()
+    .optional()
+    .describe(
+      'ISO 8601 datetime to publish at (e.g. "2025-03-15T12:00:00Z"). Overrides publish flag. Past dates backdate the entry, future dates schedule it.'
+    ),
 }
 
 const updateChangelogSchema = {
@@ -287,6 +290,12 @@ const updateChangelogSchema = {
     .optional()
     .describe('New content (markdown supported, max 50,000 chars)'),
   publish: z.boolean().optional().describe('Set to true to publish, false to revert to draft'),
+  publishedAt: z
+    .string()
+    .optional()
+    .describe(
+      'ISO 8601 datetime to set as publish date (e.g. "2025-03-15T12:00:00Z"). Overrides publish flag. Past dates backdate, future dates schedule, null reverts to draft.'
+    ),
   linkedPostIds: z
     .array(z.string())
     .optional()
@@ -439,6 +448,7 @@ type CreateChangelogArgs = {
   title: string
   content: string
   publish: boolean
+  publishedAt?: string
 }
 
 type UpdateChangelogArgs = {
@@ -446,6 +456,7 @@ type UpdateChangelogArgs = {
   title?: string
   content?: string
   publish?: boolean
+  publishedAt?: string
   linkedPostIds?: string[]
 }
 
@@ -823,7 +834,8 @@ Examples:
 
 Examples:
 - Draft: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode..." })
-- Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publish: true })`,
+- Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publish: true })
+- Backdated: create_changelog({ title: "v2.1 Release", content: "...", publishedAt: "2025-03-15T12:00:00Z" })`,
     createChangelogSchema,
     WRITE,
     async (args: CreateChangelogArgs): Promise<CallToolResult> => {
@@ -832,11 +844,14 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
+        const publishState = args.publishedAt
+          ? publishedAtToPublishState(args.publishedAt)
+          : ({ type: args.publish ? 'published' : 'draft' } as const)
         const result = await createChangelog(
           {
             title: args.title,
             content: args.content,
-            publishState: { type: args.publish ? 'published' : 'draft' },
+            publishState,
           },
           { principalId: auth.principalId, name: auth.name }
         )
@@ -862,6 +877,7 @@ Examples:
 Examples:
 - Update title: update_changelog({ changelogId: "changelog_01abc...", title: "v2.0 Release" })
 - Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
+- Backdate: update_changelog({ changelogId: "changelog_01abc...", publishedAt: "2025-03-15T12:00:00Z" })
 - Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })`,
     updateChangelogSchema,
     WRITE,
@@ -871,16 +887,20 @@ Examples:
       const roleDenied = requireTeamRole(auth)
       if (roleDenied) return roleDenied
       try {
+        let publishState: PublishState | undefined
+        if (args.publishedAt !== undefined) {
+          publishState = publishedAtToPublishState(args.publishedAt)
+        } else if (args.publish === true) {
+          publishState = { type: 'published' }
+        } else if (args.publish === false) {
+          publishState = { type: 'draft' }
+        }
+
         const result = await updateChangelog(args.changelogId as ChangelogId, {
           title: args.title,
           content: args.content,
           linkedPostIds: args.linkedPostIds as PostId[] | undefined,
-          publishState:
-            args.publish === true
-              ? { type: 'published' }
-              : args.publish === false
-                ? { type: 'draft' }
-                : undefined,
+          publishState,
         })
 
         return jsonResult({

@@ -49,8 +49,8 @@ export const Route = createFileRoute('/api/v1/users/')({
           const page = Math.floor(offset / limit) + 1
 
           // Import service functions
-          const { listPortalUsers, parseUserAttributes } =
-            await import('@/lib/server/domains/users/user.service')
+          const { listPortalUsers } = await import('@/lib/server/domains/users/user.service')
+          const { parseUserAttributes } = await import('@/lib/server/domains/users/user.attributes')
 
           const result = await listPortalUsers({
             search,

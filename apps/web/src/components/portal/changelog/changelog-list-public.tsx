@@ -1,5 +1,3 @@
-'use client'
-
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ChangelogEntryCard } from './changelog-entry-card'
@@ -33,17 +31,18 @@ export function ChangelogListPublic() {
   }
 
   return (
-    <div>
+    <div className="divide-y divide-border/40">
       {entries.map((entry, index) => (
         <div
           key={entry.id}
-          className="animate-in fade-in duration-200 fill-mode-backwards"
+          className="py-10 first:pt-0 animate-in fade-in duration-200 fill-mode-backwards"
           style={{ animationDelay: `${index * 50}ms` }}
         >
           <ChangelogEntryCard
             id={entry.id}
             title={entry.title}
             content={entry.content}
+            contentJson={entry.contentJson}
             publishedAt={entry.publishedAt}
             linkedPosts={entry.linkedPosts}
           />
@@ -52,7 +51,7 @@ export function ChangelogListPublic() {
 
       {/* Load more */}
       {hasNextPage && (
-        <div className="flex justify-center pt-4">
+        <div className="flex justify-center pt-8">
           <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
             {isFetchingNextPage ? 'Carregando...' : 'Carregar mais'}
           </Button>

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@featurepool/ids/drizzle'
 import { principal } from './auth'
@@ -22,6 +22,8 @@ export const changelogEntries = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // View count for analytics (incremented on public/widget page load)
+    viewCount: integer('view_count').default(0).notNull(),
   },
   (table) => [
     index('changelog_published_at_idx').on(table.publishedAt),

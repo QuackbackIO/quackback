@@ -25,18 +25,7 @@ import {
 import type { BoardId, PostId } from '@featurepool/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
-
-/**
- * Generate a URL-friendly slug from a string
- */
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
+import { slugify } from '@/lib/shared/utils'
 
 /**
  * Create a new board

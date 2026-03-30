@@ -8,7 +8,7 @@
 
 import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData } from '../types'
-import { createNotificationsBatch } from '@/lib/server/domains/notifications'
+import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
 import type { PrincipalId, PostId, CommentId } from '@featurepool/ids'
 import { truncate, isRetryableError } from '../hook-utils'

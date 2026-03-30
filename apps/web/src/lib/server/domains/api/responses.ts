@@ -155,6 +155,8 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   MEMBER_NOT_FOUND: 'Member',
   ROADMAP_NOT_FOUND: 'Roadmap',
   CHANGELOG_NOT_FOUND: 'Changelog entry',
+  CATEGORY_NOT_FOUND: 'Help center category',
+  ARTICLE_NOT_FOUND: 'Help center article',
   API_KEY_NOT_FOUND: 'API key',
   SEGMENT_NOT_FOUND: 'Segment',
 }

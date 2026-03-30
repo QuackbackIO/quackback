@@ -18,6 +18,7 @@ export type ActivityType =
   | 'post.deleted'
   | 'post.restored'
   | 'status.changed'
+  | 'post.board_changed'
   | 'post.merged_in'
   | 'post.merged_away'
   | 'post.unmerged'

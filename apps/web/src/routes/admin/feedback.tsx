@@ -1,8 +1,9 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useRouteContext } from '@tanstack/react-router'
 import { z } from 'zod'
 import { useQuery } from '@tanstack/react-query'
 import { feedbackQueries } from '@/lib/client/queries/feedback'
 import { TabStrip, type TabStripItem } from '@/components/admin/tab-strip'
+import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
 const searchSchema = z.object({
   board: z.array(z.string()).optional(),
@@ -36,17 +37,21 @@ export const Route = createFileRoute('/admin/feedback')({
 })
 
 function FeedbackLayout() {
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
   const { data: incomingStats } = useQuery(feedbackQueries.incomingCount())
   const incomingCount = incomingStats?.count ?? 0
 
   const tabs: TabStripItem[] = [
     { label: 'Posts', to: '/admin/feedback', exact: true },
-    { label: 'Incoming', to: '/admin/feedback/incoming', badge: incomingCount },
+    ...(flags?.aiFeedbackExtraction
+      ? [{ label: 'Incoming', to: '/admin/feedback/incoming', badge: incomingCount }]
+      : []),
   ]
 
   return (
     <div className="flex h-full flex-col">
-      <TabStrip tabs={tabs} />
+      {tabs.length > 1 && <TabStrip tabs={tabs} />}
       <div className="flex-1 min-h-0">
         <Outlet />
       </div>

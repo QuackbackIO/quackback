@@ -9,20 +9,23 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
 import {
-  addReaction,
-  canDeleteComment,
-  canEditComment,
-  canPinComment,
   createComment,
   deleteComment,
-  pinComment,
-  removeReaction,
-  restoreComment,
-  softDeleteComment,
-  unpinComment,
   updateComment,
-  userEditComment,
 } from '@/lib/server/domains/comments/comment.service'
+import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
+import {
+  canDeleteComment,
+  canEditComment,
+  softDeleteComment,
+  userEditComment,
+} from '@/lib/server/domains/comments/comment.permissions'
+import {
+  canPinComment,
+  pinComment,
+  restoreComment,
+  unpinComment,
+} from '@/lib/server/domains/comments/comment.pin'
 import { NotFoundError } from '@/lib/shared/errors'
 import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers'
 
