@@ -237,7 +237,7 @@ The target board must exist before importing. Create it in the admin UI first.
 Ensure your `.env` file contains a valid `DATABASE_URL`:
 
 ```
-DATABASE_URL=postgresql://user:pass@localhost:5432/featurepool
+DATABASE_URL=postgresql://user:pass@localhost:5435/featurepool
 ```
 
 ### Vote counts don't match

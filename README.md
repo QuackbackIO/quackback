@@ -76,7 +76,7 @@ git clone https://github.com/FeaturepoolIO/featurepool.git
 cd featurepool
 cp .env.example .env   # Edit with your configuration
 docker build -t featurepool -f apps/web/Dockerfile .
-docker run -p 5433:5433 --env-file .env featurepool
+docker run -p 5433:5435 --env-file .env featurepool
 ```
 
 Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`. Migrations run automatically on startup.
@@ -96,7 +96,7 @@ git clone https://github.com/FeaturepoolIO/featurepool.git
 cd featurepool
 bun run setup    # Install deps, start Docker, run migrations
 bun run db:seed  # Optional: seed demo data
-bun run dev      # http://localhost:5433
+bun run dev      # http://localhost:3001
 ```
 
 Log in with `demo@example.com` / `password`.

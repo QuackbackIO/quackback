@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-const BASE_URL = process.env.API_BASE_URL || 'http://localhost:5433/api/v1'
+const BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api/v1'
 const API_KEY = process.env.API_KEY || ''
 const SKIP_INTEGRATION = process.env.SKIP_INTEGRATION === 'true'
 

@@ -30,7 +30,7 @@ import postgres from 'postgres'
 import { generateId, toUuid } from '@featurepool/ids'
 
 const DB_URL =
-  process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5432/featurepool'
+  process.env.DATABASE_URL ?? 'postgresql://postgres:password@localhost:5435/featurepool'
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379'
 const sql = postgres(DB_URL)
 

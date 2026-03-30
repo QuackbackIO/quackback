@@ -22,7 +22,7 @@ fi
 
 # Start the application
 echo ""
-echo "Starting Featurepool server on port ${PORT:-5433}..."
+echo "Starting Featurepool server on port ${PORT:-5435}..."
 echo "========================================"
 cd /app
 exec bun .output/server/index.mjs

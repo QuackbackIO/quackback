@@ -65,7 +65,7 @@ const configSchema = z.object({
   // Core
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   baseUrl: z.string().url(),
-  port: envInt.default(5433),
+  port: envInt.default(5435),
 
   // Database
   databaseUrl: z.string().min(1),

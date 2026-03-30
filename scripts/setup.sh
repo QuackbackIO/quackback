@@ -41,15 +41,15 @@ else
   echo -e "${GREEN}.env already exists${NC}"
 fi
 
-# Fix legacy defaults that conflict with the app port (5433) or the user's
+# Fix legacy defaults that conflict with the app port (5435) or the user's
 # local PostgreSQL (commonly 5432). Keep the project DB on a dedicated port.
-if grep -q '^DATABASE_URL="postgresql://postgres:password@localhost:5433/featurepool"$' .env 2>/dev/null || \
+if grep -q '^DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"$' .env 2>/dev/null || \
    grep -q '^DATABASE_URL="postgresql://postgres:password@localhost:5432/featurepool"$' .env 2>/dev/null; then
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's#^DATABASE_URL="postgresql://postgres:password@localhost:5433/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
+    sed -i '' 's#^DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
     sed -i '' 's#^DATABASE_URL="postgresql://postgres:password@localhost:5432/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
   else
-    sed -i 's#^DATABASE_URL="postgresql://postgres:password@localhost:5433/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
+    sed -i 's#^DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
     sed -i 's#^DATABASE_URL="postgresql://postgres:password@localhost:5432/featurepool"$#DATABASE_URL="postgresql://postgres:password@localhost:5435/featurepool"#' .env
   fi
   echo -e "${GREEN}Updated DATABASE_URL to localhost:5435${NC}"
@@ -123,7 +123,7 @@ echo -e "  1. Run the development server:"
 echo -e "     ${YELLOW}bun run dev${NC}"
 echo ""
 echo -e "  2. Open the app in your browser:"
-echo -e "     ${YELLOW}http://localhost:5433${NC}"
+echo -e "     ${YELLOW}http://localhost:3001${NC}"
 echo ""
 echo -e "  3. (Optional) Seed demo data:"
 echo -e "     ${YELLOW}bun run db:seed${NC}"

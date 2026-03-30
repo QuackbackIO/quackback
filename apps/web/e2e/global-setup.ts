@@ -3,7 +3,7 @@ import { getOtpCode, ensureTestUserHasRole } from './utils/db-helpers'
 
 const ADMIN_EMAIL = 'demo@example.com'
 const AUTH_FILE = 'e2e/.auth/admin.json'
-const TEST_HOST = 'acme.localhost:5433'
+const TEST_HOST = 'acme.localhost:3001'
 
 /**
  * Global setup: Authenticate as admin using Better-auth OTP flow

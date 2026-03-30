@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
       __BUILD_TIME__: JSON.stringify(buildInfo.buildTime),
     },
     server: {
-      port: Number(process.env.PORT || 3000),
+      port: Number(process.env.PORT || 3001),
       cors: mode === 'development',
       allowedHosts: true,
       hmr: {
@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
         srcDirectory: 'src',
         router: {
           routesDirectory: 'routes',
+          routeFileIgnorePattern: '.*\\.test\\..*|__tests__',
         },
         importProtection: {
           behavior: { dev: 'error', build: 'error' },

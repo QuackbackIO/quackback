@@ -1,7 +1,7 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test'
 import { getOtpCode } from '../../utils/db-helpers'
 
-const TEST_HOST = 'acme.localhost:5433'
+const TEST_HOST = 'acme.localhost:3001'
 const TEST_EMAIL = 'demo@example.com'
 
 // Configure test to run serially (no parallelization)

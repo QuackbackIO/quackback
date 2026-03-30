@@ -2,7 +2,7 @@ import { test, expect, Page, BrowserContext } from '@playwright/test'
 import { getOtpCode } from '../../utils/db-helpers'
 
 const TEST_EMAIL = 'demo@example.com'
-const TEST_HOST = 'acme.localhost:5433'
+const TEST_HOST = 'acme.localhost:3001'
 
 /**
  * Helper to authenticate a user via OTP flow

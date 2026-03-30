@@ -18,7 +18,7 @@ export default defineConfig({
       enabled: false,
     },
     env: {
-      DATABASE_URL: 'postgresql://postgres:password@localhost:5432/featurepool_test',
+      DATABASE_URL: 'postgresql://postgres:password@localhost:5435/featurepool_test',
     },
   },
   esbuild: {

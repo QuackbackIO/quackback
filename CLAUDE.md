@@ -6,7 +6,7 @@ Featurepool - open-source customer feedback platform. Bun monorepo, TanStack Sta
 
 ```bash
 bun run setup              # One-time setup (deps, Docker, migrations, seed)
-bun run dev                # Dev server at localhost:5433 (login: demo@example.com / password)
+bun run dev                # Dev server at localhost:3001 (login: demo@example.com / password)
 bun run build && bun run db:generate && bun run db:migrate
 bun run test && bun run test:e2e && bun run lint && bun run typecheck
 ```

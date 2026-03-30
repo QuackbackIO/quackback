@@ -16,7 +16,7 @@ bun run setup
 bun run dev
 ```
 
-Open http://localhost:5433 to see the app.
+Open http://localhost:3001 to see the app.
 
 ## Project Structure
 

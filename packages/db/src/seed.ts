@@ -1138,7 +1138,7 @@ async function seed() {
   console.log('Demo account:')
   console.log(`  Email: ${DEMO_USER.email}`)
   console.log(`  Password: ${DEMO_USER.password}\n`)
-  console.log(`Portal: http://localhost:5433`)
+  console.log(`Portal: http://localhost:3001`)
 
   await client.end()
 }

@@ -96,7 +96,7 @@ Same — add `import '@tanstack/react-start/server-only'` as the first line of e
 
 - [ ] **Step 3: Verify dev server works**
 
-Run: `bun run dev` and load `http://localhost:3000` in the browser.
+Run: `bun run dev` and load `http://localhost:3001` in the browser.
 
 Expected: App loads normally. The `import type` statements from domain `.types.ts` files that reference `@/lib/server/db` are stripped by esbuild before the server-only check fires, so they won't error. If they DO error, remove the marker from `db.ts` only and rely on the specifier-based protection instead (Task 3).
 
@@ -868,7 +868,7 @@ Expected: All tests pass.
 
 - [ ] **Step 4: Browser verification**
 
-Start dev server, open `http://localhost:3000`, verify:
+Start dev server, open `http://localhost:3001`, verify:
 
 - No `Buffer is not defined` errors in console
 - No postgres references in client bundle (check Network tab → JS files)

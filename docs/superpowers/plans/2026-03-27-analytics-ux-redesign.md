@@ -978,7 +978,7 @@ This task wires everything together with the new layout and replaces the spinner
   bun run dev
   ```
 
-  Navigate to `http://localhost:3000` → log in as `demo@example.com` / `password` → go to Analytics. Verify:
+  Navigate to `http://localhost:3001` → log in as `demo@example.com` / `password` → go to Analytics. Verify:
   - [ ] Skeleton cards show on first load, not a spinner
   - [ ] 4 KPI cards render with icons and sparklines
   - [ ] Activity chart renders with Posts/Votes/Comments toggle pills; clicking a pill hides/shows that series

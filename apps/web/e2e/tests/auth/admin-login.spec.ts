@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { TEST_ADMIN } from '../../fixtures/auth'
 import { getOtpCode } from '../../utils/db-helpers'
 
-const TEST_HOST = 'acme.localhost:5433'
+const TEST_HOST = 'acme.localhost:3001'
 
 test.describe('Admin Login with OTP', () => {
   // Configure tests to run serially to avoid OTP race conditions

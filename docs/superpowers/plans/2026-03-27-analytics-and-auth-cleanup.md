@@ -1527,7 +1527,7 @@ const navItems = [
 
 Run: `bun run dev`
 
-Navigate to `http://localhost:3000/admin/analytics`. Verify:
+Navigate to `http://localhost:3001/admin/analytics`. Verify:
 
 1. Sidebar shows Analytics icon between Help Center and Users
 2. Page loads with skeleton, then shows the analytics dashboard
