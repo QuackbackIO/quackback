@@ -149,7 +149,7 @@ export function WidgetPostDetail({
   }
 
   return (
-    <ScrollArea ref={scrollAreaRef} className="flex-1 h-full">
+    <ScrollArea ref={scrollAreaRef} scrollBarClassName="w-1.5" className="flex-1 h-full">
       <div className="px-3 pt-3 pb-4 space-y-3">
         {/* Header: mirrors widget listing layout (vote left, status/title right) */}
         <div className="flex items-start gap-3">

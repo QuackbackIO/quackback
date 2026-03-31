@@ -64,7 +64,7 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
   }
 
   return (
-    <ScrollArea className="flex-1 min-h-0 h-full">
+    <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
       <div className="px-3 pt-2 pb-3">
         <div className="space-y-1">
           {entries.map((entry) => (

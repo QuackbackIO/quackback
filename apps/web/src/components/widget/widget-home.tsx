@@ -356,7 +356,7 @@ export function WidgetHome({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
         <div className="px-3 pt-2 pb-3">
           <motion.div
             className="rounded-lg border border-border bg-card overflow-hidden"

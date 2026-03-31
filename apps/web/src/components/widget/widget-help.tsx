@@ -80,7 +80,7 @@ export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0 h-full">
+      <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
         <div className="px-3 pt-1 pb-3">
           {isSearching && (
             <div className="flex items-center justify-center py-8">
