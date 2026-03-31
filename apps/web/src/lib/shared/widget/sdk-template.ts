@@ -52,6 +52,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
   var isIdentified = false;
   var pendingIdentify = null;
   var metadata = null;
+  var iconChat = null;
+  var iconClose = null;
   var listeners = {};
   var pendingOpen = null;
   var isMobile = window.innerWidth < 640;
@@ -140,8 +142,41 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       "aria-expanded": "false",
     });
 
-    // Chat bubbles icon (Heroicons solid)
-    trigger.innerHTML = CHAT_ICON;
+    // Stacked icons — both rendered, toggled via opacity + rotation
+    var iconWrapper = createElement("div", {
+      position: "relative",
+      width: "28px",
+      height: "28px",
+      flexShrink: "0",
+    });
+
+    var iconTransition = "opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)";
+
+    iconChat = createElement("span", {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      display: "flex",
+      opacity: "1",
+      transform: "rotate(0deg)",
+      transition: iconTransition,
+    });
+    iconChat.innerHTML = CHAT_ICON;
+
+    iconClose = createElement("span", {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      display: "flex",
+      opacity: "0",
+      transform: "rotate(-90deg)",
+      transition: iconTransition,
+    });
+    iconClose.innerHTML = CLOSE_ICON;
+
+    iconWrapper.appendChild(iconChat);
+    iconWrapper.appendChild(iconClose);
+    trigger.appendChild(iconWrapper);
 
     trigger.addEventListener("mouseenter", function() {
       trigger.style.transform = "translateY(-2px)";
