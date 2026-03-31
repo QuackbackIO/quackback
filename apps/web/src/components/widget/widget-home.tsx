@@ -190,6 +190,7 @@ export function WidgetHome({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching: isFetchingPosts,
   } = useInfiniteQuery({
     queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
     queryFn: ({ pageParam }) =>
@@ -676,43 +677,52 @@ export function WidgetHome({
             {/* Search results mode */}
             {debouncedPopularSearch.length > 0 && (
               <>
-                {isPopularSearchFetching && (
+                {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
                   <div className="flex justify-center py-4">
                     <span className="text-[10px] text-muted-foreground/50">Searching...</span>
                   </div>
                 )}
-                {!isPopularSearchFetching && (popularSearchData?.posts.length ?? 0) === 0 && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                    <p className="text-sm font-medium text-muted-foreground/70">No ideas found</p>
-                    <p className="text-xs text-muted-foreground/50 mt-0.5">
-                      Try a different search term
-                    </p>
-                  </div>
-                )}
-                {!isPopularSearchFetching && (popularSearchData?.posts.length ?? 0) > 0 && (
-                  <div className="space-y-0.5">
-                    {popularSearchData!.posts.map((post) => (
-                      <WidgetPostRow
-                        key={post.id}
-                        post={post}
-                        statusMap={statusMap}
-                        showBoard
-                        canVote={canVote}
-                        ensureSessionThen={ensureSessionThen}
-                        onAuthRequired={() => handleAuthRequired(post.id)}
-                        onSelect={() => onPostSelect?.(post.id)}
-                      />
-                    ))}
-                  </div>
-                )}
+                {!isPopularSearchFetching &&
+                  popularSearch === debouncedPopularSearch &&
+                  (popularSearchData?.posts.length ?? 0) === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm font-medium text-muted-foreground/70">No ideas found</p>
+                      <p className="text-xs text-muted-foreground/50 mt-0.5">
+                        Try a different search term
+                      </p>
+                    </div>
+                  )}
+                {!isPopularSearchFetching &&
+                  popularSearch === debouncedPopularSearch &&
+                  (popularSearchData?.posts.length ?? 0) > 0 && (
+                    <div className="space-y-0.5">
+                      {popularSearchData!.posts.map((post) => (
+                        <WidgetPostRow
+                          key={post.id}
+                          post={post}
+                          statusMap={statusMap}
+                          showBoard
+                          canVote={canVote}
+                          ensureSessionThen={ensureSessionThen}
+                          onAuthRequired={() => handleAuthRequired(post.id)}
+                          onSelect={() => onPostSelect?.(post.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
               </>
             )}
 
             {/* Infinite list mode (no active search) */}
             {debouncedPopularSearch.length === 0 && (
               <>
-                {allPopularPosts.length === 0 && (
+                {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
+                  <div className="flex justify-center py-4">
+                    <span className="text-[10px] text-muted-foreground/50">Loading...</span>
+                  </div>
+                )}
+                {!isFetchingPosts && allPopularPosts.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">

@@ -58,7 +58,7 @@ export function WidgetShell({
   }, [closeWidget])
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
+    <div className="flex flex-col h-full bg-background text-foreground overflow-x-hidden">
       <div className="flex items-center justify-between px-3 pt-2 pb-0.5 shrink-0">
         <div className="flex items-center gap-1">
           {onBack ? (
