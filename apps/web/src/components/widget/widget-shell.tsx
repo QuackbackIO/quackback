@@ -120,7 +120,7 @@ export function WidgetShell({
           </div>
         )}
 
-        <div className={cn('text-center', showTabBar ? 'pb-1' : 'py-1.5')}>
+        <div className={cn('text-center', showTabBar ? 'pt-2 pb-1' : 'py-2')}>
           <a
             href={`https://quackback.io?utm_campaign=${encodeURIComponent(orgSlug || 'unknown')}&utm_content=widget&utm_medium=referral&utm_source=powered-by`}
             target="_blank"
