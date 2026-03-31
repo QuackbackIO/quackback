@@ -21,6 +21,9 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { useWidgetAuth } from './widget-auth-provider'
 import type { PostId } from '@quackback/ids'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
+import type { JSONContent } from '@tiptap/react'
 
 interface WidgetPost {
   id: string
@@ -58,6 +61,7 @@ interface WidgetHomeProps {
   }) => void
   anonymousVotingEnabled?: boolean
   anonymousPostingEnabled?: boolean
+  imageUploadsInWidget?: boolean
 }
 
 interface SearchResult {
@@ -188,6 +192,7 @@ export function WidgetHome({
   onPostCreated,
   anonymousVotingEnabled = true,
   anonymousPostingEnabled = false,
+  imageUploadsInWidget = true,
 }: WidgetHomeProps) {
   const {
     ensureSession,
@@ -199,6 +204,8 @@ export function WidgetHome({
     metadata,
     identifyWithEmail,
   } = useWidgetAuth()
+  const { upload: uploadImage } = useWidgetImageUpload()
+  const canUploadImages = isIdentified && imageUploadsInWidget
   const inputRef = useRef<HTMLInputElement>(null)
   const canVote = isIdentified || anonymousVotingEnabled
   const canPost = isIdentified || anonymousPostingEnabled
@@ -207,7 +214,8 @@ export function WidgetHome({
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [selectedBoardId, setSelectedBoardId] = useState(boards[0]?.id ?? '')
-  const [content, setContent] = useState('')
+  const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const [contentHtml, setContentHtml] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -365,7 +373,8 @@ export function WidgetHome({
   function collapseForm() {
     setExpanded(false)
     setTitle('')
-    setContent('')
+    setContentJson(null)
+    setContentHtml('')
     setEmail('')
     setName('')
     setError(null)
@@ -413,7 +422,8 @@ export function WidgetHome({
         data: {
           boardId: selectedBoardId,
           title: title.trim(),
-          content: content.trim(),
+          content: contentHtml.trim(),
+          contentJson: contentJson ?? undefined,
           metadata: metadata ?? undefined,
         },
         headers: getWidgetAuthHeaders(),
@@ -513,7 +523,7 @@ export function WidgetHome({
                   const val = e.target.value
                   setTitle(val)
                   if (val && !expanded) setExpanded(true)
-                  if (!val && expanded && !content.trim()) setExpanded(false)
+                  if (!val && expanded && !contentHtml.trim()) setExpanded(false)
                 }}
                 onFocus={() => {
                   if (title && !expanded) setExpanded(true)
@@ -543,13 +553,29 @@ export function WidgetHome({
                     transition={{ duration: 0.2, delay: 0.1 }}
                     className="px-3 pb-2"
                   >
-                    <textarea
+                    <RichTextEditor
+                      value={contentJson || ''}
+                      onChange={(json, html) => {
+                        setContentJson(json)
+                        setContentHtml(html)
+                      }}
                       placeholder="Add more details..."
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      maxLength={10000}
-                      rows={3}
-                      className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 border-0 outline-none caret-primary resize-none leading-relaxed"
+                      minHeight="80px"
+                      borderless
+                      features={{
+                        headings: true,
+                        codeBlocks: true,
+                        taskLists: true,
+                        blockquotes: true,
+                        dividers: true,
+                        tables: true,
+                        images: canUploadImages,
+                        embeds: true,
+                        bubbleMenu: true,
+                        slashMenu: true,
+                      }}
+                      onImageUpload={canUploadImages ? uploadImage : undefined}
+                      className="text-sm"
                     />
                   </motion.div>
 
