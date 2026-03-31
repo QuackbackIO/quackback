@@ -588,7 +588,7 @@ export function WidgetHome({
             </AnimatePresence>
           </motion.div>
 
-          {/* Popular ideas */}
+          {/* Popular ideas — independent of the similar-ideas search input */}
           <div className="mt-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
               Popular ideas
@@ -628,10 +628,14 @@ export function WidgetHome({
             {allPopularPosts.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                <p className="text-sm font-medium text-muted-foreground/70">No ideas yet</p>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">
-                  Be the first to share one!
+                <p className="text-sm font-medium text-muted-foreground/70">
+                  {activeBoardSlug ? 'No ideas in this board yet' : 'No ideas yet'}
                 </p>
+                {!activeBoardSlug && (
+                  <p className="text-xs text-muted-foreground/50 mt-0.5">
+                    Be the first to share one!
+                  </p>
+                )}
               </div>
             )}
 
