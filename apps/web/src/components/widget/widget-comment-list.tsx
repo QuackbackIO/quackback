@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
@@ -81,6 +81,7 @@ function WidgetCommentItem({
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [reactionPending, setReactionPending] = useState(false)
@@ -89,6 +90,10 @@ function WidgetCommentItem({
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
+
+  useEffect(() => {
+    if (showReplyForm) replyTextareaRef.current?.focus()
+  }, [showReplyForm])
 
   const isDeleted = !!comment.deletedAt
   const isPinned = pinnedCommentId === comment.id
@@ -332,8 +337,8 @@ function WidgetCommentItem({
                   onChange={(e) => setReplyText(e.target.value)}
                   placeholder={`Reply to ${comment.authorName || 'Anonymous'}...`}
                   rows={2}
+                  ref={replyTextareaRef}
                   disabled={isSubmitting}
-                  autoFocus
                   className="flex-1 min-h-[44px] max-h-[100px] resize-none rounded-md border border-border/50 bg-background px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 transition-colors"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
