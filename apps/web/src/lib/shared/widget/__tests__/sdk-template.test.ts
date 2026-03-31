@@ -99,10 +99,10 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('window.innerWidth < 640')
   })
 
-  it('positions desktop panel above the trigger button (bottom: 80px)', () => {
+  it('positions desktop panel above the trigger button (bottom: 88px)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // Panel must be offset above the trigger (24px margin + 48px trigger + 8px gap)
-    expect(result).toContain('bottom: "80px"')
+    // Panel must be offset above the trigger (24px margin + 56px trigger + 8px gap)
+    expect(result).toContain('bottom: "88px"')
   })
 
   it('defines CHAT_ICON and CLOSE_ICON variables for icon swap', () => {
@@ -111,14 +111,17 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('var CLOSE_ICON =')
   })
 
-  it('swaps trigger icon to CLOSE_ICON when panel opens on desktop', () => {
+  it('fades CLOSE_ICON in when panel opens on desktop', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    expect(result).toContain('trigger.innerHTML = CLOSE_ICON')
+    // Icon swap uses CSS opacity/transform transitions on separate icon elements
+    expect(result).toContain('iconClose.style.opacity = "1"')
+    expect(result).toContain('iconChat.style.opacity = "0"')
   })
 
-  it('restores trigger icon to CHAT_ICON when panel closes on desktop', () => {
+  it('fades CHAT_ICON in when panel closes on desktop', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    expect(result).toContain('trigger.innerHTML = CHAT_ICON')
+    expect(result).toContain('iconChat.style.opacity = "1"')
+    expect(result).toContain('iconClose.style.opacity = "0"')
   })
 
   it('hides trigger on mobile when panel opens (conditional on isMobile)', () => {
