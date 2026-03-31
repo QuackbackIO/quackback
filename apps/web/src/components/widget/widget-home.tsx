@@ -221,6 +221,8 @@ export function WidgetHome({
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
   const popularSearchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [popularSearchOpen, setPopularSearchOpen] = useState(false)
+  const popularSearchInputRef = useRef<HTMLInputElement>(null)
 
   const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
 
@@ -351,6 +353,14 @@ export function WidgetHome({
       if (popularSearchDebounceRef.current) clearTimeout(popularSearchDebounceRef.current)
     }
   }, [popularSearch])
+
+  useEffect(() => {
+    if (popularSearchOpen) {
+      popularSearchInputRef.current?.focus()
+    } else {
+      setPopularSearch('')
+    }
+  }, [popularSearchOpen])
 
   function collapseForm() {
     setExpanded(false)
@@ -658,27 +668,40 @@ export function WidgetHome({
 
           {/* Popular ideas */}
           <div className="mt-2">
-            <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
-              Popular ideas
-            </p>
-
-            <div className="flex items-center gap-1.5 h-8 px-2.5 mx-1 mb-2 bg-muted/50 border border-border/40 rounded-md">
-              <MagnifyingGlassIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-              <input
-                type="text"
-                value={popularSearch}
-                onChange={(e) => setPopularSearch(e.target.value)}
-                placeholder="Search ideas..."
-                className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
-              />
-              {popularSearch && (
-                <button
-                  type="button"
-                  onClick={() => setPopularSearch('')}
-                  className="shrink-0 text-muted-foreground/60 hover:text-foreground transition-colors"
-                >
-                  <XMarkIcon className="w-3 h-3" />
-                </button>
+            <div className="flex items-center justify-between px-1 py-1.5">
+              {popularSearchOpen ? (
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <MagnifyingGlassIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                  <input
+                    ref={popularSearchInputRef}
+                    type="text"
+                    value={popularSearch}
+                    onChange={(e) => setPopularSearch(e.target.value)}
+                    placeholder="Search ideas..."
+                    className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPopularSearchOpen(false)}
+                    className="shrink-0 text-muted-foreground/60 hover:text-foreground transition-colors"
+                  >
+                    <XMarkIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+                    Popular ideas
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPopularSearchOpen(true)}
+                    className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    aria-label="Search ideas"
+                  >
+                    <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+                  </button>
+                </>
               )}
             </div>
 
