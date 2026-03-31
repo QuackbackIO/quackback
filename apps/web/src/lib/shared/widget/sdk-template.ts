@@ -145,6 +145,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     // Stacked icons — both rendered, toggled via opacity + rotation
     var iconWrapper = createElement("div", {
       position: "relative",
+      display: "flex",
       width: "28px",
       height: "28px",
       flexShrink: "0",
@@ -287,7 +288,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         trigger.style.display = "none";
       } else {
         trigger.setAttribute("aria-label", "Close feedback widget");
-        trigger.innerHTML = CLOSE_ICON;
+        if (iconChat && iconClose) {
+          iconChat.style.opacity = "0";
+          iconChat.style.transform = "rotate(90deg)";
+          iconClose.style.opacity = "1";
+          iconClose.style.transform = "rotate(0deg)";
+        }
       }
     }
 
@@ -318,7 +324,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       trigger.style.display = "flex"; // Always restore — handles mobile→desktop resize edge case
       if (!isMobile) {
         trigger.setAttribute("aria-label", "Open feedback widget");
-        trigger.innerHTML = CHAT_ICON;
+        if (iconChat && iconClose) {
+          iconChat.style.opacity = "1";
+          iconChat.style.transform = "rotate(0deg)";
+          iconClose.style.opacity = "0";
+          iconClose.style.transform = "rotate(-90deg)";
+        }
       }
     }
 
