@@ -59,7 +59,7 @@ interface SearchResult {
   posts: WidgetPost[]
 }
 
-const searchCache = new Map<string, SearchResult>()
+const similarSearchCache = new Map<string, SearchResult>()
 
 const identityInputCls =
   'bg-background rounded-md border border-border/50 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 transition-colors'
@@ -174,9 +174,9 @@ export function WidgetHome({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
-  const [isSearching, setIsSearching] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
+  const [isSimilarSearching, setIsSimilarSearching] = useState(false)
+  const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
 
@@ -236,38 +236,38 @@ export function WidgetHome({
   )
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
     const q = title.trim()
     if (!q) {
-      setSearchResults(null)
-      setIsSearching(false)
+      setSimilarPostResults(null)
+      setIsSimilarSearching(false)
       return
     }
-    const cached = searchCache.get(q)
+    const cached = similarSearchCache.get(q)
     if (cached) {
-      setSearchResults(cached)
-      setIsSearching(false)
+      setSimilarPostResults(cached)
+      setIsSimilarSearching(false)
       return
     }
-    setIsSearching(true)
+    setIsSimilarSearching(true)
     const controller = new AbortController()
-    debounceRef.current = setTimeout(async () => {
+    similarDebounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ q, limit: '5' })
         const res = await fetch(`/api/widget/search?${params}`, { signal: controller.signal })
         const json = await res.json()
         const result: SearchResult = { posts: json.data?.posts ?? [] }
-        searchCache.set(q, result)
-        setSearchResults(result)
+        similarSearchCache.set(q, result)
+        setSimilarPostResults(result)
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
-        setSearchResults({ posts: [] })
+        setSimilarPostResults({ posts: [] })
       } finally {
-        setIsSearching(false)
+        setIsSimilarSearching(false)
       }
     }, 300)
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (similarDebounceRef.current) clearTimeout(similarDebounceRef.current)
       controller.abort()
     }
   }, [title])
@@ -464,36 +464,38 @@ export function WidgetHome({
                   </motion.div>
 
                   <AnimatePresence>
-                    {!isSearching && searchResults && searchResults.posts.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.15, ease: 'easeOut' }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-3 pb-2">
-                          <p className="text-[10px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
-                            <LightBulbIcon className="w-3 h-3" />
-                            Similar ideas
-                          </p>
-                          <div className="space-y-0.5">
-                            {searchResults.posts.slice(0, 3).map((post) => (
-                              <WidgetPostRow
-                                key={post.id}
-                                post={post}
-                                statusMap={statusMap}
-                                compact
-                                canVote={canVote}
-                                ensureSessionThen={ensureSessionThen}
-                                onAuthRequired={() => handleAuthRequired(post.id)}
-                                onSelect={() => onPostSelect?.(post.id)}
-                              />
-                            ))}
+                    {!isSimilarSearching &&
+                      similarPostResults &&
+                      similarPostResults.posts.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.15, ease: 'easeOut' }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pb-2">
+                            <p className="text-[10px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
+                              <LightBulbIcon className="w-3 h-3" />
+                              Similar ideas
+                            </p>
+                            <div className="space-y-0.5">
+                              {similarPostResults.posts.slice(0, 3).map((post) => (
+                                <WidgetPostRow
+                                  key={post.id}
+                                  post={post}
+                                  statusMap={statusMap}
+                                  compact
+                                  canVote={canVote}
+                                  ensureSessionThen={ensureSessionThen}
+                                  onAuthRequired={() => handleAuthRequired(post.id)}
+                                  onSelect={() => onPostSelect?.(post.id)}
+                                />
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      </motion.div>
-                    )}
+                        </motion.div>
+                      )}
                   </AnimatePresence>
 
                   {error && (
