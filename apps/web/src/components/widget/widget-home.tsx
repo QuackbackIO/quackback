@@ -177,6 +177,7 @@ export function WidgetHome({
   const [similarPostResults, setSimilarPostResults] = useState<SearchResult | null>(null)
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
 
   const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
 
@@ -187,15 +188,26 @@ export function WidgetHome({
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['widget', 'posts', 'popular', 'top'],
+    queryKey: ['widget', 'posts', 'popular', 'top', activeBoardSlug ?? 'all'],
     queryFn: ({ pageParam }) =>
-      listPublicPostsFn({ data: { sort: 'top', page: pageParam, limit: 20 } }),
+      listPublicPostsFn({
+        data: {
+          sort: 'top',
+          page: pageParam,
+          limit: 20,
+          boardSlug: activeBoardSlug ?? undefined,
+        },
+      }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
-    initialData: {
-      pages: [{ items: initialPosts, total: -1, hasMore: initialHasMore }],
-      pageParams: [1],
-    },
+    // Only seed from SSR data on the initial unfiltered view
+    initialData:
+      activeBoardSlug === null
+        ? {
+            pages: [{ items: initialPosts, total: -1, hasMore: initialHasMore }],
+            pageParams: [1],
+          }
+        : undefined,
   })
 
   const allPopularPosts: WidgetPost[] = useMemo(
@@ -576,11 +588,42 @@ export function WidgetHome({
             </AnimatePresence>
           </motion.div>
 
-          {/* Popular ideas — unaffected by search */}
+          {/* Popular ideas */}
           <div className="mt-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
               Popular ideas
             </p>
+
+            {/* Board filter pills — only when 2+ boards exist */}
+            {boards.length >= 2 && (
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-none px-1 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveBoardSlug(null)}
+                  className={`rounded-full text-xs px-2.5 py-1 whitespace-nowrap transition-colors shrink-0 ${
+                    activeBoardSlug === null
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  All
+                </button>
+                {boards.map((board) => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    onClick={() => setActiveBoardSlug(board.slug)}
+                    className={`rounded-full text-xs px-2.5 py-1 whitespace-nowrap transition-colors shrink-0 ${
+                      activeBoardSlug === board.slug
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {board.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {allPopularPosts.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
