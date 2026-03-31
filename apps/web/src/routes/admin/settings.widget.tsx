@@ -38,6 +38,51 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
 
+function WidgetContentSettings({ config }: { config: { imageUploadsInWidget?: boolean } }) {
+  const router = useRouter()
+  const [saving, setSaving] = useState(false)
+  const [imageUploads, setImageUploads] = useState(config.imageUploadsInWidget ?? true)
+  const [, startTransition] = useTransition()
+
+  async function handleImageUploadsToggle(checked: boolean) {
+    setImageUploads(checked)
+    setSaving(true)
+    try {
+      await updateWidgetConfigFn({ data: { imageUploadsInWidget: checked } })
+      startTransition(() => router.invalidate())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsCard
+      title="Content"
+      description="Control what rich content types users can include in their feedback submissions."
+    >
+      <div className="flex items-center justify-between py-2">
+        <div className="pr-4">
+          <Label htmlFor="image-uploads-in-widget" className="text-sm font-medium cursor-pointer">
+            Image Uploads
+          </Label>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Allow signed-in users to attach images when submitting feedback through the widget.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <InlineSpinner visible={saving} />
+          <Switch
+            id="image-uploads-in-widget"
+            checked={imageUploads}
+            onCheckedChange={handleImageUploadsToggle}
+            disabled={saving}
+          />
+        </div>
+      </div>
+    </SettingsCard>
+  )
+}
+
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
     const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
@@ -105,6 +150,8 @@ function WidgetSettingsPage() {
           <WidgetPreview position={position} tabs={previewTabs} />
         </BrandingPreviewPanel>
       </BrandingLayout>
+
+      <WidgetContentSettings config={config} />
 
       <WidgetInstallation config={config} secret={widgetSecretQuery.data} baseUrl={baseUrl ?? ''} />
     </div>
