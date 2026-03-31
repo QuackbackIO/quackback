@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
-import { LightBulbIcon } from '@heroicons/react/24/outline'
+import { LightBulbIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -178,6 +178,9 @@ export function WidgetHome({
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  const [popularSearch, setPopularSearch] = useState('')
+  const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
+  const popularSearchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const statusMap = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
 
@@ -233,6 +236,19 @@ export function WidgetHome({
     onLoadMore: fetchNextPage,
   })
 
+  // Search query for popular ideas — replaces infinite list when active
+  const { data: popularSearchData, isFetching: isPopularSearchFetching } = useQuery({
+    queryKey: ['widget', 'search', 'popular', debouncedPopularSearch, activeBoardSlug ?? 'all'],
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: debouncedPopularSearch, limit: '20' })
+      if (activeBoardSlug) params.set('board', activeBoardSlug)
+      const res = await fetch(`/api/widget/search?${params}`)
+      const json = await res.json()
+      return { posts: (json.data?.posts ?? []) as WidgetPost[] }
+    },
+    enabled: debouncedPopularSearch.length > 0,
+  })
+
   const handleAuthRequired = useCallback(
     (postId: string) => {
       if (!hmacRequired && onPostSelect) {
@@ -283,6 +299,17 @@ export function WidgetHome({
       controller.abort()
     }
   }, [title])
+
+  // Debounce popular ideas search
+  useEffect(() => {
+    if (popularSearchDebounceRef.current) clearTimeout(popularSearchDebounceRef.current)
+    popularSearchDebounceRef.current = setTimeout(() => {
+      setDebouncedPopularSearch(popularSearch)
+    }, 300)
+    return () => {
+      if (popularSearchDebounceRef.current) clearTimeout(popularSearchDebounceRef.current)
+    }
+  }, [popularSearch])
 
   function collapseForm() {
     setExpanded(false)
@@ -594,6 +621,27 @@ export function WidgetHome({
               Popular ideas
             </p>
 
+            {/* Search input */}
+            <div className="flex items-center gap-1.5 h-8 px-2.5 mx-1 mb-2 bg-muted/50 border border-border/40 rounded-md">
+              <MagnifyingGlassIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+              <input
+                type="text"
+                value={popularSearch}
+                onChange={(e) => setPopularSearch(e.target.value)}
+                placeholder="Search ideas..."
+                className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
+              />
+              {popularSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPopularSearch('')}
+                  className="shrink-0 text-muted-foreground/60 hover:text-foreground transition-colors"
+                >
+                  <XMarkIcon className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
             {/* Board filter pills — only when 2+ boards exist */}
             {boards.length >= 2 && (
               <div className="flex gap-1.5 overflow-x-auto scrollbar-none px-1 pb-2">
@@ -625,42 +673,82 @@ export function WidgetHome({
               </div>
             )}
 
-            {allPopularPosts.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                <p className="text-sm font-medium text-muted-foreground/70">
-                  {activeBoardSlug ? 'No ideas in this board yet' : 'No ideas yet'}
-                </p>
-                {!activeBoardSlug && (
-                  <p className="text-xs text-muted-foreground/50 mt-0.5">
-                    Be the first to share one!
-                  </p>
+            {/* Search results mode */}
+            {debouncedPopularSearch.length > 0 && (
+              <>
+                {isPopularSearchFetching && (
+                  <div className="flex justify-center py-4">
+                    <span className="text-[10px] text-muted-foreground/50">Searching...</span>
+                  </div>
                 )}
-              </div>
+                {!isPopularSearchFetching && (popularSearchData?.posts.length ?? 0) === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm font-medium text-muted-foreground/70">No ideas found</p>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">
+                      Try a different search term
+                    </p>
+                  </div>
+                )}
+                {!isPopularSearchFetching && (popularSearchData?.posts.length ?? 0) > 0 && (
+                  <div className="space-y-0.5">
+                    {popularSearchData!.posts.map((post) => (
+                      <WidgetPostRow
+                        key={post.id}
+                        post={post}
+                        statusMap={statusMap}
+                        showBoard
+                        canVote={canVote}
+                        ensureSessionThen={ensureSessionThen}
+                        onAuthRequired={() => handleAuthRequired(post.id)}
+                        onSelect={() => onPostSelect?.(post.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
-            {allPopularPosts.length > 0 && (
-              <div className="space-y-0.5">
-                {allPopularPosts.map((post) => (
-                  <WidgetPostRow
-                    key={post.id}
-                    post={post}
-                    statusMap={statusMap}
-                    showBoard
-                    canVote={canVote}
-                    ensureSessionThen={ensureSessionThen}
-                    onAuthRequired={() => handleAuthRequired(post.id)}
-                    onSelect={() => onPostSelect?.(post.id)}
-                  />
-                ))}
-                {hasNextPage && (
-                  <div ref={postsSentinelRef} className="flex justify-center py-2">
-                    {isFetchingNextPage && (
-                      <span className="text-[10px] text-muted-foreground/50">Loading...</span>
+            {/* Infinite list mode (no active search) */}
+            {debouncedPopularSearch.length === 0 && (
+              <>
+                {allPopularPosts.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm font-medium text-muted-foreground/70">
+                      {activeBoardSlug ? 'No ideas in this board yet' : 'No ideas yet'}
+                    </p>
+                    {!activeBoardSlug && (
+                      <p className="text-xs text-muted-foreground/50 mt-0.5">
+                        Be the first to share one!
+                      </p>
                     )}
                   </div>
                 )}
-              </div>
+                {allPopularPosts.length > 0 && (
+                  <div className="space-y-0.5">
+                    {allPopularPosts.map((post) => (
+                      <WidgetPostRow
+                        key={post.id}
+                        post={post}
+                        statusMap={statusMap}
+                        showBoard
+                        canVote={canVote}
+                        ensureSessionThen={ensureSessionThen}
+                        onAuthRequired={() => handleAuthRequired(post.id)}
+                        onSelect={() => onPostSelect?.(post.id)}
+                      />
+                    ))}
+                    {hasNextPage && (
+                      <div ref={postsSentinelRef} className="flex justify-center py-2">
+                        {isFetchingNextPage && (
+                          <span className="text-[10px] text-muted-foreground/50">Loading...</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
