@@ -88,7 +88,7 @@ function WidgetPostRow({
   const status = post.statusId ? (statusMap.get(post.statusId) ?? null) : null
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer ${compact ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
+      className={`w-full overflow-hidden flex items-center gap-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer ${compact ? 'px-1.5 py-1' : 'px-2 py-1.5'}`}
       onClick={onSelect}
     >
       <div onClick={(e) => e.stopPropagation()} className="shrink-0">
