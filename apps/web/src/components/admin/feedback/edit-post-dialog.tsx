@@ -12,6 +12,8 @@ import type { BoardId, PostId, StatusId, TagId } from '@quackback/ids'
 import { Form } from '@/components/ui/form'
 import type { AdminEditPostInput } from '@/lib/server/domains/posts'
 import { PostFormFields } from './post-form-fields'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/client/queries/settings'
 
 interface PostToEdit {
   id: PostId
@@ -41,6 +43,10 @@ export function EditPostDialog({
   onOpenChange,
 }: EditPostDialogProps) {
   const [error, setError] = useState('')
+
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const richMediaEnabled = portalConfigQuery.data.features?.richMediaInPosts ?? true
+  const videoEmbedsEnabled = portalConfigQuery.data.features?.videoEmbedsInPosts ?? true
 
   // Use mutations for optimistic updates
   const updatePost = useUpdatePost()
@@ -174,6 +180,8 @@ export function EditPostDialog({
               contentJson={contentJson}
               onContentChange={handleContentChange}
               error={error}
+              richMediaEnabled={richMediaEnabled}
+              videoEmbedsEnabled={videoEmbedsEnabled}
             />
 
             <ModalFooter
