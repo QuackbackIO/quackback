@@ -80,6 +80,10 @@ export interface PortalFeatures {
   allowDeleteAfterEngagement: boolean
   /** Show public edit history on posts */
   showPublicEditHistory: boolean
+  /** Whether rich media (images, tables, embeds) is enabled in the admin post editor */
+  richMediaInPosts?: boolean
+  /** Whether YouTube/video embeds are enabled in the admin post editor (only applies when richMediaInPosts is true) */
+  videoEmbedsInPosts?: boolean
 }
 
 /**
@@ -238,6 +242,8 @@ export interface WidgetConfig {
     feedback?: boolean
     changelog?: boolean
   }
+  /** Whether authenticated widget users can upload images in feedback submissions */
+  imageUploadsInWidget?: boolean
 }
 
 /**
@@ -246,7 +252,7 @@ export interface WidgetConfig {
  */
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'tabs'
+  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'imageUploadsInWidget'
 > & {
   /** Whether HMAC verification is required (derived from identifyVerification) */
   hmacRequired?: boolean
@@ -273,6 +279,7 @@ export interface UpdateWidgetConfigInput {
     feedback?: boolean
     changelog?: boolean
   }
+  imageUploadsInWidget?: boolean
 }
 
 // =============================================================================
