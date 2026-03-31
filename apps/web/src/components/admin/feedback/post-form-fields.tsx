@@ -11,6 +11,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
+import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 
@@ -23,6 +24,8 @@ interface PostFormFieldsProps {
   contentJson: JSONContent | null
   onContentChange: (json: JSONContent, html: string, markdown: string) => void
   error?: string
+  richMediaEnabled?: boolean
+  videoEmbedsEnabled?: boolean
 }
 
 export function PostFormFields({
@@ -33,9 +36,12 @@ export function PostFormFields({
   contentJson,
   onContentChange,
   error,
+  richMediaEnabled = true,
+  videoEmbedsEnabled = true,
 }: PostFormFieldsProps) {
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
   const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
+  const { upload: uploadImage } = useImageUpload({ prefix: 'post-images' })
 
   return (
     <>
@@ -121,7 +127,6 @@ export function PostFormFields({
 
         <TitleInput control={form.control} placeholder="What's the feedback about?" autoFocus />
 
-        {/* Content - seamless rich text editor */}
         <FormField
           control={form.control}
           name="content"
@@ -140,7 +145,13 @@ export function PostFormFields({
                     taskLists: true,
                     blockquotes: true,
                     dividers: true,
+                    images: richMediaEnabled,
+                    tables: richMediaEnabled,
+                    embeds: richMediaEnabled && videoEmbedsEnabled,
+                    bubbleMenu: true,
+                    slashMenu: true,
                   }}
+                  onImageUpload={richMediaEnabled ? uploadImage : undefined}
                 />
               </FormControl>
               <FormMessage />
