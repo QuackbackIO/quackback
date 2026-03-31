@@ -42,7 +42,9 @@ export function WidgetShell({
   ).length
   const showTabBar = enabledCount > 1
   const { user, closeWidget } = useWidgetAuth()
-  const showCloseButton = new URLSearchParams(window.location.search).get('showClose') === '1'
+  const showCloseButton =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('showClose') === '1'
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
