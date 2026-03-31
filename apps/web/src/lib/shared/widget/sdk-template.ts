@@ -243,11 +243,11 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     } else {
       panel = createElement("div", {
         position: "fixed",
-        bottom: "80px",
+        bottom: "88px",
         [placement === "left" ? "left" : "right"]: "24px",
         zIndex: "2147483647",
         width: "400px",
-        height: "min(600px, calc(100vh - 100px))",
+        height: "min(600px, calc(100vh - 108px))",
         borderRadius: "12px",
         overflow: "hidden",
         boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
