@@ -151,8 +151,10 @@ function usePillsScroll() {
   const update = useCallback(() => {
     const el = ref.current
     if (!el) return
-    setCanScrollLeft(el.scrollLeft > 0)
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    const left = el.scrollLeft > 0
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setCanScrollLeft((prev) => (prev === left ? prev : left))
+    setCanScrollRight((prev) => (prev === right ? prev : right))
   }, [])
 
   useEffect(() => {
@@ -434,7 +436,7 @@ export function WidgetHome({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
-      <div className="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="w-full px-3 pt-2 pb-3">
           <motion.div
             className="rounded-lg border border-border bg-card overflow-hidden"
@@ -654,13 +656,12 @@ export function WidgetHome({
             </AnimatePresence>
           </motion.div>
 
-          {/* Popular ideas — independent of the similar-ideas search input */}
+          {/* Popular ideas */}
           <div className="mt-2">
             <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide px-1 py-1.5">
               Popular ideas
             </p>
 
-            {/* Search input */}
             <div className="flex items-center gap-1.5 h-8 px-2.5 mx-1 mb-2 bg-muted/50 border border-border/40 rounded-md">
               <MagnifyingGlassIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
               <input
@@ -681,7 +682,6 @@ export function WidgetHome({
               )}
             </div>
 
-            {/* Board filter pills — only when 2+ boards exist */}
             {boards.length >= 2 && (
               <div className="relative mb-2">
                 <div
@@ -728,7 +728,6 @@ export function WidgetHome({
               </div>
             )}
 
-            {/* Search results mode */}
             {debouncedPopularSearch.length > 0 && (
               <>
                 {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
@@ -768,7 +767,6 @@ export function WidgetHome({
               </>
             )}
 
-            {/* Infinite list mode (no active search) */}
             {debouncedPopularSearch.length === 0 && (
               <>
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
