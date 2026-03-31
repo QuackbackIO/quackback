@@ -5,7 +5,8 @@
  * Handles validation, error handling, and returns the public URL on success.
  */
 
-import { getPresignedUploadUrlFn } from '@/lib/server/functions/uploads'
+import { getPresignedUploadUrlFn, getWidgetImageUploadUrlFn } from '@/lib/server/functions/uploads'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { MAX_FILE_SIZE } from '@/lib/server/storage/s3'
 
 interface UseImageUploadOptions {
@@ -105,4 +106,62 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
  */
 export function useChangelogImageUpload(options: Omit<UseImageUploadOptions, 'prefix'> = {}) {
   return useImageUpload({ ...options, prefix: 'changelog-images' })
+}
+
+/**
+ * Hook for uploading images from within the widget iframe.
+ * Passes widget Bearer token auth headers so the server can authenticate the upload.
+ * Only works for identified (signed-in) widget users — pass this hook's `upload` function
+ * to RichTextEditor only when `isIdentified` is true.
+ */
+export function useWidgetImageUpload(options: Omit<UseImageUploadOptions, 'prefix'> = {}) {
+  const { onStart, onSuccess, onError } = options
+
+  const upload = async (file: File): Promise<string> => {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      const error = new Error(
+        `Invalid file type: ${file.type}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+      onError?.(error)
+      throw error
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      const error = new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+      onError?.(error)
+      throw error
+    }
+
+    onStart?.()
+
+    try {
+      const { uploadUrl, publicUrl } = await getWidgetImageUploadUrlFn({
+        data: {
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        },
+        headers: getWidgetAuthHeaders(),
+      })
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.statusText}`)
+      }
+
+      onSuccess?.(publicUrl)
+      return publicUrl
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Upload failed')
+      onError?.(error)
+      throw error
+    }
+  }
+
+  return { upload }
 }
