@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
-import { LightBulbIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import {
+  LightBulbIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -138,6 +143,38 @@ function WidgetPostRow({
   )
 }
 
+function usePillsScroll() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const update = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 0)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro.disconnect()
+    }
+  }, [update])
+
+  const scrollBy = useCallback((delta: number) => {
+    ref.current?.scrollBy({ left: delta, behavior: 'smooth' })
+  }, [])
+
+  return { ref, canScrollLeft, canScrollRight, scrollBy }
+}
+
 // ── Main component ──
 
 export function WidgetHome({
@@ -178,6 +215,7 @@ export function WidgetHome({
   const [isSimilarSearching, setIsSimilarSearching] = useState(false)
   const similarDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  const pills = usePillsScroll()
   const [popularSearch, setPopularSearch] = useState('')
   const [debouncedPopularSearch, setDebouncedPopularSearch] = useState('')
   const popularSearchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null)
@@ -396,7 +434,7 @@ export function WidgetHome({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
-      <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
         <div className="w-full px-3 pt-2 pb-3">
           <motion.div
             className="rounded-lg border border-border bg-card overflow-hidden"
@@ -645,32 +683,48 @@ export function WidgetHome({
 
             {/* Board filter pills — only when 2+ boards exist */}
             {boards.length >= 2 && (
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-none px-1 pb-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveBoardSlug(null)}
-                  className={`rounded-full text-xs px-2.5 py-1 whitespace-nowrap transition-colors shrink-0 ${
-                    activeBoardSlug === null
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  }`}
+              <div className="relative mb-2">
+                <div
+                  ref={pills.ref}
+                  className="flex gap-1 overflow-x-auto scrollbar-none px-1 pb-0.5"
                 >
-                  All
-                </button>
-                {boards.map((board) => (
+                  {boards.map((board) => (
+                    <button
+                      key={board.id}
+                      type="button"
+                      onClick={() =>
+                        setActiveBoardSlug(activeBoardSlug === board.slug ? null : board.slug)
+                      }
+                      className={`rounded-full text-[11px] px-2 py-0.5 whitespace-nowrap transition-colors shrink-0 ${
+                        activeBoardSlug === board.slug
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {board.name}
+                    </button>
+                  ))}
+                </div>
+                {pills.canScrollLeft && (
                   <button
-                    key={board.id}
                     type="button"
-                    onClick={() => setActiveBoardSlug(board.slug)}
-                    className={`rounded-full text-xs px-2.5 py-1 whitespace-nowrap transition-colors shrink-0 ${
-                      activeBoardSlug === board.slug
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                    }`}
+                    onClick={() => pills.scrollBy(-120)}
+                    className="absolute left-0 top-0 bottom-0.5 flex items-center pl-0.5 pr-6 bg-gradient-to-r from-background via-background/80 to-transparent"
+                    aria-label="Scroll left"
                   >
-                    {board.name}
+                    <ChevronLeftIcon className="w-3 h-3 text-muted-foreground" />
                   </button>
-                ))}
+                )}
+                {pills.canScrollRight && (
+                  <button
+                    type="button"
+                    onClick={() => pills.scrollBy(120)}
+                    className="absolute right-0 top-0 bottom-0.5 flex items-center pr-0.5 pl-6 bg-gradient-to-l from-background via-background/80 to-transparent"
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRightIcon className="w-3 h-3 text-muted-foreground" />
+                  </button>
+                )}
               </div>
             )}
 
@@ -762,7 +816,7 @@ export function WidgetHome({
             )}
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </form>
   )
 }
