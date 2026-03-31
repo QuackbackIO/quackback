@@ -217,9 +217,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
         display: "none",
         opacity: "0",
-        transform: "scale(0.95)",
+        transform: "scale(0)",
         transformOrigin: placement === "left" ? "bottom left" : "bottom right",
-        transition: "opacity 200ms ease-out, transform 200ms ease-out",
       }, {
         className: "quackback-widget-iframe-wrapper",
       });
@@ -265,8 +264,9 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       panel.style.transform = "translateY(0)";
     } else {
       panel.style.display = "block";
-      // Force reflow
+      // Force reflow so the browser commits opacity:0 / scale(0) before we transition
       void panel.offsetHeight;
+      panel.style.transition = "opacity 280ms cubic-bezier(0.34,1.56,0.64,1), transform 280ms cubic-bezier(0.34,1.56,0.64,1)";
       panel.style.opacity = "1";
       panel.style.transform = "scale(1)";
     }
@@ -292,8 +292,9 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       panel.style.transform = "translateY(100%)";
       setTimeout(function() { backdrop.style.display = "none"; }, 200);
     } else {
+      panel.style.transition = "opacity 200ms cubic-bezier(0.4,0,1,1), transform 200ms cubic-bezier(0.4,0,1,1)";
       panel.style.opacity = "0";
-      panel.style.transform = "scale(0.95)";
+      panel.style.transform = "scale(0)";
       setTimeout(function() { if (!isOpen && panel) panel.style.display = "none"; }, 200);
     }
 
