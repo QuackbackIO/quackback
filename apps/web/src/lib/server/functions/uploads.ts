@@ -7,6 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { getWidgetSession } from './widget-auth'
 import {
   isS3Configured,
   generatePresignedUploadUrl,
@@ -125,6 +126,46 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
       return result
     } catch (error) {
       console.error(`[fn:uploads] getChangelogImageUploadUrlFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Get a presigned URL for widget feedback submission images.
+ * Requires an active widget Bearer token session — anonymous users are blocked server-side.
+ */
+export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(
+    z.object({
+      filename: z.string().min(1).max(255),
+      contentType: z.string().min(1).max(100),
+      fileSize: z.number().int().positive().max(MAX_FILE_SIZE),
+    })
+  )
+  .handler(async ({ data }) => {
+    console.log(
+      `[fn:uploads] getWidgetImageUploadUrlFn: contentType=${data.contentType}, fileSize=${data.fileSize}`
+    )
+    try {
+      const session = await getWidgetSession()
+      if (!session) {
+        throw new Error('Authentication required to upload images.')
+      }
+
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('widget-images', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      console.error(`[fn:uploads] getWidgetImageUploadUrlFn failed:`, error)
       throw error
     }
   })
