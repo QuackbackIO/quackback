@@ -11,7 +11,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
 
@@ -41,7 +41,7 @@ export function PostFormFields({
 }: PostFormFieldsProps) {
   const selectedBoard = boards.find((b) => b.id === form.watch('boardId'))
   const selectedStatus = statuses.find((s) => s.id === form.watch('statusId'))
-  const { upload: uploadImage } = useImageUpload({ prefix: 'post-images' })
+  const { upload: uploadImage } = usePostImageUpload()
 
   return (
     <>

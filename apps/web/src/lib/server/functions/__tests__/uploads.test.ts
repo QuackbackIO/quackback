@@ -58,6 +58,19 @@ describe('getWidgetImageUploadUrlFn', () => {
     ).rejects.toThrow('Authentication required')
   })
 
+  it('rejects when widget session is anonymous', async () => {
+    const anonymousSession = {
+      ...mockSession,
+      principal: { ...mockSession.principal, type: 'anonymous' as const },
+    }
+    vi.mocked(getWidgetSession).mockResolvedValueOnce(anonymousSession as any)
+    await expect(
+      getWidgetImageUploadUrlFn({
+        data: { filename: 'test.jpg', contentType: 'image/jpeg', fileSize: 1000 },
+      })
+    ).rejects.toThrow('Authentication required')
+  })
+
   it('rejects non-image content types', async () => {
     vi.mocked(getWidgetSession).mockResolvedValueOnce(mockSession)
     await expect(

@@ -9,7 +9,7 @@ import type { CreatePostInput } from '@/lib/server/domains/posts'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
+import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
@@ -65,7 +65,7 @@ export function CreatePostDialog({
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const richMediaEnabled = portalConfigQuery.data.features?.richMediaInPosts ?? true
   const videoEmbedsEnabled = portalConfigQuery.data.features?.videoEmbedsInPosts ?? true
-  const { upload: uploadImage } = useImageUpload({ prefix: 'post-images' })
+  const { upload: uploadImage } = usePostImageUpload()
   const [authorPrincipalId, setAuthorPrincipalId] = useState(currentUser.principalId)
   const createPostMutation = useCreatePost()
   const createUserMutation = useCreatePortalUser()

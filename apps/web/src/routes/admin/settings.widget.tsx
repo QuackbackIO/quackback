@@ -50,6 +50,8 @@ function WidgetContentSettings({ config }: { config: { imageUploadsInWidget?: bo
     try {
       await updateWidgetConfigFn({ data: { imageUploadsInWidget: checked } })
       startTransition(() => router.invalidate())
+    } catch {
+      setImageUploads(!checked)
     } finally {
       setSaving(false)
     }

@@ -5,7 +5,11 @@
  * Handles validation, error handling, and returns the public URL on success.
  */
 
-import { getPresignedUploadUrlFn, getWidgetImageUploadUrlFn } from '@/lib/server/functions/uploads'
+import {
+  getPresignedUploadUrlFn,
+  getPostImageUploadUrlFn,
+  getWidgetImageUploadUrlFn,
+} from '@/lib/server/functions/uploads'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { MAX_FILE_SIZE } from '@/lib/server/storage/s3'
 
@@ -106,6 +110,61 @@ export function useImageUpload(options: UseImageUploadOptions = {}) {
  */
 export function useChangelogImageUpload(options: Omit<UseImageUploadOptions, 'prefix'> = {}) {
   return useImageUpload({ ...options, prefix: 'changelog-images' })
+}
+
+/**
+ * Hook for uploading images in admin feedback post editors.
+ * Uses the admin-only post image upload function.
+ */
+export function usePostImageUpload(options: Omit<UseImageUploadOptions, 'prefix'> = {}) {
+  const { onStart, onSuccess, onError } = options
+
+  const upload = async (file: File): Promise<string> => {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      const error = new Error(
+        `Invalid file type: ${file.type}. Allowed types: JPEG, PNG, GIF, WebP.`
+      )
+      onError?.(error)
+      throw error
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      const error = new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+      onError?.(error)
+      throw error
+    }
+
+    onStart?.()
+
+    try {
+      const { uploadUrl, publicUrl } = await getPostImageUploadUrlFn({
+        data: {
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+        },
+      })
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.statusText}`)
+      }
+
+      onSuccess?.(publicUrl)
+      return publicUrl
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Upload failed')
+      onError?.(error)
+      throw error
+    }
+  }
+
+  return { upload }
 }
 
 /**
