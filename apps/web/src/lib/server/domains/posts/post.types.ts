@@ -308,6 +308,11 @@ export interface ChangeStatusResult extends Post {
   newStatus: string
 }
 
+/**
+ * Result of changing post board
+ */
+export type ChangeBoardResult = Post
+
 // ============================================
 // Merge/Deduplication Types
 // ============================================

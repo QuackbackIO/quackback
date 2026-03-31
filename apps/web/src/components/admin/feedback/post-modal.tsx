@@ -43,6 +43,7 @@ import {
   useToggleCommentsLock,
   useDeletePost,
   useRestorePost,
+  useChangePostBoard,
 } from '@/lib/client/mutations'
 import {
   DeletePostDialog,
@@ -58,6 +59,7 @@ import {
   type TagId,
   type RoadmapId,
   type CommentId,
+  type BoardId,
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
 import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
@@ -91,6 +93,7 @@ function PostModalContent({
   const { data: tags = [] } = useQuery(adminQueries.tags())
   const { data: statuses = [] } = useQuery(adminQueries.statuses())
   const { data: roadmaps = [] } = useQuery(adminQueries.roadmaps())
+  const { data: boards = [] } = useQuery(adminQueries.boards())
   const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
 
   const post = postQuery.data as PostDetails
@@ -133,6 +136,7 @@ function PostModalContent({
   const toggleCommentsLock = useToggleCommentsLock()
   const deletePost = useDeletePost()
   const restorePostMutation = useRestorePost()
+  const changePostBoard = useChangePostBoard()
 
   // External links for cascade delete
   const externalLinksQuery = usePostExternalLinks(post.id as PostId, showDeleteDialog)
@@ -184,6 +188,18 @@ function PostModalContent({
     setIsUpdating(true)
     try {
       await updateTags.mutateAsync({ postId: post.id as PostId, tagIds, allTags: tags })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleBoardChange = async (boardId: BoardId) => {
+    setIsUpdating(true)
+    try {
+      await changePostBoard.mutateAsync({ postId: post.id as PostId, boardId })
+      toast.success('Board updated')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update board')
     } finally {
       setIsUpdating(false)
     }
@@ -463,10 +479,12 @@ function PostModalContent({
               allStatuses={statuses}
               allTags={tags}
               allRoadmaps={roadmaps}
+              allBoards={boards}
               onStatusChange={handleStatusChange}
               onTagsChange={handleTagsChange}
               onRoadmapAdd={handleRoadmapAdd}
               onRoadmapRemove={handleRoadmapRemove}
+              onBoardChange={handleBoardChange}
               isUpdating={isUpdating || !!pendingRoadmapId}
               hideSubscribe
               variant="card"

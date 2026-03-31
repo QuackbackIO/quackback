@@ -1,9 +1,6 @@
-export {
-  generateEmbedding,
-  formatPostText,
-  generatePostEmbedding,
-  savePostEmbedding,
-  findSimilarPosts,
-  findSimilarPostsByText,
-  getPostsWithoutEmbeddings,
-} from './embedding.service'
+/**
+ * Embeddings module - Types Only
+ *
+ * Import service functions directly from './embedding.service' in server-only code.
+ */
+export {}

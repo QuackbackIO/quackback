@@ -689,7 +689,8 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
     try {
       const { db, posts, boards, postStatuses, and, isNull, desc, sql, inArray } =
         await import('@/lib/server/db')
-      const { generateEmbedding } = await import('@/lib/server/domains/embeddings')
+      const { generateEmbedding } =
+        await import('@/lib/server/domains/embeddings/embedding.service')
 
       const searchQuery = data.title.trim()
       const limit = data.limit ?? 5

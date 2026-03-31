@@ -5,7 +5,7 @@
  * and consumed by the UI components.
  */
 
-import type { RawFeedbackAuthor, RawFeedbackContent } from '@/lib/server/db'
+import type { RawFeedbackAuthor, RawFeedbackContent } from '@/lib/shared/db-types'
 
 // ============================================
 // Suggestion Types

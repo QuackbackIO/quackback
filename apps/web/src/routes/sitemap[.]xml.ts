@@ -1,13 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { config } from '@/lib/server/config'
-import { db, changelogEntries, desc, eq, isNotNull, lte } from '@/lib/server/db'
-import { renderSitemap, toW3CDate } from '@/lib/server/sitemap'
 import type { SitemapUrl } from '@/lib/server/sitemap'
 
 export const Route = createFileRoute('/sitemap.xml')({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const [{ config }, { renderSitemap }] = await Promise.all([
+          import('@/lib/server/config'),
+          import('@/lib/server/sitemap'),
+        ])
+
         const url = new URL(request.url)
         const pageParam = url.searchParams.get('page')
         const page = pageParam ? parseInt(pageParam, 10) : null
@@ -33,6 +35,11 @@ export const Route = createFileRoute('/sitemap.xml')({
 })
 
 async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
+  const [{ db, changelogEntries, desc, eq, isNotNull, lte }, { toW3CDate }] = await Promise.all([
+    import('@/lib/server/db'),
+    import('@/lib/server/sitemap'),
+  ])
+
   const urls: SitemapUrl[] = []
 
   // Static pages

@@ -1,7 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { config } from '@/lib/server/config'
-import { db, changelogEntries, desc, isNotNull, lte } from '@/lib/server/db'
-import { getSettingsBrandingData } from '@/lib/server/settings-utils'
 import { stripHtml } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/changelog/feed')({
@@ -12,6 +9,16 @@ export const Route = createFileRoute('/changelog/feed')({
        * Returns RSS 2.0 feed of published changelog entries
        */
       GET: async () => {
+        const [
+          { config },
+          { db, changelogEntries, desc, isNotNull, lte },
+          { getSettingsBrandingData },
+        ] = await Promise.all([
+          import('@/lib/server/config'),
+          import('@/lib/server/db'),
+          import('@/lib/server/settings-utils'),
+        ])
+
         const baseUrl = config.baseUrl
 
         // Get workspace branding for feed title

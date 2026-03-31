@@ -39,7 +39,7 @@ export const Route = createFileRoute('/widget')({
     // session cookie so the widget can reuse it directly as a Bearer token.
     // This prevents duplicate anonymous users and bypasses HMAC requirements.
     const portalUser =
-      session?.user && !session.user.isAnonymous
+      session?.user && session.user.principalType !== 'anonymous'
         ? {
             id: session.user.id,
             name: session.user.name,

@@ -1,5 +1,3 @@
-'use client'
-
 import {
   createContext,
   useCallback,
@@ -31,6 +29,8 @@ interface WidgetAuthContextValue {
   hmacRequired: boolean
   /** Ensures a session exists (identified or anonymous). Returns true if ready. */
   ensureSession: () => Promise<boolean>
+  /** Ensures a session exists before performing a write action. Creates anonymous session if needed. */
+  ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
   /** Identify by email (inline capture). Returns true on success. */
   identifyWithEmail: (email: string, name?: string) => Promise<boolean>
   closeWidget: () => void
@@ -116,6 +116,20 @@ export function WidgetAuthProvider({
     sessionPromiseRef.current = p
     return p
   }, [storeToken])
+
+  const ensureSessionThen = useCallback(
+    async (callback: () => void | Promise<void>) => {
+      if (sessionReadyRef.current) {
+        await callback()
+        return
+      }
+      const success = await ensureSession()
+      if (success) {
+        await callback()
+      }
+    },
+    [ensureSession]
+  )
 
   /** Shared success path for both SDK identify and inline email capture */
   const applyIdentifyResult = useCallback(
@@ -242,36 +256,14 @@ export function WidgetAuthProvider({
     }
 
     async function handleAnonymousIdentify() {
-      try {
-        let token: string | null = null
-        const { error } = await authClient.signIn.anonymous({
-          fetchOptions: {
-            credentials: 'omit',
-            onSuccess: (ctx) => {
-              token = ctx.response.headers.get('set-auth-token')
-              if (token) storeToken(token)
-            },
-          },
-        })
-        if (error || !token) {
-          window.parent.postMessage(
-            { type: 'quackback:identify-result', success: false, error: 'ANON_SESSION_FAILED' },
-            '*'
-          )
-          return
-        }
-        setUser(null)
-        window.parent.postMessage(
-          { type: 'quackback:identify-result', success: true, user: null },
-          '*'
-        )
-        window.parent.postMessage({ type: 'quackback:auth-change', user: null }, '*')
-      } catch {
-        window.parent.postMessage(
-          { type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' },
-          '*'
-        )
-      }
+      // Don't eagerly create anonymous session — it will be created lazily
+      // on first write action (vote, comment, post) via ensureSessionThen.
+      setUser(null)
+      window.parent.postMessage(
+        { type: 'quackback:identify-result', success: true, user: null },
+        '*'
+      )
+      window.parent.postMessage({ type: 'quackback:auth-change', user: null }, '*')
     }
 
     function handleMessage(event: MessageEvent) {
@@ -338,6 +330,7 @@ export function WidgetAuthProvider({
       isIdentified,
       hmacRequired: hmacRequired ?? false,
       ensureSession,
+      ensureSessionThen,
       identifyWithEmail,
       closeWidget,
       emitEvent,
@@ -348,6 +341,7 @@ export function WidgetAuthProvider({
       user,
       isIdentified,
       ensureSession,
+      ensureSessionThen,
       identifyWithEmail,
       closeWidget,
       emitEvent,

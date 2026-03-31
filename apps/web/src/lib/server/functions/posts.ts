@@ -24,6 +24,7 @@ import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { getPostFeedbackSource } from '@/lib/server/domains/posts/post.export'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
+import { changeBoard } from '@/lib/server/domains/posts/post.board'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
 import {
   getPostExternalLinks,
@@ -121,6 +122,11 @@ const deletePostSchema = z.object({
 const changeStatusSchema = z.object({
   id: z.string(),
   statusId: z.string(),
+})
+
+const changePostBoardSchema = z.object({
+  id: z.string(),
+  boardId: z.string(),
 })
 
 const updateTagsSchema = z.object({
@@ -487,6 +493,29 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
       return serializePostDates(result)
     } catch (error) {
       console.error(`[fn:posts] ❌ changePostStatusFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Move a post to a different board
+ */
+export const changePostBoardFn = createServerFn({ method: 'POST' })
+  .inputValidator(changePostBoardSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:posts] changePostBoardFn: id=${data.id}, boardId=${data.boardId}`)
+    try {
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const result = await changeBoard(data.id as PostId, data.boardId as BoardId, {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+        displayName: auth.user.name,
+      })
+      console.log(`[fn:posts] changePostBoardFn: updated id=${data.id}`)
+      return serializePostDates(result)
+    } catch (error) {
+      console.error(`[fn:posts] ❌ changePostBoardFn failed:`, error)
       throw error
     }
   })

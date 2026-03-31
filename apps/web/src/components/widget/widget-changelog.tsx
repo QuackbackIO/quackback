@@ -1,5 +1,3 @@
-'use client'
-
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'

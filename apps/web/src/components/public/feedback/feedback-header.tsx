@@ -54,7 +54,7 @@ export function FeedbackHeader({
   const anonymousPostingEnabled = settings?.publicPortalConfig?.features?.anonymousPosting ?? false
 
   // Identified users post as themselves; anonymous posting is handled separately.
-  const isAnonymousSession = session?.user?.isAnonymous ?? false
+  const isAnonymousSession = session?.user?.principalType === 'anonymous'
   const effectiveUser =
     session?.user && !isAnonymousSession
       ? { name: session.user.name, email: session.user.email }

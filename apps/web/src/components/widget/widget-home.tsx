@@ -1,5 +1,3 @@
-'use client'
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
@@ -74,7 +72,7 @@ function WidgetPostRow({
   showBoard,
   compact,
   canVote,
-  ensureSession,
+  ensureSessionThen,
   onAuthRequired,
   onSelect,
 }: {
@@ -83,7 +81,7 @@ function WidgetPostRow({
   showBoard?: boolean
   compact?: boolean
   canVote: boolean
-  ensureSession: () => Promise<boolean>
+  ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
   onAuthRequired?: () => void
   onSelect?: () => void
 }) {
@@ -98,7 +96,17 @@ function WidgetPostRow({
           postId={post.id as PostId}
           voteCount={post.voteCount}
           compact={compact}
-          onBeforeVote={canVote ? ensureSession : undefined}
+          onBeforeVote={
+            canVote
+              ? async () => {
+                  let success = false
+                  await ensureSessionThen(() => {
+                    success = true
+                  })
+                  return success
+                }
+              : undefined
+          }
           onAuthRequired={!canVote ? onAuthRequired : undefined}
         />
       </div>
@@ -144,6 +152,7 @@ export function WidgetHome({
 }: WidgetHomeProps) {
   const {
     ensureSession,
+    ensureSessionThen,
     isIdentified,
     hmacRequired,
     user,
@@ -476,7 +485,7 @@ export function WidgetHome({
                                 statusMap={statusMap}
                                 compact
                                 canVote={canVote}
-                                ensureSession={ensureSession}
+                                ensureSessionThen={ensureSessionThen}
                                 onAuthRequired={() => handleAuthRequired(post.id)}
                                 onSelect={() => onPostSelect?.(post.id)}
                               />
@@ -590,7 +599,7 @@ export function WidgetHome({
                     statusMap={statusMap}
                     showBoard
                     canVote={canVote}
-                    ensureSession={ensureSession}
+                    ensureSessionThen={ensureSessionThen}
                     onAuthRequired={() => handleAuthRequired(post.id)}
                     onSelect={() => onPostSelect?.(post.id)}
                   />

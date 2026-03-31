@@ -136,6 +136,19 @@ export type ExternalUserMappingId = TypeId<'user_mapping'>
 export type MergeSuggestionId = TypeId<'merge_sug'>
 
 // ============================================
+// Help Center Entity IDs
+// ============================================
+
+/** Help center category ID - e.g., helpcenter_category_01h455vb4pex5vsknk084sn02q */
+export type HelpCenterCategoryId = TypeId<'helpcenter_category'>
+
+/** Help center article ID - e.g., helpcenter_article_01h455vb4pex5vsknk084sn02q */
+export type HelpCenterArticleId = TypeId<'helpcenter_article'>
+
+/** Help center article feedback ID - e.g., helpcenter_feedback_01h455vb4pex5vsknk084sn02q */
+export type HelpCenterFeedbackId = TypeId<'helpcenter_feedback'>
+
+// ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
 
@@ -243,6 +256,9 @@ export interface EntityIdMap {
   webhook: WebhookId
   subscription: SubscriptionId
   invoice: InvoiceId
+  helpcenter_category: HelpCenterCategoryId
+  helpcenter_article: HelpCenterArticleId
+  helpcenter_feedback: HelpCenterFeedbackId
 }
 
 /**

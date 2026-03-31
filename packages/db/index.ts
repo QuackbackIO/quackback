@@ -1,5 +1,6 @@
-// Database client
-export { createDb, getMigrationDb, type Database, type CreateDbOptions } from './src/client'
+// Database client — import from '@quackback/db/client' directly to avoid
+// pulling postgres into the client bundle via Vite's module scanner.
+export type { Database, CreateDbOptions } from './src/client'
 
 // Schema
 export * from './src/schema'

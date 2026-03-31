@@ -1,5 +1,3 @@
-'use client'
-
 import type { UseFormReturn } from 'react-hook-form'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
@@ -25,7 +23,7 @@ export function ChangelogFormFields({
   const { upload: uploadImage } = useImageUpload({ prefix: 'changelog' })
 
   return (
-    <div className="px-4 sm:px-6 py-4 space-y-4 h-full flex flex-col">
+    <div className="px-4 sm:px-6 py-4 space-y-4 flex flex-col min-h-full">
       {error && <FormError message={error} className="px-3 py-2" />}
 
       <TitleInput control={form.control} placeholder="What's new?" autoFocus />
@@ -42,6 +40,7 @@ export function ChangelogFormFields({
                 onChange={onContentChange}
                 placeholder="Share the details of your update..."
                 minHeight="100%"
+                className="h-full"
                 borderless
                 features={{
                   headings: true,

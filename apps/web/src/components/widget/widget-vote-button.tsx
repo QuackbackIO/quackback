@@ -1,5 +1,3 @@
-'use client'
-
 import { useRef, useCallback } from 'react'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { useWidgetVote } from '@/lib/client/hooks/use-widget-vote'

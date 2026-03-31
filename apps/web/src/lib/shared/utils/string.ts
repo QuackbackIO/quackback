@@ -55,6 +55,38 @@ export function formatBadgeCount(n: number): string {
   return n > 99 ? '99+' : String(n)
 }
 
+/**
+ * Strip markdown formatting and truncate to a plain text preview.
+ * Removes headings, bold, italic, links, images, lists, and collapses whitespace.
+ */
+export function stripMarkdownPreview(text: string, maxLength = 150): string {
+  const plain = text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[.*?\]\(.+?\)/g, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/\n+/g, ' ')
+    .trim()
+  if (plain.length <= maxLength) return plain
+  return plain.slice(0, maxLength).trimEnd() + '...'
+}
+
+/**
+ * Generate a URL-friendly slug from text.
+ * Lowercases, replaces non-alphanumeric runs with hyphens, trims leading/trailing hyphens.
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, '') // Remove HTML tags

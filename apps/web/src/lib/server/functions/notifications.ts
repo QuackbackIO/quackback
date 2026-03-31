@@ -12,7 +12,7 @@ import {
   markAsRead,
   markAllAsRead,
   archiveNotification,
-} from '@/lib/server/domains/notifications'
+} from '@/lib/server/domains/notifications/notification.service'
 
 // ============================================
 // Schemas

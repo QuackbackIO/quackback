@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { config } from '@/lib/server/config'
 
 export const Route = createFileRoute('/robots.txt')({
   server: {
     handlers: {
       GET: async () => {
+        const { config } = await import('@/lib/server/config')
         const baseUrl = config.baseUrl
 
         const body = `User-agent: *

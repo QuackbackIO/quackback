@@ -39,7 +39,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { getWebhookById } = await import('@/lib/server/domains/webhooks')
+          const { getWebhookById } = await import('@/lib/server/domains/webhooks/webhook.service')
           const webhook = await getWebhookById(webhookId as WebhookId)
 
           return successResponse(toWebhookResponse(webhook))
@@ -84,7 +84,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             if (boardValidationError) return boardValidationError
           }
 
-          const { updateWebhook } = await import('@/lib/server/domains/webhooks')
+          const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           const webhook = await updateWebhook(webhookId as WebhookId, {
             url: parsed.data.url,
             events: parsed.data.events,
@@ -114,7 +114,7 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
           const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
           if (validationError) return validationError
 
-          const { deleteWebhook } = await import('@/lib/server/domains/webhooks')
+          const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           await deleteWebhook(webhookId as WebhookId)
 
           return noContentResponse()

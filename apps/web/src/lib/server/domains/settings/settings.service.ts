@@ -12,13 +12,16 @@ import type {
   PublicPortalConfig,
   DeveloperConfig,
   UpdateDeveloperConfigInput,
-  PublicWidgetConfig,
+  FeatureFlags,
+  TenantSettings,
+  SettingsBrandingData,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_FEATURE_FLAGS,
 } from './settings.types'
 import {
   parseJsonConfig,
@@ -226,35 +229,8 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   }
 }
 
-export interface SettingsBrandingData {
-  name: string
-  logoUrl: string | null
-  faviconUrl: string | null
-  headerLogoUrl: string | null
-  headerDisplayMode: string | null
-  headerDisplayName: string | null
-}
-
-export interface TenantSettings {
-  /** Raw settings record from database */
-  settings: Awaited<ReturnType<typeof requireSettings>>
-  /** Workspace name (convenience property) */
-  name: string
-  /** Workspace slug (convenience property) */
-  slug: string
-  authConfig: AuthConfig
-  portalConfig: PortalConfig
-  brandingConfig: BrandingConfig
-  developerConfig: DeveloperConfig
-  /** Custom CSS for portal styling */
-  customCss: string
-  publicAuthConfig: PublicAuthConfig
-  publicPortalConfig: PublicPortalConfig
-  /** Public widget config (no secret, safe for client) */
-  publicWidgetConfig: PublicWidgetConfig
-  brandingData: SettingsBrandingData
-  faviconData: { url: string } | null
-}
+// TenantSettings and SettingsBrandingData are defined in settings.types.ts
+// to prevent client-side barrel imports from pulling in this server-only module.
 
 export async function getTenantSettings(): Promise<TenantSettings | null> {
   try {
@@ -273,6 +249,11 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+
+    const featureFlags: FeatureFlags = {
+      ...DEFAULT_FEATURE_FLAGS,
+      ...(org.featureFlags ? JSON.parse(org.featureFlags) : {}),
+    }
 
     const [configuredTypes, portalPassthroughKeys] = await Promise.all([
       getConfiguredAuthTypes(),
@@ -326,6 +307,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         tabs: widgetConfig.tabs,
         hmacRequired: widgetConfig.identifyVerification ?? false,
       },
+      featureFlags,
       brandingData,
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
     }
@@ -339,3 +321,39 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
 }
 
 // ============================================================================
+// Feature Flags
+// ============================================================================
+
+/**
+ * Get current feature flags, merged with defaults
+ */
+export async function getFeatureFlags(): Promise<FeatureFlags> {
+  const settings = await getTenantSettings()
+  return settings?.featureFlags ?? DEFAULT_FEATURE_FLAGS
+}
+
+/**
+ * Check if a specific feature flag is enabled
+ */
+export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolean> {
+  const flags = await getFeatureFlags()
+  return flags[flag] ?? false
+}
+
+/**
+ * Update feature flags (partial update, merges with existing)
+ */
+export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
+  const org = await requireSettings()
+  const current: FeatureFlags = {
+    ...DEFAULT_FEATURE_FLAGS,
+    ...(org.featureFlags ? JSON.parse(org.featureFlags) : {}),
+  }
+  const updated = { ...current, ...input }
+  await db
+    .update(settings)
+    .set({ featureFlags: JSON.stringify(updated) })
+    .where(eq(settings.id, org.id))
+  await invalidateSettingsCache()
+  return updated
+}

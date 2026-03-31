@@ -1,5 +1,3 @@
-'use client'
-
 import { Link } from '@tanstack/react-router'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import { StatusBadge } from '@/components/ui/status-badge'

@@ -13,7 +13,7 @@ import {
   rotateApiKey,
   revokeApiKey,
   type ApiKeyId,
-} from '@/lib/server/domains/api-keys'
+} from '@/lib/server/domains/api-keys/api-key.service'
 
 // ============================================
 // Schemas

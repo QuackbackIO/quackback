@@ -1,21 +1,31 @@
-'use client'
-
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftIcon, XMarkIcon, LightBulbIcon, NewspaperIcon } from '@heroicons/react/24/solid'
+import {
+  ArrowLeftIcon,
+  XMarkIcon,
+  LightBulbIcon,
+  NewspaperIcon,
+  BookOpenIcon,
+} from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 
-export type WidgetTab = 'feedback' | 'changelog'
+export type WidgetTab = 'feedback' | 'changelog' | 'help'
+
+const TAB_CONFIG: { tab: WidgetTab; icon: typeof LightBulbIcon; label: string }[] = [
+  { tab: 'feedback', icon: LightBulbIcon, label: 'Feedback' },
+  { tab: 'changelog', icon: NewspaperIcon, label: 'Changelog' },
+  { tab: 'help', icon: BookOpenIcon, label: 'Help' },
+]
 
 interface WidgetShellProps {
   orgSlug: string
   activeTab: WidgetTab
   onTabChange: (tab: WidgetTab) => void
   onBack?: () => void
-  enabledTabs?: { feedback?: boolean; changelog?: boolean }
+  enabledTabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   children: ReactNode
 }
 
@@ -24,10 +34,13 @@ export function WidgetShell({
   activeTab,
   onTabChange,
   onBack,
-  enabledTabs = { feedback: true, changelog: false },
+  enabledTabs = { feedback: true, changelog: false, help: false },
   children,
 }: WidgetShellProps) {
-  const showTabBar = enabledTabs.feedback && enabledTabs.changelog
+  const enabledCount = [enabledTabs.feedback, enabledTabs.changelog, enabledTabs.help].filter(
+    Boolean
+  ).length
+  const showTabBar = enabledCount > 1
   const { user, closeWidget } = useWidgetAuth()
   const showCloseButton = new URLSearchParams(window.location.search).get('showClose') === '1'
 
@@ -57,7 +70,11 @@ export function WidgetShell({
             </button>
           ) : (
             <h2 className="text-sm font-semibold text-foreground pl-0.5">
-              {activeTab === 'feedback' ? 'Share your ideas' : "What's new"}
+              {activeTab === 'feedback'
+                ? 'Share your ideas'
+                : activeTab === 'help'
+                  ? 'Help Center'
+                  : "What's new"}
             </h2>
           )}
         </div>
@@ -82,32 +99,22 @@ export function WidgetShell({
       <div className="border-t border-border/40 shrink-0">
         {showTabBar && (
           <div className="flex">
-            <button
-              type="button"
-              onClick={() => onTabChange('feedback')}
-              className={cn(
-                'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
-                activeTab === 'feedback'
-                  ? 'text-primary'
-                  : 'text-muted-foreground/60 hover:text-muted-foreground'
-              )}
-            >
-              <LightBulbIcon className="w-5 h-5" />
-              <span className="text-xs font-medium">Feedback</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onTabChange('changelog')}
-              className={cn(
-                'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
-                activeTab === 'changelog'
-                  ? 'text-primary'
-                  : 'text-muted-foreground/60 hover:text-muted-foreground'
-              )}
-            >
-              <NewspaperIcon className="w-5 h-5" />
-              <span className="text-xs font-medium">Changelog</span>
-            </button>
+            {TAB_CONFIG.filter(({ tab }) => enabledTabs[tab]).map(({ tab, icon: Icon, label }) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => onTabChange(tab)}
+                className={cn(
+                  'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
+                  activeTab === tab
+                    ? 'text-primary'
+                    : 'text-muted-foreground/60 hover:text-muted-foreground'
+                )}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-xs font-medium">{label}</span>
+              </button>
+            ))}
           </div>
         )}
 

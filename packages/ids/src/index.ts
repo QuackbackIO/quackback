@@ -100,6 +100,10 @@ export type {
   FeedbackCorrectionId,
   ExternalUserMappingId,
   MergeSuggestionId,
+  // Help center entities
+  HelpCenterCategoryId,
+  HelpCenterArticleId,
+  HelpCenterFeedbackId,
   // Auth entities
   WorkspaceId,
   UserId,

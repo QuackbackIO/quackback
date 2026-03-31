@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'

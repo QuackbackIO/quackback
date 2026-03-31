@@ -1,5 +1,3 @@
-'use client'
-
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ChangelogEntryCard } from './changelog-entry-card'

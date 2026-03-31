@@ -60,7 +60,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Youtube as YoutubeIcon,
+  Play as YoutubeIcon,
   Download,
   Copy,
   Expand,
@@ -88,6 +88,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from './context-menu'
+import { ScrollArea } from './scroll-area'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
@@ -455,47 +456,50 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     return (
       <div
-        ref={containerRef}
-        className="z-50 w-72 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg"
+        className="z-50 w-72 overflow-hidden rounded-lg border bg-popover shadow-lg"
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {Object.entries(groupedItems).map(([group, groupItems]) => (
-          <div key={group}>
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              {groupLabels[group] || group}
-            </div>
-            {groupItems.map((item) => {
-              globalIndex++
-              const currentIndex = globalIndex
-              return (
-                <button
-                  key={item.title}
-                  type="button"
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
-                    'hover:bg-accent focus:bg-accent focus:outline-none',
-                    currentIndex === selectedIndex && 'bg-accent'
-                  )}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    selectItem(currentIndex)
-                  }}
-                  onMouseDown={(e) => e.preventDefault()}
-                >
-                  <span className="flex size-8 items-center justify-center rounded-md border bg-background">
-                    {item.icon}
-                  </span>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-xs text-muted-foreground">{item.description}</div>
-                  </div>
-                </button>
-              )
-            })}
+        <ScrollArea className="max-h-80">
+          <div ref={containerRef} className="p-1">
+            {Object.entries(groupedItems).map(([group, groupItems]) => (
+              <div key={group}>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {groupLabels[group] || group}
+                </div>
+                {groupItems.map((item) => {
+                  globalIndex++
+                  const currentIndex = globalIndex
+                  return (
+                    <button
+                      key={item.title}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
+                        'hover:bg-accent focus:bg-accent focus:outline-none',
+                        currentIndex === selectedIndex && 'bg-accent'
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        selectItem(currentIndex)
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      <span className="flex size-8 items-center justify-center rounded-md border bg-background">
+                        {item.icon}
+                      </span>
+                      <div className="flex-1 text-left">
+                        <div className="font-medium">{item.title}</div>
+                        <div className="text-xs text-muted-foreground">{item.description}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </div>
-        ))}
+        </ScrollArea>
       </div>
     )
   }
@@ -559,6 +563,7 @@ function createSlashCommands(
               }
 
               const { x, y } = await computePosition(virtualEl, floatingEl, {
+                strategy: 'fixed',
                 placement: 'bottom-start',
                 middleware: [offset(8), flip(), shift({ padding: 8 })],
               })
@@ -581,7 +586,7 @@ function createSlashCommands(
 
                 // Create container element
                 floatingEl = document.createElement('div')
-                floatingEl.style.position = 'absolute'
+                floatingEl.style.position = 'fixed'
                 floatingEl.style.zIndex = '50'
                 floatingEl.style.pointerEvents = 'auto'
                 floatingEl.appendChild(component.element)
@@ -843,8 +848,7 @@ export function RichTextEditor({
       <ContextMenuTrigger asChild disabled={!features.images}>
         <div
           className={cn(
-            'overflow-hidden',
-            !borderless && 'rounded-md border border-input bg-background',
+            !borderless && 'overflow-hidden rounded-md border border-input bg-background',
             disabled && 'opacity-50 cursor-not-allowed',
             className
           )}

@@ -318,3 +318,94 @@ export interface PublicPortalConfig {
   /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
   customProviderNames?: Record<string, string>
 }
+
+// =============================================================================
+// Branding Data (client-safe subset of settings)
+// =============================================================================
+
+export interface SettingsBrandingData {
+  name: string
+  logoUrl: string | null
+  faviconUrl: string | null
+  headerLogoUrl: string | null
+  headerDisplayMode: string | null
+  headerDisplayName: string | null
+}
+
+// =============================================================================
+// Tenant Settings (consolidated settings object)
+// =============================================================================
+
+/**
+ * Consolidated tenant settings, parsed from the database settings row.
+ * This interface is client-safe (no DB types) and can be imported from the barrel.
+ */
+export interface TenantSettings {
+  /** Raw settings record from database (opaque on client, typed on server) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  settings: Record<string, any>
+  /** Workspace name */
+  name: string
+  /** Workspace slug */
+  slug: string
+  authConfig: AuthConfig
+  portalConfig: PortalConfig
+  brandingConfig: BrandingConfig
+  developerConfig: DeveloperConfig
+  /** Custom CSS for portal styling */
+  customCss: string
+  publicAuthConfig: PublicAuthConfig
+  publicPortalConfig: PublicPortalConfig
+  /** Public widget config (no secret, safe for client) */
+  publicWidgetConfig: PublicWidgetConfig
+  /** Feature flags for experimental features */
+  featureFlags: FeatureFlags
+  brandingData: SettingsBrandingData
+  faviconData: { url: string } | null
+}
+
+// =============================================================================
+// Feature Flags (Experimental features)
+// =============================================================================
+
+/**
+ * Feature flags for experimental/in-development features.
+ * New flags default to false. When a feature is ready for rollout,
+ * enable it via migration. Eventually remove the flag entirely.
+ */
+export interface FeatureFlags {
+  /** Analytics dashboard in admin panel */
+  analytics: boolean
+  /** Help center knowledge base */
+  helpCenter: boolean
+  /** AI-powered feedback extraction from external sources */
+  aiFeedbackExtraction: boolean
+}
+
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  analytics: false,
+  helpCenter: false,
+  aiFeedbackExtraction: false,
+}
+
+/**
+ * Feature flag metadata for the admin UI
+ */
+export const FEATURE_FLAG_REGISTRY: Record<
+  keyof FeatureFlags,
+  { label: string; description: string }
+> = {
+  analytics: {
+    label: 'Analytics Dashboard',
+    description: 'View feedback trends, top posts, and engagement metrics from the admin panel.',
+  },
+  helpCenter: {
+    label: 'Help Center',
+    description: 'Create and manage a knowledge base with categories and articles for your users.',
+  },
+  aiFeedbackExtraction: {
+    label: 'AI Feedback Extraction',
+    description:
+      'Automatically extract and categorize feedback from connected sources using large language models.',
+  },
+}

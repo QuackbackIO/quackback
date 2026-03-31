@@ -1,6 +1,5 @@
-'use client'
-
 import { useState, useCallback } from 'react'
+import { useWidgetAuth } from './widget-auth-provider'
 
 interface WidgetUser {
   id: string
@@ -22,6 +21,7 @@ export function WidgetCommentForm({
   onSubmit,
   identifyWithEmail,
 }: WidgetCommentFormProps) {
+  const { ensureSessionThen } = useWidgetAuth()
   const [commentText, setCommentText] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -50,14 +50,25 @@ export function WidgetCommentForm({
         }
       }
 
-      await onSubmit(content)
-      setCommentText('')
+      await ensureSessionThen(async () => {
+        await onSubmit(content)
+        setCommentText('')
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post comment')
     } finally {
       setIsSubmitting(false)
     }
-  }, [commentText, isSubmitting, isIdentified, email, name, identifyWithEmail, onSubmit])
+  }, [
+    commentText,
+    isSubmitting,
+    isIdentified,
+    email,
+    name,
+    identifyWithEmail,
+    ensureSessionThen,
+    onSubmit,
+  ])
 
   return (
     <div className="mb-3">

@@ -72,6 +72,12 @@ export const feedbackPipelineHook: HookHandler = {
   async run(event: EventData, _target: unknown, _config: unknown): Promise<HookResult> {
     if (event.type !== 'post.created') return { success: true }
 
+    // Feature flag guard: skip pipeline if AI feedback extraction is disabled
+    const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+    if (!(await isFeatureEnabled('aiFeedbackExtraction'))) {
+      return { success: true }
+    }
+
     const { post: eventPost } = (event as PostCreatedEvent).data
 
     // Source guard: quackback source must exist and be enabled

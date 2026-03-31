@@ -1,5 +1,3 @@
-'use client'
-
 import { Link } from '@tanstack/react-router'
 import { LinkIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'

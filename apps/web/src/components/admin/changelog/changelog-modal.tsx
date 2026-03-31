@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useCallback, useEffect } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'

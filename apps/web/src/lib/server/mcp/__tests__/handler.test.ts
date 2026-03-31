@@ -4,7 +4,7 @@ import type { PrincipalId, ApiKeyId, UserId } from '@quackback/ids'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
-vi.mock('@/lib/server/domains/api-keys', () => ({
+vi.mock('@/lib/server/domains/api-keys/api-key.service', () => ({
   verifyApiKey: vi.fn(),
 }))
 
@@ -313,7 +313,7 @@ function mcpRequest(body: unknown, apiKey = 'qb_valid_key'): Request {
 }
 
 async function setupValidAuth() {
-  const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+  const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
   vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
   mockFindFirst.mockResolvedValue(MOCK_MEMBER_RECORD)
 }
@@ -390,7 +390,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 when API key is invalid', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(null)
 
       const { handleMcpRequest } = await import('../handler')
@@ -400,7 +400,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 403 when member is a portal user (not team)', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       // Return role: 'user' for the role lookup in withApiKeyAuth
       mockFindFirst.mockResolvedValue({ role: 'user' })
@@ -412,7 +412,7 @@ describe('MCP HTTP Handler', () => {
     })
 
     it('should return 401 when member record not found', async () => {
-      const { verifyApiKey } = await import('@/lib/server/domains/api-keys')
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       // First call for role lookup in withApiKeyAuth → admin
       // Second call for full member record → null

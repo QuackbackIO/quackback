@@ -1,5 +1,3 @@
-'use client'
-
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, useCallback, useEffect, useMemo, startTransition } from 'react'
@@ -71,9 +69,14 @@ export function ChangelogList() {
   // Keyboard "/" to focus search
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable
+      ) {
         if (e.key === 'Escape') {
-          ;(e.target as HTMLElement).blur()
+          target.blur()
         }
         return
       }

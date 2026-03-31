@@ -1,5 +1,3 @@
-'use client'
-
 import { useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChatBubbleLeftIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
@@ -42,7 +40,7 @@ export function WidgetPostDetail({
     isIdentified,
     hmacRequired,
     user,
-    ensureSession,
+    ensureSessionThen,
     identifyWithEmail,
     emitEvent,
     sessionVersion,
@@ -87,23 +85,20 @@ export function WidgetPostDetail({
   /** Submit a comment (root or reply). */
   const submitComment = useCallback(
     async (content: string, parentId?: string) => {
-      if (!isIdentified) {
-        const ok = await ensureSession()
-        if (!ok) return
-      }
-
-      const result = await createCommentFn({
-        data: { postId, content, parentId },
-        headers: getWidgetAuthHeaders(),
+      await ensureSessionThen(async () => {
+        const result = await createCommentFn({
+          data: { postId, content, parentId },
+          headers: getWidgetAuthHeaders(),
+        })
+        emitEvent('comment:created', {
+          postId,
+          commentId: result.comment.id,
+          parentId: parentId ?? null,
+        })
+        queryClient.invalidateQueries({ queryKey: widgetQueryKeys.postDetail.all })
       })
-      emitEvent('comment:created', {
-        postId,
-        commentId: result.comment.id,
-        parentId: parentId ?? null,
-      })
-      queryClient.invalidateQueries({ queryKey: widgetQueryKeys.postDetail.all })
     },
-    [isIdentified, ensureSession, emitEvent, postId, queryClient]
+    [ensureSessionThen, emitEvent, postId, queryClient]
   )
 
   const handleSubmitReply = useCallback(
@@ -162,7 +157,17 @@ export function WidgetPostDetail({
             <WidgetVoteButton
               postId={postId as PostId}
               voteCount={post.voteCount}
-              onBeforeVote={canVote ? ensureSession : undefined}
+              onBeforeVote={
+                canVote
+                  ? async () => {
+                      let success = false
+                      await ensureSessionThen(() => {
+                        success = true
+                      })
+                      return success
+                    }
+                  : undefined
+              }
               onAuthRequired={!canVote ? handleViewOnPortal : undefined}
             />
           </div>

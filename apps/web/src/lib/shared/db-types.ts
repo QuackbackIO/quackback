@@ -10,8 +10,10 @@
  * import { REACTION_EMOJIS } from '@/lib/shared/db-types'
  */
 
-// Re-export types and constants (no side effects)
-export * from '@quackback/db/types'
+import type { SetupState } from '@quackback/db/types'
+
+// Re-export types only to keep this module client-safe.
+export type * from '@quackback/db/types'
 
 // Schema types needed by client components (type-only = no side effects)
 export type {
@@ -25,3 +27,21 @@ export type {
   UserAttributeType,
   CurrencyCode,
 } from '@quackback/db/schema'
+
+// Runtime exports used in client components.
+export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const
+export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
+
+export function getSetupState(setupStateJson: string | null): SetupState | null {
+  if (!setupStateJson) return null
+  try {
+    return JSON.parse(setupStateJson) as SetupState
+  } catch {
+    return null
+  }
+}
+
+export function isOnboardingComplete(setupState: SetupState | null): boolean {
+  if (!setupState) return false
+  return setupState.steps.core && setupState.steps.workspace && setupState.steps.boards
+}

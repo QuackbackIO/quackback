@@ -1,5 +1,3 @@
-'use client'
-
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'

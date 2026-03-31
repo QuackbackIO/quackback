@@ -14,7 +14,7 @@ import {
   getPendingSuggestionsForPost,
   getPendingMergeSuggestionSummary,
   getMergeSuggestionCountsForPosts,
-} from '@/lib/server/domains/merge-suggestions'
+} from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 
 // ============================================
 // Server Functions
