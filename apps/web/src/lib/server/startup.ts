@@ -6,6 +6,10 @@
 let _logged = false
 
 export function logStartupBanner(): void {
+  // During Nitro's initial build evaluation, SECRET_KEY isn't available yet.
+  // Return without setting _logged so the runtime call can still execute.
+  if (!process.env.SECRET_KEY && process.env.NODE_ENV !== 'test') return
+
   if (_logged) return
   _logged = true
 

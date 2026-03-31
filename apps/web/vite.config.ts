@@ -2,7 +2,6 @@ import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import { nitro } from 'nitro/vite'
 import viteReact from '@vitejs/plugin-react'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
@@ -51,11 +50,11 @@ export default defineConfig(({ mode }) => {
         external: [/^node:/],
       },
     },
+    resolve: {
+      tsconfigPaths: true,
+    },
     plugins: [
       tailwindcss(),
-      tsconfigPaths({
-        projects: ['./tsconfig.json'],
-      }),
       nitro({
         preset: 'bun',
       }),
@@ -63,6 +62,7 @@ export default defineConfig(({ mode }) => {
         srcDirectory: 'src',
         router: {
           routesDirectory: 'routes',
+          routeFileIgnorePattern: '__tests__',
         },
         importProtection: {
           behavior: { dev: 'error', build: 'error' },

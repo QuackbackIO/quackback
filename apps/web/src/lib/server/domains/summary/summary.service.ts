@@ -164,17 +164,6 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_BATCH_DELAY_MS = 500
 
-/** Subquery: live comment count per post (non-deleted comments only). */
-const liveCommentCountSq = db
-  .select({
-    postId: comments.postId,
-    count: sql<number>`count(*)::int`.as('live_count'),
-  })
-  .from(comments)
-  .where(isNull(comments.deletedAt))
-  .groupBy(comments.postId)
-  .as('live_cc')
-
 /**
  * Refresh stale summaries.
  * Finds all posts where the summary is missing or the live comment count has changed,
@@ -182,6 +171,16 @@ const liveCommentCountSq = db
  */
 export async function refreshStaleSummaries(): Promise<void> {
   if (!getOpenAI()) return
+
+  const liveCommentCountSq = db
+    .select({
+      postId: comments.postId,
+      count: sql<number>`count(*)::int`.as('live_count'),
+    })
+    .from(comments)
+    .where(isNull(comments.deletedAt))
+    .groupBy(comments.postId)
+    .as('live_cc')
 
   let totalProcessed = 0
   let totalFailed = 0
