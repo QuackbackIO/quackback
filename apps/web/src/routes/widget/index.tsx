@@ -72,6 +72,7 @@ export const Route = createFileRoute('/widget/')({
         changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
         help: (settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false,
       },
+      imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
     }
   },
   component: WidgetPage,
@@ -95,7 +96,8 @@ interface SuccessPost {
 }
 
 function WidgetPage() {
-  const { posts, postsHasMore, statuses, boards, orgSlug, features, tabs } = Route.useLoaderData()
+  const { posts, postsHasMore, statuses, boards, orgSlug, features, tabs, imageUploadsInWidget } =
+    Route.useLoaderData()
   const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
@@ -237,6 +239,7 @@ function WidgetPage() {
           onPostCreated={handlePostCreated}
           anonymousVotingEnabled={features.anonymousVoting}
           anonymousPostingEnabled={features.anonymousPosting}
+          imageUploadsInWidget={imageUploadsInWidget}
         />
       </div>
 
