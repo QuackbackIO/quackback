@@ -120,7 +120,7 @@ export function WidgetShell({
           </div>
         )}
 
-        <div className="border-t border-border/50 bg-muted/30 py-2 flex items-center justify-center">
+        <div className="border-t border-border/20 py-2 flex items-center justify-center">
           <a
             href={`https://quackback.io?utm_campaign=${encodeURIComponent(orgSlug || 'unknown')}&utm_content=widget&utm_medium=referral&utm_source=powered-by`}
             target="_blank"
