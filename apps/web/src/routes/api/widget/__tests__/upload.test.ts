@@ -19,8 +19,13 @@ vi.mock('@/lib/server/storage/s3', async () => {
   return createS3MockFactory()
 })
 
+vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
+  getWidgetConfig: vi.fn(),
+}))
+
 import { db } from '@/lib/server/db'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
+import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
 import { handleWidgetUpload } from '../upload'
 
 function makeRequest(file?: File, token?: string): Request {
@@ -45,6 +50,7 @@ describe('POST /api/widget/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(isS3Configured).mockReturnValue(true)
+    vi.mocked(getWidgetConfig).mockResolvedValue({ imageUploadsInWidget: true } as any)
   })
 
   it('returns 401 when no Authorization header', async () => {
@@ -65,6 +71,15 @@ describe('POST /api/widget/upload', () => {
     const res = await handleWidgetUpload({ request: makeRequest(undefined, 'valid-token') })
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ error: expect.stringContaining('Authentication') })
+  })
+
+  it('returns 403 when imageUploadsInWidget is disabled', async () => {
+    vi.mocked(db.query.session.findFirst).mockResolvedValueOnce(sessionRecord as any)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal as any)
+    vi.mocked(getWidgetConfig).mockResolvedValueOnce({ imageUploadsInWidget: false } as any)
+    const res = await handleWidgetUpload({ request: makeRequest(undefined, 'valid-token') })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining('disabled') })
   })
 
   it('returns 503 when S3 is not configured', async () => {

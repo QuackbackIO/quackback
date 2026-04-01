@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { auth } from '@/lib/server/auth'
+import { db, eq, principal } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
 
 const ALLOWED_PREFIXES = new Set([
@@ -15,8 +16,11 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const userRole = (session.user as { role?: string }).role
-  if (userRole !== 'admin' && userRole !== 'member') {
+  const principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.userId, session.user.id),
+    columns: { role: true },
+  })
+  if (!principalRecord || (principalRecord.role !== 'admin' && principalRecord.role !== 'member')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
   if (!isS3Configured()) {

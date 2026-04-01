@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
 
 export async function handleWidgetUpload({ request }: { request: Request }): Promise<Response> {
   const authHeader = request.headers.get('authorization')
@@ -19,6 +20,10 @@ export async function handleWidgetUpload({ request }: { request: Request }): Pro
   })
   if (!principalRecord || principalRecord.type === 'anonymous') {
     return Response.json({ error: 'Authentication required to upload images' }, { status: 403 })
+  }
+  const widgetConfig = await getWidgetConfig()
+  if (!widgetConfig.imageUploadsInWidget) {
+    return Response.json({ error: 'Image uploads are disabled' }, { status: 403 })
   }
   if (!isS3Configured()) {
     return Response.json({ error: 'Storage not configured' }, { status: 503 })
