@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useCreatePublicPost } from '@/lib/client/mutations/portal-posts'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -52,6 +53,7 @@ export function FeedbackHeader({
   const createPost = useCreatePublicPost()
   const ensureAnonSession = useEnsureAnonSession()
   const anonymousPostingEnabled = settings?.publicPortalConfig?.features?.anonymousPosting ?? false
+  const richMediaEnabled = settings?.publicPortalConfig?.features?.richMediaInPosts ?? true
 
   // Identified users post as themselves; anonymous posting is handled separately.
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
@@ -61,6 +63,9 @@ export function FeedbackHeader({
       : user
   const canPostAnonymously = anonymousPostingEnabled && (!session?.user || isAnonymousSession)
   const canSubmit = !!effectiveUser || anonymousPostingEnabled
+  const canUploadImages = !isAnonymousSession && !!session?.user && richMediaEnabled
+
+  const { upload: uploadImage } = usePortalImageUpload()
 
   // Listen for auth success to refetch session (no page reload)
   useAuthBroadcast({
@@ -295,6 +300,8 @@ export function FeedbackHeader({
                 placeholder="Add more details..."
                 minHeight="150px"
                 borderless
+                features={{ images: canUploadImages }}
+                onImageUpload={canUploadImages ? uploadImage : undefined}
               />
             </motion.div>
 

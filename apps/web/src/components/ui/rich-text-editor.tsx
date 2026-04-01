@@ -19,14 +19,22 @@ import { Table } from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
-import Underline from '@tiptap/extension-underline'
 import Youtube from '@tiptap/extension-youtube'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import { common, createLowlight } from 'lowlight'
-import { useEffect, useCallback, useState, forwardRef, useImperativeHandle, useRef } from 'react'
+import {
+  useEffect,
+  useCallback,
+  useState,
+  useMemo,
+  memo,
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+} from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
 import DOMPurify from 'dompurify'
 import { cn } from '@/lib/shared/utils'
@@ -92,6 +100,113 @@ import { ScrollArea } from './scroll-area'
 
 // Create lowlight instance with common languages
 const lowlight = createLowlight(common)
+
+// ============================================================================
+// Extension builder (exported for testing)
+// ============================================================================
+
+/**
+ * Build the TipTap extension list for a given feature set.
+ * Extracted as a pure function so it can be memoized with useMemo
+ * and independently tested (catches duplicate-extension regressions).
+ *
+ * NOTE: StarterKit v3 bundles Underline by default — do NOT add it separately.
+ */
+export function buildExtensions(
+  features: EditorFeatures,
+  options: { placeholder: string; onImageUpload?: (file: File) => Promise<string> }
+) {
+  const { placeholder, onImageUpload } = options
+  return [
+    StarterKit.configure({
+      heading: features.headings ? { levels: [1, 2, 3] } : false,
+      codeBlock: false,
+      blockquote: features.blockquotes ? {} : false,
+      horizontalRule: features.dividers ? {} : false,
+      link: false,
+    }),
+    Placeholder.configure({
+      placeholder,
+      emptyEditorClass: 'is-editor-empty',
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'text-primary underline',
+      },
+    }),
+    ...(features.images
+      ? [
+          ResizableImage.configure({
+            HTMLAttributes: {
+              class: 'max-w-full h-auto rounded-lg',
+            },
+            allowBase64: false,
+          }),
+        ]
+      : []),
+    ...(features.codeBlocks
+      ? [
+          CodeBlockLowlight.configure({
+            lowlight,
+            HTMLAttributes: {
+              class: 'not-prose rounded-lg bg-muted p-4 overflow-x-auto',
+            },
+          }),
+        ]
+      : []),
+    ...(features.taskLists
+      ? [
+          TaskList.configure({
+            HTMLAttributes: {
+              class: 'not-prose',
+            },
+          }),
+          TaskItem.configure({
+            nested: true,
+            HTMLAttributes: {
+              class: 'flex gap-2 items-start',
+            },
+          }),
+        ]
+      : []),
+    ...(features.tables
+      ? [
+          Table.configure({
+            resizable: true,
+            HTMLAttributes: {
+              class: 'not-prose border-collapse w-full',
+            },
+          }),
+          TableRow,
+          TableHeader.configure({
+            HTMLAttributes: {
+              class: 'border border-border bg-muted/50 p-2 text-left font-semibold',
+            },
+          }),
+          TableCell.configure({
+            HTMLAttributes: {
+              class: 'border border-border p-2',
+            },
+          }),
+        ]
+      : []),
+    ...(features.embeds
+      ? [
+          Youtube.configure({
+            controls: true,
+            nocookie: true,
+            width: 640,
+            height: 360,
+            allowFullscreen: true,
+            autoplay: false,
+          }),
+        ]
+      : []),
+    ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+    Markdown,
+  ]
+}
 
 // ============================================================================
 // Types
@@ -456,11 +571,11 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     return (
       <div
-        className="z-50 w-72 overflow-hidden rounded-lg border bg-popover shadow-lg"
+        className="z-50 w-72 rounded-lg border bg-popover shadow-lg"
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-80">
           <div ref={containerRef} className="p-1">
             {Object.entries(groupedItems).map(([group, groupItems]) => (
               <div key={group}>
@@ -511,6 +626,11 @@ function createSlashCommands(
   features: EditorFeatures,
   onImageUpload?: (file: File) => Promise<string>
 ) {
+  // Compute once per extension instance. Since buildExtensions() is wrapped in
+  // useMemo, this only re-runs when features or onImageUpload actually changes —
+  // NOT on every keystroke.
+  const allItems = getSlashMenuItems(features, onImageUpload)
+
   return Extension.create({
     name: 'slashCommands',
 
@@ -539,10 +659,7 @@ function createSlashCommands(
           editor: this.editor,
           ...this.options.suggestion,
           allowedPrefixes: null, // Allow anywhere (null = no prefix required)
-          items: ({ query }: { query: string }) => {
-            const allItems = getSlashMenuItems(features, onImageUpload)
-            return filterSlashItems(allItems, query)
-          },
+          items: ({ query }: { query: string }) => filterSlashItems(allItems, query),
           allow: ({ editor }: { editor: Editor }) => {
             // Don't allow in code blocks
             return !editor.isActive('codeBlock')
@@ -645,7 +762,7 @@ interface RichTextEditorProps {
 // Editor Component
 // ============================================================================
 
-export function RichTextEditor({
+function RichTextEditorBase({
   value,
   onChange,
   placeholder = 'Write something...',
@@ -657,117 +774,33 @@ export function RichTextEditor({
   features = {},
   onImageUpload,
 }: RichTextEditorProps) {
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        // Enable headings if feature is enabled
-        heading: features.headings ? { levels: [1, 2, 3] } : false,
-        // Disable built-in code block if using CodeBlockLowlight
-        codeBlock: features.codeBlocks ? false : false,
-        // Enable blockquote if feature is enabled (use empty object to enable with defaults)
-        blockquote: features.blockquotes ? {} : false,
-        // Enable horizontal rule if feature is enabled (use empty object to enable with defaults)
-        horizontalRule: features.dividers ? {} : false,
-        link: false, // Disable built-in Link, we use our own configured version
-      }),
-      // Underline extension (always available for bubble menu)
-      Underline,
-      Placeholder.configure({
-        placeholder,
-        emptyEditorClass: 'is-editor-empty',
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-primary underline',
-        },
-      }),
-      // Conditionally add ResizableImage extension (with selection, resize, drag-drop support)
-      ...(features.images
-        ? [
-            ResizableImage.configure({
-              HTMLAttributes: {
-                class: 'max-w-full h-auto rounded-lg',
-              },
-              allowBase64: false,
-            }),
-          ]
-        : []),
-      // Conditionally add CodeBlockLowlight extension
-      ...(features.codeBlocks
-        ? [
-            CodeBlockLowlight.configure({
-              lowlight,
-              HTMLAttributes: {
-                class: 'not-prose rounded-lg bg-muted p-4 overflow-x-auto',
-              },
-            }),
-          ]
-        : []),
-      // Conditionally add TaskList extension
-      ...(features.taskLists
-        ? [
-            TaskList.configure({
-              HTMLAttributes: {
-                class: 'not-prose',
-              },
-            }),
-            TaskItem.configure({
-              nested: true,
-              HTMLAttributes: {
-                class: 'flex gap-2 items-start',
-              },
-            }),
-          ]
-        : []),
-      // Conditionally add Table extensions
-      ...(features.tables
-        ? [
-            Table.configure({
-              resizable: true,
-              HTMLAttributes: {
-                class: 'not-prose border-collapse w-full',
-              },
-            }),
-            TableRow,
-            TableHeader.configure({
-              HTMLAttributes: {
-                class: 'border border-border bg-muted/50 p-2 text-left font-semibold',
-              },
-            }),
-            TableCell.configure({
-              HTMLAttributes: {
-                class: 'border border-border p-2',
-              },
-            }),
-          ]
-        : []),
-      // Conditionally add YouTube extension
-      ...(features.embeds
-        ? [
-            Youtube.configure({
-              controls: true,
-              nocookie: true,
-              width: 640,
-              height: 360,
-              allowFullscreen: true,
-              autoplay: false,
-            }),
-          ]
-        : []),
-      // Conditionally add slash commands (enabled by default)
-      ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
-      // Markdown extension for bidirectional markdown support
-      Markdown,
-    ],
-    content: value ?? '',
-    editable: !disabled,
-    onUpdate: ({ editor }) => {
-      const markdown = editor.getMarkdown?.() ?? ''
-      onChange?.(editor.getJSON(), editor.getHTML(), markdown)
-    },
-    editorProps: {
+  // Memoize extensions keyed on individual feature flags.
+  // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
+  // array reference changes (uses reference equality via compareOptions).
+  // Rebuilding the array on every render causes setOptions→transaction→onUpdate
+  // on every keystroke, resulting in 300–400 ms input violations.
+  const extensions = useMemo(
+    () => buildExtensions(features, { placeholder, onImageUpload }),
+
+    [
+      features.headings,
+      features.codeBlocks,
+      features.blockquotes,
+      features.dividers,
+      features.images,
+      features.taskLists,
+      features.tables,
+      features.embeds,
+      features.slashMenu,
+      onImageUpload,
+      placeholder,
+    ]
+  )
+
+  // Memoize editorProps for the same reason — handleDrop/handlePaste are
+  // closures over onImageUpload and would change reference every render.
+  const editorProps = useMemo(
+    () => ({
       attributes: {
         class: cn(
           'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none',
@@ -776,20 +809,63 @@ export function RichTextEditor({
         ),
         style: `--editor-min-height: ${minHeight}`,
       },
-      // Handle image paste/drop
       handleDrop: features.images && onImageUpload ? handleImageDrop(onImageUpload) : undefined,
       handlePaste: features.images && onImageUpload ? handleImagePaste(onImageUpload) : undefined,
+    }),
+
+    [features.images, onImageUpload, borderless, minHeight]
+  )
+
+  // Stores the last JSON emitted by onUpdate so the value-sync useEffect can
+  // skip the redundant setContent when the value prop is the same object we
+  // just emitted. Using the object reference (not a boolean flag) avoids the
+  // edge case where a batched external reset (e.g. collapseForm → null) would
+  // be incorrectly skipped by a stale boolean flag.
+  const lastEmittedJsonRef = useRef<unknown>(null)
+
+  // Stable initial content reference — passed once to useEditor so TipTap v3's
+  // compareOptions never sees a reference change on `content` and never calls
+  // setOptions on re-renders. Subsequent value changes are handled by the
+  // useEffect below (value sync).
+  const initialContentRef = useRef(value ?? '')
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    // When no toolbar is visible (borderless/widget), skip re-renders on every
+    // ProseMirror transaction for a significant perf win. When the toolbar IS
+    // shown, we need re-renders so MenuBar's active-state indicators stay current.
+    shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
+    extensions,
+    content: initialContentRef.current,
+    editable: !disabled,
+    onUpdate: ({ editor }) => {
+      if (!onChange) return
+      const json = editor.getJSON()
+      lastEmittedJsonRef.current = json
+      const html = editor.getHTML()
+      // Only serialize to markdown when the caller declares a 3rd parameter.
+      // Callers that only need json+html (widget, portal) skip the expensive
+      // recursive tree-walk that @tiptap/markdown does on every keystroke.
+      const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
+      onChange(json, html, markdown)
     },
+    editorProps,
   })
 
-  // Sync external value changes
+  // Sync external value changes into the editor.
+  // Skipped when the value is the exact object we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
+
+    if (value === lastEmittedJsonRef.current) {
+      lastEmittedJsonRef.current = null
+      return
+    }
+    lastEmittedJsonRef.current = null
 
     if (value === '' || value === undefined) {
       editor.commands.clearContent()
     } else if (typeof value === 'object') {
-      // Only update if the content is different (compare JSON)
       const currentContent = JSON.stringify(editor.getJSON())
       const newContent = JSON.stringify(value)
       if (currentContent !== newContent) {
@@ -854,7 +930,6 @@ export function RichTextEditor({
           )}
           onContextMenu={handleContextMenu}
         >
-          {/* Toolbar */}
           {showToolbar && (
             <MenuBar
               editor={editor}
@@ -864,12 +939,10 @@ export function RichTextEditor({
             />
           )}
 
-          {/* Editor content */}
           <EditorContent editor={editor} />
         </div>
       </ContextMenuTrigger>
 
-      {/* Image context menu (shadcn/Radix - Linear-style) */}
       {contextMenuImageSrc && (
         <ContextMenuContent className="min-w-[180px]">
           <ContextMenuItem onClick={contextMenuActions.viewImage}>
@@ -896,7 +969,6 @@ export function RichTextEditor({
         </ContextMenuContent>
       )}
 
-      {/* Floating bubble menu on text selection */}
       {features.bubbleMenu !== false && (
         <BubbleMenu
           editor={editor}
@@ -916,7 +988,6 @@ export function RichTextEditor({
         </BubbleMenu>
       )}
 
-      {/* Floating table toolbar when cursor is in table */}
       {features.tables && (
         <BubbleMenu
           editor={editor}
@@ -931,7 +1002,6 @@ export function RichTextEditor({
         </BubbleMenu>
       )}
 
-      {/* Floating image toolbar when image is selected */}
       {features.images && (
         <BubbleMenu
           editor={editor}
@@ -948,6 +1018,38 @@ export function RichTextEditor({
     </ContextMenu>
   )
 }
+
+// Skip re-render when individual feature flags and all other props are unchanged.
+// Compares features by primitive values rather than object reference so callers
+// can safely pass inline objects without triggering unnecessary editor rebuilds.
+export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
+  if (
+    prev.value !== next.value ||
+    prev.onChange !== next.onChange ||
+    prev.onImageUpload !== next.onImageUpload ||
+    prev.disabled !== next.disabled ||
+    prev.placeholder !== next.placeholder ||
+    prev.minHeight !== next.minHeight ||
+    prev.borderless !== next.borderless ||
+    prev.toolbarPosition !== next.toolbarPosition ||
+    prev.className !== next.className
+  )
+    return false
+  const pf = prev.features ?? {}
+  const nf = next.features ?? {}
+  return (
+    pf.headings === nf.headings &&
+    pf.codeBlocks === nf.codeBlocks &&
+    pf.blockquotes === nf.blockquotes &&
+    pf.dividers === nf.dividers &&
+    pf.images === nf.images &&
+    pf.taskLists === nf.taskLists &&
+    pf.tables === nf.tables &&
+    pf.embeds === nf.embeds &&
+    pf.slashMenu === nf.slashMenu &&
+    pf.bubbleMenu === nf.bubbleMenu
+  )
+})
 
 // ============================================================================
 // Image Handling
@@ -983,15 +1085,19 @@ function handleImageDrop(
     const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
 
     images.forEach((image) => {
-      onImageUpload(image).then((src) => {
-        // Use resizableImage node type for resizable images
-        const nodeType = schema.nodes.resizableImage || schema.nodes.image
-        const node = nodeType?.create({ src, 'data-keep-ratio': true })
-        if (node && coordinates) {
-          const transaction = view.state.tr.insert(coordinates.pos, node)
-          view.dispatch(transaction)
-        }
-      })
+      onImageUpload(image)
+        .then((src) => {
+          // Use resizableImage node type for resizable images
+          const nodeType = schema.nodes.resizableImage || schema.nodes.image
+          const node = nodeType?.create({ src, 'data-keep-ratio': true })
+          if (node && coordinates) {
+            const transaction = view.state.tr.insert(coordinates.pos, node)
+            view.dispatch(transaction)
+          }
+        })
+        .catch((err) => {
+          console.error('[RichTextEditor] Image drop upload failed:', err)
+        })
     })
 
     return true
@@ -1018,16 +1124,20 @@ function handleImagePaste(
       const file = item.getAsFile()
       if (!file) return
 
-      onImageUpload(file).then((src) => {
-        const { schema } = view.state
-        // Use resizableImage node type for resizable images
-        const nodeType = schema.nodes.resizableImage || schema.nodes.image
-        const node = nodeType?.create({ src, 'data-keep-ratio': true })
-        if (node) {
-          const transaction = view.state.tr.replaceSelectionWith(node)
-          view.dispatch(transaction)
-        }
-      })
+      onImageUpload(file)
+        .then((src) => {
+          const { schema } = view.state
+          // Use resizableImage node type for resizable images
+          const nodeType = schema.nodes.resizableImage || schema.nodes.image
+          const node = nodeType?.create({ src, 'data-keep-ratio': true })
+          if (node) {
+            const transaction = view.state.tr.replaceSelectionWith(node)
+            view.dispatch(transaction)
+          }
+        })
+        .catch((err) => {
+          console.error('[RichTextEditor] Image paste upload failed:', err)
+        })
     })
 
     return true
@@ -1389,15 +1499,15 @@ function useImageActions({ src, editor, onComplete }: UseImageActionsProps) {
       const blob = await response.blob()
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
     } catch {
-      // Fallback: copy URL
-      if (src) navigator.clipboard.writeText(src)
+      // Fallback: copy URL (may be blocked in sandboxed iframes — swallow)
+      if (src) navigator.clipboard.writeText(src).catch(() => {})
     }
     onComplete?.()
   }, [src, onComplete])
 
   const copyLink = useCallback(() => {
     if (src) {
-      navigator.clipboard.writeText(src)
+      navigator.clipboard.writeText(src).catch(() => {})
     }
     onComplete?.()
   }, [src, onComplete])

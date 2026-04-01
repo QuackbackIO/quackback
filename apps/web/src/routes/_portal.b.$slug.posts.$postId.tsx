@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react'
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -19,6 +19,7 @@ import { DeletePostDialog } from '@/components/public/post-detail/delete-post-di
 import { usePostPermissions, postPermissionsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { getPostPermissionsFn } from '@/lib/server/functions/public-posts'
 import { usePostActions } from '@/lib/client/mutations'
+import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import {
   useDeleteComment,
   usePinComment,
@@ -102,6 +103,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
+  const { session, settings } = useRouteContext({ from: '__root__' })
 
   const [isEditingPost, setIsEditingPost] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -115,6 +117,11 @@ function PostDetailPage() {
     canEdit: false,
     canDelete: false,
   }
+
+  const richMediaEnabled = settings?.publicPortalConfig?.features?.richMediaInPosts ?? true
+  const isAnonymousSession = session?.user?.principalType === 'anonymous'
+  const canUploadImages = canEdit && !isAnonymousSession && !!session?.user && richMediaEnabled
+  const { upload: uploadImage } = usePortalImageUpload()
 
   const {
     editPost,
@@ -219,6 +226,7 @@ function PostDetailPage() {
             onEditStart={() => setIsEditingPost(true)}
             onEditSave={editPost}
             onEditCancel={() => setIsEditingPost(false)}
+            onImageUpload={canUploadImages ? uploadImage : undefined}
             isSaving={isSavingEdit}
           />
 

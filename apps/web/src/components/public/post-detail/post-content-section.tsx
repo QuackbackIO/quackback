@@ -67,6 +67,7 @@ interface PostContentSectionProps {
   onEditStart?: () => void
   onEditSave?: (data: EditPostInput) => void
   onEditCancel?: () => void
+  onImageUpload?: (file: File) => Promise<string>
   isSaving?: boolean
   /** Editor features for inline editing (defaults to simple user-friendly options) */
   editorFeatures?: EditorFeatures
@@ -75,7 +76,7 @@ interface PostContentSectionProps {
 /** Default editor features for end users - simple and focused */
 const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
   headings: false,
-  images: false,
+  images: true,
   codeBlocks: false,
   bubbleMenu: true,
   slashMenu: false,
@@ -99,6 +100,7 @@ export function PostContentSection({
   onEditStart,
   onEditSave,
   onEditCancel,
+  onImageUpload,
   isSaving = false,
   editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
 }: PostContentSectionProps): React.ReactElement {
@@ -173,6 +175,7 @@ export function PostContentSection({
             disabled={isSaving}
             borderless
             features={editorFeatures}
+            onImageUpload={onImageUpload}
           />
         </div>
 

@@ -80,6 +80,7 @@ interface BucketKeyInput {
   Bucket: string
   Key: string
   ContentType?: string
+  Body?: Buffer | Uint8Array
 }
 
 /** Command instance produced by S3 command constructors. */
@@ -228,6 +229,35 @@ export async function generatePresignedUploadUrl(
   return { uploadUrl, publicUrl, key }
 }
 
+/**
+ * Upload a file directly to S3 from the server.
+ * Use this when the browser cannot reach S3 directly (e.g., ngrok, private networks).
+ *
+ * @param key - Storage key (path within bucket)
+ * @param body - File bytes
+ * @param contentType - MIME type of the file
+ */
+export async function uploadObject(
+  key: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+): Promise<string> {
+  const s3Config = getS3Config()
+  const client = await getS3Client()
+  const { PutObjectCommand } = await getS3Module()
+
+  const command = new PutObjectCommand({
+    Bucket: s3Config.bucket,
+    Key: key,
+    ContentType: contentType,
+    Body: body,
+  })
+
+  await client.send(command)
+
+  return buildPublicUrl(s3Config, key)
+}
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -249,18 +279,55 @@ export function generateStorageKey(prefix: string, filename: string): string {
   return `${prefix}/${year}/${month}/${randomId}-${safeFilename}`
 }
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+
 /**
  * Validate that a file is an allowed image type.
  */
 export function isAllowedImageType(contentType: string): boolean {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  return allowedTypes.includes(contentType)
+  return ALLOWED_IMAGE_TYPES.has(contentType)
 }
 
 /**
  * Maximum allowed file size in bytes (5MB).
  */
 export const MAX_FILE_SIZE = 5 * 1024 * 1024
+
+/**
+ * Validate and upload an image from a parsed multipart FormData body.
+ * Called by upload route handlers after they have verified auth and S3 config.
+ *
+ * @param formData - Already-parsed request FormData (must contain a `file` field)
+ * @param storagePrefix - Bucket prefix, e.g. "portal-images"
+ */
+export async function uploadImageFromFormData(
+  formData: FormData,
+  storagePrefix: string
+): Promise<Response> {
+  const file = formData.get('file')
+  if (!(file instanceof File)) {
+    return Response.json({ error: 'No file provided' }, { status: 400 })
+  }
+  if (!isAllowedImageType(file.type)) {
+    return Response.json({ error: 'Invalid file type' }, { status: 400 })
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return Response.json(
+      { error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+      { status: 400 }
+    )
+  }
+  try {
+    const ext = file.type.split('/')[1] || 'png'
+    const filename = file.name || `paste-${Date.now()}.${ext}`
+    const key = generateStorageKey(storagePrefix, filename)
+    const body = Buffer.from(await file.arrayBuffer())
+    const publicUrl = await uploadObject(key, body, file.type)
+    return Response.json({ publicUrl })
+  } catch {
+    return Response.json({ error: 'Upload failed' }, { status: 500 })
+  }
+}
 
 // ============================================================================
 // Public URL Helpers

@@ -59,13 +59,20 @@ export function SimilarPostsCard({
             </p>
             <div className="space-y-1.5">
               {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
-                <button
+                <a
                   key={post.id}
-                  type="button"
-                  onClick={() => window.open(`/b/${post.boardSlug}/posts/${post.id}`, '_blank')}
+                  href={`/b/${post.boardSlug}/posts/${post.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-2.5 w-full rounded-lg hover:bg-muted/30 transition-colors px-2 py-1.5 cursor-pointer text-left"
                 >
-                  <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    className="shrink-0"
+                  >
                     <VoteButton postId={post.id as PostId} voteCount={post.voteCount} pill />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -82,7 +89,7 @@ export function SimilarPostsCard({
                       {post.title}
                     </p>
                   </div>
-                </button>
+                </a>
               ))}
             </div>
           </div>

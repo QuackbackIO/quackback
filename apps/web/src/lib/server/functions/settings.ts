@@ -435,6 +435,7 @@ const updateWidgetConfigSchema = z.object({
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
   identifyVerification: z.boolean().optional(),
+  imageUploadsInWidget: z.boolean().optional(),
   tabs: z
     .object({
       feedback: z.boolean().optional(),

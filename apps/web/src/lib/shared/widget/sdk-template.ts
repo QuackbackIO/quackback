@@ -269,7 +269,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     }, {
       src: iframeUrl,
       title: "Feedback Widget",
-      sandbox: "allow-scripts allow-forms allow-same-origin allow-popups",
+      sandbox: "allow-scripts allow-forms allow-same-origin allow-popups allow-downloads",
+      allow: "clipboard-write",
       className: "quackback-widget-iframe",
     });
 
