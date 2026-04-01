@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeTiptapContent } from '../sanitize-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 
 // Alias that accepts unknown — used to test garbage input the sanitizer should handle gracefully
 const sanitize = sanitizeTiptapContent as (
@@ -92,7 +93,7 @@ describe('sanitizeTiptapContent', () => {
       const result = sanitizeTiptapContent(input)
       // text nodes require a text field to pass, others pass without content
       if (type === 'text') continue
-      expect(result.content?.some((n: Record<string, unknown>) => n.type === type)).toBe(true)
+      expect(result.content?.some((n) => n.type === type)).toBe(true)
     }
   })
 
@@ -421,10 +422,10 @@ describe('sanitizeTiptapContent', () => {
     expect(result.type).toBe('doc')
 
     // Verify the deepest text is cut off
-    let current: Record<string, unknown> = result
+    let current: TiptapContent = result
     let depth = 0
-    while ((current?.content as Record<string, unknown>[])?.[0]) {
-      current = (current.content as Record<string, unknown>[])[0]
+    while (current?.content?.[0]) {
+      current = current.content[0]
       depth++
     }
     // Should not reach the full 26 levels

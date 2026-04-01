@@ -15,9 +15,8 @@
     "jsx": "react-jsx",
     "incremental": true,
     "composite": true,
-    "baseUrl": "./src",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     },
     "resolvePackageJsonExports": true,
     "resolvePackageJsonImports": true,

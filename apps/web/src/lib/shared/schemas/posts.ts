@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { boardIdSchema, statusIdSchema, tagIdsSchema } from '@quackback/ids/zod'
+import type { TiptapContent as DbTiptapContent } from '@/lib/shared/db-types'
 
 /**
  * TipTap mark schema - validates mark types and their attributes
@@ -20,13 +21,12 @@ const tiptapMarkSchema = z.object({
  * TipTap node schema - validates node types and basic structure.
  * Uses z.lazy for recursive content validation.
  *
- * Type annotation uses `any` to maintain backwards-compatible inference
- * (TiptapContent.content stays as `any[]`). Runtime validation still
- * enforces node type allowlists and structure. Deep attribute sanitization
- * is handled by sanitizeTiptapContent() at the server function layer.
+ * Uses z.ZodType<TiptapContent> (from DB types) so the inferred schema types
+ * are compatible with DB column types. Runtime validation still enforces node
+ * type allowlists and structure. Deep attribute sanitization is handled by
+ * sanitizeTiptapContent() at the server function layer.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tiptapNodeSchema: z.ZodType<any> = z.lazy(() =>
+const tiptapNodeSchema: z.ZodType<DbTiptapContent> = z.lazy(() =>
   z.object({
     type: z.enum([
       'doc',
@@ -102,4 +102,4 @@ export const publicPostSchema = z.object({
 export type CreatePostFormData = z.infer<typeof createPostSchema>
 export type EditPostFormData = z.infer<typeof editPostSchema>
 export type PublicPostFormData = z.infer<typeof publicPostSchema>
-export type TiptapContent = z.infer<typeof tiptapContentSchema>
+export type { DbTiptapContent as TiptapContent }
