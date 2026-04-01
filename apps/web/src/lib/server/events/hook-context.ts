@@ -7,6 +7,7 @@
 
 import { db } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 /**
  * Centralized hook context containing workspace data needed by all hooks.
@@ -17,6 +18,8 @@ export interface HookContext {
   workspaceName: string
   /** Portal base URL for constructing post links */
   portalBaseUrl: string
+  /** Brand logo URL (proxied through app), or null if not set */
+  logoUrl: string | null
 }
 
 /**
@@ -26,7 +29,7 @@ export interface HookContext {
  */
 export async function buildHookContext(): Promise<HookContext | null> {
   const settings = await db.query.settings.findFirst({
-    columns: { name: true },
+    columns: { name: true, logoKey: true },
   })
 
   if (!settings) {
@@ -37,5 +40,6 @@ export async function buildHookContext(): Promise<HookContext | null> {
   return {
     workspaceName: settings.name,
     portalBaseUrl: getBaseUrl(),
+    logoUrl: getPublicUrlOrNull(settings.logoKey),
   }
 }

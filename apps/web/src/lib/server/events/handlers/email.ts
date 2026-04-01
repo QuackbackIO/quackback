@@ -30,6 +30,7 @@ export const emailHook: HookHandler = {
           newStatus: cfg.newStatus!,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'comment.created') {
         result = await sendNewCommentEmail({
@@ -41,6 +42,7 @@ export const emailHook: HookHandler = {
           isTeamMember: cfg.isTeamMember ?? false,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'changelog.published') {
         const changelogCfg = config as Record<string, unknown>
@@ -51,6 +53,7 @@ export const emailHook: HookHandler = {
           contentPreview: (changelogCfg.contentPreview as string) ?? '',
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          logoUrl: cfg.logoUrl,
         })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }

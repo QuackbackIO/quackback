@@ -103,4 +103,5 @@ export interface EmailConfig {
   commenterName?: string
   commentPreview?: string
   isTeamMember?: boolean
+  logoUrl?: string
 }

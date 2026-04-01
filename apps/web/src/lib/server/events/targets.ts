@@ -314,6 +314,7 @@ async function buildEmailTargets(
     },
     config: {
       workspaceName: context.workspaceName,
+      logoUrl: context.logoUrl ?? undefined,
       ...eventConfig,
     },
   }))
@@ -587,6 +588,7 @@ async function getChangelogSubscriberTargets(
         },
         config: {
           workspaceName: context.workspaceName,
+          logoUrl: context.logoUrl ?? undefined,
           changelogTitle: event.data.changelog.title,
           changelogUrl,
           contentPreview: event.data.changelog.contentPreview,

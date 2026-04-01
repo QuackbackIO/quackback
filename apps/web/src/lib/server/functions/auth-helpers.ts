@@ -59,6 +59,7 @@ export interface AuthContext {
     id: WorkspaceId
     slug: string
     name: string
+    logoKey: string | null
   }
   user: {
     id: UserId
@@ -120,6 +121,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
         id: appSettings.id as WorkspaceId,
         slug: appSettings.slug,
         name: appSettings.name,
+        logoKey: appSettings.logoKey ?? null,
       },
       user: {
         id: userId,
@@ -186,6 +188,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
         id: appSettings.id as WorkspaceId,
         slug: appSettings.slug,
         name: appSettings.name,
+        logoKey: appSettings.logoKey ?? null,
       },
       user: {
         id: userId,

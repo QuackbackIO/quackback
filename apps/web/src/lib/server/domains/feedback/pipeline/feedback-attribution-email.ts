@@ -8,6 +8,7 @@
 
 import { db, eq, principal, user, posts } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
+import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { generateUnsubscribeToken } from '@/lib/server/domains/subscriptions/subscription.service'
 import { sendFeedbackLinkedEmail } from '@quackback/email'
 import type { PrincipalId, PostId } from '@quackback/ids'
@@ -55,9 +56,9 @@ export async function sendFeedbackAttributionEmail(
     })
     if (!post) return
 
-    // Get workspace name
+    // Get workspace name and logo
     const workspace = await db.query.settings.findFirst({
-      columns: { name: true },
+      columns: { name: true, logoKey: true },
     })
     const workspaceName = workspace?.name ?? 'Quackback'
 
@@ -78,6 +79,7 @@ export async function sendFeedbackAttributionEmail(
       workspaceName,
       unsubscribeUrl,
       attributedByName,
+      logoUrl: getPublicUrlOrNull(workspace?.logoKey) ?? undefined,
     })
   } catch (error) {
     // Never fail the accept flow due to email errors
