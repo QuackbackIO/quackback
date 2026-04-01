@@ -1887,12 +1887,8 @@ function generateContentHTML(content: JSONContent): string {
         // Only render image if src is valid after sanitization
         if (!src) return ''
         const imgWidth = node.attrs?.width !== undefined ? safePositiveInt(node.attrs.width, 0) : 0
-        const imgHeight =
-          node.attrs?.height !== undefined ? safePositiveInt(node.attrs.height, 0) : 0
-        const style =
-          imgWidth || imgHeight
-            ? `style="${imgWidth ? `width:${imgWidth}px;` : ''}${imgHeight ? `height:${imgHeight}px;` : ''}"`
-            : ''
+        // Only apply width (not height) so h-auto preserves aspect ratio
+        const style = imgWidth ? `style="width:${imgWidth}px;"` : ''
         return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
       }
 
