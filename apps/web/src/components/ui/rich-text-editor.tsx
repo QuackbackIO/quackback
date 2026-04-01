@@ -550,8 +550,8 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     if (items.length === 0) {
       return (
-        <div className="z-50 w-72 rounded-lg border bg-popover p-2 shadow-lg">
-          <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+        <div className="z-50 w-52 rounded-lg border bg-popover p-2 shadow-lg">
+          <div className="px-2 py-3 text-center text-xs text-muted-foreground">
             No matching commands
           </div>
         </div>
@@ -571,15 +571,18 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
 
     return (
       <div
-        className="z-50 w-72 rounded-lg border bg-popover shadow-lg"
+        className="z-50 w-52 rounded-lg border bg-popover shadow-lg"
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <ScrollArea className="[&_[data-slot=scroll-area-viewport]]:max-h-80">
-          <div ref={containerRef} className="p-1">
+        <ScrollArea
+          className="[&_[data-slot=scroll-area-viewport]]:max-h-64"
+          scrollBarClassName="w-1.5"
+        >
+          <div ref={containerRef} className="p-0.5">
             {Object.entries(groupedItems).map(([group, groupItems]) => (
               <div key={group}>
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                <div className="px-2 py-1 text-[10px] font-medium text-muted-foreground">
                   {groupLabels[group] || group}
                 </div>
                 {groupItems.map((item) => {
@@ -590,7 +593,7 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                       key={item.title}
                       type="button"
                       className={cn(
-                        'flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm',
+                        'flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-xs',
                         'hover:bg-accent focus:bg-accent focus:outline-none',
                         currentIndex === selectedIndex && 'bg-accent'
                       )}
@@ -601,13 +604,10 @@ const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
                       }}
                       onMouseDown={(e) => e.preventDefault()}
                     >
-                      <span className="flex size-8 items-center justify-center rounded-md border bg-background">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded border bg-background text-[10px]">
                         {item.icon}
                       </span>
-                      <div className="flex-1 text-left">
-                        <div className="font-medium">{item.title}</div>
-                        <div className="text-xs text-muted-foreground">{item.description}</div>
-                      </div>
+                      <span className="truncate font-medium">{item.title}</span>
                     </button>
                   )
                 })}
