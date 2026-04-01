@@ -1500,7 +1500,7 @@ function useImageActions({ src, editor, onComplete }: UseImageActionsProps) {
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
     } catch {
       // Fallback: copy URL (may be blocked in sandboxed iframes — swallow)
-      if (src) navigator.clipboard.writeText(src).catch(() => {})
+      navigator.clipboard.writeText(src).catch(() => {})
     }
     onComplete?.()
   }, [src, onComplete])
