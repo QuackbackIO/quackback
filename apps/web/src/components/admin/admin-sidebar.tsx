@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
@@ -28,6 +28,8 @@ import { signOut } from '@/lib/server/auth/client'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { NotificationBell } from '@/components/notifications'
 import { cn } from '@/lib/shared/utils'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 
 interface AdminSidebarProps {
   initialUserData?: {
@@ -110,130 +112,175 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
     window.location.href = '/'
   }
 
+  const [latestVersion, setLatestVersion] = useState<{
+    version: string
+    releaseUrl: string
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getLatestVersion().then((result) => {
+      if (!cancelled && result && isNewerVersion(__APP_VERSION__, result.version)) {
+        setLatestVersion(result)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden sm:flex w-16 shrink-0 flex-col">
-        <div className="flex flex-col h-full py-6">
-          {/* Logo */}
-          <Link
-            to="/admin/feedback"
-            className="flex items-center justify-center mb-8 opacity-90 hover:opacity-100 transition-opacity"
-          >
-            <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
-          </Link>
+      <aside className="hidden sm:flex w-18 shrink-0 flex-col">
+        <ScrollArea className="h-full" scrollBarClassName="w-2" type="always">
+          <div className="flex flex-col h-full min-h-screen py-6">
+            {/* Logo */}
+            <Link
+              to="/admin/feedback"
+              className="flex items-center justify-center mb-8 opacity-90 hover:opacity-100 transition-opacity"
+            >
+              <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
+            </Link>
 
-          {/* Main Navigation */}
-          <nav className="flex flex-col items-center gap-3">
-            {filteredNavItems.map((item) => (
+            {/* Main Navigation */}
+            <nav className="flex flex-col items-center gap-3">
+              {filteredNavItems.map((item) => (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  isActive={isNavActive(pathname, item.href)}
+                />
+              ))}
+            </nav>
+
+            {/* Spacer */}
+            <div className="flex-1 min-h-12" />
+
+            {/* Bottom Section */}
+            <div className="flex flex-col items-center gap-3">
+              {/* Settings */}
               <NavItem
-                key={item.href}
-                href={item.href}
-                icon={item.icon}
-                label={item.label}
-                isActive={isNavActive(pathname, item.href)}
+                href="/admin/settings"
+                icon={Cog6ToothIcon}
+                label="Settings"
+                isActive={isNavActive(pathname, '/admin/settings')}
               />
-            ))}
-          </nav>
 
-          {/* Spacer */}
-          <div className="flex-1 min-h-12" />
+              {/* Notifications */}
+              <NotificationBell />
 
-          {/* Bottom Section */}
-          <div className="flex flex-col items-center gap-3">
-            {/* Settings */}
-            <NavItem
-              href="/admin/settings"
-              icon={Cog6ToothIcon}
-              label="Settings"
-              isActive={isNavActive(pathname, '/admin/settings')}
-            />
-
-            {/* Notifications */}
-            <NotificationBell />
-
-            {/* Portal Link */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to="/"
-                  className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-                >
-                  <GlobeAltIcon className="h-5 w-5" />
-                  <span className="sr-only">View Portal</span>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8}>
-                View Portal
-              </TooltipContent>
-            </Tooltip>
-
-            {/* User Menu */}
-            <DropdownMenu>
+              {/* Portal Link */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <Avatar className="h-7 w-7" src={avatarUrl} name={name} />
-                    </button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>
-                  Account
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium truncate">{name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{email}</p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/settings">
-                    <Cog6ToothIcon className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Version & Docs Footer */}
-            <div className="flex flex-col items-center gap-1.5 pt-4 mt-3 border-t border-border/20">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href="https://www.quackback.io/docs/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+                  <Link
+                    to="/"
+                    className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
                   >
-                    <QuestionMarkCircleIcon className="h-4 w-4" />
-                  </a>
+                    <GlobeAltIcon className="h-5 w-5" />
+                    <span className="sr-only">View Portal</span>
+                  </Link>
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={8}>
-                  Documentation
+                  View Portal
                 </TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-[10px] text-muted-foreground/40 cursor-default">
-                    v{__APP_VERSION__}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={8}>
-                  Quackback v{__APP_VERSION__}
-                </TooltipContent>
-              </Tooltip>
+
+              {/* Help Menu */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <QuestionMarkCircleIcon className="h-5 w-5" />
+                        <span className="sr-only">Help</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    Help
+                  </TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="https://www.quackback.io/docs/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <BookOpenIcon className="mr-2 h-4 w-4" />
+                      Documentation
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="https://feedback.quackback.io/changelog"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <DocumentTextIcon className="mr-2 h-4 w-4" />
+                      Changelog
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <div className="px-2 py-1.5 flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground/60">
+                      Quackback v{__APP_VERSION__}
+                    </span>
+                    {latestVersion && (
+                      <a
+                        href={latestVersion.releaseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        v{latestVersion.version} available
+                      </a>
+                    )}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* User Menu */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <Avatar className="h-7 w-7" src={avatarUrl} name={name} />
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    Account
+                  </TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-medium truncate">{name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings">
+                      <Cog6ToothIcon className="mr-2 h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-        </div>
+        </ScrollArea>
       </aside>
 
       {/* Mobile Header */}
@@ -295,8 +342,6 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 <GlobeAltIcon className="h-5 w-5" />
                 View Portal
               </Link>
-
-              {/* Version & Docs Footer */}
               <div className="h-px bg-border/40 my-4" />
               <a
                 href="https://www.quackback.io/docs/"
@@ -304,11 +349,30 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
               >
-                <QuestionMarkCircleIcon className="h-5 w-5" />
+                <BookOpenIcon className="h-5 w-5" />
                 Documentation
               </a>
-              <div className="px-4 py-2">
+              <a
+                href="https://feedback.quackback.io/changelog"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                Changelog
+              </a>
+              <div className="px-4 py-2 flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
+                {latestVersion && (
+                  <a
+                    href={latestVersion.releaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    v{latestVersion.version} available
+                  </a>
+                )}
               </div>
             </nav>
           </SheetContent>

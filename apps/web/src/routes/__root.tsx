@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Component, lazy, Suspense, type ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import {
   Outlet,
@@ -16,23 +16,6 @@ import type { TenantSettings } from '@/lib/server/domains/settings'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
-
-// Lazy load devtools in development only
-const TanStackRouterDevtools = import.meta.env.DEV
-  ? lazy(() =>
-      import('@tanstack/react-router-devtools').then((mod) => ({
-        default: mod.TanStackRouterDevtools,
-      }))
-    )
-  : () => null
-
-const ReactQueryDevtools = import.meta.env.DEV
-  ? lazy(() =>
-      import('@tanstack/react-query-devtools').then((mod) => ({
-        default: mod.ReactQueryDevtools,
-      }))
-    )
-  : () => null
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -137,19 +120,7 @@ function RootComponent() {
     <RootDocument>
       <OttHandler />
       <Outlet />
-      <DevtoolsWrapper />
     </RootDocument>
-  )
-}
-
-function DevtoolsWrapper() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  if (pathname.startsWith('/widget')) return null
-  return (
-    <Suspense>
-      <ReactQueryDevtools buttonPosition="bottom-left" />
-      <TanStackRouterDevtools position="bottom-right" />
-    </Suspense>
   )
 }
 

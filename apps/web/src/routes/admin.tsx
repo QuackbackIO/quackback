@@ -86,7 +86,7 @@ function AdminLayout() {
     <TooltipProvider delayDuration={0}>
       <div className="flex h-screen bg-background">
         <AdminSidebar initialUserData={initialUserData} />
-        <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
+        <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0">
           {/* Mobile: Add padding for fixed header */}
           <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col">
             <UpdateBanner />
