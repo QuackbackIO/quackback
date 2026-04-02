@@ -42,9 +42,22 @@ export function WidgetShell({
   ).length
   const showTabBar = enabledCount > 1
   const { user, closeWidget } = useWidgetAuth()
-  const showCloseButton =
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const isNative =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('source') === 'native'
+  const showCloseExplicit =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('showClose') === '1'
+  const showCloseButton = showCloseExplicit || isNative || isMobile
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {

@@ -227,14 +227,13 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     if (isMobile) {
       panel = createElement("div", {
         position: "fixed",
+        top: "0",
         bottom: "0",
         left: "0",
         right: "0",
         zIndex: "2147483647",
-        height: "calc(100vh - 40px)",
-        borderRadius: "16px 16px 0 0",
+        height: "100vh",
         overflow: "hidden",
-        boxShadow: "0 -8px 30px rgba(0,0,0,0.12)",
         transform: "translateY(100%)",
         transition: "transform 300ms cubic-bezier(0.4,0,0.2,1)",
       }, {
