@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { ListBulletIcon, ChatBubbleLeftIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -14,11 +15,15 @@ interface MobileBoardSheetProps {
 }
 
 export function MobileBoardSheet({ boards, currentBoard, onBoardChange }: MobileBoardSheetProps) {
+  const intl = useIntl()
   const [open, setOpen] = useState(false)
 
   const currentBoardName = currentBoard
     ? boards.find((b) => b.slug === currentBoard)?.name
-    : 'All Posts'
+    : intl.formatMessage({
+        id: 'portal.feedback.mobileSheet.allPosts',
+        defaultMessage: 'All Posts',
+      })
 
   function handleBoardSelect(board: string | undefined): void {
     onBoardChange(board)
@@ -35,7 +40,9 @@ export function MobileBoardSheet({ boards, currentBoard, onBoardChange }: Mobile
       </SheetTrigger>
       <SheetContent side="left" className="w-[280px] p-0">
         <SheetHeader className="border-b border-border/50 px-4 py-4">
-          <SheetTitle className="text-base">Boards</SheetTitle>
+          <SheetTitle className="text-base">
+            <FormattedMessage id="portal.feedback.mobileSheet.title" defaultMessage="Boards" />
+          </SheetTitle>
         </SheetHeader>
         <nav className="p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-8rem)]">
           {/* View all posts */}
@@ -50,7 +57,12 @@ export function MobileBoardSheet({ boards, currentBoard, onBoardChange }: Mobile
             )}
           >
             <ListBulletIcon className={cn('h-5 w-5 shrink-0', !currentBoard && 'text-primary')} />
-            <span>View all posts</span>
+            <span>
+              <FormattedMessage
+                id="portal.feedback.mobileSheet.viewAllPosts"
+                defaultMessage="View all posts"
+              />
+            </span>
           </button>
 
           {/* Board list */}

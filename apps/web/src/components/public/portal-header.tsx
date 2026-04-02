@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
@@ -43,11 +44,12 @@ interface PortalHeaderProps {
   showThemeToggle?: boolean
 }
 
-const navItems = [
-  { to: '/', label: 'Feedback' },
-  { to: '/roadmap', label: 'Roadmap' },
-  { to: '/changelog', label: 'Changelog' },
-]
+const NAV_ITEMS = [
+  { to: '/', messageId: 'portal.header.nav.feedback', defaultMessage: 'Feedback' },
+  { to: '/roadmap', messageId: 'portal.header.nav.roadmap', defaultMessage: 'Roadmap' },
+  { to: '/changelog', messageId: 'portal.header.nav.changelog', defaultMessage: 'Changelog' },
+  { to: '/help', messageId: 'portal.header.nav.helpCenter', defaultMessage: 'Help Center' },
+] as const
 
 export function PortalHeader({
   orgName,
@@ -56,6 +58,7 @@ export function PortalHeader({
   initialUserData,
   showThemeToggle = true,
 }: PortalHeaderProps) {
+  const intl = useIntl()
   const router = useRouter()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -105,7 +108,7 @@ export function PortalHeader({
   // Navigation component
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1">
-      {navItems.map((item) => {
+      {NAV_ITEMS.map((item) => {
         const isActive =
           item.to === '/'
             ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
@@ -122,7 +125,7 @@ export function PortalHeader({
                 : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
             )}
           >
-            {item.label}
+            {intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
           </Link>
         )
       })}
@@ -134,9 +137,21 @@ export function PortalHeader({
     if (!showThemeToggle || !mounted) return null
 
     const themeOptions = [
-      { value: 'system', label: 'System', icon: ComputerDesktopIcon },
-      { value: 'light', label: 'Light', icon: SunIcon },
-      { value: 'dark', label: 'Dark', icon: MoonIcon },
+      {
+        value: 'system',
+        label: intl.formatMessage({ id: 'portal.header.theme.system', defaultMessage: 'System' }),
+        icon: ComputerDesktopIcon,
+      },
+      {
+        value: 'light',
+        label: intl.formatMessage({ id: 'portal.header.theme.light', defaultMessage: 'Light' }),
+        icon: SunIcon,
+      },
+      {
+        value: 'dark',
+        label: intl.formatMessage({ id: 'portal.header.theme.dark', defaultMessage: 'Dark' }),
+        icon: MoonIcon,
+      },
     ] as const
 
     const currentTheme = themeOptions.find((t) => t.value === theme) ?? themeOptions[0]
@@ -147,7 +162,12 @@ export function PortalHeader({
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-9 w-9">
             <CurrentIcon className="h-4 w-4" />
-            <span className="sr-only">Toggle theme</span>
+            <span className="sr-only">
+              {intl.formatMessage({
+                id: 'portal.header.theme.toggleLabel',
+                defaultMessage: 'Toggle theme',
+              })}
+            </span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -157,7 +177,7 @@ export function PortalHeader({
               onClick={() => setTheme(t.value)}
               className={cn(theme === t.value && 'bg-accent')}
             >
-              <t.icon className="mr-2 h-4 w-4" />
+              <t.icon className="me-2 h-4 w-4" />
               {t.label}
             </DropdownMenuItem>
           ))}
@@ -174,16 +194,16 @@ export function PortalHeader({
 
       {/* Admin Button (visible for team members) */}
       {canAccessAdmin && (
-        <Button variant="outline" size="sm" asChild className="ml-1 mr-2">
+        <Button variant="outline" size="sm" asChild className="ms-1 me-2">
           <Link to="/admin">
-            <ShieldCheckIcon className="mr-2 h-4 w-4" />
-            Admin
+            <ShieldCheckIcon className="me-2 h-4 w-4" />
+            <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
           </Link>
         </Button>
       )}
 
       {/* Notification Bell (logged in users only) */}
-      {isLoggedIn && <NotificationBell popoverSide="bottom" className="mr-1" />}
+      {isLoggedIn && <NotificationBell popoverSide="bottom" className="me-1" />}
 
       {/* Auth Buttons */}
       {isLoggedIn ? (
@@ -208,13 +228,13 @@ export function PortalHeader({
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/settings">
-                <Cog6ToothIcon className="mr-2 h-4 w-4" />
-                Settings
+                <Cog6ToothIcon className="me-2 h-4 w-4" />
+                <FormattedMessage id="portal.header.auth.settings" defaultMessage="Settings" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut}>
-              <ArrowRightStartOnRectangleIcon className="mr-2 h-4 w-4" />
-              Sign out
+              <ArrowRightStartOnRectangleIcon className="me-2 h-4 w-4" />
+              <FormattedMessage id="portal.header.auth.signOut" defaultMessage="Sign out" />
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -222,10 +242,10 @@ export function PortalHeader({
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
-            Log in
+            <FormattedMessage id="portal.header.auth.logIn" defaultMessage="Log in" />
           </Button>
           <Button size="sm" onClick={() => openAuthPopover({ mode: 'signup' })}>
-            Sign up
+            <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
           </Button>
         </div>
       ) : null}

@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useIntl } from 'react-intl'
 import { LightBulbIcon } from '@heroicons/react/24/outline'
 import { VoteButton } from '@/components/public/vote-button'
 import type { SimilarPost } from '@/lib/client/hooks/use-similar-posts'
@@ -39,6 +40,7 @@ export function SimilarPostsCard({
   show,
   className,
 }: SimilarPostsCardProps): React.ReactElement {
+  const intl = useIntl()
   const showCard = show && posts.length > 0
   const { ref: contentRef, height: measuredHeight } = useContentHeight()
 
@@ -55,7 +57,10 @@ export function SimilarPostsCard({
           <div ref={contentRef}>
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2">
               <LightBulbIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
-              Similar ideas
+              {intl.formatMessage({
+                id: 'portal.feedback.similarPosts.heading',
+                defaultMessage: 'Similar ideas',
+              })}
             </p>
             <div className="space-y-1.5">
               {posts.slice(0, MAX_SIMILAR_POSTS).map((post) => (
