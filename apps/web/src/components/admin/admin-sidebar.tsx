@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   BookOpenIcon,
   ChartBarIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -202,6 +203,35 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Version & Docs Footer */}
+            <div className="flex flex-col items-center gap-1.5 pt-4 mt-3 border-t border-border/20">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href="https://www.quackback.io/docs/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+                  >
+                    <QuestionMarkCircleIcon className="h-4 w-4" />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>
+                  Documentation
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-[10px] text-muted-foreground/40 cursor-default">
+                    v{__APP_VERSION__}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={8}>
+                  Quackback v{__APP_VERSION__}
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </div>
       </aside>
@@ -265,6 +295,21 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 <GlobeAltIcon className="h-5 w-5" />
                 View Portal
               </Link>
+
+              {/* Version & Docs Footer */}
+              <div className="h-px bg-border/40 my-4" />
+              <a
+                href="https://www.quackback.io/docs/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <QuestionMarkCircleIcon className="h-5 w-5" />
+                Documentation
+              </a>
+              <div className="px-4 py-2">
+                <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
+              </div>
             </nav>
           </SheetContent>
         </Sheet>
