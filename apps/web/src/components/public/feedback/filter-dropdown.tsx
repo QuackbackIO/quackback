@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { FunnelIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -53,7 +54,9 @@ export function FilterDropdown({
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 relative">
           <FunnelIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">Filter</span>
+          <span className="hidden sm:inline">
+            <FormattedMessage id="portal.feedback.toolbar.filter" defaultMessage="Filter" />
+          </span>
           {activeCount > 0 && (
             <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
               {activeCount}
@@ -65,7 +68,9 @@ export function FilterDropdown({
         <div className="space-y-4">
           {/* Header with clear button */}
           <div className="flex items-center justify-between">
-            <h4 className="font-medium text-sm">Filters</h4>
+            <h4 className="font-medium text-sm">
+              <FormattedMessage id="portal.feedback.filter.title" defaultMessage="Filters" />
+            </h4>
             {activeCount > 0 && (
               <Button
                 variant="ghost"
@@ -75,7 +80,7 @@ export function FilterDropdown({
                   onClearFilters()
                 }}
               >
-                Clear all
+                <FormattedMessage id="portal.feedback.filter.clearAll" defaultMessage="Clear all" />
               </Button>
             )}
           </div>
@@ -84,7 +89,7 @@ export function FilterDropdown({
           {statuses.length > 0 && (
             <div className="space-y-2">
               <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Status
+                <FormattedMessage id="portal.feedback.filter.statusLabel" defaultMessage="Status" />
               </h5>
               <div className="space-y-1.5">
                 {statuses.map((status) => (
@@ -114,7 +119,7 @@ export function FilterDropdown({
           {tags.length > 0 && (
             <div className="space-y-2">
               <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Tags
+                <FormattedMessage id="portal.feedback.filter.tagsLabel" defaultMessage="Tags" />
               </h5>
               <div className="flex flex-wrap gap-1.5">
                 {tags.map((tag) => {
@@ -140,7 +145,12 @@ export function FilterDropdown({
 
           {/* Empty state */}
           {statuses.length === 0 && tags.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-2">No filters available</p>
+            <p className="text-sm text-muted-foreground text-center py-2">
+              <FormattedMessage
+                id="portal.feedback.filter.noFilters"
+                defaultMessage="No filters available"
+              />
+            </p>
           )}
         </div>
       </PopoverContent>

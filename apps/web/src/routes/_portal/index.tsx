@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
+import { useIntl } from 'react-intl'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
@@ -86,6 +87,7 @@ export const Route = createFileRoute('/_portal/')({
 })
 
 function PublicPortalPage() {
+  const intl = useIntl()
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
   const { org, session, anonymousVotingEnabled } = loaderData
@@ -117,8 +119,18 @@ function PublicPortalPage() {
       <div className="py-6">
         <EmptyState
           icon={ChatBubbleOvalLeftEllipsisIcon}
-          title="Coming Soon"
-          description={`${org.name} is setting up their feedback portal. Check back soon to share your ideas and suggestions.`}
+          title={intl.formatMessage({
+            id: 'portal.feedback.empty.comingSoonTitle',
+            defaultMessage: 'Coming Soon',
+          })}
+          description={intl.formatMessage(
+            {
+              id: 'portal.feedback.empty.comingSoonDescription',
+              defaultMessage:
+                '{orgName} is setting up their feedback portal. Check back soon to share your ideas and suggestions.',
+            },
+            { orgName: org.name }
+          )}
           className="py-24"
         />
       </div>

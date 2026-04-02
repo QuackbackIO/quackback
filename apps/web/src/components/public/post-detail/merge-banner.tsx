@@ -1,5 +1,6 @@
 'use client'
 
+import { FormattedMessage } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 
 interface PortalMergeBannerProps {
@@ -23,7 +24,10 @@ export function PortalMergeBanner({
       style={{ animationDelay: '75ms' }}
     >
       <p className="text-sm text-amber-800 dark:text-amber-200">
-        This feedback has been merged into{' '}
+        <FormattedMessage
+          id="portal.postDetail.mergeBanner.mergedInto"
+          defaultMessage="This feedback has been merged into"
+        />{' '}
         <Link
           to="/b/$slug/posts/$postId"
           params={{ slug: canonicalPostBoardSlug, postId: canonicalPostId }}
@@ -31,7 +35,11 @@ export function PortalMergeBanner({
         >
           {canonicalPostTitle}
         </Link>
-        . Votes and activity now count toward the linked item.
+        .{' '}
+        <FormattedMessage
+          id="portal.postDetail.mergeBanner.votesCount"
+          defaultMessage="Votes and activity now count toward the linked item."
+        />
       </p>
     </div>
   )

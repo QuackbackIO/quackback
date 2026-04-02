@@ -75,11 +75,16 @@ function WidgetLayout() {
   const { themeStyles, customCss, googleFontsUrl, portalUser, portalSessionToken, hmacRequired } =
     Route.useLoaderData()
 
+  // Read initial locale from URL param (?locale=fr)
+  const initialLocale =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('locale') : null
+
   return (
     <WidgetAuthProvider
       portalUser={portalUser}
       portalSessionToken={portalSessionToken}
       hmacRequired={hmacRequired}
+      initialLocale={initialLocale}
     >
       {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}

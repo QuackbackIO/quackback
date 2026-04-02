@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { BellIcon, BellAlertIcon, CheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import {
@@ -37,6 +38,7 @@ export function SubscriptionBell({
   disabled = false,
   onAuthRequired,
 }: SubscriptionBellProps) {
+  const intl = useIntl()
   const [status, setStatus] = useState<SubscriptionStatus>(
     initialStatus || { subscribed: false, level: 'none', reason: null }
   )
@@ -113,9 +115,20 @@ export function SubscriptionBell({
   const BellIconComponent = isSubscribed ? BellAlertIcon : BellIcon
 
   function getAriaLabel(): string {
-    if (!isSubscribed) return 'Subscribe to notifications'
-    if (level === 'status_only') return 'Subscribed to status changes only'
-    return 'Subscribed to all activity'
+    if (!isSubscribed)
+      return intl.formatMessage({
+        id: 'portal.subscriptionBell.aria.subscribe',
+        defaultMessage: 'Subscribe to notifications',
+      })
+    if (level === 'status_only')
+      return intl.formatMessage({
+        id: 'portal.subscriptionBell.aria.subscribedStatusOnly',
+        defaultMessage: 'Subscribed to status changes only',
+      })
+    return intl.formatMessage({
+      id: 'portal.subscriptionBell.aria.subscribedAll',
+      defaultMessage: 'Subscribed to all activity',
+    })
   }
 
   // Button click handler for non-dropdown scenarios
@@ -149,8 +162,18 @@ export function SubscriptionBell({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
-          <p className="text-sm font-medium">Notifications</p>
-          <p className="text-xs text-muted-foreground">Choose what to subscribe to</p>
+          <p className="text-sm font-medium">
+            <FormattedMessage
+              id="portal.subscriptionBell.menu.title"
+              defaultMessage="Notifications"
+            />
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <FormattedMessage
+              id="portal.subscriptionBell.menu.subtitle"
+              defaultMessage="Choose what to subscribe to"
+            />
+          </p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
@@ -162,8 +185,18 @@ export function SubscriptionBell({
           <div className="flex items-center gap-2">
             <BellAlertIcon className="h-4 w-4" />
             <div>
-              <p className="text-sm">All activity</p>
-              <p className="text-xs text-muted-foreground">Comments & status changes</p>
+              <p className="text-sm">
+                <FormattedMessage
+                  id="portal.subscriptionBell.level.all"
+                  defaultMessage="All activity"
+                />
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <FormattedMessage
+                  id="portal.subscriptionBell.level.allHint"
+                  defaultMessage="Comments & status changes"
+                />
+              </p>
             </div>
           </div>
           {level === 'all' && <CheckIcon className="h-4 w-4 text-primary" />}
@@ -177,8 +210,18 @@ export function SubscriptionBell({
           <div className="flex items-center gap-2">
             <BellIcon className="h-4 w-4" />
             <div>
-              <p className="text-sm">Status changes</p>
-              <p className="text-xs text-muted-foreground">When status is updated</p>
+              <p className="text-sm">
+                <FormattedMessage
+                  id="portal.subscriptionBell.level.statusOnly"
+                  defaultMessage="Status changes"
+                />
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <FormattedMessage
+                  id="portal.subscriptionBell.level.statusOnlyHint"
+                  defaultMessage="When status is updated"
+                />
+              </p>
             </div>
           </div>
           {level === 'status_only' && <CheckIcon className="h-4 w-4 text-primary" />}
@@ -194,7 +237,12 @@ export function SubscriptionBell({
         >
           <div className="flex items-center gap-2 text-muted-foreground">
             <BellIcon className="h-4 w-4" />
-            <p className="text-sm">Unsubscribe</p>
+            <p className="text-sm">
+              <FormattedMessage
+                id="portal.subscriptionBell.level.unsubscribe"
+                defaultMessage="Unsubscribe"
+              />
+            </p>
           </div>
           {level === 'none' && <CheckIcon className="h-4 w-4 text-primary" />}
         </DropdownMenuItem>

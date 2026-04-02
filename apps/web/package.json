@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "intl:extract": "formatjs extract 'src/**/*.{ts,tsx}' --out-file src/locales/en.json --id-interpolation-pattern '[sha512:contenthash:base64:6]' --flatten",
+    "intl:compile": "formatjs compile src/locales/en.json --out-file src/locales/compiled/en.json"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1022.0",
@@ -99,6 +101,7 @@
     "react-dom": "^19.2.4",
     "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.72.0",
+    "react-intl": "^10.1.1",
     "recharts": "3.8.1",
     "slugify": "^1.6.9",
     "sonner": "^2.0.7",
@@ -110,6 +113,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@formatjs/cli": "^6.14.1",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.2",
     "@types/bcryptjs": "^3.0.0",

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { useSearch } from '@tanstack/react-router'
 import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
@@ -7,6 +8,7 @@ interface UnsubscribeBannerProps {
 }
 
 export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
+  const intl = useIntl()
   const search = useSearch({ strict: false }) as { unsubscribed?: string } | undefined
   const [visible, setVisible] = useState(false)
 
@@ -29,13 +31,19 @@ export function UnsubscribeBanner({ postId }: UnsubscribeBannerProps) {
       <div className="flex items-center gap-3">
         <CheckCircleIcon className="h-5 w-5 text-success flex-shrink-0" />
         <p className="text-sm text-foreground">
-          You&apos;ve been unsubscribed from this post. Use the bell icon to resubscribe.
+          <FormattedMessage
+            id="portal.unsubscribeBanner.message"
+            defaultMessage="You've been unsubscribed from this post. Use the bell icon to resubscribe."
+          />
         </p>
       </div>
       <button
         onClick={() => setVisible(false)}
         className="flex-shrink-0 text-success hover:text-success/80 transition-colors"
-        aria-label="Dismiss"
+        aria-label={intl.formatMessage({
+          id: 'portal.unsubscribeBanner.dismiss',
+          defaultMessage: 'Dismiss',
+        })}
       >
         <XMarkIcon className="h-4 w-4" />
       </button>

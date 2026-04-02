@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import {
   ArrowTrendingUpIcon,
   ClockIcon,
@@ -30,9 +31,24 @@ interface FeedbackToolbarProps {
 }
 
 const SORT_OPTIONS = [
-  { value: 'top', label: 'Top', icon: ArrowTrendingUpIcon },
-  { value: 'new', label: 'New', icon: ClockIcon },
-  { value: 'trending', label: 'Trending', icon: FireIcon },
+  {
+    value: 'top',
+    messageId: 'portal.feedback.toolbar.sortTop',
+    defaultMessage: 'Top',
+    icon: ArrowTrendingUpIcon,
+  },
+  {
+    value: 'new',
+    messageId: 'portal.feedback.toolbar.sortNew',
+    defaultMessage: 'New',
+    icon: ClockIcon,
+  },
+  {
+    value: 'trending',
+    messageId: 'portal.feedback.toolbar.sortTrending',
+    defaultMessage: 'Trending',
+    icon: FireIcon,
+  },
 ] as const
 
 export function FeedbackToolbar({
@@ -50,6 +66,7 @@ export function FeedbackToolbar({
   activeFilterCount,
   isLoading = false,
 }: FeedbackToolbarProps): React.ReactElement {
+  const intl = useIntl()
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch || '')
 
@@ -84,7 +101,7 @@ export function FeedbackToolbar({
               )}
             >
               <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
-              {option.label}
+              {intl.formatMessage({ id: option.messageId, defaultMessage: option.defaultMessage })}
             </button>
           )
         })}
@@ -100,25 +117,36 @@ export function FeedbackToolbar({
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">
               <MagnifyingGlassIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Search</span>
+              <span className="hidden sm:inline">
+                <FormattedMessage id="portal.feedback.toolbar.search" defaultMessage="Search" />
+              </span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="max-w-[calc(100vw-2rem)] sm:w-80" align="end">
             <form onSubmit={handleSearchSubmit} className="flex gap-2">
               <Input
-                placeholder="Search posts..."
+                placeholder={intl.formatMessage({
+                  id: 'portal.feedback.toolbar.searchPlaceholder',
+                  defaultMessage: 'Search posts...',
+                })}
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 className="flex-1"
                 autoFocus
               />
               <Button type="submit" size="sm">
-                Search
+                <FormattedMessage
+                  id="portal.feedback.toolbar.searchSubmit"
+                  defaultMessage="Search"
+                />
               </Button>
             </form>
             {currentSearch && (
               <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={handleClearSearch}>
-                Clear search
+                <FormattedMessage
+                  id="portal.feedback.toolbar.clearSearch"
+                  defaultMessage="Clear search"
+                />
               </Button>
             )}
           </PopoverContent>

@@ -176,7 +176,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
 
   return (
-    <html lang="en" className={defaultTheme} suppressHydrationWarning>
+    <html className={defaultTheme} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

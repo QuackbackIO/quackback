@@ -6,6 +6,7 @@ import {
   FaceSmileIcon,
   MapPinIcon,
 } from '@heroicons/react/24/solid'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -42,7 +43,10 @@ export function WidgetCommentList({
   if (comments.length === 0) {
     return (
       <p className="text-xs text-muted-foreground/60 text-center py-4">
-        No comments yet. Be the first to share your thoughts!
+        <FormattedMessage
+          id="widget.commentList.empty"
+          defaultMessage="No comments yet. Be the first to share your thoughts!"
+        />
       </p>
     )
   }
@@ -78,6 +82,7 @@ function WidgetCommentItem({
   canComment,
   onSubmitComment,
 }: WidgetCommentItemProps) {
+  const intl = useIntl()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [replyText, setReplyText] = useState('')
@@ -133,13 +138,17 @@ function WidgetCommentItem({
     }
   }
 
+  const authorName =
+    comment.authorName ||
+    intl.formatMessage({ id: 'widget.commentList.authorFallback', defaultMessage: 'Anonymous' })
+
   if (isDeleted) {
     return (
       <div
         className={cn(
           'relative',
           depth > 0 &&
-            'ml-4 pl-3 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/40'
+            'ms-4 ps-3 before:absolute before:start-0 before:top-0 before:bottom-0 before:w-px before:bg-border/40'
         )}
       >
         <div className="py-1.5">
@@ -148,13 +157,17 @@ function WidgetCommentItem({
               <AvatarFallback className="text-[9px]">?</AvatarFallback>
             </Avatar>
             <span className="text-xs text-muted-foreground/60 italic">
-              {comment.isRemovedByTeam ? '[removed]' : '[deleted]'}
+              {comment.isRemovedByTeam ? (
+                <FormattedMessage id="widget.commentList.removed" defaultMessage="[removed]" />
+              ) : (
+                <FormattedMessage id="widget.commentList.deleted" defaultMessage="[deleted]" />
+              )}
             </span>
             <span className="text-muted-foreground/50 text-[10px]">&middot;</span>
             <TimeAgo date={comment.createdAt} className="text-[10px] text-muted-foreground/60" />
           </div>
           {hasReplies && (
-            <div className="flex items-center gap-1 mt-1.5 ml-7">
+            <div className="flex items-center gap-1 mt-1.5 ms-7">
               <button
                 type="button"
                 onClick={() => setIsCollapsed(!isCollapsed)}
@@ -201,7 +214,7 @@ function WidgetCommentItem({
       className={cn(
         'relative',
         depth > 0 &&
-          'ml-4 pl-3 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/40'
+          'ms-4 ps-3 before:absolute before:start-0 before:top-0 before:bottom-0 before:w-px before:bg-border/40'
       )}
     >
       <div
@@ -220,18 +233,16 @@ function WidgetCommentItem({
               {getInitials(comment.authorName)}
             </AvatarFallback>
           </Avatar>
-          <span className="text-xs font-medium text-foreground truncate">
-            {comment.authorName || 'Anonymous'}
-          </span>
+          <span className="text-xs font-medium text-foreground truncate">{authorName}</span>
           {comment.isTeamMember && (
             <span className="text-[9px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0">
-              Team
+              <FormattedMessage id="widget.commentList.teamBadge" defaultMessage="Team" />
             </span>
           )}
           {isPinned && (
             <span className="text-[9px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0 inline-flex items-center gap-0.5">
               <MapPinIcon className="h-2.5 w-2.5" />
-              Pinned
+              <FormattedMessage id="widget.commentList.pinnedBadge" defaultMessage="Pinned" />
             </span>
           )}
           <span className="text-muted-foreground/50 text-[10px]">&middot;</span>
@@ -242,12 +253,12 @@ function WidgetCommentItem({
         </div>
 
         {/* Content */}
-        <p className="text-xs text-foreground/90 whitespace-pre-wrap mt-1 ml-7 leading-relaxed">
+        <p className="text-xs text-foreground/90 whitespace-pre-wrap mt-1 ms-7 leading-relaxed">
           {comment.content}
         </p>
 
         {/* Actions row: collapse, reactions, emoji picker, reply */}
-        <div className="flex items-center gap-1 mt-1.5 ml-7">
+        <div className="flex items-center gap-1 mt-1.5 ms-7">
           {/* Collapse toggle */}
           {hasReplies && canShowReplies && (
             <button
@@ -316,7 +327,7 @@ function WidgetCommentItem({
               className="inline-flex items-center gap-0.5 h-5 px-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
               <ArrowUturnLeftIcon className="h-2.5 w-2.5" />
-              Reply
+              <FormattedMessage id="widget.commentList.reply" defaultMessage="Reply" />
             </button>
           )}
         </div>
@@ -330,12 +341,18 @@ function WidgetCommentItem({
           }}
         >
           <div className="overflow-hidden">
-            <div className="mt-2 ml-7 p-2 bg-muted/30 rounded-md border border-border/30">
+            <div className="mt-2 ms-7 p-2 bg-muted/30 rounded-md border border-border/30">
               <div className="flex gap-2">
                 <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Reply to ${comment.authorName || 'Anonymous'}...`}
+                  placeholder={intl.formatMessage(
+                    {
+                      id: 'widget.commentList.replyPlaceholder',
+                      defaultMessage: 'Reply to {name}...',
+                    },
+                    { name: authorName }
+                  )}
                   rows={2}
                   ref={replyTextareaRef}
                   disabled={isSubmitting}
@@ -353,7 +370,11 @@ function WidgetCommentItem({
                   disabled={isSubmitting || !replyText.trim()}
                   className="self-end px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
                 >
-                  {isSubmitting ? '...' : 'Post'}
+                  {isSubmitting ? (
+                    '...'
+                  ) : (
+                    <FormattedMessage id="widget.commentList.post" defaultMessage="Post" />
+                  )}
                 </button>
               </div>
               <button
@@ -364,7 +385,7 @@ function WidgetCommentItem({
                 }}
                 className="mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel
+                <FormattedMessage id="widget.commentList.cancel" defaultMessage="Cancel" />
               </button>
             </div>
           </div>

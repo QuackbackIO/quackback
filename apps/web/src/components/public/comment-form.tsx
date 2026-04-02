@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useForm } from 'react-hook-form'
 import type { UseMutationResult } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
@@ -67,6 +68,7 @@ export function CommentForm({
   isTeamMember,
   defaultPrivate,
 }: CommentFormProps) {
+  const intl = useIntl()
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const [error, setError] = useState<string | null>(null)
@@ -103,16 +105,32 @@ export function CommentForm({
   const isPrivateLocked = defaultPrivate === true
 
   function privateTooltipText(): string {
-    if (isPrivateLocked) return 'Replies to private comments are always private'
-    if (isPrivate) return 'Only visible to team members'
-    return 'Make this comment private (team-only)'
+    if (isPrivateLocked)
+      return intl.formatMessage({
+        id: 'portal.commentForm.privateLockedTooltip',
+        defaultMessage: 'Replies to private comments are always private',
+      })
+    if (isPrivate)
+      return intl.formatMessage({
+        id: 'portal.commentForm.privateOnTooltip',
+        defaultMessage: 'Only visible to team members',
+      })
+    return intl.formatMessage({
+      id: 'portal.commentForm.privateOffTooltip',
+      defaultMessage: 'Make this comment private (team-only)',
+    })
   }
 
   function onSubmit(data: CommentInput) {
     setError(null)
 
     if (!createComment) {
-      setError('Comment functionality not available')
+      setError(
+        intl.formatMessage({
+          id: 'portal.commentForm.errorPost',
+          defaultMessage: 'Failed to post comment',
+        })
+      )
       return
     }
 
@@ -134,7 +152,14 @@ export function CommentForm({
           onSuccess?.()
         },
         onError: (err) => {
-          setError(err instanceof Error ? err.message : 'Failed to post comment')
+          setError(
+            err instanceof Error
+              ? err.message
+              : intl.formatMessage({
+                  id: 'portal.commentForm.errorPost',
+                  defaultMessage: 'Failed to post comment',
+                })
+          )
         },
       }
     )
@@ -158,10 +183,18 @@ export function CommentForm({
               name="content"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="sr-only">Your comment</FormLabel>
+                  <FormLabel className="sr-only">
+                    {intl.formatMessage({
+                      id: 'portal.commentForm.labelSrOnly',
+                      defaultMessage: 'Your comment',
+                    })}
+                  </FormLabel>
                   <FormControl>
                     <textarea
-                      placeholder="Write a comment..."
+                      placeholder={intl.formatMessage({
+                        id: 'portal.commentForm.placeholder',
+                        defaultMessage: 'Write a comment...',
+                      })}
                       rows={3}
                       disabled={isSubmitting}
                       className="w-full resize-none border-0 bg-transparent px-3 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
@@ -178,9 +211,14 @@ export function CommentForm({
             {/* Toolbar footer */}
             <div className="flex items-center gap-2 border-t border-border/30 bg-muted/20 px-3 py-2">
               {/* Left: Identity */}
-              <p className="text-xs text-muted-foreground mr-auto truncate">
+              <p className="text-xs text-muted-foreground me-auto truncate">
                 <span className="font-medium text-foreground">
-                  {effectiveUser?.name || effectiveUser?.email || 'Anonymous'}
+                  {effectiveUser?.name ||
+                    effectiveUser?.email ||
+                    intl.formatMessage({
+                      id: 'portal.commentForm.authorFallback',
+                      defaultMessage: 'Anonymous',
+                    })}
                 </span>
               </p>
 
@@ -202,7 +240,7 @@ export function CommentForm({
                         <StatusBadge name={selectedStatus.name} color={selectedStatus.color} />
                         <button
                           type="button"
-                          className="ml-0.5 text-muted-foreground hover:text-foreground"
+                          className="ms-0.5 text-muted-foreground hover:text-foreground"
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedStatusId(null)
@@ -217,14 +255,23 @@ export function CommentForm({
                           className="size-1.5 rounded-full shrink-0"
                           style={{ backgroundColor: currentStatus?.color ?? '#94a3b8' }}
                         />
-                        <span>{currentStatus?.name ?? 'No status'}</span>
+                        <span>
+                          {currentStatus?.name ??
+                            intl.formatMessage({
+                              id: 'portal.commentForm.noStatus',
+                              defaultMessage: 'No status',
+                            })}
+                        </span>
                       </>
                     )}
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-44 p-1" align="end">
                   <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    Update status
+                    {intl.formatMessage({
+                      id: 'portal.commentForm.updateStatus',
+                      defaultMessage: 'Update status',
+                    })}
                   </div>
                   {statuses.map((status) => {
                     const isCurrent = status.id === currentStatusId
@@ -247,7 +294,7 @@ export function CommentForm({
                           className="size-2 rounded-full shrink-0"
                           style={{ backgroundColor: status.color }}
                         />
-                        <span className="flex-1 text-left">{status.name}</span>
+                        <span className="flex-1 text-start">{status.name}</span>
                         {isCurrent && !isSelected && (
                           <span className="text-muted-foreground text-[10px]">current</span>
                         )}
@@ -260,13 +307,16 @@ export function CommentForm({
                       <div className="my-1 border-t border-border/30" />
                       <button
                         type="button"
-                        className="w-full text-left px-2 py-1.5 text-xs rounded-sm hover:bg-muted/50 transition-colors text-muted-foreground"
+                        className="w-full text-start px-2 py-1.5 text-xs rounded-sm hover:bg-muted/50 transition-colors text-muted-foreground"
                         onClick={() => {
                           setSelectedStatusId(null)
                           setStatusPopoverOpen(false)
                         }}
                       >
-                        Clear status change
+                        {intl.formatMessage({
+                          id: 'portal.commentForm.clearStatusChange',
+                          defaultMessage: 'Clear status change',
+                        })}
                       </button>
                     </>
                   )}
@@ -290,7 +340,10 @@ export function CommentForm({
                       )}
                     >
                       <LockClosedIcon className="h-3 w-3" />
-                      Private
+                      {intl.formatMessage({
+                        id: 'portal.commentForm.private',
+                        defaultMessage: 'Private',
+                      })}
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{privateTooltipText()}</TooltipContent>
@@ -307,15 +360,30 @@ export function CommentForm({
                   disabled={isSubmitting}
                   className="h-7 text-xs"
                 >
-                  Cancel
+                  {intl.formatMessage({
+                    id: 'portal.commentForm.cancel',
+                    defaultMessage: 'Cancel',
+                  })}
                 </Button>
               )}
               <Button type="submit" size="sm" disabled={isSubmitting} className="h-7 text-xs">
                 {isSubmitting
-                  ? 'Posting...'
+                  ? intl.formatMessage({
+                      id: 'portal.commentForm.submitting',
+                      defaultMessage: 'Posting...',
+                    })
                   : selectedStatus
-                    ? `Comment & mark ${selectedStatus.name}`
-                    : 'Comment'}
+                    ? intl.formatMessage(
+                        {
+                          id: 'portal.commentForm.submitWithStatus',
+                          defaultMessage: 'Comment & mark {statusName}',
+                        },
+                        { statusName: selectedStatus.name }
+                      )
+                    : intl.formatMessage({
+                        id: 'portal.commentForm.submit',
+                        defaultMessage: 'Comment',
+                      })}
               </Button>
             </div>
           </div>
@@ -333,10 +401,18 @@ export function CommentForm({
           name="content"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="sr-only">Your comment</FormLabel>
+              <FormLabel className="sr-only">
+                {intl.formatMessage({
+                  id: 'portal.commentForm.labelSrOnly',
+                  defaultMessage: 'Your comment',
+                })}
+              </FormLabel>
               <FormControl>
                 <textarea
-                  placeholder="Write a comment..."
+                  placeholder={intl.formatMessage({
+                    id: 'portal.commentForm.placeholder',
+                    defaultMessage: 'Write a comment...',
+                  })}
                   rows={3}
                   disabled={isSubmitting}
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -351,15 +427,24 @@ export function CommentForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex items-center justify-end gap-2">
-          <p className="text-xs text-muted-foreground mr-auto">
+          <p className="text-xs text-muted-foreground me-auto">
             {isAnonymousCommenter ? (
-              'Posting anonymously'
+              intl.formatMessage({
+                id: 'portal.commentForm.postingAnonymously',
+                defaultMessage: 'Posting anonymously',
+              })
             ) : (
               <>
-                Posting as{' '}
-                <span className="font-medium text-foreground">
-                  {effectiveUser?.name || effectiveUser?.email}
-                </span>
+                {intl.formatMessage(
+                  { id: 'portal.commentForm.postingAs', defaultMessage: 'Posting as {name}' },
+                  {
+                    name: (
+                      <span className="font-medium text-foreground">
+                        {effectiveUser?.name || effectiveUser?.email}
+                      </span>
+                    ),
+                  }
+                )}
                 {' ('}
                 <button
                   type="button"
@@ -374,7 +459,10 @@ export function CommentForm({
                     })
                   }}
                 >
-                  sign out
+                  {intl.formatMessage({
+                    id: 'portal.commentForm.signOut',
+                    defaultMessage: 'sign out',
+                  })}
                 </button>
                 {')'}
               </>
@@ -388,7 +476,7 @@ export function CommentForm({
               onClick={onCancel}
               disabled={isSubmitting}
             >
-              Cancel
+              {intl.formatMessage({ id: 'portal.commentForm.cancel', defaultMessage: 'Cancel' })}
             </Button>
           )}
           {/* Private toggle for team members */}
@@ -410,7 +498,10 @@ export function CommentForm({
                     )}
                   >
                     <LockClosedIcon className="h-3.5 w-3.5" />
-                    Private
+                    {intl.formatMessage({
+                      id: 'portal.commentForm.private',
+                      defaultMessage: 'Private',
+                    })}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{privateTooltipText()}</TooltipContent>
@@ -418,7 +509,17 @@ export function CommentForm({
             </TooltipProvider>
           )}
           <Button type="submit" size="sm" disabled={isSubmitting}>
-            {isSubmitting ? 'Posting...' : parentId ? 'Reply' : 'Comment'}
+            {isSubmitting
+              ? intl.formatMessage({
+                  id: 'portal.commentForm.submitting',
+                  defaultMessage: 'Posting...',
+                })
+              : parentId
+                ? intl.formatMessage({ id: 'portal.commentForm.reply', defaultMessage: 'Reply' })
+                : intl.formatMessage({
+                    id: 'portal.commentForm.submit',
+                    defaultMessage: 'Comment',
+                  })}
           </Button>
         </div>
       </form>

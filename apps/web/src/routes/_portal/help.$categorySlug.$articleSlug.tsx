@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { HelpCenterArticleDetail } from '@/components/portal/help-center'
 import { BackLink } from '@/components/ui/back-link'
@@ -78,11 +79,21 @@ function ArticlePage() {
 function ArticleNotFound() {
   return (
     <div className="py-16 text-center">
-      <h1 className="text-2xl font-bold mb-2">Article not found</h1>
+      <h1 className="text-2xl font-bold mb-2">
+        <FormattedMessage
+          id="portal.help.articleNotFound.title"
+          defaultMessage="Article not found"
+        />
+      </h1>
       <p className="text-muted-foreground mb-6">
-        This article may have been removed or is not yet published.
+        <FormattedMessage
+          id="portal.help.articleNotFound.description"
+          defaultMessage="This article may have been removed or is not yet published."
+        />
       </p>
-      <BackLink to="/help">Help Center</BackLink>
+      <BackLink to="/help">
+        <FormattedMessage id="portal.help.articleNotFound.backLink" defaultMessage="Help Center" />
+      </BackLink>
     </div>
   )
 }

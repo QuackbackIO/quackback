@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
@@ -104,6 +105,7 @@ export function PostContentSection({
   isSaving = false,
   editorFeatures = DEFAULT_USER_EDITOR_FEATURES,
 }: PostContentSectionProps): React.ReactElement {
+  const intl = useIntl()
   const [editTitle, setEditTitle] = useState(post.title)
   const [editContentJson, setEditContentJson] = useState<JSONContent | null>(
     getInitialContentJson(post)
@@ -159,7 +161,10 @@ export function PostContentSection({
             type="text"
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
-            placeholder="What's your idea?"
+            placeholder={intl.formatMessage({
+              id: 'portal.postDetail.edit.titlePlaceholder',
+              defaultMessage: "What's your idea?",
+            })}
             maxLength={200}
             autoFocus
             disabled={isSaving}
@@ -170,7 +175,10 @@ export function PostContentSection({
           <RichTextEditor
             value={editContentJson || ''}
             onChange={handleContentChange}
-            placeholder="Add more details..."
+            placeholder={intl.formatMessage({
+              id: 'portal.postDetail.edit.detailsPlaceholder',
+              defaultMessage: 'Add more details...',
+            })}
             minHeight="150px"
             disabled={isSaving}
             borderless
@@ -188,10 +196,14 @@ export function PostContentSection({
             onClick={onEditCancel}
             disabled={isSaving}
           >
-            Cancel
+            <FormattedMessage id="portal.postDetail.edit.cancel" defaultMessage="Cancel" />
           </Button>
           <Button size="sm" onClick={handleSave} disabled={!isValid || !hasChanges || isSaving}>
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? (
+              <FormattedMessage id="portal.postDetail.edit.saving" defaultMessage="Saving..." />
+            ) : (
+              <FormattedMessage id="portal.postDetail.edit.save" defaultMessage="Save" />
+            )}
           </Button>
         </div>
       </div>

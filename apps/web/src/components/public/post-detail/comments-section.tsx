@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
+import { useIntl } from 'react-intl'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -101,6 +102,7 @@ export function CommentsSection({
   onRestoreComment,
   restoringCommentId,
 }: CommentsSectionProps) {
+  const intl = useIntl()
   const commentCount = useMemo(() => countAllComments(comments), [comments])
 
   // useQuery reads from cache if available (prefetched in loader), fetches if not
@@ -129,7 +131,13 @@ export function CommentsSection({
       style={{ animationDelay: '150ms' }}
     >
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-        {commentCount} {commentCount === 1 ? 'Comment' : 'Comments'}
+        {intl.formatMessage(
+          {
+            id: 'portal.postDetail.comments',
+            defaultMessage: '{count, plural, one {# Comment} other {# Comments}}',
+          },
+          { count: commentCount }
+        )}
       </h2>
 
       <AuthCommentsSection

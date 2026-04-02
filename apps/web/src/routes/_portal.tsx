@@ -1,10 +1,20 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
+import { resolveLocale } from '@/lib/shared/i18n'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+
+/** Resolve locale from Accept-Language header on the server. */
+const getPortalLocale = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getRequestHeaders } = await import('@tanstack/react-start/server')
+  const acceptLanguage = getRequestHeaders().get('accept-language')
+  return resolveLocale(acceptLanguage)
+})
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
@@ -54,6 +64,8 @@ export const Route = createFileRoute('/_portal')({
       customProviderNames: portalConfig?.customProviderNames,
     }
 
+    const locale = await getPortalLocale()
+
     return {
       org,
       baseUrl: baseUrl ?? '',
@@ -67,6 +79,7 @@ export const Route = createFileRoute('/_portal')({
       googleFontsUrl,
       initialUserData,
       authConfig,
+      locale,
     }
   },
   head: ({ loaderData }) => {
@@ -107,6 +120,7 @@ function PortalLayout() {
     googleFontsUrl,
     initialUserData,
     authConfig,
+    locale,
   } = Route.useLoaderData()
 
   // Theme enforcement is handled by the root ThemeProvider (in __root.tsx) which
@@ -114,24 +128,26 @@ function PortalLayout() {
   // The portal only needs to control toggle visibility and inject CSS.
 
   return (
-    <AuthPopoverProvider>
-      <div className="min-h-screen bg-background flex flex-col">
-        {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-        {/* Custom CSS is injected after theme styles so it can override */}
-        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
-        <PortalHeader
-          orgName={org.name}
-          orgLogo={brandingData?.logoUrl ?? null}
-          userRole={userRole}
-          initialUserData={initialUserData}
-          showThemeToggle={themeMode === 'user'}
-        />
-        <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
-          <Outlet />
-        </main>
-        <AuthDialog authConfig={authConfig} />
-      </div>
-    </AuthPopoverProvider>
+    <PortalIntlProvider locale={locale}>
+      <AuthPopoverProvider>
+        <div className="min-h-screen bg-background flex flex-col">
+          {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
+          {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+          {/* Custom CSS is injected after theme styles so it can override */}
+          {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+          <PortalHeader
+            orgName={org.name}
+            orgLogo={brandingData?.logoUrl ?? null}
+            userRole={userRole}
+            initialUserData={initialUserData}
+            showThemeToggle={themeMode === 'user'}
+          />
+          <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
+            <Outlet />
+          </main>
+          <AuthDialog authConfig={authConfig} />
+        </div>
+      </AuthPopoverProvider>
+    </PortalIntlProvider>
   )
 }
