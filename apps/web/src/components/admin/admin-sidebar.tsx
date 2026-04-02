@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   BookOpenIcon,
   ChartBarIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -27,6 +28,8 @@ import { signOut } from '@/lib/server/auth/client'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { NotificationBell } from '@/components/notifications'
 import { cn } from '@/lib/shared/utils'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import type { LatestVersionResult } from '@/lib/server/functions/version'
 
 interface AdminSidebarProps {
   initialUserData?: {
@@ -34,6 +37,7 @@ interface AdminSidebarProps {
     email: string | null
     avatarUrl: string | null
   }
+  latestVersion?: LatestVersionResult | null
 }
 
 const navItems = [
@@ -85,7 +89,7 @@ function NavItem({
   )
 }
 
-export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
+export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
   const router = useRouter()
   const { session, settings } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -112,98 +116,156 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden sm:flex w-16 shrink-0 flex-col">
-        <div className="flex flex-col h-full py-6">
-          {/* Logo */}
-          <Link
-            to="/admin/feedback"
-            className="flex items-center justify-center mb-8 opacity-90 hover:opacity-100 transition-opacity"
-          >
-            <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
-          </Link>
+      <aside className="hidden sm:flex w-18 shrink-0 flex-col">
+        <ScrollArea className="h-full" scrollBarClassName="w-2" type="always">
+          <div className="flex flex-col h-full min-h-screen py-6">
+            {/* Logo */}
+            <Link
+              to="/admin/feedback"
+              className="flex items-center justify-center mb-8 opacity-90 hover:opacity-100 transition-opacity"
+            >
+              <img src="/logo.png" alt="Quackback" width={28} height={28} className="rounded" />
+            </Link>
 
-          {/* Main Navigation */}
-          <nav className="flex flex-col items-center gap-3">
-            {filteredNavItems.map((item) => (
+            {/* Main Navigation */}
+            <nav className="flex flex-col items-center gap-3">
+              {filteredNavItems.map((item) => (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  isActive={isNavActive(pathname, item.href)}
+                />
+              ))}
+            </nav>
+
+            {/* Spacer */}
+            <div className="flex-1 min-h-12" />
+
+            {/* Bottom Section */}
+            <div className="flex flex-col items-center gap-3">
+              {/* Settings */}
               <NavItem
-                key={item.href}
-                href={item.href}
-                icon={item.icon}
-                label={item.label}
-                isActive={isNavActive(pathname, item.href)}
+                href="/admin/settings"
+                icon={Cog6ToothIcon}
+                label="Settings"
+                isActive={isNavActive(pathname, '/admin/settings')}
               />
-            ))}
-          </nav>
 
-          {/* Spacer */}
-          <div className="flex-1 min-h-12" />
+              {/* Notifications */}
+              <NotificationBell />
 
-          {/* Bottom Section */}
-          <div className="flex flex-col items-center gap-3">
-            {/* Settings */}
-            <NavItem
-              href="/admin/settings"
-              icon={Cog6ToothIcon}
-              label="Settings"
-              isActive={isNavActive(pathname, '/admin/settings')}
-            />
-
-            {/* Notifications */}
-            <NotificationBell />
-
-            {/* Portal Link */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to="/"
-                  className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
-                >
-                  <GlobeAltIcon className="h-5 w-5" />
-                  <span className="sr-only">View Portal</span>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8}>
-                View Portal
-              </TooltipContent>
-            </Tooltip>
-
-            {/* User Menu */}
-            <DropdownMenu>
+              {/* Portal Link */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <Avatar className="h-7 w-7" src={avatarUrl} name={name} />
-                    </button>
-                  </DropdownMenuTrigger>
+                  <Link
+                    to="/"
+                    className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200"
+                  >
+                    <GlobeAltIcon className="h-5 w-5" />
+                    <span className="sr-only">View Portal</span>
+                  </Link>
                 </TooltipTrigger>
                 <TooltipContent side="right" sideOffset={8}>
-                  Account
+                  View Portal
                 </TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium truncate">{name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{email}</p>
+
+              {/* Help Menu */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button className="relative flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <QuestionMarkCircleIcon className="h-5 w-5" />
+                        {latestVersion && (
+                          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+                        )}
+                        <span className="sr-only">Help</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    Help
+                  </TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-52">
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="https://www.quackback.io/docs/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <BookOpenIcon className="mr-2 h-4 w-4" />
+                      Documentation
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="https://feedback.quackback.io/changelog"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <DocumentTextIcon className="mr-2 h-4 w-4" />
+                      Changelog
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <div className="px-2 py-1.5 flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground/60">v{__APP_VERSION__}</span>
+                    {latestVersion && (
+                      <a
+                        href={latestVersion.releaseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Update available · v{latestVersion.version}
+                      </a>
+                    )}
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/settings">
-                    <Cog6ToothIcon className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* User Menu */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <Avatar className="h-7 w-7" src={avatarUrl} name={name} />
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={8}>
+                    Account
+                  </TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-medium truncate">{name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings">
+                      <Cog6ToothIcon className="mr-2 h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <ArrowRightOnRectangleIcon className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
+        </ScrollArea>
       </aside>
 
       {/* Mobile Header */}
@@ -265,6 +327,38 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 <GlobeAltIcon className="h-5 w-5" />
                 View Portal
               </Link>
+              <div className="h-px bg-border/40 my-4" />
+              <a
+                href="https://www.quackback.io/docs/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <BookOpenIcon className="h-5 w-5" />
+                Documentation
+              </a>
+              <a
+                href="https://feedback.quackback.io/changelog"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-muted-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <DocumentTextIcon className="h-5 w-5" />
+                Changelog
+              </a>
+              <div className="px-4 py-2 flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</span>
+                {latestVersion && (
+                  <a
+                    href={latestVersion.releaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Update available · v{latestVersion.version}
+                  </a>
+                )}
+              </div>
             </nav>
           </SheetContent>
         </Sheet>
