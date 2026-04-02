@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import { useIntl } from 'react-intl'
 import { PageHeader } from '@/components/shared/page-header'
 import { HelpCenterCategoryGrid } from '@/components/portal/help-center'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
@@ -36,12 +37,18 @@ export const Route = createFileRoute('/_portal/help/')({
 })
 
 function HelpCenterPage() {
+  const intl = useIntl()
+
   return (
     <div className="py-8">
       <PageHeader
         size="large"
-        title="Help Center"
-        description="Find answers to your questions and learn how to get the most out of our product."
+        title={intl.formatMessage({ id: 'portal.help.title', defaultMessage: 'Help Center' })}
+        description={intl.formatMessage({
+          id: 'portal.help.description',
+          defaultMessage:
+            'Find answers to your questions and learn how to get the most out of our product.',
+        })}
         animate
         className="mb-8"
       />

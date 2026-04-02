@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
+import { FormattedMessage } from 'react-intl'
 import { PageHeader } from '@/components/shared/page-header'
 import { BackLink } from '@/components/ui/back-link'
 import { HelpCenterArticleList } from '@/components/portal/help-center'
@@ -53,7 +54,7 @@ function CategoryPage() {
   return (
     <div className="py-8">
       <BackLink to="/help" className="mb-6">
-        Help Center
+        <FormattedMessage id="portal.help.categoryNotFound.backLink" defaultMessage="Help Center" />
       </BackLink>
 
       <PageHeader
@@ -77,11 +78,21 @@ function CategoryPage() {
 function CategoryNotFound() {
   return (
     <div className="py-16 text-center">
-      <h1 className="text-2xl font-bold mb-2">Category not found</h1>
+      <h1 className="text-2xl font-bold mb-2">
+        <FormattedMessage
+          id="portal.help.categoryNotFound.title"
+          defaultMessage="Category not found"
+        />
+      </h1>
       <p className="text-muted-foreground mb-6">
-        This category may have been removed or does not exist.
+        <FormattedMessage
+          id="portal.help.categoryNotFound.description"
+          defaultMessage="This category may have been removed or does not exist."
+        />
       </p>
-      <BackLink to="/help">Help Center</BackLink>
+      <BackLink to="/help">
+        <FormattedMessage id="portal.help.categoryNotFound.backLink" defaultMessage="Help Center" />
+      </BackLink>
     </div>
   )
 }
