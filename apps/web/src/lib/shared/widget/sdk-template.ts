@@ -482,6 +482,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
         if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
         if (trigger && trigger.parentNode) trigger.parentNode.removeChild(trigger);
+        var styleTag = document.getElementById("quackback-widget-styles");
+        if (styleTag && styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
         panel = null;
         iframe = null;
         trigger = null;
