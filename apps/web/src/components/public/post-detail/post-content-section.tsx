@@ -74,17 +74,17 @@ interface PostContentSectionProps {
   editorFeatures?: EditorFeatures
 }
 
-/** Default editor features for end users - simple and focused */
+/** Default editor features for end users */
 const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
-  headings: false,
+  headings: true,
   images: true,
-  codeBlocks: false,
+  codeBlocks: true,
   bubbleMenu: true,
-  slashMenu: false,
-  taskLists: false,
+  slashMenu: true,
+  taskLists: true,
   blockquotes: true,
   tables: false,
-  dividers: false,
+  dividers: true,
   embeds: false,
 }
 

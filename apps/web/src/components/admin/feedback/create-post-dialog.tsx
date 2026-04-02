@@ -197,7 +197,7 @@ export function CreatePostDialog({
                           <RichTextEditor
                             value={contentJson || ''}
                             onChange={handleContentChange}
-                            placeholder="Add more details..."
+                            placeholder="Add more details... Type / for commands"
                             minHeight="200px"
                             borderless
                             features={{
