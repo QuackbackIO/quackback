@@ -1,0 +1,12 @@
+{
+  "widget.shell.heading.feedback": "Share your ideas",
+  "widget.shell.heading.help": "Help Center",
+  "widget.shell.heading.changelog": "What's new",
+  "widget.shell.tab.feedback": "Feedback",
+  "widget.shell.tab.changelog": "Changelog",
+  "widget.shell.tab.help": "Help",
+  "widget.shell.aria.goBack": "Go back",
+  "widget.shell.aria.close": "Close feedback widget",
+  "widget.shell.aria.userMenu": "User menu",
+  "widget.shell.poweredBy": "Powered by {brand}"
+}
