@@ -4,6 +4,7 @@ import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { PostModal } from '@/components/admin/feedback/post-modal'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UpdateBanner } from '@/components/admin/update-banner'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -87,8 +88,11 @@ function AdminLayout() {
         <AdminSidebar initialUserData={initialUserData} />
         <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
           {/* Mobile: Add padding for fixed header */}
-          <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden">
-            <Outlet />
+          <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col">
+            <UpdateBanner />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <Outlet />
+            </div>
           </div>
         </main>
         {currentUser && (
