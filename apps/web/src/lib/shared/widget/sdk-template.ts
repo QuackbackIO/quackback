@@ -355,6 +355,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     switch (msg.type) {
       case "quackback:ready":
         isReady = true;
+        // Tell the widget whether the parent viewport is mobile-sized
+        sendToWidget("quackback:mobile", isMobile);
         // Replay any pending identify
         if (pendingIdentify !== null) {
           sendToWidget("quackback:identify", pendingIdentify);
@@ -509,22 +511,26 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     dispatch(queue[i][0], queue[i][1], queue[i][2]);
   }
 
-  // Keep isMobile in sync for trigger button logic
+  // Keep isMobile in sync and notify the widget iframe on change
   window.addEventListener("resize", function() {
     var wasMobile = isMobile;
     isMobile = window.innerWidth < 640;
-    // Show/hide trigger when crossing the breakpoint while panel is open
-    if (isOpen && trigger && wasMobile !== isMobile) {
-      if (isMobile) {
-        trigger.style.display = "none";
-      } else {
-        trigger.style.display = "flex";
-        trigger.setAttribute("aria-label", "Close feedback widget");
-        if (iconChat && iconClose) {
-          iconChat.style.opacity = "0";
-          iconChat.style.transform = "rotate(90deg)";
-          iconClose.style.opacity = "1";
-          iconClose.style.transform = "rotate(0deg)";
+    if (wasMobile !== isMobile) {
+      // Notify widget so it can show/hide the close button
+      if (isReady) sendToWidget("quackback:mobile", isMobile);
+      // Show/hide trigger when crossing the breakpoint while panel is open
+      if (isOpen && trigger) {
+        if (isMobile) {
+          trigger.style.display = "none";
+        } else {
+          trigger.style.display = "flex";
+          trigger.setAttribute("aria-label", "Close feedback widget");
+          if (iconChat && iconClose) {
+            iconChat.style.opacity = "0";
+            iconChat.style.transform = "rotate(90deg)";
+            iconClose.style.opacity = "1";
+            iconClose.style.transform = "rotate(0deg)";
+          }
         }
       }
     }

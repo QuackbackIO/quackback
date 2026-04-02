@@ -48,19 +48,21 @@ export function WidgetShell({
   const showCloseExplicit =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('showClose') === '1'
-  // On mobile the SDK opens the widget full-screen and hides its own trigger
-  // button, so we need the in-header X. Detect via screen width (not iframe
-  // width, which is always narrow) or the native SDK flag.
-  const [isMobileScreen, setIsMobileScreen] = useState(false)
+  // The widget runs in a ~400px iframe on desktop, so we can't use
+  // window.innerWidth to detect mobile. Instead the parent SDK sends
+  // a 'quackback:mobile' postMessage when the viewport crosses 640px.
+  // Native SDK context always shows the close button.
+  const [parentIsMobile, setParentIsMobile] = useState(false)
   useEffect(() => {
-    // Use screen.width for a stable device-size check that isn't affected by
-    // the iframe being 400px wide inside a desktop popover.
-    const checkMobile = () => setIsMobileScreen(window.screen.width < 640)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    function handleMobileMsg(event: MessageEvent) {
+      if (event.data?.type === 'quackback:mobile') {
+        setParentIsMobile(!!event.data.data)
+      }
+    }
+    window.addEventListener('message', handleMobileMsg)
+    return () => window.removeEventListener('message', handleMobileMsg)
   }, [])
-  const showCloseButton = showCloseExplicit || isNative || isMobileScreen
+  const showCloseButton = showCloseExplicit || isNative || parentIsMobile
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
