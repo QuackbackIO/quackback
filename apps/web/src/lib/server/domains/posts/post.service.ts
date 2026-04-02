@@ -21,9 +21,11 @@ import {
   posts,
   postTags,
   tags,
+  votes,
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
+import { createId } from '@quackback/ids'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import {
   dispatchPostCreated,
@@ -112,27 +114,37 @@ export async function createPost(
     }
   }
 
-  // Create the post with member-scoped identity
-  const [post] = await db
-    .insert(posts)
-    .values({
-      boardId: input.boardId,
-      title,
-      content,
-      contentJson: input.contentJson ?? markdownToTiptapJson(content),
-      statusId,
-      principalId: author.principalId,
-      widgetMetadata: input.widgetMetadata ?? null,
-      ...(input.createdAt && { createdAt: input.createdAt }),
-    })
-    .returning()
+  // Create post, add tags, and auto-upvote in a single transaction
+  const post = await db.transaction(async (tx) => {
+    const [newPost] = await tx
+      .insert(posts)
+      .values({
+        boardId: input.boardId,
+        title,
+        content,
+        contentJson: input.contentJson ?? markdownToTiptapJson(content),
+        statusId,
+        principalId: author.principalId,
+        widgetMetadata: input.widgetMetadata ?? null,
+        voteCount: 1,
+        ...(input.createdAt && { createdAt: input.createdAt }),
+      })
+      .returning()
 
-  // Add tags if provided
-  if (input.tagIds && input.tagIds.length > 0) {
-    // Remove all existing tags then add new ones
-    await db.delete(postTags).where(eq(postTags.postId, post.id))
-    await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: post.id, tagId })))
-  }
+    // Add tags if provided
+    if (input.tagIds && input.tagIds.length > 0) {
+      await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
+    }
+
+    // Auto-upvote by the author
+    await tx.insert(votes).values({
+      id: createId('vote'),
+      postId: newPost.id,
+      principalId: author.principalId,
+    })
+
+    return newPost
+  })
 
   if (!options?.skipDispatch) {
     // Auto-subscribe the author to their own post

@@ -245,6 +245,13 @@ export function useCreatePublicPost() {
         }
       )
 
+      // Register the author's auto-vote in the votedPosts cache
+      queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
+        const next = new Set(old || [])
+        next.add(newPost.id)
+        return next
+      })
+
       // Invalidate to get fresh data with all fields populated
       queryClient.invalidateQueries({ queryKey: publicPostsKeys.lists() })
     },
