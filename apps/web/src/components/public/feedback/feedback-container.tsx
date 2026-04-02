@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
@@ -54,6 +55,7 @@ export function FeedbackContainer({
   user,
   anonymousVotingEnabled = false,
 }: FeedbackContainerProps): React.ReactElement {
+  const intl = useIntl()
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
   const { filters, setFilters, activeFilterCount } = usePublicFilters()
@@ -238,8 +240,14 @@ export function FeedbackContainer({
             {posts.length === 0 && !isLoading ? (
               <p className="text-muted-foreground text-center py-8">
                 {activeSearch || activeFilterCount > 0
-                  ? 'No posts match your filters.'
-                  : 'No posts yet.'}
+                  ? intl.formatMessage({
+                      id: 'portal.feedback.list.noPostsFiltered',
+                      defaultMessage: 'No posts match your filters.',
+                    })
+                  : intl.formatMessage({
+                      id: 'portal.feedback.list.noPostsYet',
+                      defaultMessage: 'No posts yet.',
+                    })}
               </p>
             ) : (
               <>

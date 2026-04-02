@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useIntl, FormattedMessage } from 'react-intl'
 import {
   Select,
   SelectContent,
@@ -204,6 +205,7 @@ export function WidgetHome({
   anonymousPostingEnabled = false,
   imageUploadsInWidget = true,
 }: WidgetHomeProps) {
+  const intl = useIntl()
   const {
     ensureSession,
     ensureSessionThen,
@@ -403,7 +405,12 @@ export function WidgetHome({
       if (needsEmail) {
         const identified = await identifyWithEmail(email.trim(), name.trim() || undefined)
         if (!identified) {
-          setError('Could not verify your email. Please try again.')
+          setError(
+            intl.formatMessage({
+              id: 'widget.home.form.errorEmail',
+              defaultMessage: 'Could not verify your email. Please try again.',
+            })
+          )
           setIsSubmitting(false)
           return
         }
@@ -416,7 +423,12 @@ export function WidgetHome({
       } else if (!isIdentified) {
         const ok = await ensureSession()
         if (!ok) {
-          setError('Could not create session. Please try again.')
+          setError(
+            intl.formatMessage({
+              id: 'widget.home.form.errorSession',
+              defaultMessage: 'Could not create session. Please try again.',
+            })
+          )
           setIsSubmitting(false)
           return
         }
@@ -454,7 +466,12 @@ export function WidgetHome({
 
       collapseForm()
     } catch {
-      setError('Network error. Please try again.')
+      setError(
+        intl.formatMessage({
+          id: 'widget.home.form.errorNetwork',
+          defaultMessage: 'Network error. Please try again.',
+        })
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -486,7 +503,12 @@ export function WidgetHome({
                   className="overflow-hidden"
                 >
                   <div className="flex items-center px-3 pt-2.5 pb-0.5">
-                    <span className="text-[11px] text-muted-foreground mr-1">Posting to</span>
+                    <span className="text-[11px] text-muted-foreground me-1">
+                      <FormattedMessage
+                        id="widget.home.posting.postingTo"
+                        defaultMessage="Posting to"
+                      />
+                    </span>
                     <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
                       <SelectTrigger
                         size="xs"
@@ -525,7 +547,10 @@ export function WidgetHome({
               <motion.input
                 ref={inputRef}
                 type="text"
-                placeholder="What's your idea?"
+                placeholder={intl.formatMessage({
+                  id: 'widget.home.input.placeholder',
+                  defaultMessage: "What's your idea?",
+                })}
                 value={title}
                 onChange={(e) => {
                   const val = e.target.value
@@ -564,7 +589,10 @@ export function WidgetHome({
                     <RichTextEditor
                       value={contentJson || ''}
                       onChange={handleEditorChange}
-                      placeholder="Add more details..."
+                      placeholder={intl.formatMessage({
+                        id: 'widget.home.input.details',
+                        defaultMessage: 'Add more details...',
+                      })}
                       minHeight="80px"
                       borderless
                       features={{
@@ -598,7 +626,10 @@ export function WidgetHome({
                           <div className="px-3 pb-2">
                             <p className="text-[10px] font-medium text-muted-foreground/60 flex items-center gap-1 mb-1.5">
                               <LightBulbIcon className="w-3 h-3" />
-                              Similar ideas
+                              <FormattedMessage
+                                id="widget.home.similar.heading"
+                                defaultMessage="Similar ideas"
+                              />
                             </p>
                             <div className="space-y-0.5">
                               {similarPostResults.posts.slice(0, 3).map((post) => (
@@ -638,14 +669,20 @@ export function WidgetHome({
                         <input
                           type="email"
                           required
-                          placeholder="Your email"
+                          placeholder={intl.formatMessage({
+                            id: 'widget.home.form.emailPlaceholder',
+                            defaultMessage: 'Your email',
+                          })}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className={`flex-1 min-w-0 ${identityInputCls}`}
                         />
                         <input
                           type="text"
-                          placeholder="Name (optional)"
+                          placeholder={intl.formatMessage({
+                            id: 'widget.home.form.namePlaceholder',
+                            defaultMessage: 'Name (optional)',
+                          })}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           className={`w-28 shrink-0 ${identityInputCls}`}
@@ -653,25 +690,43 @@ export function WidgetHome({
                       </div>
                     )}
                     <div className="flex items-center justify-between px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground truncate mr-2">
+                      <p className="text-[11px] text-muted-foreground truncate me-2">
                         {user ? (
-                          <>
-                            Posting as{' '}
-                            <span className="font-medium text-foreground">
-                              {user.name || user.email}
-                            </span>
-                          </>
+                          <FormattedMessage
+                            id="widget.home.posting.postingAs"
+                            defaultMessage="Posting as {name}"
+                            values={{
+                              name: (
+                                <span className="font-medium text-foreground">
+                                  {user.name || user.email}
+                                </span>
+                              ),
+                            }}
+                          />
                         ) : needsEmail ? (
                           email.trim() ? (
-                            <>
-                              Posting as{' '}
-                              <span className="font-medium text-foreground">{email.trim()}</span>
-                            </>
+                            <FormattedMessage
+                              id="widget.home.posting.postingAs"
+                              defaultMessage="Posting as {name}"
+                              values={{
+                                name: (
+                                  <span className="font-medium text-foreground">
+                                    {email.trim()}
+                                  </span>
+                                ),
+                              }}
+                            />
                           ) : (
-                            'Your email is required'
+                            <FormattedMessage
+                              id="widget.home.posting.emailRequired"
+                              defaultMessage="Your email is required"
+                            />
                           )
                         ) : (
-                          'Posting anonymously'
+                          <FormattedMessage
+                            id="widget.home.posting.postingAnonymously"
+                            defaultMessage="Posting anonymously"
+                          />
                         )}
                       </p>
                       <div className="flex items-center gap-1.5">
@@ -680,14 +735,24 @@ export function WidgetHome({
                           onClick={collapseForm}
                           className="px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                         >
-                          Cancel
+                          <FormattedMessage id="widget.home.form.cancel" defaultMessage="Cancel" />
                         </button>
                         <button
                           type="submit"
                           disabled={!canSubmitForm || isSubmitting}
                           className="px-3 py-1 text-[11px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                         >
-                          {isSubmitting ? 'Submitting...' : 'Submit'}
+                          {isSubmitting ? (
+                            <FormattedMessage
+                              id="widget.home.form.submitting"
+                              defaultMessage="Submitting..."
+                            />
+                          ) : (
+                            <FormattedMessage
+                              id="widget.home.form.submit"
+                              defaultMessage="Submit"
+                            />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -711,7 +776,10 @@ export function WidgetHome({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') e.preventDefault()
                     }}
-                    placeholder="Search ideas..."
+                    placeholder={intl.formatMessage({
+                      id: 'widget.home.popular.search.placeholder',
+                      defaultMessage: 'Search ideas...',
+                    })}
                     className="flex-1 min-w-0 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none"
                   />
                   <button
@@ -725,13 +793,19 @@ export function WidgetHome({
               ) : (
                 <>
                   <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
-                    Popular ideas
+                    <FormattedMessage
+                      id="widget.home.popular.heading"
+                      defaultMessage="Popular ideas"
+                    />
                   </p>
                   <button
                     type="button"
                     onClick={() => setPopularSearchOpen(true)}
                     className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                    aria-label="Search ideas"
+                    aria-label={intl.formatMessage({
+                      id: 'widget.home.popular.search.aria',
+                      defaultMessage: 'Search ideas',
+                    })}
                   >
                     <MagnifyingGlassIcon className="w-3.5 h-3.5" />
                   </button>
@@ -766,8 +840,11 @@ export function WidgetHome({
                   <button
                     type="button"
                     onClick={() => pills.scrollBy(-120)}
-                    className="absolute left-0 top-0 bottom-0.5 flex items-center pl-0.5 pr-6 bg-gradient-to-r from-background via-background/80 to-transparent"
-                    aria-label="Scroll left"
+                    className="absolute start-0 top-0 bottom-0.5 flex items-center ps-0.5 pe-6 bg-gradient-to-r from-background via-background/80 to-transparent"
+                    aria-label={intl.formatMessage({
+                      id: 'widget.home.scroll.ariaLeft',
+                      defaultMessage: 'Scroll left',
+                    })}
                   >
                     <ChevronLeftIcon className="w-3 h-3 text-muted-foreground" />
                   </button>
@@ -776,8 +853,11 @@ export function WidgetHome({
                   <button
                     type="button"
                     onClick={() => pills.scrollBy(120)}
-                    className="absolute right-0 top-0 bottom-0.5 flex items-center pr-0.5 pl-6 bg-gradient-to-l from-background via-background/80 to-transparent"
-                    aria-label="Scroll right"
+                    className="absolute end-0 top-0 bottom-0.5 flex items-center pe-0.5 ps-6 bg-gradient-to-l from-background via-background/80 to-transparent"
+                    aria-label={intl.formatMessage({
+                      id: 'widget.home.scroll.ariaRight',
+                      defaultMessage: 'Scroll right',
+                    })}
                   >
                     <ChevronRightIcon className="w-3 h-3 text-muted-foreground" />
                   </button>
@@ -789,7 +869,12 @@ export function WidgetHome({
               <>
                 {(isPopularSearchFetching || popularSearch !== debouncedPopularSearch) && (
                   <div className="flex justify-center py-4">
-                    <span className="text-[10px] text-muted-foreground/50">Searching...</span>
+                    <span className="text-[10px] text-muted-foreground/50">
+                      <FormattedMessage
+                        id="widget.home.popular.search.searching"
+                        defaultMessage="Searching..."
+                      />
+                    </span>
                   </div>
                 )}
                 {!isPopularSearchFetching &&
@@ -797,9 +882,17 @@ export function WidgetHome({
                   (popularSearchData?.posts.length ?? 0) === 0 && (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                       <MagnifyingGlassIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm font-medium text-muted-foreground/70">No ideas found</p>
+                      <p className="text-sm font-medium text-muted-foreground/70">
+                        <FormattedMessage
+                          id="widget.home.popular.search.noResults"
+                          defaultMessage="No ideas found"
+                        />
+                      </p>
                       <p className="text-xs text-muted-foreground/50 mt-0.5">
-                        Try a different search term
+                        <FormattedMessage
+                          id="widget.home.popular.search.noResultsHint"
+                          defaultMessage="Try a different search term"
+                        />
                       </p>
                     </div>
                   )}
@@ -828,18 +921,36 @@ export function WidgetHome({
               <>
                 {isFetchingPosts && !isFetchingNextPage && allPopularPosts.length === 0 && (
                   <div className="flex justify-center py-4">
-                    <span className="text-[10px] text-muted-foreground/50">Loading...</span>
+                    <span className="text-[10px] text-muted-foreground/50">
+                      <FormattedMessage
+                        id="widget.home.popular.loading"
+                        defaultMessage="Loading..."
+                      />
+                    </span>
                   </div>
                 )}
                 {!isFetchingPosts && allPopularPosts.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <LightBulbIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
                     <p className="text-sm font-medium text-muted-foreground/70">
-                      {activeBoardSlug ? 'No ideas in this board yet' : 'No ideas yet'}
+                      {activeBoardSlug ? (
+                        <FormattedMessage
+                          id="widget.home.popular.emptyBoard"
+                          defaultMessage="No ideas in this board yet"
+                        />
+                      ) : (
+                        <FormattedMessage
+                          id="widget.home.popular.empty"
+                          defaultMessage="No ideas yet"
+                        />
+                      )}
                     </p>
                     {!activeBoardSlug && (
                       <p className="text-xs text-muted-foreground/50 mt-0.5">
-                        Be the first to share one!
+                        <FormattedMessage
+                          id="widget.home.popular.emptyHint"
+                          defaultMessage="Be the first to share one!"
+                        />
                       </p>
                     )}
                   </div>
@@ -861,7 +972,12 @@ export function WidgetHome({
                     {hasNextPage && (
                       <div ref={postsSentinelRef} className="flex justify-center py-2">
                         {isFetchingNextPage && (
-                          <span className="text-[10px] text-muted-foreground/50">Loading...</span>
+                          <span className="text-[10px] text-muted-foreground/50">
+                            <FormattedMessage
+                              id="widget.home.popular.loading"
+                              defaultMessage="Loading..."
+                            />
+                          </span>
                         )}
                       </div>
                     )}

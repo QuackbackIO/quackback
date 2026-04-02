@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState } from 'react'
+import { useIntl } from 'react-intl'
 import { createFileRoute, notFound, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BackLink } from '@/components/ui/back-link'
@@ -105,6 +106,7 @@ function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
   const { session, settings } = useRouteContext({ from: '__root__' })
 
+  const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
@@ -160,7 +162,11 @@ function PostDetailPage() {
   const board = post?.board
 
   if (!post || !board) {
-    return <div>Post not found</div>
+    return (
+      <div>
+        {intl.formatMessage({ id: 'portal.postDetail.notFound', defaultMessage: 'Post not found' })}
+      </div>
+    )
   }
 
   const currentStatus = statusesQuery.data.find((s) => s.id === post.statusId)
@@ -254,7 +260,14 @@ function PostDetailPage() {
             comments={post.comments}
             pinnedCommentId={post.pinnedCommentId}
             disableCommenting={!!post.mergeInfo || !!post.isCommentsLocked}
-            lockedMessage={post.isCommentsLocked ? 'Comments are locked on this post' : undefined}
+            lockedMessage={
+              post.isCommentsLocked
+                ? intl.formatMessage({
+                    id: 'portal.postDetail.commentsLocked',
+                    defaultMessage: 'Comments are locked on this post',
+                  })
+                : undefined
+            }
             statuses={statusesQuery.data}
             currentStatusId={post.statusId}
             onPinComment={(commentId: CommentId) => pinComment.mutate(commentId)}

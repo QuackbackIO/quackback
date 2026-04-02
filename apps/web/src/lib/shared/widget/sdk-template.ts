@@ -207,7 +207,8 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     var placement = (config && config.placement) || "right";
     var boardParam = config && config.defaultBoard ? "board=" + encodeURIComponent(config.defaultBoard) : "";
     var closeParam = config && config.trigger === false ? "showClose=1" : "";
-    var queryParts = [boardParam, closeParam].filter(Boolean);
+    var localeParam = config && config.locale ? "locale=" + encodeURIComponent(config.locale) : "";
+    var queryParts = [boardParam, closeParam, localeParam].filter(Boolean);
     var iframeUrl = WIDGET_URL + (queryParts.length ? "?" + queryParts.join("&") : "");
     var side = placement === "left" ? "left" : "right";
 
@@ -362,6 +363,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
           sendToWidget("quackback:identify", pendingIdentify);
           pendingIdentify = null;
         }
+        if (config && config.locale) sendToWidget("quackback:locale", config.locale);
         if (metadata) sendToWidget("quackback:metadata", metadata);
         if (pendingOpen) {
           sendToWidget("quackback:open", pendingOpen);

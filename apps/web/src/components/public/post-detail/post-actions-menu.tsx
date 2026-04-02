@@ -1,5 +1,6 @@
 'use client'
 
+import { useIntl, FormattedMessage } from 'react-intl'
 import { EllipsisVerticalIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +28,8 @@ export function PostActionsMenu({
   onEdit,
   onDelete,
 }: PostActionsMenuProps) {
+  const intl = useIntl()
+
   // Don't render the menu if user can't do anything
   if (!canEdit && !canDelete) {
     return null
@@ -41,7 +44,12 @@ export function PostActionsMenu({
           className="text-muted-foreground hover:text-foreground"
         >
           <EllipsisVerticalIcon className="size-5" />
-          <span className="sr-only">Post actions</span>
+          <span className="sr-only">
+            {intl.formatMessage({
+              id: 'portal.postDetail.postActions.ariaLabel',
+              defaultMessage: 'Post actions',
+            })}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -49,14 +57,14 @@ export function PostActionsMenu({
         {canEdit ? (
           <DropdownMenuItem onClick={onEdit}>
             <PencilIcon className="size-4" />
-            Edit
+            <FormattedMessage id="portal.postDetail.postActions.edit" defaultMessage="Edit" />
           </DropdownMenuItem>
         ) : editReason ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuItem disabled>
                 <PencilIcon className="size-4" />
-                Edit
+                <FormattedMessage id="portal.postDetail.postActions.edit" defaultMessage="Edit" />
               </DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent side="left">{editReason}</TooltipContent>
@@ -67,14 +75,17 @@ export function PostActionsMenu({
         {canDelete ? (
           <DropdownMenuItem variant="destructive" onClick={onDelete}>
             <TrashIcon className="size-4" />
-            Delete
+            <FormattedMessage id="portal.postDetail.postActions.delete" defaultMessage="Delete" />
           </DropdownMenuItem>
         ) : deleteReason ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuItem disabled>
                 <TrashIcon className="size-4" />
-                Delete
+                <FormattedMessage
+                  id="portal.postDetail.postActions.delete"
+                  defaultMessage="Delete"
+                />
               </DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent side="left">{deleteReason}</TooltipContent>

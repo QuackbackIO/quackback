@@ -73,9 +73,14 @@ export function HelpCenterList() {
   // Keyboard "/" to focus search
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable
+      ) {
         if (e.key === 'Escape') {
-          ;(e.target as HTMLElement).blur()
+          target.blur()
         }
         return
       }

@@ -49,7 +49,19 @@ const tiptapNodeSchema: z.ZodType<DbTiptapContent> = z.lazy(() =>
     text: z.string().optional(),
     marks: z.array(tiptapMarkSchema).optional(),
     attrs: z
-      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .preprocess(
+        (val) => {
+          // TipTap extensions (e.g. resizableImage) may include undefined attr values
+          // like caption: undefined. Strip them before validation.
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            return Object.fromEntries(
+              Object.entries(val as Record<string, unknown>).filter(([, v]) => v !== undefined)
+            )
+          }
+          return val
+        },
+        z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      )
       .optional(),
   })
 )

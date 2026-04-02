@@ -20,6 +20,7 @@ import {
 import { toggleVoteFn } from '@/lib/server/functions/public-posts'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
+import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult, Tag } from '@/lib/shared/db-types'
 import type { PrincipalId, PostId, StatusId, TagId, BoardId } from '@quackback/ids'
@@ -366,7 +367,13 @@ export function useCreatePost() {
           authorPrincipalId: input.authorPrincipalId,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Register the author's auto-vote in the votedPosts cache
+      queryClient.setQueryData<Set<string>>(votedPostsKeys.byWorkspace(), (old) => {
+        const next = new Set(old || [])
+        next.add(result.id)
+        return next
+      })
       queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },

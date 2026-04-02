@@ -1,9 +1,13 @@
 import { Suspense } from 'react'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
+import { IntlProvider } from 'react-intl'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { PostModal } from '@/components/admin/feedback/post-modal'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UpdateBanner } from '@/components/admin/update-banner'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -30,7 +34,7 @@ export const Route = createFileRoute('/admin')({
     // Skip for public admin routes (login, signup) - they have their own layouts
     const publicPaths = ['/admin/login', '/admin/signup']
     if (publicPaths.includes(location.pathname)) {
-      return { user: null, initialUserData: null, currentUser: null }
+      return { user: null, initialUserData: null, latestVersion: null, currentUser: null }
     }
 
     // Auth is already validated in beforeLoad - user and principal are guaranteed here
@@ -39,10 +43,15 @@ export const Route = createFileRoute('/admin')({
       principal: NonNullable<typeof context.principal>
     }
 
-    // Get avatar URL with base64 data for SSR (no flicker)
-    const avatarData = await fetchUserAvatar({
-      data: { userId: user.id, fallbackImageUrl: user.image },
-    })
+    const [avatarData, latestRelease] = await Promise.all([
+      fetchUserAvatar({
+        data: { userId: user.id, fallbackImageUrl: user.image },
+      }),
+      getLatestVersion(),
+    ])
+
+    const latestVersion =
+      latestRelease && isNewerVersion(__APP_VERSION__, latestRelease.version) ? latestRelease : null
 
     const initialUserData = {
       name: user.name,
@@ -53,6 +62,7 @@ export const Route = createFileRoute('/admin')({
     return {
       user,
       initialUserData,
+      latestVersion,
       currentUser: {
         name: user.name,
         email: user.email,
@@ -73,7 +83,7 @@ function usePostIdFromUrl(): string | undefined {
 }
 
 function AdminLayout() {
-  const { initialUserData, currentUser } = Route.useLoaderData()
+  const { initialUserData, latestVersion, currentUser } = Route.useLoaderData()
   const postId = usePostIdFromUrl()
 
   // For public routes (login, signup), render just the outlet without the admin layout
@@ -82,21 +92,26 @@ function AdminLayout() {
   }
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <div className="flex h-screen bg-background">
-        <AdminSidebar initialUserData={initialUserData} />
-        <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:p-2 p-0">
-          {/* Mobile: Add padding for fixed header */}
-          <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden">
-            <Outlet />
-          </div>
-        </main>
-        {currentUser && (
-          <Suspense>
-            <PostModal postId={postId} currentUser={currentUser} />
-          </Suspense>
-        )}
-      </div>
-    </TooltipProvider>
+    <IntlProvider locale={DEFAULT_LOCALE} defaultLocale={DEFAULT_LOCALE}>
+      <TooltipProvider delayDuration={0}>
+        <div className="flex h-screen bg-background">
+          <AdminSidebar initialUserData={initialUserData} latestVersion={latestVersion} />
+          <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0">
+            {/* Mobile: Add padding for fixed header */}
+            <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col">
+              <UpdateBanner latestVersion={latestVersion} />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <Outlet />
+              </div>
+            </div>
+          </main>
+          {currentUser && (
+            <Suspense>
+              <PostModal postId={postId} currentUser={currentUser} />
+            </Suspense>
+          )}
+        </div>
+      </TooltipProvider>
+    </IntlProvider>
   )
 }

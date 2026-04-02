@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { ChangelogEntryDetail } from '@/components/portal/changelog'
 import { BackLink } from '@/components/ui/back-link'
@@ -71,11 +72,21 @@ function ChangelogEntryPage() {
 function ChangelogNotFound() {
   return (
     <div className="py-16 text-center">
-      <h1 className="text-2xl font-bold mb-2">Changelog entry not found</h1>
+      <h1 className="text-2xl font-bold mb-2">
+        <FormattedMessage
+          id="portal.changelog.entryNotFound.title"
+          defaultMessage="Changelog entry not found"
+        />
+      </h1>
       <p className="text-muted-foreground mb-6">
-        This entry may have been removed or is not yet published.
+        <FormattedMessage
+          id="portal.changelog.entryNotFound.description"
+          defaultMessage="This entry may have been removed or is not yet published."
+        />
       </p>
-      <BackLink to="/changelog">Changelog</BackLink>
+      <BackLink to="/changelog">
+        <FormattedMessage id="portal.changelog.entryNotFound.backLink" defaultMessage="Changelog" />
+      </BackLink>
     </div>
   )
 }

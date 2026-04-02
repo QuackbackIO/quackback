@@ -40,6 +40,7 @@ export type WidgetEventName = keyof WidgetEventMap
 export interface WidgetInboundMessages {
   'quackback:identify': { anonymous: true } | Record<string, unknown> | null
   'quackback:metadata': WidgetMetadata
+  'quackback:locale': string
   'quackback:open':
     | {
         view?: 'home' | 'new-post'

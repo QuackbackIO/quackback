@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
@@ -33,7 +34,9 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">Loading...</div>
+        <div className="text-sm text-muted-foreground">
+          <FormattedMessage id="widget.changelogDetail.loading" defaultMessage="Loading..." />
+        </div>
       </div>
     )
   }
@@ -41,7 +44,9 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   if (!entry) {
     return (
       <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">Entry not found</div>
+        <div className="text-sm text-muted-foreground">
+          <FormattedMessage id="widget.changelogDetail.notFound" defaultMessage="Entry not found" />
+        </div>
       </div>
     )
   }

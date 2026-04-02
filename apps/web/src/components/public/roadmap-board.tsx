@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { useIntl } from 'react-intl'
 import { MapIcon } from '@heroicons/react/24/solid'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
@@ -26,6 +27,7 @@ export function RoadmapBoard({
   initialSelectedRoadmapId,
   isTeamMember,
 }: RoadmapBoardProps): React.ReactElement {
+  const intl = useIntl()
   const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
   const { data: roadmaps } = usePublicRoadmaps({ enabled: !initialRoadmaps })
 
@@ -55,9 +57,17 @@ export function RoadmapBoard({
       <div className="flex items-center justify-center py-16 animate-in fade-in duration-200 fill-mode-backwards">
         <div className="text-center">
           <MapIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-foreground">No roadmaps available</h3>
+          <h3 className="text-lg font-medium text-foreground">
+            {intl.formatMessage({
+              id: 'portal.roadmap.empty.title',
+              defaultMessage: 'No roadmaps available',
+            })}
+          </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Check back later to see what we're working on.
+            {intl.formatMessage({
+              id: 'portal.roadmap.empty.description',
+              defaultMessage: "Check back later to see what we're working on.",
+            })}
           </p>
         </div>
       </div>

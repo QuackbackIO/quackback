@@ -9,12 +9,15 @@ import {
   type ReactNode,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 import { setWidgetToken, clearWidgetToken, getWidgetToken } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/server/auth/client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
+import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
+import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
 
 interface WidgetUser {
   id: string
@@ -58,6 +61,8 @@ interface WidgetAuthProviderProps {
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled (identify endpoint requires HMAC hash) */
   hmacRequired?: boolean
+  /** Initial locale from URL param (?locale=fr). SDK postMessage overrides this. */
+  initialLocale?: string | null
   children: ReactNode
 }
 
@@ -65,6 +70,7 @@ export function WidgetAuthProvider({
   portalUser,
   portalSessionToken,
   hmacRequired,
+  initialLocale,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
@@ -73,6 +79,18 @@ export function WidgetAuthProvider({
   const isIdentified = user !== null
   const sessionReadyRef = useRef(false)
   const sessionSourceRef = useRef<SessionSource>(null)
+
+  // i18n locale state
+  const [locale, setLocale] = useState<SupportedLocale>(() => {
+    if (initialLocale) {
+      return normalizeLocale(initialLocale) ?? DEFAULT_LOCALE
+    }
+    if (typeof navigator !== 'undefined') {
+      return normalizeLocale(navigator.language) ?? DEFAULT_LOCALE
+    }
+    return DEFAULT_LOCALE
+  })
+  const messages = useIntlSetup(locale)
 
   const sessionVersionRef = useRef(0)
   const storeToken = useCallback((token: string) => {
@@ -263,6 +281,12 @@ export function WidgetAuthProvider({
         return
       }
 
+      if (msg.type === 'quackback:locale' && typeof msg.data === 'string') {
+        const normalized = normalizeLocale(msg.data)
+        if (normalized) setLocale(normalized)
+        return
+      }
+
       if (msg.type === 'quackback:identify') {
         const action = resolveIdentifyAction({
           identifyData: msg.data,
@@ -330,5 +354,9 @@ export function WidgetAuthProvider({
     ]
   )
 
-  return <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>
+  return (
+    <IntlProvider locale={locale} messages={messages} defaultLocale={DEFAULT_LOCALE}>
+      <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>
+    </IntlProvider>
+  )
 }

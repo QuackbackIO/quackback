@@ -114,10 +114,15 @@ export function FeedbackTableView({
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Ignore if in input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Ignore if in input/textarea/contenteditable
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable
+      ) {
         if (e.key === 'Escape') {
-          ;(e.target as HTMLElement).blur()
+          target.blur()
         }
         return
       }

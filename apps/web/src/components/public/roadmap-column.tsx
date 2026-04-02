@@ -1,4 +1,5 @@
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
+import { useIntl } from 'react-intl'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { RoadmapCard } from './roadmap-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -20,6 +21,7 @@ interface RoadmapColumnProps {
 }
 
 export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: RoadmapColumnProps) {
+  const intl = useIntl()
   const { data, isFetchingNextPage, hasNextPage, fetchNextPage, isLoading } = usePublicRoadmapPosts(
     {
       roadmapId,
@@ -58,7 +60,12 @@ export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: Ro
             </div>
           ) : posts.length === 0 ? (
             <div className="h-full flex items-center justify-center py-8 animate-in fade-in duration-200">
-              <p className="text-sm text-muted-foreground">No items yet</p>
+              <p className="text-sm text-muted-foreground">
+                {intl.formatMessage({
+                  id: 'portal.roadmap.column.empty',
+                  defaultMessage: 'No items yet',
+                })}
+              </p>
             </div>
           ) : (
             <div className="space-y-2">

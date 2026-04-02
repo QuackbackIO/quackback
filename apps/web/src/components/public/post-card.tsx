@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import {
   ChevronUpIcon,
@@ -114,7 +115,7 @@ export function PostCard({
   showAvatar = true,
 }: PostCardProps): React.ReactElement {
   // Safe hook - returns null in admin context where AuthPopoverProvider isn't available
-
+  const intl = useIntl()
   const authPopover = useAuthPopoverSafe()
   const isAdminMode = canChangeStatus || !!onClick
   const currentStatus = statuses.find((s) => s.id === statusId)
@@ -159,9 +160,19 @@ export function PostCard({
     try {
       const url = `${window.location.origin}/admin/feedback?post=${id}`
       await navigator.clipboard.writeText(url)
-      toast.success('Link copied to clipboard')
+      toast.success(
+        intl.formatMessage({
+          id: 'portal.postCard.toast.linkCopied',
+          defaultMessage: 'Link copied to clipboard',
+        })
+      )
     } catch {
-      toast.error('Failed to copy link')
+      toast.error(
+        intl.formatMessage({
+          id: 'portal.postCard.toast.linkCopyFailed',
+          defaultMessage: 'Failed to copy link',
+        })
+      )
     }
   }
 
@@ -172,8 +183,21 @@ export function PostCard({
       data-testid="vote-button"
       aria-label={
         currentHasVoted
-          ? `Remove vote (${currentVoteCount} votes)`
-          : `Vote for this post (${currentVoteCount} votes)`
+          ? intl.formatMessage(
+              {
+                id: 'portal.postCard.vote.ariaRemoveVote',
+                defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+              },
+              { count: currentVoteCount }
+            )
+          : intl.formatMessage(
+              {
+                id: 'portal.postCard.vote.ariaVote',
+                defaultMessage:
+                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+              },
+              { count: currentVoteCount }
+            )
       }
       aria-pressed={currentHasVoted}
       onClick={handleVoteClick}
@@ -221,7 +245,7 @@ export function PostCard({
   const adminQuickActions = isAdminMode && showQuickActions && (
     <div
       className={cn(
-        'absolute right-2 top-1/2 -translate-y-1/2',
+        'absolute end-2 top-1/2 -translate-y-1/2',
         'flex items-center gap-0.5',
         'transition-opacity duration-150'
       )}
@@ -248,11 +272,17 @@ export function PostCard({
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem onClick={() => window.open(`/b/${boardSlug}/posts/${id}`, '_blank')}>
             <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-            View in Portal
+            {intl.formatMessage({
+              id: 'portal.postCard.quickActions.viewInPortal',
+              defaultMessage: 'View in Portal',
+            })}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleCopyLink}>
             <LinkIcon className="h-4 w-4" />
-            Copy Link
+            {intl.formatMessage({
+              id: 'portal.postCard.quickActions.copyLink',
+              defaultMessage: 'Copy Link',
+            })}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -261,7 +291,7 @@ export function PostCard({
 
   // Portal author quick actions (edit/delete)
   const portalQuickActions = !isAdminMode && isCurrentUserAuthor && (
-    <div className="absolute right-2 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute end-2 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
       <TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -269,7 +299,10 @@ export function PostCard({
               type="button"
               onClick={(e) => e.preventDefault()}
               className="p-1 -m-1 rounded hover:bg-muted/50 transition-colors"
-              aria-label="Post options"
+              aria-label={intl.formatMessage({
+                id: 'portal.postCard.quickActions.options',
+                defaultMessage: 'Post options',
+              })}
             >
               <EllipsisHorizontalIcon className="h-4 w-4" />
             </button>
@@ -283,18 +316,30 @@ export function PostCard({
                 }}
               >
                 <PencilIcon className="h-4 w-4" />
-                Edit
+                {intl.formatMessage({
+                  id: 'portal.postCard.quickActions.edit',
+                  defaultMessage: 'Edit',
+                })}
               </DropdownMenuItem>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuItem disabled>
                     <PencilIcon className="h-4 w-4" />
-                    Edit
+                    {intl.formatMessage({
+                      id: 'portal.postCard.quickActions.edit',
+                      defaultMessage: 'Edit',
+                    })}
                   </DropdownMenuItem>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  <p>{editReason || 'Edit not allowed'}</p>
+                  <p>
+                    {editReason ||
+                      intl.formatMessage({
+                        id: 'portal.postCard.editNotAllowed',
+                        defaultMessage: 'Edit not allowed',
+                      })}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -307,18 +352,30 @@ export function PostCard({
                 }}
               >
                 <TrashIcon className="h-4 w-4" />
-                Delete
+                {intl.formatMessage({
+                  id: 'portal.postCard.quickActions.delete',
+                  defaultMessage: 'Delete',
+                })}
               </DropdownMenuItem>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuItem disabled>
                     <TrashIcon className="h-4 w-4" />
-                    Delete
+                    {intl.formatMessage({
+                      id: 'portal.postCard.quickActions.delete',
+                      defaultMessage: 'Delete',
+                    })}
                   </DropdownMenuItem>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  <p>{deleteReason || 'Delete not allowed'}</p>
+                  <p>
+                    {deleteReason ||
+                      intl.formatMessage({
+                        id: 'portal.postCard.deleteNotAllowed',
+                        defaultMessage: 'Delete not allowed',
+                      })}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -367,7 +424,16 @@ export function PostCard({
           {showAvatar && (
             <Avatar className="h-5 w-5">
               {authorAvatarUrl && (
-                <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />
+                <AvatarImage
+                  src={authorAvatarUrl}
+                  alt={
+                    authorName ||
+                    intl.formatMessage({
+                      id: 'portal.postCard.authorFallback',
+                      defaultMessage: 'Anonymous',
+                    })
+                  }
+                />
               )}
               <AvatarFallback className="bg-muted text-[10px]">
                 {getInitials(authorName)}
@@ -375,12 +441,16 @@ export function PostCard({
             </Avatar>
           )}
           <span className={showAvatar ? '' : 'text-foreground/80'}>
-            {authorName || 'Anonymous'}
+            {authorName ||
+              intl.formatMessage({
+                id: 'portal.postCard.authorFallback',
+                defaultMessage: 'Anonymous',
+              })}
           </span>
           <span className="text-muted-foreground/40">·</span>
           <TimeAgo date={createdAtDate} className="text-muted-foreground/70" />
           {commentCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground/50 ml-auto">
+            <span className="flex items-center gap-1 text-muted-foreground/50 ms-auto">
               <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
               {commentCount}
             </span>

@@ -13,6 +13,8 @@ import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { settingsQueries } from '@/lib/client/queries/settings'
+import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
@@ -97,6 +99,12 @@ function PostModalContent({
   const { data: feedbackSource } = useQuery(adminQueries.postFeedbackSource(postId))
 
   const post = postQuery.data as PostDetails
+
+  // Feature flags + image upload
+  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const richMediaEnabled = portalConfigQuery.data.features?.richMediaInPosts ?? true
+  const videoEmbedsEnabled = portalConfigQuery.data.features?.videoEmbedsInPosts ?? true
+  const { upload: uploadImage } = usePostImageUpload()
 
   // Form state - always in edit mode
   const [title, setTitle] = useState(post.title)
@@ -244,6 +252,7 @@ function PostModalContent({
         contentJson: contentJson ?? null,
       })
       toast.success('Post updated')
+      onClose()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update post')
     }
@@ -363,17 +372,18 @@ function PostModalContent({
                 disabled={updatePost.isPending}
                 borderless
                 features={{
-                  headings: false,
-                  images: false,
-                  codeBlocks: false,
-                  bubbleMenu: true,
-                  slashMenu: false,
-                  taskLists: false,
+                  headings: true,
+                  codeBlocks: true,
+                  taskLists: true,
                   blockquotes: true,
-                  tables: false,
-                  dividers: false,
-                  embeds: false,
+                  dividers: true,
+                  images: richMediaEnabled,
+                  tables: richMediaEnabled,
+                  embeds: richMediaEnabled && videoEmbedsEnabled,
+                  bubbleMenu: true,
+                  slashMenu: true,
                 }}
+                onImageUpload={richMediaEnabled ? uploadImage : undefined}
               />
 
               {/* AI section — summary + similar posts */}

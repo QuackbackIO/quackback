@@ -1,5 +1,6 @@
 import type { BoardId } from '@quackback/ids'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -44,6 +45,7 @@ export function FeedbackHeader({
   user,
   onPostCreated,
 }: FeedbackHeaderProps) {
+  const intl = useIntl()
   const router = useRouter()
   const { session, settings } = useRouteContext({ from: '__root__' })
   const [expanded, setExpanded] = useState(false)
@@ -119,17 +121,32 @@ export function FeedbackHeader({
     setError('')
 
     if (!selectedBoardId) {
-      setError('Please select a board')
+      setError(
+        intl.formatMessage({
+          id: 'portal.feedback.header.errorSelectBoard',
+          defaultMessage: 'Please select a board',
+        })
+      )
       return
     }
 
     if (!title.trim()) {
-      setError('Please add a title')
+      setError(
+        intl.formatMessage({
+          id: 'portal.feedback.header.errorAddTitle',
+          defaultMessage: 'Please add a title',
+        })
+      )
       return
     }
 
     if (!effectiveUser && !anonymousPostingEnabled) {
-      setError('Please sign in to submit feedback')
+      setError(
+        intl.formatMessage({
+          id: 'portal.feedback.header.errorSignIn',
+          defaultMessage: 'Please sign in to submit feedback',
+        })
+      )
       return
     }
 
@@ -137,7 +154,12 @@ export function FeedbackHeader({
       if (!effectiveUser && anonymousPostingEnabled) {
         const ok = await ensureAnonSession()
         if (!ok) {
-          setError('Failed to create session')
+          setError(
+            intl.formatMessage({
+              id: 'portal.feedback.header.errorSession',
+              defaultMessage: 'Failed to create session',
+            })
+          )
           return
         }
       }
@@ -153,14 +175,30 @@ export function FeedbackHeader({
       setExpanded(false)
       onPostCreated?.(result.id, result.board.slug)
 
-      toast.success('Feedback submitted', {
-        action: {
-          label: 'View',
-          onClick: () => router.navigate({ to: `/b/${result.board.slug}/posts/${result.id}` }),
-        },
-      })
+      toast.success(
+        intl.formatMessage({
+          id: 'portal.feedback.header.toastSubmitted',
+          defaultMessage: 'Feedback submitted',
+        }),
+        {
+          action: {
+            label: intl.formatMessage({
+              id: 'portal.feedback.header.toastView',
+              defaultMessage: 'View',
+            }),
+            onClick: () => router.navigate({ to: `/b/${result.board.slug}/posts/${result.id}` }),
+          },
+        }
+      )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit feedback')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.feedback.header.errorSubmit',
+              defaultMessage: 'Failed to submit feedback',
+            })
+      )
     }
   }
 
@@ -202,13 +240,23 @@ export function FeedbackHeader({
             className="overflow-hidden"
           >
             <div className="flex items-center px-4 sm:px-5 pt-3 pb-1">
-              <span className="text-xs text-muted-foreground mr-1">Posting to</span>
+              <span className="text-xs text-muted-foreground me-1">
+                <FormattedMessage
+                  id="portal.feedback.header.postingTo"
+                  defaultMessage="Posting to"
+                />
+              </span>
               <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
                 <SelectTrigger
                   size="xs"
                   className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                 >
-                  <SelectValue placeholder="Select a board" />
+                  <SelectValue
+                    placeholder={intl.formatMessage({
+                      id: 'portal.feedback.header.selectBoard',
+                      defaultMessage: 'Select a board',
+                    })}
+                  />
                 </SelectTrigger>
                 <SelectContent align="start">
                   {boards.map((board) => (
@@ -244,7 +292,10 @@ export function FeedbackHeader({
         <motion.input
           ref={titleInputRef}
           type="text"
-          placeholder="What's your idea?"
+          placeholder={intl.formatMessage({
+            id: 'portal.feedback.header.titlePlaceholder',
+            defaultMessage: "What's your idea?",
+          })}
           value={title}
           onChange={(e) => {
             setTitle(e.target.value)
@@ -297,7 +348,10 @@ export function FeedbackHeader({
               <RichTextEditor
                 value={contentJson || ''}
                 onChange={handleContentChange}
-                placeholder="Add more details..."
+                placeholder={intl.formatMessage({
+                  id: 'portal.feedback.header.detailsPlaceholder',
+                  defaultMessage: 'Add more details...',
+                })}
                 minHeight="150px"
                 borderless
                 features={{ images: canUploadImages }}
@@ -321,7 +375,10 @@ export function FeedbackHeader({
             >
               {effectiveUser ? (
                 <p className="text-xs text-muted-foreground">
-                  Posting as{' '}
+                  <FormattedMessage
+                    id="portal.feedback.header.postingAs"
+                    defaultMessage="Posting as"
+                  />{' '}
                   <span className="font-medium text-foreground">
                     {effectiveUser.name || effectiveUser.email}
                   </span>
@@ -334,19 +391,30 @@ export function FeedbackHeader({
                       router.invalidate()
                     }}
                   >
-                    sign out
+                    <FormattedMessage
+                      id="portal.feedback.header.signOut"
+                      defaultMessage="sign out"
+                    />
                   </button>
                   {')'}
                 </p>
               ) : canPostAnonymously ? (
-                <p className="text-xs text-muted-foreground">Posting anonymously</p>
+                <p className="text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="portal.feedback.header.postingAnonymously"
+                    defaultMessage="Posting anonymously"
+                  />
+                </p>
               ) : (
                 <button
                   type="button"
                   onClick={() => openAuthPopover({ mode: 'login' })}
                   className="text-xs text-primary hover:underline font-medium"
                 >
-                  Sign in to post
+                  <FormattedMessage
+                    id="portal.feedback.header.signInToPost"
+                    defaultMessage="Sign in to post"
+                  />
                 </button>
               )}
               <div className="flex items-center gap-2">
@@ -357,16 +425,30 @@ export function FeedbackHeader({
                   onClick={handleCancel}
                   disabled={createPost.isPending}
                 >
-                  Cancel
+                  <FormattedMessage id="portal.feedback.header.cancel" defaultMessage="Cancel" />
                 </Button>
                 <Button
                   size="sm"
                   onClick={handleSubmit}
                   disabled={createPost.isPending || !canSubmit}
-                  title={!canSubmit ? 'Please sign in to submit feedback' : undefined}
+                  title={
+                    !canSubmit
+                      ? intl.formatMessage({
+                          id: 'portal.feedback.header.submitTooltipSignIn',
+                          defaultMessage: 'Please sign in to submit feedback',
+                        })
+                      : undefined
+                  }
                   className="portal-submit-button bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"
                 >
-                  {createPost.isPending ? 'Submitting...' : 'Submit'}
+                  {createPost.isPending ? (
+                    <FormattedMessage
+                      id="portal.feedback.header.submitting"
+                      defaultMessage="Submitting..."
+                    />
+                  ) : (
+                    <FormattedMessage id="portal.feedback.header.submit" defaultMessage="Submit" />
+                  )}
                 </Button>
               </div>
             </motion.div>

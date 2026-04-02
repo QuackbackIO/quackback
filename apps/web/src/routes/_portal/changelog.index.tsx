@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useIntl } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/shared/page-header'
@@ -34,17 +35,24 @@ export const Route = createFileRoute('/_portal/changelog/')({
 })
 
 function ChangelogPage() {
+  const intl = useIntl()
+
   return (
     <div className="py-8">
       <PageHeader
         size="large"
-        title="Changelog"
-        description="Stay up to date with the latest product updates and shipped features."
+        title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}
+        description={intl.formatMessage({
+          id: 'portal.changelog.description',
+          defaultMessage: 'Stay up to date with the latest product updates and shipped features.',
+        })}
         action={
           <Button variant="outline" size="sm" asChild className="shrink-0 gap-1.5">
             <a href="/changelog/feed" target="_blank" rel="noopener noreferrer">
               <RssIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">RSS Feed</span>
+              <span className="hidden sm:inline">
+                {intl.formatMessage({ id: 'portal.changelog.rssFeed', defaultMessage: 'RSS Feed' })}
+              </span>
             </a>
           </Button>
         }

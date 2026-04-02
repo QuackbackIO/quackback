@@ -1,4 +1,5 @@
 import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
+import { FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import type { BoardWithStats } from '@/lib/server/domains/boards'
 
@@ -20,7 +21,7 @@ export function FeedbackSidebar({
       <div className="sticky top-24">
         <div className="bg-card border border-border/50 rounded-lg shadow-sm overflow-hidden">
           <h2 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground px-4 pt-4 pb-3">
-            Boards
+            <FormattedMessage id="portal.feedback.sidebar.boards" defaultMessage="Boards" />
           </h2>
           <nav className="space-y-1 px-4 pb-4 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
             {/* View all posts */}
@@ -35,7 +36,12 @@ export function FeedbackSidebar({
               )}
             >
               <ListBulletIcon className={cn('h-4 w-4 shrink-0', !currentBoard && 'text-primary')} />
-              <span className="truncate">View all posts</span>
+              <span className="truncate">
+                <FormattedMessage
+                  id="portal.feedback.sidebar.viewAllPosts"
+                  defaultMessage="View all posts"
+                />
+              </span>
             </button>
 
             {/* Board list */}
@@ -60,7 +66,7 @@ export function FeedbackSidebar({
                   {board.postCount > 0 && (
                     <span
                       className={cn(
-                        'text-[10px] font-semibold ml-auto pl-1 shrink-0 tabular-nums',
+                        'text-[10px] font-semibold ms-auto ps-1 shrink-0 tabular-nums',
                         isActive ? 'text-primary' : 'text-muted-foreground'
                       )}
                     >
@@ -88,7 +94,13 @@ export function FeedbackSidebar({
               className="opacity-60 group-hover:opacity-100 transition-opacity"
             />
             <span>
-              Powered by <span className="font-medium">Quackback</span>
+              <FormattedMessage
+                id="portal.feedback.sidebar.poweredBy"
+                defaultMessage="Powered by {brand}"
+                values={{
+                  brand: <span className="font-medium">Quackback</span>,
+                }}
+              />
             </span>
           </a>
         </div>

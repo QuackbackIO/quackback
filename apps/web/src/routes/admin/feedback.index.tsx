@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
@@ -129,7 +129,7 @@ function FeedbackIndexPage() {
   )
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
   const statusesQuery = useSuspenseQuery(adminQueries.statuses())
-  const membersQuery = useSuspenseQuery(adminQueries.teamMembers())
+  const membersQuery = useQuery(adminQueries.teamMembers())
 
   return (
     <InboxContainer
@@ -137,7 +137,7 @@ function FeedbackIndexPage() {
       boards={boardsQuery.data}
       tags={tagsQuery.data}
       statuses={statusesQuery.data}
-      members={membersQuery.data}
+      members={membersQuery.data ?? []}
       currentUser={currentUser}
     />
   )

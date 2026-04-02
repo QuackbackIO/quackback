@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChatBubbleLeftIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PostContent } from '@/components/public/post-content'
@@ -37,6 +38,7 @@ export function WidgetPostDetail({
   anonymousVotingEnabled = true,
   anonymousCommentingEnabled = false,
 }: WidgetPostDetailProps) {
+  const intl = useIntl()
   const {
     isIdentified,
     hmacRequired,
@@ -141,9 +143,19 @@ export function WidgetPostDetail({
   if (error || !post) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-        <p className="text-sm text-muted-foreground">Could not load post</p>
+        <p className="text-sm text-muted-foreground">
+          <FormattedMessage
+            id="widget.postDetail.error.couldNotLoad"
+            defaultMessage="Could not load post"
+          />
+        </p>
         <p className="text-xs text-muted-foreground/60 mt-1">
-          {error instanceof Error ? error.message : 'Something went wrong'}
+          {error instanceof Error
+            ? error.message
+            : intl.formatMessage({
+                id: 'widget.postDetail.error.somethingWrong',
+                defaultMessage: 'Something went wrong',
+              })}
         </p>
       </div>
     )
@@ -186,7 +198,13 @@ export function WidgetPostDetail({
             </div>
             <WidgetPortalTitle title={post.title} onClick={handleViewOnPortal} />
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 mt-1">
-              <span>{post.authorName || 'Anonymous'}</span>
+              <span>
+                {post.authorName ||
+                  intl.formatMessage({
+                    id: 'widget.postDetail.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
+              </span>
               <span className="text-muted-foreground/30">&middot;</span>
               <TimeAgo date={post.createdAt} />
               <span className="text-muted-foreground/30">&middot;</span>
@@ -210,12 +228,22 @@ export function WidgetPostDetail({
         {/* Pinned comment / official response */}
         {post.pinnedComment && (
           <div className="rounded-md border border-primary/20 bg-primary/[0.03] p-2.5">
-            <p className="text-[10px] font-medium text-primary mb-1">Official response</p>
+            <p className="text-[10px] font-medium text-primary mb-1">
+              <FormattedMessage
+                id="widget.postDetail.officialResponse"
+                defaultMessage="Official response"
+              />
+            </p>
             <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed">
               {post.pinnedComment.content}
             </p>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
-              — {post.pinnedComment.authorName || 'Team'}
+              &mdash;{' '}
+              {post.pinnedComment.authorName ||
+                intl.formatMessage({
+                  id: 'widget.postDetail.teamAuthorFallback',
+                  defaultMessage: 'Team',
+                })}
             </p>
           </div>
         )}
@@ -225,7 +253,11 @@ export function WidgetPostDetail({
           <div className="flex items-center gap-1.5 mb-3">
             <ChatBubbleLeftIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
             <span className="text-xs font-medium text-muted-foreground">
-              {liveCommentCount} {liveCommentCount === 1 ? 'comment' : 'comments'}
+              <FormattedMessage
+                id="widget.postDetail.comments"
+                defaultMessage="{count, plural, one {# comment} other {# comments}}"
+                values={{ count: liveCommentCount }}
+              />
             </span>
           </div>
 
@@ -245,13 +277,19 @@ export function WidgetPostDetail({
               onClick={handleViewOnPortal}
               className="text-[10px] text-primary hover:text-primary/80 transition-colors mb-3"
             >
-              Log in to join the conversation
+              <FormattedMessage
+                id="widget.postDetail.loginToComment"
+                defaultMessage="Log in to join the conversation"
+              />
             </button>
           )}
 
           {post.isCommentsLocked && (
             <p className="text-[10px] text-muted-foreground/50 mb-3">
-              Comments are locked on this post
+              <FormattedMessage
+                id="widget.postDetail.commentsLocked"
+                defaultMessage="Comments are locked on this post"
+              />
             </p>
           )}
 

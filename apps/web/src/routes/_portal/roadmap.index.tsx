@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { z } from 'zod'
 import { RoadmapBoard } from '@/components/public/roadmap-board'
 import { portalQueries } from '@/lib/client/queries/portal'
@@ -71,8 +72,15 @@ function RoadmapPage() {
   return (
     <div className="py-8">
       <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
-        <h1 className="text-3xl font-bold mb-2">Roadmap</h1>
-        <p className="text-muted-foreground">See what we're working on and what's coming next.</p>
+        <h1 className="text-3xl font-bold mb-2">
+          <FormattedMessage id="portal.roadmap.title" defaultMessage="Roadmap" />
+        </h1>
+        <p className="text-muted-foreground">
+          <FormattedMessage
+            id="portal.roadmap.description"
+            defaultMessage="See what we're working on and what's coming next."
+          />
+        </p>
       </div>
 
       <div
