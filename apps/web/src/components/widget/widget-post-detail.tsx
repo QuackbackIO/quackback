@@ -13,6 +13,7 @@ import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
 import { useWidgetAuth } from './widget-auth-provider'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetCommentForm } from './widget-comment-form'
 import { WidgetPortalTitle } from './widget-portal-title'
 import type { PostId } from '@quackback/ids'
@@ -79,7 +80,7 @@ export function WidgetPostDetail({
       isIdentified,
       ott,
     })
-    window.parent.postMessage({ type: 'quackback:navigate', url }, '*')
+    sendToHost({ type: 'quackback:navigate', url })
   }, [post, isIdentified])
 
   /** Submit a comment (root or reply). */

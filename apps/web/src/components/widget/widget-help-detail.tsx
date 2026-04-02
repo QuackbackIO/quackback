@@ -5,6 +5,7 @@ import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
+import { sendToHost } from '@/lib/client/widget-bridge'
 
 interface WidgetHelpDetailProps {
   articleSlug: string
@@ -16,7 +17,7 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
   const handleViewOnPortal = useCallback(() => {
     if (!article) return
     const url = `${window.location.origin}/help/${article.category.slug}/${article.slug}`
-    window.parent.postMessage({ type: 'quackback:navigate', url }, '*')
+    sendToHost({ type: 'quackback:navigate', url })
   }, [article])
 
   if (isLoading) {

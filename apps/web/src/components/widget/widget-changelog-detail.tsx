@@ -6,6 +6,7 @@ import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-ed
 import type { ChangelogId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
+import { sendToHost } from '@/lib/client/widget-bridge'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -26,7 +27,7 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   const handleViewOnPortal = useCallback(() => {
     if (!changelogEntryId) return
     const url = `${window.location.origin}/changelog/${changelogEntryId}`
-    window.parent.postMessage({ type: 'quackback:navigate', url }, '*')
+    sendToHost({ type: 'quackback:navigate', url })
   }, [changelogEntryId])
 
   if (isLoading) {

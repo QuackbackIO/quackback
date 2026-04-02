@@ -10,6 +10,7 @@ import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toggleVoteFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
 import { getWidgetAuthHeaders, hasWidgetToken } from '@/lib/client/widget-auth'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import { voteCountKeys } from './use-post-vote'
 import type { PostId } from '@quackback/ids'
 
@@ -108,14 +109,11 @@ export function useWidgetVote({
         else next.delete(id)
         return next
       })
-      window.parent.postMessage(
-        {
-          type: 'quackback:event',
-          name: 'vote',
-          payload: { postId: id, voted: data.voted, voteCount: data.voteCount },
-        },
-        '*'
-      )
+      sendToHost({
+        type: 'quackback:event',
+        name: 'vote',
+        payload: { postId: id, voted: data.voted, voteCount: data.voteCount },
+      })
     },
   })
 

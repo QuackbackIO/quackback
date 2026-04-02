@@ -20,6 +20,7 @@ import { listPublicPostsFn } from '@/lib/server/functions/public-posts'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { WidgetVoteButton } from './widget-vote-button'
 import { useWidgetAuth } from './widget-auth-provider'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import type { PostId } from '@quackback/ids'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -318,10 +319,7 @@ export function WidgetHome({
       if (!hmacRequired && onPostSelect) {
         onPostSelect(postId)
       } else {
-        window.parent.postMessage(
-          { type: 'quackback:navigate', url: `${window.location.origin}/auth/login` },
-          '*'
-        )
+        sendToHost({ type: 'quackback:navigate', url: `${window.location.origin}/auth/login` })
       }
     },
     [hmacRequired, onPostSelect]
@@ -411,10 +409,7 @@ export function WidgetHome({
         }
       } else if (!canPost) {
         if (hmacRequired) {
-          window.parent.postMessage(
-            { type: 'quackback:navigate', url: `${window.location.origin}/auth/login` },
-            '*'
-          )
+          sendToHost({ type: 'quackback:navigate', url: `${window.location.origin}/auth/login` })
           setIsSubmitting(false)
           return
         }

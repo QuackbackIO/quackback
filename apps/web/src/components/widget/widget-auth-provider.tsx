@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setWidgetToken, clearWidgetToken, getWidgetToken } from '@/lib/client/widget-auth'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/server/auth/client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
@@ -142,11 +143,8 @@ export function WidgetAuthProvider({
           new Set<string>(result.votedPostIds)
         )
       }
-      window.parent.postMessage(
-        { type: 'quackback:identify-result', success: true, user: result.user },
-        '*'
-      )
-      window.parent.postMessage({ type: 'quackback:auth-change', user: result.user }, '*')
+      sendToHost({ type: 'quackback:identify-result', success: true, user: result.user })
+      sendToHost({ type: 'quackback:auth-change', user: result.user })
     },
     [storeToken, queryClient]
   )
@@ -191,21 +189,18 @@ export function WidgetAuthProvider({
     storeToken(portalSessionToken)
     if (portalUser) {
       setUser(portalUser)
-      window.parent.postMessage(
-        { type: 'quackback:identify-result', success: true, user: portalUser },
-        '*'
-      )
-      window.parent.postMessage({ type: 'quackback:auth-change', user: portalUser }, '*')
+      sendToHost({ type: 'quackback:identify-result', success: true, user: portalUser })
+      sendToHost({ type: 'quackback:auth-change', user: portalUser })
     }
   }, [portalSessionToken, portalUser, storeToken])
 
   const closeWidget = useCallback(() => {
-    window.parent.postMessage({ type: 'quackback:close' }, '*')
+    sendToHost({ type: 'quackback:close' })
   }, [])
 
   const emitEvent = useCallback(
     <T extends WidgetEventName>(name: T, payload: WidgetEventMap[T]) => {
-      window.parent.postMessage({ type: 'quackback:event', name, payload }, '*')
+      sendToHost({ type: 'quackback:event', name, payload })
     },
     []
   )
@@ -235,23 +230,17 @@ export function WidgetAuthProvider({
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({ error: { code: 'NETWORK_ERROR' } }))
-          window.parent.postMessage(
-            {
-              type: 'quackback:identify-result',
-              success: false,
-              error: err.error?.code || 'SERVER_ERROR',
-            },
-            '*'
-          )
+          sendToHost({
+            type: 'quackback:identify-result',
+            success: false,
+            error: err.error?.code || 'SERVER_ERROR',
+          })
           return
         }
 
         applyIdentifyResult(await response.json())
       } catch {
-        window.parent.postMessage(
-          { type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' },
-          '*'
-        )
+        sendToHost({ type: 'quackback:identify-result', success: false, error: 'NETWORK_ERROR' })
       }
     }
 
@@ -259,11 +248,8 @@ export function WidgetAuthProvider({
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
       setUser(null)
-      window.parent.postMessage(
-        { type: 'quackback:identify-result', success: true, user: null },
-        '*'
-      )
-      window.parent.postMessage({ type: 'quackback:auth-change', user: null }, '*')
+      sendToHost({ type: 'quackback:identify-result', success: true, user: null })
+      sendToHost({ type: 'quackback:auth-change', user: null })
     }
 
     function handleMessage(event: MessageEvent) {
@@ -293,11 +279,8 @@ export function WidgetAuthProvider({
             sessionVersionRef.current += 1
             setSessionVersion(sessionVersionRef.current)
             setUser(null)
-            window.parent.postMessage(
-              { type: 'quackback:identify-result', success: true, user: null },
-              '*'
-            )
-            window.parent.postMessage({ type: 'quackback:auth-change', user: null }, '*')
+            sendToHost({ type: 'quackback:identify-result', success: true, user: null })
+            sendToHost({ type: 'quackback:auth-change', user: null })
             break
           case 'anonymous':
             handleAnonymousIdentify()
@@ -308,18 +291,15 @@ export function WidgetAuthProvider({
             break
           case 'skip':
             // Portal session takes precedence — ack without changing state
-            window.parent.postMessage(
-              { type: 'quackback:identify-result', success: true, user: user ?? null },
-              '*'
-            )
-            window.parent.postMessage({ type: 'quackback:auth-change', user: user ?? null }, '*')
+            sendToHost({ type: 'quackback:identify-result', success: true, user: user ?? null })
+            sendToHost({ type: 'quackback:auth-change', user: user ?? null })
             break
         }
       }
     }
 
     window.addEventListener('message', handleMessage)
-    window.parent.postMessage({ type: 'quackback:ready' }, '*')
+    sendToHost({ type: 'quackback:ready' })
 
     return () => window.removeEventListener('message', handleMessage)
   }, [storeToken, applyIdentifyResult])
