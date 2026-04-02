@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
@@ -34,14 +35,16 @@ function groupNotificationsByDate(notifications: SerializedNotification[]) {
     }
   }
 
-  if (today.length > 0) groups.push({ label: 'Today', notifications: today })
-  if (yesterday.length > 0) groups.push({ label: 'Yesterday', notifications: yesterday })
-  if (earlier.length > 0) groups.push({ label: 'Earlier', notifications: earlier })
+  // Note: group labels are resolved in the component with intl
+  if (today.length > 0) groups.push({ label: 'today', notifications: today })
+  if (yesterday.length > 0) groups.push({ label: 'yesterday', notifications: yesterday })
+  if (earlier.length > 0) groups.push({ label: 'earlier', notifications: earlier })
 
   return groups
 }
 
 function NotificationsPage() {
+  const intl = useIntl()
   const { data, isLoading } = useNotifications({ limit: 50 })
   const markAsRead = useMarkNotificationAsRead()
   const markAllAsRead = useMarkAllNotificationsAsRead()
@@ -49,6 +52,18 @@ function NotificationsPage() {
   const notifications = data?.notifications ?? []
   const unreadCount = data?.unreadCount ?? 0
   const groups = groupNotificationsByDate(notifications)
+
+  const groupLabels: Record<string, string> = {
+    today: intl.formatMessage({ id: 'portal.notifications.groupToday', defaultMessage: 'Today' }),
+    yesterday: intl.formatMessage({
+      id: 'portal.notifications.groupYesterday',
+      defaultMessage: 'Yesterday',
+    }),
+    earlier: intl.formatMessage({
+      id: 'portal.notifications.groupEarlier',
+      defaultMessage: 'Earlier',
+    }),
+  }
 
   return (
     <div className="py-8">
@@ -61,15 +76,18 @@ function NotificationsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-                Notifications
+                <FormattedMessage id="portal.notifications.title" defaultMessage="Notifications" />
                 {unreadCount > 0 && (
-                  <span className="ml-2.5 inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+                  <span className="ms-2.5 inline-flex items-center justify-center h-6 min-w-6 px-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
                     {unreadCount}
                   </span>
                 )}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Updates on posts you've subscribed to
+                <FormattedMessage
+                  id="portal.notifications.subtitle"
+                  defaultMessage="Updates on posts you've subscribed to"
+                />
               </p>
             </div>
           </div>
@@ -82,8 +100,15 @@ function NotificationsPage() {
               className="shrink-0 gap-1.5"
             >
               <CheckIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Mark all read</span>
-              <span className="sm:hidden">Read all</span>
+              <span className="hidden sm:inline">
+                <FormattedMessage
+                  id="portal.notifications.markAllRead"
+                  defaultMessage="Mark all read"
+                />
+              </span>
+              <span className="sm:hidden">
+                <FormattedMessage id="portal.notifications.readAll" defaultMessage="Read all" />
+              </span>
             </Button>
           )}
         </div>
@@ -103,7 +128,7 @@ function NotificationsPage() {
               style={{ animationDelay: `${groupIndex * 75}ms` }}
             >
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                {group.label}
+                {groupLabels[group.label] ?? group.label}
               </h2>
               <div className="rounded-xl border border-border/50 bg-card shadow-sm overflow-hidden">
                 <div className="divide-y divide-border/40">
@@ -129,8 +154,15 @@ function NotificationsPage() {
         >
           <EmptyState
             icon={InboxIcon}
-            title="All caught up!"
-            description="Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity."
+            title={intl.formatMessage({
+              id: 'portal.notifications.empty.title',
+              defaultMessage: 'All caught up!',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.notifications.empty.description',
+              defaultMessage:
+                "Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity.",
+            })}
             className="py-20 px-6"
           />
         </div>
@@ -168,7 +200,9 @@ function NotificationRow({ notification, onMarkAsRead, style }: NotificationRowP
       style={style}
     >
       {/* Unread accent bar */}
-      {isUnread && <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-primary" />}
+      {isUnread && (
+        <div className="absolute start-0 top-3 bottom-3 w-0.5 rounded-full bg-primary" />
+      )}
 
       {/* Icon */}
       <div

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useIntl } from 'react-intl'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { UserIcon } from '@heroicons/react/24/solid'
 import { PageHeader } from '@/components/shared/page-header'
@@ -24,14 +25,21 @@ export const Route = createFileRoute('/_portal/settings/profile')({
 })
 
 function ProfilePage() {
+  const intl = useIntl()
   const { user } = Route.useLoaderData()
 
   return (
     <div className="space-y-6">
       <PageHeader
         icon={UserIcon}
-        title="Profile"
-        description="Manage your personal information"
+        title={intl.formatMessage({
+          id: 'portal.settings.profile.title',
+          defaultMessage: 'Profile',
+        })}
+        description={intl.formatMessage({
+          id: 'portal.settings.profile.description',
+          defaultMessage: 'Manage your personal information',
+        })}
         animate
       />
 
