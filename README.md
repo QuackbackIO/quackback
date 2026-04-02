@@ -51,11 +51,12 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 
 - **Feedback boards.** Let users vote, comment, and track status on feature requests. Vote on behalf of customers and see a full activity timeline on every post.
 - **AI-powered.** Automatically detect duplicates, summarize key themes, and ingest feedback from Slack, email, and other sources so nothing slips through the cracks.
-- **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile.
+- **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile, with native SDKs for [iOS](https://github.com/QuackbackIO/quackback-ios) and [Android](https://github.com/QuackbackIO/quackback-android).
 - **Admin inbox.** Triage incoming feedback in one place. Filter, group, dismiss, and restore deleted posts.
 - **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
 - **Integrations.** [24 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
 - **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 23-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
+- **Internationalization.** Portal and widget available in English, French, German, Spanish, and Arabic with full RTL support. Auto-detects browser language.
 - **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
 - **SEO-ready.** Auto-generated sitemap and social sharing previews on every portal page.
 
