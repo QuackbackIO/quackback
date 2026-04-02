@@ -23,6 +23,11 @@ export function PortalIntlProvider({ locale, children }: PortalIntlProviderProps
   useEffect(() => {
     document.documentElement.lang = locale
     document.documentElement.dir = isRtlLocale(locale) ? 'rtl' : 'ltr'
+    try {
+      localStorage.setItem('quackback-locale', locale)
+    } catch {
+      /* storage unavailable */
+    }
   }, [locale])
 
   return (
