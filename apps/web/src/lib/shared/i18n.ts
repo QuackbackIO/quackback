@@ -78,18 +78,19 @@ export function isRtlLocale(locale: string): boolean {
 }
 
 /**
- * Dynamically imports compiled message catalog for the given locale.
- * Falls back to English on error.
+ * Dynamically imports the message catalog for the given locale.
+ * Falls back to English on error (e.g. locale file doesn't exist yet).
  */
 export async function loadMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  if (locale === DEFAULT_LOCALE) {
+    const messages = await import('../../locales/en.json')
+    return messages.default as Record<string, string>
+  }
   try {
-    const messages = await import(`../locales/compiled/${locale}.json`)
+    const messages = await import(`../../locales/${locale}.json`)
     return messages.default as Record<string, string>
   } catch {
-    if (locale !== DEFAULT_LOCALE) {
-      const fallback = await import('../locales/compiled/en.json')
-      return fallback.default as Record<string, string>
-    }
-    return {}
+    const fallback = await import('../../locales/en.json')
+    return fallback.default as Record<string, string>
   }
 }
