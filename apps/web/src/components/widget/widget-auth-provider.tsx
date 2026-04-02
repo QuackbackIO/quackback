@@ -15,13 +15,8 @@ import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import { authClient } from '@/lib/server/auth/client'
 import { resolveIdentifyAction, type SessionSource } from './identify-precedence'
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
-import {
-  normalizeLocale,
-  loadMessages,
-  isRtlLocale,
-  DEFAULT_LOCALE,
-  type SupportedLocale,
-} from '@/lib/shared/i18n'
+import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
+import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
 
 interface WidgetUser {
   id: string
@@ -84,9 +79,6 @@ export function WidgetAuthProvider({
   const sessionReadyRef = useRef(false)
   const sessionSourceRef = useRef<SessionSource>(null)
 
-  const forceRtl =
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rtl') === '1'
-
   // i18n locale state
   const [locale, setLocale] = useState<SupportedLocale>(() => {
     if (initialLocale) {
@@ -97,24 +89,7 @@ export function WidgetAuthProvider({
     }
     return DEFAULT_LOCALE
   })
-  const [messages, setMessages] = useState<Record<string, string>>({})
-
-  // Load locale messages when locale changes
-  useEffect(() => {
-    let cancelled = false
-    loadMessages(locale).then((msgs) => {
-      if (!cancelled) setMessages(msgs)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [locale])
-
-  // Set lang/dir on document root for RTL support
-  useEffect(() => {
-    document.documentElement.lang = locale
-    document.documentElement.dir = forceRtl || isRtlLocale(locale) ? 'rtl' : 'ltr'
-  }, [locale, forceRtl])
+  const messages = useIntlSetup(locale)
 
   const sessionVersionRef = useRef(0)
   const storeToken = useCallback((token: string) => {
@@ -400,7 +375,7 @@ export function WidgetAuthProvider({
   )
 
   return (
-    <IntlProvider locale={locale} messages={messages} defaultLocale="en">
+    <IntlProvider locale={locale} messages={messages} defaultLocale={DEFAULT_LOCALE}>
       <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>
     </IntlProvider>
   )

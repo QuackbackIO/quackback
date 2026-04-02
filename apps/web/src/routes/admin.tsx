@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router'
 import { IntlProvider } from 'react-intl'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { PostModal } from '@/components/admin/feedback/post-modal'
@@ -83,7 +84,7 @@ function AdminLayout() {
   }
 
   return (
-    <IntlProvider locale="en" defaultLocale="en">
+    <IntlProvider locale={DEFAULT_LOCALE} defaultLocale={DEFAULT_LOCALE}>
       <TooltipProvider delayDuration={0}>
         <div className="flex h-screen bg-background">
           <AdminSidebar initialUserData={initialUserData} />

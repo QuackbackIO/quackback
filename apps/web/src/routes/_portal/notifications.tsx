@@ -35,7 +35,6 @@ function groupNotificationsByDate(notifications: SerializedNotification[]) {
     }
   }
 
-  // Note: group labels are resolved in the component with intl
   if (today.length > 0) groups.push({ label: 'today', notifications: today })
   if (yesterday.length > 0) groups.push({ label: 'yesterday', notifications: yesterday })
   if (earlier.length > 0) groups.push({ label: 'earlier', notifications: earlier })

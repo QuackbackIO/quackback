@@ -66,8 +66,8 @@ export function WidgetCommentForm({
         err instanceof Error
           ? err.message
           : intl.formatMessage({
-              id: 'widget.commentForm.errorEmail',
-              defaultMessage: 'Could not verify email. Please try again.',
+              id: 'widget.commentForm.errorPost',
+              defaultMessage: 'Could not post comment. Please try again.',
             })
       )
     } finally {

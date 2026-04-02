@@ -78,19 +78,46 @@ export function isRtlLocale(locale: string): boolean {
 }
 
 /**
+ * Returns true if the `?rtl=1` debug query param is set.
+ * Safe to call during SSR (returns false when `window` is unavailable).
+ * Result is computed once and cached for the lifetime of the page.
+ */
+export const isRtlForced = (() => {
+  let cached: boolean | undefined
+  return (): boolean => {
+    if (cached !== undefined) return cached
+    cached =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('rtl') === '1'
+    return cached
+  }
+})()
+
+const messageCache = new Map<SupportedLocale, Promise<Record<string, string>>>()
+
+/**
  * Dynamically imports the message catalog for the given locale.
  * Falls back to English on error (e.g. locale file doesn't exist yet).
+ * Results are cached per locale for the lifetime of the page.
  */
-export async function loadMessages(locale: SupportedLocale): Promise<Record<string, string>> {
-  if (locale === DEFAULT_LOCALE) {
-    const messages = await import('../../locales/en.json')
-    return messages.default as Record<string, string>
-  }
-  try {
-    const messages = await import(`../../locales/${locale}.json`)
-    return messages.default as Record<string, string>
-  } catch {
-    const fallback = await import('../../locales/en.json')
-    return fallback.default as Record<string, string>
-  }
+export function loadMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const cached = messageCache.get(locale)
+  if (cached) return cached
+
+  const promise = (async () => {
+    if (locale === DEFAULT_LOCALE) {
+      const messages = await import('../../locales/en.json')
+      return messages.default as Record<string, string>
+    }
+    try {
+      const messages = await import(`../../locales/${locale}.json`)
+      return messages.default as Record<string, string>
+    } catch {
+      const fallback = await import('../../locales/en.json')
+      return fallback.default as Record<string, string>
+    }
+  })()
+
+  messageCache.set(locale, promise)
+  return promise
 }
