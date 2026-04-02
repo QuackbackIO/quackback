@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftIcon,
@@ -29,7 +29,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { NotificationBell } from '@/components/notifications'
 import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
+import type { LatestVersionResult } from '@/lib/server/functions/version'
 
 interface AdminSidebarProps {
   initialUserData?: {
@@ -37,6 +37,7 @@ interface AdminSidebarProps {
     email: string | null
     avatarUrl: string | null
   }
+  latestVersion?: LatestVersionResult | null
 }
 
 const navItems = [
@@ -88,7 +89,7 @@ function NavItem({
   )
 }
 
-export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
+export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
   const router = useRouter()
   const { session, settings } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -111,23 +112,6 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
     router.invalidate()
     window.location.href = '/'
   }
-
-  const [latestVersion, setLatestVersion] = useState<{
-    version: string
-    releaseUrl: string
-  } | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getLatestVersion().then((result) => {
-      if (!cancelled && result && isNewerVersion(__APP_VERSION__, result.version)) {
-        setLatestVersion(result)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   return (
     <>
@@ -193,8 +177,11 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
-                      <button className="flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <button className="relative flex items-center justify-center w-10 h-10 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                         <QuestionMarkCircleIcon className="h-5 w-5" />
+                        {latestVersion && (
+                          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+                        )}
                         <span className="sr-only">Help</span>
                       </button>
                     </DropdownMenuTrigger>
@@ -226,9 +213,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <div className="px-2 py-1.5 flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground/60">
-                      Quackback v{__APP_VERSION__}
-                    </span>
+                    <span className="text-xs text-muted-foreground/60">v{__APP_VERSION__}</span>
                     {latestVersion && (
                       <a
                         href={latestVersion.releaseUrl}
@@ -236,7 +221,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline"
                       >
-                        v{latestVersion.version} available
+                        Update available · v{latestVersion.version}
                       </a>
                     )}
                   </div>
@@ -370,7 +355,7 @@ export function AdminSidebar({ initialUserData }: AdminSidebarProps) {
                     rel="noopener noreferrer"
                     className="text-xs text-primary hover:underline"
                   >
-                    v{latestVersion.version} available
+                    Update available · v{latestVersion.version}
                   </a>
                 )}
               </div>

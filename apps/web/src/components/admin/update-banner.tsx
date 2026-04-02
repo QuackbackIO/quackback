@@ -1,14 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
-import { getLatestVersion, isNewerVersion } from '@/lib/server/functions/version'
+import type { LatestVersionResult } from '@/lib/server/functions/version'
 
 const DISMISSED_VERSION_KEY = 'quackback_dismissed_version'
 const CHANGELOG_URL = 'https://feedback.quackback.io/changelog'
-
-interface UpdateInfo {
-  version: string
-  releaseUrl: string
-}
 
 function getDismissedVersion(): string | null {
   if (typeof window === 'undefined') return null
@@ -28,37 +23,21 @@ function setDismissedVersion(version: string): void {
   }
 }
 
-export function UpdateBanner() {
-  const [update, setUpdate] = useState<UpdateInfo | null>(null)
-  const [dismissed, setDismissed] = useState(false)
+interface UpdateBannerProps {
+  latestVersion: LatestVersionResult | null
+}
 
-  useEffect(() => {
-    let cancelled = false
+export function UpdateBanner({ latestVersion }: UpdateBannerProps) {
+  const [dismissed, setDismissed] = useState(() => {
+    if (!latestVersion) return true
+    const dismissedVersion = getDismissedVersion()
+    return !!dismissedVersion && dismissedVersion === latestVersion.version
+  })
 
-    async function checkVersion() {
-      const latest = await getLatestVersion()
-      if (cancelled || !latest) return
-
-      if (isNewerVersion(__APP_VERSION__, latest.version)) {
-        const dismissedVersion = getDismissedVersion()
-        if (dismissedVersion && !isNewerVersion(dismissedVersion, latest.version)) {
-          // Already dismissed this version (or a newer one)
-          return
-        }
-        setUpdate(latest)
-      }
-    }
-
-    checkVersion()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (!update || dismissed) return null
+  if (!latestVersion || dismissed) return null
 
   const handleDismiss = () => {
-    setDismissedVersion(update.version)
+    setDismissedVersion(latestVersion.version)
     setDismissed(true)
   }
 
@@ -66,7 +45,7 @@ export function UpdateBanner() {
     <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm bg-primary/5 border-b border-primary/10">
       <div className="flex items-center gap-2 min-w-0">
         <span className="font-medium text-foreground shrink-0">
-          Quackback v{update.version} is available
+          Quackback v{latestVersion.version} is available
         </span>
         <span className="text-muted-foreground hidden sm:inline">—</span>
         <div className="hidden sm:flex items-center gap-2 text-muted-foreground">
@@ -81,7 +60,7 @@ export function UpdateBanner() {
           </a>
           <span>·</span>
           <a
-            href={update.releaseUrl}
+            href={latestVersion.releaseUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 hover:underline"

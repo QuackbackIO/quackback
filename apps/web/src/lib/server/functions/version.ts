@@ -22,7 +22,7 @@ let versionCache: VersionCache | null = null
 
 // --- Types ---
 
-interface LatestVersionResult {
+export interface LatestVersionResult {
   version: string
   releaseUrl: string
 }
