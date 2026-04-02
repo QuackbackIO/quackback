@@ -42,22 +42,25 @@ export function WidgetShell({
   ).length
   const showTabBar = enabledCount > 1
   const { user, closeWidget } = useWidgetAuth()
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)')
-    setIsMobile(mq.matches)
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
   const isNative =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('source') === 'native'
   const showCloseExplicit =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('showClose') === '1'
-  const showCloseButton = showCloseExplicit || isNative || isMobile
+  // On mobile the SDK opens the widget full-screen and hides its own trigger
+  // button, so we need the in-header X. Detect via screen width (not iframe
+  // width, which is always narrow) or the native SDK flag.
+  const [isMobileScreen, setIsMobileScreen] = useState(false)
+  useEffect(() => {
+    // Use screen.width for a stable device-size check that isn't affected by
+    // the iframe being 400px wide inside a desktop popover.
+    const checkMobile = () => setIsMobileScreen(window.screen.width < 640)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+  const showCloseButton = showCloseExplicit || isNative || isMobileScreen
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
