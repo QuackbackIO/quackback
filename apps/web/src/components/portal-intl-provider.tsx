@@ -10,6 +10,9 @@ interface PortalIntlProviderProps {
 export function PortalIntlProvider({ locale, children }: PortalIntlProviderProps) {
   const [messages, setMessages] = useState<Record<string, string>>({})
 
+  const forceRtl =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rtl') === '1'
+
   useEffect(() => {
     let cancelled = false
     loadMessages(locale).then((msgs) => {
@@ -22,13 +25,13 @@ export function PortalIntlProvider({ locale, children }: PortalIntlProviderProps
 
   useEffect(() => {
     document.documentElement.lang = locale
-    document.documentElement.dir = isRtlLocale(locale) ? 'rtl' : 'ltr'
+    document.documentElement.dir = forceRtl || isRtlLocale(locale) ? 'rtl' : 'ltr'
     try {
       localStorage.setItem('quackback-locale', locale)
     } catch {
       /* storage unavailable */
     }
-  }, [locale])
+  }, [locale, forceRtl])
 
   return (
     <IntlProvider locale={locale} messages={messages} defaultLocale={DEFAULT_LOCALE}>

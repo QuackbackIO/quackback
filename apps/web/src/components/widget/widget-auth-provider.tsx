@@ -84,6 +84,9 @@ export function WidgetAuthProvider({
   const sessionReadyRef = useRef(false)
   const sessionSourceRef = useRef<SessionSource>(null)
 
+  const forceRtl =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rtl') === '1'
+
   // i18n locale state
   const [locale, setLocale] = useState<SupportedLocale>(() => {
     if (initialLocale) {
@@ -110,8 +113,8 @@ export function WidgetAuthProvider({
   // Set lang/dir on document root for RTL support
   useEffect(() => {
     document.documentElement.lang = locale
-    document.documentElement.dir = isRtlLocale(locale) ? 'rtl' : 'ltr'
-  }, [locale])
+    document.documentElement.dir = forceRtl || isRtlLocale(locale) ? 'rtl' : 'ltr'
+  }, [locale, forceRtl])
 
   const sessionVersionRef = useRef(0)
   const storeToken = useCallback((token: string) => {
