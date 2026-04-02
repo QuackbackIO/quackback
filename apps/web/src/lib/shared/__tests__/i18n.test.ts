@@ -14,8 +14,11 @@ describe('normalizeLocale', () => {
   })
   it('strips region to find base locale', () => {
     expect(normalizeLocale('fr-FR')).toBe('fr')
-    expect(normalizeLocale('pt-BR')).toBe('pt')
     expect(normalizeLocale('de-AT')).toBe('de')
+  })
+  it('returns null for locales without message catalogs', () => {
+    expect(normalizeLocale('pt-BR')).toBeNull()
+    expect(normalizeLocale('it')).toBeNull()
   })
   it('returns null for unsupported locale', () => {
     expect(normalizeLocale('zz')).toBeNull()

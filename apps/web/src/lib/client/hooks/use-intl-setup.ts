@@ -19,8 +19,14 @@ export function useIntlSetup(locale: SupportedLocale): Record<string, string> {
   }, [locale])
 
   useEffect(() => {
+    const prevLang = document.documentElement.lang
+    const prevDir = document.documentElement.dir
     document.documentElement.lang = locale
     document.documentElement.dir = isRtlForced() || isRtlLocale(locale) ? 'rtl' : 'ltr'
+    return () => {
+      document.documentElement.lang = prevLang
+      document.documentElement.dir = prevDir || 'ltr'
+    }
   }, [locale])
 
   return messages
