@@ -48,7 +48,6 @@ const NAV_ITEMS = [
   { to: '/', messageId: 'portal.header.nav.feedback', defaultMessage: 'Feedback' },
   { to: '/roadmap', messageId: 'portal.header.nav.roadmap', defaultMessage: 'Roadmap' },
   { to: '/changelog', messageId: 'portal.header.nav.changelog', defaultMessage: 'Changelog' },
-  { to: '/help', messageId: 'portal.header.nav.helpCenter', defaultMessage: 'Help Center' },
 ] as const
 
 export function PortalHeader({
