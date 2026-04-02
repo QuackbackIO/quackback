@@ -107,7 +107,7 @@ describe('buildWidgetSDK', () => {
   it('positions desktop panel above the trigger button (bottom: 88px)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     // Panel must be offset above the trigger (24px margin + 56px trigger + 8px gap)
-    expect(result).toContain('bottom: "88px"')
+    expect(result).toContain('bottom:88px')
   })
 
   it('defines CHAT_ICON and CLOSE_ICON variables for icon swap', () => {
