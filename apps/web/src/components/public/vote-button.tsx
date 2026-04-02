@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useIntl } from 'react-intl'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn } from '@/lib/shared/utils'
@@ -31,6 +32,7 @@ export function VoteButton({
   pill = false,
   readonly = false,
 }: VoteButtonProps): React.ReactElement {
+  const intl = useIntl()
   const { voteCount, hasVoted, isPending, handleVote } = usePostVote({
     postId,
     voteCount: initialVoteCount,
@@ -122,7 +124,22 @@ export function VoteButton({
       type="button"
       data-testid="vote-button"
       aria-label={
-        hasVoted ? `Remove vote (${voteCount} votes)` : `Vote for this post (${voteCount} votes)`
+        hasVoted
+          ? intl.formatMessage(
+              {
+                id: 'portal.postCard.vote.ariaRemoveVote',
+                defaultMessage: 'Remove vote ({count, plural, one {# vote} other {# votes}})',
+              },
+              { count: voteCount }
+            )
+          : intl.formatMessage(
+              {
+                id: 'portal.postCard.vote.ariaVote',
+                defaultMessage:
+                  'Vote for this post ({count, plural, one {# vote} other {# votes}})',
+              },
+              { count: voteCount }
+            )
       }
       aria-pressed={hasVoted}
       className={sharedClassName}

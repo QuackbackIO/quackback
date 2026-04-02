@@ -1,4 +1,5 @@
 import { MapPinIcon } from '@heroicons/react/24/solid'
+import { FormattedMessage } from 'react-intl'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -28,8 +29,8 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
               {comment.authorName || workspaceName}
             </span>
             <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
-              <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
-              Pinned
+              <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
+              <FormattedMessage id="portal.pinnedComment.pinnedBadge" defaultMessage="Pinned" />
             </Badge>
             <span className="text-muted-foreground">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />

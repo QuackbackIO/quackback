@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
   ArrowUturnLeftIcon,
@@ -65,15 +66,23 @@ function renderGroupedComments(
 }
 
 function PrivateNoteCard({ children }: { children: React.ReactNode }) {
+  const intl = useIntl()
   return (
     <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.04] dark:bg-amber-950/30 overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-amber-500/20 bg-amber-500/[0.06] dark:bg-amber-500/[0.08]">
         <LockClosedIcon className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
         <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
-          Internal note
+          {intl.formatMessage({
+            id: 'portal.commentThread.internalNote',
+            defaultMessage: 'Internal note',
+          })}
         </span>
         <span className="text-xs text-amber-600/60 dark:text-amber-500/50">
-          &middot; only visible to your team
+          &middot;{' '}
+          {intl.formatMessage({
+            id: 'portal.commentThread.internalNoteHint',
+            defaultMessage: 'only visible to your team',
+          })}
         </span>
       </div>
       <div className="px-3 py-1 space-y-0">{children}</div>
@@ -147,6 +156,7 @@ export function CommentThread({
   onRestoreComment,
   restoringCommentId,
 }: CommentThreadProps) {
+  const intl = useIntl()
   const sortedComments = [...comments].sort((a, b) => {
     // Pinned comment always first
     if (pinnedCommentId) {
@@ -183,9 +193,14 @@ export function CommentThread({
 
     return (
       <div className="flex items-center justify-center gap-3 py-4 px-4 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
-        <p className="text-sm text-muted-foreground">Sign in to comment</p>
+        <p className="text-sm text-muted-foreground">
+          {intl.formatMessage({
+            id: 'portal.commentThread.signInToComment',
+            defaultMessage: 'Sign in to comment',
+          })}
+        </p>
         <Button variant="outline" size="sm" onClick={onAuthRequired}>
-          Sign in
+          {intl.formatMessage({ id: 'portal.commentThread.signIn', defaultMessage: 'Sign in' })}
         </Button>
       </div>
     )
@@ -197,7 +212,10 @@ export function CommentThread({
 
       {comments.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">
-          No comments yet. Be the first to share your thoughts!
+          {intl.formatMessage({
+            id: 'portal.commentThread.empty',
+            defaultMessage: 'No comments yet. Be the first to share your thoughts!',
+          })}
         </p>
       ) : (
         <div className="space-y-4">
@@ -274,6 +292,7 @@ function CommentItem({
   restoringCommentId,
   insidePrivateCard = false,
 }: CommentItemProps) {
+  const intl = useIntl()
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
@@ -334,7 +353,7 @@ function CommentItem({
           className={cn(
             'relative',
             depth > 0 &&
-              'ml-4 pl-4 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
+              'ms-4 ps-4 before:absolute before:start-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
           )}
         >
           <div className="py-2">
@@ -342,16 +361,29 @@ function CommentItem({
               <Avatar className="h-8 w-8 shrink-0 opacity-40">
                 <AvatarFallback className="text-xs">?</AvatarFallback>
               </Avatar>
-              <span className="text-sm text-muted-foreground italic">[deleted]</span>
+              <span className="text-sm text-muted-foreground italic">
+                {intl.formatMessage({
+                  id: 'portal.commentThread.deleted',
+                  defaultMessage: '[deleted]',
+                })}
+              </span>
               <span className="text-muted-foreground text-xs">·</span>
               <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
             </div>
-            <p className="text-sm mt-1.5 ml-10 text-muted-foreground italic">
-              {comment.isRemovedByTeam ? '[removed]' : '[deleted]'}
+            <p className="text-sm mt-1.5 ms-10 text-muted-foreground italic">
+              {comment.isRemovedByTeam
+                ? intl.formatMessage({
+                    id: 'portal.commentThread.removed',
+                    defaultMessage: '[removed]',
+                  })
+                : intl.formatMessage({
+                    id: 'portal.commentThread.deleted',
+                    defaultMessage: '[deleted]',
+                  })}
             </p>
             {/* Collapse toggle for replies */}
             {hasReplies && (
-              <div className="flex items-center gap-1 mt-2 ml-10">
+              <div className="flex items-center gap-1 mt-2 ms-10">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -418,7 +450,7 @@ function CommentItem({
         className={cn(
           'relative',
           depth > 0 &&
-            'ml-4 pl-4 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
+            'ms-4 ps-4 before:absolute before:start-0 before:top-0 before:bottom-0 before:w-px before:bg-border/50'
         )}
       >
         {/* Comment content — pinned highlight wraps only the comment, not replies */}
@@ -432,33 +464,57 @@ function CommentItem({
           <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8 shrink-0">
               {comment.avatarUrl && (
-                <AvatarImage src={comment.avatarUrl} alt={comment.authorName || 'Comment author'} />
+                <AvatarImage
+                  src={comment.avatarUrl}
+                  alt={
+                    comment.authorName ||
+                    intl.formatMessage({
+                      id: 'portal.commentThread.authorAlt',
+                      defaultMessage: 'Comment author',
+                    })
+                  }
+                />
               )}
               <AvatarFallback className="text-xs">{getInitials(comment.authorName)}</AvatarFallback>
             </Avatar>
-            <span className="font-medium text-sm">{comment.authorName || 'Anonymous'}</span>
+            <span className="font-medium text-sm">
+              {comment.authorName ||
+                intl.formatMessage({
+                  id: 'portal.commentThread.authorFallback',
+                  defaultMessage: 'Anonymous',
+                })}
+            </span>
             {comment.isTeamMember && (
               <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
                 {teamBadgeLogoUrl ? (
                   <img
                     src={teamBadgeLogoUrl}
                     alt=""
-                    className="h-2.5 w-2.5 mr-0.5 rounded-sm object-contain"
+                    className="h-2.5 w-2.5 me-0.5 rounded-sm object-contain"
                   />
                 ) : null}
-                Team
+                {intl.formatMessage({
+                  id: 'portal.commentThread.teamBadge',
+                  defaultMessage: 'Team',
+                })}
               </Badge>
             )}
             {comment.isPrivate && !insidePrivateCard && (
               <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
-                <LockClosedIcon className="h-2.5 w-2.5 mr-0.5" />
-                Internal note
+                <LockClosedIcon className="h-2.5 w-2.5 me-0.5" />
+                {intl.formatMessage({
+                  id: 'portal.commentThread.internalNote',
+                  defaultMessage: 'Internal note',
+                })}
               </Badge>
             )}
             {isPinned && (
               <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
-                <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
-                Pinned
+                <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
+                {intl.formatMessage({
+                  id: 'portal.commentThread.pinnedBadge',
+                  defaultMessage: 'Pinned',
+                })}
               </Badge>
             )}
             <span className="text-muted-foreground text-xs">·</span>
@@ -466,15 +522,20 @@ function CommentItem({
           </div>
 
           {/* Comment content */}
-          <p className="text-sm whitespace-pre-wrap mt-1.5 ml-10 text-foreground/90 leading-relaxed">
+          <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
             {comment.content}
           </p>
 
           {/* Status change indicator */}
           {comment.statusChange && (
-            <div className="flex items-center gap-1.5 ml-10 mt-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 ms-10 mt-1.5 text-xs text-muted-foreground">
               <ArrowRightIcon className="h-3 w-3 shrink-0" />
-              <span>changed status to</span>
+              <span>
+                {intl.formatMessage({
+                  id: 'portal.commentThread.changedStatusTo',
+                  defaultMessage: 'changed status to',
+                })}
+              </span>
               <StatusBadge
                 name={comment.statusChange.toName}
                 color={comment.statusChange.toColor}
@@ -483,7 +544,7 @@ function CommentItem({
           )}
 
           {/* Actions row: expand/collapse, reactions, reply - always visible */}
-          <div className="flex items-center gap-1 mt-2 ml-10">
+          <div className="flex items-center gap-1 mt-2 ms-10">
             {/* Expand/Collapse button - first item, icon only */}
             {hasReplies && (
               <Button
@@ -562,8 +623,8 @@ function CommentItem({
                 onClick={() => setShowReplyForm(!showReplyForm)}
                 data-testid="reply-button"
               >
-                <ArrowUturnLeftIcon className="h-3 w-3 mr-1" />
-                Reply
+                <ArrowUturnLeftIcon className="h-3 w-3 me-1" />
+                {intl.formatMessage({ id: 'portal.commentThread.reply', defaultMessage: 'Reply' })}
               </Button>
             )}
 
@@ -576,8 +637,13 @@ function CommentItem({
                 onClick={isPinned ? onUnpinComment : () => onPinComment?.(comment.id as CommentId)}
                 disabled={isPinPending}
               >
-                <MapPinIcon className="h-3 w-3 mr-1" />
-                {isPinned ? 'Unpin' : 'Pin'}
+                <MapPinIcon className="h-3 w-3 me-1" />
+                {isPinned
+                  ? intl.formatMessage({
+                      id: 'portal.commentThread.unpin',
+                      defaultMessage: 'Unpin',
+                    })
+                  : intl.formatMessage({ id: 'portal.commentThread.pin', defaultMessage: 'Pin' })}
               </Button>
             )}
 
@@ -590,8 +656,16 @@ function CommentItem({
                 onClick={() => onRestoreComment!(comment.id as CommentId)}
                 disabled={isBeingRestored}
               >
-                <ArrowUturnLeftIcon className="h-3 w-3 mr-1" />
-                {isBeingRestored ? 'Restoring...' : 'Restore'}
+                <ArrowUturnLeftIcon className="h-3 w-3 me-1" />
+                {isBeingRestored
+                  ? intl.formatMessage({
+                      id: 'portal.commentThread.restoring',
+                      defaultMessage: 'Restoring...',
+                    })
+                  : intl.formatMessage({
+                      id: 'portal.commentThread.restore',
+                      defaultMessage: 'Restore',
+                    })}
               </Button>
             )}
 
@@ -604,8 +678,16 @@ function CommentItem({
                 onClick={() => onDeleteComment!(comment.id as CommentId)}
                 disabled={isBeingDeleted}
               >
-                <TrashIcon className="h-3 w-3 mr-1" />
-                {isBeingDeleted ? 'Deleting...' : 'Delete'}
+                <TrashIcon className="h-3 w-3 me-1" />
+                {isBeingDeleted
+                  ? intl.formatMessage({
+                      id: 'portal.commentThread.deleting',
+                      defaultMessage: 'Deleting...',
+                    })
+                  : intl.formatMessage({
+                      id: 'portal.commentThread.delete',
+                      defaultMessage: 'Delete',
+                    })}
               </Button>
             )}
           </div>
@@ -619,7 +701,7 @@ function CommentItem({
             }}
           >
             <div className="overflow-hidden">
-              <div className="mt-3 ml-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
+              <div className="mt-3 ms-10 max-w-lg p-3 bg-muted/30 [border-radius:var(--radius)] border border-border/30">
                 <CommentForm
                   postId={postId}
                   parentId={comment.id}
