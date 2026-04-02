@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -48,13 +49,13 @@ export function MetadataSidebarSkeleton({
     <div
       className={cn(
         'hidden lg:block w-72 shrink-0',
-        !isCard && 'border-l border-border/30 bg-muted/5 p-4 space-y-5'
+        !isCard && 'border-s border-border/30 bg-muted/5 p-4 space-y-5'
       )}
     >
       <div
         className={cn(
           isCard
-            ? 'mt-6 mr-4 ml-1 rounded-xl border border-border/20 bg-card shadow-sm p-4 space-y-5'
+            ? 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm p-4 space-y-5'
             : 'contents'
         )}
       >
@@ -106,12 +107,21 @@ export function ManagePostActions({
   showLabel = true,
   className,
 }: ManagePostActionsProps) {
+  const intl = useIntl()
+
   return (
     <div className={cn('flex items-center justify-between', className)}>
       {showLabel ? (
-        <span className="text-sm text-muted-foreground">Manage</span>
+        <span className="text-sm text-muted-foreground">
+          <FormattedMessage id="portal.postDetail.metadata.manage" defaultMessage="Manage" />
+        </span>
       ) : (
-        <span className="sr-only">Manage post</span>
+        <span className="sr-only">
+          {intl.formatMessage({
+            id: 'portal.postDetail.metadata.managePost',
+            defaultMessage: 'Manage post',
+          })}
+        </span>
       )}
       <TooltipProvider delayDuration={300}>
         <div className="flex items-center gap-0.5">
@@ -131,12 +141,25 @@ export function ManagePostActions({
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Merge</TooltipContent>
+                <TooltipContent side="bottom">
+                  {intl.formatMessage({
+                    id: 'portal.postDetail.metadata.merge',
+                    defaultMessage: 'Merge',
+                  })}
+                </TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={actions.onMergeOthers}>Merge into this</DropdownMenuItem>
+                <DropdownMenuItem onClick={actions.onMergeOthers}>
+                  <FormattedMessage
+                    id="portal.postDetail.metadata.mergeIntoThis"
+                    defaultMessage="Merge into this"
+                  />
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={actions.onMergeInto}>
-                  Merge into another...
+                  <FormattedMessage
+                    id="portal.postDetail.metadata.mergeIntoAnother"
+                    defaultMessage="Merge into another..."
+                  />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -158,7 +181,15 @@ export function ManagePostActions({
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {actions.isCommentsLocked ? 'Unlock comments' : 'Lock comments'}
+              {actions.isCommentsLocked
+                ? intl.formatMessage({
+                    id: 'portal.postDetail.metadata.unlockComments',
+                    defaultMessage: 'Unlock comments',
+                  })
+                : intl.formatMessage({
+                    id: 'portal.postDetail.metadata.lockComments',
+                    defaultMessage: 'Lock comments',
+                  })}
             </TooltipContent>
           </Tooltip>
 
@@ -174,7 +205,12 @@ export function ManagePostActions({
                   <IconRestore className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Restore post</TooltipContent>
+              <TooltipContent side="bottom">
+                {intl.formatMessage({
+                  id: 'portal.postDetail.metadata.restorePost',
+                  defaultMessage: 'Restore post',
+                })}
+              </TooltipContent>
             </Tooltip>
           ) : (
             <Tooltip>
@@ -187,7 +223,12 @@ export function ManagePostActions({
                   <IconTrash className="h-5 w-5" strokeWidth={1.5} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Delete post</TooltipContent>
+              <TooltipContent side="bottom">
+                {intl.formatMessage({
+                  id: 'portal.postDetail.metadata.deletePost',
+                  defaultMessage: 'Delete post',
+                })}
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -284,6 +325,7 @@ export function MetadataSidebar({
   manageActions,
   feedbackSource,
 }: MetadataSidebarProps) {
+  const intl = useIntl()
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
@@ -370,14 +412,14 @@ export function MetadataSidebar({
     <aside
       className={cn(
         'hidden lg:block w-72 shrink-0 animate-in fade-in duration-200 fill-mode-backwards',
-        !isCard && 'border-l border-border/30 bg-muted/5'
+        !isCard && 'border-s border-border/30 bg-muted/5'
       )}
       style={{ animationDelay: '100ms' }}
     >
       <div
         className={cn(
           'p-4 space-y-5',
-          isCard && 'mt-6 mr-4 ml-1 rounded-xl border border-border/20 bg-card shadow-sm'
+          isCard && 'mt-6 me-4 ms-1 rounded-xl border border-border/20 bg-card shadow-sm'
         )}
       >
         {/* Manage Post actions */}
@@ -392,7 +434,12 @@ export function MetadataSidebar({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <ChevronUpIcon className="h-4 w-4" />
-                  <span>Upvotes</span>
+                  <span>
+                    <FormattedMessage
+                      id="portal.postDetail.metadata.upvotes"
+                      defaultMessage="Upvotes"
+                    />
+                  </span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-foreground">
                   {voteCount}
@@ -424,7 +471,9 @@ export function MetadataSidebar({
 
         {/* Status */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Status</span>
+          <span className="text-sm text-muted-foreground">
+            <FormattedMessage id="portal.postDetail.metadata.status" defaultMessage="Status" />
+          </span>
           {canEdit && onStatusChange && allStatuses.length > 0 ? (
             <StatusDropdown
               currentStatus={currentStatus}
@@ -444,7 +493,9 @@ export function MetadataSidebar({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderIcon className="h-4 w-4" />
-            <span>Board</span>
+            <span>
+              <FormattedMessage id="portal.postDetail.metadata.board" defaultMessage="Board" />
+            </span>
           </div>
           {canEdit && onBoardChange && allBoards && allBoards.length > 0 ? (
             <Popover open={boardOpen} onOpenChange={setBoardOpen}>
@@ -471,7 +522,7 @@ export function MetadataSidebar({
                       className={cn(
                         'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                         'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                        'transition-all duration-100 text-left font-medium'
+                        'transition-all duration-100 text-start font-medium'
                       )}
                     >
                       <FolderIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -493,7 +544,9 @@ export function MetadataSidebar({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <TagIcon className="h-4 w-4" />
-            <span>Tags</span>
+            <span>
+              <FormattedMessage id="portal.postDetail.metadata.tags" defaultMessage="Tags" />
+            </span>
           </div>
           {canEdit && onTagsChange ? (
             <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
@@ -504,7 +557,7 @@ export function MetadataSidebar({
                   onClick={() => handleTagToggle(tag.id as TagId)}
                   disabled={isUpdating}
                   className={cn(
-                    'group inline-flex items-center gap-0.5 pl-1.5 pr-1 py-0.5',
+                    'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
                     'rounded-full text-[11px] font-medium',
                     'bg-primary/10 text-primary border border-primary/20',
                     'hover:bg-primary/15 hover:border-primary/30',
@@ -533,7 +586,10 @@ export function MetadataSidebar({
                       )}
                     >
                       <PlusIcon className="h-2.5 w-2.5" />
-                      Add
+                      <FormattedMessage
+                        id="portal.postDetail.metadata.tagAdd"
+                        defaultMessage="Add"
+                      />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-40 p-1" align="end" sideOffset={4}>
@@ -546,7 +602,7 @@ export function MetadataSidebar({
                           className={cn(
                             'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                             'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                            'transition-all duration-100 text-left font-medium'
+                            'transition-all duration-100 text-start font-medium'
                           )}
                         >
                           {tag.name}
@@ -577,7 +633,9 @@ export function MetadataSidebar({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <MapIcon className="h-4 w-4" />
-            <span>Roadmap</span>
+            <span>
+              <FormattedMessage id="portal.postDetail.metadata.roadmap" defaultMessage="Roadmap" />
+            </span>
           </div>
           {canEdit && onRoadmapAdd && onRoadmapRemove ? (
             <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
@@ -590,7 +648,7 @@ export function MetadataSidebar({
                     onClick={() => handleRemoveFromRoadmap(roadmap.id as RoadmapId)}
                     disabled={isPending}
                     className={cn(
-                      'group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5',
+                      'group inline-flex items-center gap-1 ps-1.5 pe-1 py-0.5',
                       'rounded-md text-[11px] font-medium',
                       'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20',
                       'hover:bg-blue-500/15 hover:border-blue-500/30',
@@ -625,7 +683,10 @@ export function MetadataSidebar({
                       )}
                     >
                       <PlusIcon className="h-2.5 w-2.5" />
-                      Add
+                      <FormattedMessage
+                        id="portal.postDetail.metadata.roadmapAdd"
+                        defaultMessage="Add"
+                      />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-48 p-1" align="end" sideOffset={4}>
@@ -641,14 +702,14 @@ export function MetadataSidebar({
                             className={cn(
                               'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                               'text-foreground/80 hover:text-foreground hover:bg-muted/60',
-                              'transition-all duration-100 text-left font-medium',
+                              'transition-all duration-100 text-start font-medium',
                               'disabled:opacity-50'
                             )}
                           >
                             <MapIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="truncate">{roadmap.name}</span>
                             {isPending && (
-                              <ArrowPathIcon className="h-3 w-3 animate-spin ml-auto" />
+                              <ArrowPathIcon className="h-3 w-3 animate-spin ms-auto" />
                             )}
                           </button>
                         )
@@ -682,7 +743,9 @@ export function MetadataSidebar({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <CalendarIcon className="h-4 w-4" />
-            <span>Date</span>
+            <span>
+              <FormattedMessage id="portal.postDetail.metadata.date" defaultMessage="Date" />
+            </span>
           </div>
           <TimeAgo date={createdAt} className="text-sm text-foreground" />
         </div>
@@ -693,7 +756,12 @@ export function MetadataSidebar({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <LinkIcon className="h-4 w-4" />
-                <span>Source</span>
+                <span>
+                  <FormattedMessage
+                    id="portal.postDetail.metadata.source"
+                    defaultMessage="Source"
+                  />
+                </span>
               </div>
               <button
                 type="button"
@@ -711,17 +779,26 @@ export function MetadataSidebar({
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <SourceTypeIcon sourceType={feedbackSource.sourceType} size="sm" />
-                    Original feedback
+                    <FormattedMessage
+                      id="portal.postDetail.metadata.sourceOriginalFeedback"
+                      defaultMessage="Original feedback"
+                    />
                   </DialogTitle>
                 </DialogHeader>
                 <ScrollArea className="max-h-[50vh] -mx-6 px-6">
-                  <blockquote className="border-l-2 border-muted-foreground/20 pl-3 text-sm text-muted-foreground/70 italic leading-relaxed whitespace-pre-wrap">
+                  <blockquote className="border-s-2 border-muted-foreground/20 ps-3 text-sm text-muted-foreground/70 italic leading-relaxed whitespace-pre-wrap">
                     {feedbackSource.quote}
                   </blockquote>
                 </ScrollArea>
                 <div className="space-y-2 pt-3 border-t border-border/30">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{feedbackSource.authorName ?? 'Unknown author'}</span>
+                    <span>
+                      {feedbackSource.authorName ??
+                        intl.formatMessage({
+                          id: 'portal.postDetail.metadata.sourceUnknownAuthor',
+                          defaultMessage: 'Unknown author',
+                        })}
+                    </span>
                     <TimeAgo date={feedbackSource.createdAt} />
                   </div>
                   {feedbackSource.externalUrl && (
@@ -732,8 +809,17 @@ export function MetadataSidebar({
                       className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
                       <SourceTypeIcon sourceType={feedbackSource.sourceType} size="xs" />
-                      Open in{' '}
-                      {SOURCE_TYPE_LABELS[feedbackSource.sourceType] ?? feedbackSource.sourceType}
+                      {intl.formatMessage(
+                        {
+                          id: 'portal.postDetail.metadata.sourceOpenIn',
+                          defaultMessage: 'Open in {name}',
+                        },
+                        {
+                          name:
+                            SOURCE_TYPE_LABELS[feedbackSource.sourceType] ??
+                            feedbackSource.sourceType,
+                        }
+                      )}
                       <span aria-hidden>&rarr;</span>
                     </a>
                   )}
@@ -747,7 +833,9 @@ export function MetadataSidebar({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <UserIcon className="h-4 w-4" />
-            <span>Author</span>
+            <span>
+              <FormattedMessage id="portal.postDetail.metadata.author" defaultMessage="Author" />
+            </span>
           </div>
           {canEdit && authorPrincipalId ? (
             <Link
@@ -757,24 +845,50 @@ export function MetadataSidebar({
             >
               <Avatar className="h-5 w-5">
                 {authorAvatarUrl && (
-                  <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />
+                  <AvatarImage
+                    src={authorAvatarUrl}
+                    alt={
+                      authorName ||
+                      intl.formatMessage({
+                        id: 'portal.postDetail.metadata.authorFallback',
+                        defaultMessage: 'Anonymous',
+                      })
+                    }
+                  />
                 )}
                 <AvatarFallback className="text-[9px]">{getInitials(authorName)}</AvatarFallback>
               </Avatar>
               <span className="text-sm font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2">
-                {authorName || 'Anonymous'}
+                {authorName ||
+                  intl.formatMessage({
+                    id: 'portal.postDetail.metadata.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
               </span>
             </Link>
           ) : (
             <div className="flex items-center gap-1.5">
               <Avatar className="h-5 w-5">
                 {authorAvatarUrl && (
-                  <AvatarImage src={authorAvatarUrl} alt={authorName || 'Author'} />
+                  <AvatarImage
+                    src={authorAvatarUrl}
+                    alt={
+                      authorName ||
+                      intl.formatMessage({
+                        id: 'portal.postDetail.metadata.authorFallback',
+                        defaultMessage: 'Anonymous',
+                      })
+                    }
+                  />
                 )}
                 <AvatarFallback className="text-[9px]">{getInitials(authorName)}</AvatarFallback>
               </Avatar>
               <span className="text-sm font-medium text-foreground">
-                {authorName || 'Anonymous'}
+                {authorName ||
+                  intl.formatMessage({
+                    id: 'portal.postDetail.metadata.authorFallback',
+                    defaultMessage: 'Anonymous',
+                  })}
               </span>
             </div>
           )}
@@ -784,7 +898,12 @@ export function MetadataSidebar({
         {!hideSubscribe && (
           <div className="border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Subscribe</span>
+              <span className="text-sm text-muted-foreground">
+                <FormattedMessage
+                  id="portal.postDetail.metadata.subscribe"
+                  defaultMessage="Subscribe"
+                />
+              </span>
               <AuthSubscriptionBell
                 postId={postId}
                 initialStatus={subscriptionStatus}
@@ -792,7 +911,10 @@ export function MetadataSidebar({
               />
             </div>
             <p className="text-xs text-muted-foreground/70 mt-2">
-              Get notified when there are updates to this post
+              <FormattedMessage
+                id="portal.postDetail.metadata.subscribeHint"
+                defaultMessage="Get notified when there are updates to this post"
+              />
             </p>
           </div>
         )}

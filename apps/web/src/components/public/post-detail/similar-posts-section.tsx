@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useIntl } from 'react-intl'
 import { Link } from '@tanstack/react-router'
 import { ChevronUpIcon } from '@heroicons/react/24/solid'
 import { LinkIcon } from '@heroicons/react/16/solid'
@@ -53,6 +54,7 @@ export function SimilarPostsSection({
   currentPostId,
   className,
 }: SimilarPostsSectionProps) {
+  const intl = useIntl()
   const { data: allPosts = [] } = useQuery(similarPostsQuery(postTitle))
   const posts = allPosts.filter((p) => p.id !== currentPostId)
 
@@ -69,7 +71,9 @@ export function SimilarPostsSection({
     >
       <div className="mb-1.5 flex items-center gap-1.5 px-1">
         <LinkIcon className="h-3 w-3 text-muted-foreground/70" />
-        <h3 className="text-xs font-medium text-muted-foreground">Related</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">
+          {intl.formatMessage({ id: 'portal.postDetail.related', defaultMessage: 'Related' })}
+        </h3>
       </div>
 
       <div className="space-y-0.5">

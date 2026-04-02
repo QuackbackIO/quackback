@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useIntl } from 'react-intl'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -77,6 +78,7 @@ export function DeletePostDialog({
   isLoadingLinks,
   isErrorLinks,
 }: DeletePostDialogProps) {
+  const intl = useIntl()
   const [choices, setChoices] = useState<Record<string, boolean>>({})
 
   // Reset choices when dialog opens with new links
@@ -104,22 +106,47 @@ export function DeletePostDialog({
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Delete Post"
+      title={intl.formatMessage({
+        id: 'portal.postDetail.deleteDialog.title',
+        defaultMessage: 'Delete Post',
+      })}
       description={
-        description ?? (
-          <>
-            Are you sure you want to delete &ldquo;{postTitle}&rdquo;? This action cannot be undone.
-          </>
+        description ??
+        intl.formatMessage(
+          {
+            id: 'portal.postDetail.deleteDialog.description',
+            defaultMessage:
+              'Are you sure you want to delete "{title}"? This action cannot be undone.',
+          },
+          { title: postTitle }
         )
       }
       variant="destructive"
-      confirmLabel={isPending ? 'Deleting...' : isLoadingLinks ? 'Loading...' : 'Delete Post'}
+      confirmLabel={
+        isPending
+          ? intl.formatMessage({
+              id: 'portal.postDetail.deleteDialog.deleting',
+              defaultMessage: 'Deleting...',
+            })
+          : isLoadingLinks
+            ? intl.formatMessage({
+                id: 'portal.postDetail.deleteDialog.loading',
+                defaultMessage: 'Loading...',
+              })
+            : intl.formatMessage({
+                id: 'portal.postDetail.deleteDialog.confirmLabel',
+                defaultMessage: 'Delete Post',
+              })
+      }
       isPending={isPending || isLoadingLinks || isErrorLinks}
       onConfirm={handleConfirm}
     >
       {isErrorLinks && (
         <p className="text-sm text-destructive">
-          Failed to load linked integrations. Please close and try again.
+          {intl.formatMessage({
+            id: 'portal.postDetail.deleteDialog.errorLinks',
+            defaultMessage: 'Failed to load linked integrations. Please close and try again.',
+          })}
         </p>
       )}
       {hasLinks && (
