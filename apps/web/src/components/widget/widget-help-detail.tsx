@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
@@ -22,7 +23,9 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">Loading...</div>
+        <div className="text-sm text-muted-foreground">
+          <FormattedMessage id="widget.helpDetail.loading" defaultMessage="Loading..." />
+        </div>
       </div>
     )
   }
@@ -30,7 +33,9 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
   if (!article) {
     return (
       <div className="flex items-center justify-center py-10">
-        <div className="text-sm text-muted-foreground">Article not found</div>
+        <div className="text-sm text-muted-foreground">
+          <FormattedMessage id="widget.helpDetail.notFound" defaultMessage="Article not found" />
+        </div>
       </div>
     )
   }
