@@ -11,10 +11,12 @@ describe('normalizeLocale', () => {
   it('returns exact match for supported locale', () => {
     expect(normalizeLocale('en')).toBe('en')
     expect(normalizeLocale('de')).toBe('de')
+    expect(normalizeLocale('ru')).toBe('ru')
   })
   it('strips region to find base locale', () => {
     expect(normalizeLocale('fr-FR')).toBe('fr')
     expect(normalizeLocale('de-AT')).toBe('de')
+    expect(normalizeLocale('ru-RU')).toBe('ru')
   })
   it('returns null for locales without message catalogs', () => {
     expect(normalizeLocale('pt-BR')).toBeNull()
@@ -38,6 +40,7 @@ describe('resolveLocale', () => {
   it('returns first supported locale from Accept-Language header', () => {
     expect(resolveLocale('fr-FR,fr;q=0.9,en;q=0.8')).toBe('fr')
     expect(resolveLocale('de,en;q=0.5')).toBe('de')
+    expect(resolveLocale('ru-RU,ru;q=0.9,en;q=0.8')).toBe('ru')
   })
   it('falls back to default when no supported locale found', () => {
     expect(resolveLocale('zz,xx;q=0.5')).toBe('en')
@@ -72,6 +75,9 @@ describe('isRtlLocale', () => {
 describe('SUPPORTED_LOCALES', () => {
   it('includes en as default', () => {
     expect(SUPPORTED_LOCALES).toContain('en')
+  })
+  it('includes ru', () => {
+    expect(SUPPORTED_LOCALES).toContain('ru')
   })
   it('DEFAULT_LOCALE is en', () => {
     expect(DEFAULT_LOCALE).toBe('en')
