@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { SitemapArticle } from '@/lib/shared/help-center-sitemap'
 
-export const Route = createFileRoute('/_helpcenter/sitemap.xml')({
+export const Route = createFileRoute('/hc/sitemap.xml')({
   server: {
     handlers: {
       GET: async ({ request }) => {

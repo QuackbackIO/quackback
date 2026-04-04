@@ -8,7 +8,7 @@ import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/j
 const helpCenterApi = getRouteApi('/_helpcenter')
 const categoryApi = getRouteApi('/_helpcenter/$categorySlug')
 
-export const Route = createFileRoute('/_helpcenter/$categorySlug/')({
+export const Route = createFileRoute('/hc/$categorySlug/')({
   component: CategoryIndexPage,
 })
 

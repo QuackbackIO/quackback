@@ -14,10 +14,9 @@ const getHelpCenterLocale = createServerFn({ method: 'GET' }).handler(async () =
   return resolveLocale(acceptLanguage)
 })
 
-export const Route = createFileRoute('/_helpcenter')({
+export const Route = createFileRoute('/hc')({
   beforeLoad: async ({ context }) => {
-    const { helpCenterHost, settings } = context
-    if (!helpCenterHost) throw notFound()
+    const { settings } = context
 
     const flags = settings?.featureFlags as FeatureFlags | undefined
     if (!flags?.helpCenter) throw notFound()
