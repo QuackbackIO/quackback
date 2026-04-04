@@ -73,6 +73,15 @@ export const Route = createFileRoute('/widget/')({
         help: (settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false,
       },
       imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
+      helpCenterSettings: {
+        helpCenterConfig: settings?.helpCenterConfig
+          ? {
+              customDomain: settings.helpCenterConfig.customDomain ?? null,
+              domainVerified: settings.helpCenterConfig.domainVerified ?? false,
+            }
+          : null,
+        slug: settings?.slug ?? null,
+      },
     }
   },
   component: WidgetPage,
@@ -96,8 +105,17 @@ interface SuccessPost {
 }
 
 function WidgetPage() {
-  const { posts, postsHasMore, statuses, boards, orgSlug, features, tabs, imageUploadsInWidget } =
-    Route.useLoaderData()
+  const {
+    posts,
+    postsHasMore,
+    statuses,
+    boards,
+    orgSlug,
+    features,
+    tabs,
+    imageUploadsInWidget,
+    helpCenterSettings,
+  } = Route.useLoaderData()
   const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
@@ -217,7 +235,7 @@ function WidgetPage() {
       {view === 'help' && <WidgetHelp onArticleSelect={handleHelpArticleSelect} />}
 
       {view === 'help-detail' && selectedHelpSlug && (
-        <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+        <WidgetHelpDetail articleSlug={selectedHelpSlug} helpCenterSettings={helpCenterSettings} />
       )}
 
       {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}
