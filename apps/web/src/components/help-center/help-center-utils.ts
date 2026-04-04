@@ -31,3 +31,34 @@ export function truncateContent(content: string, maxLength = 150): string {
   if (content.length <= maxLength) return content
   return content.slice(0, maxLength) + '...'
 }
+
+/**
+ * Filters categories to find direct children of a given parent category.
+ */
+export function getSubcategories<T extends CategoryLike>(categories: T[], parentId: string): T[] {
+  return categories.filter((c) => c.parentId === parentId)
+}
+
+/**
+ * Builds breadcrumb items for a category page or article page.
+ * The last item has no href (it's the current page).
+ */
+export function buildCategoryBreadcrumbs(params: {
+  categoryName: string
+  categorySlug: string
+  articleTitle?: string
+}): Array<{ label: string; href?: string }> {
+  const items: Array<{ label: string; href?: string }> = [{ label: 'Help Center', href: '/' }]
+
+  if (params.articleTitle) {
+    items.push({
+      label: params.categoryName,
+      href: `/${params.categorySlug}`,
+    })
+    items.push({ label: params.articleTitle })
+  } else {
+    items.push({ label: params.categoryName })
+  }
+
+  return items
+}

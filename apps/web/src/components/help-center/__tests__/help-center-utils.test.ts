@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { getTopLevelCategories, getActiveCategory, truncateContent } from '../help-center-utils'
+import {
+  getTopLevelCategories,
+  getActiveCategory,
+  truncateContent,
+  getSubcategories,
+  buildCategoryBreadcrumbs,
+} from '../help-center-utils'
 
 interface TestCategory {
   id: string
@@ -72,5 +78,61 @@ describe('truncateContent', () => {
     const long = 'a'.repeat(200)
     const result = truncateContent(long)
     expect(result).toBe('a'.repeat(150) + '...')
+  })
+})
+
+describe('getSubcategories', () => {
+  const categories: TestCategory[] = [
+    { id: '1', parentId: null, slug: 'getting-started', name: 'Getting Started' },
+    { id: '2', parentId: '1', slug: 'first-steps', name: 'First Steps' },
+    { id: '3', parentId: '1', slug: 'advanced', name: 'Advanced' },
+    { id: '4', parentId: null, slug: 'faq', name: 'FAQ' },
+    { id: '5', parentId: '4', slug: 'billing', name: 'Billing' },
+  ]
+
+  it('returns children of a given parent', () => {
+    const result = getSubcategories(categories, '1')
+    expect(result).toHaveLength(2)
+    expect(result.map((c) => c.slug)).toEqual(['first-steps', 'advanced'])
+  })
+
+  it('returns empty array when no children exist', () => {
+    const result = getSubcategories(categories, '2')
+    expect(result).toHaveLength(0)
+  })
+
+  it('returns empty array for empty categories list', () => {
+    expect(getSubcategories([], '1')).toEqual([])
+  })
+
+  it('returns children for a different parent', () => {
+    const result = getSubcategories(categories, '4')
+    expect(result).toHaveLength(1)
+    expect(result[0].slug).toBe('billing')
+  })
+})
+
+describe('buildCategoryBreadcrumbs', () => {
+  it('builds breadcrumbs with just category', () => {
+    const result = buildCategoryBreadcrumbs({
+      categoryName: 'Getting Started',
+      categorySlug: 'getting-started',
+    })
+
+    expect(result).toEqual([{ label: 'Help Center', href: '/' }, { label: 'Getting Started' }])
+  })
+
+  it('builds breadcrumbs with category and article', () => {
+    const result = buildCategoryBreadcrumbs({
+      categoryName: 'Getting Started',
+      categorySlug: 'getting-started',
+      articleTitle: 'Quick Start Guide',
+    })
+
+    expect(result).toEqual([
+      { label: 'Help Center', href: '/' },
+      { label: 'Getting Started', href: '/getting-started' },
+      { label: 'Quick Start Guide' },
+    ])
   })
 })
