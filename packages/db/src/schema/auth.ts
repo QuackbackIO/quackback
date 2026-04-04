@@ -202,6 +202,11 @@ export const settings = pgTable('settings', {
   widgetSecret: text('widget_secret'),
   /** Feature flags for experimental features (JSON) */
   featureFlags: text('feature_flags'),
+  /**
+   * Help center configuration (JSON)
+   * Structure: { enabled, customDomain?, subdomain?, logoKey?, faviconKey?, ... }
+   */
+  helpCenterConfig: text('help_center_config'),
 })
 
 /**
