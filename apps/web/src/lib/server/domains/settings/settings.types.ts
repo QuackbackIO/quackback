@@ -241,6 +241,7 @@ export interface WidgetConfig {
   tabs?: {
     feedback?: boolean
     changelog?: boolean
+    help?: boolean
   }
   /** Whether authenticated widget users can upload images in feedback submissions */
   imageUploadsInWidget?: boolean
@@ -278,6 +279,7 @@ export interface UpdateWidgetConfigInput {
   tabs?: {
     feedback?: boolean
     changelog?: boolean
+    help?: boolean
   }
   imageUploadsInWidget?: boolean
 }
