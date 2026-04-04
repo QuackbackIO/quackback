@@ -29,7 +29,7 @@ export const Route = createFileRoute('/api/widget/kb-search')({
             slug: a.slug,
             title: a.title,
             content: a.content?.slice(0, 200) ?? '',
-            category: { slug: a.categorySlug, name: a.categoryName },
+            category: { id: a.categoryId, slug: a.categorySlug, name: a.categoryName },
           }))
 
           return Response.json({ data: { articles } }, { headers: corsHeaders() })
