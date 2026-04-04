@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { listPublicArticles } from '@/lib/server/domains/help-center/help-center.service'
+import { hybridSearch } from '@/lib/server/domains/help-center/help-center-search.service'
 
 export const Route = createFileRoute('/api/widget/kb-search')({
   server: {
@@ -22,14 +22,14 @@ export const Route = createFileRoute('/api/widget/kb-search')({
         }
 
         try {
-          const result = await listPublicArticles({ search: q, limit })
+          const results = await hybridSearch(q, limit)
 
-          const articles = result.items.map((a) => ({
+          const articles = results.map((a) => ({
             id: a.id,
             slug: a.slug,
             title: a.title,
-            content: a.content.slice(0, 200),
-            category: a.category,
+            content: a.content?.slice(0, 200) ?? '',
+            category: { slug: a.categorySlug, name: a.categoryName },
           }))
 
           return Response.json({ data: { articles } }, { headers: corsHeaders() })

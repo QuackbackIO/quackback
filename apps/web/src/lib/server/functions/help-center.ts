@@ -237,3 +237,17 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
     )
     return { success: true }
   })
+
+// ============================================================================
+// Public Hybrid Search
+// ============================================================================
+
+export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
+  .inputValidator(
+    z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(20).optional() })
+  )
+  .handler(async ({ data }) => {
+    const { hybridSearch } =
+      await import('@/lib/server/domains/help-center/help-center-search.service')
+    return hybridSearch(data.query, data.limit ?? 10)
+  })
