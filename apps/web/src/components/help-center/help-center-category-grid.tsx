@@ -30,7 +30,7 @@ export function HelpCenterCategoryGrid({ categories }: HelpCenterCategoryGridPro
       {topLevel.map((cat, index) => (
         <a
           key={cat.id}
-          href={`/${cat.slug}`}
+          href={`/hc/${cat.slug}`}
           className="group rounded-xl border border-border/50 bg-card p-6 hover:border-border hover:shadow-sm transition-all animate-in fade-in duration-200 fill-mode-backwards"
           style={{ animationDelay: `${index * 50}ms` }}
         >

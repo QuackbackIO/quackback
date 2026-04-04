@@ -31,7 +31,7 @@ export function HelpCenterHeader({ orgName, orgLogo, categories }: HelpCenterHea
       <div>
         <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
           <div className="flex h-12 items-center justify-between">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/hc" className="flex items-center gap-2">
               {orgLogo ? (
                 <img
                   src={orgLogo}
@@ -57,7 +57,7 @@ export function HelpCenterHeader({ orgName, orgLogo, categories }: HelpCenterHea
         <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
           <nav className="flex items-center gap-1 overflow-x-auto">
             <Link
-              to="/"
+              to="/hc"
               className={cn(
                 'px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap [border-radius:calc(var(--radius)*0.8)]',
                 activeSlug === null
@@ -70,7 +70,7 @@ export function HelpCenterHeader({ orgName, orgLogo, categories }: HelpCenterHea
             {topLevelCategories.map((cat) => (
               <a
                 key={cat.id}
-                href={`/${cat.slug}`}
+                href={`/hc/${cat.slug}`}
                 className={cn(
                   'px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap [border-radius:calc(var(--radius)*0.8)]',
                   activeSlug === cat.slug

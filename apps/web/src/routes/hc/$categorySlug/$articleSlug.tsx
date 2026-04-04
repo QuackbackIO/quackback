@@ -14,8 +14,8 @@ import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import type { JSONContent } from '@tiptap/react'
 
-const helpCenterApi = getRouteApi('/_helpcenter')
-const categoryApi = getRouteApi('/_helpcenter/$categorySlug')
+const helpCenterApi = getRouteApi('/hc')
+const categoryApi = getRouteApi('/hc/$categorySlug')
 
 export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
   loader: async ({ params }) => {
@@ -32,7 +32,7 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
     const { article } = loaderData
 
     // Get workspace name from the root helpcenter layout
-    const helpCenterMatch = matches.find((m) => m.routeId === '/_helpcenter')
+    const helpCenterMatch = matches.find((m) => m.routeId === '/hc')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parentLoaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =

@@ -50,7 +50,7 @@ export function HelpCenterSidebar({
           <li key={article.id}>
             {/* TODO: Upgrade to <Link> when Task 6 creates the $articleSlug route */}
             <a
-              href={`/${categorySlug}/${article.slug}`}
+              href={`/hc/${categorySlug}/${article.slug}`}
               className={cn(
                 'block rounded-md px-2 py-1.5 text-sm transition-colors',
                 activeArticleSlug === article.slug
@@ -79,7 +79,7 @@ export function HelpCenterSidebar({
               <li key={article.id}>
                 {/* TODO: Upgrade to <Link> when Task 6 creates the $articleSlug route */}
                 <a
-                  href={`/${categorySlug}/${article.slug}`}
+                  href={`/hc/${categorySlug}/${article.slug}`}
                   className={cn(
                     'block rounded-md px-2 py-1.5 text-sm transition-colors',
                     activeArticleSlug === article.slug

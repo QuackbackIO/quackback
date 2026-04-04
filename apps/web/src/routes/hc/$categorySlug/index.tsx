@@ -5,8 +5,8 @@ import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-u
 import { JsonLd } from '@/components/json-ld'
 import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 
-const helpCenterApi = getRouteApi('/_helpcenter')
-const categoryApi = getRouteApi('/_helpcenter/$categorySlug')
+const helpCenterApi = getRouteApi('/hc')
+const categoryApi = getRouteApi('/hc/$categorySlug')
 
 export const Route = createFileRoute('/hc/$categorySlug/')({
   component: CategoryIndexPage,
@@ -66,7 +66,7 @@ function CategoryIndexPage() {
           {articles.map((article) => (
             <a
               key={article.id}
-              href={`/${categorySlug}/${article.slug}`}
+              href={`/hc/${categorySlug}/${article.slug}`}
               className="group flex items-center justify-between rounded-lg border border-border/50 bg-card p-4 hover:border-border hover:shadow-sm transition-all"
             >
               <div className="min-w-0 flex-1">

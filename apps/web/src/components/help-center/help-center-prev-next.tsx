@@ -15,7 +15,7 @@ export function HelpCenterPrevNext({ categorySlug, prev, next }: HelpCenterPrevN
   return (
     <div className="mt-10 pt-8 border-t border-border/40 flex items-start justify-between gap-4">
       {prev ? (
-        <a href={`/${categorySlug}/${prev.slug}`} className="group text-left">
+        <a href={`/hc/${categorySlug}/${prev.slug}`} className="group text-left">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             &larr; Previous
           </span>
@@ -27,7 +27,7 @@ export function HelpCenterPrevNext({ categorySlug, prev, next }: HelpCenterPrevN
         <div />
       )}
       {next ? (
-        <a href={`/${categorySlug}/${next.slug}`} className="group text-right">
+        <a href={`/hc/${categorySlug}/${next.slug}`} className="group text-right">
           <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
             Next &rarr;
           </span>

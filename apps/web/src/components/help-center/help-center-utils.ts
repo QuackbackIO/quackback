@@ -48,12 +48,12 @@ export function buildCategoryBreadcrumbs(params: {
   categorySlug: string
   articleTitle?: string
 }): Array<{ label: string; href?: string }> {
-  const items: Array<{ label: string; href?: string }> = [{ label: 'Help Center', href: '/' }]
+  const items: Array<{ label: string; href?: string }> = [{ label: 'Help Center', href: '/hc' }]
 
   if (params.articleTitle) {
     items.push({
       label: params.categoryName,
-      href: `/${params.categorySlug}`,
+      href: `/hc/${params.categorySlug}`,
     })
     items.push({ label: params.articleTitle })
   } else {

@@ -119,7 +119,7 @@ describe('buildCategoryBreadcrumbs', () => {
       categorySlug: 'getting-started',
     })
 
-    expect(result).toEqual([{ label: 'Help Center', href: '/' }, { label: 'Getting Started' }])
+    expect(result).toEqual([{ label: 'Help Center', href: '/hc' }, { label: 'Getting Started' }])
   })
 
   it('builds breadcrumbs with category and article', () => {
@@ -130,8 +130,8 @@ describe('buildCategoryBreadcrumbs', () => {
     })
 
     expect(result).toEqual([
-      { label: 'Help Center', href: '/' },
-      { label: 'Getting Started', href: '/getting-started' },
+      { label: 'Help Center', href: '/hc' },
+      { label: 'Getting Started', href: '/hc/getting-started' },
       { label: 'Quick Start Guide' },
     ])
   })
