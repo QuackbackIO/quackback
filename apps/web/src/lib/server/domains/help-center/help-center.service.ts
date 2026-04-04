@@ -37,6 +37,7 @@ import type {
   ListArticlesParams,
   ArticleListResult,
 } from './help-center.types'
+import { generateArticleEmbedding } from './help-center-embedding.service'
 
 // ============================================================================
 // Categories
@@ -387,7 +388,14 @@ export async function createArticle(
     })
     .returning()
 
-  return resolveArticleWithCategory(article)
+  const resolved = await resolveArticleWithCategory(article)
+
+  // Fire-and-forget: generate embedding for the new article
+  generateArticleEmbedding(article.id, title, content, resolved.category?.name).catch((err) =>
+    console.error(`[KB Embedding] Failed for article ${article.id}:`, err)
+  )
+
+  return resolved
 }
 
 export async function updateArticle(
@@ -415,7 +423,17 @@ export async function updateArticle(
     .returning()
 
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
-  return resolveArticleWithCategory(updated)
+
+  const resolved = await resolveArticleWithCategory(updated)
+
+  // Fire-and-forget: re-generate embedding when title or content changed
+  if (input.title || input.content) {
+    generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
+      (err) => console.error(`[KB Embedding] Failed for article ${id}:`, err)
+    )
+  }
+
+  return resolved
 }
 
 export async function publishArticle(
