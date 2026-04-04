@@ -34,9 +34,9 @@ export const Route = createFileRoute('/_helpcenter/$categorySlug/$articleSlug')(
     // Get workspace name from the root helpcenter layout
     const helpCenterMatch = matches.find((m) => m.routeId === '/_helpcenter')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
+    const parentLoaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =
-      (loaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'
+      (parentLoaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'
 
     // Build description: use article description or first 160 chars of content
     const description =

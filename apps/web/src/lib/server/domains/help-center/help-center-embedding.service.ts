@@ -11,6 +11,7 @@
 import { db, helpCenterArticles, eq, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import type { HelpCenterArticleId } from '@quackback/ids'
 
 export const KB_EMBEDDING_MODEL = 'google/text-embedding-004'
 const KB_EMBEDDING_DIMENSIONS = 768
@@ -71,7 +72,7 @@ export async function generateArticleEmbedding(
       embeddingModel: KB_EMBEDDING_MODEL,
       embeddingUpdatedAt: new Date(),
     })
-    .where(eq(helpCenterArticles.id, articleId))
+    .where(eq(helpCenterArticles.id, articleId as HelpCenterArticleId))
 
   return true
 }
