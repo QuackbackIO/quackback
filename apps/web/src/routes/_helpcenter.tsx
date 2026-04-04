@@ -81,6 +81,12 @@ export const Route = createFileRoute('/_helpcenter')({
       { name: 'twitter:title', content: `${workspaceName} - Help Center` },
       { name: 'twitter:description', content: description },
     ]
+
+    // Prevent search engine indexing for authenticated help centers
+    if (loaderData?.helpCenterConfig?.access === 'authenticated') {
+      meta.push({ name: 'robots', content: 'noindex, nofollow' })
+    }
+
     return {
       meta,
       links: [{ rel: 'icon', href: faviconUrl }],

@@ -2,7 +2,10 @@ import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { ArrowRightIcon } from '@heroicons/react/16/solid'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
+import { JsonLd } from '@/components/json-ld'
+import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 
+const helpCenterApi = getRouteApi('/_helpcenter')
 const categoryApi = getRouteApi('/_helpcenter/$categorySlug')
 
 export const Route = createFileRoute('/_helpcenter/$categorySlug/')({
@@ -12,14 +15,36 @@ export const Route = createFileRoute('/_helpcenter/$categorySlug/')({
 function CategoryIndexPage() {
   const { categorySlug } = Route.useParams()
   const { category, articles } = categoryApi.useLoaderData()
+  const { helpCenterConfig } = helpCenterApi.useLoaderData()
+  const { baseUrl } = Route.useRouteContext()
 
   const breadcrumbs = buildCategoryBreadcrumbs({
     categoryName: category.name,
     categorySlug: category.slug,
   })
 
+  const seoEnabled = helpCenterConfig?.seo?.structuredDataEnabled !== false
+  const resolvedBaseUrl = baseUrl ?? ''
+
   return (
     <div>
+      {seoEnabled && (
+        <>
+          <JsonLd
+            data={buildCollectionPageJsonLd({
+              name: category.name,
+              description: category.description ?? null,
+            })}
+          />
+          <JsonLd
+            data={buildBreadcrumbJsonLd([
+              { name: 'Help Center', url: resolvedBaseUrl || '/' },
+              { name: category.name, url: `${resolvedBaseUrl}/${category.slug}` },
+            ])}
+          />
+        </>
+      )}
+
       <HelpCenterBreadcrumbs items={breadcrumbs} />
 
       {/* Category header */}

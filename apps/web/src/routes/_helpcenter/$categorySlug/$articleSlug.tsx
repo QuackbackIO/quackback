@@ -10,8 +10,11 @@ import {
   extractHeadings,
   computePrevNext,
 } from '@/components/help-center/help-center-article-utils'
+import { JsonLd } from '@/components/json-ld'
+import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import type { JSONContent } from '@tiptap/react'
 
+const helpCenterApi = getRouteApi('/_helpcenter')
 const categoryApi = getRouteApi('/_helpcenter/$categorySlug')
 
 export const Route = createFileRoute('/_helpcenter/$categorySlug/$articleSlug')({
@@ -40,7 +43,6 @@ export const Route = createFileRoute('/_helpcenter/$categorySlug/$articleSlug')(
       article.description ||
       (article.content ? article.content.slice(0, 160) : `${article.title} - ${workspaceName}`)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const baseUrl =
       ((helpCenterMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
     const canonicalUrl = `${baseUrl}/${params.categorySlug}/${params.articleSlug}`
@@ -64,6 +66,8 @@ function ArticleDetailPage() {
   const { article } = Route.useLoaderData()
   const { categorySlug } = Route.useParams()
   const { category, articles } = categoryApi.useLoaderData()
+  const { helpCenterConfig } = helpCenterApi.useLoaderData()
+  const { baseUrl } = Route.useRouteContext()
 
   const breadcrumbs = buildCategoryBreadcrumbs({
     categoryName: category.name,
@@ -74,8 +78,40 @@ function ArticleDetailPage() {
   const headings = extractHeadings(article.contentJson)
   const { prev, next } = computePrevNext(articles, article.slug)
 
+  const seoEnabled = helpCenterConfig?.seo?.structuredDataEnabled !== false
+  const resolvedBaseUrl = baseUrl ?? ''
+
   return (
     <div>
+      {seoEnabled && (
+        <>
+          <JsonLd
+            data={buildArticleJsonLd({
+              title: article.title,
+              description: article.description ?? null,
+              content: article.content ?? null,
+              authorName: article.author?.name ?? null,
+              publishedAt: article.publishedAt ?? null,
+              updatedAt: article.updatedAt,
+              baseUrl: resolvedBaseUrl,
+              categorySlug: category.slug,
+              categoryName: category.name,
+              articleSlug: article.slug,
+            })}
+          />
+          <JsonLd
+            data={buildBreadcrumbJsonLd([
+              { name: 'Help Center', url: resolvedBaseUrl || '/' },
+              { name: category.name, url: `${resolvedBaseUrl}/${category.slug}` },
+              {
+                name: article.title,
+                url: `${resolvedBaseUrl}/${category.slug}/${article.slug}`,
+              },
+            ])}
+          />
+        </>
+      )}
+
       <HelpCenterBreadcrumbs items={breadcrumbs} />
 
       <div className="mt-6 flex gap-8">
