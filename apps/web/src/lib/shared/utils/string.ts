@@ -43,14 +43,6 @@ export function strengthTier(normalized: number): 'low' | 'medium' | 'high' | 'c
 }
 
 /**
- * Strip HTML tags from a string.
- * Returns plain text content.
- *
- * @example
- * stripHtml('<p>Hello <strong>world</strong></p>') // 'Hello world'
- * stripHtml('No tags here') // 'No tags here'
- */
-/**
  * Format a badge count for display, capping at 99+.
  */
 export function formatBadgeCount(n: number): string {
@@ -83,6 +75,39 @@ export function stripMarkdownPreview(text: string, maxLength = 150): string {
  */
 export function slugify(text: string): string {
   return slugifyLib(text, { lower: true, strict: true })
+}
+
+/**
+ * Truncate text to a maximum length with ellipsis.
+ */
+export function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength - 3) + '...'
+}
+
+/**
+ * Format a status name for display (e.g., "in_progress" -> "In Progress").
+ */
+export function formatStatus(status: string): string {
+  return status
+    .split(/[_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+/**
+ * Get an emoji for a status.
+ */
+export function getStatusEmoji(status: string): string {
+  const map: Record<string, string> = {
+    open: '\ud83d\udce5',
+    under_review: '\ud83d\udc40',
+    planned: '\ud83d\udcc5',
+    in_progress: '\ud83d\udea7',
+    complete: '\u2705',
+    closed: '\ud83d\udd12',
+  }
+  return map[status.toLowerCase().replace(/\s+/g, '_')] || '\ud83d\udccc'
 }
 
 export function stripHtml(html: string): string {

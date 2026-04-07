@@ -25,100 +25,84 @@ import {
   analyticsDailyStats,
   analyticsTopPosts,
 } from '@/lib/server/db'
+import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 /**
  * Refresh today's row in analytics_daily_stats and the top posts snapshots.
  * Called hourly by the analytics BullMQ job.
  */
 export async function refreshAnalytics(): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD'
-  const dayStart = `${today}T00:00:00.000Z`
-  const dayEnd = `${today}T23:59:59.999Z`
+  const today = toIsoDateOnly(new Date())
+  const dayStart = new Date(`${today}T00:00:00.000Z`)
+  const dayEnd = new Date(`${today}T23:59:59.999Z`)
 
   console.log(`[analytics] Refreshing stats for ${today}`)
 
-  // Count new posts today (non-deleted)
-  const [newPostsResult] = await db
-    .select({ value: count() })
-    .from(posts)
-    .where(
-      and(
-        gte(posts.createdAt, new Date(dayStart)),
-        lte(posts.createdAt, new Date(dayEnd)),
-        isNull(posts.deletedAt)
+  // Run all count and groupBy queries in parallel
+  const [
+    [newPostsResult],
+    [newVotesResult],
+    [newCommentsResult],
+    [newUsersResult],
+    statusRows,
+    boardRows,
+  ] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(posts)
+      .where(
+        and(gte(posts.createdAt, dayStart), lte(posts.createdAt, dayEnd), isNull(posts.deletedAt))
+      ),
+    db
+      .select({ value: count() })
+      .from(votes)
+      .where(and(gte(votes.createdAt, dayStart), lte(votes.createdAt, dayEnd))),
+    db
+      .select({ value: count() })
+      .from(comments)
+      .where(
+        and(
+          gte(comments.createdAt, dayStart),
+          lte(comments.createdAt, dayEnd),
+          isNull(comments.deletedAt)
+        )
+      ),
+    db
+      .select({ value: count() })
+      .from(principal)
+      .where(
+        and(
+          gte(principal.createdAt, dayStart),
+          lte(principal.createdAt, dayEnd),
+          ne(principal.type, 'anonymous'),
+          eq(principal.role, 'user')
+        )
+      ),
+    db
+      .select({ slug: postStatuses.slug, value: count() })
+      .from(posts)
+      .innerJoin(postStatuses, eq(posts.statusId, postStatuses.id))
+      .where(isNull(posts.deletedAt))
+      .groupBy(postStatuses.slug),
+    db
+      .select({ boardId: posts.boardId, value: count() })
+      .from(posts)
+      .where(
+        and(gte(posts.createdAt, dayStart), lte(posts.createdAt, dayEnd), isNull(posts.deletedAt))
       )
-    )
-
-  // Count new votes today
-  const [newVotesResult] = await db
-    .select({ value: count() })
-    .from(votes)
-    .where(and(gte(votes.createdAt, new Date(dayStart)), lte(votes.createdAt, new Date(dayEnd))))
-
-  // Count new comments today (non-deleted)
-  const [newCommentsResult] = await db
-    .select({ value: count() })
-    .from(comments)
-    .where(
-      and(
-        gte(comments.createdAt, new Date(dayStart)),
-        lte(comments.createdAt, new Date(dayEnd)),
-        isNull(comments.deletedAt)
-      )
-    )
-
-  // Count new non-anonymous users today
-  const [newUsersResult] = await db
-    .select({ value: count() })
-    .from(principal)
-    .where(
-      and(
-        gte(principal.createdAt, new Date(dayStart)),
-        lte(principal.createdAt, new Date(dayEnd)),
-        ne(principal.type, 'anonymous'),
-        eq(principal.role, 'user')
-      )
-    )
-
-  // Current status distribution (snapshot of all active posts)
-  const statusRows = await db
-    .select({
-      slug: postStatuses.slug,
-      value: count(),
-    })
-    .from(posts)
-    .innerJoin(postStatuses, eq(posts.statusId, postStatuses.id))
-    .where(isNull(posts.deletedAt))
-    .groupBy(postStatuses.slug)
+      .groupBy(posts.boardId),
+  ])
 
   const postsByStatus: Record<string, number> = {}
   for (const row of statusRows) {
     postsByStatus[row.slug] = row.value
   }
 
-  // Posts by board (new today)
-  const boardRows = await db
-    .select({
-      boardId: posts.boardId,
-      value: count(),
-    })
-    .from(posts)
-    .where(
-      and(
-        gte(posts.createdAt, new Date(dayStart)),
-        lte(posts.createdAt, new Date(dayEnd)),
-        isNull(posts.deletedAt)
-      )
-    )
-    .groupBy(posts.boardId)
-
   const postsByBoard: Record<string, number> = {}
   for (const row of boardRows) {
     if (row.boardId) postsByBoard[row.boardId] = row.value
   }
 
-  // Posts by source (new today) -- source is derived from vote sourceType or post metadata
-  // For now, default all to 'portal' since source tracking on posts isn't implemented yet
   const postsBySource: Record<string, number> = {
     portal: newPostsResult.value,
   }

@@ -14,7 +14,7 @@ import {
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/shared/utils'
+import { cn, toIsoDateOnly } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { InboxFilters } from './use-inbox-filters'
@@ -113,7 +113,7 @@ function getDateFromDaysAgo(days: number): string {
   } else {
     date.setHours(0, 0, 0, 0)
   }
-  return date.toISOString().split('T')[0]!
+  return toIsoDateOnly(date)
 }
 
 const DATE_PRESETS = [

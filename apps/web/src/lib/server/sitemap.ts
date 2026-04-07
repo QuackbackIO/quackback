@@ -7,6 +7,8 @@
  * - Generates a sitemap index when URL count exceeds the per-file limit
  */
 
+import { toIsoDateOnly } from '@/lib/shared/utils/date'
+
 export const MAX_URLS_PER_SITEMAP = 50_000
 
 export interface SitemapUrl {
@@ -14,9 +16,8 @@ export interface SitemapUrl {
   lastmod?: string
 }
 
-export function toW3CDate(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
+/** @deprecated Use toIsoDateOnly from @/lib/shared/utils/date */
+export const toW3CDate = toIsoDateOnly
 
 export function escapeXml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

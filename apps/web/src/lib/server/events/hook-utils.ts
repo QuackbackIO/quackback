@@ -1,28 +1,11 @@
 /**
  * Shared utilities for hooks.
+ *
+ * stripHtml, truncate, formatStatus, getStatusEmoji are canonical in
+ * @/lib/shared/utils/string and re-exported here for existing consumers.
  */
 
-/**
- * Strip HTML tags from text.
- */
-export function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .trim()
-}
-
-/**
- * Truncate text to a maximum length with ellipsis.
- */
-export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength - 3) + '...'
-}
+export { stripHtml, truncate, formatStatus, getStatusEmoji } from '@/lib/shared/utils/string'
 
 const RETRYABLE_CODES = new Set([
   'ECONNRESET',
@@ -54,29 +37,4 @@ export function isRetryableError(error: unknown): boolean {
   }
 
   return false
-}
-
-/**
- * Format a status name for display (e.g., "in_progress" -> "In Progress").
- */
-export function formatStatus(status: string): string {
-  return status
-    .split(/[_\s]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
-}
-
-/**
- * Get an emoji for a status.
- */
-export function getStatusEmoji(status: string): string {
-  const map: Record<string, string> = {
-    open: '📥',
-    under_review: '👀',
-    planned: '📅',
-    in_progress: '🚧',
-    complete: '✅',
-    closed: '🔒',
-  }
-  return map[status.toLowerCase().replace(/\s+/g, '_')] || '📌'
 }

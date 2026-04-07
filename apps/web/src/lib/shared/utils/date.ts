@@ -14,6 +14,13 @@ export function toIsoString(value: Date | string): string {
 }
 
 /**
+ * Extract the date-only portion of a Date as YYYY-MM-DD (W3C date format).
+ */
+export function toIsoDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0]
+}
+
+/**
  * Safely convert an optional date value to ISO string or null.
  */
 export function toIsoStringOrNull(value: Date | string | null | undefined): string | null {

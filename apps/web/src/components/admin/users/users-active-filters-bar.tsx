@@ -11,7 +11,7 @@ import {
   AdjustmentsHorizontalIcon,
   UserGroupIcon,
 } from '@heroicons/react/24/solid'
-import { cn } from '@/lib/shared/utils'
+import { cn, toIsoDateOnly } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import { Input } from '@/components/ui/input'
@@ -73,7 +73,7 @@ function getDateFromDaysAgo(daysAgo: number): string {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
   date.setDate(date.getDate() - daysAgo)
-  return date.toISOString().split('T')[0]
+  return toIsoDateOnly(date)
 }
 
 const DATE_PRESETS = [

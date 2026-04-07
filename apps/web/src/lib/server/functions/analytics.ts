@@ -22,6 +22,7 @@ import {
   boards,
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
+import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
@@ -34,8 +35,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const start = new Date(now.getTime() - days * 86_400_000)
     const previousStart = new Date(start.getTime() - days * 86_400_000)
 
-    const startStr = start.toISOString().slice(0, 10)
-    const previousStartStr = previousStart.toISOString().slice(0, 10)
+    const startStr = toIsoDateOnly(start)
+    const previousStartStr = toIsoDateOnly(previousStart)
 
     // -- Fetch daily stats for current and previous periods --
     const allRows = await db

@@ -74,9 +74,8 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
   }
 
-  // Get the board, tags, and roadmaps in parallel
-  // Uses denormalized comment_count (maintained by comment.service.ts)
-  const [board, postTagsResult, roadmapsResult] = await Promise.all([
+  // Get board, tags, roadmaps, and pinned comment in parallel
+  const [board, postTagsResult, roadmapsResult, pinnedCommentData] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
     db
       .select({
@@ -91,45 +90,42 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       .select({ roadmapId: postRoadmaps.roadmapId })
       .from(postRoadmaps)
       .where(eq(postRoadmaps.postId, postId)),
+    post.pinnedCommentId
+      ? db.query.comments.findFirst({
+          where: eq(comments.id, post.pinnedCommentId),
+          with: {
+            author: {
+              columns: { displayName: true, avatarUrl: true, avatarKey: true },
+            },
+          },
+        })
+      : Promise.resolve(undefined),
   ])
 
   if (!board) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
   }
 
-  // Fetch pinned comment data if exists
   let pinnedComment: PinnedComment | null = null
-  if (post.pinnedCommentId) {
-    const pinnedCommentData = await db.query.comments.findFirst({
-      where: eq(comments.id, post.pinnedCommentId),
-      with: {
-        author: {
-          columns: { displayName: true, avatarUrl: true, avatarKey: true },
-        },
-      },
-    })
-
-    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-      // Compute avatar URL from principal fields
-      let avatarUrl: string | null = null
-      if (pinnedCommentData.author) {
-        if (pinnedCommentData.author.avatarKey) {
-          avatarUrl = getPublicUrlOrNull(pinnedCommentData.author.avatarKey)
-        }
-        if (!avatarUrl && pinnedCommentData.author.avatarUrl) {
-          avatarUrl = pinnedCommentData.author.avatarUrl
-        }
+  if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+    let avatarUrl: string | null = null
+    if (pinnedCommentData.author) {
+      if (pinnedCommentData.author.avatarKey) {
+        avatarUrl = getPublicUrlOrNull(pinnedCommentData.author.avatarKey)
       }
-
-      pinnedComment = {
-        id: pinnedCommentData.id,
-        content: pinnedCommentData.content,
-        authorName: pinnedCommentData.author?.displayName ?? null,
-        principalId: pinnedCommentData.principalId,
-        avatarUrl,
-        createdAt: pinnedCommentData.createdAt,
-        isTeamMember: pinnedCommentData.isTeamMember,
+      if (!avatarUrl && pinnedCommentData.author.avatarUrl) {
+        avatarUrl = pinnedCommentData.author.avatarUrl
       }
+    }
+
+    pinnedComment = {
+      id: pinnedCommentData.id,
+      content: pinnedCommentData.content,
+      authorName: pinnedCommentData.author?.displayName ?? null,
+      principalId: pinnedCommentData.principalId,
+      avatarUrl,
+      createdAt: pinnedCommentData.createdAt,
+      isTeamMember: pinnedCommentData.isTeamMember,
     }
   }
 

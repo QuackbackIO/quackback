@@ -9,6 +9,9 @@ import {
   strengthTier,
   formatBadgeCount,
   stripHtml,
+  truncate,
+  formatStatus,
+  getStatusEmoji,
   slugify,
 } from '../string'
 
@@ -221,5 +224,61 @@ describe('slugify', () => {
 
   it('collapses multiple hyphens', () => {
     expect(slugify('a---b')).toBe('a-b')
+  })
+})
+
+describe('truncate', () => {
+  it('returns text unchanged if within limit', () => {
+    expect(truncate('short', 10)).toBe('short')
+  })
+
+  it('returns text unchanged at exact limit', () => {
+    expect(truncate('exact', 5)).toBe('exact')
+  })
+
+  it('truncates with ellipsis when over limit', () => {
+    expect(truncate('this is a long string', 10)).toBe('this is...')
+  })
+
+  it('handles empty string', () => {
+    expect(truncate('', 5)).toBe('')
+  })
+})
+
+describe('formatStatus', () => {
+  it('formats underscore-separated status', () => {
+    expect(formatStatus('in_progress')).toBe('In Progress')
+  })
+
+  it('formats single word', () => {
+    expect(formatStatus('open')).toBe('Open')
+  })
+
+  it('formats already capitalized input', () => {
+    expect(formatStatus('UNDER_REVIEW')).toBe('Under Review')
+  })
+
+  it('handles space-separated input', () => {
+    expect(formatStatus('in progress')).toBe('In Progress')
+  })
+})
+
+describe('getStatusEmoji', () => {
+  it('returns correct emoji for known statuses', () => {
+    expect(getStatusEmoji('open')).toBe('\ud83d\udce5')
+    expect(getStatusEmoji('complete')).toBe('\u2705')
+    expect(getStatusEmoji('closed')).toBe('\ud83d\udd12')
+  })
+
+  it('handles case-insensitive input', () => {
+    expect(getStatusEmoji('IN_PROGRESS')).toBe('\ud83d\udea7')
+  })
+
+  it('handles space-separated input', () => {
+    expect(getStatusEmoji('under review')).toBe('\ud83d\udc40')
+  })
+
+  it('returns fallback emoji for unknown status', () => {
+    expect(getStatusEmoji('unknown')).toBe('\ud83d\udccc')
   })
 })
