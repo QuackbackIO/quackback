@@ -83,11 +83,15 @@ export async function identifyPortalUser(
       await db.update(principal).set(principalUpdates).where(eq(principal.userId, record.id))
     }
 
-    // Re-read to get updated values
-    return (await db.query.user.findFirst({
+    // Re-read to get updated values — record must exist since we just updated it
+    const updated = await db.query.user.findFirst({
       where: eq(user.id, record.id),
       columns: USER_COLUMNS,
-    }))!
+    })
+    if (!updated) {
+      throw new Error(`Failed to re-read user ${record.id} after update`)
+    }
+    return updated
   }
 
   // Try to find existing user
@@ -149,9 +153,12 @@ export async function identifyPortalUser(
     where: eq(principal.userId, userRecord.id),
     columns: { id: true },
   })
+  if (!principalRecord) {
+    throw new NotFoundError('PRINCIPAL_NOT_FOUND', `No principal found for user ${userRecord.id}`)
+  }
 
   return {
-    principalId: principalRecord!.id as PrincipalId,
+    principalId: principalRecord.id as PrincipalId,
     userId: userRecord.id,
     name: userRecord.name ?? defaultName,
     email: userRecord.email ?? normalizedEmail, // identify always provides email

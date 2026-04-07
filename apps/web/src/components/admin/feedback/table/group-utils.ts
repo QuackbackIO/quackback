@@ -24,12 +24,14 @@ export function groupPostsByStatus(
   // Group posts by status
   for (const post of posts) {
     const statusId = post.statusId as StatusId | null
-    if (statusId && groups.has(statusId)) {
-      groups.get(statusId)!.posts.push(post)
+    const group = statusId ? groups.get(statusId) : undefined
+    if (group) {
+      group.posts.push(post)
     } else {
       // Handle posts with no status or unknown status
-      if (!groups.has('none')) {
-        groups.set('none', {
+      let noneGroup = groups.get('none')
+      if (!noneGroup) {
+        noneGroup = {
           status: {
             id: 'none' as StatusId,
             name: 'No Status',
@@ -43,9 +45,10 @@ export function groupPostsByStatus(
             deletedAt: null,
           },
           posts: [],
-        })
+        }
+        groups.set('none', noneGroup)
       }
-      groups.get('none')!.posts.push(post)
+      noneGroup.posts.push(post)
     }
   }
 

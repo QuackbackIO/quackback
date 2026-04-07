@@ -8,11 +8,7 @@ import { type CommentId, type PostId, type StatusId, type UserId } from '@quackb
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
-import {
-  createComment,
-  deleteComment,
-  updateComment,
-} from '@/lib/server/domains/comments/comment.service'
+import { createComment } from '@/lib/server/domains/comments/comment.service'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import {
   canDeleteComment,
@@ -38,15 +34,6 @@ const createCommentSchema = z.object({
   isPrivate: z.boolean().optional(),
 })
 
-const updateCommentSchema = z.object({
-  id: z.string(),
-  content: z.string().min(1).max(5000),
-})
-
-const deleteCommentSchema = z.object({
-  id: z.string(),
-})
-
 const reactionSchema = z.object({
   commentId: z.string(),
   emoji: z.string(),
@@ -67,8 +54,13 @@ const userDeleteCommentSchema = z.object({
 
 // Types
 export type CreateCommentInput = z.infer<typeof createCommentSchema>
-export type UpdateCommentInput = z.infer<typeof updateCommentSchema>
-export type DeleteCommentInput = z.infer<typeof deleteCommentSchema>
+export interface UpdateCommentInput {
+  id: string
+  content: string
+}
+export interface DeleteCommentInput {
+  id: string
+}
 export type ReactionInput = z.infer<typeof reactionSchema>
 export type GetCommentPermissionsInput = z.infer<typeof getCommentPermissionsSchema>
 export type UserEditCommentInput = z.infer<typeof userEditCommentSchema>
@@ -114,52 +106,6 @@ export const createCommentFn = createServerFn({ method: 'POST' })
       return result
     } catch (error) {
       console.error(`[fn:comments] ❌ createCommentFn failed:`, error)
-      throw error
-    }
-  })
-
-export const updateCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateCommentSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:comments] updateCommentFn: id=${data.id}`)
-    try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-
-      const result = await updateComment(
-        data.id as CommentId,
-        {
-          content: data.content,
-        },
-        {
-          principalId: auth.principal.id,
-          role: auth.principal.role,
-          userId: auth.user.id,
-        }
-      )
-      console.log(`[fn:comments] updateCommentFn: updated id=${data.id}`)
-      return result
-    } catch (error) {
-      console.error(`[fn:comments] ❌ updateCommentFn failed:`, error)
-      throw error
-    }
-  })
-
-export const deleteCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteCommentSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:comments] deleteCommentFn: id=${data.id}`)
-    try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
-
-      await deleteComment(data.id as CommentId, {
-        principalId: auth.principal.id,
-        role: auth.principal.role,
-        userId: auth.user.id,
-      })
-      console.log(`[fn:comments] deleteCommentFn: deleted id=${data.id}`)
-      return { id: data.id }
-    } catch (error) {
-      console.error(`[fn:comments] ❌ deleteCommentFn failed:`, error)
       throw error
     }
   })

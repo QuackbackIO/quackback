@@ -71,7 +71,6 @@ export async function createApiKey(
   input: CreateApiKeyInput,
   createdById: PrincipalId
 ): Promise<CreateApiKeyResult> {
-  console.log(`[domain:api-keys] createApiKey: createdById=${createdById}`)
   // Validate input
   if (!input.name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'API key name is required')
@@ -128,7 +127,6 @@ export async function createApiKey(
  * timing oracle attacks. Returns null if the key is invalid, expired, or revoked.
  */
 export async function verifyApiKey(key: string): Promise<ApiKey | null> {
-  console.log(`[domain:api-keys] verifyApiKey: hasKey=${!!key}`)
   // Basic format validation
   if (!key || !key.startsWith(API_KEY_PREFIX)) {
     return null
@@ -174,7 +172,6 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
  * (Neon HTTP-compatible, no interactive transactions)
  */
 export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
-  console.log(`[domain:api-keys] rotateApiKey: id=${id}`)
   // Generate new key credentials
   const plainTextKey = generateApiKey()
   const keyHash = hashApiKey(plainTextKey)
@@ -202,7 +199,6 @@ export async function rotateApiKey(id: ApiKeyId): Promise<CreateApiKeyResult> {
  * Revoke an API key (soft delete)
  */
 export async function revokeApiKey(id: ApiKeyId): Promise<void> {
-  console.log(`[domain:api-keys] revokeApiKey: id=${id}`)
   const result = await db
     .update(apiKeys)
     .set({ revokedAt: new Date() })
@@ -224,7 +220,6 @@ export async function revokeApiKey(id: ApiKeyId): Promise<void> {
  * List all active API keys (excludes revoked)
  */
 export async function listApiKeys(): Promise<ApiKey[]> {
-  console.log(`[domain:api-keys] listApiKeys`)
   const keys = await db.query.apiKeys.findMany({
     where: isNull(apiKeys.revokedAt),
     orderBy: (apiKeys, { desc }) => [desc(apiKeys.createdAt)],
@@ -237,7 +232,6 @@ export async function listApiKeys(): Promise<ApiKey[]> {
  * Get an API key by ID
  */
 export async function getApiKeyById(id: ApiKeyId): Promise<ApiKey> {
-  console.log(`[domain:api-keys] getApiKeyById: id=${id}`)
   const apiKey = await db.query.apiKeys.findFirst({
     where: eq(apiKeys.id, id),
   })
@@ -253,7 +247,6 @@ export async function getApiKeyById(id: ApiKeyId): Promise<ApiKey> {
  * Update an API key's name
  */
 export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiKey> {
-  console.log(`[domain:api-keys] updateApiKeyName: id=${id}`)
   if (!name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'API key name is required')
   }

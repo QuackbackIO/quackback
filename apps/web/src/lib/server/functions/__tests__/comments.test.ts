@@ -90,12 +90,11 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 // --- Handler setup ---
 
 // Handler indices match the declaration order in comments.ts:
-// 0: createCommentFn, 1: updateCommentFn, 2: deleteCommentFn,
-// 3: addReactionFn, 4: removeReactionFn, 5: getCommentPermissionsFn,
-// 6: userEditCommentFn, 7: userDeleteCommentFn, 8: restoreCommentFn,
-// 9: pinCommentFn, 10: unpinCommentFn, 11: canPinCommentFn
-const HANDLER_INDEX_GET_COMMENT_PERMISSIONS = 5
-const HANDLER_INDEX_CAN_PIN_COMMENT = 11
+// 0: createCommentFn, 1: addReactionFn, 2: removeReactionFn,
+// 3: getCommentPermissionsFn, 4: userEditCommentFn, 5: userDeleteCommentFn,
+// 6: restoreCommentFn, 7: pinCommentFn, 8: unpinCommentFn, 9: canPinCommentFn
+const HANDLER_INDEX_GET_COMMENT_PERMISSIONS = 3
+const HANDLER_INDEX_CAN_PIN_COMMENT = 9
 
 let getCommentPermissionsHandler: AnyHandler
 let canPinCommentHandler: AnyHandler
