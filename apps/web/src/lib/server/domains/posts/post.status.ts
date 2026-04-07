@@ -49,7 +49,7 @@ export async function changeStatus(
     db.query.postStatuses.findFirst({ where: eq(postStatuses.id, statusId) }),
     existingPost.statusId
       ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, existingPost.statusId) })
-      : Promise.resolve(null),
+      : null,
   ])
 
   if (!board) {

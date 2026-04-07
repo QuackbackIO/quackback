@@ -19,7 +19,7 @@ import {
 } from '@/components/public/post-detail/comments-section'
 import { PinnedCommentSection } from '@/components/public/post-detail/official-response-section'
 import {
-  useUpdatePostStatus,
+  useChangePostStatusId,
   useUpdatePostTags,
   usePinComment,
   useUnpinComment,
@@ -113,7 +113,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
 
   // Mutations
-  const updateStatus = useUpdatePostStatus()
+  const updateStatus = useChangePostStatusId()
   const updateTags = useUpdatePostTags()
   const pinComment = usePinComment({ postId: post.id as PostId })
   const unpinComment = useUnpinComment({ postId: post.id as PostId })

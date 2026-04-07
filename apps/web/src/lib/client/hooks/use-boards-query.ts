@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { fetchBoards, fetchBoard } from '@/lib/server/functions/boards'
+import { fetchBoardsFn, fetchBoardFn } from '@/lib/server/functions/boards'
 import type { BoardId } from '@quackback/ids'
 
 // ============================================================================
@@ -33,7 +33,7 @@ interface UseBoardsOptions {
 export function useBoards({ enabled = true }: UseBoardsOptions = {}) {
   return useQuery({
     queryKey: boardKeys.lists(),
-    queryFn: fetchBoards,
+    queryFn: fetchBoardsFn,
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
@@ -50,7 +50,7 @@ interface UseBoardDetailOptions {
 export function useBoardDetail({ boardId, enabled = true }: UseBoardDetailOptions) {
   return useQuery({
     queryKey: boardKeys.detail(boardId),
-    queryFn: () => fetchBoard({ data: { id: boardId } }),
+    queryFn: () => fetchBoardFn({ data: { id: boardId } }),
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })

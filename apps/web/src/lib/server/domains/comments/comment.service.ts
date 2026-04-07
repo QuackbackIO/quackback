@@ -110,7 +110,7 @@ export async function createComment(
       db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId as StatusId) }),
       post.statusId
         ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, post.statusId) })
-        : Promise.resolve(null),
+        : null,
     ])
 
     if (!newStatus) {

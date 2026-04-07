@@ -294,13 +294,13 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
           where: inArray(helpCenterCategories.id, categoryIds),
           columns: { id: true, slug: true, name: true },
         })
-      : Promise.resolve([]),
+      : [],
     principalIds.length > 0
       ? db.query.principal.findMany({
           where: inArray(principal.id, principalIds),
           columns: { id: true, displayName: true, avatarUrl: true },
         })
-      : Promise.resolve([]),
+      : [],
   ])
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]))

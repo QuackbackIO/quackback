@@ -198,7 +198,7 @@ export async function getPortalUserDetail(
             .innerJoin(boards, eq(posts.boardId, boards.id))
             .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
             .where(and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt)))
-        : Promise.resolve([]),
+        : [],
 
       // Get comment counts for all engaged posts in one query
       allCommentPostIds.length > 0
@@ -210,7 +210,7 @@ export async function getPortalUserDetail(
             .from(comments)
             .where(and(inArray(comments.postId, allCommentPostIds), isNull(comments.deletedAt)))
             .groupBy(comments.postId)
-        : Promise.resolve([]),
+        : [],
     ])
 
     const engagementData = {

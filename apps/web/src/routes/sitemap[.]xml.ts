@@ -35,10 +35,9 @@ export const Route = createFileRoute('/sitemap.xml')({
 })
 
 async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
-  const [{ db, changelogEntries, desc, eq, isNotNull, lte }, { toW3CDate }] = await Promise.all([
-    import('@/lib/server/db'),
-    import('@/lib/server/sitemap'),
-  ])
+  const [{ db, changelogEntries, desc, eq, isNotNull, lte }, { toIsoDateOnly }] = await Promise.all(
+    [import('@/lib/server/db'), import('@/lib/shared/utils/date')]
+  )
 
   const urls: SitemapUrl[] = []
 
@@ -58,7 +57,7 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
   for (const entry of entries) {
     urls.push({
       loc: `${baseUrl}/changelog/${entry.id}`,
-      lastmod: toW3CDate(entry.updatedAt),
+      lastmod: toIsoDateOnly(entry.updatedAt),
     })
   }
 
@@ -82,7 +81,7 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
     if (post.board?.slug && post.board.isPublic && !post.board.deletedAt) {
       urls.push({
         loc: `${baseUrl}/b/${post.board.slug}/posts/${post.id}`,
-        lastmod: toW3CDate(post.updatedAt),
+        lastmod: toIsoDateOnly(post.updatedAt),
       })
     }
   }

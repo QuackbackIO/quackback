@@ -817,7 +817,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
               .select({ id: postStatuses.id, name: postStatuses.name, color: postStatuses.color })
               .from(postStatuses)
               .where(inArray(postStatuses.id, statusIds))
-          : Promise.resolve([]),
+          : [],
         db
           .select({ id: boards.id, slug: boards.slug })
           .from(boards)

@@ -79,7 +79,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
               where: eq(principalTable.userId, data.userId as UserId),
               columns: { id: true },
             })
-          : Promise.resolve(null),
+          : null,
         listPublicBoardsWithStats(),
         // Posts WITHOUT embedded vote check (we get votes separately for parallelism)
         listPublicPostsWithVotesAndAvatars({

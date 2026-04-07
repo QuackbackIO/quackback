@@ -76,7 +76,7 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
 /**
  * List all statuses for the workspace
  */
-export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () => {
+export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:statuses] fetchStatuses`)
   try {
     await requireAuth({ roles: ['admin', 'member'] })
@@ -93,7 +93,7 @@ export const fetchStatuses = createServerFn({ method: 'GET' }).handler(async () 
 /**
  * Get a single status by ID
  */
-export const fetchStatus = createServerFn({ method: 'GET' })
+export const fetchStatusFn = createServerFn({ method: 'GET' })
   .inputValidator(getStatusSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:statuses] fetchStatus: id=${data.id}`)

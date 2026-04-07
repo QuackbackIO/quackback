@@ -258,7 +258,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
           ? getPostMergeInfo(postId).then((info) =>
               info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
             )
-          : Promise.resolve(null),
+          : null,
       ])
 
       return {

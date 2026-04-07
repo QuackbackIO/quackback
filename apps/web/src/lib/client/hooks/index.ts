@@ -54,7 +54,6 @@ export { useSegments, useSuspenseSegments } from './use-segments-queries'
 
 export {
   // Post mutations (admin)
-  useUpdatePostStatus,
   useChangePostStatusId,
   useUpdatePostOwner,
   useUpdatePostTags,

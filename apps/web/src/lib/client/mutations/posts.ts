@@ -111,9 +111,6 @@ function updatePostInLists(
 // Status Mutations
 // ============================================================================
 
-/** @deprecated Use useChangePostStatusId instead */
-export const useUpdatePostStatus = useChangePostStatusId
-
 /**
  * Hook to change a post's status using TypeID-based statusId
  */

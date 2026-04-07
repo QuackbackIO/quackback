@@ -215,10 +215,10 @@ export async function updatePost(
     db.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) }),
     statusChanged && existingPost.statusId
       ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, existingPost.statusId) })
-      : Promise.resolve(null),
+      : null,
     statusChanged
       ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId!) })
-      : Promise.resolve(null),
+      : null,
   ])
 
   if (!board) {

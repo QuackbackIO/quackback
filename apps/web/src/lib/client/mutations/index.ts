@@ -6,7 +6,6 @@
 
 // Admin post mutations
 export {
-  useUpdatePostStatus,
   useChangePostStatusId,
   useUpdatePostOwner,
   useUpdatePostTags,

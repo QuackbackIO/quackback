@@ -92,7 +92,7 @@ function serializeBoard(b: Awaited<ReturnType<typeof listBoards>>[number]) {
 /**
  * List all boards for the authenticated user's workspace
  */
-export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () => {
+export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:boards] fetchBoards`)
   await requireAuth({ roles: ['admin', 'member'] })
 
@@ -104,7 +104,7 @@ export const fetchBoards = createServerFn({ method: 'GET' }).handler(async () =>
 /**
  * Get a single board by ID
  */
-export const fetchBoard = createServerFn({ method: 'GET' })
+export const fetchBoardFn = createServerFn({ method: 'GET' })
   .inputValidator(getBoardSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:boards] fetchBoard: id=${data.id}`)

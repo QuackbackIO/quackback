@@ -5,21 +5,10 @@ import {
   escapeXml,
   MAX_URLS_PER_SITEMAP,
   renderSitemap,
-  toW3CDate,
 } from '../sitemap'
 import type { SitemapUrl } from '../sitemap'
 
 describe('sitemap helpers', () => {
-  describe('toW3CDate', () => {
-    it('formats date as YYYY-MM-DD', () => {
-      expect(toW3CDate(new Date('2026-02-23T15:30:00Z'))).toBe('2026-02-23')
-    })
-
-    it('handles midnight UTC', () => {
-      expect(toW3CDate(new Date('2026-01-01T00:00:00Z'))).toBe('2026-01-01')
-    })
-  })
-
   describe('escapeXml', () => {
     it('escapes ampersands', () => {
       expect(escapeXml('foo&bar')).toBe('foo&amp;bar')

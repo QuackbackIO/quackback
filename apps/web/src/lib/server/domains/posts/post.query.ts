@@ -99,7 +99,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
             },
           },
         })
-      : Promise.resolve(undefined),
+      : undefined,
   ])
 
   if (!board) {
