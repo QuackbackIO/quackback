@@ -6,7 +6,7 @@
  */
 
 import { Queue, Worker, UnrecoverableError } from 'bullmq'
-import { config } from '@/lib/server/config'
+import { getRedisConnectionOpts, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
 import type { FeedbackIngestJob } from '../types'
 
 const QUEUE_NAME = '{feedback-ingest}'
@@ -35,11 +35,7 @@ function ensureQueue(): Promise<Queue<FeedbackIngestJob>> {
 }
 
 async function initializeQueue() {
-  const connOpts = {
-    url: config.redisUrl,
-    maxRetriesPerRequest: null as null,
-    connectTimeout: 5_000,
-  }
+  const connOpts = getRedisConnectionOpts()
 
   const queue = new Queue<FeedbackIngestJob>(QUEUE_NAME, {
     connection: connOpts,
@@ -80,7 +76,7 @@ async function initializeQueue() {
     await Promise.race([
       queue.waitUntilReady(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), 5_000)
+        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
       ),
     ])
   } catch (error) {

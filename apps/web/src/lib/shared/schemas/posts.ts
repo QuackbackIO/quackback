@@ -98,17 +98,7 @@ export const editPostSchema = z.object({
   tagIds: tagIdsSchema,
 })
 
-/**
- * Schema for public post submissions (authenticated users)
- */
-export const publicPostSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().max(10000),
-  contentJson: tiptapContentSchema.optional(),
-})
-
 // Inferred types from schemas (for form values - uses plain strings due to resolver inference)
 export type CreatePostFormData = z.infer<typeof createPostSchema>
 export type EditPostFormData = z.infer<typeof editPostSchema>
-export type PublicPostFormData = z.infer<typeof publicPostSchema>
 export type { DbTiptapContent as TiptapContent }

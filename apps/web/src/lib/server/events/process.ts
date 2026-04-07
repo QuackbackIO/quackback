@@ -6,7 +6,7 @@
  */
 
 import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq'
-import { config } from '@/lib/server/config'
+import { getRedisConnectionOpts, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
 import { getHook } from './registry'
 import { getHookTargets } from './targets'
 import { isRetryableError } from './hook-utils'
@@ -58,11 +58,7 @@ function ensureQueue(): Promise<Queue<HookJobData>> {
 }
 
 async function initializeQueue() {
-  const connOpts = {
-    url: config.redisUrl,
-    maxRetriesPerRequest: null as null,
-    connectTimeout: 5_000,
-  }
+  const connOpts = getRedisConnectionOpts()
 
   // Separate connections: BullMQ Workers use blocking commands (BLMOVE)
   // that conflict with Queue commands on a shared connection.
@@ -122,7 +118,7 @@ async function initializeQueue() {
     await Promise.race([
       queue.waitUntilReady(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), 5_000)
+        setTimeout(() => reject(new Error('Redis connection timeout (5s)')), REDIS_READY_TIMEOUT_MS)
       ),
     ])
   } catch (error) {
