@@ -89,6 +89,7 @@ const mockOpenAI = {
 
 vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn(() => mockOpenAI),
+  stripCodeFences: vi.fn((s: string) => s.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, '')),
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({

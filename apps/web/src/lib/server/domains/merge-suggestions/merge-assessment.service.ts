@@ -4,9 +4,8 @@
  * Single batched LLM call to verify true duplicates and determine merge direction.
  */
 
-import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
-import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'

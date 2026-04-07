@@ -62,7 +62,7 @@ async function initializeQueue() {
           break
         }
         case 'retention-cleanup': {
-          const { cleanupExpiredLogs } = await import('../../ai/usage-retention')
+          const { cleanupExpiredLogs } = await import('../../ai/usage-log')
           await cleanupExpiredLogs()
           break
         }

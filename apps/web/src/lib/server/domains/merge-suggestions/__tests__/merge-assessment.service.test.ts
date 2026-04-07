@@ -14,16 +14,13 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
       completions: { create: (...args: unknown[]) => mockCreate(...args) },
     },
   })),
+  stripCodeFences: vi.fn((text: string) => text),
 }))
 
 vi.mock('@/lib/server/domains/ai/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) =>
     fn().then((result: unknown) => ({ result, retryCount: 0 }))
   ),
-}))
-
-vi.mock('@/lib/server/domains/ai/parse', () => ({
-  stripCodeFences: vi.fn((text: string) => text),
 }))
 
 describe('merge-assessment.service', () => {

@@ -2,8 +2,7 @@
  * AI module - Types Only
  *
  * Import directly:
- *   - './config' for getOpenAI
+ *   - './config' for getOpenAI, stripCodeFences
  *   - './retry' for withRetry
- *   - './parse' for stripCodeFences
  */
 export type { RetryOptions } from './retry'

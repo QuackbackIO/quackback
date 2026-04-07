@@ -1,9 +1,11 @@
 /**
  * AI usage logging — records token usage, timing, and retry counts
  * for every AI API call in the feedback pipeline.
+ *
+ * Also handles retention cleanup for ai_usage_log and pipeline_log tables.
  */
 
-import { db, aiUsageLog } from '@/lib/server/db'
+import { db, aiUsageLog, sql } from '@/lib/server/db'
 
 export interface LogAiUsageParams {
   pipelineStep: string
@@ -107,4 +109,36 @@ export async function withUsageLogging<T>(
 
     throw error
   }
+}
+
+// ---------------------------------------------------------------------------
+// Retention cleanup
+// ---------------------------------------------------------------------------
+
+const AI_USAGE_RETENTION_DAYS = 90
+const PIPELINE_LOG_RETENTION_DAYS = 180
+
+export async function cleanupExpiredLogs(): Promise<{
+  aiUsageDeleted: number
+  pipelineDeleted: number
+}> {
+  const aiResult = await db.execute(
+    sql`DELETE FROM ai_usage_log WHERE created_at < now() - interval '${sql.raw(String(AI_USAGE_RETENTION_DAYS))} days'`
+  )
+
+  const pipelineResult = await db.execute(
+    sql`DELETE FROM pipeline_log WHERE created_at < now() - interval '${sql.raw(String(PIPELINE_LOG_RETENTION_DAYS))} days'`
+  )
+
+  const aiUsageDeleted = (aiResult as { count: number }).count ?? 0
+  const pipelineDeleted = (pipelineResult as { count: number }).count ?? 0
+
+  if (aiUsageDeleted > 0 || pipelineDeleted > 0) {
+    console.log(
+      `[Retention] Cleaned up ${aiUsageDeleted} ai_usage_log rows (>${AI_USAGE_RETENTION_DAYS}d), ` +
+        `${pipelineDeleted} pipeline_log rows (>${PIPELINE_LOG_RETENTION_DAYS}d)`
+    )
+  }
+
+  return { aiUsageDeleted, pipelineDeleted }
 }

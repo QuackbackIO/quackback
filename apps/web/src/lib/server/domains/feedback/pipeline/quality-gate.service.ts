@@ -12,10 +12,9 @@
  * since there is no human-provided one.
  */
 
-import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
-import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { buildQualityGatePrompt } from './prompts/quality-gate.prompt'
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
 

@@ -7,10 +7,9 @@
 
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, rawFeedbackItems, feedbackSignals, sql } from '@/lib/server/db'
-import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
-import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { buildExtractionPrompt } from './prompts/extraction.prompt'
 import { shouldExtract } from './quality-gate.service'
 import { logPipelineEvent } from './pipeline-log'

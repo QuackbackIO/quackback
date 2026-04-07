@@ -12,10 +12,9 @@
 
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, rawFeedbackItems } from '@/lib/server/db'
-import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
-import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import { embedSignal, findSimilarPosts, findSimilarPendingSuggestions } from './embedding.service'
 import { createPostSuggestion, createVoteSuggestion } from './suggestion.service'
 import { logPipelineEvent } from './pipeline-log'
