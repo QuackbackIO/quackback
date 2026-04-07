@@ -6,10 +6,6 @@
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '../../events/hook-utils'
 
-function truncateTitle(title: string): string {
-  return title.length > 256 ? title.slice(0, 253) + '...' : title
-}
-
 interface DiscordEmbed {
   title?: string
   description?: string
@@ -61,7 +57,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(post.title),
+            title: truncate(post.title, 256),
             url: postUrl,
             description: content || undefined,
             color: COLORS.blue,
@@ -82,7 +78,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(post.title),
+            title: truncate(post.title, 256),
             url: postUrl,
             description: `${formatStatus(previousStatus)} → **${formatStatus(newStatus)}**`,
             color: getStatusColor(newStatus),
@@ -102,7 +98,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(post.title),
+            title: truncate(post.title, 256),
             url: postUrl,
             description: `Changed: ${fields}`,
             color: COLORS.yellow,
@@ -120,7 +116,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(post.title),
+            title: truncate(post.title, 256),
             color: COLORS.grey,
             author: { name: `🗑️ Post deleted by ${actor}` },
             timestamp: event.timestamp,
@@ -137,7 +133,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(canonicalPost.title),
+            title: truncate(canonicalPost.title, 256),
             url: canonicalUrl,
             description: `"${duplicatePost.title}" merged into this post`,
             color: COLORS.orange,
@@ -157,7 +153,7 @@ export function buildDiscordMessage(event: EventData, rootUrl: string): DiscordM
       return {
         embeds: [
           {
-            title: truncateTitle(post.title),
+            title: truncate(post.title, 256),
             url: postUrl,
             description: content || undefined,
             color: COLORS.blue,

@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
 
 type AuthMode = 'login' | 'signup'
 
@@ -36,13 +28,7 @@ export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
   const [mode, setMode] = useState<AuthMode>('login')
   const onSuccessCallbackRef = useRef<(() => void) | null>(null)
 
-  // DEBUG: Log provider initialization
-  useEffect(() => {
-    console.log('[AuthPopoverProvider] Provider initialized')
-  }, [])
-
   const openAuthPopover = useCallback((options: OpenAuthPopoverOptions) => {
-    console.log('[AuthPopoverProvider] openAuthPopover called with mode:', options.mode)
     setMode(options.mode)
     onSuccessCallbackRef.current = options.onSuccess || null
     setIsOpen(true)

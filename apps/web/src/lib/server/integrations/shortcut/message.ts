@@ -31,7 +31,6 @@ export function buildShortcutStoryBody(
     `[View in Quackback](${postUrl})`,
   ].join('\n')
 
-  // Shortcut story name has a 512 char max
-  const title = post.title.length > 512 ? post.title.slice(0, 509) + '...' : post.title
+  const title = truncate(post.title, 512)
   return { title, description }
 }

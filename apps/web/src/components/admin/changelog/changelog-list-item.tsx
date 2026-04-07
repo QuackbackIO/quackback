@@ -15,6 +15,7 @@ import {
   LinkIcon,
 } from '@heroicons/react/24/outline'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
+import { stripMarkdownPreview } from '@/lib/shared/utils'
 
 interface ChangelogListItemProps {
   id: ChangelogId
@@ -56,17 +57,7 @@ export function ChangelogListItem({
   onDelete,
 }: ChangelogListItemProps) {
   const config = STATUS_CONFIG[status]
-  const plain = content
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-    .replace(/!\[.*?\]\(.+?\)/g, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-  const contentPreview = plain.length > 150 ? plain.slice(0, 150) + '...' : plain
+  const contentPreview = stripMarkdownPreview(content, 150)
 
   return (
     <div

@@ -8,6 +8,7 @@ import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { stripCodeFences } from '@/lib/server/domains/ai/parse'
 import type { PostId } from '@quackback/ids'
+import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
 
 const ASSESSMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
@@ -140,10 +141,6 @@ export function determineDirection(
   return postA.createdAt <= postB.createdAt
     ? { sourcePostId: postB.id, targetPostId: postA.id }
     : { sourcePostId: postA.id, targetPostId: postB.id }
-}
-
-function truncate(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
 }
 
 function buildPrompt(sourcePost: PostInfo, candidates: MergeCandidate[]): string {

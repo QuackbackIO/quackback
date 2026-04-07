@@ -68,6 +68,7 @@ import {
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { truncate } from '@/lib/shared/utils/string'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -1460,11 +1461,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
-      excerpt: p.content
-        ? p.content.length > 200
-          ? p.content.slice(0, 200) + '...'
-          : p.content
-        : '',
+      excerpt: p.content ? truncate(p.content, 200) : '',
       voteCount: p.voteCount,
       commentCount: p.commentCount,
       boardId: p.boardId,
@@ -1515,11 +1512,7 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
     changelogs: result.items.map((c) => ({
       id: c.id,
       title: c.title,
-      excerpt: c.content
-        ? c.content.length > 200
-          ? c.content.slice(0, 200) + '...'
-          : c.content
-        : '',
+      excerpt: c.content ? truncate(c.content, 200) : '',
       status: c.status,
       authorName: c.author?.name ?? null,
       linkedPosts: c.linkedPosts.map((p) => ({

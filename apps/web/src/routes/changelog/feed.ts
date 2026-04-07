@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { stripHtml } from '@/lib/shared/utils'
+import { stripHtml, truncate } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/changelog/feed')({
   server: {
@@ -92,9 +92,7 @@ function buildRssFeed(options: RssFeedOptions): string {
   const items = entries
     .map((entry) => {
       // Strip HTML for description, keep it short
-      const plainContent = stripHtml(entry.content)
-      const truncatedContent =
-        plainContent.length > 500 ? plainContent.slice(0, 500) + '...' : plainContent
+      const truncatedContent = truncate(stripHtml(entry.content), 500)
 
       return `    <item>
       <title>${escapeXml(entry.title)}</title>

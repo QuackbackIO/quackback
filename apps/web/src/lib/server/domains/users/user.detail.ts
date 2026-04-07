@@ -26,6 +26,7 @@ import {
 } from '@/lib/server/db'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { InternalError } from '@/lib/shared/errors'
+import { truncate } from '@/lib/shared/utils/string'
 import type {
   PortalUserDetail,
   EngagedPost,
@@ -171,9 +172,10 @@ export async function getPortalUserDetail(
       ]),
     ]
 
-    // Run the dependent queries in parallel where possible
+    // Run all dependent queries in parallel — otherPostCommentCounts uses
+    // otherPostIds (available now) instead of waiting for otherPosts results
+    const allCommentPostIds = [...authoredPosts.map((p) => p.id), ...otherPostIds]
     const [otherPosts, commentCounts] = await Promise.all([
-      // Fetch posts the user engaged with but didn't author
       otherPostIds.length > 0
         ? db
             .select({
@@ -198,54 +200,25 @@ export async function getPortalUserDetail(
             .where(and(inArray(posts.id, otherPostIds), isNull(posts.deletedAt)))
         : Promise.resolve([]),
 
-      // Get comment counts for authored posts (we'll add otherPosts counts after)
-      authoredPosts.length > 0
+      // Get comment counts for all engaged posts in one query
+      allCommentPostIds.length > 0
         ? db
             .select({
               postId: comments.postId,
               count: sql<number>`count(*)::int`.as('count'),
             })
             .from(comments)
-            .where(
-              and(
-                inArray(
-                  comments.postId,
-                  authoredPosts.map((p) => p.id)
-                ),
-                isNull(comments.deletedAt)
-              )
-            )
+            .where(and(inArray(comments.postId, allCommentPostIds), isNull(comments.deletedAt)))
             .groupBy(comments.postId)
         : Promise.resolve([]),
     ])
-
-    // Get comment counts for other posts if we have any
-    const otherPostCommentCounts =
-      otherPosts.length > 0
-        ? await db
-            .select({
-              postId: comments.postId,
-              count: sql<number>`count(*)::int`.as('count'),
-            })
-            .from(comments)
-            .where(
-              and(
-                inArray(
-                  comments.postId,
-                  otherPosts.map((p) => p.id)
-                ),
-                isNull(comments.deletedAt)
-              )
-            )
-            .groupBy(comments.postId)
-        : []
 
     const engagementData = {
       authoredPosts,
       commentedPostIds,
       votedPostIds,
       otherPosts,
-      commentCounts: [...commentCounts, ...otherPostCommentCounts],
+      commentCounts,
     }
 
     // Build maps for engagement tracking
@@ -259,13 +232,14 @@ export async function getPortalUserDetail(
 
     // Combine all posts into a single engaged posts list
     const allPosts = [...engagementData.authoredPosts, ...engagementData.otherPosts]
+    const authoredPostIds = new Set(engagementData.authoredPosts.map((p) => p.id))
     const engagedPostsMap = new Map<string, EngagedPost>()
 
     for (const post of allPosts) {
       const engagementTypes: EngagementType[] = []
       const engagementDates: Date[] = []
 
-      if (engagementData.authoredPosts.some((p) => p.id === post.id)) {
+      if (authoredPostIds.has(post.id)) {
         engagementTypes.push('authored')
         engagementDates.push(post.createdAt)
       }
@@ -283,8 +257,7 @@ export async function getPortalUserDetail(
       }
 
       if (engagementTypes.length > 0) {
-        const contentPreview =
-          post.content.length > 200 ? post.content.substring(0, 200) + '...' : post.content
+        const contentPreview = truncate(post.content, 200)
 
         engagedPostsMap.set(post.id, {
           id: post.id,

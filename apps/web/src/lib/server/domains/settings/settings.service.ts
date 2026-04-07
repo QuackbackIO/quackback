@@ -79,10 +79,13 @@ async function getCustomProviderNames(
   if (genericProviders.length === 0) return undefined
 
   const names: Record<string, string> = {}
-  for (const provider of genericProviders) {
-    const creds = await getPlatformCredentials(provider.credentialType)
-    if (creds?.displayName) {
-      names[provider.id] = creds.displayName
+  const credResults = await Promise.all(
+    genericProviders.map((p) => getPlatformCredentials(p.credentialType))
+  )
+  for (let i = 0; i < genericProviders.length; i++) {
+    const displayName = credResults[i]?.displayName
+    if (displayName) {
+      names[genericProviders[i].id] = displayName
     }
   }
 
