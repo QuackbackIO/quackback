@@ -5,6 +5,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate } from '../../events/hook-utils'
+import { buildPostUrl, escapeHtml, getAuthorName } from '../message-utils'
 
 export function buildAzureDevOpsWorkItemBody(
   event: EventData,
@@ -15,9 +16,9 @@ export function buildAzureDevOpsWorkItemBody(
   }
 
   const { post } = event.data
-  const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
-  const author = post.authorName || post.authorEmail || 'Anonymous'
+  const author = getAuthorName(post)
 
   const description = [
     `<p>${escapeHtml(content)}</p>`,
@@ -28,12 +29,4 @@ export function buildAzureDevOpsWorkItemBody(
   ].join('\n')
 
   return { title: post.title, description }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }

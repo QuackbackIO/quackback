@@ -61,7 +61,6 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
     const { decryptSecrets } = await import('../encryption')
     const { listGitLabProjects } = await import('./projects')
 
-    console.log(`[fn:integrations] fetchGitLabProjectsFn`)
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -82,7 +81,6 @@ export const fetchGitLabProjectsFn = createServerFn({ method: 'GET' }).handler(
     }
 
     const projects = await listGitLabProjects(secrets.accessToken)
-    console.log(`[fn:integrations] fetchGitLabProjectsFn: ${projects.length} projects`)
     return projects
   }
 )

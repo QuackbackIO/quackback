@@ -19,6 +19,7 @@ import {
 import type { PostId, CommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { commentKeys } from '@/lib/client/hooks/use-comments-query'
+import { addReplyToTree, replaceOptimisticInTree } from '@/lib/client/utils/comment-tree-helpers'
 
 // ============================================================================
 // Types
@@ -92,56 +93,6 @@ interface UseUnpinCommentOptions {
 }
 
 // ============================================================================
-// Helper Functions
-// ============================================================================
-
-/** Add a reply to the correct parent in a nested comment structure */
-function addReplyToComments(
-  comments: OptimisticComment[],
-  parentId: string,
-  reply: OptimisticComment
-): OptimisticComment[] {
-  return comments.map((comment) => {
-    if (comment.id === parentId) {
-      return { ...comment, replies: [...comment.replies, reply] }
-    }
-    if (comment.replies.length > 0) {
-      return { ...comment, replies: addReplyToComments(comment.replies, parentId, reply) }
-    }
-    return comment
-  })
-}
-
-/** Replace optimistic comment with real server data */
-function replaceOptimisticInComments(
-  comments: OptimisticComment[],
-  parentId: string | null,
-  content: string,
-  serverComment: { id: CommentId; createdAt: Date }
-): OptimisticComment[] {
-  return comments.map((comment) => {
-    if (comment.id.startsWith('comment_optimistic_')) {
-      const sameParent = (comment.parentId || null) === (parentId || null)
-      const sameContent = comment.content === content
-      if (sameParent && sameContent) {
-        const createdAt =
-          typeof serverComment.createdAt === 'string'
-            ? serverComment.createdAt
-            : serverComment.createdAt.toISOString()
-        return { ...comment, id: serverComment.id, createdAt }
-      }
-    }
-    if (comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: replaceOptimisticInComments(comment.replies, parentId, content, serverComment),
-      }
-    }
-    return comment
-  })
-}
-
-// ============================================================================
 // Mutation Hooks
 // ============================================================================
 
@@ -187,7 +138,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           if (!old || typeof old !== 'object') return old
           const post = old as { comments: OptimisticComment[] }
           const comments = input.parentId
-            ? addReplyToComments(post.comments, input.parentId, optimisticComment)
+            ? addReplyToTree(post.comments, input.parentId, optimisticComment)
             : [optimisticComment, ...post.comments]
           return { ...post, comments }
         })
@@ -208,8 +159,9 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
         const post = old as { comments: OptimisticComment[] }
         return {
           ...post,
-          comments: replaceOptimisticInComments(
+          comments: replaceOptimisticInTree(
             post.comments,
+            'comment_optimistic_',
             input.parentId ?? null,
             input.content,
             serverComment.comment

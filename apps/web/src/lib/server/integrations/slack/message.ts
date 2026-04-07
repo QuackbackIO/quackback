@@ -5,6 +5,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '../../events/hook-utils'
+import { getAuthorName, buildPostUrl } from '../message-utils'
 
 interface SlackMessage {
   text: string
@@ -43,9 +44,9 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const content = truncate(stripHtml(post.content), 300)
-      const author = post.authorName || post.authorEmail || 'Anonymous'
+      const author = getAuthorName(post)
 
       return {
         text: `New feedback from ${author}: ${post.title}`,
@@ -78,7 +79,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.status_changed': {
       const { post, previousStatus, newStatus } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const emoji = getStatusEmoji(newStatus)
       const actor = event.actor.email || 'System'
 
@@ -104,7 +105,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.updated': {
       const { post, changedFields } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const actor = event.actor.email || 'System'
       const fields = changedFields.join(', ')
 
@@ -154,7 +155,7 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'post.merged': {
       const { duplicatePost, canonicalPost } = event.data
-      const canonicalUrl = `${rootUrl}/b/${canonicalPost.boardSlug}/posts/${canonicalPost.id}`
+      const canonicalUrl = buildPostUrl(rootUrl, canonicalPost.boardSlug, canonicalPost.id)
       const actor = event.actor.email || 'System'
 
       return {
@@ -177,9 +178,9 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
 
     case 'comment.created': {
       const { comment, post } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const content = truncate(stripHtml(comment.content), 300)
-      const author = comment.authorName || comment.authorEmail || 'Anonymous'
+      const author = getAuthorName(comment)
 
       return {
         text: `New comment from ${author} on "${post.title}"`,

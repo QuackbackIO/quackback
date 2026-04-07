@@ -7,6 +7,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate } from '../../events/hook-utils'
+import { buildPostUrl, escapeHtml, getAuthorName } from '../message-utils'
 
 /**
  * Build an Asana task name and HTML notes body from a post.created event.
@@ -20,9 +21,9 @@ export function buildAsanaTaskBody(
   }
 
   const { post } = event.data
-  const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
-  const author = post.authorName || post.authorEmail || 'Anonymous'
+  const author = getAuthorName(post)
 
   const htmlNotes = [
     '<body>',
@@ -35,15 +36,4 @@ export function buildAsanaTaskBody(
   ].join('\n')
 
   return { name: post.title, htmlNotes }
-}
-
-/**
- * Escape HTML special characters for safe embedding in Asana notes.
- */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }

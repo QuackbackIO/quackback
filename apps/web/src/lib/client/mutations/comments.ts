@@ -10,6 +10,7 @@ import { inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import type { PostDetails, CommentReaction, CommentWithReplies } from '@/lib/shared/types'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
 import type { CommentId, PrincipalId, PostId } from '@quackback/ids'
+import { addReplyToTree, replaceOptimisticInTree } from '@/lib/client/utils/comment-tree-helpers'
 
 // ============================================================================
 // Types
@@ -123,54 +124,6 @@ function updateCommentReactionsFromServer(
   })
 }
 
-/** Add a reply to a nested comment structure */
-function addReplyToComment(
-  comments: CommentWithReplies[],
-  parentId: CommentId,
-  newComment: CommentWithReplies
-): CommentWithReplies[] {
-  return comments.map((comment) => {
-    if (comment.id === parentId) {
-      return {
-        ...comment,
-        replies: [...comment.replies, newComment],
-      }
-    }
-    if (comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: addReplyToComment(comment.replies, parentId, newComment),
-      }
-    }
-    return comment
-  })
-}
-
-/** Replace optimistic comment with real server data */
-function replaceOptimisticComment(
-  comments: CommentWithReplies[],
-  parentId: string | null,
-  content: string,
-  serverComment: { id: CommentId; createdAt: Date }
-): CommentWithReplies[] {
-  return comments.map((comment) => {
-    if (comment.id.startsWith('comment_temp')) {
-      const sameParent = (comment.parentId || null) === (parentId || null)
-      const sameContent = comment.content === content
-      if (sameParent && sameContent) {
-        return { ...comment, id: serverComment.id, createdAt: serverComment.createdAt }
-      }
-    }
-    if (comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: replaceOptimisticComment(comment.replies, parentId, content, serverComment),
-      }
-    }
-    return comment
-  })
-}
-
 // ============================================================================
 // Comment Reaction Mutation
 // ============================================================================
@@ -264,7 +217,7 @@ export function useAddComment() {
 
       if (previousDetail) {
         const updatedComments = parentId
-          ? addReplyToComment(previousDetail.comments, parentId as CommentId, optimisticComment)
+          ? addReplyToTree(previousDetail.comments, parentId as CommentId, optimisticComment)
           : [...previousDetail.comments, optimisticComment]
         queryClient.setQueryData<PostDetails>(inboxKeys.detail(typedPostId), {
           ...previousDetail,
@@ -301,8 +254,9 @@ export function useAddComment() {
         if (!old) return old
         return {
           ...old,
-          comments: replaceOptimisticComment(
+          comments: replaceOptimisticInTree(
             old.comments,
+            'comment_temp',
             parentId ?? null,
             content,
             serverComment.comment

@@ -4,6 +4,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate } from '../../events/hook-utils'
+import { buildPostUrl, getAuthorName } from '../message-utils'
 
 /**
  * Build card name and description for a Trello card.
@@ -20,9 +21,9 @@ export function buildTrelloCard(
   }
 
   const { post } = event.data
-  const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+  const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
   const content = truncate(stripHtml(post.content), 2000)
-  const author = post.authorName || post.authorEmail || 'Anonymous'
+  const author = getAuthorName(post)
 
   const desc = [
     `**Submitted by:** ${author}`,

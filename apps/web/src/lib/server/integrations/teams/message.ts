@@ -12,6 +12,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate, formatStatus, getStatusEmoji } from '../../events/hook-utils'
+import { getAuthorName, buildPostUrl } from '../message-utils'
 
 interface TeamsMessage {
   body: { contentType: 'html'; content: string }
@@ -60,9 +61,9 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const content = truncate(stripHtml(post.content), 300)
-      const author = post.authorName || post.authorEmail || 'Anonymous'
+      const author = getAuthorName(post)
 
       return buildCard(
         [
@@ -77,7 +78,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.status_changed': {
       const { post, previousStatus, newStatus } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const emoji = getStatusEmoji(newStatus)
       const actor = event.actor.email || 'System'
 
@@ -93,7 +94,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.updated': {
       const { post, changedFields } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const actor = event.actor.email || 'System'
       const fields = changedFields.join(', ')
 
@@ -119,7 +120,7 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'post.merged': {
       const { duplicatePost, canonicalPost } = event.data
-      const canonicalUrl = `${rootUrl}/b/${canonicalPost.boardSlug}/posts/${canonicalPost.id}`
+      const canonicalUrl = buildPostUrl(rootUrl, canonicalPost.boardSlug, canonicalPost.id)
       const actor = event.actor.email || 'System'
 
       return buildCard(
@@ -136,9 +137,9 @@ export function buildTeamsMessage(event: EventData, rootUrl: string): TeamsMessa
 
     case 'comment.created': {
       const { comment, post } = event.data
-      const postUrl = `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`
+      const postUrl = buildPostUrl(rootUrl, post.boardSlug, post.id)
       const content = truncate(stripHtml(comment.content), 300)
-      const author = comment.authorName || comment.authorEmail || 'Anonymous'
+      const author = getAuthorName(comment)
 
       return buildCard(
         [
