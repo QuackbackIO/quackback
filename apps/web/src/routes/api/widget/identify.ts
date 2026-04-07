@@ -9,24 +9,11 @@ import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 
-// Accept either legacy HMAC fields or a JWT ssoToken
-const identifySchema = z
-  .object({
-    // JWT mode (preferred)
-    ssoToken: z.string().optional(),
-    // Legacy HMAC mode
-    id: z.string().optional(),
-    email: z.string().email().optional(),
-    name: z.string().optional(),
-    avatarURL: z.string().url().optional(),
-    created: z.string().optional(),
-    hash: z.string().optional(),
-    // Anonymous→identified merge: previous widget session token
-    previousToken: z.string().optional(),
-  })
-  .refine((data) => data.ssoToken || (data.id && data.email), {
-    message: 'Either ssoToken or (id + email) is required',
-  })
+const identifySchema = z.object({
+  ssoToken: z.string().min(1, 'ssoToken is required'),
+  // Anonymous→identified merge: previous widget session token
+  previousToken: z.string().optional(),
+})
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -125,80 +112,35 @@ export const Route = createFileRoute('/api/widget/identify')({
           const raw = await request.json()
           body = identifySchema.parse(raw)
         } catch {
+          return jsonError('VALIDATION_ERROR', 'Invalid request body: ssoToken is required', 400)
+        }
+
+        const secret = await getWidgetSecret()
+        if (!secret) {
+          return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
+        }
+
+        const payload = verifyHS256JWT(body.ssoToken, secret)
+        if (!payload) {
+          return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
+        }
+
+        // Extract user data from JWT claims
+        const sub = payload.sub || payload.id
+        const email = payload.email
+        if (typeof sub !== 'string' || typeof email !== 'string') {
           return jsonError(
-            'VALIDATION_ERROR',
-            'Invalid request body: provide ssoToken or (id + email)',
+            'TOKEN_INVALID',
+            'ssoToken must contain sub (or id) and email claims',
             400
           )
         }
 
-        let identified: IdentifiedUser
-
-        if (body.ssoToken) {
-          // JWT mode: verify the ssoToken
-          const secret = await getWidgetSecret()
-          if (!secret) {
-            return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
-          }
-
-          const payload = verifyHS256JWT(body.ssoToken, secret)
-          if (!payload) {
-            return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
-          }
-
-          // Extract user data from JWT claims
-          const sub = payload.sub || payload.id
-          const email = payload.email
-          if (typeof sub !== 'string' || typeof email !== 'string') {
-            return jsonError(
-              'TOKEN_INVALID',
-              'ssoToken must contain sub (or id) and email claims',
-              400
-            )
-          }
-
-          identified = {
-            id: sub,
-            email,
-            name: typeof payload.name === 'string' ? payload.name : undefined,
-            avatarURL: typeof payload.avatarURL === 'string' ? payload.avatarURL : undefined,
-          }
-        } else if (body.id && body.email) {
-          // Legacy HMAC mode
-          if (widgetConfig.identifyVerification) {
-            if (!body.hash) {
-              return jsonError(
-                'VALIDATION_ERROR',
-                'HMAC hash is required when verification is enabled',
-                400
-              )
-            }
-
-            const secret = await getWidgetSecret()
-            if (!secret) {
-              return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
-            }
-
-            const expectedHash = createHmac('sha256', secret).update(body.id).digest('hex')
-            const hashBuffer = Buffer.from(body.hash, 'hex')
-            const expectedBuffer = Buffer.from(expectedHash, 'hex')
-
-            if (
-              hashBuffer.length !== expectedBuffer.length ||
-              !timingSafeEqual(hashBuffer, expectedBuffer)
-            ) {
-              return jsonError('HMAC_INVALID', 'Hash verification failed', 403)
-            }
-          }
-
-          identified = {
-            id: body.id,
-            email: body.email,
-            name: body.name,
-            avatarURL: body.avatarURL,
-          }
-        } else {
-          return jsonError('VALIDATION_ERROR', 'Provide ssoToken or (id + email)', 400)
+        const identified: IdentifiedUser = {
+          id: sub,
+          email,
+          name: typeof payload.name === 'string' ? payload.name : undefined,
+          avatarURL: typeof payload.avatarURL === 'string' ? payload.avatarURL : undefined,
         }
 
         // Find or create user
