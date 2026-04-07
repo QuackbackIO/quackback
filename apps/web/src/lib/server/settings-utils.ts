@@ -88,9 +88,3 @@ export async function getSettingsBrandingData(): Promise<BrandingData | null> {
     headerDisplayName: record.headerDisplayName,
   }
 }
-
-// Backwards-compatible exports
-export const getWorkspaceLogoData = getSettingsLogoData
-export const getWorkspaceFaviconData = getSettingsFaviconData
-export const getWorkspaceHeaderLogoData = getSettingsHeaderLogoData
-export const getWorkspaceBrandingData = getSettingsBrandingData

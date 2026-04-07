@@ -43,7 +43,7 @@ export {
 } from './use-roadmaps-query'
 
 // Settings queries
-export { useWorkspaceLogo, useWorkspaceHeaderLogo } from './use-settings-queries'
+export { useSettingsLogo, useSettingsHeaderLogo } from './use-settings-queries'
 
 // Segment queries
 export { useSegments, useSuspenseSegments } from './use-segments-queries'

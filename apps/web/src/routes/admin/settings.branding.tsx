@@ -46,7 +46,7 @@ import {
 } from '@/components/admin/settings/branding/use-branding-state'
 import { oklchColor } from '@/components/admin/settings/branding/oklch-color-extension'
 import { primaryPresetIds, themePresets, type ThemeConfig } from '@/lib/shared/theme'
-import { useWorkspaceLogo } from '@/lib/client/hooks/use-settings-queries'
+import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 
@@ -465,7 +465,7 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
   const [showCropper, setShowCropper] = useState(false)
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
 
-  const { data: logoData } = useWorkspaceLogo()
+  const { data: logoData } = useSettingsLogo()
   const uploadMutation = useUploadWorkspaceLogo()
   const deleteMutation = useDeleteWorkspaceLogo()
 

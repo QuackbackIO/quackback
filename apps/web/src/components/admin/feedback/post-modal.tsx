@@ -64,7 +64,7 @@ import {
   type BoardId,
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
-import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
+import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import {
   toPortalComments,
   getInitialContentJson,

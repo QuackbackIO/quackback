@@ -70,9 +70,3 @@ export const fetchSettingsFaviconData = createServerFn({ method: 'GET' }).handle
     throw error
   }
 })
-
-// Backwards-compatible exports
-export const fetchWorkspaceLogoData = fetchSettingsLogoData
-export const fetchWorkspaceFaviconData = fetchSettingsFaviconData
-export const fetchWorkspaceHeaderLogoData = fetchSettingsHeaderLogoData
-export const fetchWorkspaceBrandingData = fetchSettingsBrandingData

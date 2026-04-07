@@ -6,7 +6,7 @@
 
 import type { JSONContent } from '@tiptap/react'
 import type { CommentId } from '@quackback/ids'
-import type { PostDetails } from '@/components/admin/feedback/inbox-types'
+import type { PostDetails } from '@/lib/shared/types'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 
 /** Convert admin comments to portal-compatible format */

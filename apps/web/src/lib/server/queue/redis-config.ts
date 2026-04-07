@@ -1,6 +1,9 @@
 import { config } from '@/lib/server/config'
 
-/** Shared Redis connection options for BullMQ queues and workers. */
+/**
+ * Shared Redis connection options for BullMQ queues and workers.
+ * Returns a new object each call — BullMQ requires distinct connection objects per queue/worker.
+ */
 export function getRedisConnectionOpts() {
   return {
     url: config.redisUrl,

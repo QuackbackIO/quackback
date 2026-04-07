@@ -33,7 +33,7 @@ import {
   type RoadmapId,
   type CommentId,
 } from '@quackback/ids'
-import type { PostDetails, CurrentUser } from '@/components/admin/feedback/inbox-types'
+import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 
 interface RoadmapModalProps {
