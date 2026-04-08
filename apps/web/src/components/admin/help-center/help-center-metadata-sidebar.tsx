@@ -50,12 +50,7 @@ function SidebarContent({
 
       <SidebarRow label="Category">
         <div className="flex items-center gap-1.5">
-          <Select
-            value={
-              categoryId && categories?.some((c) => c.id === categoryId) ? categoryId : undefined
-            }
-            onValueChange={onCategoryChange}
-          >
+          <Select value={categoryId || undefined} onValueChange={onCategoryChange}>
             <SelectTrigger size="sm" className="flex-1 min-w-0">
               <SelectValue placeholder="Select category..." />
             </SelectTrigger>
