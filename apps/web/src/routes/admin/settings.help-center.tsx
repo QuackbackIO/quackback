@@ -1,13 +1,7 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
 import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import {
-  BookOpenIcon,
-  ArrowPathIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ArrowTopRightOnSquareIcon,
-} from '@heroicons/react/24/solid'
+import { BookOpenIcon, ArrowPathIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -112,7 +106,6 @@ function HelpCenterSettingsPage() {
   }
 
   const helpUrl = `${baseUrl ?? ''}/help`
-  const cnameTarget = 'help-proxy.quackback.app'
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -174,35 +167,13 @@ function HelpCenterSettingsPage() {
             <Label htmlFor="custom-domain" className="text-sm font-medium">
               Custom Domain
             </Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="custom-domain"
-                value={customDomain}
-                onChange={(e) => handleCustomDomainChange(e.target.value)}
-                placeholder="help.yourdomain.com"
-                disabled={isBusy}
-              />
-              {config.customDomain && (
-                <div className="flex items-center gap-1 shrink-0">
-                  {config.domainVerified ? (
-                    <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-500">
-                      <CheckCircleIcon className="h-4 w-4" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-500">
-                      <XCircleIcon className="h-4 w-4" />
-                      Pending
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            {customDomain && !config.domainVerified && (
-              <p className="text-xs text-muted-foreground">
-                Point a CNAME record to <code className="text-xs font-mono">{cnameTarget}</code>
-              </p>
-            )}
+            <Input
+              id="custom-domain"
+              value={customDomain}
+              onChange={(e) => handleCustomDomainChange(e.target.value)}
+              placeholder="help.yourdomain.com"
+              disabled={isBusy}
+            />
           </div>
         </div>
       </SettingsCard>
