@@ -1,7 +1,12 @@
 import type { PrincipalId, UserId } from '@quackback/ids'
 
 /** Known MCP scopes that gate tool access. */
-export type McpScope = 'read:feedback' | 'write:feedback' | 'write:changelog'
+export type McpScope =
+  | 'read:feedback'
+  | 'write:feedback'
+  | 'write:changelog'
+  | 'read:help-center'
+  | 'write:help-center'
 
 /**
  * Auth context resolved once in the route handler.

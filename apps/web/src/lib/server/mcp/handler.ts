@@ -32,7 +32,13 @@ function jsonRpcError(status: number, message: string): Response {
   )
 }
 
-const ALL_SCOPES: McpScope[] = ['read:feedback', 'write:feedback', 'write:changelog']
+const ALL_SCOPES: McpScope[] = [
+  'read:feedback',
+  'write:feedback',
+  'write:changelog',
+  'read:help-center',
+  'write:help-center',
+]
 
 const API_KEY_PREFIX = 'qb_'
 
