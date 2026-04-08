@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, Outlet } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect, Outlet } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import { resolveLocale } from '@/lib/shared/i18n'
@@ -6,12 +6,23 @@ import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { HelpCenterHeader } from '@/components/help-center/help-center-header'
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
+import type { HelpCenterConfig } from '@/lib/server/domains/settings'
 
 /** Resolve locale from Accept-Language header on the server. */
 const getHelpCenterLocale = createServerFn({ method: 'GET' }).handler(async () => {
   const { getRequestHeaders } = await import('@tanstack/react-start/server')
   const acceptLanguage = getRequestHeaders().get('accept-language')
   return resolveLocale(acceptLanguage)
+})
+
+/** Check if the current request has a valid session. */
+const checkHasSession = createServerFn({ method: 'GET' }).handler(async () => {
+  const { hasSessionCookie } = await import('@/lib/server/functions/auth-helpers')
+  if (!hasSessionCookie()) return false
+  const { auth } = await import('@/lib/server/auth')
+  const { getRequestHeaders } = await import('@tanstack/react-start/server')
+  const session = await auth.api.getSession({ headers: getRequestHeaders() })
+  return !!session
 })
 
 export const Route = createFileRoute('/hc')({
@@ -21,8 +32,16 @@ export const Route = createFileRoute('/hc')({
     const flags = settings?.featureFlags as FeatureFlags | undefined
     if (!flags?.helpCenter) throw notFound()
 
-    const helpCenterConfig = settings?.helpCenterConfig
+    const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
     if (!helpCenterConfig?.enabled) throw notFound()
+
+    // Enforce authenticated-only access
+    if (helpCenterConfig?.access === 'authenticated') {
+      const hasSession = await checkHasSession()
+      if (!hasSession) {
+        throw redirect({ to: '/auth/login', replace: true })
+      }
+    }
   },
   loader: async ({ context }) => {
     const { settings } = context
