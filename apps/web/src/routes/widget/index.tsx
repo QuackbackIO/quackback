@@ -11,6 +11,7 @@ import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
 import { WidgetChangelog } from '@/components/widget/widget-changelog'
 import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
 import { WidgetHelp } from '@/components/widget/widget-help'
+import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
 import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
@@ -70,7 +71,10 @@ export const Route = createFileRoute('/widget/')({
       tabs: {
         feedback: settings?.publicWidgetConfig?.tabs?.feedback ?? true,
         changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
-        help: (settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false,
+        help:
+          ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
+          (settings?.helpCenterConfig?.enabled ?? false) &&
+          (settings?.publicWidgetConfig?.tabs?.help ?? false),
       },
       imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
       helpCenterSettings: {
@@ -94,6 +98,7 @@ type WidgetView =
   | 'changelog'
   | 'changelog-detail'
   | 'help'
+  | 'help-category'
   | 'help-detail'
 
 interface SuccessPost {
@@ -128,6 +133,11 @@ function WidgetPage() {
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
   const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<{
+    id: string
+    name: string
+    icon: string | null
+  } | null>(null)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
 
   const allPosts = useMemo(() => {
@@ -184,12 +194,21 @@ function WidgetPage() {
     }
     if (view === 'help-detail') {
       setSelectedHelpSlug(null)
+      if (selectedCategory) {
+        setView('help-category')
+      } else {
+        setView('help')
+      }
+      return
+    }
+    if (view === 'help-category') {
+      setSelectedCategory(null)
       setView('help')
       return
     }
     setSelectedPostId(null)
     setView('home')
-  }, [view])
+  }, [view, selectedCategory])
 
   const handleTabChange = useCallback((tab: WidgetTab) => {
     setActiveTab(tab)
@@ -201,6 +220,7 @@ function WidgetPage() {
       setView('changelog')
     } else {
       setSelectedHelpSlug(null)
+      setSelectedCategory(null)
       setView('help')
     }
   }, [])
@@ -211,6 +231,19 @@ function WidgetPage() {
   }, [])
 
   const handleHelpArticleSelect = useCallback((articleSlug: string) => {
+    setSelectedHelpSlug(articleSlug)
+    setView('help-detail')
+  }, [])
+
+  const handleHelpCategorySelect = useCallback(
+    (categoryId: string, categoryName: string, categoryIcon: string | null) => {
+      setSelectedCategory({ id: categoryId, name: categoryName, icon: categoryIcon })
+      setView('help-category')
+    },
+    []
+  )
+
+  const handleHelpCategoryArticleSelect = useCallback((articleSlug: string) => {
     setSelectedHelpSlug(articleSlug)
     setView('help-detail')
   }, [])
@@ -232,7 +265,21 @@ function WidgetPage() {
         <WidgetChangelogDetail entryId={selectedChangelogId} />
       )}
 
-      {view === 'help' && <WidgetHelp onArticleSelect={handleHelpArticleSelect} />}
+      {view === 'help' && (
+        <WidgetHelp
+          onArticleSelect={handleHelpArticleSelect}
+          onCategorySelect={handleHelpCategorySelect}
+        />
+      )}
+
+      {view === 'help-category' && selectedCategory && (
+        <WidgetHelpCategory
+          categoryId={selectedCategory.id}
+          categoryName={selectedCategory.name}
+          categoryIcon={selectedCategory.icon}
+          onArticleSelect={handleHelpCategoryArticleSelect}
+        />
+      )}
 
       {view === 'help-detail' && selectedHelpSlug && (
         <WidgetHelpDetail articleSlug={selectedHelpSlug} helpCenterSettings={helpCenterSettings} />

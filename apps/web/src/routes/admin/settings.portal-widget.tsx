@@ -39,100 +39,6 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
-function WidgetContentSettings({
-  config,
-  helpCenterEnabled,
-  helpCenterFlagEnabled,
-}: {
-  config: { imageUploadsInWidget?: boolean; tabs?: { help?: boolean } }
-  helpCenterEnabled: boolean
-  helpCenterFlagEnabled: boolean
-}) {
-  const router = useRouter()
-  const [saving, setSaving] = useState(false)
-  const [imageUploads, setImageUploads] = useState(config.imageUploadsInWidget ?? true)
-  const [helpTab, setHelpTab] = useState(config.tabs?.help ?? false)
-  const [, startTransition] = useTransition()
-
-  const showHelpTabToggle = helpCenterFlagEnabled && helpCenterEnabled
-
-  async function handleImageUploadsToggle(checked: boolean) {
-    setImageUploads(checked)
-    setSaving(true)
-    try {
-      await updateWidgetConfigFn({ data: { imageUploadsInWidget: checked } })
-      startTransition(() => router.invalidate())
-    } catch {
-      setImageUploads(!checked)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleHelpTabToggle(checked: boolean) {
-    setHelpTab(checked)
-    setSaving(true)
-    try {
-      await updateWidgetConfigFn({ data: { tabs: { help: checked } } })
-      startTransition(() => router.invalidate())
-    } catch {
-      setHelpTab(!checked)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <SettingsCard
-      title="Content"
-      description="Control what rich content types users can include in their feedback submissions."
-    >
-      <div className="divide-y divide-border/50">
-        <div className="flex items-center justify-between py-2">
-          <div className="pr-4">
-            <Label htmlFor="image-uploads-in-widget" className="text-sm font-medium cursor-pointer">
-              Image Uploads
-            </Label>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Allow signed-in users to attach images when submitting feedback through the widget.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <InlineSpinner visible={saving} />
-            <Switch
-              id="image-uploads-in-widget"
-              checked={imageUploads}
-              onCheckedChange={handleImageUploadsToggle}
-              disabled={saving}
-            />
-          </div>
-        </div>
-        {showHelpTabToggle && (
-          <div className="flex items-center justify-between py-2">
-            <div className="pr-4">
-              <Label htmlFor="help-tab-toggle" className="text-sm font-medium cursor-pointer">
-                Help Tab
-              </Label>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Show a Help tab in the widget that links to your help center articles.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <InlineSpinner visible={saving} />
-              <Switch
-                id="help-tab-toggle"
-                checked={helpTab}
-                onCheckedChange={handleHelpTabToggle}
-                disabled={saving}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </SettingsCard>
-  )
-}
-
 export const Route = createFileRoute('/admin/settings/portal-widget')({
   loader: async ({ context }) => {
     const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
@@ -171,9 +77,12 @@ function PortalWidgetSettingsPage() {
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>(
     (config.position as 'bottom-right' | 'bottom-left') ?? 'bottom-right'
   )
+  const helpCenterFlagEnabled = flags?.helpCenter ?? false
+  const helpCenterEnabled = helpCenterConfig?.enabled ?? false
   const [previewTabs, setPreviewTabs] = useState({
     feedback: config.tabs?.feedback ?? true,
     changelog: config.tabs?.changelog ?? false,
+    help: (config.tabs?.help ?? false) && helpCenterFlagEnabled && helpCenterEnabled,
   })
 
   return (
@@ -198,18 +107,14 @@ function PortalWidgetSettingsPage() {
             position={position}
             onPositionChange={setPosition}
             onTabsChange={setPreviewTabs}
+            helpCenterEnabled={helpCenterEnabled}
+            helpCenterFlagEnabled={helpCenterFlagEnabled}
           />
         </BrandingControlsPanel>
         <BrandingPreviewPanel label="Preview">
           <WidgetPreview position={position} tabs={previewTabs} />
         </BrandingPreviewPanel>
       </BrandingLayout>
-
-      <WidgetContentSettings
-        config={config}
-        helpCenterEnabled={helpCenterConfig?.enabled ?? false}
-        helpCenterFlagEnabled={flags?.helpCenter ?? false}
-      />
 
       <WidgetInstallation config={config} secret={widgetSecretQuery.data} baseUrl={baseUrl ?? ''} />
     </div>
@@ -267,16 +172,20 @@ function WidgetAppearanceControls({
   position,
   onPositionChange,
   onTabsChange,
+  helpCenterEnabled,
+  helpCenterFlagEnabled,
 }: {
   config: {
     defaultBoard?: string
     position?: string
-    tabs?: { feedback?: boolean; changelog?: boolean }
+    tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   }
   boards: { id: string; name: string; slug: string }[]
   position: 'bottom-right' | 'bottom-left'
   onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
-  onTabsChange: (tabs: { feedback: boolean; changelog: boolean }) => void
+  onTabsChange: (tabs: { feedback: boolean; changelog: boolean; help: boolean }) => void
+  helpCenterEnabled: boolean
+  helpCenterFlagEnabled: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -286,6 +195,9 @@ function WidgetAppearanceControls({
     feedback: config.tabs?.feedback ?? true,
     changelog: config.tabs?.changelog ?? false,
   })
+  const [helpTab, setHelpTab] = useState(config.tabs?.help ?? false)
+
+  const showHelpTabToggle = helpCenterFlagEnabled && helpCenterEnabled
 
   async function save(updates: Record<string, unknown>) {
     setSaving(true)
@@ -356,7 +268,7 @@ function WidgetAppearanceControls({
                 if (!checked && !widgetTabs.changelog) return
                 const next = { ...widgetTabs, feedback: checked }
                 setWidgetTabs(next)
-                onTabsChange(next)
+                onTabsChange({ ...next, help: helpTab })
                 save({ tabs: next })
               }}
               disabled={isBusy || (widgetTabs.feedback && !widgetTabs.changelog)}
@@ -380,13 +292,47 @@ function WidgetAppearanceControls({
                 if (!checked && !widgetTabs.feedback) return
                 const next = { ...widgetTabs, changelog: checked }
                 setWidgetTabs(next)
-                onTabsChange(next)
+                onTabsChange({ ...next, help: helpTab })
                 save({ tabs: next })
               }}
               disabled={isBusy || (widgetTabs.changelog && !widgetTabs.feedback)}
               aria-label="Changelog tab"
             />
           </div>
+
+          {showHelpTabToggle && (
+            <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
+              <div>
+                <Label htmlFor="tab-help" className="text-xs font-medium cursor-pointer">
+                  Help
+                </Label>
+                <p className="text-[11px] text-muted-foreground">Show help center articles</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <InlineSpinner visible={saving} />
+                <Switch
+                  id="tab-help"
+                  checked={helpTab}
+                  onCheckedChange={async (checked) => {
+                    setHelpTab(checked)
+                    onTabsChange({ ...widgetTabs, help: checked })
+                    setSaving(true)
+                    try {
+                      await updateWidgetConfigFn({ data: { tabs: { help: checked } } })
+                      startTransition(() => router.invalidate())
+                    } catch {
+                      setHelpTab(!checked)
+                      onTabsChange({ ...widgetTabs, help: !checked })
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={isBusy}
+                  aria-label="Help tab"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
