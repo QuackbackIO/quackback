@@ -235,7 +235,7 @@ export interface WidgetConfig {
   defaultBoard?: string
   /** Trigger button position */
   position?: 'bottom-right' | 'bottom-left'
-  /** Whether to require HMAC verification on identify calls */
+  /** Whether to require app-signed identity instead of inline email capture */
   identifyVerification?: boolean
   /** Which tabs to show in the widget bottom bar */
   tabs?: {
@@ -254,7 +254,7 @@ export type PublicWidgetConfig = Pick<
   WidgetConfig,
   'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'imageUploadsInWidget'
 > & {
-  /** Whether HMAC verification is required (derived from identifyVerification) */
+  /** Whether verified identity is required (derived from identifyVerification) */
   hmacRequired?: boolean
 }
 

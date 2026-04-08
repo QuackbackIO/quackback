@@ -22,7 +22,7 @@ vi.mock('@quackback/ids', () => ({
   generateId: vi.fn(() => 'mock_id'),
 }))
 
-import { verifyHS256JWT } from '../identify'
+import { createWidgetIdentityToken, verifyHS256JWT } from '@/lib/server/widget/identity-token'
 
 const SECRET = 'test-secret-key-for-jwt'
 
@@ -118,5 +118,28 @@ describe('verifyHS256JWT', () => {
     }
     const token = createJWT(payload, SECRET)
     expect(verifyHS256JWT(token, SECRET)).toEqual(payload)
+  })
+
+  it('creates signed widget identity tokens with standard claims', () => {
+    const token = createWidgetIdentityToken(
+      {
+        id: 'user_123',
+        email: 'jane@test.com',
+        name: 'Jane Doe',
+        avatarUrl: 'https://example.com/avatar.png',
+      },
+      SECRET,
+      300
+    )
+
+    const payload = verifyHS256JWT(token, SECRET)
+    expect(payload).not.toBeNull()
+    expect(payload?.sub).toBe('user_123')
+    expect(payload?.id).toBe('user_123')
+    expect(payload?.email).toBe('jane@test.com')
+    expect(payload?.name).toBe('Jane Doe')
+    expect(payload?.avatarURL).toBe('https://example.com/avatar.png')
+    expect(typeof payload?.iat).toBe('number')
+    expect(typeof payload?.exp).toBe('number')
   })
 })

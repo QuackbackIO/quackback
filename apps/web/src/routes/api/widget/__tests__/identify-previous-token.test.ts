@@ -8,27 +8,16 @@ import { z } from 'zod'
  */
 
 // Recreate the identify schema to test validation (the real schema is not exported)
-const identifySchema = z
-  .object({
-    ssoToken: z.string().optional(),
-    id: z.string().optional(),
-    email: z.string().email().optional(),
-    name: z.string().optional(),
-    avatarURL: z.string().url().optional(),
-    created: z.string().optional(),
-    hash: z.string().optional(),
-    previousToken: z.string().optional(),
-  })
-  .refine((data) => data.ssoToken || (data.id && data.email), {
-    message: 'Either ssoToken or (id + email) is required',
-  })
+const identifySchema = z.object({
+  ssoToken: z.string().min(1, 'ssoToken is required'),
+  previousToken: z.string().optional(),
+})
 
 describe('identify endpoint previousToken', () => {
   describe('schema validation', () => {
     it('accepts payload with previousToken', () => {
       const result = identifySchema.safeParse({
-        id: 'user_123',
-        email: 'jane@acme.com',
+        ssoToken: 'jwt.token.here',
         previousToken: 'old-session-token-uuid',
       })
       expect(result.success).toBe(true)
@@ -39,8 +28,7 @@ describe('identify endpoint previousToken', () => {
 
     it('accepts payload without previousToken', () => {
       const result = identifySchema.safeParse({
-        id: 'user_123',
-        email: 'jane@acme.com',
+        ssoToken: 'jwt.token.here',
       })
       expect(result.success).toBe(true)
       if (result.success) {

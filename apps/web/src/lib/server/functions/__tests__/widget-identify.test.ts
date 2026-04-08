@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createHmac } from 'crypto'
-import { verifyHS256JWT } from '@/routes/api/widget/identify'
+import { createWidgetIdentityToken, verifyHS256JWT } from '@/lib/server/widget/identity-token'
 
 describe('Widget Identify — verifyHS256JWT', () => {
   const SECRET = 'wgt_' + 'a'.repeat(64)
@@ -78,5 +78,14 @@ describe('Widget Identify — verifyHS256JWT', () => {
       JSON.stringify({ sub: 'hacker', email: 'evil@test.com' })
     ).toString('base64url')
     expect(verifyHS256JWT(`${parts[0]}.${tampered}.${parts[2]}`, SECRET)).toBeNull()
+  })
+
+  it('creates widget tokens that default subject to email', () => {
+    const token = createWidgetIdentityToken({ email: 'test@example.com', name: 'Test' }, SECRET, 60)
+    const result = verifyHS256JWT(token, SECRET)
+    expect(result?.sub).toBe('test@example.com')
+    expect(result?.id).toBe('test@example.com')
+    expect(result?.email).toBe('test@example.com')
+    expect(result?.name).toBe('Test')
   })
 })

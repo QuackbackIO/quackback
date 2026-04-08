@@ -18,6 +18,7 @@ import { resolveIdentifyAction, type SessionSource } from './identify-precedence
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
+import { createWidgetIdentifyTokenFn } from '@/lib/server/functions/widget'
 
 interface WidgetUser {
   id: string
@@ -29,7 +30,7 @@ interface WidgetUser {
 interface WidgetAuthContextValue {
   user: WidgetUser | null
   isIdentified: boolean
-  /** Whether HMAC verification is required (inline email capture disabled) */
+  /** Whether verified identity is required (inline email capture disabled) */
   hmacRequired: boolean
   /** Ensures a session exists (identified or anonymous). Returns true if ready. */
   ensureSession: () => Promise<boolean>
@@ -59,7 +60,7 @@ interface WidgetAuthProviderProps {
   portalUser?: WidgetUser | null
   /** Signed session cookie token extracted during SSR (available in cross-origin iframes) */
   portalSessionToken?: string | null
-  /** When true, inline email capture is disabled (identify endpoint requires HMAC hash) */
+  /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
   /** Initial locale from URL param (?locale=fr). SDK postMessage overrides this. */
   initialLocale?: string | null
@@ -174,10 +175,22 @@ export function WidgetAuthProvider({
 
       const p = (async () => {
         try {
+          if (hmacRequired) return false
+
+          const previousToken = getWidgetToken()
+          const { ssoToken } = await createWidgetIdentifyTokenFn({
+            data: { email, name: name || email.split('@')[0] },
+          })
+
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (previousToken) {
+            headers.Authorization = `Bearer ${previousToken}`
+          }
+
           const response = await fetch('/api/widget/identify', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: email, email, name: name || email.split('@')[0] }),
+            headers,
+            body: JSON.stringify(previousToken ? { ssoToken, previousToken } : { ssoToken }),
           })
           if (!response.ok) return false
           applyIdentifyResult(await response.json())
@@ -191,7 +204,7 @@ export function WidgetAuthProvider({
       identifyPromiseRef.current = p
       return p
     },
-    [applyIdentifyResult]
+    [applyIdentifyResult, hmacRequired]
   )
 
   // If a portal session token was extracted during SSR, use it directly as the

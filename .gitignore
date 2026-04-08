@@ -64,3 +64,4 @@ apps/web/next-env.d.ts
 .serena/
 .worktrees/
 .superpowers/
+.codex
