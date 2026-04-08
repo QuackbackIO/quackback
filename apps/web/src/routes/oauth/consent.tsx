@@ -58,6 +58,14 @@ const SCOPE_LABELS: Record<string, { label: string; description: string }> = {
     label: 'Write changelogs',
     description: 'Create and publish changelog entries',
   },
+  'read:help-center': {
+    label: 'Read help center',
+    description: 'Browse categories and articles',
+  },
+  'write:help-center': {
+    label: 'Write help center',
+    description: 'Create, edit, and delete articles and categories',
+  },
   offline_access: {
     label: 'Offline access',
     description: "Stay connected when you're not actively using it",
