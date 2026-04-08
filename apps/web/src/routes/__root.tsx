@@ -24,6 +24,7 @@ export interface RouterContext {
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
   themeCookie?: BootstrapData['themeCookie']
+  helpCenterHost: boolean
 }
 
 // Paths that are allowed before onboarding is complete
@@ -45,7 +46,8 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const { baseUrl, session, settings, userRole, themeCookie } = await getBootstrapData()
+    const { baseUrl, session, settings, userRole, themeCookie, helpCenterHost } =
+      await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -54,7 +56,20 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    return { baseUrl, session, settings, userRole, themeCookie }
+    // Allow dev mode override via query param
+    let resolvedHelpCenterHost = helpCenterHost
+    if (!resolvedHelpCenterHost && location.searchStr.includes('mode=help-center')) {
+      resolvedHelpCenterHost = true
+    }
+
+    return {
+      baseUrl,
+      session,
+      settings,
+      userRole,
+      themeCookie,
+      helpCenterHost: resolvedHelpCenterHost,
+    }
   },
   head: () => ({
     meta: [

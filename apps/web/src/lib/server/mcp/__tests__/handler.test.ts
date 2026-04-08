@@ -576,7 +576,7 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unmerge_post')
       expect(toolNames).toContain('delete_post')
       expect(toolNames).toContain('restore_post')
-      expect(toolNames).toHaveLength(23)
+      expect(toolNames).toHaveLength(27)
     })
 
     it('should handle resources/list request', async () => {
@@ -594,7 +594,8 @@ describe('MCP HTTP Handler', () => {
       expect(uris).toContain('quackback://tags')
       expect(uris).toContain('quackback://roadmaps')
       expect(uris).toContain('quackback://members')
-      expect(uris).toHaveLength(5)
+      expect(uris).toContain('quackback://help-center/categories')
+      expect(uris).toHaveLength(6)
     })
 
     // ── search tool (posts) ─────────────────────────────────────────────────

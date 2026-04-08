@@ -1,10 +1,20 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { PlusIcon } from '@heroicons/react/24/solid'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   SidebarContainer,
   SidebarRow,
   SidebarDivider,
 } from '@/components/shared/sidebar-primitives'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import { CategoryFormDialog } from './category-form-dialog'
 
 interface HelpCenterMetadataSidebarProps {
   categoryId?: string
@@ -21,6 +31,7 @@ function SidebarContent({
   onPublishToggle,
   authorName,
 }: HelpCenterMetadataSidebarProps) {
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false)
   const { data: categories } = useQuery(helpCenterQueries.categories())
 
   return (
@@ -38,19 +49,38 @@ function SidebarContent({
       <SidebarDivider />
 
       <SidebarRow label="Category">
-        <select
-          value={categoryId || ''}
-          onChange={(e) => onCategoryChange(e.target.value)}
-          className="w-full text-sm bg-transparent border border-border/50 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">Select category...</option>
-          {categories?.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1.5">
+          <Select value={categoryId || undefined} onValueChange={onCategoryChange}>
+            <SelectTrigger size="sm" className="flex-1 min-w-0">
+              <SelectValue placeholder="Select category..." />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {categories?.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id}>
+                  <span className="flex items-center gap-1.5">
+                    {cat.icon && <span>{cat.icon}</span>}
+                    <span className="truncate">{cat.name}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={() => setCreateCategoryOpen(true)}
+            className="h-8 w-8 flex items-center justify-center rounded-md border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            title="Create new category"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </SidebarRow>
+
+      <CategoryFormDialog
+        open={createCategoryOpen}
+        onOpenChange={setCreateCategoryOpen}
+        onCreated={(id) => onCategoryChange(id)}
+      />
 
       {authorName && (
         <>

@@ -104,6 +104,7 @@ export type {
   HelpCenterCategoryId,
   HelpCenterArticleId,
   HelpCenterFeedbackId,
+  HelpCenterDomainId,
   // Auth entities
   WorkspaceId,
   UserId,

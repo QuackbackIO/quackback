@@ -241,6 +241,7 @@ export interface WidgetConfig {
   tabs?: {
     feedback?: boolean
     changelog?: boolean
+    help?: boolean
   }
   /** Whether authenticated widget users can upload images in feedback submissions */
   imageUploadsInWidget?: boolean
@@ -278,8 +279,56 @@ export interface UpdateWidgetConfigInput {
   tabs?: {
     feedback?: boolean
     changelog?: boolean
+    help?: boolean
   }
   imageUploadsInWidget?: boolean
+}
+
+// =============================================================================
+// Help Center Configuration (Standalone knowledge base)
+// =============================================================================
+
+/**
+ * SEO configuration for the help center
+ */
+export interface HelpCenterSeoConfig {
+  metaDescription: string
+  sitemapEnabled: boolean
+  structuredDataEnabled: boolean
+  ogImageKey: string | null
+}
+
+export const DEFAULT_HELP_CENTER_SEO_CONFIG: HelpCenterSeoConfig = {
+  metaDescription: '',
+  sitemapEnabled: true,
+  structuredDataEnabled: true,
+  ogImageKey: null,
+}
+
+/**
+ * Help center configuration
+ * Controls the standalone knowledge base behavior
+ */
+export interface HelpCenterConfig {
+  enabled: boolean
+  subdomain: string | null
+  customDomain: string | null
+  domainVerified: boolean
+  homepageTitle: string
+  homepageDescription: string
+  access: 'public' | 'authenticated'
+  seo: HelpCenterSeoConfig
+}
+
+export const DEFAULT_HELP_CENTER_CONFIG: HelpCenterConfig = {
+  enabled: false,
+  subdomain: null,
+  customDomain: null,
+  domainVerified: false,
+  homepageTitle: 'How can we help?',
+  homepageDescription: 'Search our knowledge base or browse by category',
+  access: 'public',
+  seo: DEFAULT_HELP_CENTER_SEO_CONFIG,
 }
 
 // =============================================================================
@@ -363,6 +412,8 @@ export interface TenantSettings {
   customCss: string
   publicAuthConfig: PublicAuthConfig
   publicPortalConfig: PublicPortalConfig
+  /** Help center configuration */
+  helpCenterConfig: HelpCenterConfig
   /** Public widget config (no secret, safe for client) */
   publicWidgetConfig: PublicWidgetConfig
   /** Feature flags for experimental features */

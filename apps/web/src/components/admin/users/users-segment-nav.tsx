@@ -9,7 +9,6 @@ import {
   BoltIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/solid'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
@@ -43,77 +42,79 @@ export function UsersSegmentNav({
   const hasSelection = selectedSegmentIds.length > 0
 
   return (
-    <div className="space-y-1">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-foreground">Users</h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-          onClick={onCreateSegment}
-          title="Create segment"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/* All users */}
-      <button
-        type="button"
-        onClick={() => {
-          if (hasSelection) {
-            onClearSegments()
-          }
-        }}
-        className={cn(
-          'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
-          !hasSelection
-            ? 'bg-muted text-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-        )}
-      >
-        <UsersIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="flex-1 truncate">All users</span>
-        <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
-          {totalUserCount}
-        </span>
-      </button>
-
-      {/* Divider */}
-      <div className="border-b border-border/30 my-2" />
-
-      {/* Segments */}
-      {isLoading ? (
-        <div className="space-y-1">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-7 bg-muted/30 rounded-md animate-pulse" />
-          ))}
+    <div className="space-y-0">
+      <div className="pb-4">
+        {/* Header */}
+        <div className="flex w-full items-center justify-between py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Users
+          </span>
+          <button
+            type="button"
+            onClick={onCreateSegment}
+            title="Create segment"
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <PlusIcon className="h-3 w-3" />
+          </button>
         </div>
-      ) : !segments || segments.length === 0 ? (
-        <p className="text-xs text-muted-foreground px-2.5 py-1.5">
-          No segments yet. Click + to create one.
-        </p>
-      ) : (
-        <div className="space-y-0.5">
-          {segments.map((seg) => (
-            <SegmentNavItem
-              key={seg.id}
-              segment={seg}
-              isSelected={selectedSegmentIds.includes(seg.id)}
-              onSelect={(shiftKey) => onSelectSegment(seg.id, shiftKey)}
-              onEdit={() => onEditSegment(seg)}
-              onDelete={() => onDeleteSegment(seg)}
-              onEvaluate={
-                seg.type === 'dynamic' && onEvaluateSegment
-                  ? () => onEvaluateSegment(seg.id)
-                  : undefined
+
+        <div className="mt-2 space-y-1">
+          {/* All users */}
+          <button
+            type="button"
+            onClick={() => {
+              if (hasSelection) {
+                onClearSegments()
               }
-              isEvaluating={isEvaluating === seg.id}
-            />
-          ))}
+            }}
+            className={cn(
+              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              !hasSelection
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <UsersIcon className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1 truncate">All users</span>
+            <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+              {totalUserCount}
+            </span>
+          </button>
+
+          {/* Segments */}
+          {isLoading ? (
+            <div className="space-y-1">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-7 bg-muted/30 rounded-md animate-pulse" />
+              ))}
+            </div>
+          ) : !segments || segments.length === 0 ? (
+            <p className="text-xs text-muted-foreground px-2.5 py-1.5">
+              No segments yet. Click + to create one.
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {segments.map((seg) => (
+                <SegmentNavItem
+                  key={seg.id}
+                  segment={seg}
+                  isSelected={selectedSegmentIds.includes(seg.id)}
+                  onSelect={(shiftKey) => onSelectSegment(seg.id, shiftKey)}
+                  onEdit={() => onEditSegment(seg)}
+                  onDelete={() => onDeleteSegment(seg)}
+                  onEvaluate={
+                    seg.type === 'dynamic' && onEvaluateSegment
+                      ? () => onEvaluateSegment(seg.id)
+                      : undefined
+                  }
+                  isEvaluating={isEvaluating === seg.id}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

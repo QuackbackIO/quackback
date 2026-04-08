@@ -5,30 +5,36 @@ import {
   XMarkIcon,
   LightBulbIcon,
   NewspaperIcon,
+  BookOpenIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 interface WidgetPreviewProps {
   position: 'bottom-right' | 'bottom-left'
-  tabs?: { feedback: boolean; changelog: boolean }
+  tabs?: { feedback: boolean; changelog: boolean; help?: boolean }
 }
 
-type PreviewTab = 'feedback' | 'changelog'
+type PreviewTab = 'feedback' | 'changelog' | 'help'
 
 export function WidgetPreview({
   position,
-  tabs = { feedback: true, changelog: false },
+  tabs = { feedback: true, changelog: false, help: false },
 }: WidgetPreviewProps) {
   const [isOpen, setIsOpen] = useState(true)
-  const showTabBar = tabs.feedback && tabs.changelog
-  const initialTab: PreviewTab = tabs.feedback ? 'feedback' : 'changelog'
+  const enabledCount = [tabs.feedback, tabs.changelog, tabs.help].filter(Boolean).length
+  const showTabBar = enabledCount > 1
+  const initialTab: PreviewTab = tabs.feedback ? 'feedback' : tabs.changelog ? 'changelog' : 'help'
   const [activeTab, setActiveTab] = useState<PreviewTab>(initialTab)
 
   // Reset to a valid tab when config changes
   useEffect(() => {
-    if (activeTab === 'feedback' && !tabs.feedback) setActiveTab('changelog')
-    else if (activeTab === 'changelog' && !tabs.changelog) setActiveTab('feedback')
-  }, [tabs.feedback, tabs.changelog, activeTab])
+    if (activeTab === 'feedback' && !tabs.feedback)
+      setActiveTab(tabs.changelog ? 'changelog' : 'help')
+    else if (activeTab === 'changelog' && !tabs.changelog)
+      setActiveTab(tabs.feedback ? 'feedback' : 'help')
+    else if (activeTab === 'help' && !tabs.help)
+      setActiveTab(tabs.feedback ? 'feedback' : 'changelog')
+  }, [tabs.feedback, tabs.changelog, tabs.help, activeTab])
 
   return (
     <div className="relative rounded-lg border border-border bg-muted/30 overflow-hidden h-[520px]">
@@ -47,7 +53,11 @@ export function WidgetPreview({
           {/* Header: title + close */}
           <div className="flex items-center justify-between px-2.5 pt-2 pb-0.5 shrink-0">
             <p className="text-[10px] font-semibold text-foreground px-0.5">
-              {activeTab === 'feedback' ? 'Share your ideas' : "What's new"}
+              {activeTab === 'feedback'
+                ? 'Share your ideas'
+                : activeTab === 'help'
+                  ? 'Help Center'
+                  : "What's new"}
             </p>
             <button
               type="button"
@@ -77,6 +87,21 @@ export function WidgetPreview({
                   <MockPost title="Export data to CSV" votes={19} />
                   <MockPost title="Keyboard shortcuts" votes={14} voted />
                   <MockPost title="Custom notification rules" votes={11} />
+                </div>
+              </>
+            ) : activeTab === 'help' ? (
+              <>
+                <div className="relative mb-1.5">
+                  <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
+                  <div className="w-full pl-6 pr-2 py-1.5 text-[10px] rounded-lg border border-border bg-muted/30 text-muted-foreground/60">
+                    Search help articles...
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <MockHelpCategory icon="📚" title="Getting started" articles={4} />
+                  <MockHelpCategory icon="💳" title="Account & billing" articles={6} />
+                  <MockHelpCategory icon="🔌" title="Integrations" articles={3} />
+                  <MockHelpCategory icon="🔧" title="Troubleshooting" articles={5} />
                 </div>
               </>
             ) : (
@@ -109,32 +134,51 @@ export function WidgetPreview({
           <div className="border-t border-border shrink-0">
             {showTabBar && (
               <div className="flex">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('feedback')}
-                  className={cn(
-                    'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
-                    activeTab === 'feedback'
-                      ? 'text-primary'
-                      : 'text-muted-foreground/60 hover:text-muted-foreground'
-                  )}
-                >
-                  <LightBulbIcon className="w-3.5 h-3.5" />
-                  <span className="text-[8px] font-medium">Feedback</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('changelog')}
-                  className={cn(
-                    'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
-                    activeTab === 'changelog'
-                      ? 'text-primary'
-                      : 'text-muted-foreground/60 hover:text-muted-foreground'
-                  )}
-                >
-                  <NewspaperIcon className="w-3.5 h-3.5" />
-                  <span className="text-[8px] font-medium">Changelog</span>
-                </button>
+                {tabs.feedback && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('feedback')}
+                    className={cn(
+                      'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
+                      activeTab === 'feedback'
+                        ? 'text-primary'
+                        : 'text-muted-foreground/60 hover:text-muted-foreground'
+                    )}
+                  >
+                    <LightBulbIcon className="w-3.5 h-3.5" />
+                    <span className="text-[8px] font-medium">Feedback</span>
+                  </button>
+                )}
+                {tabs.changelog && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('changelog')}
+                    className={cn(
+                      'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
+                      activeTab === 'changelog'
+                        ? 'text-primary'
+                        : 'text-muted-foreground/60 hover:text-muted-foreground'
+                    )}
+                  >
+                    <NewspaperIcon className="w-3.5 h-3.5" />
+                    <span className="text-[8px] font-medium">Changelog</span>
+                  </button>
+                )}
+                {tabs.help && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('help')}
+                    className={cn(
+                      'flex-1 flex flex-col items-center gap-0.5 py-1.5 transition-colors',
+                      activeTab === 'help'
+                        ? 'text-primary'
+                        : 'text-muted-foreground/60 hover:text-muted-foreground'
+                    )}
+                  >
+                    <BookOpenIcon className="w-3.5 h-3.5" />
+                    <span className="text-[8px] font-medium">Help</span>
+                  </button>
+                )}
               </div>
             )}
             <div className={cn('text-center', showTabBar ? 'pb-0.5' : 'py-1')}>
@@ -225,6 +269,24 @@ function MockChangelogEntry({
       <p className="text-[8px] text-muted-foreground/70 line-clamp-2 mt-0.5 leading-relaxed">
         {excerpt}
       </p>
+    </div>
+  )
+}
+
+function MockHelpCategory({
+  icon,
+  title,
+  articles,
+}: {
+  icon: string
+  title: string
+  articles: number
+}) {
+  return (
+    <div className="rounded-md border border-border/50 p-1.5 cursor-pointer hover:border-border transition-all">
+      <div className="text-xs mb-0.5">{icon}</div>
+      <p className="text-[9px] font-semibold text-foreground line-clamp-1">{title}</p>
+      <p className="text-[7px] text-muted-foreground/50 mt-0.5">{articles} articles</p>
     </div>
   )
 }

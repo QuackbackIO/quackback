@@ -12,6 +12,7 @@ import {
   fetchWidgetConfig,
   fetchWidgetSecret,
 } from '@/lib/server/functions/settings'
+import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
@@ -103,6 +104,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'widgetSecret'],
       queryFn: fetchWidgetSecret,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  helpCenterConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'helpCenterConfig'],
+      queryFn: () => getHelpCenterConfigFn({ data: {} }),
       staleTime: STALE_TIME_LONG,
     }),
 }

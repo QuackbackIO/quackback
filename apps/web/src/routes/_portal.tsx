@@ -17,6 +17,12 @@ const getPortalLocale = createServerFn({ method: 'GET' }).handler(async () => {
 })
 
 export const Route = createFileRoute('/_portal')({
+  beforeLoad: ({ context }) => {
+    // When on help center subdomain, redirect to /hc prefix
+    if (context.helpCenterHost) {
+      throw redirect({ to: '/hc' })
+    }
+  },
   loader: async ({ context }) => {
     const { session, settings, userRole, baseUrl } = context
 

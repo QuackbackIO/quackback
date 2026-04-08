@@ -48,24 +48,31 @@ export function AnalyticsPage() {
       {/* Left sidebar */}
       <aside className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col border-r border-border/50 bg-card/30 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-5 space-y-6">
-            <div className="space-y-1">
-              {navItems.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSection(key)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    section === key
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  )}
-                >
-                  <Icon className={cn('h-3.5 w-3.5 shrink-0', section === key && 'text-primary')} />
-                  {label}
-                </button>
-              ))}
+          <div className="p-5 space-y-0">
+            <div className="pb-4">
+              <span className="inline-block py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Sections
+              </span>
+              <div className="mt-2 space-y-1">
+                {navItems.map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSection(key)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                      section === key
+                        ? 'bg-muted text-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    )}
+                  >
+                    <Icon
+                      className={cn('h-3.5 w-3.5 shrink-0', section === key && 'text-primary')}
+                    />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </ScrollArea>

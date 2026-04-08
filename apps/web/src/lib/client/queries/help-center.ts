@@ -11,6 +11,7 @@ import {
   listPublicCategoriesFn,
   listArticlesFn,
   listPublicArticlesFn,
+  listPublicArticlesForCategoryFn,
   getArticleFn,
   getPublicArticleBySlugFn,
 } from '@/lib/server/functions/help-center'
@@ -108,6 +109,13 @@ export const publicHelpCenterQueries = {
     queryOptions({
       queryKey: helpCenterKeys.publicArticleDetail(slug),
       queryFn: () => getPublicArticleBySlugFn({ data: { slug } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  articlesForCategory: (categoryId: string) =>
+    queryOptions({
+      queryKey: [...helpCenterKeys.public(), 'category-articles', categoryId] as const,
+      queryFn: () => listPublicArticlesForCategoryFn({ data: { categoryId } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

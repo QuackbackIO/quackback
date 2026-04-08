@@ -47,6 +47,39 @@ describe('createCategorySchema', () => {
     const result = createCategorySchema.safeParse({})
     expect(result.success).toBe(false)
   })
+
+  it('accepts emoji unicode as icon', () => {
+    const result = createCategorySchema.safeParse({
+      name: 'Billing',
+      icon: '💰',
+      isPublic: true,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.icon).toBe('💰')
+    }
+  })
+
+  it('accepts full CategoryFormDialog payload', () => {
+    const result = createCategorySchema.safeParse({
+      name: 'Getting Started',
+      description: 'Learn the basics',
+      icon: '📚',
+      isPublic: true,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts isPublic false', () => {
+    const result = createCategorySchema.safeParse({
+      name: 'Internal Docs',
+      isPublic: false,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.isPublic).toBe(false)
+    }
+  })
 })
 
 describe('updateCategorySchema', () => {
@@ -69,6 +102,39 @@ describe('updateCategorySchema', () => {
   it('rejects missing id', () => {
     const result = updateCategorySchema.safeParse({ name: 'Name' })
     expect(result.success).toBe(false)
+  })
+
+  it('accepts position update for drag reorder', () => {
+    const result = updateCategorySchema.safeParse({
+      id: 'helpcenter_category_1',
+      position: 3,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.position).toBe(3)
+    }
+  })
+
+  it('accepts full CategoryFormDialog edit payload', () => {
+    const result = updateCategorySchema.safeParse({
+      id: 'helpcenter_category_1',
+      name: 'Updated Name',
+      description: 'Updated description',
+      icon: '🔧',
+      isPublic: false,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts emoji icon update', () => {
+    const result = updateCategorySchema.safeParse({
+      id: 'helpcenter_category_1',
+      icon: '🚀',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.icon).toBe('🚀')
+    }
   })
 })
 

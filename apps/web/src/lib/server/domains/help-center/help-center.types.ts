@@ -20,9 +20,11 @@ export type {
 
 export interface HelpCenterCategory {
   id: HelpCenterCategoryId
+  parentId: HelpCenterCategoryId | null
   slug: string
   name: string
   description: string | null
+  icon: string | null
   isPublic: boolean
   position: number
   createdAt: Date
@@ -42,6 +44,8 @@ export interface HelpCenterArticle {
   categoryId: HelpCenterCategoryId
   slug: string
   title: string
+  description: string | null
+  position: number | null
   content: string
   contentJson: TiptapContent | null
   principalId: PrincipalId

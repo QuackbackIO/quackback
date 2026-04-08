@@ -37,6 +37,7 @@ import type {
   ListArticlesParams,
   ArticleListResult,
 } from './help-center.types'
+import { generateArticleEmbedding } from './help-center-embedding.service'
 
 // ============================================================================
 // Categories
@@ -113,6 +114,8 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
       description: input.description?.trim() || null,
       isPublic: input.isPublic ?? true,
       position: input.position ?? 0,
+      parentId: (input.parentId as HelpCenterCategoryId) ?? null,
+      icon: input.icon ?? null,
     })
     .returning()
 
@@ -129,6 +132,9 @@ export async function updateCategory(
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
   if (input.position !== undefined) updateData.position = input.position
+  if (input.parentId !== undefined)
+    updateData.parentId = (input.parentId as HelpCenterCategoryId) ?? null
+  if (input.icon !== undefined) updateData.icon = input.icon ?? null
 
   const [updated] = await db
     .update(helpCenterCategories)
@@ -336,6 +342,27 @@ export async function listPublicArticles(params: {
   return listArticles({ ...params, status: 'published' })
 }
 
+export async function listPublicArticlesForCategory(categoryId: string) {
+  return db
+    .select({
+      id: helpCenterArticles.id,
+      slug: helpCenterArticles.slug,
+      title: helpCenterArticles.title,
+      description: helpCenterArticles.description,
+      position: helpCenterArticles.position,
+      publishedAt: helpCenterArticles.publishedAt,
+    })
+    .from(helpCenterArticles)
+    .where(
+      and(
+        eq(helpCenterArticles.categoryId, categoryId as HelpCenterCategoryId),
+        isNotNull(helpCenterArticles.publishedAt),
+        isNull(helpCenterArticles.deletedAt)
+      )
+    )
+    .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
+}
+
 export async function createArticle(
   input: CreateArticleInput,
   principalId: PrincipalId
@@ -356,10 +383,19 @@ export async function createArticle(
       contentJson: input.contentJson ?? markdownToTiptapJson(content),
       slug,
       principalId,
+      position: input.position ?? null,
+      description: input.description?.trim() || null,
     })
     .returning()
 
-  return resolveArticleWithCategory(article)
+  const resolved = await resolveArticleWithCategory(article)
+
+  // Fire-and-forget: generate embedding for the new article
+  generateArticleEmbedding(article.id, title, content, resolved.category?.name).catch((err) =>
+    console.error(`[KB Embedding] Failed for article ${article.id}:`, err)
+  )
+
+  return resolved
 }
 
 export async function updateArticle(
@@ -377,6 +413,8 @@ export async function updateArticle(
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
   if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.position !== undefined) updateData.position = input.position
+  if (input.description !== undefined) updateData.description = input.description?.trim() || null
 
   const [updated] = await db
     .update(helpCenterArticles)
@@ -385,7 +423,17 @@ export async function updateArticle(
     .returning()
 
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
-  return resolveArticleWithCategory(updated)
+
+  const resolved = await resolveArticleWithCategory(updated)
+
+  // Fire-and-forget: re-generate embedding when title or content changed
+  if (input.title || input.content) {
+    generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
+      (err) => console.error(`[KB Embedding] Failed for article ${id}:`, err)
+    )
+  }
+
+  return resolved
 }
 
 export async function publishArticle(

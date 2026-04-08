@@ -17,6 +17,8 @@ export const createCategorySchema = z.object({
   description: z.string().max(2000).optional(),
   isPublic: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
+  parentId: z.string().nullable().optional(),
+  icon: z.string().max(50).nullable().optional(),
 })
 
 export const updateCategorySchema = z.object({
@@ -26,6 +28,8 @@ export const updateCategorySchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
+  parentId: z.string().nullable().optional(),
+  icon: z.string().max(50).nullable().optional(),
 })
 
 export const getCategorySchema = z.object({
@@ -46,6 +50,8 @@ export const createArticleSchema = z.object({
   content: z.string().min(1, 'Content is required'),
   contentJson: tiptapContentSchema.nullable().optional(),
   slug: z.string().max(200).optional(),
+  position: z.number().int().optional(),
+  description: z.string().max(300).optional(),
 })
 
 export const updateArticleSchema = z.object({
@@ -55,6 +61,8 @@ export const updateArticleSchema = z.object({
   content: z.string().min(1).optional(),
   contentJson: tiptapContentSchema.nullable().optional(),
   slug: z.string().max(200).optional(),
+  position: z.number().int().optional(),
+  description: z.string().max(300).optional(),
 })
 
 export const getArticleSchema = z.object({
@@ -99,6 +107,24 @@ export const getArticleBySlugSchema = z.object({
 
 export const unpublishArticleSchema = z.object({
   id: z.string().min(1),
+})
+
+// ============================================================================
+// Help Center Config Schemas
+// ============================================================================
+
+export const updateHelpCenterConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  customDomain: z.string().max(253).nullable().optional(),
+  homepageTitle: z.string().min(1).max(200).optional(),
+  homepageDescription: z.string().max(500).optional(),
+  access: z.enum(['public', 'authenticated']).optional(),
+})
+
+export const updateHelpCenterSeoSchema = z.object({
+  metaDescription: z.string().max(500).optional(),
+  sitemapEnabled: z.boolean().optional(),
+  structuredDataEnabled: z.boolean().optional(),
 })
 
 // ============================================================================

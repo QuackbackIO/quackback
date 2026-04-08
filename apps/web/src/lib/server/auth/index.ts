@@ -314,6 +314,8 @@ async function createAuth() {
           'read:feedback',
           'write:feedback',
           'write:changelog',
+          'read:help-center',
+          'write:help-center',
         ],
 
         // Default scopes for dynamically registered clients
@@ -325,6 +327,8 @@ async function createAuth() {
           'offline_access',
           'write:feedback',
           'write:changelog',
+          'read:help-center',
+          'write:help-center',
         ],
 
         // MCP endpoint is a valid token audience

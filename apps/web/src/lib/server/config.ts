@@ -285,6 +285,11 @@ export const config = {
     return loadConfig().disableTelemetry
   },
 
+  // Help center
+  get helpCenterDev() {
+    return process.env.HELP_CENTER_DEV === 'true'
+  },
+
   // Convenience
   get isDev() {
     return this.nodeEnv === 'development'
