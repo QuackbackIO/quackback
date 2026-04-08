@@ -212,8 +212,6 @@ export {
   rawFeedbackItemsRelations,
   feedbackSignals,
   feedbackSignalsRelations,
-  feedbackSignalCorrections,
-  feedbackSignalCorrectionsRelations,
   feedbackSuggestions,
   feedbackSuggestionsRelations,
   externalUserMappings,

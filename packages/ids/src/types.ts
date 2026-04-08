@@ -126,9 +126,6 @@ export type FeedbackSignalId = TypeId<'feedback_signal'>
 /** Feedback suggestion ID - e.g., feedback_suggestion_01h455vb4pex5vsknk084sn02q */
 export type FeedbackSuggestionId = TypeId<'feedback_suggestion'>
 
-/** Feedback signal correction ID - e.g., signal_correction_01h455vb4pex5vsknk084sn02q */
-export type FeedbackCorrectionId = TypeId<'signal_correction'>
-
 /** External user mapping ID - e.g., user_mapping_01h455vb4pex5vsknk084sn02q */
 export type ExternalUserMappingId = TypeId<'user_mapping'>
 
@@ -228,7 +225,7 @@ export interface EntityIdMap {
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId
   feedback_suggestion: FeedbackSuggestionId
-  signal_correction: FeedbackCorrectionId
+
   user_mapping: ExternalUserMappingId
   merge_suggestion: MergeSuggestionId
   roadmap: RoadmapId

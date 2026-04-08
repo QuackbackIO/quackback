@@ -97,7 +97,6 @@ export type {
   RawFeedbackItemId,
   FeedbackSignalId,
   FeedbackSuggestionId,
-  FeedbackCorrectionId,
   ExternalUserMappingId,
   MergeSuggestionId,
   // Help center entities
@@ -166,7 +165,6 @@ export {
   feedbackSourceIdSchema,
   rawFeedbackItemIdSchema,
   feedbackSignalIdSchema,
-  feedbackCorrectionIdSchema,
   externalUserMappingIdSchema,
   // Pre-built flexible schemas
   flexibleSegmentIdSchema,
@@ -192,7 +190,6 @@ export {
   flexibleFeedbackSourceIdSchema,
   flexibleRawFeedbackItemIdSchema,
   flexibleFeedbackSignalIdSchema,
-  flexibleFeedbackCorrectionIdSchema,
   flexibleExternalUserMappingIdSchema,
   // Array schemas
   tagIdsSchema,

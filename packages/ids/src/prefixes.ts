@@ -60,7 +60,7 @@ export const ID_PREFIXES = {
   raw_feedback: 'raw_feedback',
   feedback_signal: 'feedback_signal',
   feedback_suggestion: 'feedback_suggestion',
-  signal_correction: 'signal_correction',
+
   user_mapping: 'user_mapping',
   merge_suggestion: 'merge_sug',
   activity: 'activity',

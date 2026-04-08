@@ -192,7 +192,6 @@ export const segmentIdSchema = typeIdSchema(ID_PREFIXES.segment)
 export const feedbackSourceIdSchema = typeIdSchema(ID_PREFIXES.feedback_source)
 export const rawFeedbackItemIdSchema = typeIdSchema(ID_PREFIXES.raw_feedback)
 export const feedbackSignalIdSchema = typeIdSchema(ID_PREFIXES.feedback_signal)
-export const feedbackCorrectionIdSchema = typeIdSchema(ID_PREFIXES.signal_correction)
 export const externalUserMappingIdSchema = typeIdSchema(ID_PREFIXES.user_mapping)
 
 // Flexible schemas (accept TypeID or UUID, normalize to UUID)
@@ -218,7 +217,6 @@ export const flexibleDomainIdSchema = flexibleIdSchema(ID_PREFIXES.domain)
 export const flexibleFeedbackSourceIdSchema = flexibleIdSchema(ID_PREFIXES.feedback_source)
 export const flexibleRawFeedbackItemIdSchema = flexibleIdSchema(ID_PREFIXES.raw_feedback)
 export const flexibleFeedbackSignalIdSchema = flexibleIdSchema(ID_PREFIXES.feedback_signal)
-export const flexibleFeedbackCorrectionIdSchema = flexibleIdSchema(ID_PREFIXES.signal_correction)
 export const flexibleExternalUserMappingIdSchema = flexibleIdSchema(ID_PREFIXES.user_mapping)
 
 // ============================================

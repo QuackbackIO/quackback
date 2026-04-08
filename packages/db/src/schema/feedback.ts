@@ -204,29 +204,6 @@ export const feedbackSuggestions = pgTable(
 )
 
 // ============================================
-// Feedback Signal Corrections
-// ============================================
-
-export const feedbackSignalCorrections = pgTable(
-  'feedback_signal_corrections',
-  {
-    id: typeIdWithDefault('signal_correction')('id').primaryKey(),
-    signalId: typeIdColumn('feedback_signal')('signal_id')
-      .notNull()
-      .references(() => feedbackSignals.id, { onDelete: 'cascade' }),
-    correctedByPrincipalId: typeIdColumn('principal')('corrected_by_principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'cascade' }),
-    field: varchar('field', { length: 30 }).notNull(),
-    previousValue: jsonb('previous_value').$type<unknown>(),
-    newValue: jsonb('new_value').$type<unknown>().notNull(),
-    reason: text('reason'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index('feedback_signal_corrections_signal_idx').on(t.signalId)]
-)
-
-// ============================================
 // External User Mappings
 // ============================================
 
@@ -302,7 +279,7 @@ export const feedbackSuggestionsRelations = relations(feedbackSuggestions, ({ on
   }),
 }))
 
-export const feedbackSignalsRelations = relations(feedbackSignals, ({ one, many }) => ({
+export const feedbackSignalsRelations = relations(feedbackSignals, ({ one }) => ({
   rawItem: one(rawFeedbackItems, {
     fields: [feedbackSignals.rawFeedbackItemId],
     references: [rawFeedbackItems.id],
@@ -311,23 +288,7 @@ export const feedbackSignalsRelations = relations(feedbackSignals, ({ one, many 
     fields: [feedbackSignals.boardId],
     references: [boards.id],
   }),
-  corrections: many(feedbackSignalCorrections),
 }))
-
-export const feedbackSignalCorrectionsRelations = relations(
-  feedbackSignalCorrections,
-  ({ one }) => ({
-    signal: one(feedbackSignals, {
-      fields: [feedbackSignalCorrections.signalId],
-      references: [feedbackSignals.id],
-    }),
-    correctedBy: one(principal, {
-      fields: [feedbackSignalCorrections.correctedByPrincipalId],
-      references: [principal.id],
-      relationName: 'signalCorrectionAuthor',
-    }),
-  })
-)
 
 export const externalUserMappingsRelations = relations(externalUserMappings, ({ one }) => ({
   principal: one(principal, {
