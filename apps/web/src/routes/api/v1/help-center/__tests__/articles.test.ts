@@ -72,7 +72,7 @@ const mockAuthContext = {
   principalId: 'principal_1',
   role: 'admin' as const,
   importMode: false,
-}
+} as any
 
 const mockArticle = {
   id: 'helpcenter_article_1',
@@ -87,7 +87,7 @@ const mockArticle = {
   updatedAt: new Date('2026-01-10'),
   category: { id: 'helpcenter_category_1', slug: 'getting-started', name: 'Getting Started' },
   author: { id: 'principal_1', name: 'Admin', avatarUrl: null },
-}
+} as any
 
 // --- Tests ---
 
