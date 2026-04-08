@@ -1,8 +1,8 @@
 /**
  * MCP Tools for Quackback
  *
- * 23 tools calling domain services directly (no HTTP self-loop):
- * - search: Unified search across posts and changelogs
+ * 27 tools calling domain services directly (no HTTP self-loop):
+ * - search: Unified search across posts, changelogs, and articles
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, and owner
  * - vote_post: Toggle vote on a post
@@ -25,6 +25,10 @@
  * - dismiss_suggestion: Dismiss a suggestion
  * - restore_suggestion: Restore a dismissed suggestion to pending
  * - get_post_activity: Get activity log for a post
+ * - create_article: Create a help center article (draft)
+ * - update_article: Update or publish/unpublish an article
+ * - delete_article: Soft-delete an article
+ * - manage_category: Create, update, or delete a help center category
  */
 
 import { z } from 'zod'
