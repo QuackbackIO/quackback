@@ -388,18 +388,34 @@ const SERVER_EXAMPLES: {
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
+function signWidgetToken(payload) {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", process.env.QUACKBACK_WIDGET_SECRET!)
+    .update(\`\${header}.\${body}\`)
+    .digest("base64url");
+  return \`\${header}.\${body}.\${signature}\`;
+}
+
 export async function POST() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({}, { status: 401 });
   }
 
-  const hash = crypto
-    .createHmac("sha256", process.env.QUACKBACK_WIDGET_SECRET!)
-    .update(session.user.id)
-    .digest("hex");
+  const now = Math.floor(Date.now() / 1000);
+  const ssoToken = signWidgetToken({
+    sub: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+    // Custom attributes (must be configured in Settings > User Attributes)
+    // plan: session.user.plan,
+    // mrr: session.user.mrr,
+    exp: now + 300,
+  });
 
-  return NextResponse.json({ hash });
+  return NextResponse.json({ ssoToken });
 }`,
   },
   {
@@ -409,14 +425,29 @@ export async function POST() {
     lang: 'js',
     code: `import crypto from "crypto";
 
-app.post("/api/widget-hash", (req, res) => {
-  // req.user set by your auth middleware
-  const hash = crypto
+function signWidgetToken(payload) {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
     .createHmac("sha256", process.env.QUACKBACK_WIDGET_SECRET)
-    .update(req.user.id)
-    .digest("hex");
+    .update(\`\${header}.\${body}\`)
+    .digest("base64url");
+  return \`\${header}.\${body}.\${signature}\`;
+}
 
-  res.json({ hash });
+app.post("/api/widget-sso", (req, res) => {
+  // req.user set by your auth middleware
+  const now = Math.floor(Date.now() / 1000);
+  const ssoToken = signWidgetToken({
+    sub: req.user.id,
+    email: req.user.email,
+    name: req.user.name,
+    // Custom attributes (must be configured in Settings > User Attributes)
+    // plan: req.user.plan,
+    exp: now + 300,
+  });
+
+  res.json({ ssoToken });
 });`,
   },
   {
@@ -424,35 +455,68 @@ app.post("/api/widget-hash", (req, res) => {
     label: 'Django',
     filename: 'views.py',
     lang: 'python',
-    code: `import hmac, hashlib
+    code: `import base64, hashlib, hmac, json, time
 from django.conf import settings
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 
-@login_required
-def widget_hash(request):
-    digest = hmac.new(
+def b64url(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+def sign_widget_token(payload):
+    header = b64url(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    body = b64url(json.dumps(payload).encode())
+    sig = hmac.new(
         settings.QUACKBACK_WIDGET_SECRET.encode(),
-        str(request.user.id).encode(),
+        f"{header}.{body}".encode(),
         hashlib.sha256,
-    ).hexdigest()
-    return JsonResponse({"hash": digest})`,
+    ).digest()
+    return f"{header}.{body}.{b64url(sig)}"
+
+@login_required
+def widget_sso(request):
+    now = int(time.time())
+    token = sign_widget_token({
+        "sub": str(request.user.id),
+        "email": request.user.email,
+        "name": request.user.get_full_name() or request.user.username,
+        # Custom attributes (must be configured in Settings > User Attributes)
+        # "plan": request.user.plan,
+        "exp": now + 300,
+    })
+    return JsonResponse({"ssoToken": token})`,
   },
   {
     id: 'rails',
     label: 'Rails',
     filename: 'widget_controller.rb',
     lang: 'ruby',
-    code: `class Api::WidgetController < ApplicationController
+    code: `require "base64"
+require "json"
+require "openssl"
+
+class Api::WidgetController < ApplicationController
   before_action :authenticate_user!
 
-  def identify_hash
-    digest = OpenSSL::HMAC.hexdigest(
-      "sha256",
-      ENV["QUACKBACK_WIDGET_SECRET"],
-      current_user.id.to_s,
-    )
-    render json: { hash: digest }
+  def identify_sso
+    now = Time.now.to_i
+    payload = {
+      sub: current_user.id.to_s,
+      email: current_user.email,
+      name: current_user.name,
+      exp: now + 300,
+    }
+
+    render json: { ssoToken: sign_widget_token(payload) }
+  end
+
+  private
+
+  def sign_widget_token(payload)
+    header = Base64.urlsafe_encode64({ alg: "HS256", typ: "JWT" }.to_json, padding: false)
+    body = Base64.urlsafe_encode64(payload.to_json, padding: false)
+    sig = OpenSSL::HMAC.digest("sha256", ENV["QUACKBACK_WIDGET_SECRET"], "#{header}.#{body}")
+    "#{header}.#{body}.#{Base64.urlsafe_encode64(sig, padding: false)}"
   end
 end`,
   },
@@ -465,20 +529,37 @@ end`,
 
 class WidgetController extends Controller
 {
-    public function identifyHash(Request $request)
+    public function identifySso(Request $request)
     {
-        $hash = hash_hmac(
+        $now = time();
+        $payload = [
+            "sub" => (string) $request->user()->id,
+            "email" => $request->user()->email,
+            "name" => $request->user()->name,
+            "exp" => $now + 300,
+        ];
+
+        return response()->json(["ssoToken" => $this->signWidgetToken($payload)]);
+    }
+
+    private function signWidgetToken(array $payload): string
+    {
+        $header = rtrim(strtr(base64_encode(json_encode(["alg" => "HS256", "typ" => "JWT"])), "+/", "-_"), "=");
+        $body = rtrim(strtr(base64_encode(json_encode($payload)), "+/", "-_"), "=");
+        $signature = hash_hmac(
             "sha256",
-            $request->user()->id,
+            $header . "." . $body,
             config("services.quackback.widget_secret"),
+            true,
         );
-        return response()->json(["hash" => $hash]);
+
+        return $header . "." . $body . "." . rtrim(strtr(base64_encode($signature), "+/", "-_"), "=");
     }
 }`,
   },
 ]
 
-const CLIENT_CODE_SIMPLE = `import { useEffect } from "react";
+const CLIENT_CODE = `import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 export function WidgetIdentify() {
@@ -486,36 +567,16 @@ export function WidgetIdentify() {
 
   useEffect(() => {
     if (user) {
-      Quackback("identify", {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      });
-    } else {
-      Quackback("identify", { anonymous: true });
-    }
-  }, [user]);
-
-  return null;
-}`
-
-const CLIENT_CODE_WITH_HMAC = `import { useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
-
-export function WidgetIdentify() {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (user) {
-      fetch("/api/widget-hash", { method: "POST" })
-        .then((res) => res.json())
-        .then(({ hash }) => {
-          Quackback("identify", {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            hash,
-          });
+      fetch("/api/widget-sso", { method: "POST" })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch widget token");
+          return res.json();
+        })
+        .then(({ ssoToken }) => {
+          Quackback("identify", { ssoToken });
+        })
+        .catch(() => {
+          Quackback("identify", null);
         });
     } else {
       Quackback("identify", { anonymous: true });
@@ -576,20 +637,18 @@ function WidgetInstallation({
     const t: CodeTab[] = [
       { id: 'snippet', label: 'snippet.html', lang: 'js', code: installSnippet },
     ]
-    if (hmacEnabled) {
-      const ex = SERVER_EXAMPLES.find((e) => e.id === framework)
-      if (ex) {
-        t.push({ id: 'server', label: ex.filename, lang: ex.lang, code: ex.code })
-      }
+    const ex = SERVER_EXAMPLES.find((e) => e.id === framework)
+    if (ex) {
+      t.push({ id: 'server', label: ex.filename, lang: ex.lang, code: ex.code })
     }
     t.push({
       id: 'client',
       label: 'identify.tsx',
       lang: 'js',
-      code: hmacEnabled ? CLIENT_CODE_WITH_HMAC : CLIENT_CODE_SIMPLE,
+      code: CLIENT_CODE,
     })
     return t
-  }, [installSnippet, hmacEnabled, framework])
+  }, [installSnippet, framework])
 
   // Reset active tab if it's no longer available
   useEffect(() => {
@@ -675,16 +734,21 @@ function WidgetInstallation({
               </span>
               <div>
                 <span className="text-xs font-medium text-foreground">Identify users</span>
-                <p className="text-[11px] text-muted-foreground">Required to display the widget</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Generate a signed <code className="text-[11px]">ssoToken</code> on your backend
+                </p>
               </div>
             </div>
 
             <div className="ml-7 space-y-3">
-              {/* HMAC toggle */}
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <span className="text-xs font-medium text-foreground">HMAC verification</span>
-                  <p className="text-[11px] text-muted-foreground">Prevent identity spoofing</p>
+                  <span className="text-xs font-medium text-foreground">
+                    Verified identity only
+                  </span>
+                  <p className="text-[11px] text-muted-foreground">
+                    Disable inline email capture and require your app to sign each user
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <InlineSpinner visible={isBusy} />
@@ -692,93 +756,91 @@ function WidgetInstallation({
                     checked={hmacEnabled}
                     onCheckedChange={handleHmacToggle}
                     disabled={isBusy}
-                    aria-label="Require HMAC verification"
+                    aria-label="Require verified widget identity"
                   />
                 </div>
               </div>
 
-              {hmacEnabled && (
-                <div className="space-y-2.5">
-                  {/* Framework */}
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Backend framework</Label>
-                    <Select value={framework} onValueChange={setFramework}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SERVER_EXAMPLES.map((ex) => (
-                          <SelectItem key={ex.id} value={ex.id}>
-                            {ex.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Secret */}
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Widget secret</Label>
-                    {currentSecret ? (
-                      <div className="flex items-center gap-1">
-                        <code className="flex-1 text-[10px] font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1 truncate">
-                          {secretVisible ? currentSecret : maskedSecret}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => setSecretVisible(!secretVisible)}
-                        >
-                          {secretVisible ? (
-                            <EyeSlashIcon className="h-3 w-3" />
-                          ) : (
-                            <EyeIcon className="h-3 w-3" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={handleCopySecret}
-                        >
-                          {copiedSecret ? (
-                            <CheckIcon className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <ClipboardDocumentIcon className="h-3 w-3" />
-                          )}
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground italic">
-                        Click regenerate to create a secret
-                      </p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px]"
-                      onClick={handleRegenerate}
-                      disabled={regenerating}
-                    >
-                      {regenerating ? (
-                        <>
-                          <ArrowPathIcon className="h-3 w-3 animate-spin mr-1" />
-                          Regenerating...
-                        </>
-                      ) : (
-                        'Regenerate'
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Security note */}
-                  <p className="flex items-start gap-1.5 text-[10px] text-yellow-600 dark:text-yellow-500">
-                    <ExclamationTriangleIcon className="h-3 w-3 shrink-0 mt-px" />
-                    Keep this secret server-side only
-                  </p>
+              <div className="space-y-2.5">
+                {/* Framework */}
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Backend framework</Label>
+                  <Select value={framework} onValueChange={setFramework}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVER_EXAMPLES.map((ex) => (
+                        <SelectItem key={ex.id} value={ex.id}>
+                          {ex.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+
+                {/* Secret */}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground">Widget secret</Label>
+                  {currentSecret ? (
+                    <div className="flex items-center gap-1">
+                      <code className="flex-1 text-[10px] font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1 truncate">
+                        {secretVisible ? currentSecret : maskedSecret}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => setSecretVisible(!secretVisible)}
+                      >
+                        {secretVisible ? (
+                          <EyeSlashIcon className="h-3 w-3" />
+                        ) : (
+                          <EyeIcon className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={handleCopySecret}
+                      >
+                        {copiedSecret ? (
+                          <CheckIcon className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <ClipboardDocumentIcon className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground italic">
+                      Click regenerate to create a secret
+                    </p>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                  >
+                    {regenerating ? (
+                      <>
+                        <ArrowPathIcon className="h-3 w-3 animate-spin mr-1" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      'Regenerate'
+                    )}
+                  </Button>
+                </div>
+
+                {/* Security note */}
+                <p className="flex items-start gap-1.5 text-[10px] text-yellow-600 dark:text-yellow-500">
+                  <ExclamationTriangleIcon className="h-3 w-3 shrink-0 mt-px" />
+                  Keep this secret server-side only
+                </p>
+              </div>
             </div>
           </div>
         </div>
