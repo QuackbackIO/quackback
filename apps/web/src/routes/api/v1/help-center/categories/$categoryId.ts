@@ -23,6 +23,8 @@ const updateCategoryBody = z.object({
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
+  parentId: z.string().nullable().optional(),
+  icon: z.string().max(50).nullable().optional(),
 })
 
 function formatCategory(cat: {
@@ -30,6 +32,8 @@ function formatCategory(cat: {
   slug: string
   name: string
   description: string | null
+  icon: string | null
+  parentId: string | null
   isPublic: boolean
   position: number
   createdAt: Date
@@ -40,6 +44,8 @@ function formatCategory(cat: {
     slug: cat.slug,
     name: cat.name,
     description: cat.description,
+    icon: cat.icon,
+    parentId: cat.parentId,
     isPublic: cat.isPublic,
     position: cat.position,
     createdAt: cat.createdAt.toISOString(),
@@ -47,7 +53,7 @@ function formatCategory(cat: {
   }
 }
 
-export const Route = createFileRoute('/api/v1/kb/categories/$categoryId')({
+export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {

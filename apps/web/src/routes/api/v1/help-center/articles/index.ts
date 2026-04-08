@@ -50,7 +50,7 @@ function formatArticle(article: {
   }
 }
 
-export const Route = createFileRoute('/api/v1/kb/articles/')({
+export const Route = createFileRoute('/api/v1/help-center/articles/')({
   server: {
     handlers: {
       GET: async ({ request }) => {

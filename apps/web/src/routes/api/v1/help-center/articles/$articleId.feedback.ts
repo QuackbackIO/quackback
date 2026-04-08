@@ -16,7 +16,7 @@ const feedbackBody = z.object({
   helpful: z.boolean(),
 })
 
-export const Route = createFileRoute('/api/v1/kb/articles/$articleId/feedback')({
+export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/feedback')({
   server: {
     handlers: {
       POST: async ({ request, params }) => {
