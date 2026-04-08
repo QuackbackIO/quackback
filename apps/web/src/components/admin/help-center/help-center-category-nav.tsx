@@ -70,11 +70,11 @@ export function HelpCenterCategoryNav({
 
     const reordered = arrayMove(sortedCategories, oldIndex, newIndex)
 
-    for (let i = 0; i < reordered.length; i++) {
-      if (reordered[i].position !== i) {
-        await updateCategory.mutateAsync({ id: reordered[i].id, position: i })
-      }
-    }
+    const updates = reordered
+      .map((cat, i) => (cat.position !== i ? { id: cat.id, position: i } : null))
+      .filter(Boolean)
+
+    await Promise.all(updates.map((u) => updateCategory.mutateAsync(u!)))
   }
 
   const handleDelete = async () => {

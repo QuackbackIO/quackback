@@ -156,10 +156,7 @@ export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ categoryId: z.string() }))
   .handler(async ({ data }) => {
     const articles = await listPublicArticlesForCategory(data.categoryId)
-    return articles.map((a) => ({
-      ...a,
-      publishedAt: toIsoStringOrNull(a.publishedAt),
-    }))
+    return articles.map(serializeArticle)
   })
 
 export const getArticleFn = createServerFn({ method: 'GET' })

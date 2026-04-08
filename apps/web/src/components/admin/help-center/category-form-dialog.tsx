@@ -110,20 +110,22 @@ export function CategoryFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    const trimmedName = name.trim()
+    const trimmedDesc = description.trim()
+    if (!trimmedName) return
 
     if (isEdit) {
       await updateCategory.mutateAsync({
         id: initialValues.id,
-        name: name.trim(),
-        description: description.trim() || null,
+        name: trimmedName,
+        description: trimmedDesc || null,
         icon,
         isPublic,
       })
     } else {
       const result = await createCategory.mutateAsync({
-        name: name.trim(),
-        description: description.trim() || undefined,
+        name: trimmedName,
+        description: trimmedDesc || undefined,
         icon,
         isPublic,
       })
