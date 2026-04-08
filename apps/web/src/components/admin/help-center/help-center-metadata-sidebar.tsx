@@ -65,12 +65,13 @@ function SidebarContent({
             <PlusIcon className="h-3.5 w-3.5" />
           </button>
         </div>
-        <CategoryFormDialog
-          open={createCategoryOpen}
-          onOpenChange={setCreateCategoryOpen}
-          onCreated={(id) => onCategoryChange(id)}
-        />
       </SidebarRow>
+
+      <CategoryFormDialog
+        open={createCategoryOpen}
+        onOpenChange={setCreateCategoryOpen}
+        onCreated={(id) => onCategoryChange(id)}
+      />
 
       {authorName && (
         <>
