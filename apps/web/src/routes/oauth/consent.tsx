@@ -279,38 +279,38 @@ function ConsentPage() {
           </div>
 
           {/* Legal links */}
-          {((client.tos_uri && isSafeUrl(client.tos_uri)) ||
-            (client.policy_uri && isSafeUrl(client.policy_uri))) && (
-            <p className="text-center text-xs text-muted-foreground/60">
-              {'By authorizing, you agree to '}
-              {client.tos_uri && isSafeUrl(client.tos_uri) && (
-                <a
-                  href={client.tos_uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-muted-foreground transition-colors"
-                >
-                  Terms of Service
-                </a>
-              )}
-              {client.tos_uri &&
-                isSafeUrl(client.tos_uri) &&
-                client.policy_uri &&
-                isSafeUrl(client.policy_uri) &&
-                ' and '}
-              {client.policy_uri && isSafeUrl(client.policy_uri) && (
-                <a
-                  href={client.policy_uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-muted-foreground transition-colors"
-                >
-                  Privacy Policy
-                </a>
-              )}
-              .
-            </p>
-          )}
+          {(() => {
+            const hasTos = !!client.tos_uri && isSafeUrl(client.tos_uri)
+            const hasPolicy = !!client.policy_uri && isSafeUrl(client.policy_uri)
+            if (!hasTos && !hasPolicy) return null
+            return (
+              <p className="text-center text-xs text-muted-foreground/60">
+                {'By authorizing, you agree to '}
+                {hasTos && (
+                  <a
+                    href={client.tos_uri!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-muted-foreground transition-colors"
+                  >
+                    Terms of Service
+                  </a>
+                )}
+                {hasTos && hasPolicy && ' and '}
+                {hasPolicy && (
+                  <a
+                    href={client.policy_uri!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-muted-foreground transition-colors"
+                  >
+                    Privacy Policy
+                  </a>
+                )}
+                .
+              </p>
+            )
+          })()}
         </div>
       </div>
     </div>

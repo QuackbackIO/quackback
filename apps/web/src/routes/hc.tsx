@@ -36,7 +36,7 @@ export const Route = createFileRoute('/hc')({
     if (!helpCenterConfig?.enabled) throw notFound()
 
     // Enforce authenticated-only access
-    if (helpCenterConfig?.access === 'authenticated') {
+    if (helpCenterConfig.access === 'authenticated') {
       const hasSession = await checkHasSession()
       if (!hasSession) {
         throw redirect({ to: '/auth/login', replace: true })

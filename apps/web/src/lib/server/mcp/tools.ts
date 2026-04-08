@@ -182,6 +182,81 @@ async function requireHelpCenter(): Promise<CallToolResult | null> {
   }
 }
 
+/** Combined gate: feature flag + scope + team role for help center write tools. */
+async function requireHelpCenterWrite(auth: McpAuthContext): Promise<CallToolResult | null> {
+  return (
+    (await requireHelpCenter()) ?? requireScope(auth, 'write:help-center') ?? requireTeamRole(auth)
+  )
+}
+
+/** Truncate content to an excerpt. */
+function truncateExcerpt(content: string | null | undefined, max = 200): string {
+  if (!content) return ''
+  return content.length > max ? content.slice(0, max) + '...' : content
+}
+
+/** Format a help center article as a tool result. */
+function articleResult(article: {
+  id: string
+  slug: string
+  title: string
+  content: string
+  description: string | null
+  position: number | null
+  category: { id: string; slug: string; name: string }
+  author: { id: string; name: string; avatarUrl: string | null } | null
+  publishedAt: Date | null
+  viewCount: number
+  helpfulCount: number
+  notHelpfulCount: number
+  createdAt: Date
+  updatedAt: Date
+}): CallToolResult {
+  return jsonResult({
+    id: article.id,
+    slug: article.slug,
+    title: article.title,
+    content: article.content,
+    description: article.description,
+    position: article.position,
+    category: article.category,
+    author: article.author,
+    publishedAt: article.publishedAt,
+    viewCount: article.viewCount,
+    helpfulCount: article.helpfulCount,
+    notHelpfulCount: article.notHelpfulCount,
+    createdAt: article.createdAt,
+    updatedAt: article.updatedAt,
+  })
+}
+
+/** Format a help center category as a tool result. */
+function categoryResult(category: {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  icon: string | null
+  parentId: string | null
+  isPublic: boolean
+  position: number
+  createdAt: Date
+  updatedAt: Date
+}): CallToolResult {
+  return jsonResult({
+    id: category.id,
+    slug: category.slug,
+    name: category.name,
+    description: category.description,
+    icon: category.icon,
+    parentId: category.parentId,
+    isPublic: category.isPublic,
+    position: category.position,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+  })
+}
+
 // ============================================================================
 // Annotations
 // ============================================================================
@@ -1580,12 +1655,8 @@ Examples:
     createHelpCenterArticleSchema,
     WRITE,
     async (args: CreateHelpCenterArticleArgs): Promise<CallToolResult> => {
-      const flagDenied = await requireHelpCenter()
-      if (flagDenied) return flagDenied
-      const scopeDenied = requireScope(auth, 'write:help-center')
-      if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      const denied = await requireHelpCenterWrite(auth)
+      if (denied) return denied
       try {
         const article = await createArticle(
           {
@@ -1597,22 +1668,7 @@ Examples:
           auth.principalId
         )
 
-        return jsonResult({
-          id: article.id,
-          slug: article.slug,
-          title: article.title,
-          content: article.content,
-          description: article.description,
-          position: article.position,
-          category: article.category,
-          author: article.author,
-          publishedAt: article.publishedAt,
-          viewCount: article.viewCount,
-          helpfulCount: article.helpfulCount,
-          notHelpfulCount: article.notHelpfulCount,
-          createdAt: article.createdAt,
-          updatedAt: article.updatedAt,
-        })
+        return articleResult(article)
       } catch (err) {
         return errorResult(err)
       }
@@ -1631,48 +1687,27 @@ Examples:
     updateHelpCenterArticleSchema,
     WRITE,
     async (args: UpdateHelpCenterArticleArgs): Promise<CallToolResult> => {
-      const flagDenied = await requireHelpCenter()
-      if (flagDenied) return flagDenied
-      const scopeDenied = requireScope(auth, 'write:help-center')
-      if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      const denied = await requireHelpCenterWrite(auth)
+      if (denied) return denied
       try {
-        // Handle publish/unpublish via publishedAt
+        let article
         if (args.publishedAt !== undefined) {
-          if (args.publishedAt === null) {
-            await unpublishArticle(args.articleId as HelpCenterArticleId)
-          } else {
-            await publishArticle(args.articleId as HelpCenterArticleId)
-          }
+          article =
+            args.publishedAt === null
+              ? await unpublishArticle(args.articleId as HelpCenterArticleId)
+              : await publishArticle(args.articleId as HelpCenterArticleId)
         }
 
         const { articleId: _, publishedAt: __, ...updateData } = args
         const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
 
-        let article
         if (hasUpdates) {
           article = await updateArticle(args.articleId as HelpCenterArticleId, updateData)
-        } else {
+        } else if (!article) {
           article = await getArticleById(args.articleId as HelpCenterArticleId)
         }
 
-        return jsonResult({
-          id: article.id,
-          slug: article.slug,
-          title: article.title,
-          content: article.content,
-          description: article.description,
-          position: article.position,
-          category: article.category,
-          author: article.author,
-          publishedAt: article.publishedAt,
-          viewCount: article.viewCount,
-          helpfulCount: article.helpfulCount,
-          notHelpfulCount: article.notHelpfulCount,
-          createdAt: article.createdAt,
-          updatedAt: article.updatedAt,
-        })
+        return articleResult(article)
       } catch (err) {
         return errorResult(err)
       }
@@ -1689,12 +1724,8 @@ Example:
     deleteHelpCenterArticleSchema,
     DESTRUCTIVE,
     async (args: DeleteHelpCenterArticleArgs): Promise<CallToolResult> => {
-      const flagDenied = await requireHelpCenter()
-      if (flagDenied) return flagDenied
-      const scopeDenied = requireScope(auth, 'write:help-center')
-      if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      const denied = await requireHelpCenterWrite(auth)
+      if (denied) return denied
       try {
         await deleteArticle(args.articleId as HelpCenterArticleId)
         return jsonResult({ deleted: true, id: args.articleId })
@@ -1716,12 +1747,8 @@ Examples:
     manageCategorySchema,
     DESTRUCTIVE,
     async (args: ManageCategoryArgs): Promise<CallToolResult> => {
-      const flagDenied = await requireHelpCenter()
-      if (flagDenied) return flagDenied
-      const scopeDenied = requireScope(auth, 'write:help-center')
-      if (scopeDenied) return scopeDenied
-      const roleDenied = requireTeamRole(auth)
-      if (roleDenied) return roleDenied
+      const denied = await requireHelpCenterWrite(auth)
+      if (denied) return denied
       try {
         switch (args.action) {
           case 'create': {
@@ -1736,18 +1763,7 @@ Examples:
               parentId: args.parentId ?? undefined,
               isPublic: args.isPublic,
             })
-            return jsonResult({
-              id: category.id,
-              slug: category.slug,
-              name: category.name,
-              description: category.description,
-              icon: category.icon,
-              parentId: category.parentId,
-              isPublic: category.isPublic,
-              position: category.position,
-              createdAt: category.createdAt,
-              updatedAt: category.updatedAt,
-            })
+            return categoryResult(category)
           }
           case 'update': {
             if (!args.categoryId) {
@@ -1758,18 +1774,7 @@ Examples:
               args.categoryId as HelpCenterCategoryId,
               updateData
             )
-            return jsonResult({
-              id: category.id,
-              slug: category.slug,
-              name: category.name,
-              description: category.description,
-              icon: category.icon,
-              parentId: category.parentId,
-              isPublic: category.isPublic,
-              position: category.position,
-              createdAt: category.createdAt,
-              updatedAt: category.updatedAt,
-            })
+            return categoryResult(category)
           }
           case 'delete': {
             if (!args.categoryId) {
@@ -1828,11 +1833,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     posts: result.items.map((p) => ({
       id: p.id,
       title: p.title,
-      excerpt: p.content
-        ? p.content.length > 200
-          ? p.content.slice(0, 200) + '...'
-          : p.content
-        : '',
+      excerpt: truncateExcerpt(p.content),
       voteCount: p.voteCount,
       commentCount: p.commentCount,
       boardId: p.boardId,
@@ -1883,11 +1884,7 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
     changelogs: result.items.map((c) => ({
       id: c.id,
       title: c.title,
-      excerpt: c.content
-        ? c.content.length > 200
-          ? c.content.slice(0, 200) + '...'
-          : c.content
-        : '',
+      excerpt: truncateExcerpt(c.content),
       status: c.status,
       authorName: c.author?.name ?? null,
       linkedPosts: c.linkedPosts.map((p) => ({
@@ -1933,11 +1930,7 @@ async function searchArticles(args: SearchArgs): Promise<CallToolResult> {
       id: a.id,
       slug: a.slug,
       title: a.title,
-      excerpt: a.content
-        ? a.content.length > 200
-          ? a.content.slice(0, 200) + '...'
-          : a.content
-        : '',
+      excerpt: truncateExcerpt(a.content),
       description: a.description,
       status: a.publishedAt ? 'published' : 'draft',
       categoryId: a.category.id,
@@ -2028,38 +2021,10 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
 
 async function getArticleDetails(articleId: HelpCenterArticleId): Promise<CallToolResult> {
   const article = await getArticleById(articleId)
-
-  return jsonResult({
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    content: article.content,
-    description: article.description,
-    position: article.position,
-    category: article.category,
-    author: article.author,
-    publishedAt: article.publishedAt,
-    viewCount: article.viewCount,
-    helpfulCount: article.helpfulCount,
-    notHelpfulCount: article.notHelpfulCount,
-    createdAt: article.createdAt,
-    updatedAt: article.updatedAt,
-  })
+  return articleResult(article)
 }
 
 async function getCategoryDetails(categoryId: HelpCenterCategoryId): Promise<CallToolResult> {
   const category = await getCategoryById(categoryId)
-
-  return jsonResult({
-    id: category.id,
-    slug: category.slug,
-    name: category.name,
-    description: category.description,
-    icon: category.icon,
-    parentId: category.parentId,
-    isPublic: category.isPublic,
-    position: category.position,
-    createdAt: category.createdAt,
-    updatedAt: category.updatedAt,
-  })
+  return categoryResult(category)
 }
