@@ -7,7 +7,7 @@
 
 import { McpServer, type ReadResourceCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerTools } from './tools'
-import type { McpAuthContext } from './types'
+import type { McpAuthContext, McpScope } from './types'
 
 export function createMcpServer(auth: McpAuthContext): McpServer {
   const server = new McpServer({
@@ -21,16 +21,20 @@ export function createMcpServer(auth: McpAuthContext): McpServer {
   return server
 }
 
-/** Wrap a resource callback with a read:feedback scope check. */
-function scopeGated(auth: McpAuthContext, fn: ReadResourceCallback): ReadResourceCallback {
+/** Wrap a resource callback with a scope check. */
+function scopeGated(
+  auth: McpAuthContext,
+  scope: McpScope,
+  fn: ReadResourceCallback
+): ReadResourceCallback {
   return async (uri, extra) => {
-    if (!auth.scopes.includes('read:feedback')) {
+    if (!auth.scopes.includes(scope)) {
       return {
         contents: [
           {
             uri: uri.href,
             mimeType: 'text/plain',
-            text: 'Error: Insufficient scope. Required: read:feedback',
+            text: `Error: Insufficient scope. Required: ${scope}`,
           },
         ],
       }
@@ -57,7 +61,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'boards',
     'quackback://boards',
     { description: 'List all boards' },
-    scopeGated(auth, async () => {
+    scopeGated(auth, 'read:feedback', async () => {
       const { listBoards } = await import('@/lib/server/domains/boards/board.service')
       const boards = await listBoards()
       return jsonResource(
@@ -71,7 +75,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'statuses',
     'quackback://statuses',
     { description: 'List all statuses' },
-    scopeGated(auth, async () => {
+    scopeGated(auth, 'read:feedback', async () => {
       const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
       const statuses = await listStatuses()
       return jsonResource(
@@ -85,7 +89,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'tags',
     'quackback://tags',
     { description: 'List all tags' },
-    scopeGated(auth, async () => {
+    scopeGated(auth, 'read:feedback', async () => {
       const { listTags } = await import('@/lib/server/domains/tags/tag.service')
       const tags = await listTags()
       return jsonResource(
@@ -99,7 +103,7 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'roadmaps',
     'quackback://roadmaps',
     { description: 'List all roadmaps' },
-    scopeGated(auth, async () => {
+    scopeGated(auth, 'read:feedback', async () => {
       const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
       const roadmaps = await listRoadmaps()
       return jsonResource(
@@ -113,12 +117,49 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'members',
     'quackback://members',
     { description: 'List all team members (emails stripped)' },
-    scopeGated(auth, async () => {
+    scopeGated(auth, 'read:feedback', async () => {
       const { listTeamMembers } = await import('@/lib/server/domains/principals/principal.service')
       const members = await listTeamMembers()
       return jsonResource(
         'members',
         members.map((m) => ({ id: m.id, name: m.name, role: m.role }))
+      )
+    })
+  )
+
+  server.resource(
+    'help-center-categories',
+    'quackback://help-center/categories',
+    { description: 'List all help center categories with article counts' },
+    scopeGated(auth, 'read:help-center', async () => {
+      const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+      if (!(await isFeatureEnabled('helpCenter'))) {
+        return {
+          contents: [
+            {
+              uri: 'quackback://help-center/categories',
+              mimeType: 'text/plain',
+              text: 'Help center is not enabled. Enable it in Settings > Features.',
+            },
+          ],
+        }
+      }
+      const { listCategories } =
+        await import('@/lib/server/domains/help-center/help-center.service')
+      const categories = await listCategories()
+      return jsonResource(
+        'help-center/categories',
+        categories.map((c) => ({
+          id: c.id,
+          slug: c.slug,
+          name: c.name,
+          description: c.description,
+          icon: c.icon,
+          parentId: c.parentId,
+          isPublic: c.isPublic,
+          position: c.position,
+          articleCount: c.articleCount,
+        }))
       )
     })
   )
