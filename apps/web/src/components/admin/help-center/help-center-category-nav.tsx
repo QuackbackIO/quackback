@@ -87,68 +87,76 @@ export function HelpCenterCategoryNav({
   }
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between px-2 mb-1">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Categories
-        </span>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => onSelectCategory(undefined)}
-        className={cn(
-          'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-between',
-          !selectedCategory
-            ? 'bg-muted text-foreground'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-        )}
-      >
-        <span className="flex items-center gap-2">
-          <FolderIcon className="h-3.5 w-3.5" />
-          All Articles
-        </span>
-        <span className="text-muted-foreground/50 text-[10px]">{totalArticles}</span>
-      </button>
-
-      <div className="border-t border-border/30 my-1" />
-
-      {isLoading ? (
-        <div className="space-y-1 px-1">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-7 rounded-md bg-muted/50 animate-pulse" />
-          ))}
-        </div>
-      ) : sortedCategories.length === 0 ? (
-        <p className="text-xs text-muted-foreground px-2.5 py-2">
-          No categories yet. Click + to create one.
-        </p>
-      ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={sortedCategories.map((c) => c.id)}
-            strategy={verticalListSortingStrategy}
+    <div className="space-y-0">
+      <div className="pb-4 last:pb-0">
+        <div className="flex items-center justify-between py-1">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Categories
+          </span>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            {sortedCategories.map((cat) => (
-              <SortableCategoryItem
-                key={cat.id}
-                category={cat as CategoryItem}
-                isSelected={selectedCategory === cat.id}
-                onSelect={() => onSelectCategory(selectedCategory === cat.id ? undefined : cat.id)}
-                onEdit={() => setEditTarget(cat as CategoryItem)}
-                onDelete={() => setDeleteTarget(cat as CategoryItem)}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-      )}
+            <PlusIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="mt-2 space-y-1">
+          <button
+            type="button"
+            onClick={() => onSelectCategory(undefined)}
+            className={cn(
+              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-between',
+              !selectedCategory
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <FolderIcon className="h-3.5 w-3.5" />
+              All Articles
+            </span>
+            <span className="text-muted-foreground/50 text-[10px]">{totalArticles}</span>
+          </button>
+
+          {isLoading ? (
+            <div className="space-y-1 px-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-7 rounded-md bg-muted/50 animate-pulse" />
+              ))}
+            </div>
+          ) : sortedCategories.length === 0 ? (
+            <p className="text-xs text-muted-foreground px-2.5 py-2">
+              No categories yet. Click + to create one.
+            </p>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortedCategories.map((c) => c.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sortedCategories.map((cat) => (
+                  <SortableCategoryItem
+                    key={cat.id}
+                    category={cat as CategoryItem}
+                    isSelected={selectedCategory === cat.id}
+                    onSelect={() =>
+                      onSelectCategory(selectedCategory === cat.id ? undefined : cat.id)
+                    }
+                    onEdit={() => setEditTarget(cat as CategoryItem)}
+                    onDelete={() => setDeleteTarget(cat as CategoryItem)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
+      </div>
 
       <CategoryFormDialog open={createOpen} onOpenChange={setCreateOpen} />
 
