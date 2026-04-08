@@ -68,7 +68,19 @@ import {
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
-import { listArticles } from '@/lib/server/domains/help-center/help-center.service'
+import {
+  listArticles,
+  getArticleById,
+  getCategoryById,
+  createArticle,
+  updateArticle,
+  publishArticle,
+  unpublishArticle,
+  deleteArticle,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} from '@/lib/server/domains/help-center/help-center.service'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import type { McpAuthContext, McpScope } from './types'
 import type {
@@ -82,6 +94,8 @@ import type {
   RoadmapId,
   FeedbackSuggestionId,
   MergeSuggestionId,
+  HelpCenterArticleId,
+  HelpCenterCategoryId,
 } from '@quackback/ids'
 
 // ============================================================================
@@ -410,6 +424,52 @@ const getPostActivitySchema = {
   postId: z.string().describe('Post TypeID to get activity for'),
 }
 
+const createHelpCenterArticleSchema = {
+  categoryId: z
+    .string()
+    .describe('Category TypeID (use quackback://help-center/categories resource to find IDs)'),
+  title: z.string().max(200).describe('Article title (max 200 characters)'),
+  content: z.string().max(50000).describe('Article content (markdown, max 50,000 characters)'),
+  slug: z.string().max(200).optional().describe('URL slug (auto-generated from title if omitted)'),
+}
+
+const updateHelpCenterArticleSchema = {
+  articleId: z.string().describe('Article TypeID to update'),
+  title: z.string().max(200).optional().describe('New title'),
+  content: z
+    .string()
+    .max(50000)
+    .optional()
+    .describe('New content (markdown, max 50,000 characters)'),
+  slug: z.string().max(200).optional().describe('New URL slug'),
+  categoryId: z.string().optional().describe('Move to a different category TypeID'),
+  publishedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .optional()
+    .describe('ISO 8601 datetime to publish (e.g. "2026-04-08T00:00:00Z"), or null to unpublish'),
+}
+
+const deleteHelpCenterArticleSchema = {
+  articleId: z.string().describe('Article TypeID to delete'),
+}
+
+const manageCategorySchema = {
+  action: z.enum(['create', 'update', 'delete']).describe('Operation to perform'),
+  categoryId: z.string().optional().describe('Category TypeID (required for update and delete)'),
+  name: z.string().max(200).optional().describe('Category name (required for create)'),
+  slug: z.string().max(200).optional().describe('URL slug'),
+  description: z.string().max(2000).nullable().optional().describe('Category description'),
+  icon: z.string().max(50).nullable().optional().describe('Emoji icon (e.g. "🚀")'),
+  parentId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Parent category TypeID, or null for top-level'),
+  isPublic: z.boolean().optional().describe('Whether category is publicly visible'),
+}
+
 // ============================================================================
 // Type aliases — manually defined to avoid deep Zod type recursion.
 // WARNING: These must stay in sync with the Zod schemas above.
@@ -538,6 +598,35 @@ type RestoreSuggestionArgs = { id: string }
 
 type GetPostActivityArgs = { postId: string }
 
+type CreateHelpCenterArticleArgs = {
+  categoryId: string
+  title: string
+  content: string
+  slug?: string
+}
+
+type UpdateHelpCenterArticleArgs = {
+  articleId: string
+  title?: string
+  content?: string
+  slug?: string
+  categoryId?: string
+  publishedAt?: string | null
+}
+
+type DeleteHelpCenterArticleArgs = { articleId: string }
+
+type ManageCategoryArgs = {
+  action: 'create' | 'update' | 'delete'
+  categoryId?: string
+  name?: string
+  slug?: string
+  description?: string | null
+  icon?: string | null
+  parentId?: string | null
+  isPublic?: boolean
+}
+
 // ============================================================================
 // Tool registration
 // ============================================================================
@@ -596,12 +685,12 @@ Examples:
 
 Examples:
 - Get a post: get_details({ id: "post_01abc..." })
-- Get a changelog: get_details({ id: "changelog_01xyz..." })`,
+- Get a changelog: get_details({ id: "changelog_01xyz..." })
+- Get an article: get_details({ id: "helpcenter_article_01abc..." })
+- Get a category: get_details({ id: "helpcenter_category_01abc..." })`,
     getDetailsSchema,
     READ_ONLY,
     async (args: GetDetailsArgs): Promise<CallToolResult> => {
-      const denied = requireScope(auth, 'read:feedback')
-      if (denied) return denied
       try {
         let prefix: string
         try {
@@ -609,19 +698,41 @@ Examples:
         } catch {
           return errorResult(
             new Error(
-              `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., changelog_01xyz...)`
+              `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., helpcenter_article_01abc...)`
             )
           )
         }
 
         switch (prefix) {
-          case 'post':
+          case 'post': {
+            const denied = requireScope(auth, 'read:feedback')
+            if (denied) return denied
             return await getPostDetails(args.id as PostId)
-          case 'changelog':
+          }
+          case 'changelog': {
+            const denied = requireScope(auth, 'read:feedback')
+            if (denied) return denied
             return await getChangelogDetails(args.id as ChangelogId)
+          }
+          case 'helpcenter_article': {
+            const flagDenied = await requireHelpCenter()
+            if (flagDenied) return flagDenied
+            const denied = requireScope(auth, 'read:help-center')
+            if (denied) return denied
+            return await getArticleDetails(args.id as HelpCenterArticleId)
+          }
+          case 'helpcenter_category': {
+            const flagDenied = await requireHelpCenter()
+            if (flagDenied) return flagDenied
+            const denied = requireScope(auth, 'read:help-center')
+            if (denied) return denied
+            return await getCategoryDetails(args.id as HelpCenterCategoryId)
+          }
           default:
             return errorResult(
-              new Error(`Unsupported entity type: "${prefix}". Supported: post, changelog`)
+              new Error(
+                `Unsupported entity type: "${prefix}". Supported: post, changelog, helpcenter_article, helpcenter_category`
+              )
             )
         }
       } catch (err) {
@@ -1451,6 +1562,222 @@ Examples:
       }
     }
   )
+
+  // create_article
+  server.tool(
+    'create_article',
+    `Create a new help center article (draft). Use update_article to publish it.
+
+Examples:
+- create_article({ categoryId: "helpcenter_category_01abc...", title: "Getting Started", content: "Welcome to..." })
+- With custom slug: create_article({ categoryId: "helpcenter_category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })`,
+    createHelpCenterArticleSchema,
+    WRITE,
+    async (args: CreateHelpCenterArticleArgs): Promise<CallToolResult> => {
+      const flagDenied = await requireHelpCenter()
+      if (flagDenied) return flagDenied
+      const scopeDenied = requireScope(auth, 'write:help-center')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const article = await createArticle(
+          {
+            categoryId: args.categoryId,
+            title: args.title,
+            content: args.content,
+            slug: args.slug,
+          },
+          auth.principalId
+        )
+
+        return jsonResult({
+          id: article.id,
+          slug: article.slug,
+          title: article.title,
+          content: article.content,
+          description: article.description,
+          position: article.position,
+          category: article.category,
+          author: article.author,
+          publishedAt: article.publishedAt,
+          viewCount: article.viewCount,
+          helpfulCount: article.helpfulCount,
+          notHelpfulCount: article.notHelpfulCount,
+          createdAt: article.createdAt,
+          updatedAt: article.updatedAt,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // update_article
+  server.tool(
+    'update_article',
+    `Update a help center article. All fields optional — only provided fields change. Set publishedAt to an ISO datetime to publish, or null to unpublish.
+
+Examples:
+- Update title: update_article({ articleId: "helpcenter_article_01abc...", title: "New Title" })
+- Publish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: "2026-04-08T00:00:00Z" })
+- Unpublish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: null })`,
+    updateHelpCenterArticleSchema,
+    WRITE,
+    async (args: UpdateHelpCenterArticleArgs): Promise<CallToolResult> => {
+      const flagDenied = await requireHelpCenter()
+      if (flagDenied) return flagDenied
+      const scopeDenied = requireScope(auth, 'write:help-center')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        // Handle publish/unpublish via publishedAt
+        if (args.publishedAt !== undefined) {
+          if (args.publishedAt === null) {
+            await unpublishArticle(args.articleId as HelpCenterArticleId)
+          } else {
+            await publishArticle(args.articleId as HelpCenterArticleId)
+          }
+        }
+
+        const { articleId: _, publishedAt: __, ...updateData } = args
+        const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
+
+        let article
+        if (hasUpdates) {
+          article = await updateArticle(args.articleId as HelpCenterArticleId, updateData)
+        } else {
+          article = await getArticleById(args.articleId as HelpCenterArticleId)
+        }
+
+        return jsonResult({
+          id: article.id,
+          slug: article.slug,
+          title: article.title,
+          content: article.content,
+          description: article.description,
+          position: article.position,
+          category: article.category,
+          author: article.author,
+          publishedAt: article.publishedAt,
+          viewCount: article.viewCount,
+          helpfulCount: article.helpfulCount,
+          notHelpfulCount: article.notHelpfulCount,
+          createdAt: article.createdAt,
+          updatedAt: article.updatedAt,
+        })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // delete_article
+  server.tool(
+    'delete_article',
+    `Soft-delete a help center article.
+
+Example:
+- delete_article({ articleId: "helpcenter_article_01abc..." })`,
+    deleteHelpCenterArticleSchema,
+    DESTRUCTIVE,
+    async (args: DeleteHelpCenterArticleArgs): Promise<CallToolResult> => {
+      const flagDenied = await requireHelpCenter()
+      if (flagDenied) return flagDenied
+      const scopeDenied = requireScope(auth, 'write:help-center')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        await deleteArticle(args.articleId as HelpCenterArticleId)
+        return jsonResult({ deleted: true, id: args.articleId })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // manage_category
+  server.tool(
+    'manage_category',
+    `Create, update, or delete a help center category.
+
+Examples:
+- Create: manage_category({ action: "create", name: "Getting Started", icon: "🚀" })
+- Update: manage_category({ action: "update", categoryId: "helpcenter_category_01abc...", name: "New Name" })
+- Delete: manage_category({ action: "delete", categoryId: "helpcenter_category_01abc..." })`,
+    manageCategorySchema,
+    DESTRUCTIVE,
+    async (args: ManageCategoryArgs): Promise<CallToolResult> => {
+      const flagDenied = await requireHelpCenter()
+      if (flagDenied) return flagDenied
+      const scopeDenied = requireScope(auth, 'write:help-center')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        switch (args.action) {
+          case 'create': {
+            if (!args.name) {
+              return errorResult(new Error('name is required when action is "create"'))
+            }
+            const category = await createCategory({
+              name: args.name,
+              slug: args.slug,
+              description: args.description ?? undefined,
+              icon: args.icon ?? undefined,
+              parentId: args.parentId ?? undefined,
+              isPublic: args.isPublic,
+            })
+            return jsonResult({
+              id: category.id,
+              slug: category.slug,
+              name: category.name,
+              description: category.description,
+              icon: category.icon,
+              parentId: category.parentId,
+              isPublic: category.isPublic,
+              position: category.position,
+              createdAt: category.createdAt,
+              updatedAt: category.updatedAt,
+            })
+          }
+          case 'update': {
+            if (!args.categoryId) {
+              return errorResult(new Error('categoryId is required when action is "update"'))
+            }
+            const { action: _, categoryId: __, ...updateData } = args
+            const category = await updateCategory(
+              args.categoryId as HelpCenterCategoryId,
+              updateData
+            )
+            return jsonResult({
+              id: category.id,
+              slug: category.slug,
+              name: category.name,
+              description: category.description,
+              icon: category.icon,
+              parentId: category.parentId,
+              isPublic: category.isPublic,
+              position: category.position,
+              createdAt: category.createdAt,
+              updatedAt: category.updatedAt,
+            })
+          }
+          case 'delete': {
+            if (!args.categoryId) {
+              return errorResult(new Error('categoryId is required when action is "delete"'))
+            }
+            await deleteCategory(args.categoryId as HelpCenterCategoryId)
+            return jsonResult({ deleted: true, id: args.categoryId })
+          }
+        }
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
 }
 
 // ============================================================================
@@ -1690,5 +2017,43 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
     publishedAt: entry.publishedAt,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+  })
+}
+
+async function getArticleDetails(articleId: HelpCenterArticleId): Promise<CallToolResult> {
+  const article = await getArticleById(articleId)
+
+  return jsonResult({
+    id: article.id,
+    slug: article.slug,
+    title: article.title,
+    content: article.content,
+    description: article.description,
+    position: article.position,
+    category: article.category,
+    author: article.author,
+    publishedAt: article.publishedAt,
+    viewCount: article.viewCount,
+    helpfulCount: article.helpfulCount,
+    notHelpfulCount: article.notHelpfulCount,
+    createdAt: article.createdAt,
+    updatedAt: article.updatedAt,
+  })
+}
+
+async function getCategoryDetails(categoryId: HelpCenterCategoryId): Promise<CallToolResult> {
+  const category = await getCategoryById(categoryId)
+
+  return jsonResult({
+    id: category.id,
+    slug: category.slug,
+    name: category.name,
+    description: category.description,
+    icon: category.icon,
+    parentId: category.parentId,
+    isPublic: category.isPublic,
+    position: category.position,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
   })
 }
