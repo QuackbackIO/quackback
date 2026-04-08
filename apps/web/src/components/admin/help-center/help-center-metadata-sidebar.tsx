@@ -2,6 +2,13 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PlusIcon } from '@heroicons/react/24/solid'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   SidebarContainer,
   SidebarRow,
   SidebarDivider,
@@ -43,23 +50,25 @@ function SidebarContent({
 
       <SidebarRow label="Category">
         <div className="flex items-center gap-1.5">
-          <select
-            value={categoryId || ''}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className="flex-1 text-sm bg-transparent border border-border/50 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">Select category...</option>
-            {categories?.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.icon ? `${cat.icon} ` : ''}
-                {cat.name}
-              </option>
-            ))}
-          </select>
+          <Select value={categoryId || ''} onValueChange={onCategoryChange}>
+            <SelectTrigger size="sm" className="flex-1 min-w-0">
+              <SelectValue placeholder="Select category..." />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {categories?.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id}>
+                  <span className="flex items-center gap-1.5">
+                    {cat.icon && <span>{cat.icon}</span>}
+                    <span className="truncate">{cat.name}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <button
             type="button"
             onClick={() => setCreateCategoryOpen(true)}
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            className="h-8 w-8 flex items-center justify-center rounded-md border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
             title="Create new category"
           >
             <PlusIcon className="h-3.5 w-3.5" />
