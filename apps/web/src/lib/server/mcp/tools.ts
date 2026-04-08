@@ -219,7 +219,7 @@ const searchSchema = {
     .string()
     .optional()
     .describe(
-      'Filter by status. For posts: slug like "open", "in_progress". For changelogs: "draft", "published", "scheduled", "all".'
+      'Filter by status. For posts: slug like "open", "in_progress". For changelogs: "draft", "published", "scheduled", "all". For articles: "draft", "published", "all".'
     ),
   tagIds: z
     .array(z.string())
@@ -452,7 +452,9 @@ const updateHelpCenterArticleSchema = {
     .datetime()
     .nullable()
     .optional()
-    .describe('ISO 8601 datetime to publish (e.g. "2026-04-08T00:00:00Z"), or null to unpublish'),
+    .describe(
+      'Any ISO 8601 datetime string to publish immediately (e.g. "2026-04-08T00:00:00Z"), or null to unpublish. The exact timestamp is not used — articles are always published at the current time.'
+    ),
 }
 
 const deleteHelpCenterArticleSchema = {
@@ -1620,7 +1622,7 @@ Examples:
   // update_article
   server.tool(
     'update_article',
-    `Update a help center article. All fields optional — only provided fields change. Set publishedAt to an ISO datetime to publish, or null to unpublish.
+    `Update a help center article. All fields optional — only provided fields change. Set publishedAt to any ISO datetime string to publish immediately, or null to unpublish.
 
 Examples:
 - Update title: update_article({ articleId: "helpcenter_article_01abc...", title: "New Title" })
