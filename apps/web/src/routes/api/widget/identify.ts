@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createHmac, timingSafeEqual } from 'crypto'
 import { z } from 'zod'
 import { generateId } from '@quackback/ids'
 import type { UserId, PrincipalId } from '@quackback/ids'
@@ -8,12 +7,44 @@ import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
+import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
+import {
+  validateAndCoerceAttributes,
+  mergeMetadata,
+} from '@/lib/server/domains/users/user.attributes'
 
 const identifySchema = z.object({
   ssoToken: z.string().min(1, 'ssoToken is required'),
   // Anonymous→identified merge: previous widget session token
   previousToken: z.string().optional(),
 })
+
+/** JWT claims that are identity fields or standard JWT metadata — not custom attributes */
+export const RESERVED_JWT_CLAIMS = new Set([
+  'sub',
+  'id',
+  'email',
+  'name',
+  'avatarURL',
+  'avatarUrl',
+  'iat',
+  'exp',
+  'nbf',
+  'iss',
+  'aud',
+  'jti',
+])
+
+/** Extract non-reserved claims from a verified JWT payload for attribute processing */
+export function extractCustomClaims(payload: Record<string, unknown>): Record<string, unknown> {
+  const custom: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    if (!RESERVED_JWT_CLAIMS.has(key)) {
+      custom[key] = value
+    }
+  }
+  return custom
+}
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -45,50 +76,6 @@ async function findOrCreateSession(userId: UserId, request: Request): Promise<st
     userAgent: request.headers.get('user-agent') ?? null,
   })
   return token
-}
-
-/**
- * Verify a HS256 JWT without external libraries.
- * Returns the decoded payload or null if invalid.
- */
-export function verifyHS256JWT(token: string, secret: string): Record<string, unknown> | null {
-  const parts = token.split('.')
-  if (parts.length !== 3) return null
-
-  const [headerB64, payloadB64, signatureB64] = parts
-
-  // Verify header is HS256
-  try {
-    const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString())
-    if (header.alg !== 'HS256') return null
-  } catch {
-    return null
-  }
-
-  // Verify signature
-  const expected = createHmac('sha256', secret)
-    .update(`${headerB64}.${payloadB64}`)
-    .digest('base64url')
-
-  const sigBuf = Buffer.from(signatureB64, 'base64url')
-  const expBuf = Buffer.from(expected, 'base64url')
-  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
-    return null
-  }
-
-  // Decode payload
-  try {
-    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString())
-
-    // Check expiry if present
-    if (payload.exp && typeof payload.exp === 'number') {
-      if (Math.floor(Date.now() / 1000) > payload.exp) return null
-    }
-
-    return payload
-  } catch {
-    return null
-  }
 }
 
 interface IdentifiedUser {
@@ -140,8 +127,22 @@ export const Route = createFileRoute('/api/widget/identify')({
           id: sub,
           email,
           name: typeof payload.name === 'string' ? payload.name : undefined,
-          avatarURL: typeof payload.avatarURL === 'string' ? payload.avatarURL : undefined,
+          avatarURL:
+            typeof payload.avatarURL === 'string'
+              ? payload.avatarURL
+              : typeof payload.avatarUrl === 'string'
+                ? payload.avatarUrl
+                : undefined,
         }
+
+        // Extract custom attributes from JWT claims (silently drop unknown/invalid)
+        const customClaims = extractCustomClaims(payload)
+        let validAttrs: Record<string, unknown> = {}
+        if (Object.keys(customClaims).length > 0) {
+          const { valid } = await validateAndCoerceAttributes(customClaims)
+          validAttrs = valid
+        }
+        const hasAttrs = Object.keys(validAttrs).length > 0
 
         // Find or create user
         let userRecord = await db.query.user.findFirst({
@@ -153,6 +154,9 @@ export const Route = createFileRoute('/api/widget/identify')({
           if (identified.name && identified.name !== userRecord.name) updates.name = identified.name
           if (identified.avatarURL && identified.avatarURL !== userRecord.image)
             updates.image = identified.avatarURL
+          if (hasAttrs) {
+            updates.metadata = mergeMetadata(userRecord.metadata ?? null, validAttrs, [])
+          }
 
           if (Object.keys(updates).length > 0) {
             await db.update(user).set(updates).where(eq(user.id, userRecord.id))
@@ -166,6 +170,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               email: identified.email,
               emailVerified: false,
               image: identified.avatarURL ?? null,
+              metadata: hasAttrs ? JSON.stringify(validAttrs) : null,
               createdAt: new Date(),
               updatedAt: new Date(),
             })
