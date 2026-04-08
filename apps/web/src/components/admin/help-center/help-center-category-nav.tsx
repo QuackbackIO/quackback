@@ -89,8 +89,8 @@ export function HelpCenterCategoryNav({
   return (
     <div className="space-y-0">
       <div className="pb-4 last:pb-0">
-        <div className="flex items-center justify-between py-1">
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="flex w-full items-center justify-between py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Categories
           </span>
           <button
@@ -98,7 +98,7 @@ export function HelpCenterCategoryNav({
             onClick={() => setCreateOpen(true)}
             className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <PlusIcon className="h-3.5 w-3.5" />
+            <PlusIcon className="h-3 w-3" />
           </button>
         </div>
 

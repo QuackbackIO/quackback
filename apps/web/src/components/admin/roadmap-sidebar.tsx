@@ -126,16 +126,19 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   return (
     <aside className="w-64 xl:w-72 shrink-0 flex flex-col border-r border-border/50 bg-card/30 overflow-hidden">
       {/* Header */}
-      <div className="px-5 pt-5 pb-3">
+      <div className="px-5 pt-5 pb-2">
         <div className="flex items-center justify-between py-1">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Roadmaps
           </span>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 -mr-2">
-                <PlusIcon className="h-4 w-4" />
-              </Button>
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <PlusIcon className="h-3 w-3" />
+              </button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
