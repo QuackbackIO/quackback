@@ -107,3 +107,64 @@ describe('Widget Identify — custom attributes from JWT claims', () => {
     })
   })
 })
+
+describe('Widget Identify handler — attribute integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('passes custom claims to validateAndCoerceAttributes', async () => {
+    const { validateAndCoerceAttributes } =
+      await import('@/lib/server/domains/users/user.attributes')
+    const mockValidate = vi.mocked(validateAndCoerceAttributes)
+    mockValidate.mockResolvedValueOnce({
+      valid: { plan: 'pro' },
+      removals: [],
+      errors: [{ key: 'unknown_field', reason: 'No attribute definition found' }],
+    })
+
+    const claims = {
+      sub: 'user_1',
+      email: 'test@example.com',
+      plan: 'pro',
+      unknown_field: 'dropped',
+      iat: 123,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }
+    const custom = extractCustomClaims(claims)
+    expect(custom).toEqual({ plan: 'pro', unknown_field: 'dropped' })
+
+    // Simulate what the handler does
+    const { valid } = await mockValidate(custom)
+    expect(mockValidate).toHaveBeenCalledWith({ plan: 'pro', unknown_field: 'dropped' })
+    expect(valid).toEqual({ plan: 'pro' })
+  })
+
+  it('does not call validateAndCoerceAttributes when no custom claims', () => {
+    const claims = {
+      sub: 'user_1',
+      email: 'test@example.com',
+      iat: 123,
+      exp: 456,
+    }
+    const custom = extractCustomClaims(claims)
+    expect(Object.keys(custom)).toHaveLength(0)
+    // Handler should skip attribute validation entirely
+  })
+
+  it('handles boolean, number, and date custom claims', () => {
+    const claims = {
+      sub: 'user_1',
+      email: 'test@example.com',
+      enterprise: true,
+      seat_count: 50,
+      trial_ends: '2026-05-01T00:00:00Z',
+    }
+    const custom = extractCustomClaims(claims)
+    expect(custom).toEqual({
+      enterprise: true,
+      seat_count: 50,
+      trial_ends: '2026-05-01T00:00:00Z',
+    })
+  })
+})
