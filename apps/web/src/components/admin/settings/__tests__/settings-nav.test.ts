@@ -30,14 +30,12 @@ describe('buildNavSections', () => {
     expect(helpCenterIdx).toBeLessThan(usersIdx)
   })
 
-  it('has Help Center General and SEO items', () => {
+  it('has Help Center item', () => {
     const sections = buildNavSections({ helpCenter: true })
     const helpCenter = sections.find((s) => s.label === 'Help Center')!
-    expect(helpCenter.items).toHaveLength(2)
-    expect(helpCenter.items[0].label).toBe('General')
+    expect(helpCenter.items).toHaveLength(1)
+    expect(helpCenter.items[0].label).toBe('Help Center')
     expect(helpCenter.items[0].to).toBe('/admin/settings/help-center')
-    expect(helpCenter.items[1].label).toBe('SEO')
-    expect(helpCenter.items[1].to).toBe('/admin/settings/help-center-seo')
   })
 
   it('does not include Widget under Feedback', () => {

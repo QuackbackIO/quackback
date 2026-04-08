@@ -18,7 +18,6 @@ import {
   BeakerIcon,
   GlobeAltIcon,
   BookOpenIcon,
-  MagnifyingGlassIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
@@ -67,10 +66,7 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
   if (flags?.helpCenter) {
     sections.push({
       label: 'Help Center',
-      items: [
-        { label: 'General', to: '/admin/settings/help-center', icon: BookOpenIcon },
-        { label: 'SEO', to: '/admin/settings/help-center-seo', icon: MagnifyingGlassIcon },
-      ],
+      items: [{ label: 'Help Center', to: '/admin/settings/help-center', icon: BookOpenIcon }],
     })
   }
 

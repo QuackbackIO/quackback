@@ -32,7 +32,7 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
     const { article } = loaderData
 
     // Get workspace name from the root helpcenter layout
-    const helpCenterMatch = matches.find((m) => m.routeId === '/hc')
+    const helpCenterMatch = matches.find((m) => (m.routeId as string) === '/hc')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parentLoaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =

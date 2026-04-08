@@ -59,14 +59,14 @@ const mockAuthContext = {
   principalId: 'principal_1',
   role: 'admin' as const,
   importMode: false,
-}
+} as any
 
 const mockTeamAuthContext = {
   apiKey: { id: 'key_1', name: 'test' },
   principalId: 'principal_1',
   role: 'team' as const,
   importMode: false,
-}
+} as any
 
 beforeEach(() => {
   vi.clearAllMocks()

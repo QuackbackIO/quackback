@@ -7,8 +7,6 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ArrowTopRightOnSquareIcon,
-  LinkIcon,
-  GlobeAltIcon,
 } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -40,11 +38,8 @@ function InlineSpinner({ visible }: { visible: boolean }) {
 function HelpCenterSettingsPage() {
   const router = useRouter()
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
-  const { settings } = useRouteContext({ from: '__root__' })
-
-  const config = helpCenterConfigQuery.data as HelpCenterConfig
-  const slug = settings?.slug ?? ''
   const { baseUrl } = useRouteContext({ from: '__root__' })
+  const config = helpCenterConfigQuery.data as HelpCenterConfig
 
   const [enabled, setEnabled] = useState(config.enabled)
   const [customDomain, setCustomDomain] = useState(config.customDomain ?? '')
@@ -117,8 +112,7 @@ function HelpCenterSettingsPage() {
   }
 
   const helpUrl = `${baseUrl ?? ''}/help`
-  const subdomain = slug ? `help.${slug}.quackback.app` : 'help.your-workspace.quackback.app'
-  const cnameTarget = 'cname.quackback.app'
+  const cnameTarget = 'help-proxy.quackback.app'
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -160,13 +154,9 @@ function HelpCenterSettingsPage() {
 
       {/* Domain */}
       <SettingsCard title="Domain" description="Where your help center is accessible">
-        <div className="space-y-5">
-          {/* Built-in URL */}
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <LinkIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label className="text-sm font-medium">Help Center URL</Label>
-            </div>
+            <Label className="text-sm font-medium">Help Center URL</Label>
             <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
               <code className="text-sm font-mono text-foreground flex-1">{helpUrl}</code>
               <a
@@ -178,37 +168,12 @@ function HelpCenterSettingsPage() {
                 <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
               </a>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Always available at <code className="text-xs">/help</code> on your base URL
-            </p>
           </div>
 
-          {/* Subdomain */}
           <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <GlobeAltIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label className="text-sm font-medium">Subdomain</Label>
-            </div>
-            <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
-              <code className="text-sm font-mono text-foreground">{subdomain}</code>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Automatically derived from your workspace slug
-            </p>
-          </div>
-
-          {/* Custom Domain (optional) */}
-          <div className="space-y-1.5 pt-2 border-t border-border/30">
-            <div className="flex items-center gap-1.5">
-              <GlobeAltIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <Label htmlFor="custom-domain" className="text-sm font-medium">
-                Custom Domain
-              </Label>
-              <span className="text-xs text-muted-foreground/60">Optional</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Serve your help center on your own domain (e.g. help.yourdomain.com)
-            </p>
+            <Label htmlFor="custom-domain" className="text-sm font-medium">
+              Custom Domain
+            </Label>
             <div className="flex items-center gap-2">
               <Input
                 id="custom-domain"
@@ -233,19 +198,12 @@ function HelpCenterSettingsPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {customDomain && (
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">CNAME Target</Label>
-              <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
-                <code className="text-sm font-mono text-foreground">{cnameTarget}</code>
-              </div>
+            {customDomain && !config.domainVerified && (
               <p className="text-xs text-muted-foreground">
-                Point your DNS CNAME record to this target to verify your custom domain
+                Point a CNAME record to <code className="text-xs font-mono">{cnameTarget}</code>
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </SettingsCard>
 
