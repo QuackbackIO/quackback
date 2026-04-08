@@ -68,6 +68,8 @@ import {
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { listArticles } from '@/lib/server/domains/help-center/help-center.service'
+import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -148,6 +150,20 @@ function requireTeamRole(auth: McpAuthContext): CallToolResult | null {
   }
 }
 
+/** Return an error if the help center feature is disabled. */
+async function requireHelpCenter(): Promise<CallToolResult | null> {
+  if (await isFeatureEnabled('helpCenter')) return null
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'text',
+        text: 'Error: Help center is not enabled. Enable it in Settings > Features.',
+      },
+    ],
+  }
+}
+
 // ============================================================================
 // Annotations
 // ============================================================================
@@ -172,11 +188,15 @@ const DESTRUCTIVE: ToolAnnotations = {
 
 const searchSchema = {
   entity: z
-    .enum(['posts', 'changelogs'])
+    .enum(['posts', 'changelogs', 'articles'])
     .default('posts')
     .describe('Entity type to search. Defaults to posts.'),
   query: z.string().optional().describe('Text search across titles and content'),
   boardId: z.string().optional().describe('Filter posts by board TypeID (ignored for changelogs)'),
+  categoryId: z
+    .string()
+    .optional()
+    .describe('Filter articles by category TypeID (ignored for posts and changelogs)'),
   status: z
     .string()
     .optional()
@@ -397,9 +417,10 @@ const getPostActivitySchema = {
 // ============================================================================
 
 type SearchArgs = {
-  entity: 'posts' | 'changelogs'
+  entity: 'posts' | 'changelogs' | 'articles'
   query?: string
   boardId?: string
+  categoryId?: string
   status?: string
   tagIds?: string[]
   dateFrom?: string
@@ -525,17 +546,31 @@ export function registerTools(server: McpServer, auth: McpAuthContext) {
   // search
   server.tool(
     'search',
-    `Search feedback posts or changelog entries. Returns paginated results with a cursor for fetching more.
+    `Search feedback posts, changelog entries, or help center articles. Returns paginated results with a cursor for fetching more.
 
 Examples:
 - Search all posts: search()
 - Search by text: search({ query: "dark mode" })
 - Filter by board and status: search({ boardId: "board_01abc...", status: "open" })
 - Search changelogs: search({ entity: "changelogs", status: "published" })
+- Search articles: search({ entity: "articles", query: "getting started" })
+- Filter articles by category: search({ entity: "articles", categoryId: "helpcenter_category_01abc..." })
 - Sort by votes: search({ sort: "votes", limit: 10 })`,
     searchSchema,
     READ_ONLY,
     async (args: SearchArgs): Promise<CallToolResult> => {
+      if (args.entity === 'articles') {
+        const flagDenied = await requireHelpCenter()
+        if (flagDenied) return flagDenied
+        const denied = requireScope(auth, 'read:help-center')
+        if (denied) return denied
+        try {
+          return await searchArticles(args)
+        } catch (err) {
+          return errorResult(err)
+        }
+      }
+
       const denied = requireScope(auth, 'read:feedback')
       if (denied) return denied
       // showDeleted requires team role
@@ -1529,6 +1564,56 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
       })),
       publishedAt: c.publishedAt,
       createdAt: c.createdAt,
+    })),
+    nextCursor,
+    hasMore: result.hasMore,
+  })
+}
+
+async function searchArticles(args: SearchArgs): Promise<CallToolResult> {
+  const decoded = decodeSearchCursor(args.cursor)
+  if (args.cursor && decoded.entity && decoded.entity !== 'articles') {
+    return errorResult(
+      new Error('Cursor is from a different entity type. Do not reuse cursors across entity types.')
+    )
+  }
+  const cursorValue = typeof decoded.value === 'string' ? decoded.value : undefined
+
+  const validStatuses = new Set(['draft', 'published', 'all'])
+  const status = validStatuses.has(args.status ?? '')
+    ? (args.status as 'draft' | 'published' | 'all')
+    : undefined
+
+  const result = await listArticles({
+    categoryId: args.categoryId,
+    status,
+    search: args.query,
+    cursor: cursorValue,
+    limit: args.limit,
+  })
+
+  const lastItem = result.items[result.items.length - 1]
+  const nextCursor = result.hasMore && lastItem ? encodeSearchCursor('articles', lastItem.id) : null
+
+  return compactJsonResult({
+    articles: result.items.map((a) => ({
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      excerpt: a.content
+        ? a.content.length > 200
+          ? a.content.slice(0, 200) + '...'
+          : a.content
+        : '',
+      description: a.description,
+      status: a.publishedAt ? 'published' : 'draft',
+      categoryId: a.category.id,
+      categoryName: a.category.name,
+      categorySlug: a.category.slug,
+      authorName: a.author?.name ?? null,
+      publishedAt: a.publishedAt,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
     })),
     nextCursor,
     hasMore: result.hasMore,
