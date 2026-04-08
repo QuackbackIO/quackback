@@ -19,8 +19,8 @@ export function isHelpCenterHost(
 
   const hostname = host.split(':')[0] // Strip port
 
-  // Check verified custom domain
-  if (helpCenterConfig.customDomain && helpCenterConfig.domainVerified) {
+  // Check custom domain (route regardless of verification status)
+  if (helpCenterConfig.customDomain) {
     if (hostname === helpCenterConfig.customDomain) return true
   }
 

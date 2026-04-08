@@ -9,19 +9,11 @@ import type { HelpCenterArticleId } from '@quackback/ids'
 
 interface HelpCenterArticleFeedbackProps {
   articleId: string
-  helpfulCount: number
-  notHelpfulCount: number
 }
 
-export function HelpCenterArticleFeedback({
-  articleId,
-  helpfulCount: initialHelpful,
-  notHelpfulCount: initialNotHelpful,
-}: HelpCenterArticleFeedbackProps) {
+export function HelpCenterArticleFeedback({ articleId }: HelpCenterArticleFeedbackProps) {
   const [feedback, setFeedback] = useState<'helpful' | 'not-helpful' | null>(null)
   const [isPending, setIsPending] = useState(false)
-  const [helpfulCount, setHelpfulCount] = useState(initialHelpful)
-  const [notHelpfulCount, setNotHelpfulCount] = useState(initialNotHelpful)
 
   const handleFeedback = async (helpful: boolean) => {
     if (isPending) return
@@ -35,19 +27,6 @@ export function HelpCenterArticleFeedback({
         data: { articleId: articleId as HelpCenterArticleId, helpful },
       })
 
-      // Update counts optimistically
-      if (feedback === null) {
-        if (helpful) setHelpfulCount((c) => c + 1)
-        else setNotHelpfulCount((c) => c + 1)
-      } else {
-        if (helpful) {
-          setHelpfulCount((c) => c + 1)
-          setNotHelpfulCount((c) => Math.max(0, c - 1))
-        } else {
-          setNotHelpfulCount((c) => c + 1)
-          setHelpfulCount((c) => Math.max(0, c - 1))
-        }
-      }
       setFeedback(newFeedback)
     } catch {
       // Silently fail -- non-critical
@@ -57,17 +36,17 @@ export function HelpCenterArticleFeedback({
   }
 
   return (
-    <div className="mt-10 pt-8 border-t border-border/40">
-      <p className="text-sm font-medium text-foreground mb-3">Was this article helpful?</p>
-      <div className="flex items-center gap-3">
+    <div className="mt-10 pt-8 border-t border-border/40 flex flex-col items-center text-center">
+      <p className="text-sm text-muted-foreground mb-3">Was this article helpful?</p>
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => handleFeedback(true)}
           disabled={isPending}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors disabled:opacity-50 ${
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-colors disabled:opacity-50 ${
             feedback === 'helpful'
-              ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950 dark:text-green-300'
-              : 'border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+              ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
           {feedback === 'helpful' ? (
@@ -75,16 +54,16 @@ export function HelpCenterArticleFeedback({
           ) : (
             <HandThumbUpIcon className="h-4 w-4" />
           )}
-          Yes {helpfulCount > 0 && <span className="text-xs opacity-60">({helpfulCount})</span>}
+          Yes
         </button>
         <button
           type="button"
           onClick={() => handleFeedback(false)}
           disabled={isPending}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors disabled:opacity-50 ${
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-colors disabled:opacity-50 ${
             feedback === 'not-helpful'
-              ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300'
-              : 'border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+              ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           }`}
         >
           {feedback === 'not-helpful' ? (
@@ -92,8 +71,7 @@ export function HelpCenterArticleFeedback({
           ) : (
             <HandThumbDownIcon className="h-4 w-4" />
           )}
-          No{' '}
-          {notHelpfulCount > 0 && <span className="text-xs opacity-60">({notHelpfulCount})</span>}
+          No
         </button>
       </div>
       {feedback && (

@@ -126,11 +126,7 @@ function ArticleDetailPage() {
             )}
           </div>
 
-          <HelpCenterArticleFeedback
-            articleId={article.id}
-            helpfulCount={article.helpfulCount}
-            notHelpfulCount={article.notHelpfulCount}
-          />
+          <HelpCenterArticleFeedback articleId={article.id} />
 
           <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
         </article>

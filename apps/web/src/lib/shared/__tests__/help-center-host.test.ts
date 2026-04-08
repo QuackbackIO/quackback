@@ -26,9 +26,9 @@ describe('isHelpCenterHost', () => {
     expect(isHelpCenterHost('help.acme.com', config, 'acme', baseDomain)).toBe(true)
   })
 
-  it('returns false for a custom domain that is not verified', () => {
+  it('returns true for a custom domain even when not verified', () => {
     const config = { enabled: true, customDomain: 'help.acme.com', domainVerified: false }
-    expect(isHelpCenterHost('help.acme.com', config, 'acme', baseDomain)).toBe(false)
+    expect(isHelpCenterHost('help.acme.com', config, 'acme', baseDomain)).toBe(true)
   })
 
   it('returns false for a custom domain that is null even if verified flag is true', () => {

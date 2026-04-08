@@ -10,12 +10,12 @@ describe('getHelpCenterBaseUrl', () => {
     expect(url).toBe('https://help.example.com')
   })
 
-  it('falls back to convention subdomain when customDomain is set but not verified', () => {
+  it('returns custom domain URL even when not verified', () => {
     const url = getHelpCenterBaseUrl({
       helpCenterConfig: { customDomain: 'help.example.com', domainVerified: false },
       slug: 'acme',
     })
-    expect(url).toBe('https://help.acme.quackback.app')
+    expect(url).toBe('https://help.example.com')
   })
 
   it('falls back to convention subdomain when customDomain is null', () => {

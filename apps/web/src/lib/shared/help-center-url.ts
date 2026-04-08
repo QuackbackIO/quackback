@@ -2,7 +2,7 @@
  * Build the base URL for the standalone help center.
  *
  * Priority:
- * 1. Verified custom domain -> https://{customDomain}
+ * 1. Custom domain           -> https://{customDomain}
  * 2. Convention subdomain   -> https://help.{slug}.quackback.app
  * 3. Fallback               -> /help (relative, for edge cases)
  */
@@ -13,7 +13,7 @@ export function getHelpCenterBaseUrl(
   } | null
 ): string {
   const config = settings?.helpCenterConfig
-  if (config?.customDomain && config.domainVerified) {
+  if (config?.customDomain) {
     return `https://${config.customDomain}`
   }
   const slug = settings?.slug

@@ -5,7 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { HelpCenterCategoryId, HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, getOptionalAuth } from './auth-helpers'
 import {
   listCategories,
   listPublicCategories,
@@ -174,7 +174,8 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
   .inputValidator(getArticleBySlugSchema)
   .handler(async ({ data }) => {
     const article = await getPublicArticleBySlug(data.slug)
-    return serializeArticle(article)
+    const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
+    return publicArticle
   })
 
 export const createArticleFn = createServerFn({ method: 'POST' })
@@ -229,11 +230,11 @@ export const deleteArticleFn = createServerFn({ method: 'POST' })
 export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .inputValidator(articleFeedbackSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await getOptionalAuth()
     await recordArticleFeedback(
       data.articleId as HelpCenterArticleId,
       data.helpful,
-      auth.principal.id as PrincipalId
+      (auth?.principal?.id as PrincipalId) ?? null
     )
     return { success: true }
   })
