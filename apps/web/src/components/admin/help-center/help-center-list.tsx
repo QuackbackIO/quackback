@@ -18,7 +18,7 @@ import { HelpCenterListItem } from './help-center-list-item'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { useDeleteArticle } from '@/lib/client/mutations/help-center'
 import { Route } from '@/routes/admin/help-center'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { HelpCenterArticleId, HelpCenterCategoryId } from '@quackback/ids'
 import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
 
 function ArticleSkeleton() {
@@ -129,7 +129,7 @@ export function HelpCenterList() {
       <InboxLayout
         filters={
           <HelpCenterCategoryNav
-            selectedCategory={filters.category}
+            selectedCategory={filters.category as HelpCenterCategoryId | undefined}
             onSelectCategory={(category) => setFilters({ category })}
           />
         }

@@ -26,8 +26,8 @@ import { cn } from '@/lib/shared/utils'
 import type { HelpCenterCategoryId } from '@quackback/ids'
 
 interface HelpCenterCategoryNavProps {
-  selectedCategory?: string
-  onSelectCategory: (categoryId: string | undefined) => void
+  selectedCategory?: HelpCenterCategoryId
+  onSelectCategory: (categoryId: HelpCenterCategoryId | undefined) => void
 }
 
 interface CategoryItem {
