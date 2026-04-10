@@ -17,6 +17,7 @@ const updateTagSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
     .optional(),
+  description: z.string().max(200).optional().nullable(),
 })
 
 export const Route = createFileRoute('/api/v1/tags/$tagId')({
@@ -47,6 +48,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
             id: tag.id,
             name: tag.name,
             color: tag.color,
+            description: tag.description,
             createdAt: tag.createdAt.toISOString(),
           })
         } catch (error) {
@@ -86,12 +88,14 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
           const tag = await updateTag(tagId as TagId, {
             name: parsed.data.name,
             color: parsed.data.color,
+            description: parsed.data.description ?? undefined,
           })
 
           return successResponse({
             id: tag.id,
             name: tag.name,
             color: tag.color,
+            description: tag.description,
             createdAt: tag.createdAt.toISOString(),
           })
         } catch (error) {

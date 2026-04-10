@@ -25,6 +25,7 @@ const createTagSchema = z.object({
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
     .optional()
     .default('#6b7280'),
+  description: z.string().max(200).optional(),
 })
 
 const getTagSchema = z.object({
@@ -38,6 +39,13 @@ const updateTagSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
+  description: z.string().max(200).optional().nullable(),
+})
+
+const fetchTagsPaginatedSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  search: z.string().optional(),
 })
 
 const deleteTagSchema = z.object({
@@ -93,6 +101,32 @@ export const fetchTag = createServerFn({ method: 'GET' })
     }
   })
 
+/**
+ * Fetch tags with pagination and search (for settings page)
+ */
+export const fetchTagsPaginatedFn = createServerFn({ method: 'GET' })
+  .inputValidator(fetchTagsPaginatedSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:tags] fetchTagsPaginated: search=${data.search}, cursor=${data.cursor}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+
+      const { listTagsPaginated } = await import('@/lib/server/domains/tags/tag.service')
+      const result = await listTagsPaginated({
+        cursor: data.cursor,
+        limit: data.limit,
+        search: data.search,
+      })
+      console.log(
+        `[fn:tags] fetchTagsPaginated: count=${result.items.length}, hasMore=${result.hasMore}`
+      )
+      return result
+    } catch (error) {
+      console.error(`[fn:tags] ❌ fetchTagsPaginated failed:`, error)
+      throw error
+    }
+  })
+
 // ============================================
 // Write Operations
 // ============================================
@@ -110,6 +144,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
       const tag = await createTag({
         name: data.name,
         color: data.color,
+        description: data.description,
       })
       console.log(`[fn:tags] createTagFn: id=${tag.id}`)
       return tag
@@ -132,6 +167,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
       const tag = await updateTag(data.id as TagId, {
         name: data.name,
         color: data.color,
+        description: data.description ?? undefined,
       })
       console.log(`[fn:tags] updateTagFn: updated id=${tag.id}`)
       return tag
