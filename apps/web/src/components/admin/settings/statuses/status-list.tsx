@@ -18,7 +18,13 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { PlusIcon, Bars3Icon, TrashIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+import {
+  PlusIcon,
+  Bars3Icon,
+  TrashIcon,
+  LockClosedIcon,
+  ArrowPathIcon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -139,6 +145,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [statuses, setStatuses] = useState(initialStatuses)
+  const [savingField, setSavingField] = useState<string | null>(null)
   const [deleteStatus, setDeleteStatus] = useState<PostStatusEntity | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createCategory, setCreateCategory] = useState<StatusCategory>('active')
@@ -197,6 +204,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
   // Toggle roadmap — save immediately
   const handleToggleRoadmap = async (status: PostStatusEntity) => {
     const newValue = !status.showOnRoadmap
+    setSavingField(`roadmap-${status.id}`)
     setStatuses((prev) =>
       prev.map((s) => (s.id === status.id ? { ...s, showOnRoadmap: newValue } : s))
     )
@@ -211,12 +219,15 @@ export function StatusList({ initialStatuses }: StatusListProps) {
       setStatuses((prev) =>
         prev.map((s) => (s.id === status.id ? { ...s, showOnRoadmap: !newValue } : s))
       )
+    } finally {
+      setSavingField(null)
     }
   }
 
   // Change color — save immediately
   const handleColorChange = async (status: PostStatusEntity, color: string) => {
     const previousColor = status.color
+    setSavingField(`color-${status.id}`)
     setStatuses((prev) => prev.map((s) => (s.id === status.id ? { ...s, color } : s)))
 
     try {
@@ -229,6 +240,8 @@ export function StatusList({ initialStatuses }: StatusListProps) {
       setStatuses((prev) =>
         prev.map((s) => (s.id === status.id ? { ...s, color: previousColor } : s))
       )
+    } finally {
+      setSavingField(null)
     }
   }
 
@@ -303,6 +316,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
                       key={status.id}
                       status={status}
                       canDelete={canDeleteInCategory && !status.isDefault}
+                      savingField={savingField}
                       onToggleRoadmap={() => handleToggleRoadmap(status)}
                       onColorChange={(color) => handleColorChange(status, color)}
                       onDelete={() => setDeleteStatus(status)}
@@ -353,6 +367,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
 interface SortableStatusItemProps {
   status: PostStatusEntity
   canDelete: boolean
+  savingField: string | null
   onToggleRoadmap: () => void
   onColorChange: (color: string) => void
   onDelete: () => void
@@ -361,6 +376,7 @@ interface SortableStatusItemProps {
 function SortableStatusItem({
   status,
   canDelete,
+  savingField,
   onToggleRoadmap,
   onColorChange,
   onDelete,
@@ -424,6 +440,9 @@ function SortableStatusItem({
       </span>
 
       {/* Roadmap toggle */}
+      {(savingField === `roadmap-${status.id}` || savingField === `color-${status.id}`) && (
+        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+      )}
       <Switch
         checked={status.showOnRoadmap}
         onCheckedChange={onToggleRoadmap}

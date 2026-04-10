@@ -224,24 +224,24 @@ function WidgetAppearanceControls({
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [saving, setSaving] = useState(false)
+  const [savingField, setSavingField] = useState<string | null>(null)
   const [defaultBoard, setDefaultBoard] = useState(config.defaultBoard ?? '')
   const [widgetTabs, setWidgetTabs] = useState({
     feedback: config.tabs?.feedback ?? true,
     changelog: config.tabs?.changelog ?? false,
   })
 
-  async function save(updates: Record<string, unknown>) {
-    setSaving(true)
+  async function save(field: string, updates: Record<string, unknown>) {
+    setSavingField(field)
     try {
       await updateWidgetConfigFn({ data: updates })
       startTransition(() => router.invalidate())
     } finally {
-      setSaving(false)
+      setSavingField(null)
     }
   }
 
-  const isBusy = saving || isPending
+  const isBusy = savingField !== null || isPending
 
   return (
     <>
@@ -261,7 +261,7 @@ function WidgetAppearanceControls({
             value={position}
             onValueChange={(val: 'bottom-right' | 'bottom-left') => {
               onPositionChange(val)
-              save({ position: val })
+              save('position', { position: val })
             }}
             disabled={isBusy}
           >
@@ -293,19 +293,22 @@ function WidgetAppearanceControls({
               </Label>
               <p className="text-[11px] text-muted-foreground">Search, vote, and submit ideas</p>
             </div>
-            <Switch
-              id="tab-feedback"
-              checked={widgetTabs.feedback}
-              onCheckedChange={(checked) => {
-                if (!checked && !widgetTabs.changelog) return
-                const next = { ...widgetTabs, feedback: checked }
-                setWidgetTabs(next)
-                onTabsChange(next)
-                save({ tabs: next })
-              }}
-              disabled={isBusy || (widgetTabs.feedback && !widgetTabs.changelog)}
-              aria-label="Feedback tab"
-            />
+            <div className="flex items-center gap-2">
+              <InlineSpinner visible={savingField === 'tab-feedback'} />
+              <Switch
+                id="tab-feedback"
+                checked={widgetTabs.feedback}
+                onCheckedChange={(checked) => {
+                  if (!checked && !widgetTabs.changelog) return
+                  const next = { ...widgetTabs, feedback: checked }
+                  setWidgetTabs(next)
+                  onTabsChange(next)
+                  save('tab-feedback', { tabs: next })
+                }}
+                disabled={isBusy || (widgetTabs.feedback && !widgetTabs.changelog)}
+                aria-label="Feedback tab"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
@@ -317,19 +320,22 @@ function WidgetAppearanceControls({
                 Show product updates and shipped features
               </p>
             </div>
-            <Switch
-              id="tab-changelog"
-              checked={widgetTabs.changelog}
-              onCheckedChange={(checked) => {
-                if (!checked && !widgetTabs.feedback) return
-                const next = { ...widgetTabs, changelog: checked }
-                setWidgetTabs(next)
-                onTabsChange(next)
-                save({ tabs: next })
-              }}
-              disabled={isBusy || (widgetTabs.changelog && !widgetTabs.feedback)}
-              aria-label="Changelog tab"
-            />
+            <div className="flex items-center gap-2">
+              <InlineSpinner visible={savingField === 'tab-changelog'} />
+              <Switch
+                id="tab-changelog"
+                checked={widgetTabs.changelog}
+                onCheckedChange={(checked) => {
+                  if (!checked && !widgetTabs.feedback) return
+                  const next = { ...widgetTabs, changelog: checked }
+                  setWidgetTabs(next)
+                  onTabsChange(next)
+                  save('tab-changelog', { tabs: next })
+                }}
+                disabled={isBusy || (widgetTabs.changelog && !widgetTabs.feedback)}
+                aria-label="Changelog tab"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -347,7 +353,7 @@ function WidgetAppearanceControls({
           onValueChange={(val) => {
             const resolved = val === '__all__' ? '' : val
             setDefaultBoard(resolved)
-            save({ defaultBoard: resolved || undefined })
+            save('defaultBoard', { defaultBoard: resolved || undefined })
           }}
           disabled={isBusy}
         >
