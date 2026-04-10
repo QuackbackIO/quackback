@@ -18,6 +18,7 @@ import {
   BeakerIcon,
   GlobeAltIcon,
   BookOpenIcon,
+  TagIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
@@ -51,6 +52,7 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
       items: [
         { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
         { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
+        { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
         { label: 'Permissions', to: '/admin/settings/permissions', icon: ShieldCheckIcon },
       ],
     },
