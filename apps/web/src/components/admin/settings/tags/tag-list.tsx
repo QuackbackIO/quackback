@@ -157,7 +157,7 @@ interface TagDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   tag: Tag | null
-  onSaved: () => void
+  onSaved: (saved: Tag) => void
 }
 
 function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
@@ -203,8 +203,9 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
     setError(null)
 
     try {
+      let saved: Tag
       if (isEdit) {
-        await updateTagFn({
+        saved = await updateTagFn({
           data: {
             id: tag.id,
             name: trimmedName,
@@ -213,7 +214,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           },
         })
       } else {
-        await createTagFn({
+        saved = await createTagFn({
           data: {
             name: trimmedName,
             color,
@@ -221,7 +222,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           },
         })
       }
-      onSaved()
+      onSaved(saved)
       onOpenChange(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save tag'
@@ -328,9 +329,13 @@ export function TagList({ initialTags }: TagListProps) {
     }
   }
 
-  function handleTagSaved() {
+  function handleTagSaved(saved: Tag) {
+    if (editingTag) {
+      setTags((prev) => prev.map((t) => (t.id === saved.id ? saved : t)))
+    } else {
+      setTags((prev) => [...prev, saved])
+    }
     startTransition(() => router.invalidate())
-    // Refetch by invalidating — the route loader will re-run
   }
 
   function openCreate() {
