@@ -42,12 +42,6 @@ const updateTagSchema = z.object({
   description: z.string().max(200).optional().nullable(),
 })
 
-const fetchTagsPaginatedSchema = z.object({
-  cursor: z.string().optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-  search: z.string().optional(),
-})
-
 const deleteTagSchema = z.object({
   id: z.string(),
 })
@@ -97,32 +91,6 @@ export const fetchTag = createServerFn({ method: 'GET' })
       return tag
     } catch (error) {
       console.error(`[fn:tags] ❌ fetchTag failed:`, error)
-      throw error
-    }
-  })
-
-/**
- * Fetch tags with pagination and search (for settings page)
- */
-export const fetchTagsPaginatedFn = createServerFn({ method: 'GET' })
-  .inputValidator(fetchTagsPaginatedSchema)
-  .handler(async ({ data }) => {
-    console.log(`[fn:tags] fetchTagsPaginated: search=${data.search}, cursor=${data.cursor}`)
-    try {
-      await requireAuth({ roles: ['admin', 'member'] })
-
-      const { listTagsPaginated } = await import('@/lib/server/domains/tags/tag.service')
-      const result = await listTagsPaginated({
-        cursor: data.cursor,
-        limit: data.limit,
-        search: data.search,
-      })
-      console.log(
-        `[fn:tags] fetchTagsPaginated: count=${result.items.length}, hasMore=${result.hasMore}`
-      )
-      return result
-    } catch (error) {
-      console.error(`[fn:tags] ❌ fetchTagsPaginated failed:`, error)
       throw error
     }
   })
