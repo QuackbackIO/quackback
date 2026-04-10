@@ -10,7 +10,20 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
-import { db, eq, and, isNull, asc, type Tag, tags, boards, postTags, posts } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  asc,
+  ilike,
+  gt,
+  type Tag,
+  tags,
+  boards,
+  postTags,
+  posts,
+} from '@/lib/server/db'
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
@@ -60,6 +73,7 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
     .values({
       name: trimmedName,
       color,
+      description: input.description?.trim() || null,
     })
     .returning()
 
@@ -123,6 +137,7 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
   const updateData: Partial<Tag> = {}
   if (input.name !== undefined) updateData.name = input.name.trim()
   if (input.color !== undefined) updateData.color = input.color
+  if (input.description !== undefined) updateData.description = input.description?.trim() || null
 
   // Update the tag
   const [updatedTag] = await db.update(tags).set(updateData).where(eq(tags.id, id)).returning()
@@ -243,4 +258,37 @@ export async function listPublicTags(): Promise<Tag[]> {
       error
     )
   }
+}
+
+/**
+ * List tags with cursor-based pagination and optional search.
+ * Used by the admin settings tag editor.
+ */
+export async function listTagsPaginated(opts: {
+  cursor?: string
+  limit?: number
+  search?: string
+}): Promise<{ items: Tag[]; hasMore: boolean }> {
+  const limit = opts.limit ?? 20
+  const conditions = [isNull(tags.deletedAt)]
+
+  if (opts.search?.trim()) {
+    conditions.push(ilike(tags.name, `%${opts.search.trim()}%`))
+  }
+
+  if (opts.cursor) {
+    // Cursor is a tag name — fetch tags alphabetically after it
+    conditions.push(gt(tags.name, opts.cursor))
+  }
+
+  const items = await db.query.tags.findMany({
+    where: and(...conditions),
+    orderBy: [asc(tags.name)],
+    limit: limit + 1,
+  })
+
+  const hasMore = items.length > limit
+  if (hasMore) items.pop()
+
+  return { items, hasMore }
 }
