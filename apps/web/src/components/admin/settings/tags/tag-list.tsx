@@ -7,6 +7,7 @@ import {
   EllipsisVerticalIcon,
   PencilSquareIcon,
   TrashIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -126,7 +127,7 @@ interface TagDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   tag: Tag | null // null = create mode
-  onSaved: (tag: Tag) => void
+  onSaved: () => void
 }
 
 function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
@@ -189,9 +190,8 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
     setError(null)
 
     try {
-      let saved: Tag
       if (isEdit) {
-        saved = await updateTagFn({
+        await updateTagFn({
           data: {
             id: tag.id,
             name: trimmedName,
@@ -200,7 +200,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           },
         })
       } else {
-        saved = await createTagFn({
+        await createTagFn({
           data: {
             name: trimmedName,
             color,
@@ -208,7 +208,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           },
         })
       }
-      onSaved(saved)
+      onSaved()
       onOpenChange(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save tag'
@@ -291,7 +291,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
               }}
               title="Random color"
             >
-              🎲
+              <ArrowPathIcon className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -372,7 +372,7 @@ export function TagList() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const allTags = data?.pages.flatMap((p) => p.items) ?? []
-  const totalCount = allTags.length + (hasNextPage ? '+' : '')
+  const totalCount = `${allTags.length}${hasNextPage ? '+' : ''}`
 
   function handleTagSaved() {
     refetch()
