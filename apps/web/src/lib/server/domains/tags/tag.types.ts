@@ -8,6 +8,7 @@
 export interface CreateTagInput {
   name: string
   color?: string
+  description?: string
 }
 
 /**
@@ -16,4 +17,5 @@ export interface CreateTagInput {
 export interface UpdateTagInput {
   name?: string
   color?: string
+  description?: string
 }

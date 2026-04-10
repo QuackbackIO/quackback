@@ -52,6 +52,7 @@ export const tags = pgTable(
     id: typeIdWithDefault('tag')('id').primaryKey(),
     name: text('name').notNull().unique(),
     color: text('color').default('#6b7280').notNull(),
+    description: text('description'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
