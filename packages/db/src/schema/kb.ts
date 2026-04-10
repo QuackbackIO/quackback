@@ -23,7 +23,7 @@ const tsvector = customType<{ data: string }>({
 
 const vector = customType<{ data: number[] }>({
   dataType() {
-    return 'vector(768)'
+    return 'vector(1536)'
   },
 })
 

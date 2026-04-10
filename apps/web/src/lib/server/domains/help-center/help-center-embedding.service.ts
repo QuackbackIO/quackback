@@ -1,20 +1,17 @@
 /**
  * Help Center Embedding Service
  *
- * Generates embeddings for knowledge base articles using Gemini text-embedding-004
- * via the OpenAI-compatible API (through Cloudflare AI Gateway).
- *
- * Uses a separate model from the post embedding service (768 dims vs 1536 dims)
- * to optimize for the smaller, more structured KB content.
+ * Generates embeddings for knowledge base articles using the same
+ * OpenAI text-embedding-3-small model as the feedback pipeline.
  */
 
 import { db, helpCenterArticles, eq, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { EMBEDDING_MODEL } from '@/lib/server/domains/embeddings/embedding.service'
 import type { HelpCenterArticleId } from '@quackback/ids'
 
-export const KB_EMBEDDING_MODEL = 'google/text-embedding-004'
-const KB_EMBEDDING_DIMENSIONS = 768
+const KB_EMBEDDING_DIMENSIONS = 1536
 
 /**
  * Format article text for embedding input.
@@ -30,7 +27,7 @@ export function formatArticleText(title: string, content: string, categoryName?:
 }
 
 /**
- * Generate embedding for text using Gemini text-embedding-004.
+ * Generate embedding for text using OpenAI text-embedding-3-small.
  */
 export async function generateKbEmbedding(text: string): Promise<number[] | null> {
   const openai = getOpenAI()
@@ -39,14 +36,14 @@ export async function generateKbEmbedding(text: string): Promise<number[] | null
   try {
     const { result: response } = await withRetry(() =>
       openai.embeddings.create({
-        model: KB_EMBEDDING_MODEL,
+        model: EMBEDDING_MODEL,
         input: text,
         dimensions: KB_EMBEDDING_DIMENSIONS,
       })
     )
     return response.data[0]?.embedding ?? null
   } catch (error) {
-    console.error('[KB Embedding] Gemini embedding failed:', error)
+    console.error('[KB Embedding] Embedding generation failed:', error)
     return null
   }
 }
@@ -69,7 +66,7 @@ export async function generateArticleEmbedding(
     .update(helpCenterArticles)
     .set({
       embedding: sql`${vectorStr}::vector`,
-      embeddingModel: KB_EMBEDDING_MODEL,
+      embeddingModel: EMBEDDING_MODEL,
       embeddingUpdatedAt: new Date(),
     })
     .where(eq(helpCenterArticles.id, articleId as HelpCenterArticleId))
