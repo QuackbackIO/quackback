@@ -2,7 +2,7 @@ import { useState, useTransition } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { ShieldCheckIcon } from '@heroicons/react/24/solid'
+import { ShieldCheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -26,6 +26,7 @@ interface PermissionToggleProps {
   label: string
   description: string
   checked: boolean
+  saving?: boolean
   onCheckedChange: (checked: boolean) => void
   disabled?: boolean
 }
@@ -35,6 +36,7 @@ function PermissionToggle({
   label,
   description,
   checked,
+  saving,
   onCheckedChange,
   disabled,
 }: PermissionToggleProps) {
@@ -46,7 +48,10 @@ function PermissionToggle({
         </label>
         <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
       </div>
-      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      <div className="flex items-center gap-2">
+        {saving && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      </div>
     </div>
   )
 }
@@ -62,8 +67,10 @@ function PermissionsPage() {
   const [anonVoting, setAnonVoting] = useState(features?.anonymousVoting ?? true)
   const [richMediaInPosts, setRichMediaInPosts] = useState(features?.richMediaInPosts ?? true)
   const [videoEmbedsInPosts, setVideoEmbedsInPosts] = useState(features?.videoEmbedsInPosts ?? true)
+  const [savingField, setSavingField] = useState<string | null>(null)
 
   async function updateFeature(key: string, value: boolean, revert: () => void) {
+    setSavingField(key)
     try {
       await updatePortalConfigFn({ data: { features: { [key]: value } } })
       startTransition(() => {
@@ -71,8 +78,12 @@ function PermissionsPage() {
       })
     } catch {
       revert()
+    } finally {
+      setSavingField(null)
     }
   }
+
+  const isBusy = savingField !== null || isPending
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -95,33 +106,36 @@ function PermissionsPage() {
             label="Anonymous Posting"
             description="Anyone can create submissions without authenticating."
             checked={anonPosting}
+            saving={savingField === 'anonymousPosting'}
             onCheckedChange={(checked) => {
               setAnonPosting(checked)
               updateFeature('anonymousPosting', checked, () => setAnonPosting(!checked))
             }}
-            disabled={isPending}
+            disabled={isBusy}
           />
           <PermissionToggle
             id="anon-commenting"
             label="Anonymous Commenting"
             description="Users will be able to comment on posts without signing in."
             checked={anonCommenting}
+            saving={savingField === 'anonymousCommenting'}
             onCheckedChange={(checked) => {
               setAnonCommenting(checked)
               updateFeature('anonymousCommenting', checked, () => setAnonCommenting(!checked))
             }}
-            disabled={isPending}
+            disabled={isBusy}
           />
           <PermissionToggle
             id="anon-voting"
             label="Anonymous Upvoting"
             description="Users will be able to upvote posts without having to sign in."
             checked={anonVoting}
+            saving={savingField === 'anonymousVoting'}
             onCheckedChange={(checked) => {
               setAnonVoting(checked)
               updateFeature('anonymousVoting', checked, () => setAnonVoting(!checked))
             }}
-            disabled={isPending}
+            disabled={isBusy}
           />
         </div>
       </SettingsCard>
@@ -136,22 +150,24 @@ function PermissionsPage() {
             label="Rich Media in Posts"
             description="Allow images, tables, and embedded videos when writing feedback posts."
             checked={richMediaInPosts}
+            saving={savingField === 'richMediaInPosts'}
             onCheckedChange={(checked) => {
               setRichMediaInPosts(checked)
               updateFeature('richMediaInPosts', checked, () => setRichMediaInPosts(!checked))
             }}
-            disabled={isPending}
+            disabled={isBusy}
           />
           <PermissionToggle
             id="video-embeds-in-posts"
             label="Video Embeds in Posts"
             description="Allow YouTube and other video embeds inside post content. Only applies when rich media is enabled."
             checked={videoEmbedsInPosts}
+            saving={savingField === 'videoEmbedsInPosts'}
             onCheckedChange={(checked) => {
               setVideoEmbedsInPosts(checked)
               updateFeature('videoEmbedsInPosts', checked, () => setVideoEmbedsInPosts(!checked))
             }}
-            disabled={isPending || !richMediaInPosts}
+            disabled={isBusy || !richMediaInPosts}
           />
         </div>
       </SettingsCard>
