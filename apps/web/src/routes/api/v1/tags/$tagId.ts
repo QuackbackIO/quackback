@@ -88,7 +88,7 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
           const tag = await updateTag(tagId as TagId, {
             name: parsed.data.name,
             color: parsed.data.color,
-            description: parsed.data.description ?? undefined,
+            description: parsed.data.description,
           })
 
           return successResponse({

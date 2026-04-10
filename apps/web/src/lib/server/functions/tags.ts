@@ -167,7 +167,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
       const tag = await updateTag(data.id as TagId, {
         name: data.name,
         color: data.color,
-        description: data.description ?? undefined,
+        description: data.description,
       })
       console.log(`[fn:tags] updateTagFn: updated id=${tag.id}`)
       return tag

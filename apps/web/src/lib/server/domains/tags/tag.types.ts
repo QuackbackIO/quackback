@@ -17,5 +17,5 @@ export interface CreateTagInput {
 export interface UpdateTagInput {
   name?: string
   color?: string
-  description?: string
+  description?: string | null
 }
