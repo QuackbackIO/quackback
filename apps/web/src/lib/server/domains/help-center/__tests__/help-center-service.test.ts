@@ -97,11 +97,15 @@ vi.mock('@/lib/server/db', () => ({
     deletedAt: 'deleted_at',
     position: 'position',
     isPublic: 'is_public',
+    parentId: 'parent_id',
+    icon: 'icon',
   },
   helpCenterArticles: {
     id: 'id',
     slug: 'slug',
     title: 'title',
+    description: 'description',
+    position: 'position',
     content: 'content',
     categoryId: 'category_id',
     deletedAt: 'deleted_at',
@@ -130,6 +134,7 @@ vi.mock('@/lib/server/db', () => ({
   desc: vi.fn(),
   asc: vi.fn(),
   sql: vi.fn(),
+  inArray: vi.fn(),
 }))
 
 vi.mock('@/lib/server/markdown-tiptap', () => ({
@@ -141,14 +146,16 @@ let listPublicCategories: typeof import('../help-center.service').listPublicCate
 let getCategoryById: typeof import('../help-center.service').getCategoryById
 let getCategoryBySlug: typeof import('../help-center.service').getCategoryBySlug
 let createCategory: typeof import('../help-center.service').createCategory
-let _updateCategory: typeof import('../help-center.service').updateCategory
+let updateCategory: typeof import('../help-center.service').updateCategory
 let deleteCategory: typeof import('../help-center.service').deleteCategory
 let getArticleById: typeof import('../help-center.service').getArticleById
 let createArticle: typeof import('../help-center.service').createArticle
+let updateArticle: typeof import('../help-center.service').updateArticle
 let publishArticle: typeof import('../help-center.service').publishArticle
 let unpublishArticle: typeof import('../help-center.service').unpublishArticle
 let deleteArticle: typeof import('../help-center.service').deleteArticle
 let recordArticleFeedback: typeof import('../help-center.service').recordArticleFeedback
+let listPublicArticlesForCategory: typeof import('../help-center.service').listPublicArticlesForCategory
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -162,14 +169,16 @@ beforeEach(async () => {
   getCategoryById = mod.getCategoryById
   getCategoryBySlug = mod.getCategoryBySlug
   createCategory = mod.createCategory
-  _updateCategory = mod.updateCategory
+  updateCategory = mod.updateCategory
   deleteCategory = mod.deleteCategory
   getArticleById = mod.getArticleById
   createArticle = mod.createArticle
+  updateArticle = mod.updateArticle
   publishArticle = mod.publishArticle
   unpublishArticle = mod.unpublishArticle
   deleteArticle = mod.deleteArticle
   recordArticleFeedback = mod.recordArticleFeedback
+  listPublicArticlesForCategory = mod.listPublicArticlesForCategory
 })
 
 describe('listCategories', () => {
@@ -557,6 +566,246 @@ describe('deleteArticle', () => {
     await expect(
       deleteArticle('helpcenter_article_missing' as HelpCenterArticleId)
     ).rejects.toMatchObject({ code: 'ARTICLE_NOT_FOUND' })
+  })
+})
+
+describe('createCategory with parentId and icon', () => {
+  it('passes parentId and icon to the database insert', async () => {
+    const result = await createCategory({
+      name: 'Child Category',
+      parentId: 'helpcenter_category_parent1',
+      icon: 'book',
+    })
+    expect(result.id).toBeDefined()
+    expect(insertValuesCalls).toHaveLength(1)
+    const insertedValues = insertValuesCalls[0][0] as Record<string, unknown>
+    expect(insertedValues.parentId).toBe('helpcenter_category_parent1')
+    expect(insertedValues.icon).toBe('book')
+  })
+
+  it('defaults parentId and icon to null when not provided', async () => {
+    await createCategory({ name: 'Top Level' })
+    expect(insertValuesCalls).toHaveLength(1)
+    const insertedValues = insertValuesCalls[0][0] as Record<string, unknown>
+    expect(insertedValues.parentId).toBeNull()
+    expect(insertedValues.icon).toBeNull()
+  })
+})
+
+describe('updateCategory with parentId and icon', () => {
+  it('passes parentId and icon in the update set', async () => {
+    await updateCategory('helpcenter_category_1' as HelpCenterCategoryId, {
+      parentId: 'helpcenter_category_parent1',
+      icon: 'star',
+    })
+    expect(updateSetCalls).toHaveLength(1)
+    const setValues = updateSetCalls[0][0] as Record<string, unknown>
+    expect(setValues.parentId).toBe('helpcenter_category_parent1')
+    expect(setValues.icon).toBe('star')
+  })
+
+  it('allows clearing parentId and icon by passing null', async () => {
+    await updateCategory('helpcenter_category_1' as HelpCenterCategoryId, {
+      parentId: null,
+      icon: null,
+    })
+    expect(updateSetCalls).toHaveLength(1)
+    const setValues = updateSetCalls[0][0] as Record<string, unknown>
+    expect(setValues.parentId).toBeNull()
+    expect(setValues.icon).toBeNull()
+  })
+})
+
+describe('listPublicCategories returns parentId and icon', () => {
+  it('includes parentId and icon in results', async () => {
+    mockCategoryFindMany.mockResolvedValue([
+      {
+        id: 'helpcenter_category_1' as HelpCenterCategoryId,
+        slug: 'public',
+        name: 'Public',
+        description: null,
+        isPublic: true,
+        position: 0,
+        parentId: 'helpcenter_category_parent1',
+        icon: 'book',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
+
+    mockSelectFrom.mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        groupBy: vi.fn().mockResolvedValue([{ categoryId: 'helpcenter_category_1', count: 2 }]),
+      }),
+    })
+
+    const result = await listPublicCategories()
+    expect(result).toHaveLength(1)
+    expect(result[0].parentId).toBe('helpcenter_category_parent1')
+    expect(result[0].icon).toBe('book')
+  })
+})
+
+describe('createArticle with position and description', () => {
+  it('passes position and description to the database insert', async () => {
+    const { db } = await import('@/lib/server/db')
+    const articleInsertChain: Record<string, unknown> = {}
+    articleInsertChain.values = vi.fn((...args: unknown[]) => {
+      insertValuesCalls.push(args)
+      return articleInsertChain
+    })
+    articleInsertChain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'helpcenter_article_new1' as HelpCenterArticleId,
+        slug: 'how-to-start',
+        title: 'How to Start',
+        description: 'A short intro',
+        position: 5,
+        content: 'Some content',
+        contentJson: { type: 'doc', content: [] },
+        categoryId: 'helpcenter_category_1',
+        principalId: 'principal_1',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
+    vi.mocked(db.insert).mockReturnValueOnce(articleInsertChain as never)
+
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'helpcenter_category_1',
+      slug: 'getting-started',
+      name: 'Getting Started',
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      displayName: 'Author',
+      avatarUrl: null,
+    })
+
+    const result = await createArticle(
+      {
+        categoryId: 'helpcenter_category_1',
+        title: 'How to Start',
+        content: 'Some content',
+        position: 5,
+        description: 'A short intro',
+      },
+      'principal_1' as PrincipalId
+    )
+
+    expect(result.title).toBe('How to Start')
+    const insertedValues = insertValuesCalls[0][0] as Record<string, unknown>
+    expect(insertedValues.position).toBe(5)
+    expect(insertedValues.description).toBe('A short intro')
+  })
+})
+
+describe('updateArticle with position and description', () => {
+  it('passes position and description in the update set', async () => {
+    const { db } = await import('@/lib/server/db')
+    const articleUpdateChain: Record<string, unknown> = {}
+    articleUpdateChain.set = vi.fn((...args: unknown[]) => {
+      updateSetCalls.push(args)
+      return articleUpdateChain
+    })
+    articleUpdateChain.where = vi.fn((...args: unknown[]) => {
+      updateWhereCalls.push(args)
+      return articleUpdateChain
+    })
+    articleUpdateChain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'helpcenter_article_1' as HelpCenterArticleId,
+        slug: 'test',
+        title: 'Test',
+        description: 'Updated desc',
+        position: 3,
+        content: 'Content',
+        contentJson: null,
+        categoryId: 'helpcenter_category_1',
+        principalId: 'principal_1',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
+    vi.mocked(db.update).mockReturnValueOnce(articleUpdateChain as never)
+
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'helpcenter_category_1',
+      slug: 'test',
+      name: 'Test',
+    })
+    mockPrincipalFindFirst.mockResolvedValue(null)
+
+    await updateArticle('helpcenter_article_1' as HelpCenterArticleId, {
+      position: 3,
+      description: 'Updated desc',
+    })
+
+    expect(updateSetCalls).toHaveLength(1)
+    const setValues = updateSetCalls[0][0] as Record<string, unknown>
+    expect(setValues.position).toBe(3)
+    expect(setValues.description).toBe('Updated desc')
+  })
+})
+
+describe('listPublicArticlesForCategory', () => {
+  it('returns published articles for a category ordered by position then publishedAt', async () => {
+    const { db } = await import('@/lib/server/db')
+
+    const mockArticles = [
+      {
+        id: 'helpcenter_article_1' as HelpCenterArticleId,
+        slug: 'first-article',
+        title: 'First Article',
+        description: 'Desc 1',
+        position: 0,
+        publishedAt: new Date('2024-01-01'),
+      },
+      {
+        id: 'helpcenter_article_2' as HelpCenterArticleId,
+        slug: 'second-article',
+        title: 'Second Article',
+        description: null,
+        position: 1,
+        publishedAt: new Date('2024-01-02'),
+      },
+    ]
+
+    // Mock the select().from().where().orderBy() chain
+    const orderByMock = vi.fn().mockResolvedValue(mockArticles)
+    const whereMock = vi.fn().mockReturnValue({ orderBy: orderByMock })
+    const fromMock = vi.fn().mockReturnValue({ where: whereMock })
+    const selectResult = { from: fromMock }
+    vi.mocked(db.select).mockReturnValueOnce(selectResult as never)
+
+    const result = await listPublicArticlesForCategory('helpcenter_category_1')
+
+    expect(result).toHaveLength(2)
+    expect(result[0].slug).toBe('first-article')
+    expect(result[0].description).toBe('Desc 1')
+    expect(result[0].position).toBe(0)
+    expect(result[1].slug).toBe('second-article')
+    expect(db.select).toHaveBeenCalled()
+  })
+
+  it('returns empty array when no published articles exist', async () => {
+    const { db } = await import('@/lib/server/db')
+
+    const orderByMock = vi.fn().mockResolvedValue([])
+    const whereMock = vi.fn().mockReturnValue({ orderBy: orderByMock })
+    const fromMock = vi.fn().mockReturnValue({ where: whereMock })
+    vi.mocked(db.select).mockReturnValueOnce({ from: fromMock } as never)
+
+    const result = await listPublicArticlesForCategory('helpcenter_category_1')
+    expect(result).toHaveLength(0)
   })
 })
 

@@ -15,6 +15,7 @@ import type {
   FeatureFlags,
   TenantSettings,
   SettingsBrandingData,
+  HelpCenterConfig,
 } from './settings.types'
 import {
   DEFAULT_AUTH_CONFIG,
@@ -22,6 +23,7 @@ import {
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_FEATURE_FLAGS,
+  DEFAULT_HELP_CENTER_CONFIG,
 } from './settings.types'
 import {
   parseJsonConfig,
@@ -187,6 +189,36 @@ export async function updateDeveloperConfig(
   }
 }
 
+export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
+  try {
+    const org = await requireSettings()
+    return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+  } catch (error) {
+    console.error(`[domain:settings] getHelpCenterConfig failed:`, error)
+    wrapDbError('fetch help center config', error)
+  }
+}
+
+export async function updateHelpCenterConfig(
+  input: Partial<HelpCenterConfig>
+): Promise<HelpCenterConfig> {
+  console.log(`[domain:settings] updateHelpCenterConfig`)
+  try {
+    const org = await requireSettings()
+    const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
+    const updated = deepMerge(existing, input)
+    await db
+      .update(settings)
+      .set({ helpCenterConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+    return updated
+  } catch (error) {
+    console.error(`[domain:settings] updateHelpCenterConfig failed:`, error)
+    wrapDbError('update help center config', error)
+  }
+}
+
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   try {
     const org = await requireSettings()
@@ -252,6 +284,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const developerConfig = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
 
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
+    const helpCenterConfig = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
 
     const featureFlags: FeatureFlags = {
       ...DEFAULT_FEATURE_FLAGS,
@@ -292,6 +325,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       portalConfig,
       brandingConfig,
       developerConfig,
+      helpCenterConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: {
         oauth: filteredAuthOAuth,

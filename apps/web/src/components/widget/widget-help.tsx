@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
+import { useQuery } from '@tanstack/react-query'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MagnifyingGlassIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
+import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 
 interface WidgetHelpArticle {
   id: string
@@ -12,16 +15,20 @@ interface WidgetHelpArticle {
 }
 
 interface WidgetHelpProps {
-  onArticleSelect?: (articleId: string) => void
+  onArticleSelect?: (articleSlug: string) => void
+  onCategorySelect?: (categoryId: string, categoryName: string, categoryIcon: string | null) => void
 }
 
-export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
+export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProps) {
   const intl = useIntl()
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<WidgetHelpArticle[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const cacheRef = useRef(new Map<string, WidgetHelpArticle[]>())
+
+  const categoriesQuery = useQuery(publicHelpCenterQueries.categories())
+  const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
 
   const doSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -35,7 +42,6 @@ export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
       return
     }
 
-    // Cap cache size to prevent unbounded growth
     if (cacheRef.current.size >= 30) {
       const firstKey = cacheRef.current.keys().next().value!
       cacheRef.current.delete(firstKey)
@@ -66,6 +72,8 @@ export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
     return () => clearTimeout(timer)
   }, [search, doSearch])
 
+  const showCategories = !search && !isSearching
+
   return (
     <div className="flex flex-col h-full">
       {/* Search bar */}
@@ -87,6 +95,64 @@ export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
 
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
         <div className="px-3 pt-1 pb-3">
+          {/* Category grid (default view) */}
+          {showCategories && (
+            <>
+              {categoriesQuery.isLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-xs text-muted-foreground/50">
+                    <FormattedMessage id="widget.help.loading" defaultMessage="Loading..." />
+                  </span>
+                </div>
+              )}
+
+              {!categoriesQuery.isLoading && topLevelCategories.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                  <QuestionMarkCircleIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-sm font-medium text-muted-foreground/70">
+                    <FormattedMessage
+                      id="widget.help.noCategories"
+                      defaultMessage="No articles yet"
+                    />
+                  </p>
+                  <p className="text-xs text-muted-foreground/50 mt-0.5">
+                    <FormattedMessage
+                      id="widget.help.noCategoriesHint"
+                      defaultMessage="Help articles will appear here once published."
+                    />
+                  </p>
+                </div>
+              )}
+
+              {!categoriesQuery.isLoading && topLevelCategories.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {topLevelCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => onCategorySelect?.(cat.id, cat.name, cat.icon)}
+                      className="group text-start rounded-lg border border-border/50 bg-card p-3 hover:border-border hover:bg-muted/30 transition-all cursor-pointer"
+                    >
+                      {cat.icon && <div className="text-lg mb-1">{cat.icon}</div>}
+                      <h3 className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                        {cat.name}
+                      </h3>
+                      {cat.description && (
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">
+                          {cat.description}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                        {cat.articleCount} {cat.articleCount === 1 ? 'article' : 'articles'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Search states */}
           {isSearching && (
             <div className="flex items-center justify-center py-8">
               <span className="text-xs text-muted-foreground/50">
@@ -105,21 +171,6 @@ export function WidgetHelp({ onArticleSelect }: WidgetHelpProps) {
                 <FormattedMessage
                   id="widget.help.noResultsHint"
                   defaultMessage="Try different keywords or browse categories."
-                />
-              </p>
-            </div>
-          )}
-
-          {!isSearching && !search && (
-            <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-              <QuestionMarkCircleIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground/70">
-                <FormattedMessage id="widget.help.emptyHeading" defaultMessage="Search for help" />
-              </p>
-              <p className="text-xs text-muted-foreground/50 mt-0.5">
-                <FormattedMessage
-                  id="widget.help.emptyHint"
-                  defaultMessage="Type a question or keyword above to find help articles."
                 />
               </p>
             </div>

@@ -5,7 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { HelpCenterCategoryId, HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, getOptionalAuth } from './auth-helpers'
 import {
   listCategories,
   listPublicCategories,
@@ -16,6 +16,7 @@ import {
   deleteCategory,
   listArticles,
   listPublicArticles,
+  listPublicArticlesForCategory,
   getArticleById,
   getPublicArticleBySlug,
   createArticle,
@@ -151,6 +152,16 @@ export const listPublicArticlesFn = createServerFn({ method: 'GET' })
     }
   })
 
+export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ categoryId: z.string() }))
+  .handler(async ({ data }) => {
+    const articles = await listPublicArticlesForCategory(data.categoryId)
+    return articles.map((a) => ({
+      ...a,
+      publishedAt: toIsoStringOrNull(a.publishedAt),
+    }))
+  })
+
 export const getArticleFn = createServerFn({ method: 'GET' })
   .inputValidator(getArticleSchema)
   .handler(async ({ data }) => {
@@ -163,7 +174,8 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
   .inputValidator(getArticleBySlugSchema)
   .handler(async ({ data }) => {
     const article = await getPublicArticleBySlug(data.slug)
-    return serializeArticle(article)
+    const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
+    return publicArticle
   })
 
 export const createArticleFn = createServerFn({ method: 'POST' })
@@ -218,11 +230,25 @@ export const deleteArticleFn = createServerFn({ method: 'POST' })
 export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .inputValidator(articleFeedbackSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await getOptionalAuth()
     await recordArticleFeedback(
       data.articleId as HelpCenterArticleId,
       data.helpful,
-      auth.principal.id as PrincipalId
+      (auth?.principal?.id as PrincipalId) ?? null
     )
     return { success: true }
+  })
+
+// ============================================================================
+// Public Hybrid Search
+// ============================================================================
+
+export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
+  .inputValidator(
+    z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(20).optional() })
+  )
+  .handler(async ({ data }) => {
+    const { hybridSearch } =
+      await import('@/lib/server/domains/help-center/help-center-search.service')
+    return hybridSearch(data.query, data.limit ?? 10)
   })

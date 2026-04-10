@@ -236,6 +236,8 @@ export {
   helpCenterArticlesRelations,
   helpCenterArticleFeedback,
   helpCenterArticleFeedbackRelations,
+  kbDomainVerifications,
+  kbDomainVerificationsRelations,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

@@ -31,6 +31,7 @@ export const ID_PREFIXES = {
   helpcenter_category: 'helpcenter_category',
   helpcenter_article: 'helpcenter_article',
   helpcenter_feedback: 'helpcenter_feedback',
+  helpcenter_domain: 'helpcenter_domain',
 
   // Integrations
   integration: 'integration',

@@ -10,14 +10,15 @@ import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
-import { HelpCenterFiltersPanel } from './help-center-filters'
+import { HelpCenterCategoryNav } from './help-center-category-nav'
 import { useHelpCenterFilters } from './use-help-center-filters'
+import type { HelpCenterStatusFilter } from './use-help-center-filters'
 import { CreateArticleDialog } from './create-article-dialog'
 import { HelpCenterListItem } from './help-center-list-item'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { useDeleteArticle } from '@/lib/client/mutations/help-center'
 import { Route } from '@/routes/admin/help-center'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { HelpCenterArticleId, HelpCenterCategoryId } from '@quackback/ids'
 import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
 
 function ArticleSkeleton() {
@@ -127,11 +128,9 @@ export function HelpCenterList() {
     <>
       <InboxLayout
         filters={
-          <HelpCenterFiltersPanel
-            status={filters.status}
-            onStatusChange={(status) => setFilters({ status })}
-            category={filters.category}
-            onCategoryChange={(category) => setFilters({ category })}
+          <HelpCenterCategoryNav
+            selectedCategory={filters.category as HelpCenterCategoryId | undefined}
+            onSelectCategory={(category) => setFilters({ category })}
           />
         }
         hasActiveFilters={hasActiveFilters}
@@ -140,6 +139,13 @@ export function HelpCenterList() {
           <AdminListHeader
             searchValue={searchValue}
             onSearchChange={setSearchValue}
+            sortOptions={[
+              { value: 'all', label: 'All' },
+              { value: 'draft', label: 'Draft' },
+              { value: 'published', label: 'Published' },
+            ]}
+            activeSort={filters.status}
+            onSortChange={(status) => setFilters({ status: status as HelpCenterStatusFilter })}
             action={<CreateArticleDialog />}
           />
 

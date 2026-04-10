@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { useState, useMemo } from 'react'
+import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
   UsersIcon,
@@ -16,8 +16,11 @@ import {
   AdjustmentsHorizontalIcon,
   ShieldCheckIcon,
   BeakerIcon,
+  GlobeAltIcon,
+  BookOpenIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 
 interface NavItem {
   label: string
@@ -30,51 +33,71 @@ interface NavSection {
   items: NavItem[]
 }
 
-const navSections: NavSection[] = [
-  {
-    label: 'Workspace',
-    items: [
-      { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
-      { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
-    ],
-  },
-  {
-    label: 'Feedback',
-    items: [
-      { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
-      { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
-      { label: 'Permissions', to: '/admin/settings/permissions', icon: ShieldCheckIcon },
-      { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
-    ],
-  },
-  {
-    label: 'Appearance',
-    items: [{ label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon }],
-  },
-  {
-    label: 'Users',
-    items: [
-      { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
-      {
-        label: 'User Attributes',
-        to: '/admin/settings/user-attributes',
-        icon: AdjustmentsHorizontalIcon,
-      },
-    ],
-  },
-  {
-    label: 'Developers',
-    items: [
-      { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
-      { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
-      { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
-    ],
-  },
-  {
-    label: 'Advanced',
-    items: [{ label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon }],
-  },
-]
+export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[] {
+  const sections: NavSection[] = [
+    {
+      label: 'Workspace',
+      items: [
+        { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
+        { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+      ],
+    },
+    {
+      label: 'Appearance',
+      items: [{ label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon }],
+    },
+    {
+      label: 'Feedback',
+      items: [
+        { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
+        { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
+        { label: 'Permissions', to: '/admin/settings/permissions', icon: ShieldCheckIcon },
+      ],
+    },
+    {
+      label: 'Portal',
+      items: [
+        { label: 'General', to: '/admin/settings/portal', icon: GlobeAltIcon },
+        { label: 'Widget', to: '/admin/settings/portal-widget', icon: ChatBubbleLeftRightIcon },
+      ],
+    },
+  ]
+
+  if (flags?.helpCenter) {
+    sections.push({
+      label: 'Help Center',
+      items: [{ label: 'Help Center', to: '/admin/settings/help-center', icon: BookOpenIcon }],
+    })
+  }
+
+  sections.push(
+    {
+      label: 'Users',
+      items: [
+        { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
+        {
+          label: 'User Attributes',
+          to: '/admin/settings/user-attributes',
+          icon: AdjustmentsHorizontalIcon,
+        },
+      ],
+    },
+    {
+      label: 'Developers',
+      items: [
+        { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
+        { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
+        { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
+      ],
+    },
+    {
+      label: 'Advanced',
+      items: [{ label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon }],
+    }
+  )
+
+  return sections
+}
 
 function NavSection({
   label,
@@ -104,6 +127,10 @@ function NavSection({
 
 export function SettingsNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+
+  const navSections = useMemo(() => buildNavSections(flags), [flags])
 
   return (
     <div className="space-y-1">

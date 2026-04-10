@@ -8,10 +8,11 @@ import {
   uniqueIndex,
   jsonb,
   customType,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { principal } from './auth'
+import { principal, settings } from './auth'
 import type { TiptapContent } from '../types'
 
 const tsvector = customType<{ data: string }>({
@@ -22,7 +23,7 @@ const tsvector = customType<{ data: string }>({
 
 const vector = customType<{ data: number[] }>({
   dataType() {
-    return 'vector(1536)'
+    return 'vector(768)'
   },
 })
 
@@ -34,9 +35,14 @@ export const helpCenterCategories = pgTable(
   'kb_categories',
   {
     id: typeIdWithDefault('helpcenter_category')('id').primaryKey(),
+    parentId: typeIdColumnNullable('helpcenter_category')('parent_id').references(
+      (): AnyPgColumn => helpCenterCategories.id,
+      { onDelete: 'set null' }
+    ),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
+    icon: text('icon'),
     isPublic: boolean('is_public').default(true).notNull(),
     position: integer('position').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -47,6 +53,7 @@ export const helpCenterCategories = pgTable(
     uniqueIndex('kb_categories_slug_idx').on(table.slug),
     index('kb_categories_position_idx').on(table.position),
     index('kb_categories_deleted_at_idx').on(table.deletedAt),
+    index('kb_categories_parent_id_idx').on(table.parentId),
   ]
 )
 
@@ -63,6 +70,8 @@ export const helpCenterArticles = pgTable(
       .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
     slug: text('slug').notNull(),
     title: text('title').notNull(),
+    description: text('description'),
+    position: integer('position'),
     content: text('content').notNull(),
     contentJson: jsonb('content_json').$type<TiptapContent>(),
     principalId: typeIdColumn('principal')('principal_id')
@@ -89,6 +98,7 @@ export const helpCenterArticles = pgTable(
     index('kb_articles_published_at_idx').on(table.publishedAt),
     index('kb_articles_deleted_at_idx').on(table.deletedAt),
     index('kb_articles_category_published_idx').on(table.categoryId, table.publishedAt),
+    index('kb_articles_category_position_idx').on(table.categoryId, table.position),
     index('kb_articles_search_vector_idx').using('gin', table.searchVector),
   ]
 )
@@ -120,7 +130,13 @@ export const helpCenterArticleFeedback = pgTable(
 // Relations
 // ============================================
 
-export const helpCenterCategoriesRelations = relations(helpCenterCategories, ({ many }) => ({
+export const helpCenterCategoriesRelations = relations(helpCenterCategories, ({ one, many }) => ({
+  parent: one(helpCenterCategories, {
+    fields: [helpCenterCategories.parentId],
+    references: [helpCenterCategories.id],
+    relationName: 'categoryParent',
+  }),
+  children: many(helpCenterCategories, { relationName: 'categoryParent' }),
   articles: many(helpCenterArticles),
 }))
 
@@ -151,3 +167,34 @@ export const helpCenterArticleFeedbackRelations = relations(
     }),
   })
 )
+
+// ============================================
+// Domain Verifications (custom domains for help center)
+// ============================================
+
+export const kbDomainVerifications = pgTable(
+  'kb_domain_verifications',
+  {
+    id: typeIdWithDefault('helpcenter_domain')('id').primaryKey(),
+    settingsId: typeIdColumn('workspace')('settings_id')
+      .notNull()
+      .references(() => settings.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull(),
+    status: text('status').default('pending').notNull(),
+    cnameTarget: text('cname_target').notNull(),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('kb_domain_verifications_settings_id_idx').on(table.settingsId),
+    uniqueIndex('kb_domain_verifications_domain_idx').on(table.domain),
+  ]
+)
+
+export const kbDomainVerificationsRelations = relations(kbDomainVerifications, ({ one }) => ({
+  settings: one(settings, {
+    fields: [kbDomainVerifications.settingsId],
+    references: [settings.id],
+  }),
+}))

@@ -145,6 +145,9 @@ export type HelpCenterArticleId = TypeId<'helpcenter_article'>
 /** Help center article feedback ID - e.g., helpcenter_feedback_01h455vb4pex5vsknk084sn02q */
 export type HelpCenterFeedbackId = TypeId<'helpcenter_feedback'>
 
+/** Help center domain verification ID - e.g., helpcenter_domain_01h455vb4pex5vsknk084sn02q */
+export type HelpCenterDomainId = TypeId<'helpcenter_domain'>
+
 // ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
@@ -256,6 +259,7 @@ export interface EntityIdMap {
   helpcenter_category: HelpCenterCategoryId
   helpcenter_article: HelpCenterArticleId
   helpcenter_feedback: HelpCenterFeedbackId
+  helpcenter_domain: HelpCenterDomainId
 }
 
 /**

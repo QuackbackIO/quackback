@@ -16,6 +16,7 @@ import {
   usePublishArticle,
   useUnpublishArticle,
 } from '@/lib/client/mutations/help-center'
+import { getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -66,7 +67,7 @@ function ArticleModalContent({ articleId, onClose }: ArticleModalContentProps) {
     if (article && !hasInitialized) {
       form.setValue('title', article.title)
       form.setValue('content', article.content)
-      setContentJson(article.contentJson as JSONContent | null)
+      setContentJson(getInitialContentJson(article))
       setCategoryId(article.categoryId)
       setIsPublished(!!article.publishedAt)
       setHasInitialized(true)

@@ -28,6 +28,8 @@ export type {
   WidgetConfig,
   PublicWidgetConfig,
   UpdateWidgetConfigInput,
+  HelpCenterConfig,
+  HelpCenterSeoConfig,
 } from './settings.types'
 
 // Default config values (no DB dependency)
@@ -36,6 +38,8 @@ export {
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_HELP_CENTER_CONFIG,
+  DEFAULT_HELP_CENTER_SEO_CONFIG,
 } from './settings.types'
 
 // Consolidated tenant settings type (in types.ts to avoid server dep leak via barrel)

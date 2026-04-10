@@ -440,6 +440,7 @@ const updateWidgetConfigSchema = z.object({
     .object({
       feedback: z.boolean().optional(),
       changelog: z.boolean().optional(),
+      help: z.boolean().optional(),
     })
     .optional(),
 })

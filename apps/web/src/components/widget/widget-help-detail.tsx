@@ -7,19 +7,25 @@ import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-ed
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { getHelpCenterBaseUrl } from '@/lib/shared/help-center-url'
 
 interface WidgetHelpDetailProps {
   articleSlug: string
+  helpCenterSettings: {
+    helpCenterConfig?: { customDomain?: string | null; domainVerified?: boolean } | null
+    slug?: string | null
+  }
 }
 
-export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
+export function WidgetHelpDetail({ articleSlug, helpCenterSettings }: WidgetHelpDetailProps) {
   const { data: article, isLoading } = useQuery(publicHelpCenterQueries.articleBySlug(articleSlug))
 
   const handleViewOnPortal = useCallback(() => {
     if (!article) return
-    const url = `${window.location.origin}/help/${article.category.slug}/${article.slug}`
+    const baseUrl = getHelpCenterBaseUrl(helpCenterSettings)
+    const url = `${baseUrl}/${article.category.slug}/${article.slug}`
     sendToHost({ type: 'quackback:navigate', url })
-  }, [article])
+  }, [article, helpCenterSettings])
 
   if (isLoading) {
     return (
