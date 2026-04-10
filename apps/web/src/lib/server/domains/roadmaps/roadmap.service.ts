@@ -13,6 +13,7 @@ import {
   eq,
   and,
   isNull,
+  inArray,
   asc,
   sql,
   roadmaps,
@@ -20,7 +21,7 @@ import {
   postRoadmaps,
   type Roadmap,
 } from '@/lib/server/db'
-import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
+import { type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type {
@@ -188,19 +189,14 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
 
   // Build CASE WHEN clause for batch update
   const cases = roadmapIds
-    .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${roadmaps.id} = ${id} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const idList = sql.join(
-    roadmapIds.map((id) => sql`${toUuid(id)}`),
-    sql`, `
-  )
 
   // Single UPDATE with CASE expression
-  await db.execute(sql`
-    UPDATE roadmaps
-    SET position = CASE ${cases} END
-    WHERE id IN (${idList})
-  `)
+  await db
+    .update(roadmaps)
+    .set({ position: sql`CASE ${cases} END` })
+    .where(inArray(roadmaps.id, roadmapIds))
 }
 
 // ==========================================================================
@@ -311,22 +307,16 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
 
   if (input.postIds.length === 0) return
 
-  const roadmapUuid = toUuid(input.roadmapId)
-
   // Build CASE WHEN clause for batch update
   const cases = input.postIds
-    .map((id, i) => sql`WHEN post_id = ${toUuid(id)} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${postRoadmaps.postId} = ${id} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const postIdList = sql.join(
-    input.postIds.map((id) => sql`${toUuid(id)}`),
-    sql`, `
-  )
 
   // Single UPDATE with CASE expression
-  await db.execute(sql`
-    UPDATE post_roadmaps
-    SET position = CASE ${cases} END
-    WHERE roadmap_id = ${roadmapUuid}
-      AND post_id IN (${postIdList})
-  `)
+  await db
+    .update(postRoadmaps)
+    .set({ position: sql`CASE ${cases} END` })
+    .where(
+      and(eq(postRoadmaps.roadmapId, input.roadmapId), inArray(postRoadmaps.postId, input.postIds))
+    )
 }

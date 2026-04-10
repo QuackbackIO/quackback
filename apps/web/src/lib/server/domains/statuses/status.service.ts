@@ -9,7 +9,7 @@
  * - Validation
  */
 
-import { db, eq, and, isNull, sql, posts, postStatuses, asc } from '@/lib/server/db'
+import { db, eq, and, isNull, inArray, sql, posts, postStatuses, asc } from '@/lib/server/db'
 import { toUuid, type StatusId } from '@quackback/ids'
 import {
   NotFoundError,
@@ -245,19 +245,14 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
 
   // Build CASE WHEN clause for batch update
   const cases = ids
-    .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${postStatuses.id} = ${id} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const uuidList = sql.join(
-    ids.map((id) => sql`${toUuid(id)}`),
-    sql`, `
-  )
 
   // Single UPDATE with CASE expression
-  await db.execute(sql`
-    UPDATE post_statuses
-    SET position = CASE ${cases} END
-    WHERE id IN (${uuidList})
-  `)
+  await db
+    .update(postStatuses)
+    .set({ position: sql`CASE ${cases} END` })
+    .where(inArray(postStatuses.id, ids))
 }
 
 /**
