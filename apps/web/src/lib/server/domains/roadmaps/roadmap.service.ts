@@ -21,7 +21,7 @@ import {
   postRoadmaps,
   type Roadmap,
 } from '@/lib/server/db'
-import { type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
+import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import type {
@@ -189,7 +189,7 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
 
   // Build CASE WHEN clause for batch update
   const cases = roadmapIds
-    .map((id, i) => sql`WHEN ${roadmaps.id} = ${id} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${roadmaps.id} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
 
   // Single UPDATE with CASE expression
@@ -309,7 +309,7 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
 
   // Build CASE WHEN clause for batch update
   const cases = input.postIds
-    .map((id, i) => sql`WHEN ${postRoadmaps.postId} = ${id} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${postRoadmaps.postId} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
 
   // Single UPDATE with CASE expression

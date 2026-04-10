@@ -244,8 +244,10 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
   }
 
   // Build CASE WHEN clause for batch update
+  // Position values are inlined (sql.raw) because parameterized integers
+  // can be sent as text by the driver, causing type mismatch with the integer column
   const cases = ids
-    .map((id, i) => sql`WHEN ${postStatuses.id} = ${id} THEN ${i}`)
+    .map((id, i) => sql`WHEN ${postStatuses.id} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
 
   // Single UPDATE with CASE expression
