@@ -13,7 +13,6 @@ import {
 import { toast } from 'sonner'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -405,13 +404,16 @@ export function PostCard({
         {tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1.5">
             {tags.slice(0, 3).map((tag) => (
-              <Badge
+              <span
                 key={tag.id}
-                variant="secondary"
-                className="text-[10px] font-normal px-1.5 py-0"
+                className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium"
+                style={{
+                  backgroundColor: tag.color + '20',
+                  color: tag.color,
+                }}
               >
                 {tag.name}
-              </Badge>
+              </span>
             ))}
             {tags.length > 3 && (
               <span className="text-[10px] text-muted-foreground/60">+{tags.length - 3}</span>

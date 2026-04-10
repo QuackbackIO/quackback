@@ -27,7 +27,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { StatusDropdown } from '@/components/shared/status-dropdown'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -558,12 +557,16 @@ export function MetadataSidebar({
                   disabled={isUpdating}
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
-                    'rounded-full text-[11px] font-medium',
-                    'bg-primary/10 text-primary border border-primary/20',
-                    'hover:bg-primary/15 hover:border-primary/30',
+                    'rounded-full text-[11px] font-medium border',
+                    'hover:opacity-80',
                     'transition-all duration-150',
                     'disabled:opacity-50 disabled:cursor-not-allowed'
                   )}
+                  style={{
+                    backgroundColor: tag.color + '20',
+                    borderColor: tag.color + '40',
+                    color: tag.color,
+                  }}
                 >
                   {tag.name}
                   <XMarkIcon className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -605,6 +608,10 @@ export function MetadataSidebar({
                             'transition-all duration-100 text-start font-medium'
                           )}
                         >
+                          <span
+                            className="h-2.5 w-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: tag.color }}
+                          />
                           {tag.name}
                         </button>
                       ))}
@@ -619,9 +626,16 @@ export function MetadataSidebar({
           ) : tags.length > 0 ? (
             <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
               {tags.map((tag) => (
-                <Badge key={tag.id} variant="secondary" className="text-[11px] font-normal">
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+                  style={{
+                    backgroundColor: tag.color + '20',
+                    color: tag.color,
+                  }}
+                >
                   {tag.name}
-                </Badge>
+                </span>
               ))}
             </div>
           ) : (
