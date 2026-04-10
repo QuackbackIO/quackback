@@ -1,14 +1,7 @@
-import { useState, useCallback, useRef, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { useInfiniteQuery } from '@tanstack/react-query'
-import {
-  PlusIcon,
-  MagnifyingGlassIcon,
-  EllipsisVerticalIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  ArrowPathIcon,
-} from '@heroicons/react/24/solid'
+import { toast } from 'sonner'
+import { PlusIcon, TrashIcon, PencilSquareIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,28 +13,18 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { cn } from '@/lib/shared/utils'
 import type { Tag } from '@/lib/shared/db-types'
-import {
-  createTagFn,
-  updateTagFn,
-  deleteTagFn,
-  fetchTagsPaginatedFn,
-} from '@/lib/server/functions/tags'
+import { createTagFn, updateTagFn, deleteTagFn } from '@/lib/server/functions/tags'
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 const PRESET_COLORS = [
-  // Row 1 - Vibrant
   '#ef4444',
   '#f97316',
   '#eab308',
@@ -50,7 +33,6 @@ const PRESET_COLORS = [
   '#3b82f6',
   '#8b5cf6',
   '#ec4899',
-  // Row 2 - Muted
   '#f87171',
   '#fb923c',
   '#facc15',
@@ -59,7 +41,6 @@ const PRESET_COLORS = [
   '#60a5fa',
   '#a78bfa',
   '#f472b6',
-  // Row 3 - Dark
   '#b91c1c',
   '#c2410c',
   '#a16207',
@@ -68,7 +49,6 @@ const PRESET_COLORS = [
   '#1d4ed8',
   '#6d28d9',
   '#be185d',
-  // Row 4 - Neutrals
   '#0f172a',
   '#334155',
   '#64748b',
@@ -89,7 +69,7 @@ function randomColor(): string {
 }
 
 // ============================================================================
-// Color Picker
+// Color Picker Components
 // ============================================================================
 
 function ColorPickerGrid({
@@ -119,6 +99,56 @@ function ColorPickerGrid({
   )
 }
 
+function ColorHexInput({
+  color,
+  onColorChange,
+}: {
+  color: string
+  onColorChange: (color: string) => void
+}) {
+  const [hexInput, setHexInput] = useState(color)
+
+  useEffect(() => {
+    setHexInput(color)
+  }, [color])
+
+  function handleHexChange(value: string) {
+    setHexInput(value)
+    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+      onColorChange(value)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="h-6 w-6 rounded-md border border-border shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      <Input
+        value={hexInput}
+        onChange={(e) => handleHexChange(e.target.value)}
+        className="font-mono text-xs h-7"
+        placeholder="#000000"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        onClick={() => {
+          const c = randomColor()
+          setHexInput(c)
+          onColorChange(c)
+        }}
+        title="Random color"
+      >
+        <ArrowPathIcon className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  )
+}
+
 // ============================================================================
 // Tag Dialog (Create + Edit)
 // ============================================================================
@@ -126,7 +156,7 @@ function ColorPickerGrid({
 interface TagDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  tag: Tag | null // null = create mode
+  tag: Tag | null
   onSaved: () => void
 }
 
@@ -134,42 +164,25 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6b7280')
-  const [hexInput, setHexInput] = useState('#6b7280')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const isEdit = tag !== null
 
-  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       if (tag) {
         setName(tag.name)
         setDescription(tag.description ?? '')
         setColor(tag.color)
-        setHexInput(tag.color)
       } else {
-        const c = randomColor()
         setName('')
         setDescription('')
-        setColor(c)
-        setHexInput(c)
+        setColor(randomColor())
       }
       setError(null)
     }
   }, [open, tag])
-
-  function handleHexChange(value: string) {
-    setHexInput(value)
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      setColor(value)
-    }
-  }
-
-  function handlePresetChange(c: string) {
-    setColor(c)
-    setHexInput(c)
-  }
 
   async function handleSave() {
     const trimmedName = name.trim()
@@ -229,16 +242,12 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
         <div className="flex justify-center py-3 bg-muted/30 rounded-lg">
           <span
             className="inline-flex items-center px-3 py-0.5 rounded-md text-sm font-medium"
-            style={{
-              backgroundColor: color + '20',
-              color: color,
-            }}
+            style={{ backgroundColor: color + '20', color }}
           >
             {name.trim() || 'Tag name'}
           </span>
         </div>
 
-        {/* Name */}
         <div className="space-y-2">
           <Label htmlFor="tag-name">Name</Label>
           <Input
@@ -250,7 +259,6 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           />
         </div>
 
-        {/* Description */}
         <div className="space-y-2">
           <Label htmlFor="tag-desc">
             Description <span className="text-muted-foreground font-normal">(optional)</span>
@@ -265,41 +273,14 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           />
         </div>
 
-        {/* Color */}
         <div className="space-y-2">
           <Label>Color</Label>
-          <ColorPickerGrid selectedColor={color} onColorChange={handlePresetChange} />
-          <div className="flex items-center gap-2 mt-2">
-            <span
-              className="h-7 w-7 rounded-md border border-border shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            <Input
-              value={hexInput}
-              onChange={(e) => handleHexChange(e.target.value)}
-              className="font-mono text-sm"
-              placeholder="#000000"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const c = randomColor()
-                setColor(c)
-                setHexInput(c)
-              }}
-              title="Random color"
-            >
-              <ArrowPathIcon className="h-4 w-4" />
-            </Button>
-          </div>
+          <ColorPickerGrid selectedColor={color} onColorChange={setColor} />
+          <ColorHexInput color={color} onColorChange={setColor} />
         </div>
 
-        {/* Error */}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {/* Actions */}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
@@ -317,66 +298,39 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 // Tag List (main export)
 // ============================================================================
 
-export function TagList() {
+interface TagListProps {
+  initialTags: Tag[]
+}
+
+export function TagList({ initialTags }: TagListProps) {
   const router = useRouter()
   const [, startTransition] = useTransition()
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [tags, setTags] = useState(initialTags)
+  const [savingField, setSavingField] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [deletingTag, setDeletingTag] = useState<Tag | null>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
-  // Debounce search
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setDebouncedSearch(value), 300)
-  }, [])
+  // Change color inline — save immediately
+  const handleColorChange = async (tag: Tag, color: string) => {
+    const previousColor = tag.color
+    setSavingField(`color-${tag.id}`)
+    setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
 
-  // Infinite query
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch } =
-    useInfiniteQuery({
-      queryKey: ['admin', 'tags', 'paginated', debouncedSearch],
-      queryFn: ({ pageParam }) =>
-        fetchTagsPaginatedFn({
-          data: {
-            cursor: pageParam,
-            limit: 20,
-            search: debouncedSearch || undefined,
-          },
-        }),
-      initialPageParam: undefined as string | undefined,
-      getNextPageParam: (lastPage) => {
-        if (!lastPage.hasMore || lastPage.items.length === 0) return undefined
-        return lastPage.items[lastPage.items.length - 1].name
-      },
-    })
-
-  // IntersectionObserver for infinite scroll
-  useEffect(() => {
-    const el = loadMoreRef.current
-    if (!el) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage()
-        }
-      },
-      { threshold: 0.1 }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
-
-  const allTags = data?.pages.flatMap((p) => p.items) ?? []
-  const totalCount = `${allTags.length}${hasNextPage ? '+' : ''}`
+    try {
+      await updateTagFn({ data: { id: tag.id, color } })
+      startTransition(() => router.invalidate())
+    } catch {
+      toast.error('Failed to update color')
+      setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color: previousColor } : t)))
+    } finally {
+      setSavingField(null)
+    }
+  }
 
   function handleTagSaved() {
-    refetch()
     startTransition(() => router.invalidate())
+    // Refetch by invalidating — the route loader will re-run
   }
 
   function openCreate() {
@@ -393,114 +347,101 @@ export function TagList() {
     if (!deletingTag) return
     try {
       await deleteTagFn({ data: { id: deletingTag.id } })
-      setDeletingTag(null)
-      refetch()
+      setTags((prev) => prev.filter((t) => t.id !== deletingTag.id))
       startTransition(() => router.invalidate())
-    } catch (err) {
-      console.error('[tags] delete failed:', err)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete tag')
+    } finally {
+      setDeletingTag(null)
     }
   }
 
   return (
-    <div className="space-y-4">
-      {/* Search + New button */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search tags..."
-            className="pl-9"
-          />
-        </div>
-        <Button onClick={openCreate}>
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          New tag
-        </Button>
-      </div>
+    <div className="space-y-8">
+      <SettingsCard
+        title="Tags"
+        description="Label posts across boards for filtering and organization. Tags appear as colored badges throughout the app."
+        contentClassName="p-4"
+      >
+        <div className="space-y-1">
+          {tags.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No tags yet. Create your first tag to get started.
+            </p>
+          )}
 
-      {/* Count */}
-      {!isLoading && (
-        <p className="text-xs text-muted-foreground px-1">
-          {totalCount} tag{allTags.length !== 1 ? 's' : ''}
-        </p>
-      )}
-
-      {/* Tag rows */}
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground text-center py-12">Loading tags...</div>
-      ) : allTags.length === 0 ? (
-        <div className="text-sm text-muted-foreground text-center py-12">
-          {debouncedSearch ? 'No tags match your search' : 'No tags yet. Create your first tag!'}
-        </div>
-      ) : (
-        <div className="border rounded-lg divide-y">
-          {allTags.map((tag) => (
+          {tags.map((tag) => (
             <div
               key={tag.id}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer group"
-              onClick={() => openEdit(tag)}
+              className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
             >
-              {/* Colored badge */}
-              <span
-                className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium shrink-0"
-                style={{
-                  backgroundColor: tag.color + '20',
-                  color: tag.color,
-                }}
-              >
-                {tag.name}
-              </span>
+              {/* Color dot with popover */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    className="h-3 w-3 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-muted-foreground/50"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2 space-y-2" align="start">
+                  <ColorPickerGrid
+                    selectedColor={tag.color}
+                    onColorChange={(c) => handleColorChange(tag, c)}
+                  />
+                  <ColorHexInput
+                    color={tag.color}
+                    onColorChange={(c) => handleColorChange(tag, c)}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Name */}
+              <span className="text-sm font-medium">{tag.name}</span>
 
               {/* Description */}
               <span className="text-xs text-muted-foreground truncate flex-1">
                 {tag.description ?? ''}
               </span>
 
-              {/* Actions menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <EllipsisVerticalIcon className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(tag)
-                    }}
-                  >
-                    <PencilSquareIcon className="h-3.5 w-3.5 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setDeletingTag(tag)
-                    }}
-                  >
-                    <TrashIcon className="h-3.5 w-3.5 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Saving spinner */}
+              {savingField === `color-${tag.id}` && (
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              )}
+
+              {/* Edit button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                onClick={() => openEdit(tag)}
+                title="Edit tag"
+              >
+                <PencilSquareIcon className="h-3.5 w-3.5" />
+              </Button>
+
+              {/* Delete button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                onClick={() => setDeletingTag(tag)}
+                title="Delete tag"
+              >
+                <TrashIcon className="h-3.5 w-3.5" />
+              </Button>
             </div>
           ))}
-        </div>
-      )}
 
-      {/* Infinite scroll sentinel */}
-      <div ref={loadMoreRef} className="h-1" />
-      {isFetchingNextPage && (
-        <p className="text-xs text-muted-foreground text-center py-2">Loading more...</p>
-      )}
+          {/* Add new tag button */}
+          <button
+            className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
+            onClick={openCreate}
+          >
+            <PlusIcon className="h-3 w-3" />
+            <span className="text-sm">Add new tag</span>
+          </button>
+        </div>
+      </SettingsCard>
 
       {/* Create/Edit dialog */}
       <TagDialog
