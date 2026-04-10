@@ -247,13 +247,16 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
   const cases = ids
     .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const uuids = ids.map((id) => toUuid(id))
+  const uuidList = sql.join(
+    ids.map((id) => sql`${toUuid(id)}`),
+    sql`, `
+  )
 
   // Single UPDATE with CASE expression
   await db.execute(sql`
     UPDATE post_statuses
     SET position = CASE ${cases} END
-    WHERE id = ANY(${uuids}::uuid[])
+    WHERE id IN (${uuidList})
   `)
 }
 

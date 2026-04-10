@@ -190,13 +190,16 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
   const cases = roadmapIds
     .map((id, i) => sql`WHEN id = ${toUuid(id)} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const ids = roadmapIds.map((id) => toUuid(id))
+  const idList = sql.join(
+    roadmapIds.map((id) => sql`${toUuid(id)}`),
+    sql`, `
+  )
 
   // Single UPDATE with CASE expression
   await db.execute(sql`
     UPDATE roadmaps
     SET position = CASE ${cases} END
-    WHERE id = ANY(${ids}::uuid[])
+    WHERE id IN (${idList})
   `)
 }
 
@@ -314,13 +317,16 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
   const cases = input.postIds
     .map((id, i) => sql`WHEN post_id = ${toUuid(id)} THEN ${i}`)
     .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-  const postIds = input.postIds.map((id) => toUuid(id))
+  const postIdList = sql.join(
+    input.postIds.map((id) => sql`${toUuid(id)}`),
+    sql`, `
+  )
 
   // Single UPDATE with CASE expression
   await db.execute(sql`
     UPDATE post_roadmaps
     SET position = CASE ${cases} END
     WHERE roadmap_id = ${roadmapUuid}
-      AND post_id = ANY(${postIds}::uuid[])
+      AND post_id IN (${postIdList})
   `)
 }
