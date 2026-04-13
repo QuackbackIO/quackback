@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
+import {
+  Link,
+  useRouter,
+  useRouterState,
+  useRouteContext,
+  useMatches,
+} from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
+import {
+  HelpCenterCategoryNav,
+  type HelpCenterCategory,
+} from '@/components/help-center/help-center-category-nav'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -44,11 +54,41 @@ interface PortalHeaderProps {
   showThemeToggle?: boolean
 }
 
-const NAV_ITEMS = [
+const NAV_ITEMS_BASE = [
   { to: '/', messageId: 'portal.header.nav.feedback', defaultMessage: 'Feedback' },
   { to: '/roadmap', messageId: 'portal.header.nav.roadmap', defaultMessage: 'Roadmap' },
   { to: '/changelog', messageId: 'portal.header.nav.changelog', defaultMessage: 'Changelog' },
 ] as const
+
+const NAV_ITEM_HELP = {
+  to: '/hc',
+  messageId: 'portal.header.nav.help',
+  defaultMessage: 'Help',
+} as const
+
+export type PortalNavItem = (typeof NAV_ITEMS_BASE)[number] | typeof NAV_ITEM_HELP
+
+/**
+ * Returns the nav items shown in the portal header.
+ * On the help center subdomain we show only the Help tab so the standalone
+ * experience stays focused. Elsewhere we show feedback/roadmap/changelog and
+ * append a Help tab when the help center is enabled.
+ */
+export function buildNavItems({
+  helpCenterEnabled,
+  helpCenterHost,
+}: {
+  helpCenterEnabled: boolean
+  helpCenterHost: boolean
+}): readonly PortalNavItem[] {
+  if (helpCenterHost) {
+    return helpCenterEnabled ? [NAV_ITEM_HELP] : []
+  }
+  if (helpCenterEnabled) {
+    return [...NAV_ITEMS_BASE, NAV_ITEM_HELP]
+  }
+  return NAV_ITEMS_BASE
+}
 
 export function PortalHeader({
   orgName,
@@ -61,7 +101,22 @@ export function PortalHeader({
   const router = useRouter()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { session } = useRouteContext({ from: '__root__' })
+  const { session, settings, helpCenterHost } = useRouteContext({ from: '__root__' })
+
+  const helpCenterEnabled =
+    !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
+  const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
+  const navItems = buildNavItems({
+    helpCenterEnabled,
+    helpCenterHost: !!helpCenterHost,
+  })
+
+  const matches = useMatches()
+  const hcMatch = matches.find((m) => (m.routeId as string) === '/_portal/hc')
+  const hcLoaderData = hcMatch?.loaderData as { categories?: unknown } | undefined
+  const hcCategories: HelpCenterCategory[] = Array.isArray(hcLoaderData?.categories)
+    ? (hcLoaderData!.categories as HelpCenterCategory[])
+    : []
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
   const { theme, setTheme } = useTheme()
@@ -107,11 +162,13 @@ export function PortalHeader({
   // Navigation component
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1">
-      {NAV_ITEMS.map((item) => {
+      {navItems.map((item) => {
         const isActive =
           item.to === '/'
             ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
-            : pathname.startsWith(item.to)
+            : item.to === '/hc'
+              ? onHelpPages
+              : pathname.startsWith(item.to)
 
         return (
           <Link
@@ -285,6 +342,11 @@ export function PortalHeader({
           <div className="flex items-center">
             <Navigation />
           </div>
+          {onHelpPages && hcCategories.length > 0 && (
+            <div className="mt-2">
+              <HelpCenterCategoryNav categories={hcCategories} />
+            </div>
+          )}
         </div>
       </div>
     </div>
