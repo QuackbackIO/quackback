@@ -274,6 +274,18 @@ const DESTRUCTIVE: ToolAnnotations = {
 // Schemas
 // ============================================================================
 
+/**
+ * Shared "Content format" block appended to rich-content tool descriptions.
+ * Kept as a single constant so the auto-rehost behavior stays DRY across
+ * create_post / create_changelog / update_changelog / create_article / update_article.
+ */
+const CONTENT_FORMAT_BLOCK = `
+
+Content format: GitHub-flavored Markdown (GFM).
+Supported: headings (#, ##, ###), bold/italic/strikethrough, links, ordered/bulleted lists, task lists (- [ ]), inline and fenced code blocks with language hints, blockquotes, tables, horizontal rules, images.
+Images: \`![alt](https://...)\`. External URLs are fetched server-side and re-uploaded to workspace storage on save (auto-rehost). Supported image types: PNG, JPEG, WebP, GIF, AVIF. Max 10 MB per image, max 20 images per save. Images exceeding these limits keep their original URL as a fallback.
+Example: "## New feature\\n\\nAdds **dark mode**. See screenshot:\\n\\n![dark mode](https://example.com/dark.png)"`
+
 const searchSchema = {
   entity: z
     .enum(['posts', 'changelogs', 'articles'])
@@ -340,7 +352,12 @@ const triagePostSchema = {
 
 const addCommentSchema = {
   postId: z.string().describe('Post TypeID to comment on'),
-  content: z.string().max(5000).describe('Comment text (max 5,000 characters)'),
+  content: z
+    .string()
+    .max(5000)
+    .describe(
+      'Comment text. Plain text only (max 5,000 characters). Rich content, markdown, and image embedding are not supported for comments today.'
+    ),
   parentId: z.string().optional().describe('Parent comment TypeID for threaded reply'),
   isPrivate: z
     .boolean()
@@ -351,7 +368,13 @@ const addCommentSchema = {
 const createPostSchema = {
   boardId: z.string().describe('Board TypeID (use quackback://boards resource to find IDs)'),
   title: z.string().max(200).describe('Post title (max 200 characters)'),
-  content: z.string().max(10000).optional().describe('Post content (max 10,000 characters)'),
+  content: z
+    .string()
+    .max(10000)
+    .optional()
+    .describe(
+      'Post content (max 10,000 characters). Markdown (GFM). Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
+    ),
   statusId: z.string().optional().describe('Initial status TypeID (defaults to board default)'),
   tagIds: z.array(z.string()).optional().describe('Tag TypeIDs to apply'),
 }
@@ -376,7 +399,9 @@ const createChangelogSchema = {
   content: z
     .string()
     .max(50000)
-    .describe('Changelog content (markdown supported, max 50,000 chars)'),
+    .describe(
+      'Changelog content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
+    ),
   publish: z
     .boolean()
     .default(false)
@@ -396,7 +421,9 @@ const updateChangelogSchema = {
     .string()
     .max(50000)
     .optional()
-    .describe('New content (markdown supported, max 50,000 chars)'),
+    .describe(
+      'New content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
+    ),
   publish: z.boolean().optional().describe('Set to true to publish, false to revert to draft'),
   publishedAt: z
     .string()
@@ -416,7 +443,12 @@ const deleteChangelogSchema = {
 
 const updateCommentSchema = {
   commentId: z.string().describe('Comment TypeID to edit'),
-  content: z.string().max(5000).describe('New comment text (max 5,000 characters)'),
+  content: z
+    .string()
+    .max(5000)
+    .describe(
+      'New comment text. Plain text only (max 5,000 characters). Rich content, markdown, and image embedding are not supported for comments today.'
+    ),
 }
 
 const deleteCommentSchema = {
@@ -503,7 +535,12 @@ const createHelpCenterArticleSchema = {
     .string()
     .describe('Category TypeID (use quackback://help-center/categories resource to find IDs)'),
   title: z.string().max(200).describe('Article title (max 200 characters)'),
-  content: z.string().max(50000).describe('Article content (markdown, max 50,000 characters)'),
+  content: z
+    .string()
+    .max(50000)
+    .describe(
+      'Article content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
+    ),
   slug: z.string().max(200).optional().describe('URL slug (auto-generated from title if omitted)'),
 }
 
@@ -514,7 +551,9 @@ const updateHelpCenterArticleSchema = {
     .string()
     .max(50000)
     .optional()
-    .describe('New content (markdown, max 50,000 characters)'),
+    .describe(
+      'New content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
+    ),
   slug: z.string().max(200).optional().describe('New URL slug'),
   categoryId: z.string().optional().describe('Move to a different category TypeID'),
   publishedAt: z
@@ -1012,7 +1051,7 @@ Examples:
 
 Examples:
 - Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
-- Full: create_post({ boardId: "board_01abc...", title: "Add dark mode", content: "Would love a dark theme option.", statusId: "status_01xyz...", tagIds: ["tag_01a..."] })`,
+- Full: create_post({ boardId: "board_01abc...", title: "Add dark mode", content: "Would love a dark theme option.", statusId: "status_01xyz...", tagIds: ["tag_01a..."] })${CONTENT_FORMAT_BLOCK}`,
     createPostSchema,
     WRITE,
     async (args: CreatePostArgs): Promise<CallToolResult> => {
@@ -1057,7 +1096,7 @@ Examples:
 Examples:
 - Draft: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode..." })
 - Published: create_changelog({ title: "v2.1 Release", content: "## New features\\n- Dark mode...", publish: true })
-- Backdated: create_changelog({ title: "v2.1 Release", content: "...", publishedAt: "2025-03-15T12:00:00Z" })`,
+- Backdated: create_changelog({ title: "v2.1 Release", content: "...", publishedAt: "2025-03-15T12:00:00Z" })${CONTENT_FORMAT_BLOCK}`,
     createChangelogSchema,
     WRITE,
     async (args: CreateChangelogArgs): Promise<CallToolResult> => {
@@ -1100,7 +1139,7 @@ Examples:
 - Update title: update_changelog({ changelogId: "changelog_01abc...", title: "v2.0 Release" })
 - Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
 - Backdate: update_changelog({ changelogId: "changelog_01abc...", publishedAt: "2025-03-15T12:00:00Z" })
-- Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })`,
+- Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })${CONTENT_FORMAT_BLOCK}`,
     updateChangelogSchema,
     WRITE,
     async (args: UpdateChangelogArgs): Promise<CallToolResult> => {
@@ -1646,7 +1685,7 @@ Examples:
 
 Examples:
 - create_article({ categoryId: "helpcenter_category_01abc...", title: "Getting Started", content: "Welcome to..." })
-- With custom slug: create_article({ categoryId: "helpcenter_category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })`,
+- With custom slug: create_article({ categoryId: "helpcenter_category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })${CONTENT_FORMAT_BLOCK}`,
     createHelpCenterArticleSchema,
     WRITE,
     async (args: CreateHelpCenterArticleArgs): Promise<CallToolResult> => {
@@ -1678,7 +1717,7 @@ Examples:
 Examples:
 - Update title: update_article({ articleId: "helpcenter_article_01abc...", title: "New Title" })
 - Publish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: "2026-04-08T00:00:00Z" })
-- Unpublish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: null })`,
+- Unpublish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: null })${CONTENT_FORMAT_BLOCK}`,
     updateHelpCenterArticleSchema,
     WRITE,
     async (args: UpdateHelpCenterArticleArgs): Promise<CallToolResult> => {
