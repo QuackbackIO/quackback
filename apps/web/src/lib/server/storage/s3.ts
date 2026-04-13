@@ -279,7 +279,13 @@ export function generateStorageKey(prefix: string, filename: string): string {
   return `${prefix}/${year}/${month}/${randomId}-${safeFilename}`
 }
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+])
 
 /**
  * Validate that a file is an allowed image type.
@@ -327,6 +333,37 @@ export async function uploadImageFromFormData(
   } catch {
     return Response.json({ error: 'Upload failed' }, { status: 500 })
   }
+}
+
+/**
+ * Upload pre-read image bytes to storage.
+ *
+ * Used by the content rehoster when it has already fetched and validated
+ * the bytes (see `lib/server/content/rehost-images.ts`). This is the
+ * buffer-level twin of `uploadImageFromFormData`.
+ *
+ * @param buffer - Image bytes
+ * @param mimeType - Must be one of the allowed image types (see isAllowedImageType)
+ * @param storagePrefix - Bucket prefix, e.g. "post-images" | "changelog-images" | "help-center"
+ * @returns Public URL to the uploaded object
+ * @throws Error if the mime type is not allowed, the buffer is empty, or the upload fails
+ */
+export async function uploadImageBuffer(
+  buffer: Buffer,
+  mimeType: string,
+  storagePrefix: string
+): Promise<{ url: string }> {
+  if (!isAllowedImageType(mimeType)) {
+    throw new Error(`Invalid mime type for rehost: ${mimeType}`)
+  }
+  if (buffer.length === 0) {
+    throw new Error('Cannot upload empty buffer')
+  }
+  const ext = mimeType.split('/')[1] ?? 'bin'
+  const filename = `rehost-${Date.now()}.${ext}`
+  const key = generateStorageKey(storagePrefix, filename)
+  const url = await uploadObject(key, buffer, mimeType)
+  return { url }
 }
 
 // ============================================================================
