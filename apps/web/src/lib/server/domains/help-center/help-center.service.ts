@@ -25,6 +25,7 @@ import {
 import type { HelpCenterCategoryId, HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
 import type {
   HelpCenterCategory,
@@ -374,13 +375,19 @@ export async function createArticle(
 
   const slug = input.slug?.trim() || slugify(title)
 
+  const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
+  const contentJson = await rehostExternalImages(parsedContentJson, {
+    contentType: 'help-center',
+    principalId,
+  })
+
   const [article] = await db
     .insert(helpCenterArticles)
     .values({
       categoryId: input.categoryId as HelpCenterCategoryId,
       title,
       content,
-      contentJson: input.contentJson ?? markdownToTiptapJson(content),
+      contentJson,
       slug,
       principalId,
       position: input.position ?? null,
@@ -404,11 +411,14 @@ export async function updateArticle(
 ): Promise<HelpCenterArticleWithCategory> {
   const updateData: Partial<typeof helpCenterArticles.$inferInsert> = { updatedAt: new Date() }
   if (input.title !== undefined) updateData.title = input.title.trim()
-  if (input.content !== undefined) {
-    updateData.content = input.content.trim()
-    updateData.contentJson = input.contentJson ?? markdownToTiptapJson(input.content.trim())
-  } else if (input.contentJson !== undefined) {
-    updateData.contentJson = input.contentJson
+  if (input.content !== undefined || input.contentJson !== undefined) {
+    if (input.content !== undefined) {
+      updateData.content = input.content.trim()
+    }
+    const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
+    updateData.contentJson = await rehostExternalImages(parsed, {
+      contentType: 'help-center',
+    })
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
