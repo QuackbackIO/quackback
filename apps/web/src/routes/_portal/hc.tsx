@@ -25,7 +25,7 @@ const checkHasSession = createServerFn({ method: 'GET' }).handler(async () => {
   return !!session
 })
 
-export const Route = createFileRoute('/hc')({
+export const Route = createFileRoute('/_portal/hc')({
   beforeLoad: async ({ context }) => {
     const { settings } = context
 

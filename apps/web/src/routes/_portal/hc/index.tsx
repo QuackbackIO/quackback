@@ -4,7 +4,7 @@ import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-cat
 import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import type { HelpCenterConfig } from '@/lib/server/domains/settings'
 
-export const Route = createFileRoute('/hc/')({
+export const Route = createFileRoute('/_portal/hc/')({
   loader: async ({ context }) => {
     const { settings } = context
     const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined

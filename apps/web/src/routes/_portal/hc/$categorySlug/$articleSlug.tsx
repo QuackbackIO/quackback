@@ -17,7 +17,7 @@ import type { JSONContent } from '@tiptap/react'
 const helpCenterApi = getRouteApi('/hc')
 const categoryApi = getRouteApi('/hc/$categorySlug')
 
-export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug/$articleSlug')({
   loader: async ({ params }) => {
     try {
       const article = await getPublicArticleBySlugFn({ data: { slug: params.articleSlug } })
