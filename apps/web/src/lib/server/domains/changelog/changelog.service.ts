@@ -23,6 +23,7 @@ import {
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { buildEventActor, dispatchChangelogPublished } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import type {
@@ -67,12 +68,18 @@ export async function createChangelog(
   const publishedAt = getPublishedAtFromState(input.publishState)
 
   // Create the changelog entry
+  const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
+  const contentJson = await rehostExternalImages(parsedContentJson, {
+    contentType: 'changelog',
+    principalId: author.principalId,
+  })
+
   const [entry] = await db
     .insert(changelogEntries)
     .values({
       title,
       content,
-      contentJson: input.contentJson ?? markdownToTiptapJson(content),
+      contentJson,
       principalId: author.principalId,
       publishedAt,
     })
@@ -150,11 +157,12 @@ export async function updateChangelog(
 
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined) updateData.content = input.content.trim()
-  if (input.contentJson !== undefined) {
-    updateData.contentJson = input.contentJson
-  } else if (input.content !== undefined) {
-    // Derive contentJson from markdown when only content is provided (MCP/API path)
-    updateData.contentJson = markdownToTiptapJson(input.content.trim())
+  if (input.contentJson !== undefined || input.content !== undefined) {
+    const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
+    updateData.contentJson = await rehostExternalImages(parsed, {
+      contentType: 'changelog',
+      principalId: existing.principalId ?? undefined,
+    })
   }
 
   // Handle publish state change
