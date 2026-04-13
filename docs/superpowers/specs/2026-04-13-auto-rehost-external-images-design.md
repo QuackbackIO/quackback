@@ -140,7 +140,7 @@ For a single save, end-to-end:
 
 **Note on image count cap:** If a doc has more than 20 images, only the first 20 (in traversal order) are considered for rehost. Images beyond the cap keep their original src untouched and a single warning is logged summarizing how many were skipped. We don't hard-fail on this — the goal is to not let LLM spam runaway cost the server; the doc still saves correctly.
 
-**Note on MIME allow-list:** `image/png`, `image/jpeg`, `image/webp`, `image/gif`. `image/svg+xml` is explicitly rejected on both the data-URI and HTTP paths because SVGs can contain script payloads. `image/avif` is excluded for now pending user need.
+**Note on MIME allow-list:** `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/avif`. `image/svg+xml` is explicitly rejected on both the data-URI and HTTP paths because SVGs can contain script payloads. AVIF is safe to rehost because the server never decodes the bytes — it only reads them into a buffer and uploads to S3. The browser handles rendering via its own native AVIF decoder, so any theoretical libavif CVEs never execute in our server process.
 
 ## Error handling
 
@@ -158,7 +158,7 @@ Any fetch error, upload error, timeout, bad mime type, SVG, oversized image, or 
   reason=fetch-timeout
 ```
 
-Log reasons enum: `same-origin-skip` (info, not warn), `svg-rejected`, `mime-rejected`, `oversized`, `fetch-timeout`, `fetch-error`, `upload-error`, `data-uri-decode-error`, `count-cap-exceeded`.
+Log reasons enum: `same-origin-skip` (info, not warn), `svg-rejected`, `mime-rejected`, `oversized`, `fetch-timeout`, `fetch-error`, `upload-error`, `data-uri-decode-error`, `count-cap-exceeded`, `scheme-rejected`, `ssrf-rejected`, `redirect-rejected`, `magic-mismatch`.
 
 ### S3 not configured (dev path)
 
@@ -181,7 +181,7 @@ The metadata update is a separate commit from the rehost logic, but lives in the
 - Content is GitHub-flavored Markdown (`### format: markdown (GFM)`)
 - Supported features: headings (h1–h3), bold/italic/strikethrough, links, ordered and bulleted lists, task lists (`- [ ]`), inline code and fenced code blocks with language hint, blockquotes, tables, horizontal rules, images
 - Image embedding: `![alt](https://...)`, external URLs are auto-rehosted to workspace storage on save
-- Image constraints: PNG/JPEG/WebP/GIF only (no SVG), max 10 MB per image, max 20 images per save; images exceeding limits keep their original URL as a fallback
+- Image constraints: PNG/JPEG/WebP/GIF/AVIF only (no SVG), max 10 MB per image, max 20 images per save; images exceeding limits keep their original URL as a fallback
 - One-line example markdown payload
 
 **Applied to tools:**
@@ -202,23 +202,32 @@ The metadata update is a separate commit from the rehost logic, but lives in the
 
 **New:** `apps/web/src/lib/server/content/__tests__/rehost-images.test.ts`
 
-Mocks global `fetch` and `uploadImageBuffer`. Cases:
+Mocks global `fetch`, `node:dns/promises` `lookup`, and `uploadImageBuffer`. Cases:
 
 1. Single external URL → fetched, uploaded, src rewritten
 2. Multiple distinct external URLs → each fetched, each rewritten
 3. Same URL twice → fetched once, both nodes rewritten identically (dedupe)
 4. Same-origin URL → skipped, src unchanged, no fetch
 5. Data URI with PNG → decoded, uploaded, src rewritten
-6. Data URI with SVG → kept as-is, warning logged
-7. External SVG via http → kept as-is, warning logged
-8. Disallowed mime type (`application/pdf`) → kept, warning
-9. Oversized image (`content-length` over cap) → kept, warning, no body read
-10. Fetch timeout → kept, warning
-11. S3 upload throws → kept, warning
-12. 21 images in one doc → first 20 rehosted, 21st kept, one summary warning
-13. Non-image nodes (paragraph, code block, table) → untouched
-14. `isS3Configured()` returns false → input returned unchanged, no fetch calls
-15. Top-level try/catch: a traversal bug throws → input returned unchanged, error logged
+6. Data URI with AVIF → decoded, uploaded, src rewritten
+7. Data URI with SVG → kept as-is, warning logged
+8. External SVG via http → kept as-is, warning logged
+9. Disallowed mime type (`application/pdf`) → kept, warning
+10. Oversized image (`content-length` over cap) → kept, warning, no body read
+11. Streamed oversized response (no content-length, body exceeds cap mid-stream) → kept, warning, stream aborted
+12. Magic-byte mismatch (declared `image/png`, body is actually zip) → kept, warning
+13. Scheme rejected (`file://`, `ftp://`, `javascript:`) → kept, warning
+14. SSRF: hostname resolves to `127.0.0.1` → kept, warning, no fetch
+15. SSRF: hostname resolves to `169.254.169.254` (cloud metadata) → kept, warning
+16. SSRF: IPv6 loopback `::1` → kept, warning
+17. SSRF: hostname resolves to multiple addresses, any private → kept, warning
+18. Redirect response (302) → kept, warning, redirect target never fetched
+19. Fetch timeout → kept, warning
+20. S3 upload throws → kept, warning
+21. 21 images in one doc → first 20 rehosted, 21st kept, one summary warning
+22. Non-image nodes (paragraph, code block, table) → untouched
+23. `isS3Configured()` returns false → input returned unchanged, no fetch calls
+24. Top-level try/catch: a traversal bug throws → input returned unchanged, error logged
 
 ### Service-level tests
 
@@ -240,12 +249,40 @@ The existing `apps/web/src/lib/server/mcp/__tests__/handler.test.ts` doesn't ass
 
 **Cost:** S3 storage cost scales with the number of rehosted images; a runaway MCP agent that spams an article with 20 real 10 MB images costs ~200 MB per save. The per-save cap is the primary defense. We do not impose a per-workspace rate limit in this change — if abuse becomes real, it's a separate feature.
 
-**Security:** The fetch path is an SSRF vector if unguarded. Two mitigations:
+### Security review
 
-1. The fetch URL must start with `http://` or `https://` — no `file://`, `ftp://`, or other schemes.
-2. Private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.169.254 AWS metadata) are blocked via a resolved-host check before fetch. This is implemented as a helper `isPrivateHost(urlHost)` that rejects any hostname resolving to a private or link-local address.
+Fetching user-supplied URLs server-side is a well-known attack surface. The mitigations below are layered so a single bypass doesn't open the whole path.
 
-Log the SSRF rejections at warn level with the same "skipped image" format, reason `ssrf-rejected`.
+**1. Scheme allow-list.** Only `http://` and `https://` URLs are fetched. `file://`, `ftp://`, `gopher://`, `dict://`, `ldap://`, `data:` (handled separately, not fetched), and any other scheme is rejected outright with reason `scheme-rejected`. This is the cheapest and strictest filter.
+
+**2. DNS resolution + private-IP check, pre-fetch.** Before any network call, resolve the URL's hostname via `node:dns/promises`'s `lookup()` and check every returned address against a blocklist:
+
+- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` — RFC 1918 private ranges
+- `127.0.0.0/8` — loopback
+- `169.254.0.0/16` — link-local (critically, this blocks `169.254.169.254`, the AWS/GCP metadata endpoint)
+- `::1/128`, `fc00::/7`, `fe80::/10` — IPv6 loopback, unique-local, link-local
+- `0.0.0.0/8` — this-network
+- `100.64.0.0/10` — carrier-grade NAT (Tailscale uses this range)
+
+If any resolved address is in these ranges, reject with reason `ssrf-rejected`. Implementation: a helper `isPrivateAddress(ip: string): boolean` that takes a parsed address and compares against the blocklist. `isPrivateHost(hostname)` calls `lookup(hostname, { all: true })` and returns true if any returned address is private.
+
+**3. DNS rebinding window.** DNS-based TOCTOU attacks are possible in theory (we resolve the hostname, it passes the check, then the attacker's DNS server returns a different answer when `fetch()` re-resolves). Mitigation: after the pre-flight check passes, fetch using a Node HTTP agent configured with a custom `lookup` function that returns the already-resolved IP from step 2, so the network call connects to exactly the address we validated. This pins the resolution and closes the rebinding window for the whole fetch lifecycle.
+
+**4. Redirect handling.** A server that returns `302 http://127.0.0.1/whatever` would bypass the pre-flight check if redirects were followed blindly. Mitigation: `fetch(src, { redirect: 'manual' })`. If the response status is a redirect (3xx), reject with reason `redirect-rejected`. Direct CDN URLs don't redirect; LLMs producing markdown should embed the final public URL, not a redirector. This is a small ergonomic cost that's worth paying for a hard SSRF stop.
+
+**5. Stream-limited body read.** Even with a `content-length` header check, a malicious server can omit the header or lie about it. Mitigation: read the response body via a `ReadableStream` and abort as soon as the accumulated byte count exceeds `REHOST_MAX_BYTES`. No allocating a 2 GB buffer because a hostile server claims 500 KB.
+
+**6. Content-type vs. magic bytes.** The response `Content-Type` header is advisory. An attacker could send `Content-Type: image/png` while serving a polyglot file. Mitigation: after reading the first 16 bytes of the response, sniff against known image magic numbers (PNG `89 50 4E 47`, JPEG `FF D8 FF`, GIF `47 49 46 38`, WebP `52 49 46 46 .. .. .. .. 57 45 42 50`, AVIF `.. .. .. .. 66 74 79 70 61 76 69 66`). If the header mime and the sniffed mime disagree — or the sniffed bytes don't match any allowed image format — reject with reason `magic-mismatch`. Trust the sniff, not the header.
+
+**7. Filename collision and path traversal.** The `uploadImageBuffer` helper must generate random-or-hash-derived object keys (e.g. `${prefix}/${yyyy}/${mm}/${randomUUID()}.${ext}`) mirroring the existing `uploadImageFromFormData` pattern. The caller-supplied source URL is never used to derive the destination key.
+
+**8. Rate limiting.** Not implemented in this change. A single malicious MCP session could repeatedly call `create_post` with 20 image references to generate outbound traffic. The per-save cap of 20 bounds one call; per-workspace rate limiting is a separate concern and already partially covered by the existing MCP auth scopes. Flagged as a follow-up in `## Operational considerations > Cost`.
+
+**9. Data URI handling.** Data URIs never leave the process and never trigger network calls, so the SSRF concerns don't apply. They still go through the MIME allow-list (rule 2 of MIME check) and the size cap before reaching `uploadImageBuffer`.
+
+All SSRF-class rejections log at `warn` level with the "skipped image" format and the specific reason from the enum below.
+
+**Reason enum additions:** `scheme-rejected`, `ssrf-rejected`, `redirect-rejected`, `magic-mismatch` — added to the existing log reasons list in the _Per-image failure_ section.
 
 **Observability:** All warnings use the `[content:rehost-images]` log prefix so they can be grepped and eventually piped to a dashboard if rehost becomes a hot metric.
 
@@ -269,7 +306,7 @@ None. All design decisions are locked:
 - Same-origin detection via `S3_PUBLIC_URL_PREFIX`
 - Scope: posts, changelogs, help center articles (comments out of scope)
 - MCP metadata: approach B (field descriptions + tool-level "Content format" block)
-- SSRF protection via scheme and private-IP checks
+- SSRF protection: scheme allow-list, DNS pre-resolve + private-IP blocklist (incl. 169.254.169.254 cloud metadata), DNS pinning across the fetch, manual redirect handling, stream-limited body read, magic-byte content-type verification
 
 ## Rollout
 
