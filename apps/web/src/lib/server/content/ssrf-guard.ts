@@ -63,6 +63,8 @@ function isPrivateIpv6(addr: string): boolean {
   if (asV4 !== null) {
     return isPrivateIpv4(lower)
   }
+  // Documentation (RFC 3849) 2001:db8::/32 — non-routable
+  if (/^2001:0?db8:/.test(lower)) return true
   // Loopback
   if (lower === '::1') return true
   // Unspecified

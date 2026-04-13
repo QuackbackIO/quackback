@@ -66,6 +66,22 @@ describe('isPrivateAddress', () => {
     expect(isPrivateAddress('2606:4700:4700::1111')).toBe(false)
     expect(isPrivateAddress('2001:4860:4860::8888')).toBe(false)
   })
+
+  it('blocks IPv4-mapped IPv6 private addresses', () => {
+    expect(isPrivateAddress('::ffff:127.0.0.1')).toBe(true)
+    expect(isPrivateAddress('::ffff:192.168.1.1')).toBe(true)
+    expect(isPrivateAddress('::ffff:10.0.0.1')).toBe(true)
+  })
+
+  it('allows IPv4-mapped IPv6 public addresses', () => {
+    expect(isPrivateAddress('::ffff:8.8.8.8')).toBe(false)
+    expect(isPrivateAddress('::ffff:1.1.1.1')).toBe(false)
+  })
+
+  it('blocks the IPv6 documentation prefix 2001:db8::/32', () => {
+    expect(isPrivateAddress('2001:db8::1')).toBe(true)
+    expect(isPrivateAddress('2001:0db8:1234::1')).toBe(true)
+  })
 })
 
 describe('checkUrlSafety', () => {
