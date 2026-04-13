@@ -157,22 +157,31 @@ async function fetchWithLimits(
     return { ok: false, reason: 'oversized' }
   }
 
-  // Read the body. Prefer arrayBuffer() for broad compatibility (test mocks
-  // don't always expose a full ReadableStream reader on `new Response(buf)`).
-  // We already rejected oversized declarations above, and we re-check after
-  // read to catch servers that lie about content-length.
-  let buffer: Buffer
+  // Stream-limited read: abort if the body overruns the cap.
+  if (!response.body) {
+    return { ok: false, reason: 'fetch-error' }
+  }
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
   try {
-    const arrayBuffer = await response.arrayBuffer()
-    buffer = Buffer.from(arrayBuffer)
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        total += value.byteLength
+        if (total > MAX_BYTES) {
+          await reader.cancel()
+          return { ok: false, reason: 'oversized' }
+        }
+        chunks.push(value)
+      }
+    }
   } catch {
     return { ok: false, reason: 'fetch-error' }
   }
 
-  if (buffer.length > MAX_BYTES) {
-    return { ok: false, reason: 'oversized' }
-  }
-
+  const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)))
   return { ok: true, buffer, mimeHeader }
 }
 

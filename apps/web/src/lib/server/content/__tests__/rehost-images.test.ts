@@ -51,7 +51,15 @@ function okImageResponse(
   if (options.contentLength !== null) {
     headers.set('content-length', String(options.contentLength ?? bodyBytes.length))
   }
-  return new Response(bodyBytes as unknown as BodyInit, {
+  // Wrap in a ReadableStream so .body.getReader() works in test envs that
+  // don't auto-streamify Buffer-backed Responses.
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bodyBytes))
+      controller.close()
+    },
+  })
+  return new Response(stream, {
     status: 200,
     headers,
   })
@@ -294,10 +302,18 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   it('rejects when header mime and sniffed bytes disagree', async () => {
     const lie = Buffer.from('PK\x03\x04...zip')
     fetchMock.mockResolvedValueOnce(
-      new Response(lie, {
-        status: 200,
-        headers: { 'content-type': 'image/png' },
-      })
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(lie))
+            controller.close()
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        }
+      )
     )
 
     const input = docWithImages('https://external.example.com/lie.png')
@@ -360,6 +376,29 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
     const output = await rehostExternalImages(input, { contentType: 'post' })
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
     expect(node.attrs.src).toBe('https://external.example.com/bad.png')
+  })
+
+  it('aborts streaming read when body exceeds cap mid-stream (no content-length)', async () => {
+    // No content-length header, body actually larger than MAX_BYTES
+    const oversized = Buffer.alloc(11 * 1024 * 1024) // 11 MB > 10 MB cap
+    // Put valid PNG header at the start so any pre-stream header check passes
+    oversized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
+
+    const headers = new Headers({ 'content-type': 'image/png' })
+    // Deliberately omit content-length
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(oversized))
+        controller.close()
+      },
+    })
+    fetchMock.mockResolvedValueOnce(new Response(stream, { status: 200, headers }))
+
+    const input = docWithImages('https://external.example.com/lying.png')
+    const output = await rehostExternalImages(input, { contentType: 'post' })
+    const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
+    expect(node.attrs.src).toBe('https://external.example.com/lying.png')
+    expect(uploadImageBufferMock).not.toHaveBeenCalled()
   })
 
   it('caps at 20 images per save (21st keeps external URL)', async () => {
