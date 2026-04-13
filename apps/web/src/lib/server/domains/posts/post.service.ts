@@ -35,6 +35,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -115,6 +116,12 @@ export async function createPost(
   }
 
   // Create post, add tags, and auto-upvote in a single transaction
+  const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
+  const contentJson = await rehostExternalImages(parsedContentJson, {
+    contentType: 'post',
+    principalId: author.principalId,
+  })
+
   const post = await db.transaction(async (tx) => {
     const [newPost] = await tx
       .insert(posts)
@@ -122,7 +129,7 @@ export async function createPost(
         boardId: input.boardId,
         title,
         content,
-        contentJson: input.contentJson ?? markdownToTiptapJson(content),
+        contentJson,
         statusId,
         principalId: author.principalId,
         widgetMetadata: input.widgetMetadata ?? null,
@@ -257,11 +264,12 @@ export async function updatePost(
   const updateData: Partial<Post> = {}
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined) updateData.content = input.content.trim()
-  if (input.contentJson !== undefined) {
-    updateData.contentJson = input.contentJson
-  } else if (input.content !== undefined) {
-    // Derive contentJson from markdown when only content is provided (MCP/API path)
-    updateData.contentJson = markdownToTiptapJson(input.content.trim())
+  if (input.contentJson !== undefined || input.content !== undefined) {
+    const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
+    updateData.contentJson = await rehostExternalImages(parsed, {
+      contentType: 'post',
+      principalId: existingPost.principalId,
+    })
   }
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
