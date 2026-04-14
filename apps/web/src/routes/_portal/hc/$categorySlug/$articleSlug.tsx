@@ -6,6 +6,7 @@ import { HelpCenterToc } from '@/components/help-center/help-center-toc'
 import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-next'
 import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
+import { HelpCenterSidebar } from '@/components/help-center/help-center-sidebar'
 import {
   extractHeadings,
   computePrevNext,
@@ -65,7 +66,7 @@ export const Route = createFileRoute('/_portal/hc/$categorySlug/$articleSlug')({
 function ArticleDetailPage() {
   const { article } = Route.useLoaderData()
   const { categorySlug } = Route.useParams()
-  const { category, articles, allCategories } = categoryApi.useLoaderData()
+  const { category, articles, subcategories, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   const { baseUrl } = Route.useRouteContext()
 
@@ -112,26 +113,38 @@ function ArticleDetailPage() {
         </>
       )}
 
-      <HelpCenterBreadcrumbs items={breadcrumbs} />
+      <div className="flex gap-6">
+        <HelpCenterSidebar
+          categoryName={category.name}
+          categorySlug={category.slug}
+          categoryIcon={category.icon}
+          articles={articles}
+          subcategories={subcategories}
+        />
 
-      <div className="mt-6 flex gap-8">
-        <article className="min-w-0 flex-1">
-          <h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
+        <div className="min-w-0 flex-1 px-6 py-6 sm:px-10">
+          <HelpCenterBreadcrumbs items={breadcrumbs} />
 
-          <div className="mt-6 prose prose-neutral dark:prose-invert max-w-none">
-            {article.contentJson && isRichTextContent(article.contentJson) ? (
-              <RichTextContent content={article.contentJson as JSONContent} />
-            ) : (
-              <p className="whitespace-pre-wrap">{article.content}</p>
-            )}
+          <div className="mt-6 flex gap-8">
+            <article className="min-w-0 flex-1">
+              <h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
+
+              <div className="mt-6 prose prose-neutral dark:prose-invert max-w-none">
+                {article.contentJson && isRichTextContent(article.contentJson) ? (
+                  <RichTextContent content={article.contentJson as JSONContent} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{article.content}</p>
+                )}
+              </div>
+
+              <HelpCenterArticleFeedback articleId={article.id} />
+
+              <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
+            </article>
+
+            <HelpCenterToc headings={headings} />
           </div>
-
-          <HelpCenterArticleFeedback articleId={article.id} />
-
-          <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
-        </article>
-
-        <HelpCenterToc headings={headings} />
+        </div>
       </div>
     </div>
   )
