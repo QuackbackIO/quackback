@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react'
-import {
-  Link,
-  useRouter,
-  useRouterState,
-  useRouteContext,
-  useMatches,
-} from '@tanstack/react-router'
+import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import {
-  HelpCenterCategoryNav,
-  type HelpCenterCategory,
-} from '@/components/help-center/help-center-category-nav'
 import { buildNavItems } from './portal-header-nav'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -76,12 +66,6 @@ export function PortalHeader({
     helpCenterHost: !!helpCenterHost,
   })
 
-  const matches = useMatches()
-  const hcMatch = matches.find((m) => (m.routeId as string) === '/_portal/hc')
-  const hcLoaderData = hcMatch?.loaderData as { categories?: unknown } | undefined
-  const hcCategories: HelpCenterCategory[] = Array.isArray(hcLoaderData?.categories)
-    ? (hcLoaderData!.categories as HelpCenterCategory[])
-    : []
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
   const { theme, setTheme } = useTheme()
@@ -307,11 +291,6 @@ export function PortalHeader({
           <div className="flex items-center">
             <Navigation />
           </div>
-          {onHelpPages && hcCategories.length > 0 && (
-            <div className="mt-2">
-              <HelpCenterCategoryNav categories={hcCategories} />
-            </div>
-          )}
         </div>
       </div>
     </div>

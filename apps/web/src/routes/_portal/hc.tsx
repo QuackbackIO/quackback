@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, redirect, Outlet } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { listPublicCategoriesFn } from '@/lib/server/functions/help-center'
 import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 import type { HelpCenterConfig } from '@/lib/server/domains/settings'
 
@@ -31,11 +30,10 @@ export const Route = createFileRoute('/_portal/hc')({
       }
     }
   },
-  loader: async ({ context }) => {
+  loader: ({ context }) => {
     const { settings } = context
     const helpCenterConfig = (settings?.helpCenterConfig as HelpCenterConfig | null) ?? null
-    const categories = await listPublicCategoriesFn({ data: {} })
-    return { categories, helpCenterConfig }
+    return { helpCenterConfig }
   },
   head: ({ loaderData }) => {
     const meta: Array<Record<string, string>> = []
