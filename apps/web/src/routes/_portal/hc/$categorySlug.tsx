@@ -7,7 +7,7 @@ import {
 import { getSubcategories } from '@/components/help-center/help-center-utils'
 import { HelpCenterSidebar } from '@/components/help-center/help-center-sidebar'
 
-export const Route = createFileRoute('/hc/$categorySlug')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug')({
   loader: async ({ params }) => {
     let category: Awaited<ReturnType<typeof getPublicCategoryBySlugFn>>
     try {

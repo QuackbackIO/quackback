@@ -14,10 +14,10 @@ import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import type { JSONContent } from '@tiptap/react'
 
-const helpCenterApi = getRouteApi('/hc')
-const categoryApi = getRouteApi('/hc/$categorySlug')
+const helpCenterApi = getRouteApi('/_portal/hc')
+const categoryApi = getRouteApi('/_portal/hc/$categorySlug')
 
-export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug/$articleSlug')({
   loader: async ({ params }) => {
     try {
       const article = await getPublicArticleBySlugFn({ data: { slug: params.articleSlug } })
@@ -31,10 +31,10 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
 
     const { article } = loaderData
 
-    // Get workspace name from the root helpcenter layout
-    const helpCenterMatch = matches.find((m) => (m.routeId as string) === '/hc')
+    // Get workspace name from the portal layout (formerly the hc layout)
+    const portalMatch = matches.find((m) => (m.routeId as string) === '/_portal')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parentLoaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
+    const parentLoaderData = portalMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =
       (parentLoaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'
 
@@ -44,7 +44,7 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
       (article.content ? article.content.slice(0, 160) : `${article.title} - ${workspaceName}`)
 
     const baseUrl =
-      ((helpCenterMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
+      ((portalMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
     const canonicalUrl = `${baseUrl}/${params.categorySlug}/${params.articleSlug}`
 
     return {

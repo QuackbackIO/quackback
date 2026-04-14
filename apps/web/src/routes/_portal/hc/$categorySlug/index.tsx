@@ -5,10 +5,10 @@ import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-u
 import { JsonLd } from '@/components/json-ld'
 import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 
-const helpCenterApi = getRouteApi('/hc')
-const categoryApi = getRouteApi('/hc/$categorySlug')
+const helpCenterApi = getRouteApi('/_portal/hc')
+const categoryApi = getRouteApi('/_portal/hc/$categorySlug')
 
-export const Route = createFileRoute('/hc/$categorySlug/')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug/')({
   component: CategoryIndexPage,
 })
 

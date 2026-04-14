@@ -44,20 +44,22 @@ describe('getTopLevelCategories', () => {
 })
 
 describe('getActiveCategory', () => {
-  it('returns null when pathname is /', () => {
+  it('returns null for the help center root', () => {
+    expect(getActiveCategory('/hc')).toBeNull()
+    expect(getActiveCategory('/hc/')).toBeNull()
+  })
+
+  it('returns the slug for a category path', () => {
+    expect(getActiveCategory('/hc/getting-started')).toBe('getting-started')
+  })
+
+  it('returns the category slug for a nested article path', () => {
+    expect(getActiveCategory('/hc/getting-started/first-steps')).toBe('getting-started')
+  })
+
+  it('returns null for non-hc portal paths', () => {
     expect(getActiveCategory('/')).toBeNull()
-  })
-
-  it('returns the first path segment as the category slug', () => {
-    expect(getActiveCategory('/getting-started')).toBe('getting-started')
-  })
-
-  it('returns the first path segment for nested paths', () => {
-    expect(getActiveCategory('/faq/how-to-reset')).toBe('faq')
-  })
-
-  it('returns null for empty pathname', () => {
-    expect(getActiveCategory('')).toBeNull()
+    expect(getActiveCategory('/roadmap')).toBeNull()
   })
 })
 

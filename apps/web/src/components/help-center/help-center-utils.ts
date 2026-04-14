@@ -16,12 +16,14 @@ export function getTopLevelCategories<T extends CategoryLike>(categories: T[]): 
 
 /**
  * Extracts the active category slug from the current pathname.
- * Returns null for the landing page (/).
+ * Understands both the `/hc/*` inline mount and the help center landing.
+ * Returns null when not on a specific category.
  */
 export function getActiveCategory(pathname: string): string | null {
-  if (!pathname || pathname === '/') return null
+  if (!pathname) return null
   const segments = pathname.split('/').filter(Boolean)
-  return segments[0] ?? null
+  if (segments[0] !== 'hc') return null
+  return segments[1] ?? null
 }
 
 /**
