@@ -95,13 +95,16 @@ export function HelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterF
     onChange: (search) => setFilters({ search }),
   })
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    helpCenterQueries.articleList({
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
+    ...helpCenterQueries.articleList({
       categoryId: filters.category,
       status: filters.status === 'all' ? undefined : filters.status,
       search: filters.search,
-    })
-  )
+    }),
+    // Only fetch when inside a category — the top-level view renders collapsible
+    // groups that fetch their own article lists on demand.
+    enabled: !!filters.category,
+  })
 
   const loadMoreRef = useInfiniteScroll({
     hasMore: !!hasNextPage,
