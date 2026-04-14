@@ -22,7 +22,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
 import { buildAdminCategoryBreadcrumbs } from './help-center-utils-admin'
 import { HelpCenterListItem } from './help-center-list-item'
-import { HelpCenterSubcategoryCard } from './help-center-subcategory-card'
+import { HelpCenterCategoryGroup } from './help-center-category-group'
 import { CreateArticleDialog } from './create-article-dialog'
 import { CategoryFormDialog } from './category-form-dialog'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -233,93 +233,122 @@ export function HelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterF
         </div>
       </div>
 
-      {/* Sub-categories / top-level categories section */}
-      {children.length > 0 && (
-        <section className="px-3 pb-4">
-          <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            {currentCategory ? 'Sub-categories' : 'Categories'}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {children.map((cat) => {
-              const descendantCount = allCategories.filter((c) => c.parentId === cat.id).length
-              return (
-                <HelpCenterSubcategoryCard
-                  key={cat.id}
-                  category={cat}
-                  subCategoryCount={descendantCount}
-                  onClick={() => setFilters({ category: cat.id })}
-                />
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Articles section */}
-      <section className="px-3 pb-4">
-        <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-          {currentCategory
-            ? `Articles (${articles.length}${hasNextPage ? '+' : ''})`
-            : 'Recent activity'}
-        </h2>
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Spinner />
-          </div>
-        ) : articles.length === 0 ? (
-          <EmptyState
-            icon={QuestionMarkCircleIcon}
-            title={
-              filters.search
-                ? 'No articles match your search'
-                : currentCategory
-                  ? 'No articles in this category yet'
-                  : 'No help articles yet'
-            }
-            className="h-48"
-          />
-        ) : (
-          <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-            {articles.map((article, index) => (
-              <div
-                key={article.id}
-                className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-                style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-              >
-                <HelpCenterListItem
-                  id={article.id as HelpCenterArticleId}
-                  title={article.title}
-                  content={article.content}
-                  publishedAt={article.publishedAt}
-                  createdAt={article.createdAt}
-                  category={article.category}
-                  author={article.author}
-                  viewCount={article.viewCount}
-                  helpfulCount={article.helpfulCount}
-                  onEdit={onEditArticle}
-                  onDelete={onDeleteArticle}
-                />
+      {/* When viewing a specific category: show direct articles, then sub-categories as collapsible groups */}
+      {currentCategory ? (
+        <>
+          {/* Direct articles in this category */}
+          <section className="px-3 pb-4">
+            <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              {`Articles (${articles.length}${hasNextPage ? '+' : ''})`}
+            </h2>
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Spinner />
               </div>
-            ))}
-          </div>
-        )}
-        {hasNextPage && (
-          <div ref={loadMoreRef} className="mt-3 flex justify-center">
-            {isFetchingNextPage ? (
-              <Spinner />
+            ) : articles.length === 0 ? (
+              <EmptyState
+                icon={QuestionMarkCircleIcon}
+                title={
+                  filters.search
+                    ? 'No articles match your search'
+                    : 'No articles in this category yet'
+                }
+                className="h-48"
+              />
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => fetchNextPage()}
-                className="text-muted-foreground"
-              >
-                Load more
-              </Button>
+              <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+                {articles.map((article, index) => (
+                  <div
+                    key={article.id}
+                    className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                    style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+                  >
+                    <HelpCenterListItem
+                      id={article.id as HelpCenterArticleId}
+                      title={article.title}
+                      content={article.content}
+                      publishedAt={article.publishedAt}
+                      createdAt={article.createdAt}
+                      category={article.category}
+                      author={article.author}
+                      viewCount={article.viewCount}
+                      helpfulCount={article.helpfulCount}
+                      onEdit={onEditArticle}
+                      onDelete={onDeleteArticle}
+                    />
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
-        )}
-      </section>
+            {hasNextPage && (
+              <div ref={loadMoreRef} className="mt-3 flex justify-center">
+                {isFetchingNextPage ? (
+                  <Spinner />
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fetchNextPage()}
+                    className="text-muted-foreground"
+                  >
+                    Load more
+                  </Button>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Sub-categories as collapsible groups */}
+          {children.length > 0 && (
+            <section className="px-3 pb-4">
+              <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                Sub-categories
+              </h2>
+              <div className="space-y-2">
+                {children.map((sub) => (
+                  <HelpCenterCategoryGroup
+                    key={sub.id}
+                    category={sub}
+                    onNavigate={() => setFilters({ category: sub.id })}
+                    onEditArticle={onEditArticle}
+                    onDeleteArticle={onDeleteArticle}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        /* Top-level view: show categories as collapsible groups */
+        <>
+          {children.length > 0 ? (
+            <section className="px-3 pb-4">
+              <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                Categories
+              </h2>
+              <div className="space-y-2">
+                {children.map((cat) => (
+                  <HelpCenterCategoryGroup
+                    key={cat.id}
+                    category={cat}
+                    onNavigate={() => setFilters({ category: cat.id })}
+                    onEditArticle={onEditArticle}
+                    onDeleteArticle={onDeleteArticle}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section className="px-3 pb-4">
+              <EmptyState
+                icon={QuestionMarkCircleIcon}
+                title="No help categories yet"
+                className="h-48"
+              />
+            </section>
+          )}
+        </>
+      )}
 
       {/* Dialogs */}
       <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
