@@ -199,7 +199,11 @@ describe('listCategories', () => {
     // Mock the article count query
     mockSelectFrom.mockReturnValue({
       where: vi.fn().mockReturnValue({
-        groupBy: vi.fn().mockResolvedValue([{ categoryId: 'helpcenter_category_1', count: 3 }]),
+        groupBy: vi
+          .fn()
+          .mockResolvedValue([
+            { categoryId: 'helpcenter_category_1', totalCount: 3, publishedCount: 3 },
+          ]),
       }),
     })
 
@@ -262,8 +266,8 @@ describe('listPublicCategories', () => {
     mockSelectFrom.mockReturnValue({
       where: vi.fn().mockReturnValue({
         groupBy: vi.fn().mockResolvedValue([
-          { categoryId: 'helpcenter_category_1', count: 2 },
-          { categoryId: 'helpcenter_category_2', count: 1 },
+          { categoryId: 'helpcenter_category_1', totalCount: 2, publishedCount: 2 },
+          { categoryId: 'helpcenter_category_2', totalCount: 1, publishedCount: 1 },
         ]),
       }),
     })
@@ -678,7 +682,11 @@ describe('listPublicCategories returns parentId and icon', () => {
 
     mockSelectFrom.mockReturnValue({
       where: vi.fn().mockReturnValue({
-        groupBy: vi.fn().mockResolvedValue([{ categoryId: 'helpcenter_category_1', count: 2 }]),
+        groupBy: vi
+          .fn()
+          .mockResolvedValue([
+            { categoryId: 'helpcenter_category_1', totalCount: 2, publishedCount: 2 },
+          ]),
       }),
     })
 

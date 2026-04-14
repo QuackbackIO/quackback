@@ -117,6 +117,10 @@ function validateHierarchyConstraint(params: {
 export async function listCategories(): Promise<HelpCenterCategoryWithCount[]> {
   const now = new Date()
 
+  // Count in a single pass: total articles per category (drafts + published)
+  // alongside the published-only subset, via a FILTER aggregate. Admin
+  // callers use `articleCount` (total); the public listing uses
+  // `publishedArticleCount` to hide categories that only have drafts.
   const [categories, counts] = await Promise.all([
     db.query.helpCenterCategories.findMany({
       where: isNull(helpCenterCategories.deletedAt),
@@ -125,30 +129,36 @@ export async function listCategories(): Promise<HelpCenterCategoryWithCount[]> {
     db
       .select({
         categoryId: helpCenterArticles.categoryId,
-        count: sql<number>`count(*)::int`,
+        totalCount: sql<number>`count(*)::int`,
+        publishedCount: sql<number>`count(*) filter (where ${helpCenterArticles.publishedAt} is not null and ${helpCenterArticles.publishedAt} <= ${now})::int`,
       })
       .from(helpCenterArticles)
-      .where(
-        and(
-          isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          lte(helpCenterArticles.publishedAt, now)
-        )
-      )
+      .where(isNull(helpCenterArticles.deletedAt))
       .groupBy(helpCenterArticles.categoryId),
   ])
 
-  const countMap = new Map(counts.map((c) => [c.categoryId, c.count]))
+  const countMap = new Map(
+    counts.map((c) => [c.categoryId, { total: c.totalCount, published: c.publishedCount }])
+  )
 
-  return categories.map((cat) => ({
-    ...cat,
-    articleCount: countMap.get(cat.id as HelpCenterCategoryId) ?? 0,
-  }))
+  return categories.map((cat) => {
+    const row = countMap.get(cat.id as HelpCenterCategoryId)
+    return {
+      ...cat,
+      articleCount: row?.total ?? 0,
+      publishedArticleCount: row?.published ?? 0,
+    }
+  })
 }
 
 export async function listPublicCategories(): Promise<HelpCenterCategoryWithCount[]> {
   const all = await listCategories()
-  return all.filter((cat) => cat.isPublic && cat.articleCount > 0)
+  // Public consumers see `articleCount` as the published-only count to avoid
+  // exposing draft counts. Admin consumers call listCategories directly and
+  // see the total count on `articleCount`.
+  return all
+    .filter((cat) => cat.isPublic && cat.publishedArticleCount > 0)
+    .map((cat) => ({ ...cat, articleCount: cat.publishedArticleCount }))
 }
 
 export async function getCategoryById(id: HelpCenterCategoryId): Promise<HelpCenterCategory> {

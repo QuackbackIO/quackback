@@ -32,7 +32,10 @@ export interface HelpCenterCategory {
 }
 
 export interface HelpCenterCategoryWithCount extends HelpCenterCategory {
+  /** Total non-deleted articles in this category (drafts + published). */
   articleCount: number
+  /** Published articles in this category (excludes drafts and scheduled). */
+  publishedArticleCount: number
 }
 
 // ============================================================================
