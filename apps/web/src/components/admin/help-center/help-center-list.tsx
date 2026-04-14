@@ -80,7 +80,6 @@ export function HelpCenterList() {
           />
         }
         hasActiveFilters={hasActiveFilters}
-        scrollContent={false}
       >
         <HelpCenterFinder onEditArticle={handleEdit} onDeleteArticle={handleDelete} />
       </InboxLayout>

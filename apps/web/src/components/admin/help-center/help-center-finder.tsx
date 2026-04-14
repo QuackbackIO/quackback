@@ -192,7 +192,7 @@ export function HelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterF
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
+    <div className="max-w-5xl mx-auto w-full">
       {/* Breadcrumbs + search header */}
       <AdminListHeader
         searchValue={searchValue}
@@ -256,7 +256,7 @@ export function HelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterF
       )}
 
       {/* Articles section */}
-      <section className="px-3 pb-4 flex-1 min-h-0">
+      <section className="px-3 pb-4">
         <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           {currentCategory
             ? `Articles (${articles.length}${hasNextPage ? '+' : ''})`
