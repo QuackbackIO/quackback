@@ -82,6 +82,26 @@ describe('isPrivateAddress', () => {
     expect(isPrivateAddress('2001:db8::1')).toBe(true)
     expect(isPrivateAddress('2001:0db8:1234::1')).toBe(true)
   })
+
+  it('blocks hextet-form IPv4-mapped IPv6 private addresses', () => {
+    // ::ffff:7f00:1 encodes 127.0.0.1
+    expect(isPrivateAddress('::ffff:7f00:1')).toBe(true)
+    // ::ffff:0a00:1 encodes 10.0.0.1
+    expect(isPrivateAddress('::ffff:0a00:1')).toBe(true)
+    // ::ffff:c0a8:1 encodes 192.168.0.1
+    expect(isPrivateAddress('::ffff:c0a8:1')).toBe(true)
+    // ::ffff:a9fe:a9fe encodes 169.254.169.254 (cloud metadata)
+    expect(isPrivateAddress('::ffff:a9fe:a9fe')).toBe(true)
+    // ::ffff:ac10:1 encodes 172.16.0.1
+    expect(isPrivateAddress('::ffff:ac10:1')).toBe(true)
+  })
+
+  it('allows hextet-form IPv4-mapped IPv6 public addresses', () => {
+    // ::ffff:0808:0808 encodes 8.8.8.8
+    expect(isPrivateAddress('::ffff:0808:0808')).toBe(false)
+    // ::ffff:0101:0101 encodes 1.1.1.1
+    expect(isPrivateAddress('::ffff:0101:0101')).toBe(false)
+  })
 })
 
 describe('checkUrlSafety', () => {

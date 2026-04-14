@@ -182,6 +182,27 @@ describe('rehostExternalImages — happy paths', () => {
     delete process.env.S3_PUBLIC_URL
   })
 
+  it('does not treat a prefix-matching attacker host as same-origin', async () => {
+    // Attacker registers cdn.example.com.attacker.tld so the URL string
+    // starts with the public URL's scheme+host prefix. A naive startsWith
+    // check would skip the rehost and leave the attacker image embedded.
+    process.env.S3_PUBLIC_URL = 'https://cdn.example.com'
+    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    uploadImageBufferMock.mockResolvedValueOnce({
+      url: 'https://cdn.example.com/post-images/rehosted.png',
+    })
+
+    const input = docWithImages('https://cdn.example.com.attacker.tld/evil.png')
+    const output = await rehostExternalImages(input, { contentType: 'post' })
+    const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
+
+    expect(node.attrs.src).toBe('https://cdn.example.com/post-images/rehosted.png')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(uploadImageBufferMock).toHaveBeenCalledTimes(1)
+
+    delete process.env.S3_PUBLIC_URL
+  })
+
   it('handles a data-URI PNG', async () => {
     // 1x1 transparent PNG
     const base64 =

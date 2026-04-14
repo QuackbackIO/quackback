@@ -52,16 +52,45 @@ function ipv4InRange(ip: number, baseCidr: string): boolean {
 }
 
 /**
+ * Extract the embedded IPv4 address from an IPv4-mapped IPv6 address.
+ * Handles both dotted-decimal (`::ffff:127.0.0.1`) and hextet
+ * (`::ffff:7f00:1`) representations. Returns the IPv4 as a dotted string
+ * or null if the input isn't IPv4-mapped.
+ */
+function extractMappedIpv4(lowerAddr: string): string | null {
+  if (!lowerAddr.startsWith('::ffff:')) return null
+  const suffix = lowerAddr.slice('::ffff:'.length)
+  // Dotted-decimal form: ::ffff:127.0.0.1
+  if (parseIpv4(suffix) !== null) {
+    return suffix
+  }
+  // Hextet form: ::ffff:7f00:1 (= ::ffff:127.0.0.1)
+  const hextets = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(suffix)
+  if (hextets) {
+    const hi = parseInt(hextets[1], 16)
+    const lo = parseInt(hextets[2], 16)
+    if (hi > 0xffff || lo > 0xffff) return null
+    const ip = ((hi << 16) | lo) >>> 0
+    const a = (ip >>> 24) & 0xff
+    const b = (ip >>> 16) & 0xff
+    const c = (ip >>> 8) & 0xff
+    const d = ip & 0xff
+    return `${a}.${b}.${c}.${d}`
+  }
+  return null
+}
+
+/**
  * IPv6 handling: we normalize to lowercase and check leading-segment prefixes.
  * This is a pragmatic approximation — we don't need full RFC 4291 parsing for
  * the small set of ranges we block.
  */
 function isPrivateIpv6(addr: string): boolean {
-  const lower = addr.toLowerCase().replace(/^::ffff:/, '')
-  // IPv4-mapped IPv6 (::ffff:1.2.3.4) — handled by the v4 path below if present
-  const asV4 = parseIpv4(lower)
-  if (asV4 !== null) {
-    return isPrivateIpv4(lower)
+  const lower = addr.toLowerCase()
+  // IPv4-mapped IPv6 — covers both ::ffff:127.0.0.1 (dotted) and ::ffff:7f00:1 (hextet)
+  const mappedV4 = extractMappedIpv4(lower)
+  if (mappedV4 !== null) {
+    return isPrivateIpv4(mappedV4)
   }
   // Documentation (RFC 3849) 2001:db8::/32 — non-routable
   if (/^2001:0?db8:/.test(lower)) return true

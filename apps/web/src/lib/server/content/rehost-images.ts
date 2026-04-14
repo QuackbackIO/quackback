@@ -112,10 +112,29 @@ function parseDataUri(src: string): { mime: string; buffer: Buffer } {
   return { mime, buffer }
 }
 
+/**
+ * Compare parsed URL origins (and path prefix) to decide whether a src is
+ * already on our workspace storage. A raw `startsWith` against the env value
+ * would let an attacker host `cdn.example.com.attacker.tld` bypass rehost by
+ * embedding a matching prefix.
+ */
 function isSameOrigin(src: string): boolean {
   const publicUrl = process.env.S3_PUBLIC_URL
   if (!publicUrl) return false
-  return src.startsWith(publicUrl.replace(/\/$/, ''))
+  let srcUrl: URL
+  let publicUrlParsed: URL
+  try {
+    srcUrl = new URL(src)
+    publicUrlParsed = new URL(publicUrl)
+  } catch {
+    return false
+  }
+  if (srcUrl.origin !== publicUrlParsed.origin) return false
+  // If the public URL includes a path (e.g. https://cdn.example.com/bucket),
+  // require the src path to be inside it.
+  const publicPath = publicUrlParsed.pathname.replace(/\/$/, '')
+  if (publicPath === '') return true
+  return srcUrl.pathname === publicPath || srcUrl.pathname.startsWith(`${publicPath}/`)
 }
 
 /** Fetch a URL with timeout + manual redirect + stream-limited body read. */
