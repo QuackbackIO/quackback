@@ -241,15 +241,31 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(id: HelpCenterCategoryId): Promise<void> {
-  const result = await db
-    .update(helpCenterCategories)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(helpCenterCategories.id, id), isNull(helpCenterCategories.deletedAt)))
-    .returning()
-
-  if (result.length === 0) {
+  const flat = await db.query.helpCenterCategories.findMany({
+    where: isNull(helpCenterCategories.deletedAt),
+    columns: { id: true, parentId: true },
+  })
+  if (!flat.some((c) => c.id === id)) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `Category ${id} not found`)
   }
+
+  const toDelete = collectDescendantIdsIncludingSelf(
+    flat as Array<{ id: string; parentId: string | null }>,
+    id
+  )
+  const ids = [...toDelete] as HelpCenterCategoryId[]
+  const now = new Date()
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(helpCenterCategories)
+      .set({ deletedAt: now })
+      .where(and(inArray(helpCenterCategories.id, ids), isNull(helpCenterCategories.deletedAt)))
+    await tx
+      .update(helpCenterArticles)
+      .set({ deletedAt: now })
+      .where(and(inArray(helpCenterArticles.categoryId, ids), isNull(helpCenterArticles.deletedAt)))
+  })
 }
 
 // ============================================================================

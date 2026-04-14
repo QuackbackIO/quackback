@@ -349,23 +349,57 @@ describe('createCategory', () => {
 
 describe('deleteCategory', () => {
   it('soft deletes the category', async () => {
-    // updateChain.returning returns non-empty = success
+    mockCategoryFindMany.mockResolvedValue([{ id: 'helpcenter_category_1', parentId: null }])
     const result = await deleteCategory('helpcenter_category_1' as HelpCenterCategoryId)
     expect(result).toBeUndefined()
   })
 
   it('throws NotFoundError when category does not exist', async () => {
-    // Override the mock to return empty array
-    const { db } = await import('@/lib/server/db')
-    const emptyChain: Record<string, unknown> = {}
-    emptyChain.set = vi.fn().mockReturnValue(emptyChain)
-    emptyChain.where = vi.fn().mockReturnValue(emptyChain)
-    emptyChain.returning = vi.fn().mockResolvedValue([])
-    vi.mocked(db.update).mockReturnValueOnce(emptyChain as never)
+    // findMany returns an empty list — category not found before any update
+    mockCategoryFindMany.mockResolvedValue([])
 
     await expect(
       deleteCategory('helpcenter_category_missing' as HelpCenterCategoryId)
     ).rejects.toMatchObject({ code: 'CATEGORY_NOT_FOUND' })
+  })
+})
+
+describe('deleteCategory cascade soft-delete', () => {
+  it('soft-deletes a leaf category with no descendants', async () => {
+    mockCategoryFindMany.mockResolvedValue([{ id: 'leaf', parentId: null }])
+
+    await expect(deleteCategory('leaf' as HelpCenterCategoryId)).resolves.toBeUndefined()
+  })
+
+  it('walks descendants and soft-deletes the full subtree including articles', async () => {
+    mockCategoryFindMany.mockResolvedValue([
+      { id: 'a', parentId: null },
+      { id: 'b', parentId: 'a' },
+      { id: 'c', parentId: 'a' },
+      { id: 'd', parentId: 'b' },
+    ])
+
+    await expect(deleteCategory('a' as HelpCenterCategoryId)).resolves.toBeUndefined()
+
+    // inArray is mocked as vi.fn() at the module level; inspect its call history
+    // to confirm both the categories update and articles update received all 4 ids.
+    const inArrayMock = (await import('@/lib/server/db')).inArray as unknown as ReturnType<
+      typeof vi.fn
+    >
+    const idArrayCalls = inArrayMock.mock.calls
+      .map((call) => call[1])
+      .filter((arg): arg is string[] => Array.isArray(arg))
+    // Find calls where the array contains all four descendant ids
+    const fullSubtreeCalls = idArrayCalls.filter(
+      (arr) => arr.length === 4 && ['a', 'b', 'c', 'd'].every((id) => arr.includes(id))
+    )
+    // Expect at least two such calls: one for categories update, one for articles update
+    expect(fullSubtreeCalls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('throws NotFoundError when the category does not exist', async () => {
+    mockCategoryFindMany.mockResolvedValue([])
+    await expect(deleteCategory('ghost' as HelpCenterCategoryId)).rejects.toThrow(/not found/i)
   })
 })
 
