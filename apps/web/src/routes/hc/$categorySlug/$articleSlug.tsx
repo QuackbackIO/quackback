@@ -65,13 +65,13 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
 function ArticleDetailPage() {
   const { article } = Route.useLoaderData()
   const { categorySlug } = Route.useParams()
-  const { category, articles } = categoryApi.useLoaderData()
+  const { category, articles, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   const { baseUrl } = Route.useRouteContext()
 
   const breadcrumbs = buildCategoryBreadcrumbs({
-    categoryName: category.name,
-    categorySlug: category.slug,
+    allCategories,
+    categoryId: category.id,
     articleTitle: article.title,
   })
 

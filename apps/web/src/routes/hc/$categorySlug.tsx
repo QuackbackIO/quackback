@@ -33,7 +33,7 @@ export const Route = createFileRoute('/hc/$categorySlug')({
       }))
     )
 
-    return { category, articles, subcategories: subcategoryArticles }
+    return { category, articles, subcategories: subcategoryArticles, allCategories }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}

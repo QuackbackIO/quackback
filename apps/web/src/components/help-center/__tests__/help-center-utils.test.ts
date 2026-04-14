@@ -112,27 +112,72 @@ describe('getSubcategories', () => {
   })
 })
 
-describe('buildCategoryBreadcrumbs', () => {
-  it('builds breadcrumbs with just category', () => {
-    const result = buildCategoryBreadcrumbs({
-      categoryName: 'Getting Started',
-      categorySlug: 'getting-started',
-    })
+describe('buildCategoryBreadcrumbs (hierarchical)', () => {
+  const tree = [
+    { id: 'root', parentId: null, slug: 'root', name: 'Root' },
+    { id: 'mid', parentId: 'root', slug: 'mid', name: 'Middle' },
+    { id: 'leaf', parentId: 'mid', slug: 'leaf', name: 'Leaf' },
+  ]
 
-    expect(result).toEqual([{ label: 'Help Center', href: '/hc' }, { label: 'Getting Started' }])
+  it('returns Help Center > Category for a top-level category', () => {
+    const items = buildCategoryBreadcrumbs({
+      allCategories: tree,
+      categoryId: 'root',
+    })
+    expect(items.map((i) => i.label)).toEqual(['Help Center', 'Root'])
+    expect(items[0].href).toBe('/hc')
+    expect(items[1].href).toBeUndefined()
   })
 
-  it('builds breadcrumbs with category and article', () => {
-    const result = buildCategoryBreadcrumbs({
-      categoryName: 'Getting Started',
-      categorySlug: 'getting-started',
-      articleTitle: 'Quick Start Guide',
+  it('walks the full chain for a nested category', () => {
+    const items = buildCategoryBreadcrumbs({
+      allCategories: tree,
+      categoryId: 'leaf',
     })
+    expect(items.map((i) => i.label)).toEqual(['Help Center', 'Root', 'Middle', 'Leaf'])
+    expect(items[1].href).toBe('/hc/root')
+    expect(items[2].href).toBe('/hc/mid')
+    expect(items[3].href).toBeUndefined()
+  })
 
-    expect(result).toEqual([
-      { label: 'Help Center', href: '/hc' },
-      { label: 'Getting Started', href: '/hc/getting-started' },
-      { label: 'Quick Start Guide' },
+  it('appends the article title as a final non-linked crumb', () => {
+    const items = buildCategoryBreadcrumbs({
+      allCategories: tree,
+      categoryId: 'leaf',
+      articleTitle: 'Installing the CLI',
+    })
+    expect(items.map((i) => i.label)).toEqual([
+      'Help Center',
+      'Root',
+      'Middle',
+      'Leaf',
+      'Installing the CLI',
     ])
+    expect(items[3].href).toBe('/hc/leaf')
+    expect(items[4].href).toBeUndefined()
+  })
+
+  it('falls back to just Help Center when the id is unknown', () => {
+    const items = buildCategoryBreadcrumbs({
+      allCategories: tree,
+      categoryId: 'ghost',
+    })
+    expect(items.map((i) => i.label)).toEqual(['Help Center'])
+  })
+
+  it('bails out of a cycle without looping forever', () => {
+    // Broken data: a -> b -> a
+    const cyclic = [
+      { id: 'a', parentId: 'b', slug: 'a', name: 'A' },
+      { id: 'b', parentId: 'a', slug: 'b', name: 'B' },
+    ]
+    const items = buildCategoryBreadcrumbs({
+      allCategories: cyclic,
+      categoryId: 'a',
+    })
+    // Must terminate; exact shape depends on which direction we walk first,
+    // but should include Help Center + at most both nodes
+    expect(items.length).toBeLessThanOrEqual(3)
+    expect(items[0].label).toBe('Help Center')
   })
 })
