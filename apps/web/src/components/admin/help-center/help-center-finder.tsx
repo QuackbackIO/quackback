@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
-import { buildAdminCategoryBreadcrumbs } from './help-center-utils-admin'
 import { HelpCenterListItem } from './help-center-list-item'
 import { HelpCenterCategoryGroup } from './help-center-category-group'
 import { CreateArticleDialog } from './create-article-dialog'
@@ -120,17 +119,6 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
     }
     return allCategories.filter((c) => c.parentId === filters.category)
   }, [allCategories, filters.category])
-
-  const breadcrumbs = useMemo(
-    () =>
-      filters.category
-        ? buildAdminCategoryBreadcrumbs({
-            allCategories,
-            categoryId: filters.category,
-          })
-        : [],
-    [allCategories, filters.category]
-  )
 
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
@@ -268,16 +256,11 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
         onSortChange={(sort) => setFilters({ sort: sort as 'newest' | 'oldest' })}
         action={headerActions}
       >
-        <div className="mt-1">
-          <HelpCenterBreadcrumbs items={breadcrumbs} />
-        </div>
         <HelpCenterActiveFiltersBar
           status={filters.status}
-          search={filters.search}
           category={filters.category}
           showDeleted={filters.showDeleted}
           onClearStatus={() => setFilters({ status: 'all' })}
-          onClearSearch={() => setFilters({ search: undefined })}
           onClearCategory={() => setFilters({ category: undefined })}
           onClearShowDeleted={() => setFilters({ showDeleted: undefined })}
           onClearAll={clearFilters}
@@ -379,7 +362,7 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
           ))}
         </section>
       ) : (
-        /* Top-level view: show categories as collapsible groups */
+        /* Top-level view: simple category listing, no expandable cards */
         <>
           {children.length > 0 ? (
             <section className="px-3 pb-4">
@@ -388,13 +371,22 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
               </h2>
               <div className="space-y-2">
                 {children.map((cat) => (
-                  <HelpCenterCategoryGroup
+                  <button
                     key={cat.id}
-                    category={cat}
-                    onNavigate={() => setFilters({ category: cat.id })}
-                    onEditArticle={onEditArticle}
-                    onDeleteArticle={onDeleteArticle}
-                  />
+                    type="button"
+                    onClick={() => setFilters({ category: cat.id })}
+                    className="w-full rounded-xl border border-border/50 bg-card overflow-hidden hover:bg-muted/40 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2 px-4 py-3">
+                      <span className="text-xl shrink-0">{cat.icon || '📁'}</span>
+                      <span className="font-medium text-sm text-foreground truncate">
+                        {cat.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                        {cat.articleCount} article{cat.articleCount === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </button>
                 ))}
               </div>
             </section>

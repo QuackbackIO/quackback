@@ -6,11 +6,9 @@ import type { HelpCenterStatusFilter } from './use-help-center-filters'
 
 interface HelpCenterActiveFiltersBarProps {
   status: HelpCenterStatusFilter
-  search?: string
   category?: string
   showDeleted?: boolean
   onClearStatus: () => void
-  onClearSearch: () => void
   onClearCategory: () => void
   onClearShowDeleted: () => void
   onClearAll: () => void
@@ -24,11 +22,9 @@ interface Chip {
 
 export function HelpCenterActiveFiltersBar({
   status,
-  search,
   category,
   showDeleted,
   onClearStatus,
-  onClearSearch,
   onClearCategory,
   onClearShowDeleted,
   onClearAll,
@@ -45,13 +41,6 @@ export function HelpCenterActiveFiltersBar({
       key: 'status',
       label: `Status: ${status === 'draft' ? 'Draft' : 'Published'}`,
       onRemove: onClearStatus,
-    })
-  }
-  if (search?.trim()) {
-    chips.push({
-      key: 'search',
-      label: `Search: "${search}"`,
-      onRemove: onClearSearch,
     })
   }
   if (categoryName) {
