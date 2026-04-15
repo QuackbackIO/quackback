@@ -758,7 +758,7 @@ Examples:
 - Filter by board and status: search({ boardId: "board_01abc...", status: "open" })
 - Search changelogs: search({ entity: "changelogs", status: "published" })
 - Search articles: search({ entity: "articles", query: "getting started" })
-- Filter articles by category: search({ entity: "articles", categoryId: "helpcenter_category_01abc..." })
+- Filter articles by category: search({ entity: "articles", categoryId: "category_01abc..." })
 - Sort by votes: search({ sort: "votes", limit: 10 })`,
     searchSchema,
     READ_ONLY,
@@ -801,8 +801,8 @@ Examples:
 Examples:
 - Get a post: get_details({ id: "post_01abc..." })
 - Get a changelog: get_details({ id: "changelog_01xyz..." })
-- Get an article: get_details({ id: "helpcenter_article_01abc..." })
-- Get a category: get_details({ id: "helpcenter_category_01abc..." })`,
+- Get an article: get_details({ id: "article_01abc..." })
+- Get a category: get_details({ id: "category_01abc..." })`,
     getDetailsSchema,
     READ_ONLY,
     async (args: GetDetailsArgs): Promise<CallToolResult> => {
@@ -813,7 +813,7 @@ Examples:
         } catch {
           return errorResult(
             new Error(
-              `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., helpcenter_article_01abc...)`
+              `Invalid TypeID format: "${args.id}". Expected format: prefix_base32suffix (e.g., post_01abc..., article_01abc...)`
             )
           )
         }
@@ -829,14 +829,14 @@ Examples:
             if (denied) return denied
             return await getChangelogDetails(args.id as ChangelogId)
           }
-          case 'helpcenter_article': {
+          case 'article': {
             const flagDenied = await requireHelpCenter()
             if (flagDenied) return flagDenied
             const denied = requireScope(auth, 'read:help-center')
             if (denied) return denied
             return await getArticleDetails(args.id as HelpCenterArticleId)
           }
-          case 'helpcenter_category': {
+          case 'category': {
             const flagDenied = await requireHelpCenter()
             if (flagDenied) return flagDenied
             const denied = requireScope(auth, 'read:help-center')
@@ -846,7 +846,7 @@ Examples:
           default:
             return errorResult(
               new Error(
-                `Unsupported entity type: "${prefix}". Supported: post, changelog, helpcenter_article, helpcenter_category`
+                `Unsupported entity type: "${prefix}". Supported: post, changelog, article, category`
               )
             )
         }
@@ -1684,8 +1684,8 @@ Examples:
     `Create a new help center article (draft). Use update_article to publish it.
 
 Examples:
-- create_article({ categoryId: "helpcenter_category_01abc...", title: "Getting Started", content: "Welcome to..." })
-- With custom slug: create_article({ categoryId: "helpcenter_category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })${CONTENT_FORMAT_BLOCK}`,
+- create_article({ categoryId: "category_01abc...", title: "Getting Started", content: "Welcome to..." })
+- With custom slug: create_article({ categoryId: "category_01abc...", title: "FAQ", content: "...", slug: "frequently-asked-questions" })${CONTENT_FORMAT_BLOCK}`,
     createHelpCenterArticleSchema,
     WRITE,
     async (args: CreateHelpCenterArticleArgs): Promise<CallToolResult> => {
@@ -1715,9 +1715,9 @@ Examples:
     `Update a help center article. All fields optional — only provided fields change. Set publishedAt to any ISO datetime string to publish immediately, or null to unpublish.
 
 Examples:
-- Update title: update_article({ articleId: "helpcenter_article_01abc...", title: "New Title" })
-- Publish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: "2026-04-08T00:00:00Z" })
-- Unpublish: update_article({ articleId: "helpcenter_article_01abc...", publishedAt: null })${CONTENT_FORMAT_BLOCK}`,
+- Update title: update_article({ articleId: "article_01abc...", title: "New Title" })
+- Publish: update_article({ articleId: "article_01abc...", publishedAt: "2026-04-08T00:00:00Z" })
+- Unpublish: update_article({ articleId: "article_01abc...", publishedAt: null })${CONTENT_FORMAT_BLOCK}`,
     updateHelpCenterArticleSchema,
     WRITE,
     async (args: UpdateHelpCenterArticleArgs): Promise<CallToolResult> => {
@@ -1754,7 +1754,7 @@ Examples:
     `Soft-delete a help center article.
 
 Example:
-- delete_article({ articleId: "helpcenter_article_01abc..." })`,
+- delete_article({ articleId: "article_01abc..." })`,
     deleteHelpCenterArticleSchema,
     DESTRUCTIVE,
     async (args: DeleteHelpCenterArticleArgs): Promise<CallToolResult> => {
@@ -1776,8 +1776,8 @@ Example:
 
 Examples:
 - Create: manage_category({ action: "create", name: "Getting Started", icon: "🚀" })
-- Update: manage_category({ action: "update", categoryId: "helpcenter_category_01abc...", name: "New Name" })
-- Delete: manage_category({ action: "delete", categoryId: "helpcenter_category_01abc..." })`,
+- Update: manage_category({ action: "update", categoryId: "category_01abc...", name: "New Name" })
+- Delete: manage_category({ action: "delete", categoryId: "category_01abc..." })`,
     manageCategorySchema,
     DESTRUCTIVE,
     async (args: ManageCategoryArgs): Promise<CallToolResult> => {

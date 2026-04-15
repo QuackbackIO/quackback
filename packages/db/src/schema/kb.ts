@@ -12,7 +12,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { principal, settings } from './auth'
+import { principal } from './auth'
 import type { TiptapContent } from '../types'
 
 const tsvector = customType<{ data: string }>({
@@ -34,8 +34,8 @@ const vector = customType<{ data: number[] }>({
 export const helpCenterCategories = pgTable(
   'kb_categories',
   {
-    id: typeIdWithDefault('helpcenter_category')('id').primaryKey(),
-    parentId: typeIdColumnNullable('helpcenter_category')('parent_id').references(
+    id: typeIdWithDefault('category')('id').primaryKey(),
+    parentId: typeIdColumnNullable('category')('parent_id').references(
       (): AnyPgColumn => helpCenterCategories.id,
       { onDelete: 'set null' }
     ),
@@ -64,8 +64,8 @@ export const helpCenterCategories = pgTable(
 export const helpCenterArticles = pgTable(
   'kb_articles',
   {
-    id: typeIdWithDefault('helpcenter_article')('id').primaryKey(),
-    categoryId: typeIdColumn('helpcenter_category')('category_id')
+    id: typeIdWithDefault('article')('id').primaryKey(),
+    categoryId: typeIdColumn('category')('category_id')
       .notNull()
       .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
     slug: text('slug').notNull(),
@@ -110,8 +110,8 @@ export const helpCenterArticles = pgTable(
 export const helpCenterArticleFeedback = pgTable(
   'kb_article_feedback',
   {
-    id: typeIdWithDefault('helpcenter_feedback')('id').primaryKey(),
-    articleId: typeIdColumn('helpcenter_article')('article_id')
+    id: typeIdWithDefault('article_feedback')('id').primaryKey(),
+    articleId: typeIdColumn('article')('article_id')
       .notNull()
       .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
     principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
@@ -167,34 +167,3 @@ export const helpCenterArticleFeedbackRelations = relations(
     }),
   })
 )
-
-// ============================================
-// Domain Verifications (custom domains for help center)
-// ============================================
-
-export const kbDomainVerifications = pgTable(
-  'kb_domain_verifications',
-  {
-    id: typeIdWithDefault('helpcenter_domain')('id').primaryKey(),
-    settingsId: typeIdColumn('workspace')('settings_id')
-      .notNull()
-      .references(() => settings.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull(),
-    status: text('status').default('pending').notNull(),
-    cnameTarget: text('cname_target').notNull(),
-    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
-    verifiedAt: timestamp('verified_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index('kb_domain_verifications_settings_id_idx').on(table.settingsId),
-    uniqueIndex('kb_domain_verifications_domain_idx').on(table.domain),
-  ]
-)
-
-export const kbDomainVerificationsRelations = relations(kbDomainVerifications, ({ one }) => ({
-  settings: one(settings, {
-    fields: [kbDomainVerifications.settingsId],
-    references: [settings.id],
-  }),
-}))
