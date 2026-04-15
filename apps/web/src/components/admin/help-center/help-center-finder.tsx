@@ -236,11 +236,17 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
   // Render
   // ---------------------------------------------------------------------------
 
-  const newButton = currentCategory ? (
-    <NewInsideDropdown
-      onNewArticle={() => setCreateArticleOpen(true)}
-      onNewSubcategory={() => openNewCategoryDialog(currentCategory.id)}
-    />
+  const headerActions = currentCategory ? (
+    <div className="flex items-center gap-1">
+      <CategoryActionsDropdown
+        onEdit={openEditCategoryDialog}
+        onDelete={() => setConfirmDeleteOpen(true)}
+      />
+      <NewInsideDropdown
+        onNewArticle={() => setCreateArticleOpen(true)}
+        onNewSubcategory={() => openNewCategoryDialog(currentCategory.id)}
+      />
+    </div>
   ) : (
     <NewAtRootDropdown
       onNewArticle={() => setCreateArticleOpen(true)}
@@ -260,7 +266,7 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
         sortOptions={SORT_OPTIONS}
         activeSort={filters.sort}
         onSortChange={(sort) => setFilters({ sort: sort as 'newest' | 'oldest' })}
-        action={newButton}
+        action={headerActions}
       >
         <div className="mt-1">
           <HelpCenterBreadcrumbs items={breadcrumbs} />
@@ -278,114 +284,100 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
         />
       </AdminListHeader>
 
-      {/* Category page title + action buttons — only shown when inside a category.
-          At the root view, the categories list below IS the page, so a top-level
-          "Help Center" header would just be redundant noise above it. */}
-      {currentCategory && (
-        <div className="px-3 pb-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            {titleIcon && <span>{titleIcon}</span>}
-            {currentCategory.name}
-          </h1>
-          <CategoryActionsDropdown
-            onEdit={openEditCategoryDialog}
-            onDelete={() => setConfirmDeleteOpen(true)}
-          />
-        </div>
-      )}
-
-      {/* When viewing a specific category: show direct articles, then sub-categories as collapsible groups */}
+      {/* When viewing a specific category: current category renders as a card
+          (matching the root card style), followed by sub-category cards. */}
       {currentCategory ? (
-        <>
-          {/* Direct articles in this category */}
-          <section className="px-3 pb-4">
-            <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              {`Articles (${articles.length}${hasNextPage ? '+' : ''})`}
-            </h2>
-            {isLoading ? (
-              <HelpCenterListSkeleton />
-            ) : articles.length === 0 ? (
-              <EmptyState
-                icon={QuestionMarkCircleIcon}
-                title={
-                  filters.search
-                    ? 'No articles match your search'
-                    : hasActiveFilters
-                      ? 'No articles match your filters'
-                      : 'No articles in this category yet'
-                }
-                action={
-                  hasActiveFilters ? (
-                    <Button variant="outline" size="sm" onClick={clearFilters}>
-                      Clear all filters
-                    </Button>
-                  ) : undefined
-                }
-                className="h-48"
-              />
-            ) : (
-              <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-                {articles.map((article, index) => (
-                  <div
-                    key={article.id}
-                    className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-                    style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-                  >
-                    <HelpCenterListItem
-                      id={article.id as HelpCenterArticleId}
-                      title={article.title}
-                      content={article.content}
-                      publishedAt={article.publishedAt}
-                      createdAt={article.createdAt}
-                      category={article.category}
-                      author={article.author}
-                      viewCount={article.viewCount}
-                      helpfulCount={article.helpfulCount}
-                      onEdit={onEditArticle}
-                      onDelete={onDeleteArticle}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            {hasNextPage && (
-              <div ref={loadMoreRef} className="mt-3 flex justify-center">
-                {isFetchingNextPage ? (
-                  <Spinner />
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => fetchNextPage()}
-                    className="text-muted-foreground"
-                  >
-                    Load more
-                  </Button>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* Sub-categories as collapsible groups */}
-          {children.length > 0 && (
-            <section className="px-3 pb-4">
-              <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Sub-categories
-              </h2>
-              <div className="space-y-2">
-                {children.map((sub) => (
-                  <HelpCenterCategoryGroup
-                    key={sub.id}
-                    category={sub}
-                    onNavigate={() => setFilters({ category: sub.id })}
-                    onEditArticle={onEditArticle}
-                    onDeleteArticle={onDeleteArticle}
+        <section className="px-3 pb-4 space-y-2">
+          {/* Current category as a card — always expanded since the user
+              navigated into it. No chevron, just header + articles. */}
+          <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3">
+              <span className="text-xl shrink-0">{titleIcon || '📁'}</span>
+              <span className="font-medium text-sm text-foreground truncate">
+                {currentCategory.name}
+              </span>
+              <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                {articles.length}
+                {hasNextPage ? '+' : ''} article{articles.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="border-t border-border/50">
+              {isLoading ? (
+                <div className="p-3">
+                  <HelpCenterListSkeleton />
+                </div>
+              ) : articles.length === 0 ? (
+                <div className="px-4 py-6">
+                  <EmptyState
+                    icon={QuestionMarkCircleIcon}
+                    title={
+                      filters.search
+                        ? 'No articles match your search'
+                        : hasActiveFilters
+                          ? 'No articles match your filters'
+                          : 'No articles in this category yet'
+                    }
+                    action={
+                      hasActiveFilters ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear all filters
+                        </Button>
+                      ) : undefined
+                    }
+                    className="h-32"
                   />
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {articles.map((article, index) => (
+                    <div
+                      key={article.id}
+                      className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                      style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+                    >
+                      <HelpCenterListItem
+                        id={article.id as HelpCenterArticleId}
+                        title={article.title}
+                        content={article.content}
+                        publishedAt={article.publishedAt}
+                        createdAt={article.createdAt}
+                        category={article.category}
+                        author={article.author}
+                        viewCount={article.viewCount}
+                        helpfulCount={article.helpfulCount}
+                        onEdit={onEditArticle}
+                        onDelete={onDeleteArticle}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {hasNextPage && (
+                <div ref={loadMoreRef} className="border-t border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="w-full text-center py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                  >
+                    {isFetchingNextPage ? 'Loading…' : 'Load more articles'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sub-categories as collapsible cards */}
+          {children.map((sub) => (
+            <HelpCenterCategoryGroup
+              key={sub.id}
+              category={sub}
+              onNavigate={() => setFilters({ category: sub.id })}
+              onEditArticle={onEditArticle}
+              onDeleteArticle={onDeleteArticle}
+            />
+          ))}
+        </section>
       ) : (
         /* Top-level view: show categories as collapsible groups */
         <>
