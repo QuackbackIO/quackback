@@ -8,6 +8,7 @@ export interface HelpCenterFilters {
   status: HelpCenterStatusFilter
   category?: string
   search?: string
+  sort: 'newest' | 'oldest'
   showDeleted?: boolean
 }
 
@@ -20,9 +21,10 @@ export function useHelpCenterFilters() {
       status: search.status ?? 'all',
       category: search.category,
       search: search.search,
+      sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
     }),
-    [search.status, search.category, search.search, search.deleted]
+    [search.status, search.category, search.search, search.sort, search.deleted]
   )
 
   const setFilters = useCallback(
@@ -39,6 +41,9 @@ export function useHelpCenterFilters() {
           }),
           ...('search' in updates && {
             search: updates.search || undefined,
+          }),
+          ...('sort' in updates && {
+            sort: updates.sort === 'newest' ? undefined : updates.sort,
           }),
           ...('showDeleted' in updates && {
             deleted: updates.showDeleted || undefined,
@@ -59,8 +64,10 @@ export function useHelpCenterFilters() {
   }, [navigate])
 
   const hasActiveFilters = useMemo(() => {
-    return filters.status !== 'all' || !!filters.search || !!filters.showDeleted
-  }, [filters.status, filters.search, filters.showDeleted])
+    return (
+      filters.status !== 'all' || !!filters.search || !!filters.showDeleted || !!filters.category
+    )
+  }, [filters.status, filters.search, filters.showDeleted, filters.category])
 
   return {
     filters,

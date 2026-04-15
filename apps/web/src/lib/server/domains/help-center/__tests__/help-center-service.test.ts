@@ -131,6 +131,7 @@ vi.mock('@/lib/server/db', () => ({
   isNotNull: vi.fn(),
   lte: vi.fn(),
   lt: vi.fn(),
+  gt: vi.fn(),
   desc: vi.fn(),
   asc: vi.fn(),
   sql: vi.fn(() => {
@@ -1411,5 +1412,67 @@ describe('listArticles with showDeleted option', () => {
     const result = await listArticles({})
     expect(result.items).toHaveLength(1)
     expect(result.items[0].title).toBe('Live Article')
+  })
+})
+
+// ============================================================================
+// listArticles sort param tests
+// ============================================================================
+
+describe('listArticles sort param', () => {
+  function makeArticle(id: string, title: string) {
+    return {
+      id: id as HelpCenterArticleId,
+      slug: id,
+      title,
+      description: null,
+      position: null,
+      content: 'Content',
+      categoryId: 'helpcenter_category_1',
+      principalId: null,
+      publishedAt: null,
+      viewCount: 0,
+      helpfulCount: 0,
+      notHelpfulCount: 0,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+      deletedAt: null,
+    }
+  }
+
+  beforeEach(() => {
+    mockCategoryFindMany.mockResolvedValue([
+      { id: 'helpcenter_category_1', slug: 'cat', name: 'Category' },
+    ])
+  })
+
+  it('returns articles with sort=newest (default)', async () => {
+    const { asc: ascMock, desc: descMock } = await import('@/lib/server/db')
+    mockArticleFindMany.mockResolvedValue([makeArticle('helpcenter_article_1', 'Article A')])
+
+    const result = await listArticles({ sort: 'newest' })
+    expect(result.items).toHaveLength(1)
+    // desc should be called for newest order
+    expect(descMock).toHaveBeenCalled()
+    expect(ascMock).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'created_at' }))
+  })
+
+  it('returns articles with sort=oldest using asc order', async () => {
+    const { asc: ascMock } = await import('@/lib/server/db')
+    mockArticleFindMany.mockResolvedValue([makeArticle('helpcenter_article_2', 'Article B')])
+
+    const result = await listArticles({ sort: 'oldest' })
+    expect(result.items).toHaveLength(1)
+    // asc should be called for oldest order
+    expect(ascMock).toHaveBeenCalled()
+  })
+
+  it('defaults to newest when sort is not provided', async () => {
+    const { desc: descMock } = await import('@/lib/server/db')
+    mockArticleFindMany.mockResolvedValue([makeArticle('helpcenter_article_3', 'Article C')])
+
+    const result = await listArticles({})
+    expect(result.items).toHaveLength(1)
+    expect(descMock).toHaveBeenCalled()
   })
 })

@@ -16,6 +16,7 @@ import {
   isNotNull,
   lte,
   lt,
+  gt,
   or,
   desc,
   asc,
@@ -429,7 +430,15 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
 }
 
 export async function listArticles(params: ListArticlesParams): Promise<ArticleListResult> {
-  const { categoryId, status = 'all', search, cursor, limit = 20, showDeleted = false } = params
+  const {
+    categoryId,
+    status = 'all',
+    search,
+    cursor,
+    limit = 20,
+    showDeleted = false,
+    sort = 'newest',
+  } = params
   const now = new Date()
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -466,17 +475,34 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
       columns: { createdAt: true },
     })
     if (cursorEntry?.createdAt) {
-      conditions.push(
-        or(
-          lt(helpCenterArticles.createdAt, cursorEntry.createdAt),
-          and(
-            eq(helpCenterArticles.createdAt, cursorEntry.createdAt),
-            lt(helpCenterArticles.id, cursor as HelpCenterArticleId)
-          )
-        )!
-      )
+      if (sort === 'oldest') {
+        conditions.push(
+          or(
+            gt(helpCenterArticles.createdAt, cursorEntry.createdAt),
+            and(
+              eq(helpCenterArticles.createdAt, cursorEntry.createdAt),
+              gt(helpCenterArticles.id, cursor as HelpCenterArticleId)
+            )
+          )!
+        )
+      } else {
+        conditions.push(
+          or(
+            lt(helpCenterArticles.createdAt, cursorEntry.createdAt),
+            and(
+              eq(helpCenterArticles.createdAt, cursorEntry.createdAt),
+              lt(helpCenterArticles.id, cursor as HelpCenterArticleId)
+            )
+          )!
+        )
+      }
     }
   }
+
+  const orderByClause =
+    sort === 'oldest'
+      ? [asc(helpCenterArticles.createdAt), asc(helpCenterArticles.id)]
+      : [desc(helpCenterArticles.createdAt), desc(helpCenterArticles.id)]
 
   // Exclude heavy columns (contentJson, embedding, searchVector) from the list
   // query — the list UI only needs metadata + a short preview of `content`.
@@ -484,7 +510,7 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
   // the perf audit that motivated this.
   const articles = await db.query.helpCenterArticles.findMany({
     where: and(...conditions),
-    orderBy: [desc(helpCenterArticles.createdAt), desc(helpCenterArticles.id)],
+    orderBy: orderByClause,
     limit: limit + 1,
     columns: {
       id: true,

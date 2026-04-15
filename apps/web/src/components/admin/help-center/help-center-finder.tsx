@@ -10,6 +10,7 @@ import {
   ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
@@ -34,11 +35,35 @@ import {
 } from '@/lib/client/mutations/help-center'
 import { collectDescendantIds } from '@/lib/server/domains/help-center/category-tree'
 import { useHelpCenterFilters } from './use-help-center-filters'
+import { HelpCenterActiveFiltersBar } from './help-center-active-filters-bar'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { HelpCenterArticleId, HelpCenterCategoryId } from '@quackback/ids'
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+]
+
+function HelpCenterListSkeleton() {
+  return (
+    <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="p-4">
+          <Skeleton className="h-5 w-16 rounded-full mb-1" />
+          <Skeleton className="h-5 w-3/4 mb-1" />
+          <Skeleton className="h-3 w-full mb-2.5" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface HelpCenterFinderProps {
   onEditArticle: (id: HelpCenterArticleId) => void
@@ -57,7 +82,7 @@ export function HelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterF
 }
 
 function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFinderProps) {
-  const { filters, setFilters } = useHelpCenterFilters()
+  const { filters, setFilters, clearFilters, hasActiveFilters } = useHelpCenterFilters()
 
   const [createArticleOpen, setCreateArticleOpen] = useState(false)
 
@@ -117,6 +142,7 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
       categoryId: filters.category,
       status: filters.status === 'all' ? undefined : filters.status,
       search: filters.search,
+      sort: filters.sort,
     }),
     // Only fetch when inside a category — the top-level view renders collapsible
     // groups that fetch their own article lists on demand.
@@ -211,6 +237,18 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
   // Render
   // ---------------------------------------------------------------------------
 
+  const newButton = currentCategory ? (
+    <NewInsideDropdown
+      onNewArticle={() => setCreateArticleOpen(true)}
+      onNewSubcategory={() => openNewCategoryDialog(currentCategory.id)}
+    />
+  ) : (
+    <NewAtRootDropdown
+      onNewArticle={() => setCreateArticleOpen(true)}
+      onNewCategory={() => openNewCategoryDialog(null)}
+    />
+  )
+
   return (
     <div className="max-w-5xl mx-auto w-full">
       {/* Breadcrumbs + search header */}
@@ -220,10 +258,25 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
         searchPlaceholder={
           currentCategory ? `Search in ${currentCategory.name}...` : 'Search all articles...'
         }
+        sortOptions={SORT_OPTIONS}
+        activeSort={filters.sort}
+        onSortChange={(sort) => setFilters({ sort: sort as 'newest' | 'oldest' })}
+        action={newButton}
       >
         <div className="mt-1">
           <HelpCenterBreadcrumbs items={breadcrumbs} />
         </div>
+        <HelpCenterActiveFiltersBar
+          status={filters.status}
+          search={filters.search}
+          category={filters.category}
+          showDeleted={filters.showDeleted}
+          onClearStatus={() => setFilters({ status: 'all' })}
+          onClearSearch={() => setFilters({ search: undefined })}
+          onClearCategory={() => setFilters({ category: undefined })}
+          onClearShowDeleted={() => setFilters({ showDeleted: undefined })}
+          onClearAll={clearFilters}
+        />
       </AdminListHeader>
 
       {/* Category/page title + action buttons */}
@@ -232,25 +285,12 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
           {titleIcon && <span>{titleIcon}</span>}
           {title}
         </h1>
-        <div className="flex items-center gap-2">
-          {currentCategory ? (
-            <>
-              <CategoryActionsDropdown
-                onEdit={openEditCategoryDialog}
-                onDelete={() => setConfirmDeleteOpen(true)}
-              />
-              <NewInsideDropdown
-                onNewArticle={() => setCreateArticleOpen(true)}
-                onNewSubcategory={() => openNewCategoryDialog(currentCategory.id)}
-              />
-            </>
-          ) : (
-            <NewAtRootDropdown
-              onNewArticle={() => setCreateArticleOpen(true)}
-              onNewCategory={() => openNewCategoryDialog(null)}
-            />
-          )}
-        </div>
+        {currentCategory && (
+          <CategoryActionsDropdown
+            onEdit={openEditCategoryDialog}
+            onDelete={() => setConfirmDeleteOpen(true)}
+          />
+        )}
       </div>
 
       {/* When viewing a specific category: show direct articles, then sub-categories as collapsible groups */}
@@ -262,16 +302,23 @@ function LiveHelpCenterFinder({ onEditArticle, onDeleteArticle }: HelpCenterFind
               {`Articles (${articles.length}${hasNextPage ? '+' : ''})`}
             </h2>
             {isLoading ? (
-              <div className="flex justify-center py-8">
-                <Spinner />
-              </div>
+              <HelpCenterListSkeleton />
             ) : articles.length === 0 ? (
               <EmptyState
                 icon={QuestionMarkCircleIcon}
                 title={
                   filters.search
                     ? 'No articles match your search'
-                    : 'No articles in this category yet'
+                    : hasActiveFilters
+                      ? 'No articles match your filters'
+                      : 'No articles in this category yet'
+                }
+                action={
+                  hasActiveFilters ? (
+                    <Button variant="outline" size="sm" onClick={clearFilters}>
+                      Clear all filters
+                    </Button>
+                  ) : undefined
                 }
                 className="h-48"
               />

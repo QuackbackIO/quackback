@@ -84,6 +84,7 @@ export const listArticlesSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
   showDeleted: z.boolean().optional(),
+  sort: z.enum(['newest', 'oldest']).optional(),
 })
 
 export const listPublicArticlesSchema = z.object({

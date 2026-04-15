@@ -27,8 +27,12 @@ export const helpCenterKeys = {
   publicCategories: () => [...helpCenterKeys.all, 'public-categories'] as const,
   articles: () => [...helpCenterKeys.all, 'articles'] as const,
   articleLists: () => [...helpCenterKeys.articles(), 'list'] as const,
-  articleList: (filters: { categoryId?: string; status?: string; showDeleted?: boolean }) =>
-    [...helpCenterKeys.articleLists(), filters] as const,
+  articleList: (filters: {
+    categoryId?: string
+    status?: string
+    sort?: string
+    showDeleted?: boolean
+  }) => [...helpCenterKeys.articleLists(), filters] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: HelpCenterArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
@@ -53,6 +57,7 @@ export const helpCenterQueries = {
     categoryId?: string
     status?: 'draft' | 'published' | 'all'
     search?: string
+    sort?: 'newest' | 'oldest'
     showDeleted?: boolean
   }) =>
     infiniteQueryOptions({
@@ -63,6 +68,7 @@ export const helpCenterQueries = {
             categoryId: params.categoryId,
             status: params.status,
             search: params.search,
+            sort: params.sort,
             cursor: pageParam,
             limit: 20,
             showDeleted: params.showDeleted,

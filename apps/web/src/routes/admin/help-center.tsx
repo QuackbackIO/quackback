@@ -6,6 +6,7 @@ const searchSchema = z.object({
   status: z.enum(['draft', 'published']).optional(),
   category: z.string().optional(),
   search: z.string().optional(),
+  sort: z.enum(['newest', 'oldest']).optional(),
   deleted: z.boolean().optional(),
 })
 
