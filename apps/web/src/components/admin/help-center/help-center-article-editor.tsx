@@ -163,14 +163,23 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
             </Button>
 
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+              <Link
+                to="/admin/help-center"
+                className="hover:text-foreground transition-colors truncate"
+              >
+                Help Center
+              </Link>
               {article.category && (
-                <Link
-                  to="/admin/help-center"
-                  search={{ category: article.categoryId }}
-                  className="hover:text-foreground transition-colors truncate"
-                >
-                  {article.category.name}
-                </Link>
+                <>
+                  <span className="shrink-0 text-muted-foreground/50">/</span>
+                  <Link
+                    to="/admin/help-center"
+                    search={{ category: article.categoryId }}
+                    className="hover:text-foreground transition-colors truncate"
+                  >
+                    {article.category.name}
+                  </Link>
+                </>
               )}
             </div>
 
