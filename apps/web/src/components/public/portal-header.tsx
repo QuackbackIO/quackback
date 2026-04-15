@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
+import { buildNavItems } from './portal-header-nav'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -44,12 +45,6 @@ interface PortalHeaderProps {
   showThemeToggle?: boolean
 }
 
-const NAV_ITEMS = [
-  { to: '/', messageId: 'portal.header.nav.feedback', defaultMessage: 'Feedback' },
-  { to: '/roadmap', messageId: 'portal.header.nav.roadmap', defaultMessage: 'Roadmap' },
-  { to: '/changelog', messageId: 'portal.header.nav.changelog', defaultMessage: 'Changelog' },
-] as const
-
 export function PortalHeader({
   orgName,
   orgLogo,
@@ -61,7 +56,13 @@ export function PortalHeader({
   const router = useRouter()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { session } = useRouteContext({ from: '__root__' })
+  const { session, settings } = useRouteContext({ from: '__root__' })
+
+  const helpCenterEnabled =
+    !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
+  const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
+  const navItems = buildNavItems({ helpCenterEnabled })
+
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
   const { theme, setTheme } = useTheme()
@@ -107,11 +108,13 @@ export function PortalHeader({
   // Navigation component
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1">
-      {NAV_ITEMS.map((item) => {
+      {navItems.map((item) => {
         const isActive =
           item.to === '/'
             ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
-            : pathname.startsWith(item.to)
+            : item.to === '/hc'
+              ? onHelpPages
+              : pathname.startsWith(item.to)
 
         return (
           <Link

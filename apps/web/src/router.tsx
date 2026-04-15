@@ -22,7 +22,6 @@ export function getRouter() {
     defaultPendingMinMs: 0,
     context: {
       queryClient,
-      helpCenterHost: false,
     },
     defaultErrorComponent: DefaultErrorPage,
     defaultNotFoundComponent: NotFoundPage,

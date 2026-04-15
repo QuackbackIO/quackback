@@ -439,12 +439,7 @@ function BrandingPage() {
               </div>
             }
           >
-            <ThemePreview
-              previewMode={state.previewMode}
-              logoUrl={state.logoUrl}
-              workspaceName={workspaceName || 'My Workspace'}
-              cssVariables={state.parsedCssVariables}
-            />
+            <ThemePreview previewMode={state.previewMode} cssVariables={state.parsedCssVariables} />
           </BrandingPreviewPanel>
         </BrandingLayout>
       </div>

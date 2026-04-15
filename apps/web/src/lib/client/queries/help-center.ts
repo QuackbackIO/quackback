@@ -22,11 +22,17 @@ const STALE_TIME_MEDIUM = 60 * 1000
 export const helpCenterKeys = {
   all: ['help-center'] as const,
   categories: () => [...helpCenterKeys.all, 'categories'] as const,
+  categoriesList: (options: { showDeleted?: boolean } = {}) =>
+    [...helpCenterKeys.categories(), options] as const,
   publicCategories: () => [...helpCenterKeys.all, 'public-categories'] as const,
   articles: () => [...helpCenterKeys.all, 'articles'] as const,
   articleLists: () => [...helpCenterKeys.articles(), 'list'] as const,
-  articleList: (filters: { categoryId?: string; status?: string }) =>
-    [...helpCenterKeys.articleLists(), filters] as const,
+  articleList: (filters: {
+    categoryId?: string
+    status?: string
+    sort?: string
+    showDeleted?: boolean
+  }) => [...helpCenterKeys.articleLists(), filters] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: HelpCenterArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
@@ -40,10 +46,10 @@ export const helpCenterKeys = {
 // ============================================================================
 
 export const helpCenterQueries = {
-  categories: () =>
+  categories: (options: { showDeleted?: boolean } = {}) =>
     queryOptions({
-      queryKey: helpCenterKeys.categories(),
-      queryFn: () => listCategoriesFn({ data: {} }),
+      queryKey: helpCenterKeys.categoriesList(options),
+      queryFn: () => listCategoriesFn({ data: { showDeleted: options.showDeleted } }),
       staleTime: STALE_TIME_SHORT,
     }),
 
@@ -51,6 +57,8 @@ export const helpCenterQueries = {
     categoryId?: string
     status?: 'draft' | 'published' | 'all'
     search?: string
+    sort?: 'newest' | 'oldest'
+    showDeleted?: boolean
   }) =>
     infiniteQueryOptions({
       queryKey: helpCenterKeys.articleList(params),
@@ -60,8 +68,10 @@ export const helpCenterQueries = {
             categoryId: params.categoryId,
             status: params.status,
             search: params.search,
+            sort: params.sort,
             cursor: pageParam,
             limit: 20,
+            showDeleted: params.showDeleted,
           },
         }),
       initialPageParam: undefined as string | undefined,

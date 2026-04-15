@@ -307,27 +307,19 @@ export const DEFAULT_HELP_CENTER_SEO_CONFIG: HelpCenterSeoConfig = {
 
 /**
  * Help center configuration
- * Controls the standalone knowledge base behavior
+ * Controls the inline knowledge base behavior (always public, always inside the portal)
  */
 export interface HelpCenterConfig {
   enabled: boolean
-  subdomain: string | null
-  customDomain: string | null
-  domainVerified: boolean
   homepageTitle: string
   homepageDescription: string
-  access: 'public' | 'authenticated'
   seo: HelpCenterSeoConfig
 }
 
 export const DEFAULT_HELP_CENTER_CONFIG: HelpCenterConfig = {
   enabled: false,
-  subdomain: null,
-  customDomain: null,
-  domainVerified: false,
   homepageTitle: 'How can we help?',
   homepageDescription: 'Search our knowledge base or browse by category',
-  access: 'public',
   seo: DEFAULT_HELP_CENTER_SEO_CONFIG,
 }
 

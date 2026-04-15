@@ -10,11 +10,13 @@ import {
   createCategoryFn,
   updateCategoryFn,
   deleteCategoryFn,
+  restoreCategoryFn,
   createArticleFn,
   updateArticleFn,
   publishArticleFn,
   unpublishArticleFn,
   deleteArticleFn,
+  restoreArticleFn,
 } from '@/lib/server/functions/help-center'
 import { helpCenterKeys } from '@/lib/client/queries/help-center'
 import type {
@@ -56,6 +58,18 @@ export function useDeleteCategory() {
     mutationFn: (id: HelpCenterCategoryId) => deleteCategoryFn({ data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.publicCategories() })
+    },
+  })
+}
+
+export function useRestoreCategory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: HelpCenterCategoryId) => restoreCategoryFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.publicCategories() })
     },
   })
@@ -125,6 +139,17 @@ export function useDeleteArticle() {
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
       queryClient.invalidateQueries({ queryKey: helpCenterKeys.public() })
+    },
+  })
+}
+
+export function useRestoreArticle() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: HelpCenterArticleId) => restoreArticleFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.articleLists() })
+      queryClient.invalidateQueries({ queryKey: helpCenterKeys.categories() })
     },
   })
 }

@@ -63,7 +63,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
 
         try {
           const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'helpcenter_category', 'category ID')
+          const validationError = validateTypeId(categoryId, 'category', 'category ID')
           if (validationError) return validationError
 
           const category = await getCategoryById(categoryId as HelpCenterCategoryId)
@@ -80,7 +80,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
 
         try {
           const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'helpcenter_category', 'category ID')
+          const validationError = validateTypeId(categoryId, 'category', 'category ID')
           if (validationError) return validationError
 
           const body = await request.json()
@@ -106,7 +106,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
 
         try {
           const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'helpcenter_category', 'category ID')
+          const validationError = validateTypeId(categoryId, 'category', 'category ID')
           if (validationError) return validationError
 
           await deleteCategory(categoryId as HelpCenterCategoryId)

@@ -14,6 +14,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  restoreCategory,
   listArticles,
   listPublicArticles,
   listPublicArticlesForCategory,
@@ -24,9 +25,11 @@ import {
   publishArticle,
   unpublishArticle,
   deleteArticle,
+  restoreArticle,
   recordArticleFeedback,
 } from '@/lib/server/domains/help-center/help-center.service'
 import {
+  listCategoriesSchema,
   getCategorySchema,
   deleteCategorySchema,
   createCategorySchema,
@@ -42,6 +45,8 @@ import {
   articleFeedbackSchema,
   getCategoryBySlugSchema,
   getArticleBySlugSchema,
+  restoreCategorySchema,
+  restoreArticleSchema,
 } from '@/lib/shared/schemas/help-center'
 import { z } from 'zod'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
@@ -50,22 +55,26 @@ import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 // Helper: serialize article dates
 // ============================================================================
 
-function serializeArticle<T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null }>(
-  article: T
-) {
+function serializeArticle<
+  T extends { createdAt: Date; updatedAt: Date; publishedAt: Date | null; deletedAt?: Date | null },
+>(article: T) {
   return {
     ...article,
     createdAt: toIsoString(article.createdAt),
     updatedAt: toIsoString(article.updatedAt),
     publishedAt: toIsoStringOrNull(article.publishedAt),
+    deletedAt: toIsoStringOrNull(article.deletedAt ?? null),
   }
 }
 
-function serializeCategory<T extends { createdAt: Date; updatedAt: Date }>(cat: T) {
+function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deletedAt?: Date | null }>(
+  cat: T
+) {
   return {
     ...cat,
     createdAt: toIsoString(cat.createdAt),
     updatedAt: toIsoString(cat.updatedAt),
+    deletedAt: 'deletedAt' in cat ? toIsoStringOrNull(cat.deletedAt ?? null) : undefined,
   }
 }
 
@@ -74,10 +83,10 @@ function serializeCategory<T extends { createdAt: Date; updatedAt: Date }>(cat: 
 // ============================================================================
 
 export const listCategoriesFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({}))
-  .handler(async () => {
+  .inputValidator(listCategoriesSchema)
+  .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
-    const categories = await listCategories()
+    const categories = await listCategories({ showDeleted: data.showDeleted })
     return categories.map(serializeCategory)
   })
 
@@ -139,6 +148,36 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
     return {
       ...result,
       items: result.items.map(serializeArticle),
+    }
+  })
+
+export const restoreCategoryFn = createServerFn({ method: 'POST' })
+  .inputValidator(restoreCategorySchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:help-center] restoreCategoryFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      const category = await restoreCategory(data.id as HelpCenterCategoryId)
+      console.log(`[fn:help-center] restoreCategoryFn: restored id=${category.id}`)
+      return serializeCategory(category)
+    } catch (error) {
+      console.error(`[fn:help-center] restoreCategoryFn failed:`, error)
+      throw error
+    }
+  })
+
+export const restoreArticleFn = createServerFn({ method: 'POST' })
+  .inputValidator(restoreArticleSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:help-center] restoreArticleFn: id=${data.id}`)
+    try {
+      await requireAuth({ roles: ['admin', 'member'] })
+      const article = await restoreArticle(data.id as HelpCenterArticleId)
+      console.log(`[fn:help-center] restoreArticleFn: restored id=${article.id}`)
+      return serializeArticle(article)
+    } catch (error) {
+      console.error(`[fn:help-center] restoreArticleFn failed:`, error)
+      throw error
     }
   })
 

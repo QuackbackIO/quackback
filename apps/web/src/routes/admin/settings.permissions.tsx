@@ -62,11 +62,22 @@ function PermissionsPage() {
   const [isPending, startTransition] = useTransition()
 
   const features = portalConfigQuery.data.features
+
+  // Portal access
+  const [publicView, setPublicView] = useState(features?.publicView ?? true)
+
+  // Action toggles — signed-in + anonymous per action
+  const [submissions, setSubmissions] = useState(features?.submissions ?? true)
   const [anonPosting, setAnonPosting] = useState(features?.anonymousPosting ?? false)
+  const [comments, setComments] = useState(features?.comments ?? true)
   const [anonCommenting, setAnonCommenting] = useState(features?.anonymousCommenting ?? false)
+  const [voting, setVoting] = useState(features?.voting ?? true)
   const [anonVoting, setAnonVoting] = useState(features?.anonymousVoting ?? true)
+
+  // Content toggles
   const [richMediaInPosts, setRichMediaInPosts] = useState(features?.richMediaInPosts ?? true)
   const [videoEmbedsInPosts, setVideoEmbedsInPosts] = useState(features?.videoEmbedsInPosts ?? true)
+
   const [savingField, setSavingField] = useState<string | null>(null)
 
   async function updateFeature(key: string, value: boolean, revert: () => void) {
@@ -93,62 +104,119 @@ function PermissionsPage() {
       <PageHeader
         icon={ShieldCheckIcon}
         title="Permissions"
-        description="Change who can post, comment and upvote under your organization."
+        description="Control who can access your portal and what they can do."
       />
 
-      <SettingsCard
-        title="Anonymous Access"
-        description="Control what actions visitors can take without signing in. Anonymous users cannot receive notifications."
-      >
+      <SettingsCard title="Portal access" description="Who can see your feedback portal.">
         <div className="divide-y divide-border/50">
           <PermissionToggle
-            id="anon-posting"
-            label="Anonymous Posting"
-            description="Anyone can create submissions without authenticating."
-            checked={anonPosting}
-            saving={savingField === 'anonymousPosting'}
+            id="public-view"
+            label="Public view"
+            description="Let anyone browse posts without signing in."
+            checked={publicView}
+            saving={savingField === 'publicView'}
             onCheckedChange={(checked) => {
-              setAnonPosting(checked)
-              updateFeature('anonymousPosting', checked, () => setAnonPosting(!checked))
-            }}
-            disabled={isBusy}
-          />
-          <PermissionToggle
-            id="anon-commenting"
-            label="Anonymous Commenting"
-            description="Users will be able to comment on posts without signing in."
-            checked={anonCommenting}
-            saving={savingField === 'anonymousCommenting'}
-            onCheckedChange={(checked) => {
-              setAnonCommenting(checked)
-              updateFeature('anonymousCommenting', checked, () => setAnonCommenting(!checked))
-            }}
-            disabled={isBusy}
-          />
-          <PermissionToggle
-            id="anon-voting"
-            label="Anonymous Upvoting"
-            description="Users will be able to upvote posts without having to sign in."
-            checked={anonVoting}
-            saving={savingField === 'anonymousVoting'}
-            onCheckedChange={(checked) => {
-              setAnonVoting(checked)
-              updateFeature('anonymousVoting', checked, () => setAnonVoting(!checked))
+              setPublicView(checked)
+              updateFeature('publicView', checked, () => setPublicView(!checked))
             }}
             disabled={isBusy}
           />
         </div>
       </SettingsCard>
 
-      <SettingsCard
-        title="Content"
-        description="Control what rich content types are available when creating and editing posts."
-      >
+      <SettingsCard title="Submissions" description="Who can create new posts.">
+        <div className="divide-y divide-border/50">
+          <PermissionToggle
+            id="submissions"
+            label="Signed-in users can submit"
+            description="Allow users to submit new posts."
+            checked={submissions}
+            saving={savingField === 'submissions'}
+            onCheckedChange={(checked) => {
+              setSubmissions(checked)
+              updateFeature('submissions', checked, () => setSubmissions(!checked))
+            }}
+            disabled={isBusy}
+          />
+          <PermissionToggle
+            id="anon-posting"
+            label="Anonymous users can submit"
+            description="Let visitors submit without an account."
+            checked={anonPosting}
+            saving={savingField === 'anonymousPosting'}
+            onCheckedChange={(checked) => {
+              setAnonPosting(checked)
+              updateFeature('anonymousPosting', checked, () => setAnonPosting(!checked))
+            }}
+            disabled={isBusy || !submissions}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Comments" description="Who can comment on posts.">
+        <div className="divide-y divide-border/50">
+          <PermissionToggle
+            id="comments"
+            label="Signed-in users can comment"
+            description="Allow users to comment on posts."
+            checked={comments}
+            saving={savingField === 'comments'}
+            onCheckedChange={(checked) => {
+              setComments(checked)
+              updateFeature('comments', checked, () => setComments(!checked))
+            }}
+            disabled={isBusy}
+          />
+          <PermissionToggle
+            id="anon-commenting"
+            label="Anonymous users can comment"
+            description="Let visitors comment without an account."
+            checked={anonCommenting}
+            saving={savingField === 'anonymousCommenting'}
+            onCheckedChange={(checked) => {
+              setAnonCommenting(checked)
+              updateFeature('anonymousCommenting', checked, () => setAnonCommenting(!checked))
+            }}
+            disabled={isBusy || !comments}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Voting" description="Who can upvote posts.">
+        <div className="divide-y divide-border/50">
+          <PermissionToggle
+            id="voting"
+            label="Signed-in users can vote"
+            description="Allow users to upvote posts."
+            checked={voting}
+            saving={savingField === 'voting'}
+            onCheckedChange={(checked) => {
+              setVoting(checked)
+              updateFeature('voting', checked, () => setVoting(!checked))
+            }}
+            disabled={isBusy}
+          />
+          <PermissionToggle
+            id="anon-voting"
+            label="Anonymous users can vote"
+            description="Let visitors upvote without an account."
+            checked={anonVoting}
+            saving={savingField === 'anonymousVoting'}
+            onCheckedChange={(checked) => {
+              setAnonVoting(checked)
+              updateFeature('anonymousVoting', checked, () => setAnonVoting(!checked))
+            }}
+            disabled={isBusy || !voting}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Post content" description="What users can add to their posts.">
         <div className="divide-y divide-border/50">
           <PermissionToggle
             id="rich-media-in-posts"
-            label="Rich Media in Posts"
-            description="Allow images, tables, and embedded videos when writing feedback posts."
+            label="Allow images in posts"
+            description="Let users attach images when writing posts."
             checked={richMediaInPosts}
             saving={savingField === 'richMediaInPosts'}
             onCheckedChange={(checked) => {
@@ -159,8 +227,8 @@ function PermissionsPage() {
           />
           <PermissionToggle
             id="video-embeds-in-posts"
-            label="Video Embeds in Posts"
-            description="Allow YouTube and other video embeds inside post content. Only applies when rich media is enabled."
+            label="Allow videos in posts"
+            description="Let users embed YouTube and other videos in posts."
             checked={videoEmbedsInPosts}
             saving={savingField === 'videoEmbedsInPosts'}
             onCheckedChange={(checked) => {

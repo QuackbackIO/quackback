@@ -6,6 +6,7 @@ import { HelpCenterToc } from '@/components/help-center/help-center-toc'
 import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-next'
 import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
+import { HelpCenterSidebar } from '@/components/help-center/help-center-sidebar'
 import {
   extractHeadings,
   computePrevNext,
@@ -14,10 +15,10 @@ import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import type { JSONContent } from '@tiptap/react'
 
-const helpCenterApi = getRouteApi('/hc')
-const categoryApi = getRouteApi('/hc/$categorySlug')
+const helpCenterApi = getRouteApi('/_portal/hc')
+const categoryApi = getRouteApi('/_portal/hc/$categorySlug')
 
-export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug/$articleSlug')({
   loader: async ({ params }) => {
     try {
       const article = await getPublicArticleBySlugFn({ data: { slug: params.articleSlug } })
@@ -31,10 +32,10 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
 
     const { article } = loaderData
 
-    // Get workspace name from the root helpcenter layout
-    const helpCenterMatch = matches.find((m) => (m.routeId as string) === '/hc')
+    // Get workspace name from the portal layout (formerly the hc layout)
+    const portalMatch = matches.find((m) => (m.routeId as string) === '/_portal')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parentLoaderData = helpCenterMatch?.loaderData as Record<string, any> | undefined
+    const parentLoaderData = portalMatch?.loaderData as Record<string, any> | undefined
     const workspaceName =
       (parentLoaderData?.org as Record<string, string> | undefined)?.name ?? 'Help Center'
 
@@ -44,8 +45,8 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
       (article.content ? article.content.slice(0, 160) : `${article.title} - ${workspaceName}`)
 
     const baseUrl =
-      ((helpCenterMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
-    const canonicalUrl = `${baseUrl}/${params.categorySlug}/${params.articleSlug}`
+      ((portalMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
+    const canonicalUrl = `${baseUrl}/hc/${params.categorySlug}/${params.articleSlug}`
 
     return {
       meta: [
@@ -65,13 +66,13 @@ export const Route = createFileRoute('/hc/$categorySlug/$articleSlug')({
 function ArticleDetailPage() {
   const { article } = Route.useLoaderData()
   const { categorySlug } = Route.useParams()
-  const { category, articles } = categoryApi.useLoaderData()
+  const { category, articles, subcategories, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   const { baseUrl } = Route.useRouteContext()
 
   const breadcrumbs = buildCategoryBreadcrumbs({
-    categoryName: category.name,
-    categorySlug: category.slug,
+    allCategories,
+    categoryId: category.id,
     articleTitle: article.title,
   })
 
@@ -112,26 +113,38 @@ function ArticleDetailPage() {
         </>
       )}
 
-      <HelpCenterBreadcrumbs items={breadcrumbs} />
+      <div className="flex gap-6">
+        <HelpCenterSidebar
+          categoryName={category.name}
+          categorySlug={category.slug}
+          categoryIcon={category.icon}
+          articles={articles}
+          subcategories={subcategories}
+        />
 
-      <div className="mt-6 flex gap-8">
-        <article className="min-w-0 flex-1">
-          <h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
+        <div className="min-w-0 flex-1 px-6 py-6 sm:px-10">
+          <HelpCenterBreadcrumbs items={breadcrumbs} />
 
-          <div className="mt-6 prose prose-neutral dark:prose-invert max-w-none">
-            {article.contentJson && isRichTextContent(article.contentJson) ? (
-              <RichTextContent content={article.contentJson as JSONContent} />
-            ) : (
-              <p className="whitespace-pre-wrap">{article.content}</p>
-            )}
+          <div className="mt-6 flex gap-8">
+            <article className="min-w-0 flex-1">
+              <h1 className="text-3xl font-bold leading-tight">{article.title}</h1>
+
+              <div className="mt-6 prose prose-neutral dark:prose-invert max-w-none">
+                {article.contentJson && isRichTextContent(article.contentJson) ? (
+                  <RichTextContent content={article.contentJson as JSONContent} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{article.content}</p>
+                )}
+              </div>
+
+              <HelpCenterArticleFeedback articleId={article.id} />
+
+              <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
+            </article>
+
+            <HelpCenterToc headings={headings} />
           </div>
-
-          <HelpCenterArticleFeedback articleId={article.id} />
-
-          <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
-        </article>
-
-        <HelpCenterToc headings={headings} />
+        </div>
       </div>
     </div>
   )

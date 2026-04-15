@@ -1,75 +1,39 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useState, useCallback, useEffect, useMemo, startTransition } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useEffect, startTransition } from 'react'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Spinner } from '@/components/shared/spinner'
+import { useQuery } from '@tanstack/react-query'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { EmptyState } from '@/components/shared/empty-state'
 import { InboxLayout } from '@/components/admin/feedback/inbox-layout'
-import { AdminListHeader } from '@/components/admin/admin-list-header'
-import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
-import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
-import { HelpCenterCategoryNav } from './help-center-category-nav'
+import { HelpCenterFiltersPanel } from './help-center-filters'
+import { HelpCenterFinder } from './help-center-finder'
+import { CategoryFormDialog } from './category-form-dialog'
 import { useHelpCenterFilters } from './use-help-center-filters'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
-import { CreateArticleDialog } from './create-article-dialog'
-import { HelpCenterListItem } from './help-center-list-item'
+import type { CategoryActions, TreeCategory } from './help-center-category-tree'
+import { useDeleteArticle, useDeleteCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
-import { useDeleteArticle } from '@/lib/client/mutations/help-center'
+import { collectDescendantIds } from '@/lib/server/domains/help-center/category-tree'
 import { Route } from '@/routes/admin/help-center'
 import type { HelpCenterArticleId, HelpCenterCategoryId } from '@quackback/ids'
-import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
 
-function ArticleSkeleton() {
-  return (
-    <div className="p-3">
-      <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="p-4">
-            <Skeleton className="h-5 w-16 rounded-full mb-1" />
-            <Skeleton className="h-5 w-3/4 mb-1" />
-            <Skeleton className="h-3 w-full mb-2.5" />
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+type CategoryDialogState =
+  | { mode: 'new'; parentId: HelpCenterCategoryId | null }
+  | { mode: 'edit'; category: TreeCategory }
+  | null
 
 export function HelpCenterList() {
   const navigate = useNavigate({ from: Route.fullPath })
-  const search = Route.useSearch()
   const { filters, setFilters, hasActiveFilters } = useHelpCenterFilters()
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  const [deleteArticleDialogOpen, setDeleteArticleDialogOpen] = useState(false)
   const [articleToDelete, setArticleToDelete] = useState<HelpCenterArticleId | null>(null)
 
+  const [categoryDialogState, setCategoryDialogState] = useState<CategoryDialogState>(null)
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<TreeCategory | null>(null)
+
   const deleteArticleMutation = useDeleteArticle()
+  const deleteCategoryMutation = useDeleteCategory()
 
-  const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
-    externalValue: filters.search,
-    onChange: (search) => setFilters({ search }),
-  })
-
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    helpCenterQueries.articleList({
-      status: filters.status === 'all' ? undefined : filters.status,
-      categoryId: filters.category,
-      search: filters.search,
-    })
-  )
-
-  const loadMoreRef = useInfiniteScroll({
-    hasMore: !!hasNextPage,
-    isFetching: isLoading || isFetchingNextPage,
-    onLoadMore: fetchNextPage,
-    rootMargin: '0px',
-    threshold: 0.1,
-  })
+  const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
 
   // Keyboard "/" to focus search
   useEffect(() => {
@@ -94,33 +58,89 @@ export function HelpCenterList() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const articles = data?.pages.flatMap((page) => page.items) ?? []
-
   const handleEdit = useCallback(
     (id: HelpCenterArticleId) => {
       startTransition(() => {
-        navigate({
-          to: '/admin/help-center',
-          search: { ...search, article: id },
+        void navigate({
+          to: '/admin/help-center/articles/$articleId',
+          params: { articleId: id },
         })
       })
     },
-    [navigate, search]
+    [navigate]
   )
 
-  const handleDelete = (id: HelpCenterArticleId) => {
+  const handleDeleteArticle = (id: HelpCenterArticleId) => {
     setArticleToDelete(id)
-    setDeleteDialogOpen(true)
+    setDeleteArticleDialogOpen(true)
   }
 
-  const confirmDelete = () => {
+  const confirmDeleteArticle = () => {
     if (articleToDelete) {
       deleteArticleMutation.mutate(articleToDelete, {
         onSuccess: () => {
-          setDeleteDialogOpen(false)
+          setDeleteArticleDialogOpen(false)
           setArticleToDelete(null)
         },
       })
+    }
+  }
+
+  // Category CRUD actions — shared between sidebar tree and main finder.
+  const categoryActions = useMemo<CategoryActions>(
+    () => ({
+      onNew: (parentId) => setCategoryDialogState({ mode: 'new', parentId }),
+      onEdit: (category) => setCategoryDialogState({ mode: 'edit', category }),
+      onDelete: (category) => setDeleteCategoryTarget(category),
+    }),
+    []
+  )
+
+  // Cascade impact computed lazily for the delete confirm dialog.
+  const cascadeImpact = useMemo(() => {
+    if (!deleteCategoryTarget) return { descendantCount: 0, articleCount: 0 }
+    const flat = allCategories as Array<{
+      id: string
+      parentId: string | null
+      articleCount: number
+    }>
+    const descendantIds = collectDescendantIds(flat, deleteCategoryTarget.id)
+    const subtreeIds = new Set<string>([deleteCategoryTarget.id, ...descendantIds])
+    let totalArticles = 0
+    for (const cat of flat) {
+      if (subtreeIds.has(cat.id)) totalArticles += cat.articleCount
+    }
+    return { descendantCount: descendantIds.size, articleCount: totalArticles }
+  }, [deleteCategoryTarget, allCategories])
+
+  const deleteDescription = useMemo(() => {
+    if (!deleteCategoryTarget) return ''
+    const parts: string[] = []
+    if (cascadeImpact.descendantCount > 0) {
+      parts.push(
+        `${cascadeImpact.descendantCount} sub-categor${cascadeImpact.descendantCount === 1 ? 'y' : 'ies'}`
+      )
+    }
+    if (cascadeImpact.articleCount > 0) {
+      parts.push(
+        `${cascadeImpact.articleCount} article${cascadeImpact.articleCount === 1 ? '' : 's'}`
+      )
+    }
+    if (parts.length === 0) {
+      return `This will permanently delete "${deleteCategoryTarget.name}". This cannot be undone from the UI.`
+    }
+    return `This will delete "${deleteCategoryTarget.name}" along with ${parts.join(' and ')}. Everything can be restored from the database, but the UI provides no restore flow.`
+  }, [deleteCategoryTarget, cascadeImpact])
+
+  async function handleConfirmDeleteCategory() {
+    if (!deleteCategoryTarget) return
+    const deletingId = deleteCategoryTarget.id
+    const parentId = deleteCategoryTarget.parentId ?? null
+    await deleteCategoryMutation.mutateAsync(deletingId)
+    setDeleteCategoryTarget(null)
+    // If the deleted category was the currently-selected one, fall back to parent.
+    if (filters.category === deletingId) {
+      setFilters({ category: parentId ?? undefined })
     }
   }
 
@@ -128,98 +148,71 @@ export function HelpCenterList() {
     <>
       <InboxLayout
         filters={
-          <HelpCenterCategoryNav
-            selectedCategory={filters.category as HelpCenterCategoryId | undefined}
-            onSelectCategory={(category) => setFilters({ category })}
+          <HelpCenterFiltersPanel
+            status={filters.status}
+            onStatusChange={(status) => setFilters({ status: status as HelpCenterStatusFilter })}
+            selectedCategoryId={filters.category}
+            onSelectCategory={(id) => setFilters({ category: id ?? undefined })}
+            categoryActions={categoryActions}
+            showDeleted={filters.showDeleted}
+            onShowDeletedChange={(showDeleted) =>
+              setFilters({ showDeleted: showDeleted ?? undefined })
+            }
           />
         }
         hasActiveFilters={hasActiveFilters}
       >
-        <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
-          <AdminListHeader
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            sortOptions={[
-              { value: 'all', label: 'All' },
-              { value: 'draft', label: 'Draft' },
-              { value: 'published', label: 'Published' },
-            ]}
-            activeSort={filters.status}
-            onSortChange={(status) => setFilters({ status: status as HelpCenterStatusFilter })}
-            action={<CreateArticleDialog />}
-          />
-
-          {isLoading ? (
-            <ArticleSkeleton />
-          ) : articles.length === 0 ? (
-            <EmptyState
-              icon={QuestionMarkCircleIcon}
-              title={
-                filters.search
-                  ? 'No articles match your search'
-                  : hasActiveFilters
-                    ? 'No articles match your filters'
-                    : 'No help articles yet'
-              }
-              action={!hasActiveFilters && !filters.search ? <CreateArticleDialog /> : undefined}
-              className="h-48"
-            />
-          ) : (
-            <div className="p-3">
-              <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-                {articles.map((article, index) => (
-                  <div
-                    key={article.id}
-                    className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-                    style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-                  >
-                    <HelpCenterListItem
-                      id={article.id as HelpCenterArticleId}
-                      title={article.title}
-                      content={article.content}
-                      publishedAt={article.publishedAt}
-                      createdAt={article.createdAt}
-                      category={article.category}
-                      author={article.author}
-                      viewCount={article.viewCount}
-                      helpfulCount={article.helpfulCount}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {hasNextPage && (
-            <div ref={loadMoreRef} className="px-3 pb-3 flex justify-center">
-              {isFetchingNextPage ? (
-                <Spinner />
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => fetchNextPage()}
-                  className="text-muted-foreground"
-                >
-                  Load more
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+        <HelpCenterFinder
+          onEditArticle={handleEdit}
+          onDeleteArticle={handleDeleteArticle}
+          categoryActions={categoryActions}
+        />
       </InboxLayout>
 
       <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        open={deleteArticleDialogOpen}
+        onOpenChange={setDeleteArticleDialogOpen}
         title="Delete help article?"
         description="This action cannot be undone. The article will be permanently deleted."
         confirmLabel="Delete"
         variant="destructive"
         isPending={deleteArticleMutation.isPending}
-        onConfirm={confirmDelete}
+        onConfirm={confirmDeleteArticle}
+      />
+
+      <CategoryFormDialog
+        open={categoryDialogState !== null}
+        onOpenChange={(open) => {
+          if (!open) setCategoryDialogState(null)
+        }}
+        initialValues={
+          categoryDialogState?.mode === 'edit'
+            ? {
+                id: categoryDialogState.category.id,
+                name: categoryDialogState.category.name,
+                description: categoryDialogState.category.description,
+                icon: categoryDialogState.category.icon,
+                isPublic: categoryDialogState.category.isPublic,
+                parentId: categoryDialogState.category.parentId,
+              }
+            : undefined
+        }
+        defaultParentId={
+          categoryDialogState?.mode === 'new' ? categoryDialogState.parentId : undefined
+        }
+      />
+
+      <ConfirmDialog
+        open={deleteCategoryTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCategoryTarget(null)
+        }}
+        title={`Delete "${deleteCategoryTarget?.name ?? ''}"?`}
+        description={deleteDescription}
+        confirmLabel="Delete"
+        variant="destructive"
+        isPending={deleteCategoryMutation.isPending}
+        onConfirm={handleConfirmDeleteCategory}
       />
     </>
   )

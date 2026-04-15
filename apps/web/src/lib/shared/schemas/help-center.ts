@@ -11,6 +11,10 @@ import { tiptapContentSchema } from './posts'
 // Category Schemas
 // ============================================================================
 
+export const listCategoriesSchema = z.object({
+  showDeleted: z.boolean().optional(),
+})
+
 export const createCategorySchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   slug: z.string().max(200).optional(),
@@ -79,6 +83,8 @@ export const listArticlesSchema = z.object({
   search: z.string().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
+  showDeleted: z.boolean().optional(),
+  sort: z.enum(['newest', 'oldest']).optional(),
 })
 
 export const listPublicArticlesSchema = z.object({
@@ -109,16 +115,22 @@ export const unpublishArticleSchema = z.object({
   id: z.string().min(1),
 })
 
+export const restoreCategorySchema = z.object({
+  id: z.string().min(1),
+})
+
+export const restoreArticleSchema = z.object({
+  id: z.string().min(1),
+})
+
 // ============================================================================
 // Help Center Config Schemas
 // ============================================================================
 
 export const updateHelpCenterConfigSchema = z.object({
   enabled: z.boolean().optional(),
-  customDomain: z.string().max(253).nullable().optional(),
   homepageTitle: z.string().min(1).max(200).optional(),
   homepageDescription: z.string().max(500).optional(),
-  access: z.enum(['public', 'authenticated']).optional(),
 })
 
 export const updateHelpCenterSeoSchema = z.object({

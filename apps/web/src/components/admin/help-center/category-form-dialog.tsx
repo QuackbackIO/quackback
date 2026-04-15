@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Dialog,
   DialogContent,
@@ -8,11 +9,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useCreateCategory, useUpdateCategory } from '@/lib/client/mutations/help-center'
+import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import {
+  MAX_CATEGORY_DEPTH,
+  collectDescendantIdsIncludingSelf,
+  getCategoryDepth,
+  getSubtreeMaxDepth,
+} from '@/lib/server/domains/help-center/category-tree'
 import type { HelpCenterCategoryId } from '@quackback/ids'
 
 const CATEGORY_EMOJIS = [
@@ -77,7 +92,10 @@ interface CategoryFormDialogProps {
     description: string | null
     icon: string | null
     isPublic: boolean
+    parentId: HelpCenterCategoryId | null
   }
+  /** Pre-selected parent when creating a new category (ignored if initialValues is set). */
+  defaultParentId?: HelpCenterCategoryId | null
   onCreated?: (categoryId: string) => void
 }
 
@@ -85,6 +103,7 @@ export function CategoryFormDialog({
   open,
   onOpenChange,
   initialValues,
+  defaultParentId,
   onCreated,
 }: CategoryFormDialogProps) {
   const isEdit = !!initialValues
@@ -95,6 +114,7 @@ export function CategoryFormDialog({
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(true)
+  const [parentId, setParentId] = useState<HelpCenterCategoryId | null>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
 
   useEffect(() => {
@@ -103,8 +123,43 @@ export function CategoryFormDialog({
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
       setIsPublic(initialValues?.isPublic ?? true)
+      setParentId(initialValues?.parentId ?? defaultParentId ?? null)
     }
-  }, [open, initialValues])
+  }, [open, initialValues, defaultParentId])
+
+  const { data: allCategories = [] } = useQuery({
+    ...helpCenterQueries.categories(),
+    enabled: open,
+  })
+
+  const eligibleParents = useMemo(() => {
+    const flat = allCategories as Array<{
+      id: string
+      parentId: string | null
+      name: string
+      icon: string | null
+      articleCount: number
+    }>
+
+    // Exclude self + descendants of self (cycle / self-parent)
+    const excluded = new Set<string>()
+    if (initialValues?.id) {
+      for (const ex of collectDescendantIdsIncludingSelf(flat, initialValues.id)) {
+        excluded.add(ex)
+      }
+    }
+
+    // Compute the editing category's subtree height (0 for a new category)
+    const subtreeHeight = initialValues?.id ? getSubtreeMaxDepth(flat, initialValues.id) : 0
+
+    return flat.filter((cat) => {
+      if (excluded.has(cat.id)) return false
+      const parentDepth = getCategoryDepth(flat, cat.id)
+      // New depth = parentDepth + 1; deepest leaf after placement = that + subtreeHeight
+      // Depths are 0-indexed with cap MAX_CATEGORY_DEPTH, so max depth index is MAX - 1
+      return parentDepth + 1 + subtreeHeight <= MAX_CATEGORY_DEPTH - 1
+    })
+  }, [allCategories, initialValues?.id])
 
   const isPending = createCategory.isPending || updateCategory.isPending
 
@@ -121,6 +176,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || null,
         icon,
         isPublic,
+        parentId,
       })
     } else {
       const result = await createCategory.mutateAsync({
@@ -128,6 +184,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || undefined,
         icon,
         isPublic,
+        parentId,
       })
       onCreated?.(result.id)
     }
@@ -194,6 +251,31 @@ export function CategoryFormDialog({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional short description"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category-parent">Parent category</Label>
+            <Select
+              value={parentId ?? '__none__'}
+              onValueChange={(value) =>
+                setParentId(value === '__none__' ? null : (value as HelpCenterCategoryId))
+              }
+            >
+              <SelectTrigger id="category-parent">
+                <SelectValue placeholder="No parent (top-level)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No parent (top-level)</SelectItem>
+                {eligibleParents.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.icon ?? '📁'} {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Maximum depth is {MAX_CATEGORY_DEPTH} levels. Parents that would exceed it are hidden.
+            </p>
           </div>
 
           <div className="flex items-center justify-between">

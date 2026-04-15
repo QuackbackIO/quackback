@@ -5,9 +5,8 @@ import {
   listPublicCategoriesFn,
 } from '@/lib/server/functions/help-center'
 import { getSubcategories } from '@/components/help-center/help-center-utils'
-import { HelpCenterSidebar } from '@/components/help-center/help-center-sidebar'
 
-export const Route = createFileRoute('/hc/$categorySlug')({
+export const Route = createFileRoute('/_portal/hc/$categorySlug')({
   loader: async ({ params }) => {
     let category: Awaited<ReturnType<typeof getPublicCategoryBySlugFn>>
     try {
@@ -33,7 +32,7 @@ export const Route = createFileRoute('/hc/$categorySlug')({
       }))
     )
 
-    return { category, articles, subcategories: subcategoryArticles }
+    return { category, articles, subcategories: subcategoryArticles, allCategories }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}
@@ -46,20 +45,9 @@ export const Route = createFileRoute('/hc/$categorySlug')({
 })
 
 function CategoryLayout() {
-  const { category, articles, subcategories } = Route.useLoaderData()
-
   return (
-    <div className="mx-auto flex max-w-7xl">
-      <HelpCenterSidebar
-        categoryName={category.name}
-        categorySlug={category.slug}
-        categoryIcon={category.icon}
-        articles={articles}
-        subcategories={subcategories}
-      />
-      <div className="min-w-0 flex-1 px-6 py-6 sm:px-10">
-        <Outlet />
-      </div>
+    <div className="mx-auto max-w-7xl">
+      <Outlet />
     </div>
   )
 }

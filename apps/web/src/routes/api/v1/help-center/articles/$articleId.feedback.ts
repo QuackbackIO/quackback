@@ -26,7 +26,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
 
         try {
           const { articleId } = params
-          const validationError = validateTypeId(articleId, 'helpcenter_article', 'article ID')
+          const validationError = validateTypeId(articleId, 'article', 'article ID')
           if (validationError) return validationError
 
           const body = await request.json()

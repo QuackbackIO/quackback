@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
-import { createFileRoute, useRouter, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { BookOpenIcon, ArrowPathIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
+import { BookOpenIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -32,26 +32,21 @@ function InlineSpinner({ visible }: { visible: boolean }) {
 function HelpCenterSettingsPage() {
   const router = useRouter()
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
-  const { baseUrl } = useRouteContext({ from: '__root__' })
   const config = helpCenterConfigQuery.data as HelpCenterConfig
 
   const [enabled, setEnabled] = useState(config.enabled)
-  const [customDomain, setCustomDomain] = useState(config.customDomain ?? '')
   const [homepageTitle, setHomepageTitle] = useState(config.homepageTitle)
   const [homepageDescription, setHomepageDescription] = useState(config.homepageDescription)
-  const [access, setAccess] = useState<'public' | 'authenticated'>(config.access)
   const [saving, setSaving] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const titleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const descTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const domainTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     return () => {
       if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
       if (descTimeoutRef.current) clearTimeout(descTimeoutRef.current)
-      if (domainTimeoutRef.current) clearTimeout(domainTimeoutRef.current)
     }
   }, [])
 
@@ -92,21 +87,6 @@ function HelpCenterSettingsPage() {
     }, 800)
   }
 
-  function handleCustomDomainChange(value: string) {
-    setCustomDomain(value)
-    if (domainTimeoutRef.current) clearTimeout(domainTimeoutRef.current)
-    domainTimeoutRef.current = setTimeout(() => {
-      saveField({ customDomain: value.trim() || null })
-    }, 800)
-  }
-
-  function handleAccessChange(value: 'public' | 'authenticated') {
-    setAccess(value)
-    saveField({ access: value })
-  }
-
-  const helpUrl = `${baseUrl ?? ''}/help`
-
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
@@ -145,39 +125,6 @@ function HelpCenterSettingsPage() {
         </div>
       </SettingsCard>
 
-      {/* Domain */}
-      <SettingsCard title="Domain" description="Where your help center is accessible">
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Help Center URL</Label>
-            <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
-              <code className="text-sm font-mono text-foreground flex-1">{helpUrl}</code>
-              <a
-                href={helpUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-              </a>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-domain" className="text-sm font-medium">
-              Custom Domain
-            </Label>
-            <Input
-              id="custom-domain"
-              value={customDomain}
-              onChange={(e) => handleCustomDomainChange(e.target.value)}
-              placeholder="help.yourdomain.com"
-              disabled={isBusy}
-            />
-          </div>
-        </div>
-      </SettingsCard>
-
       {/* Homepage */}
       <SettingsCard title="Homepage" description="Customize the help center landing page">
         <div className="space-y-4">
@@ -206,46 +153,6 @@ function HelpCenterSettingsPage() {
               disabled={isBusy}
             />
           </div>
-        </div>
-      </SettingsCard>
-
-      {/* Access Control */}
-      <SettingsCard title="Access" description="Control who can view your help center">
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 rounded-lg border border-border/50 p-4 cursor-pointer transition-colors hover:bg-muted/30">
-            <input
-              type="radio"
-              name="access"
-              value="public"
-              checked={access === 'public'}
-              onChange={() => handleAccessChange('public')}
-              disabled={isBusy}
-              className="accent-primary"
-            />
-            <div>
-              <span className="text-sm font-medium">Public</span>
-              <p className="text-xs text-muted-foreground">
-                Anyone can view help center articles without signing in
-              </p>
-            </div>
-          </label>
-          <label className="flex items-center gap-3 rounded-lg border border-border/50 p-4 cursor-pointer transition-colors hover:bg-muted/30">
-            <input
-              type="radio"
-              name="access"
-              value="authenticated"
-              checked={access === 'authenticated'}
-              onChange={() => handleAccessChange('authenticated')}
-              disabled={isBusy}
-              className="accent-primary"
-            />
-            <div>
-              <span className="text-sm font-medium">Authenticated Only</span>
-              <p className="text-xs text-muted-foreground">
-                Only signed-in users can view help center articles
-              </p>
-            </div>
-          </label>
         </div>
       </SettingsCard>
     </div>

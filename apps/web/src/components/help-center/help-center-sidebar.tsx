@@ -48,7 +48,6 @@ export function HelpCenterSidebar({
       <ul className="space-y-0.5">
         {articles.map((article) => (
           <li key={article.id}>
-            {/* TODO: Upgrade to <Link> when Task 6 creates the $articleSlug route */}
             <a
               href={`/hc/${categorySlug}/${article.slug}`}
               className={cn(
@@ -77,7 +76,6 @@ export function HelpCenterSidebar({
           <ul className="space-y-0.5 pl-3">
             {sub.articles.map((article) => (
               <li key={article.id}>
-                {/* TODO: Upgrade to <Link> when Task 6 creates the $articleSlug route */}
                 <a
                   href={`/hc/${categorySlug}/${article.slug}`}
                   className={cn(

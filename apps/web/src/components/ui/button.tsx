@@ -8,7 +8,7 @@ const buttonVariants = cva(
   [
     'inline-flex items-center justify-center gap-2 shrink-0',
     'text-sm font-medium whitespace-nowrap',
-    '[border-radius:var(--radius)] cursor-pointer',
+    'cursor-pointer',
     'transition-all duration-200 ease-out',
     'outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'disabled:pointer-events-none disabled:opacity-50',
@@ -36,10 +36,15 @@ const buttonVariants = cva(
         'icon-sm': 'size-8',
         'icon-lg': 'size-11',
       },
+      shape: {
+        default: '[border-radius:var(--radius)]',
+        pill: 'rounded-full',
+      },
     },
     defaultVariants: {
       variant: 'default',
       size: 'default',
+      shape: 'pill',
     },
   }
 )
@@ -48,6 +53,7 @@ function Button({
   className,
   variant,
   size,
+  shape,
   asChild = false,
   ...props
 }: React.ComponentProps<'button'> &
@@ -59,7 +65,7 @@ function Button({
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size, shape, className }))}
       {...props}
     />
   )

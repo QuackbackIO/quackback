@@ -40,7 +40,7 @@ export interface RoadmapFiltersBarProps {
 type FilterCategory = 'board' | 'tags' | 'segment'
 type IconComponent = React.ComponentType<{ className?: string }>
 
-type RoadmapFilterType = 'board' | 'tags' | 'segment' | 'search'
+type RoadmapFilterType = 'board' | 'tags' | 'segment'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -56,7 +56,6 @@ const FILTER_ICON_MAP: Record<RoadmapFilterType, IconComponent> = {
   board: Squares2X2Icon,
   tags: TagIcon,
   segment: UserGroupIcon,
-  search: MagnifyingGlassIcon,
 }
 
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
@@ -104,17 +103,6 @@ function computeActiveFilters(
   onFiltersChange: (updates: Partial<RoadmapFilters>) => void
 ): ActiveFilter[] {
   const result: ActiveFilter[] = []
-
-  if (filters.search) {
-    result.push({
-      key: 'search',
-      type: 'search',
-      label: 'Search:',
-      value: filters.search,
-      valueId: 'search',
-      onRemove: () => onFiltersChange({ search: undefined }),
-    })
-  }
 
   if (filters.board?.length) {
     const boardOptions: FilterOption[] = boards.map((b) => ({ id: b.id, label: b.name }))

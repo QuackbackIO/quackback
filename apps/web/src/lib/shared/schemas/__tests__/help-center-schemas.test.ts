@@ -20,23 +20,6 @@ describe('updateHelpCenterConfigSchema', () => {
     expect(result.data?.enabled).toBe(true)
   })
 
-  it('should accept customDomain string', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ customDomain: 'help.example.com' })
-    expect(result.success).toBe(true)
-    expect(result.data?.customDomain).toBe('help.example.com')
-  })
-
-  it('should accept customDomain null', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ customDomain: null })
-    expect(result.success).toBe(true)
-    expect(result.data?.customDomain).toBeNull()
-  })
-
-  it('should reject customDomain over 253 chars', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ customDomain: 'a'.repeat(254) })
-    expect(result.success).toBe(false)
-  })
-
   it('should accept homepageTitle', () => {
     const result = updateHelpCenterConfigSchema.safeParse({ homepageTitle: 'Help Center' })
     expect(result.success).toBe(true)
@@ -66,28 +49,11 @@ describe('updateHelpCenterConfigSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('should accept access public', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ access: 'public' })
-    expect(result.success).toBe(true)
-  })
-
-  it('should accept access authenticated', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ access: 'authenticated' })
-    expect(result.success).toBe(true)
-  })
-
-  it('should reject invalid access value', () => {
-    const result = updateHelpCenterConfigSchema.safeParse({ access: 'private' })
-    expect(result.success).toBe(false)
-  })
-
   it('should accept all fields together', () => {
     const result = updateHelpCenterConfigSchema.safeParse({
       enabled: true,
-      customDomain: 'help.acme.com',
       homepageTitle: 'Get Help',
       homepageDescription: 'Browse our docs',
-      access: 'authenticated',
     })
     expect(result.success).toBe(true)
   })

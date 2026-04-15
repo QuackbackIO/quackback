@@ -139,7 +139,6 @@ describe('getHelpCenterConfig', () => {
     const stored = JSON.stringify({
       enabled: true,
       homepageTitle: 'Custom Title',
-      access: 'authenticated',
     })
     mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))
 
@@ -147,11 +146,7 @@ describe('getHelpCenterConfig', () => {
 
     expect(result.enabled).toBe(true)
     expect(result.homepageTitle).toBe('Custom Title')
-    expect(result.access).toBe('authenticated')
     // Defaults preserved
-    expect(result.subdomain).toBeNull()
-    expect(result.customDomain).toBeNull()
-    expect(result.domainVerified).toBe(false)
     expect(result.homepageDescription).toBe('Search our knowledge base or browse by category')
     expect(result.seo).toEqual(DEFAULT_HELP_CENTER_SEO_CONFIG)
   })
@@ -188,8 +183,6 @@ describe('updateHelpCenterConfig', () => {
     expect(result.enabled).toBe(true)
     expect(result.homepageTitle).toBe('New Title')
     // Defaults preserved
-    expect(result.subdomain).toBeNull()
-    expect(result.access).toBe('public')
     expect(result.seo).toEqual(DEFAULT_HELP_CENTER_SEO_CONFIG)
 
     // Should have persisted
@@ -203,7 +196,6 @@ describe('updateHelpCenterConfig', () => {
     const existing = JSON.stringify({
       enabled: true,
       homepageTitle: 'Existing Title',
-      access: 'authenticated',
     })
     mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: existing }))
 
@@ -211,7 +203,6 @@ describe('updateHelpCenterConfig', () => {
 
     expect(result.enabled).toBe(true)
     expect(result.homepageTitle).toBe('Existing Title')
-    expect(result.access).toBe('authenticated')
     expect(result.homepageDescription).toBe('New desc')
   })
 
@@ -259,7 +250,6 @@ describe('getTenantSettings includes helpCenterConfig', () => {
     const stored = JSON.stringify({
       enabled: true,
       homepageTitle: 'Help',
-      access: 'authenticated',
     })
     mockCacheGet.mockResolvedValue(null)
     mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))
@@ -269,9 +259,7 @@ describe('getTenantSettings includes helpCenterConfig', () => {
     expect(result).not.toBeNull()
     expect(result!.helpCenterConfig.enabled).toBe(true)
     expect(result!.helpCenterConfig.homepageTitle).toBe('Help')
-    expect(result!.helpCenterConfig.access).toBe('authenticated')
     // Defaults merged
-    expect(result!.helpCenterConfig.subdomain).toBeNull()
     expect(result!.helpCenterConfig.seo).toEqual(DEFAULT_HELP_CENTER_SEO_CONFIG)
   })
 })

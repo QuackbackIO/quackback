@@ -1,14 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/shared/utils'
 import { FilterSection } from '@/components/shared/filter-section'
+import { FilterList } from '@/components/admin/feedback/single-select-filter-list'
+import { HelpCenterCategoryTree, type CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
+import type { HelpCenterCategoryId } from '@quackback/ids'
 
 interface HelpCenterFiltersProps {
   status: HelpCenterStatusFilter
   onStatusChange: (status: HelpCenterStatusFilter) => void
-  category?: string
-  onCategoryChange: (category: string | undefined) => void
+  selectedCategoryId: string | undefined
+  onSelectCategory: (id: HelpCenterCategoryId | null) => void
+  categoryActions: CategoryActions
+  showDeleted?: boolean
+  onShowDeletedChange?: (showDeleted: boolean | undefined) => void
 }
 
 const ARTICLE_STATUSES = [
@@ -20,10 +26,13 @@ const ARTICLE_STATUSES = [
 export function HelpCenterFiltersPanel({
   status,
   onStatusChange,
-  category,
-  onCategoryChange,
+  selectedCategoryId,
+  onSelectCategory,
+  categoryActions,
+  showDeleted,
+  onShowDeletedChange,
 }: HelpCenterFiltersProps) {
-  const { data: categories } = useQuery(helpCenterQueries.categories())
+  const { data: categories = [] } = useQuery(helpCenterQueries.categories())
 
   return (
     <div className="space-y-0">
@@ -61,49 +70,24 @@ export function HelpCenterFiltersPanel({
         </div>
       </FilterSection>
 
-      {categories && categories.length > 0 && (
-        <FilterSection title="Category">
-          <div className="space-y-1" role="listbox" aria-label="Category filter">
-            <button
-              type="button"
-              role="option"
-              aria-selected={!category}
-              onClick={() => onCategoryChange(undefined)}
-              className={cn(
-                'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                !category
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              All Categories
-            </button>
-            {categories.map((cat) => {
-              const isSelected = category === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => onCategoryChange(cat.id)}
-                  className={cn(
-                    'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    isSelected
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  )}
-                >
-                  <span className="flex items-center justify-between">
-                    <span className="truncate">{cat.name}</span>
-                    <span className="text-muted-foreground/50 text-[10px]">{cat.articleCount}</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </FilterSection>
-      )}
+      <FilterSection title="Categories">
+        <HelpCenterCategoryTree
+          categories={categories}
+          selectedId={selectedCategoryId}
+          onNavigate={onSelectCategory}
+          actions={categoryActions}
+        />
+      </FilterSection>
+
+      <FilterSection title="Other">
+        <FilterList
+          items={[{ id: 'deleted', name: 'Deleted items' }]}
+          selectedIds={showDeleted ? ['deleted'] : []}
+          onSelect={() => {
+            onShowDeletedChange?.(!showDeleted || undefined)
+          }}
+        />
+      </FilterSection>
     </div>
   )
 }

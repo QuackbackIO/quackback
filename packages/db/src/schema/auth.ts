@@ -204,7 +204,7 @@ export const settings = pgTable('settings', {
   featureFlags: text('feature_flags'),
   /**
    * Help center configuration (JSON)
-   * Structure: { enabled, customDomain?, subdomain?, logoKey?, faviconKey?, ... }
+   * Structure: { enabled, homepageTitle, homepageDescription, seo }
    */
   helpCenterConfig: text('help_center_config'),
 })

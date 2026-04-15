@@ -20,14 +20,14 @@ describe('buildNavSections', () => {
     expect(labels).toContain('Help Center')
   })
 
-  it('places Help Center between Portal and Users', () => {
+  it('places Help Center between Feedback and End Users', () => {
     const sections = buildNavSections({ helpCenter: true })
     const labels = sections.map((s) => s.label)
-    const portalIdx = labels.indexOf('Portal')
+    const feedbackIdx = labels.indexOf('Feedback')
     const helpCenterIdx = labels.indexOf('Help Center')
-    const usersIdx = labels.indexOf('Users')
-    expect(helpCenterIdx).toBeGreaterThan(portalIdx)
-    expect(helpCenterIdx).toBeLessThan(usersIdx)
+    const endUsersIdx = labels.indexOf('End Users')
+    expect(helpCenterIdx).toBeGreaterThan(feedbackIdx)
+    expect(helpCenterIdx).toBeLessThan(endUsersIdx)
   })
 
   it('has Help Center item', () => {
@@ -38,55 +38,54 @@ describe('buildNavSections', () => {
     expect(helpCenter.items[0].to).toBe('/admin/settings/help-center')
   })
 
-  it('does not include Widget under Feedback', () => {
+  it('places Widget and Branding under Customization', () => {
+    const sections = buildNavSections()
+    const customization = sections.find((s) => s.label === 'Customization')!
+    const branding = customization.items.find((i) => i.label === 'Branding')
+    const widget = customization.items.find((i) => i.label === 'Widget')
+    expect(branding).toBeDefined()
+    expect(branding!.to).toBe('/admin/settings/branding')
+    expect(widget).toBeDefined()
+    expect(widget!.to).toBe('/admin/settings/portal-widget')
+  })
+
+  it('does not place Widget under Feedback', () => {
     const sections = buildNavSections()
     const feedback = sections.find((s) => s.label === 'Feedback')!
     const widgetItem = feedback.items.find((i) => i.label === 'Widget')
     expect(widgetItem).toBeUndefined()
   })
 
-  it('includes Widget under Portal', () => {
+  it('places Experimental under Developers', () => {
     const sections = buildNavSections()
-    const portal = sections.find((s) => s.label === 'Portal')!
-    const widgetItem = portal.items.find((i) => i.label === 'Widget')
-    expect(widgetItem).toBeDefined()
-    expect(widgetItem!.to).toBe('/admin/settings/portal-widget')
+    const developers = sections.find((s) => s.label === 'Developers')!
+    const experimental = developers.items.find((i) => i.label === 'Experimental')
+    expect(experimental).toBeDefined()
+    expect(experimental!.to).toBe('/admin/settings/experimental')
   })
 
-  it('includes Portal > General with correct route', () => {
-    const sections = buildNavSections()
-    const portal = sections.find((s) => s.label === 'Portal')!
-    const general = portal.items.find((i) => i.label === 'General')
-    expect(general).toBeDefined()
-    expect(general!.to).toBe('/admin/settings/portal')
+  it('has no Portal section (merged into other groups)', () => {
+    const sections = buildNavSections({ helpCenter: true })
+    const labels = sections.map((s) => s.label)
+    expect(labels).not.toContain('Portal')
   })
 
-  it('has the expected section order', () => {
+  it('has the expected section order with helpCenter flag on', () => {
     const sections = buildNavSections({ helpCenter: true })
     const labels = sections.map((s) => s.label)
     expect(labels).toEqual([
-      'Workspace',
-      'Appearance',
+      'General',
+      'Customization',
       'Feedback',
-      'Portal',
       'Help Center',
-      'Users',
+      'End Users',
       'Developers',
-      'Advanced',
     ])
   })
 
   it('has the expected section order without helpCenter', () => {
     const sections = buildNavSections()
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual([
-      'Workspace',
-      'Appearance',
-      'Feedback',
-      'Portal',
-      'Users',
-      'Developers',
-      'Advanced',
-    ])
+    expect(labels).toEqual(['General', 'Customization', 'Feedback', 'End Users', 'Developers'])
   })
 })

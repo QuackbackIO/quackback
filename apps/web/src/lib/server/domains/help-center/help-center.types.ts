@@ -29,10 +29,14 @@ export interface HelpCenterCategory {
   position: number
   createdAt: Date
   updatedAt: Date
+  deletedAt?: Date | null
 }
 
 export interface HelpCenterCategoryWithCount extends HelpCenterCategory {
+  /** Total non-deleted articles in this category (drafts + published). */
   articleCount: number
+  /** Published articles in this category (excludes drafts and scheduled). */
+  publishedArticleCount: number
 }
 
 // ============================================================================
@@ -55,6 +59,7 @@ export interface HelpCenterArticle {
   notHelpfulCount: number
   createdAt: Date
   updatedAt: Date
+  deletedAt?: Date | null
 }
 
 export interface HelpCenterArticleWithCategory extends HelpCenterArticle {

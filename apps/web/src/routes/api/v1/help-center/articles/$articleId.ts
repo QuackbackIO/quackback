@@ -67,7 +67,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
         try {
           const { articleId } = params
-          const validationError = validateTypeId(articleId, 'helpcenter_article', 'article ID')
+          const validationError = validateTypeId(articleId, 'article', 'article ID')
           if (validationError) return validationError
 
           const article = await getArticleById(articleId as HelpCenterArticleId)
@@ -84,7 +84,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
         try {
           const { articleId } = params
-          const validationError = validateTypeId(articleId, 'helpcenter_article', 'article ID')
+          const validationError = validateTypeId(articleId, 'article', 'article ID')
           if (validationError) return validationError
 
           const body = await request.json()
@@ -127,7 +127,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
         try {
           const { articleId } = params
-          const validationError = validateTypeId(articleId, 'helpcenter_article', 'article ID')
+          const validationError = validateTypeId(articleId, 'article', 'article ID')
           if (validationError) return validationError
 
           await deleteArticle(articleId as HelpCenterArticleId)

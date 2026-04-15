@@ -82,7 +82,7 @@ describe('GET /api/v1/help-center/categories', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
     vi.mocked(listCategories).mockResolvedValue([
       {
-        id: 'helpcenter_category_01jk0000000000000000000001' as any,
+        id: 'category_01jk0000000000000000000001' as any,
         slug: 'getting-started',
         name: 'Getting Started',
         description: 'Intro guides',
@@ -91,6 +91,7 @@ describe('GET /api/v1/help-center/categories', () => {
         isPublic: true,
         position: 0,
         articleCount: 5,
+        publishedArticleCount: 5,
         createdAt: new Date('2026-01-01'),
         updatedAt: new Date('2026-01-02'),
       },
@@ -103,7 +104,7 @@ describe('GET /api/v1/help-center/categories', () => {
     expect(response.status).toBe(200)
     expect(json.data).toHaveLength(1)
     expect(json.data[0]).toMatchObject({
-      id: 'helpcenter_category_01jk0000000000000000000001',
+      id: 'category_01jk0000000000000000000001',
       name: 'Getting Started',
       icon: '\u{1F4DA}',
       parentId: null,
@@ -116,7 +117,7 @@ describe('GET /api/v1/help-center/categories', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
     vi.mocked(listCategories).mockResolvedValue([
       {
-        id: 'helpcenter_category_01jk0000000000000000000002' as any,
+        id: 'category_01jk0000000000000000000002' as any,
         slug: 'faq',
         name: 'FAQ',
         description: null,
@@ -125,6 +126,7 @@ describe('GET /api/v1/help-center/categories', () => {
         isPublic: true,
         position: 1,
         articleCount: 0,
+        publishedArticleCount: 0,
         createdAt: new Date('2026-01-01'),
         updatedAt: new Date('2026-01-01'),
       },
@@ -152,12 +154,12 @@ describe('POST /api/v1/help-center/categories', () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
     vi.mocked(createCategory).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000003' as any,
+      id: 'category_01jk0000000000000000000003' as any,
       slug: 'billing',
       name: 'Billing',
       description: null,
       icon: '\u{1F4B0}',
-      parentId: 'helpcenter_category_01jk0000000000000000000001' as any,
+      parentId: 'category_01jk0000000000000000000001' as any,
       isPublic: true,
       position: 0,
       createdAt: new Date('2026-01-01'),
@@ -167,7 +169,7 @@ describe('POST /api/v1/help-center/categories', () => {
     const request = createRequest('POST', 'http://localhost/api/v1/help-center/categories', {
       name: 'Billing',
       icon: '\u{1F4B0}',
-      parentId: 'helpcenter_category_01jk0000000000000000000001',
+      parentId: 'category_01jk0000000000000000000001',
     })
     const response = await handlers.POST({ request })
     const json = await parseJson(response)
@@ -175,12 +177,12 @@ describe('POST /api/v1/help-center/categories', () => {
     expect(response.status).toBe(201)
     expect(json.data.name).toBe('Billing')
     expect(json.data.icon).toBe('\u{1F4B0}')
-    expect(json.data.parentId).toBe('helpcenter_category_01jk0000000000000000000001')
+    expect(json.data.parentId).toBe('category_01jk0000000000000000000001')
     expect(createCategory).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Billing',
         icon: '\u{1F4B0}',
-        parentId: 'helpcenter_category_01jk0000000000000000000001',
+        parentId: 'category_01jk0000000000000000000001',
       })
     )
   })
@@ -189,7 +191,7 @@ describe('POST /api/v1/help-center/categories', () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
     vi.mocked(createCategory).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000004' as any,
+      id: 'category_01jk0000000000000000000004' as any,
       slug: 'general',
       name: 'General',
       description: null,
@@ -247,7 +249,7 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
     vi.mocked(validateTypeId).mockReturnValue(undefined)
     vi.mocked(getCategoryById).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000001' as any,
+      id: 'category_01jk0000000000000000000001' as any,
       slug: 'getting-started',
       name: 'Getting Started',
       description: 'Intro guides',
@@ -261,17 +263,17 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'GET',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001'
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001'
     )
     const response = await detailHandlers.GET({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     const json = await parseJson(response)
 
     expect(response.status).toBe(200)
     expect(json.data).toMatchObject({
-      id: 'helpcenter_category_01jk0000000000000000000001',
+      id: 'category_01jk0000000000000000000001',
       name: 'Getting Started',
       icon: '\u{1F680}',
       parentId: null,
@@ -282,11 +284,11 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(false)
     const request = createRequest(
       'GET',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001'
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001'
     )
     const response = await detailHandlers.GET({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     expect(response.status).toBe(404)
   })
@@ -319,7 +321,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
     vi.mocked(validateTypeId).mockReturnValue(undefined)
     vi.mocked(updateCategory).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000001' as any,
+      id: 'category_01jk0000000000000000000001' as any,
       slug: 'getting-started',
       name: 'Getting Started',
       description: 'Intro guides',
@@ -333,19 +335,19 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'PATCH',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001',
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001',
       { icon: '\u{2728}' }
     )
     const response = await detailHandlers.PATCH({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     const json = await parseJson(response)
 
     expect(response.status).toBe(200)
     expect(json.data.icon).toBe('\u{2728}')
     expect(updateCategory).toHaveBeenCalledWith(
-      'helpcenter_category_01jk0000000000000000000001',
+      'category_01jk0000000000000000000001',
       expect.objectContaining({ icon: '\u{2728}' })
     )
   })
@@ -355,12 +357,12 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
     vi.mocked(validateTypeId).mockReturnValue(undefined)
     vi.mocked(updateCategory).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000001' as any,
+      id: 'category_01jk0000000000000000000001' as any,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
       icon: null,
-      parentId: 'helpcenter_category_01jk0000000000000000000002' as any,
+      parentId: 'category_01jk0000000000000000000002' as any,
       isPublic: true,
       position: 0,
       createdAt: new Date('2026-01-01'),
@@ -369,21 +371,21 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'PATCH',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001',
-      { parentId: 'helpcenter_category_01jk0000000000000000000002' }
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001',
+      { parentId: 'category_01jk0000000000000000000002' }
     )
     const response = await detailHandlers.PATCH({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     const json = await parseJson(response)
 
     expect(response.status).toBe(200)
-    expect(json.data.parentId).toBe('helpcenter_category_01jk0000000000000000000002')
+    expect(json.data.parentId).toBe('category_01jk0000000000000000000002')
     expect(updateCategory).toHaveBeenCalledWith(
-      'helpcenter_category_01jk0000000000000000000001',
+      'category_01jk0000000000000000000001',
       expect.objectContaining({
-        parentId: 'helpcenter_category_01jk0000000000000000000002',
+        parentId: 'category_01jk0000000000000000000002',
       })
     )
   })
@@ -393,7 +395,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
     vi.mocked(validateTypeId).mockReturnValue(undefined)
     vi.mocked(updateCategory).mockResolvedValue({
-      id: 'helpcenter_category_01jk0000000000000000000001' as any,
+      id: 'category_01jk0000000000000000000001' as any,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
@@ -407,19 +409,19 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'PATCH',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001',
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001',
       { icon: null }
     )
     const response = await detailHandlers.PATCH({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     const json = await parseJson(response)
 
     expect(response.status).toBe(200)
     expect(json.data.icon).toBeNull()
     expect(updateCategory).toHaveBeenCalledWith(
-      'helpcenter_category_01jk0000000000000000000001',
+      'category_01jk0000000000000000000001',
       expect.objectContaining({ icon: null })
     )
   })
@@ -434,12 +436,12 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'PATCH',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001',
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001',
       { name: 'Updated' }
     )
     const response = await detailHandlers.PATCH({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     expect(response.status).toBe(403)
   })
@@ -454,15 +456,15 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'DELETE',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001'
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001'
     )
     const response = await detailHandlers.DELETE({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
 
     expect(response.status).toBe(204)
-    expect(deleteCategory).toHaveBeenCalledWith('helpcenter_category_01jk0000000000000000000001')
+    expect(deleteCategory).toHaveBeenCalledWith('category_01jk0000000000000000000001')
   })
 
   it('returns 403 when auth fails (non-admin)', async () => {
@@ -475,11 +477,11 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
 
     const request = createRequest(
       'DELETE',
-      'http://localhost/api/v1/help-center/categories/helpcenter_category_01jk0000000000000000000001'
+      'http://localhost/api/v1/help-center/categories/category_01jk0000000000000000000001'
     )
     const response = await detailHandlers.DELETE({
       request,
-      params: { categoryId: 'helpcenter_category_01jk0000000000000000000001' },
+      params: { categoryId: 'category_01jk0000000000000000000001' },
     })
     expect(response.status).toBe(403)
   })

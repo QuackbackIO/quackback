@@ -1,24 +1,7 @@
 /**
- * Build the base URL for the standalone help center.
- *
- * Priority:
- * 1. Custom domain           -> https://{customDomain}
- * 2. Convention subdomain   -> https://help.{slug}.quackback.app
- * 3. Fallback               -> /help (relative, for edge cases)
+ * Returns the base path for the inline help center.
+ * The help center is always served inline at /hc on the workspace's main domain.
  */
-export function getHelpCenterBaseUrl(
-  settings: {
-    helpCenterConfig?: { customDomain?: string | null; domainVerified?: boolean } | null
-    slug?: string | null
-  } | null
-): string {
-  const config = settings?.helpCenterConfig
-  if (config?.customDomain) {
-    return `https://${config.customDomain}`
-  }
-  const slug = settings?.slug
-  if (slug) {
-    return `https://help.${slug}.quackback.app`
-  }
-  return '/help' // fallback for edge cases
+export function getHelpCenterBaseUrl(): string {
+  return '/hc'
 }

@@ -10,7 +10,6 @@ export interface BootstrapData {
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
   themeCookie: Theme
-  helpCenterHost: boolean
 }
 
 async function getSessionInternal(): Promise<Session | null> {
@@ -67,19 +66,13 @@ async function getSessionInternal(): Promise<Session | null> {
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
-  const [
-    { getTenantSettings },
-    { db, principal, eq },
-    { config },
-    { getRequestHeaders },
-    { isHelpCenterHost },
-  ] = await Promise.all([
-    import('@/lib/server/domains/settings/settings.service'),
-    import('@/lib/server/db'),
-    import('@/lib/server/config'),
-    import('@tanstack/react-start/server'),
-    import('@/lib/shared/help-center-host'),
-  ])
+  const [{ getTenantSettings }, { db, principal, eq }, { config }, { getRequestHeaders }] =
+    await Promise.all([
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/server/db'),
+      import('@/lib/server/config'),
+      import('@tanstack/react-start/server'),
+    ])
 
   // Fetch session and settings in parallel
   const [session, settings] = await Promise.all([getSessionInternal(), getTenantSettings()])
@@ -112,22 +105,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
 
-  // Detect help center hostname
-  const host = headers.get('host') ?? ''
-  const baseDomain = new URL(config.baseUrl).hostname
-  let helpCenterHost = isHelpCenterHost(
-    host,
-    settings?.helpCenterConfig ?? null,
-    settings?.slug ?? null,
-    baseDomain
-  )
-
-  // Dev mode override: HELP_CENTER_DEV=true forces help center mode
-  if (!helpCenterHost && config.isDev && config.helpCenterDev) {
-    helpCenterHost = true
-  }
-
-  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie, helpCenterHost }
+  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
 })
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(

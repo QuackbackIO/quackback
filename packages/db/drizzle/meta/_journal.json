@@ -323,6 +323,13 @@
       "when": 1775830438920,
       "tag": "0045_needy_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1776295529864,
+      "tag": "0046_military_nebula",
+      "breakpoints": true
     }
   ]
 }
