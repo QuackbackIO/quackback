@@ -139,7 +139,7 @@ export function SettingsNav() {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
                   isActive
                     ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
