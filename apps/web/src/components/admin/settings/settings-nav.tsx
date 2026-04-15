@@ -16,7 +16,6 @@ import {
   AdjustmentsHorizontalIcon,
   ShieldCheckIcon,
   BeakerIcon,
-  GlobeAltIcon,
   BookOpenIcon,
   TagIcon,
 } from '@heroicons/react/24/solid'
@@ -37,15 +36,18 @@ interface NavSection {
 export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[] {
   const sections: NavSection[] = [
     {
-      label: 'Workspace',
+      label: 'General',
       items: [
         { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
       ],
     },
     {
-      label: 'Appearance',
-      items: [{ label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon }],
+      label: 'Customization',
+      items: [
+        { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
+        { label: 'Widget', to: '/admin/settings/portal-widget', icon: ChatBubbleLeftRightIcon },
+      ],
     },
     {
       label: 'Feedback',
@@ -54,13 +56,6 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
         { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
         { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
         { label: 'Permissions', to: '/admin/settings/permissions', icon: ShieldCheckIcon },
-      ],
-    },
-    {
-      label: 'Portal',
-      items: [
-        { label: 'General', to: '/admin/settings/portal', icon: GlobeAltIcon },
-        { label: 'Widget', to: '/admin/settings/portal-widget', icon: ChatBubbleLeftRightIcon },
       ],
     },
   ]
@@ -74,7 +69,7 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
 
   sections.push(
     {
-      label: 'Users',
+      label: 'End Users',
       items: [
         { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
         {
@@ -90,11 +85,8 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
         { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
         { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
         { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
+        { label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon },
       ],
-    },
-    {
-      label: 'Advanced',
-      items: [{ label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon }],
     }
   )
 
@@ -117,7 +109,7 @@ function NavSection({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center justify-between px-2.5 py-1 text-xs font-normal text-muted-foreground/80 hover:text-foreground transition-colors"
       >
         {label}
         {isOpen ? <ChevronUpIcon className="h-3 w-3" /> : <ChevronDownIcon className="h-3 w-3" />}
@@ -147,7 +139,7 @@ export function SettingsNav() {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
                   isActive
                     ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
