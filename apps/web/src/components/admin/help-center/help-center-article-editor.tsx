@@ -5,9 +5,16 @@ import { useQuery } from '@tanstack/react-query'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { ArrowTopRightOnSquareIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -99,17 +106,17 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
     [form]
   )
 
-  const handlePublishToggle = useCallback(() => {
-    if (isPublished) {
-      unpublishArticleMutation.mutate(articleId, {
-        onSuccess: () => setIsPublished(false),
-      })
-    } else {
-      publishArticleMutation.mutate(articleId, {
-        onSuccess: () => setIsPublished(true),
-      })
-    }
-  }, [isPublished, articleId, publishArticleMutation, unpublishArticleMutation])
+  const handlePublish = useCallback(() => {
+    publishArticleMutation.mutate(articleId, {
+      onSuccess: () => setIsPublished(true),
+    })
+  }, [articleId, publishArticleMutation])
+
+  const handleUnpublish = useCallback(() => {
+    unpublishArticleMutation.mutate(articleId, {
+      onSuccess: () => setIsPublished(false),
+    })
+  }, [articleId, unpublishArticleMutation])
 
   const handleSubmit = form.handleSubmit((data) => {
     updateArticleMutation.mutate({
@@ -144,7 +151,8 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   }
 
   const currentCategory = categories.find((c) => c.id === categoryId)
-  const publishDisabled = publishArticleMutation.isPending || unpublishArticleMutation.isPending
+  const publicArticleUrl =
+    article.category?.slug && article.slug ? `/hc/${article.category.slug}/${article.slug}` : null
 
   return (
     <Form {...form}>
@@ -209,27 +217,60 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 </SelectContent>
               </Select>
 
-              {/* Publish state toggle */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handlePublishToggle}
-                disabled={publishDisabled}
-                className={cn(
-                  'h-8 rounded-full text-xs px-3 gap-1.5',
-                  isPublished &&
-                    'border-green-600/30 bg-green-600/10 text-green-700 hover:bg-green-600/20 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300'
-                )}
-              >
-                <span
-                  className={cn(
-                    'h-1.5 w-1.5 rounded-full',
-                    isPublished ? 'bg-green-500' : 'bg-muted-foreground/60'
+              {/* Publish primary action — changes to "View article" once published */}
+              {isPublished ? (
+                <div className="flex items-center gap-1">
+                  {publicArticleUrl && (
+                    <a
+                      href={publicArticleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        'inline-flex items-center gap-1.5 h-8 rounded-full text-xs px-3',
+                        'border border-green-600/30 bg-green-600/10 text-green-700',
+                        'hover:bg-green-600/20 hover:text-green-800',
+                        'dark:text-green-400 dark:hover:text-green-300 transition-colors'
+                      )}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
+                      View article
+                      <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                    </a>
                   )}
-                />
-                {isPublished ? 'Published' : 'Draft'}
-              </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-full"
+                        aria-label="Article actions"
+                      >
+                        <EllipsisHorizontalIcon className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={handleUnpublish}
+                        disabled={unpublishArticleMutation.isPending}
+                      >
+                        {unpublishArticleMutation.isPending ? 'Unpublishing…' : 'Unpublish'}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePublish}
+                  disabled={publishArticleMutation.isPending}
+                  className="h-8 rounded-full text-xs px-3"
+                >
+                  {publishArticleMutation.isPending ? 'Publishing…' : 'Publish'}
+                </Button>
+              )}
 
               {/* Save primary action */}
               <Button
