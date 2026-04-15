@@ -1,17 +1,20 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Route } from '@/routes/admin/help-center'
 import { cn } from '@/lib/shared/utils'
 import { FilterSection } from '@/components/shared/filter-section'
 import { FilterList } from '@/components/admin/feedback/single-select-filter-list'
-import { Input } from '@/components/ui/input'
+import { HelpCenterCategoryTree, type TreeCategory } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import type { HelpCenterStatusFilter } from './use-help-center-filters'
+import type { HelpCenterCategoryId } from '@quackback/ids'
 
 interface HelpCenterFiltersProps {
   status: HelpCenterStatusFilter
   onStatusChange: (status: HelpCenterStatusFilter) => void
+  selectedCategoryId: string | undefined
+  onSelectCategory: (id: HelpCenterCategoryId | null) => void
+  onNewCategory: (parentId: HelpCenterCategoryId | null) => void
+  onEditCategory: (category: TreeCategory) => void
+  onDeleteCategory: (category: TreeCategory) => void
   showDeleted?: boolean
   onShowDeletedChange?: (showDeleted: boolean | undefined) => void
 }
@@ -25,19 +28,15 @@ const ARTICLE_STATUSES = [
 export function HelpCenterFiltersPanel({
   status,
   onStatusChange,
+  selectedCategoryId,
+  onSelectCategory,
+  onNewCategory,
+  onEditCategory,
+  onDeleteCategory,
   showDeleted,
   onShowDeletedChange,
 }: HelpCenterFiltersProps) {
-  const { data: categories } = useQuery(helpCenterQueries.categories())
-  const navigate = useNavigate({ from: Route.fullPath })
-  const search = Route.useSearch()
-  const [jumpQuery, setJumpQuery] = useState('')
-
-  const jumpMatches = useMemo(() => {
-    if (!categories || jumpQuery.trim().length === 0) return []
-    const q = jumpQuery.trim().toLowerCase()
-    return categories.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 8)
-  }, [categories, jumpQuery])
+  const { data: categories = [] } = useQuery(helpCenterQueries.categories())
 
   return (
     <div className="space-y-0">
@@ -75,37 +74,17 @@ export function HelpCenterFiltersPanel({
         </div>
       </FilterSection>
 
-      <FilterSection title="Jump to">
-        <Input
-          placeholder="Search categories..."
-          value={jumpQuery}
-          onChange={(e) => setJumpQuery(e.target.value)}
-          className="h-7 text-xs"
+      <FilterSection title="Categories">
+        <HelpCenterCategoryTree
+          categories={categories}
+          selectedId={selectedCategoryId}
+          onNavigate={onSelectCategory}
+          onNewCategory={onNewCategory}
+          onEditCategory={onEditCategory}
+          onDeleteCategory={onDeleteCategory}
         />
-        {jumpMatches.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {jumpMatches.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setJumpQuery('')
-                  void navigate({
-                    to: '/admin/help-center',
-                    search: { ...search, category: cat.id },
-                  })
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex items-center gap-2"
-              >
-                <span className="shrink-0">{cat.icon || '📁'}</span>
-                <span className="truncate">{cat.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </FilterSection>
 
-      {/* Other Filters */}
       <FilterSection title="Other">
         <FilterList
           items={[{ id: 'deleted', name: 'Deleted items' }]}
