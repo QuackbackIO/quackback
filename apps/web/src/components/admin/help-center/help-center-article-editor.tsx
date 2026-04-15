@@ -8,6 +8,7 @@ import { ArrowLeftIcon, Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { updateArticleSchema } from '@/lib/shared/schemas/help-center'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
@@ -138,66 +139,70 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   return (
     <Form {...form}>
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex flex-col h-full">
-        {/* Top bar: back button + title crumbs + save controls */}
-        <div className="border-b border-border/50 px-4 py-3 flex items-center gap-3 shrink-0">
-          <Button type="button" variant="ghost" size="sm" onClick={handleBack}>
-            <ArrowLeftIcon className="h-4 w-4 mr-1" />
-            Back
-          </Button>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
-            <Link
-              to="/admin/help-center"
-              className="hover:text-foreground transition-colors truncate"
-            >
-              Help Center
-            </Link>
-            <span className="shrink-0">/</span>
-            {article.category && (
-              <>
-                <Link
-                  to="/admin/help-center"
-                  search={{ category: article.categoryId }}
-                  className="hover:text-foreground transition-colors truncate"
-                >
-                  {article.category.name}
-                </Link>
-                <span className="shrink-0">/</span>
-              </>
-            )}
-            <span className="text-foreground truncate">{article.title || 'Untitled'}</span>
-          </div>
-          <div className="ml-auto flex items-center gap-2 shrink-0">
-            <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
-              <SheetTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="lg:hidden">
-                  <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
-                  Settings
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="bottom" className="h-[70vh]">
-                <SheetHeader>
-                  <SheetTitle>Article Settings</SheetTitle>
-                </SheetHeader>
-                <div className="py-4 overflow-y-auto">
-                  <HelpCenterMetadataSidebarContent
-                    categoryId={categoryId}
-                    onCategoryChange={handleCategoryChange}
-                    isPublished={isPublished}
-                    onPublishToggle={handlePublishToggle}
-                    authorName={article.author?.name}
-                  />
-                </div>
-              </SheetContent>
-            </Sheet>
-            <Button type="submit" size="sm" disabled={updateArticleMutation.isPending}>
-              {updateArticleMutation.isPending ? 'Saving\u2026' : 'Save changes'}
+        {/* Top bar: back button + title crumbs + save controls.
+            Border spans the full width; inner content is constrained to
+            max-w-4xl so it aligns with the editor body below. */}
+        <div className="border-b border-border/50 shrink-0">
+          <div className="mx-auto w-full max-w-4xl px-4 py-3 flex items-center gap-3">
+            <Button type="button" variant="ghost" size="sm" onClick={handleBack}>
+              <ArrowLeftIcon className="h-4 w-4 mr-1" />
+              Back
             </Button>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+              <Link
+                to="/admin/help-center"
+                className="hover:text-foreground transition-colors truncate"
+              >
+                Help Center
+              </Link>
+              <span className="shrink-0">/</span>
+              {article.category && (
+                <>
+                  <Link
+                    to="/admin/help-center"
+                    search={{ category: article.categoryId }}
+                    className="hover:text-foreground transition-colors truncate"
+                  >
+                    {article.category.name}
+                  </Link>
+                  <span className="shrink-0">/</span>
+                </>
+              )}
+              <span className="text-foreground truncate">{article.title || 'Untitled'}</span>
+            </div>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
+                <SheetTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="lg:hidden">
+                    <Cog6ToothIcon className="h-4 w-4 mr-1.5" />
+                    Settings
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[70vh]">
+                  <SheetHeader>
+                    <SheetTitle>Article Settings</SheetTitle>
+                  </SheetHeader>
+                  <div className="py-4 overflow-y-auto">
+                    <HelpCenterMetadataSidebarContent
+                      categoryId={categoryId}
+                      onCategoryChange={handleCategoryChange}
+                      isPublished={isPublished}
+                      onPublishToggle={handlePublishToggle}
+                      authorName={article.author?.name}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+              <Button type="submit" size="sm" disabled={updateArticleMutation.isPending}>
+                {updateArticleMutation.isPending ? 'Saving\u2026' : 'Save changes'}
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Content + metadata sidebar */}
         <div className="flex flex-1 min-h-0">
-          <div className="flex-1 overflow-y-auto">
+          <ScrollArea className="flex-1">
             {/* Constrain the editing surface to a reader-friendly width so the
                 admin view mirrors the way articles actually render on the portal. */}
             <div className="mx-auto w-full max-w-4xl">
@@ -210,7 +215,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 }
               />
             </div>
-          </div>
+          </ScrollArea>
 
           <HelpCenterMetadataSidebar
             categoryId={categoryId}
