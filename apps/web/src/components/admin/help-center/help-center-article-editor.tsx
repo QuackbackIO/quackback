@@ -198,14 +198,18 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         {/* Content + metadata sidebar */}
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto">
-            <HelpCenterFormFields
-              form={form}
-              contentJson={contentJson}
-              onContentChange={handleContentChange}
-              error={
-                updateArticleMutation.isError ? updateArticleMutation.error.message : undefined
-              }
-            />
+            {/* Constrain the editing surface to a reader-friendly width so the
+                admin view mirrors the way articles actually render on the portal. */}
+            <div className="mx-auto w-full max-w-4xl">
+              <HelpCenterFormFields
+                form={form}
+                contentJson={contentJson}
+                onContentChange={handleContentChange}
+                error={
+                  updateArticleMutation.isError ? updateArticleMutation.error.message : undefined
+                }
+              />
+            </div>
           </div>
 
           <HelpCenterMetadataSidebar
