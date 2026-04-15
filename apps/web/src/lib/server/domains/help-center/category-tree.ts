@@ -70,9 +70,9 @@ export function getCategoryDepth<T extends CategoryLike>(flat: T[], id: string):
   const start = byId.get(id)
   if (!start) return 0
   let depth = 0
-  let current: T | undefined = start
+  let current: T = start
   const seen = new Set<string>()
-  while (current && current.parentId !== null) {
+  while (current.parentId !== null) {
     if (seen.has(current.id)) break
     seen.add(current.id)
     const parent = byId.get(current.parentId)

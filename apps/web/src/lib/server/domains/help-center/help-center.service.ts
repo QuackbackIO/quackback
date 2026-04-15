@@ -336,6 +336,23 @@ export async function restoreCategory(id: HelpCenterCategoryId): Promise<HelpCen
     )
   }
 
+  // Refuse to restore a child under a still-deleted parent — it would keep
+  // a non-null parentId to a hidden ancestor and drop out of the active
+  // sidebar tree (which only roots from parentId === null). Admins must
+  // restore the ancestor chain first.
+  if (category.parentId) {
+    const parent = await db.query.helpCenterCategories.findFirst({
+      where: eq(helpCenterCategories.id, category.parentId),
+      columns: { id: true, deletedAt: true },
+    })
+    if (parent?.deletedAt) {
+      throw new ValidationError(
+        'PARENT_DELETED',
+        'Restore the parent category first, then restore this one.'
+      )
+    }
+  }
+
   const [restored] = await db
     .update(helpCenterCategories)
     .set({ deletedAt: null, updatedAt: new Date() })

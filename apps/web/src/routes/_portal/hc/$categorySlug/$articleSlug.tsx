@@ -46,7 +46,7 @@ export const Route = createFileRoute('/_portal/hc/$categorySlug/$articleSlug')({
 
     const baseUrl =
       ((portalMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
-    const canonicalUrl = `${baseUrl}/${params.categorySlug}/${params.articleSlug}`
+    const canonicalUrl = `${baseUrl}/hc/${params.categorySlug}/${params.articleSlug}`
 
     return {
       meta: [

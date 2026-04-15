@@ -1125,6 +1125,47 @@ describe('restoreCategory', () => {
       code: 'RESTORE_EXPIRED',
     })
   })
+
+  it('refuses to restore a child under a still-deleted parent', async () => {
+    const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+    mockCategoryFindFirst.mockResolvedValueOnce({
+      id: 'category_child' as HelpCenterCategoryId,
+      slug: 'child',
+      name: 'Child Category',
+      parentId: 'category_parent' as HelpCenterCategoryId,
+      deletedAt: recentDeletedAt,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    })
+    mockCategoryFindFirst.mockResolvedValueOnce({
+      id: 'category_parent' as HelpCenterCategoryId,
+      deletedAt: recentDeletedAt,
+    })
+    await expect(restoreCategory('category_child' as HelpCenterCategoryId)).rejects.toMatchObject({
+      code: 'PARENT_DELETED',
+    })
+  })
+
+  it('restores a child when its parent is already active', async () => {
+    const recentDeletedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+    mockCategoryFindFirst.mockResolvedValueOnce({
+      id: 'category_child' as HelpCenterCategoryId,
+      slug: 'child',
+      name: 'Child Category',
+      parentId: 'category_parent' as HelpCenterCategoryId,
+      deletedAt: recentDeletedAt,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    })
+    mockCategoryFindFirst.mockResolvedValueOnce({
+      id: 'category_parent' as HelpCenterCategoryId,
+      deletedAt: null,
+    })
+    const { db } = await import('@/lib/server/db')
+    vi.mocked(db.update).mockReturnValueOnce(makeRestoredCategoryChain() as never)
+    const result = await restoreCategory('category_child' as HelpCenterCategoryId)
+    expect(result.deletedAt).toBeNull()
+  })
 })
 
 // ============================================================================
