@@ -235,12 +235,12 @@ function WidgetCommentItem({
           </Avatar>
           <span className="text-xs font-medium text-foreground truncate">{authorName}</span>
           {comment.isTeamMember && (
-            <span className="text-[9px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0">
+            <span className="text-[10px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0">
               <FormattedMessage id="widget.commentList.teamBadge" defaultMessage="Team" />
             </span>
           )}
           {isPinned && (
-            <span className="text-[9px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0 inline-flex items-center gap-0.5">
+            <span className="text-[10px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0 inline-flex items-center gap-0.5">
               <MapPinIcon className="h-2.5 w-2.5" />
               <FormattedMessage id="widget.commentList.pinnedBadge" defaultMessage="Pinned" />
             </span>
@@ -324,7 +324,7 @@ function WidgetCommentItem({
             <button
               type="button"
               onClick={() => setShowReplyForm(!showReplyForm)}
-              className="inline-flex items-center gap-0.5 h-5 px-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              className="inline-flex items-center gap-0.5 h-5 px-1 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
               <ArrowUturnLeftIcon className="h-2.5 w-2.5" />
               <FormattedMessage id="widget.commentList.reply" defaultMessage="Reply" />
@@ -383,7 +383,7 @@ function WidgetCommentItem({
                   setShowReplyForm(false)
                   setReplyText('')
                 }}
-                className="mt-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                className="mt-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 <FormattedMessage id="widget.commentList.cancel" defaultMessage="Cancel" />
               </button>

@@ -135,11 +135,11 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                       className="group text-start rounded-lg border border-border/50 bg-card p-3 hover:border-border hover:bg-muted/30 transition-all cursor-pointer"
                     >
                       {cat.icon && <div className="text-lg mb-1">{cat.icon}</div>}
-                      <h3 className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                      <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
                         {cat.name}
                       </h3>
                       {cat.description && (
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">
+                        <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">
                           {cat.description}
                         </p>
                       )}
@@ -187,7 +187,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                   className="w-full text-start rounded-lg hover:bg-muted/30 transition-colors px-2.5 py-2.5 cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+                    <span className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
                       {article.category.name}
                     </span>
                   </div>

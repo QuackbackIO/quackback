@@ -70,7 +70,7 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
               className="w-full text-start rounded-lg hover:bg-muted/30 transition-colors px-2.5 py-2.5 cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-1">
-                <time className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+                <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
                   {formatDate(entry.publishedAt)}
                 </time>
               </div>
