@@ -13,11 +13,21 @@ import {
   mergeMetadata,
 } from '@/lib/server/domains/users/user.attributes'
 
-const identifySchema = z.object({
-  ssoToken: z.string().min(1, 'ssoToken is required'),
-  // Anonymous→identified merge: previous widget session token
-  previousToken: z.string().optional(),
-})
+const identifySchema = z
+  .object({
+    // Verified path
+    ssoToken: z.string().min(1).optional(),
+    // Unverified path
+    id: z.string().min(1).optional(),
+    sub: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    name: z.string().optional(),
+    avatarURL: z.string().optional(),
+    avatarUrl: z.string().optional(),
+    // Anonymous→identified merge: previous widget session token
+    previousToken: z.string().optional(),
+  })
+  .passthrough()
 
 /** JWT claims that are identity fields or standard JWT metadata — not custom attributes */
 export const RESERVED_JWT_CLAIMS = new Set([
@@ -99,26 +109,51 @@ export const Route = createFileRoute('/api/widget/identify')({
           const raw = await request.json()
           body = identifySchema.parse(raw)
         } catch {
-          return jsonError('VALIDATION_ERROR', 'Invalid request body: ssoToken is required', 400)
+          return jsonError('VALIDATION_ERROR', 'Invalid request body', 400)
         }
 
-        const secret = await getWidgetSecret()
-        if (!secret) {
-          return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
+        // Determine identity source: verified JWT or unverified body fields
+        let claims: Record<string, unknown>
+
+        if (body.ssoToken) {
+          const secret = await getWidgetSecret()
+          if (!secret) {
+            return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
+          }
+          const payload = verifyHS256JWT(body.ssoToken, secret)
+          if (!payload) {
+            return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
+          }
+          claims = payload
+        } else {
+          // Unverified identify — only allowed when verified-identity-only is off
+          if (widgetConfig.identifyVerification) {
+            return jsonError(
+              'TOKEN_REQUIRED',
+              'ssoToken is required when verified identity is enabled',
+              403
+            )
+          }
+          // Strip session-management fields so they're not treated as attributes
+          claims = { ...body } as Record<string, unknown>
+          delete claims.ssoToken
+          delete claims.previousToken
         }
 
-        const payload = verifyHS256JWT(body.ssoToken, secret)
-        if (!payload) {
-          return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
-        }
-
-        // Extract user data from JWT claims
-        const sub = payload.sub || payload.id
-        const email = payload.email
-        if (typeof sub !== 'string' || typeof email !== 'string') {
+        // Extract identity fields, supporting both JWT and unverified body shapes
+        const sub =
+          typeof claims.sub === 'string'
+            ? claims.sub
+            : typeof claims.id === 'string'
+              ? claims.id
+              : undefined
+        const email = typeof claims.email === 'string' ? claims.email : undefined
+        if (!sub || !email) {
           return jsonError(
-            'TOKEN_INVALID',
-            'ssoToken must contain sub (or id) and email claims',
+            body.ssoToken ? 'TOKEN_INVALID' : 'VALIDATION_ERROR',
+            body.ssoToken
+              ? 'ssoToken must contain sub (or id) and email claims'
+              : 'id (or sub) and email are required',
             400
           )
         }
@@ -126,17 +161,17 @@ export const Route = createFileRoute('/api/widget/identify')({
         const identified: IdentifiedUser = {
           id: sub,
           email,
-          name: typeof payload.name === 'string' ? payload.name : undefined,
+          name: typeof claims.name === 'string' ? claims.name : undefined,
           avatarURL:
-            typeof payload.avatarURL === 'string'
-              ? payload.avatarURL
-              : typeof payload.avatarUrl === 'string'
-                ? payload.avatarUrl
+            typeof claims.avatarURL === 'string'
+              ? claims.avatarURL
+              : typeof claims.avatarUrl === 'string'
+                ? claims.avatarUrl
                 : undefined,
         }
 
-        // Extract custom attributes from JWT claims (silently drop unknown/invalid)
-        const customClaims = extractCustomClaims(payload)
+        // Extract custom attributes (silently drop unknown/invalid)
+        const customClaims = extractCustomClaims(claims)
         let validAttrs: Record<string, unknown> = {}
         if (Object.keys(customClaims).length > 0) {
           const { valid } = await validateAndCoerceAttributes(customClaims)
