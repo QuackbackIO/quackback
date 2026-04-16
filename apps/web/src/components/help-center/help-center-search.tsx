@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { truncateContent } from './help-center-utils'
+import { contentPreview } from '@/lib/shared/utils/string'
 
 // ============================================================================
 // Types
@@ -128,7 +128,7 @@ export function HelpCenterHeroSearch() {
                   <div className="text-xs text-muted-foreground mt-0.5">{result.category.name}</div>
                   {result.content && (
                     <div className="text-xs text-muted-foreground/70 mt-1 line-clamp-2">
-                      {truncateContent(result.content)}
+                      {contentPreview(result.content, 150)}
                     </div>
                   )}
                 </button>

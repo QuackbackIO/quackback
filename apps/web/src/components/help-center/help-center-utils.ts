@@ -27,14 +27,6 @@ export function getActiveCategory(pathname: string): string | null {
 }
 
 /**
- * Truncates content to a maximum length, appending ellipsis if needed.
- */
-export function truncateContent(content: string, maxLength = 150): string {
-  if (content.length <= maxLength) return content
-  return content.slice(0, maxLength) + '...'
-}
-
-/**
  * Filters categories to find direct children of a given parent category.
  */
 export function getSubcategories<T extends CategoryLike>(categories: T[], parentId: string): T[] {

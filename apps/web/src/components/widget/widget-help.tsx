@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
+import { contentPreview } from '@/lib/shared/utils/string'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MagnifyingGlassIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
@@ -194,7 +195,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                     {article.title}
                   </h3>
                   <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">
-                    {article.content}
+                    {contentPreview(article.content)}
                   </p>
                 </button>
               ))}

@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { contentPreview } from '@/lib/shared/utils/string'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
@@ -11,20 +12,6 @@ function formatDate(iso: string) {
     day: 'numeric',
     year: 'numeric',
   })
-}
-
-export function truncateContent(content: string, maxLength = 120): string {
-  const plain = content
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`(.*?)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/^[-*]\s+/gm, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-  if (plain.length <= maxLength) return plain
-  return plain.slice(0, maxLength).trimEnd() + '...'
 }
 
 interface WidgetChangelogProps {
@@ -91,7 +78,7 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
                 {entry.title}
               </h3>
               <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">
-                {truncateContent(entry.content)}
+                {contentPreview(entry.content, 120)}
               </p>
             </button>
           ))}

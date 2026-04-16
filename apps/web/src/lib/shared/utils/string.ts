@@ -113,8 +113,8 @@ export function getStatusEmoji(status: string): string {
 /**
  * Strip HTML and markdown formatting to produce a plain text preview.
  */
-export function contentPreview(text: string): string {
-  return stripMarkdownPreview(stripHtml(text), Infinity)
+export function contentPreview(text: string, maxLength = Infinity): string {
+  return stripMarkdownPreview(stripHtml(text), maxLength)
 }
 
 export function stripHtml(html: string): string {

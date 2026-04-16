@@ -312,4 +312,12 @@ describe('contentPreview', () => {
   it('collapses whitespace', () => {
     expect(contentPreview('<p>hello</p>\n\n<p>world</p>')).toBe('hello world')
   })
+
+  it('truncates to maxLength with ellipsis', () => {
+    expect(contentPreview('a'.repeat(200), 150)).toBe('a'.repeat(150) + '...')
+  })
+
+  it('returns full text when under maxLength', () => {
+    expect(contentPreview('short', 150)).toBe('short')
+  })
 })

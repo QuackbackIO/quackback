@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   getTopLevelCategories,
   getActiveCategory,
-  truncateContent,
   getSubcategories,
   buildCategoryBreadcrumbs,
 } from '../help-center-utils'
@@ -60,26 +59,6 @@ describe('getActiveCategory', () => {
   it('returns null for non-hc portal paths', () => {
     expect(getActiveCategory('/')).toBeNull()
     expect(getActiveCategory('/roadmap')).toBeNull()
-  })
-})
-
-describe('truncateContent', () => {
-  it('returns content unchanged when under limit', () => {
-    expect(truncateContent('hello', 10)).toBe('hello')
-  })
-
-  it('truncates and appends ellipsis when over limit', () => {
-    expect(truncateContent('hello world foo bar', 11)).toBe('hello world...')
-  })
-
-  it('handles empty string', () => {
-    expect(truncateContent('', 10)).toBe('')
-  })
-
-  it('uses default limit of 150', () => {
-    const long = 'a'.repeat(200)
-    const result = truncateContent(long)
-    expect(result).toBe('a'.repeat(150) + '...')
   })
 })
 
