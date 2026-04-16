@@ -17,7 +17,7 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
 
   const handleViewOnPortal = useCallback(() => {
     if (!article) return
-    const url = `/hc/${article.category.slug}/${article.slug}`
+    const url = `${window.location.origin}/hc/${article.category.slug}/${article.slug}`
     sendToHost({ type: 'quackback:navigate', url })
   }, [article])
 
@@ -42,26 +42,28 @@ export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
   }
 
   return (
-    <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
-      <div className="px-4 py-3">
-        <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
-          {article.category.name}
-        </span>
-        <WidgetPortalTitle title={article.title} onClick={handleViewOnPortal} />
+    <div className="flex flex-col h-full">
+      <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
+        <div className="px-4 py-3">
+          <span className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
+            {article.category.name}
+          </span>
+          <WidgetPortalTitle title={article.title} onClick={handleViewOnPortal} />
 
-        <div className="mt-3">
-          {article.contentJson && isRichTextContent(article.contentJson) ? (
-            <RichTextContent
-              content={article.contentJson as JSONContent}
-              className="prose-sm [&_h1]:text-base [&_h2]:text-[15px] [&_h3]:text-sm [&_h4]:text-sm [&_p]:text-[13px] [&_li]:text-[13px]"
-            />
-          ) : (
-            <p className="whitespace-pre-wrap text-[13px] text-muted-foreground">
-              {article.content}
-            </p>
-          )}
+          <div className="mt-3">
+            {article.contentJson && isRichTextContent(article.contentJson) ? (
+              <RichTextContent
+                content={article.contentJson as JSONContent}
+                className="prose-sm [&_h1]:text-base [&_h2]:text-[15px] [&_h3]:text-sm [&_h4]:text-sm [&_p]:text-[13px] [&_li]:text-[13px]"
+              />
+            ) : (
+              <p className="whitespace-pre-wrap text-[13px] text-muted-foreground">
+                {article.content}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </ScrollArea>
+      </ScrollArea>
+    </div>
   )
 }
