@@ -53,7 +53,7 @@ export interface TiptapContent {
   type: string
   content?: TiptapContent[]
   text?: string
-  marks?: { type: string; attrs?: Record<string, string | number | boolean> }[]
+  marks?: { type: string; attrs?: Record<string, string | number | boolean | null> }[]
   attrs?: Record<string, string | number | boolean | null>
 }
 

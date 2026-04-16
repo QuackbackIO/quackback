@@ -11,6 +11,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
+import { contentPreview } from '@/lib/shared/utils/string'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -398,7 +399,11 @@ export function PostCard({
         <h3 className="font-semibold text-base text-foreground line-clamp-1">{title}</h3>
 
         {/* Description */}
-        {content && <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">{content}</p>}
+        {content && (
+          <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">
+            {contentPreview(content)}
+          </p>
+        )}
 
         {/* Tags */}
         {tags.length > 0 && (

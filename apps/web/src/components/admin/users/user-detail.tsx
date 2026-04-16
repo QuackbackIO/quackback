@@ -24,6 +24,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { contentPreview } from '@/lib/shared/utils/string'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/server/domains/users'
@@ -145,7 +146,9 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
         <h4 className="font-medium text-sm text-foreground line-clamp-1 mb-0.5">{post.title}</h4>
 
         {/* Description */}
-        <p className="text-xs text-muted-foreground/80 line-clamp-2 mb-2">{post.content}</p>
+        <p className="text-xs text-muted-foreground/80 line-clamp-2 mb-2">
+          {contentPreview(post.content)}
+        </p>
 
         {/* Footer */}
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">

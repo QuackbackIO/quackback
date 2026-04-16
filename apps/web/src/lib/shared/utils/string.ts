@@ -110,6 +110,13 @@ export function getStatusEmoji(status: string): string {
   return map[status.toLowerCase().replace(/\s+/g, '_')] || '\ud83d\udccc'
 }
 
+/**
+ * Strip HTML and markdown formatting to produce a plain text preview.
+ */
+export function contentPreview(text: string): string {
+  return stripMarkdownPreview(stripHtml(text), Infinity)
+}
+
 export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, '') // Remove HTML tags

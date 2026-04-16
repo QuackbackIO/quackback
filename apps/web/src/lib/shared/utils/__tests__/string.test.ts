@@ -13,6 +13,7 @@ import {
   formatStatus,
   getStatusEmoji,
   slugify,
+  contentPreview,
 } from '../string'
 
 describe('getInitials', () => {
@@ -280,5 +281,35 @@ describe('getStatusEmoji', () => {
 
   it('returns fallback emoji for unknown status', () => {
     expect(getStatusEmoji('unknown')).toBe('\ud83d\udccc')
+  })
+})
+
+describe('contentPreview', () => {
+  it('strips markdown link syntax', () => {
+    expect(contentPreview('[google.com](http://google.com)')).toBe('google.com')
+  })
+
+  it('strips HTML tags', () => {
+    expect(contentPreview('<p>some feedback</p>')).toBe('some feedback')
+  })
+
+  it('strips both HTML and markdown', () => {
+    expect(contentPreview('<p>Visit [google.com](http://google.com)</p>')).toBe('Visit google.com')
+  })
+
+  it('strips markdown bold and italic', () => {
+    expect(contentPreview('**bold** and *italic*')).toBe('bold and italic')
+  })
+
+  it('returns plain text unchanged', () => {
+    expect(contentPreview('just some text')).toBe('just some text')
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(contentPreview('')).toBe('')
+  })
+
+  it('collapses whitespace', () => {
+    expect(contentPreview('<p>hello</p>\n\n<p>world</p>')).toBe('hello world')
   })
 })
