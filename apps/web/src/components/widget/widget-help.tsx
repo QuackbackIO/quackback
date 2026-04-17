@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { MagnifyingGlassIcon, QuestionMarkCircleIcon } from '@heroicons/react/24/outline'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
+import { CategoryIcon } from '@/components/help-center/category-icon'
 
 interface WidgetHelpArticle {
   id: string
@@ -134,7 +135,7 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
                       onClick={() => onCategorySelect?.(cat.id, cat.name, cat.icon)}
                       className="group text-start rounded-lg border border-border/50 bg-card p-3 hover:border-border hover:bg-muted/30 transition-all cursor-pointer"
                     >
-                      {cat.icon && <div className="text-lg mb-1">{cat.icon}</div>}
+                      <CategoryIcon icon={cat.icon} className="w-6 h-6 mb-1" />
                       <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
                         {cat.name}
                       </h3>

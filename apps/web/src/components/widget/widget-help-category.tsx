@@ -3,6 +3,7 @@ import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRightIcon } from '@heroicons/react/24/solid'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
+import { CategoryIcon } from '@/components/help-center/category-icon'
 
 interface WidgetHelpCategoryProps {
   categoryId: string
@@ -24,7 +25,7 @@ export function WidgetHelpCategory({
       {/* Category header */}
       <div className="px-3 pt-2 pb-2 shrink-0 border-b border-border/30">
         <div className="flex items-center gap-2">
-          {categoryIcon && <span className="text-lg">{categoryIcon}</span>}
+          {categoryIcon && <CategoryIcon icon={categoryIcon} className="w-5 h-5 shrink-0" />}
           <h3 className="text-sm font-semibold text-foreground">{categoryName}</h3>
         </div>
       </div>
