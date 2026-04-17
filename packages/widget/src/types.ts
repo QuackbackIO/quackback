@@ -14,8 +14,6 @@ export interface InitOptions {
   locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | string
   /** Bundle identity into init — shorthand for init + identify. */
   identity?: Identity
-  /** Override server-provided theme (see /api/widget/config.json). */
-  theme?: WidgetTheme
 }
 
 /**
@@ -57,15 +55,6 @@ export interface WidgetUser {
   name: string
   email: string
   avatarUrl?: string | null
-}
-
-export interface WidgetTheme {
-  lightPrimary?: string
-  lightPrimaryForeground?: string
-  darkPrimary?: string
-  darkPrimaryForeground?: string
-  radius?: string
-  themeMode?: 'light' | 'dark' | 'user'
 }
 
 /**

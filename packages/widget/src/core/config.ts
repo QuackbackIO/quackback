@@ -1,7 +1,17 @@
-import type { WidgetTheme } from '../types'
-
+/** Server config shape returned from `/api/widget/config.json`. */
 export interface ServerConfig {
-  theme?: WidgetTheme
+  /**
+   * Theme colors configured in the admin dashboard. Opaque to this package —
+   * sdk.ts picks out the primary/foreground fields it needs and pushes them
+   * to the launcher via `setColors`.
+   */
+  theme?: {
+    lightPrimary?: string
+    lightPrimaryForeground?: string
+    darkPrimary?: string
+    darkPrimaryForeground?: string
+    themeMode?: 'light' | 'dark' | 'user'
+  }
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   imageUploadsInWidget?: boolean
   hmacRequired?: boolean
