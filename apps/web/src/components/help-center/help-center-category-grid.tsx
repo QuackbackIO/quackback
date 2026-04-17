@@ -29,7 +29,7 @@ function EditorAvatars({ editors }: { editors: Editor[] }) {
       <div className="flex">
         {editors.slice(0, 3).map((e, i) => (
           <span
-            key={`${e.name}-${i}`}
+            key={e.name}
             className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted border border-background text-[9px] font-semibold text-muted-foreground overflow-hidden"
             style={{ marginLeft: i === 0 ? 0 : -6 }}
             title={e.name}
