@@ -582,10 +582,10 @@ export function WidgetIdentify() {
           Quackback("identify", { ssoToken });
         })
         .catch(() => {
-          Quackback("identify", null);
+          Quackback("logout");
         });
     } else {
-      Quackback("identify", { anonymous: true });
+      Quackback("identify");
     }
   }, [user]);
 

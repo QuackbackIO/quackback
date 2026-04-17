@@ -407,29 +407,28 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         break;
 
       case "identify":
-        if (options === null || options === undefined) {
-          // Clear identity — close panel and hide trigger
-          isIdentified = false;
-          hidePanel();
-          if (trigger) trigger.style.display = "none";
-          if (isReady) sendToWidget("quackback:identify", null);
-          else pendingIdentify = null;
-        } else {
-          // Show trigger on first identify
-          if (!isIdentified) {
-            isIdentified = true;
-            if (!(config && config.trigger === false)) {
-              if (!trigger) createTrigger();
-              else trigger.style.display = "flex";
-            }
+        // No-args / empty object → anonymous; otherwise { id, email, ... } or { ssoToken }
+        var identifyPayload = options || { anonymous: true };
+        if (!isIdentified) {
+          isIdentified = true;
+          if (!(config && config.trigger === false)) {
+            if (!trigger) createTrigger();
+            else trigger.style.display = "flex";
           }
-          // Eagerly create the iframe so it loads, hydrates, and completes
-          // the identify round-trip in the background — before the user opens
-          // the panel. This eliminates the visible delay on vote highlights.
-          if (!panel) createPanel();
-          if (isReady) sendToWidget("quackback:identify", options);
-          else pendingIdentify = options;
         }
+        // Eagerly create the iframe so identify completes in the background
+        // before the user opens the panel.
+        if (!panel) createPanel();
+        if (isReady) sendToWidget("quackback:identify", identifyPayload);
+        else pendingIdentify = identifyPayload;
+        break;
+
+      case "logout":
+        isIdentified = false;
+        hidePanel();
+        if (trigger) trigger.style.display = "none";
+        if (isReady) sendToWidget("quackback:identify", null);
+        else pendingIdentify = null;
         break;
 
       case "open":

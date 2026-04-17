@@ -494,7 +494,7 @@ export function WidgetIdentify() {
         name: user.name,
       });
     } else {
-      Quackback("identify", { anonymous: true });
+      Quackback("identify");
     }
   }, [user]);
 
@@ -520,7 +520,7 @@ export function WidgetIdentify() {
           });
         });
     } else {
-      Quackback("identify", { anonymous: true });
+      Quackback("identify");
     }
   }, [user]);
 

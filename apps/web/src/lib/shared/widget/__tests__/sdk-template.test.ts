@@ -46,6 +46,16 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('"destroy"')
   })
 
+  it('should handle the logout command', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('case "logout"')
+  })
+
+  it('treats identify() with no args as anonymous', () => {
+    const result = buildWidgetSDK('https://feedback.acme.com')
+    expect(result).toContain('{ anonymous: true }')
+  })
+
   it('should replay the command queue on initialization', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     expect(result).toContain('window.Quackback')
