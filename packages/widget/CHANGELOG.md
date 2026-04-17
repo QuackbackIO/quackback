@@ -1,5 +1,13 @@
 # @quackback/widget
 
+## 0.1.4 — 2026-04-17
+
+- Launcher fade-in is slower (≈450 ms) and waits ~600 ms after the theme fetch resolves before appearing, for a gentler entrance that doesn't compete with the host page finishing its own render.
+
+## 0.1.3 — 2026-04-17
+
+- Honour the server's `themeMode` when resolving launcher colors. If the server is in dark mode, use `darkPrimary` + `darkPrimaryForeground`; otherwise use the light pair. Keeps the launcher in sync with the iframe's branding.
+
 ## 0.1.2 — 2026-04-17
 
 Security hardening:

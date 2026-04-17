@@ -192,7 +192,7 @@ describe('sdk', () => {
     expect(launcher()?.style.display).toBe('flex')
   })
 
-  it('launcher starts hidden and reveals after server config fetch resolves', async () => {
+  it('launcher starts hidden and reveals shortly after server config fetch resolves', async () => {
     stubIframe()
     let resolveFetch!: (value: unknown) => void
     vi.stubGlobal(
@@ -211,8 +211,12 @@ describe('sdk', () => {
     ) as HTMLButtonElement
     expect(btn.style.opacity).toBe('0')
     resolveFetch({ ok: true, json: async () => ({ theme: {} }) })
-    // Let fetch → json → applyServerTheme → finally settle.
+    // Let the fetch → json → applyServerTheme → finally chain settle.
     await new Promise((r) => setTimeout(r, 0))
+    // Still hidden — the launcher waits a short beat after the fetch resolves.
+    expect(btn.style.opacity).toBe('0')
+    // Then it reveals.
+    await new Promise((r) => setTimeout(r, 700))
     expect(btn.style.opacity).toBe('1')
   })
 
@@ -229,7 +233,7 @@ describe('sdk', () => {
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
     expect(btn.style.opacity).toBe('0')
-    vi.advanceTimersByTime(1500)
+    vi.advanceTimersByTime(1800)
     expect(btn.style.opacity).toBe('1')
     vi.useRealTimers()
   })

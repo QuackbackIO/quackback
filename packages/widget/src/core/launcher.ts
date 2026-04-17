@@ -50,7 +50,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     opacity: '0',
     transition:
-      'opacity 200ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',
+      'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',
   })
   btn.setAttribute('aria-label', 'Open feedback widget')
   btn.setAttribute('aria-expanded', 'false')

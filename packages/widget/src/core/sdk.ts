@@ -56,7 +56,13 @@ export function createSDK(): SDK {
   let pendingOpen: OpenOptions | null = null
   let panelOpen = false
   let currentUser: WidgetUser | null = null
+  let mobileMql: MediaQueryList | null = null
+  let mobileCleanup: (() => void) | null = null
   const emitter = createEmitter()
+
+  function sendMobileState(): void {
+    if (ready && bridge) bridge.send('quackback:mobile', !!mobileMql?.matches)
+  }
 
   function iframeOrigin(): string {
     return new URL(config!.instanceUrl).origin
@@ -77,6 +83,7 @@ export function createSDK(): SDK {
           bridge!.send('quackback:open', pendingOpen)
           pendingOpen = null
         }
+        sendMobileState()
         emitter.emit('ready', {})
         break
       case 'quackback:close':
@@ -134,6 +141,9 @@ export function createSDK(): SDK {
       origin: iframeOrigin(),
     })
     bridge.onMessage(onIframeMessage)
+    mobileMql = window.matchMedia('(max-width: 639px)')
+    mobileMql.addEventListener('change', sendMobileState)
+    mobileCleanup = () => mobileMql!.removeEventListener('change', sendMobileState)
     return panel
   }
 
@@ -162,8 +172,10 @@ export function createSDK(): SDK {
 
   // Reveal the launcher after colors are set (or as a fallback if the fetch
   // is slow/fails), so users never see the default indigo flash before the
-  // brand color lands.
-  const LAUNCHER_REVEAL_FALLBACK_MS = 1500
+  // brand color lands. A small post-fetch delay lets the host page settle
+  // before the launcher fades in.
+  const LAUNCHER_REVEAL_DELAY_MS = 600
+  const LAUNCHER_REVEAL_FALLBACK_MS = 1800
   function revealLauncherOnce(): () => void {
     let revealed = false
     return () => {
@@ -203,7 +215,7 @@ export function createSDK(): SDK {
           .then(applyServerTheme)
           .finally(() => {
             window.clearTimeout(fallback)
-            reveal()
+            window.setTimeout(reveal, LAUNCHER_REVEAL_DELAY_MS)
           })
         return
       }
@@ -275,6 +287,9 @@ export function createSDK(): SDK {
         panel?.destroy()
         launcher?.remove()
         bridge?.dispose()
+        mobileCleanup?.()
+        mobileCleanup = null
+        mobileMql = null
         removeStyles()
         panel = null
         launcher = null
