@@ -44,15 +44,14 @@ packages/widget/
 ├── README.md                  # install + quickstart + API
 ├── src/
 │   ├── index.ts               # Public API: init, identify, logout, open, close, on, off, metadata, destroy, destroy
-│   ├── types.ts               # InitOptions, Identity, EventMap, OpenOptions, WidgetTheme
+│   ├── types.ts               # InitOptions, Identity, OpenOptions, WidgetUser, EventMap
 │   ├── core/
 │   │   ├── sdk.ts             # Orchestrator — holds state, wires modules, exposes dispatcher
 │   │   ├── events.ts          # Typed event emitter (listeners by name)
 │   │   ├── postmessage.ts     # Iframe message protocol (quackback:* in/out)
-│   │   ├── theme.ts           # Dark-mode detection + color resolution
-│   │   ├── launcher.ts         # Floating launcher DOM
+│   │   ├── launcher.ts        # Launcher button (default colors; setColors() for server theme)
 │   │   ├── panel.ts           # Iframe panel + backdrop DOM
-│   │   ├── config.ts          # Fetch /api/widget/config.json, merge with init overrides
+│   │   ├── config.ts          # Fetch /api/widget/config.json (server owns theme)
 │   │   └── style.ts           # Injects the one <style> tag (panel/backdrop CSS)
 │   ├── browser-queue.ts       # IIFE entry: replays window.Quackback.q
 │   └── react/
@@ -136,27 +135,24 @@ Expected: find every place `appId` is read. If it's only stored in config and ne
 
 - [ ] **Step 2: Rename `baseURL` → `instanceUrl` and `position` → `placement` in `QuackbackConfig.swift`**
 
-Rewrite the struct initializer so `instanceUrl: URL` and `placement: QuackbackPosition` are the canonical names. Drop `appId` if Step 1 confirmed it's vestigial. Keep `theme`, `buttonColor`, `locale` unchanged.
+Rewrite the struct initializer so `instanceUrl: URL` and `placement: QuackbackPosition` are the canonical names. Drop `appId` if Step 1 confirmed it's vestigial. Drop `buttonColor` too — theme is fully server-driven; users don't override colors. Keep `theme` (the `QuackbackTheme` themeMode enum, not color values) and `locale`.
 
 ```swift
 public struct QuackbackConfig {
     public let instanceUrl: URL
     public var theme: QuackbackTheme
     public var placement: QuackbackPosition
-    public var buttonColor: String?
     public var locale: String?
 
     public init(
         instanceUrl: URL,
         theme: QuackbackTheme = .system,
         placement: QuackbackPosition = .bottomRight,
-        buttonColor: String? = nil,
         locale: String? = nil
     ) {
         self.instanceUrl = instanceUrl
         self.theme = theme
         self.placement = placement
-        self.buttonColor = buttonColor
         self.locale = locale
     }
 }
@@ -264,10 +260,11 @@ data class QuackbackConfig(
     val instanceUrl: String,
     val theme: QuackbackTheme = QuackbackTheme.SYSTEM,
     val placement: QuackbackPosition = QuackbackPosition.BOTTOM_RIGHT,
-    val buttonColor: String? = null,
     val locale: String? = null,
 )
 ```
+
+(Drop `buttonColor` for the same reason as iOS — theme is server-driven.)
 
 - [ ] **Step 3: Update `Quackback.kt` call sites** — `config.baseURL` → `config.instanceUrl`, `config.position` → `config.placement`.
 
@@ -553,24 +550,26 @@ git commit -m "feat(widget): scaffold @quackback/widget package"
 
 ```ts
 // Tenant Quackback URL — e.g. "https://feedback.acme.com"
-export type AppUrl = string
+export type InstanceUrl = string
 
 /** Passed to `Quackback("init", ...)` or `Quackback.init(...)`. */
 export interface InitOptions {
   /** Tenant Quackback URL — required when using the npm package. */
-  instanceUrl: AppUrl
+  instanceUrl: InstanceUrl
   placement?: 'left' | 'right'
   defaultBoard?: string
   /** Set `launcher: false` to hide the default floating button and open programmatically. */
   launcher?: boolean
-  buttonColor?: string
-  tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | string
   /** Bundle identity into init — shorthand for init + identify. */
   identity?: Identity
-  /** Override server-provided theme (see /api/widget/config.json). */
-  theme?: WidgetTheme
 }
+
+// Note: theme *and* tab visibility are both server-driven. Admin configures
+// them in Quackback (Admin → Settings → Branding / Widget); the SDK fetches
+// /api/widget/config.json at init and applies theme colors to the launcher via
+// setColors(). There is no user-facing theme/buttonColor/tabs override — the
+// principle is "server owns product config, client owns integration wiring."
 
 /**
  * What the host app passes to identify the current user.
@@ -612,15 +611,6 @@ export interface WidgetUser {
   name: string
   email: string
   avatarUrl?: string | null
-}
-
-export interface WidgetTheme {
-  lightPrimary?: string
-  lightPrimaryForeground?: string
-  darkPrimary?: string
-  darkPrimaryForeground?: string
-  radius?: string
-  themeMode?: 'light' | 'dark' | 'user'
 }
 
 /**
@@ -1019,285 +1009,36 @@ git commit -m "feat(widget): iframe postmessage bridge"
 
 ---
 
-### Task 5: Theme resolution (`theme.ts`)
+### Task 5: (removed) — theme is server-driven
 
-Extract the `isDarkMode`, `getThemeColors`, and `applyLauncherColors` logic from `sdk-template.ts` lines 93–114.
+Originally this task extracted a `theme.ts` module with `withDefaults`/`isDark`/`resolveColors`. Post-review we decided theme is **entirely server-driven** — admin configures colors in Quackback, SDK fetches and applies them. There is no client-side `WidgetTheme` override, no `buttonColor` option, and no separate theme module.
 
-**Files:**
-
-- Create: `packages/widget/src/core/theme.ts`
-- Create: `packages/widget/__tests__/theme.test.ts`
-
-- [ ] **Step 1: Write failing test**
-
-`packages/widget/__tests__/theme.test.ts`:
-
-```ts
-import { describe, it, expect, vi } from 'vitest'
-import { resolveColors } from '../src/core/theme'
-
-describe('theme.resolveColors', () => {
-  const defaults = {
-    lightPrimary: '#6366f1',
-    lightPrimaryFg: '#ffffff',
-    darkPrimary: '#818cf8',
-    darkPrimaryFg: '#0f172a',
-    themeMode: 'user' as const,
-  }
-
-  it('uses light colors when themeMode is light', () => {
-    const c = resolveColors({ theme: { ...defaults, themeMode: 'light' }, matches: () => true })
-    expect(c).toEqual({ bg: '#6366f1', fg: '#ffffff' })
-  })
-
-  it('uses dark colors when themeMode is dark', () => {
-    const c = resolveColors({ theme: { ...defaults, themeMode: 'dark' }, matches: () => false })
-    expect(c).toEqual({ bg: '#818cf8', fg: '#0f172a' })
-  })
-
-  it('follows system preference when themeMode is user', () => {
-    const c = resolveColors({ theme: defaults, matches: () => true })
-    expect(c.bg).toBe('#818cf8')
-  })
-
-  it('custom buttonColor overrides theme bg', () => {
-    const c = resolveColors({ theme: defaults, matches: () => false, buttonColor: '#ff0000' })
-    expect(c).toEqual({ bg: '#ff0000', fg: '#ffffff' })
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-Run: `cd ~/quackback/packages/widget && bunx vitest run __tests__/theme.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement**
-
-`packages/widget/src/core/theme.ts`:
-
-```ts
-export interface ResolvedTheme {
-  lightPrimary: string
-  lightPrimaryFg: string
-  darkPrimary: string
-  darkPrimaryFg: string
-  radius: string
-  themeMode: 'light' | 'dark' | 'user'
-}
-
-export function withDefaults(partial?: Partial<ResolvedTheme>): ResolvedTheme {
-  return {
-    lightPrimary: partial?.lightPrimary ?? '#6366f1',
-    lightPrimaryFg: partial?.lightPrimaryFg ?? '#ffffff',
-    darkPrimary: partial?.darkPrimary ?? partial?.lightPrimary ?? '#6366f1',
-    darkPrimaryFg: partial?.darkPrimaryFg ?? partial?.lightPrimaryFg ?? '#ffffff',
-    radius: partial?.radius ?? '24px',
-    themeMode: partial?.themeMode ?? 'user',
-  }
-}
-
-export function isDark(theme: ResolvedTheme, matchesDark: () => boolean): boolean {
-  if (theme.themeMode === 'light') return false
-  if (theme.themeMode === 'dark') return true
-  return matchesDark()
-}
-
-export interface ResolveColorsOptions {
-  theme: ResolvedTheme
-  matches: () => boolean // typically () => window.matchMedia('(prefers-color-scheme: dark)').matches
-  buttonColor?: string
-}
-
-export function resolveColors({ theme, matches, buttonColor }: ResolveColorsOptions): {
-  bg: string
-  fg: string
-} {
-  const dark = isDark(theme, matches)
-  return {
-    bg: buttonColor || (dark ? theme.darkPrimary : theme.lightPrimary),
-    fg: dark ? theme.darkPrimaryFg : theme.lightPrimaryFg,
-  }
-}
-```
-
-- [ ] **Step 4: Run test**
-
-Run: `cd ~/quackback/packages/widget && bunx vitest run __tests__/theme.test.ts`
-Expected: 4 passing.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/widget/src/core/theme.ts packages/widget/__tests__/theme.test.ts
-git commit -m "feat(widget): extract theme resolution"
-```
+Theme handling is now ~10 inline lines in Task 9's `applyServerTheme` helper inside `sdk.ts`.
 
 ---
 
 ### Task 6: Launcher button (`launcher.ts`)
 
-Extract the `createLauncher`, icon swap logic, and hover behavior from `sdk-template.ts` lines 115–198.
+**Status:** Done (shipped on `feat/widget-sdk` — see commit `f04fe7b7`, later simplified in `b55e85d6` and `efec266f`).
 
-**Files:**
-
-- Create: `packages/widget/src/core/launcher.ts`
-
-No unit test — this is DOM plumbing that's exercised by `sdk.test.ts` integration tests in Task 9. A separate test would be mocking DOM state to re-assert what the browser already guarantees.
-
-- [ ] **Step 1: Create `launcher.ts`**
-
-Port lines 115–198 of `sdk-template.ts`. The module exports:
+**Shape of the shipped module:**
 
 ```ts
-import type { ResolvedTheme } from './theme'
-import { resolveColors } from './theme'
-
 export interface LauncherOptions {
-  theme: ResolvedTheme
   placement: 'left' | 'right'
-  buttonColor?: string
   onClick: () => void
 }
 
 export interface LauncherHandle {
   el: HTMLButtonElement
   setOpen(open: boolean): void
-  applyColors(): void
+  /** Replace the button colors (typically called after server config fetch). */
+  setColors(colors: { backgroundColor?: string; foregroundColor?: string }): void
   remove(): void
 }
-
-const CHAT_ICON =
-  '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 0 0-1.032-.211 50.89 50.89 0 0 0-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 0 0 2.433 3.984L7.28 21.53A.75.75 0 0 1 6 21v-4.03a48.527 48.527 0 0 1-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979Z"/><path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z"/></svg>'
-const CLOSE_ICON =
-  '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-
-export function createLauncher(opts: LauncherOptions): LauncherHandle {
-  const btn = document.createElement('button')
-  const colors = resolveColors({
-    theme: opts.theme,
-    matches: () => window.matchMedia('(prefers-color-scheme: dark)').matches,
-    buttonColor: opts.buttonColor,
-  })
-
-  Object.assign(btn.style, {
-    position: 'fixed',
-    bottom: '24px',
-    [opts.placement === 'left' ? 'left' : 'right']: '24px',
-    zIndex: '2147483647',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '48px',
-    height: '48px',
-    padding: '0',
-    border: 'none',
-    borderRadius: '50%',
-    backgroundColor: colors.bg,
-    color: colors.fg,
-    fontSize: '14px',
-    fontWeight: '600',
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    transition:
-      'transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',
-  })
-  btn.setAttribute('aria-label', 'Open feedback widget')
-  btn.setAttribute('aria-expanded', 'false')
-
-  const wrapper = document.createElement('div')
-  Object.assign(wrapper.style, {
-    position: 'relative',
-    display: 'flex',
-    width: '28px',
-    height: '28px',
-    flexShrink: '0',
-  })
-
-  const iconTransition =
-    'opacity 220ms cubic-bezier(0.34,1.56,0.64,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1)'
-  const iconChat = document.createElement('span')
-  Object.assign(iconChat.style, {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    display: 'flex',
-    opacity: '1',
-    transform: 'rotate(0deg)',
-    transition: iconTransition,
-  })
-  iconChat.innerHTML = CHAT_ICON
-  const iconClose = document.createElement('span')
-  Object.assign(iconClose.style, {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    display: 'flex',
-    opacity: '0',
-    transform: 'rotate(-90deg)',
-    transition: iconTransition,
-  })
-  iconClose.innerHTML = CLOSE_ICON
-  wrapper.appendChild(iconChat)
-  wrapper.appendChild(iconClose)
-  btn.appendChild(wrapper)
-
-  btn.addEventListener('mouseenter', () => {
-    btn.style.transform = 'translateY(-2px)'
-    btn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)'
-  })
-  btn.addEventListener('mouseleave', () => {
-    btn.style.transform = 'translateY(0)'
-    btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
-  })
-  btn.addEventListener('click', opts.onClick)
-
-  document.body.appendChild(btn)
-
-  const mediaQuery =
-    opts.theme.themeMode === 'user' ? window.matchMedia('(prefers-color-scheme: dark)') : null
-  const applyColors = () => {
-    const c = resolveColors({
-      theme: opts.theme,
-      matches: () => mediaQuery?.matches ?? false,
-      buttonColor: opts.buttonColor,
-    })
-    btn.style.backgroundColor = c.bg
-    btn.style.color = c.fg
-  }
-  mediaQuery?.addEventListener('change', applyColors)
-
-  return {
-    el: btn,
-    setOpen(open) {
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false')
-      btn.setAttribute('aria-label', open ? 'Close feedback widget' : 'Open feedback widget')
-      iconChat.style.opacity = open ? '0' : '1'
-      iconChat.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)'
-      iconClose.style.opacity = open ? '1' : '0'
-      iconClose.style.transform = open ? 'rotate(0deg)' : 'rotate(-90deg)'
-    },
-    applyColors,
-    remove() {
-      mediaQuery?.removeEventListener('change', applyColors)
-      btn.remove()
-    },
-  }
-}
 ```
 
-- [ ] **Step 2: Verify it typechecks**
-
-Run: `cd ~/quackback/packages/widget && bunx tsc --noEmit`
-Expected: Exit code 0.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add packages/widget/src/core/launcher.ts
-git commit -m "feat(widget): extract launcher module"
-```
+No theme imports, no `buttonColor` option — launcher starts with default indigo colors (`DEFAULT_BG = '#6366f1'`, `DEFAULT_FG = '#ffffff'`) and `sdk.ts` pushes server theme via `setColors()` once `/api/widget/config.json` resolves. No unit test — DOM plumbing exercised by `sdk.test.ts` integration tests in Task 9.
 
 ---
 
@@ -1520,10 +1261,20 @@ Expected: FAIL.
 `packages/widget/src/core/config.ts`:
 
 ```ts
-import type { WidgetTheme } from '../types'
-
+/** Server config shape returned from `/api/widget/config.json`. */
 export interface ServerConfig {
-  theme?: WidgetTheme
+  /**
+   * Theme colors configured in the admin dashboard. Inline (no WidgetTheme
+   * public type) — sdk.ts picks out the primary/foreground fields it needs
+   * and pushes them to the launcher via `setColors`.
+   */
+  theme?: {
+    lightPrimary?: string
+    lightPrimaryForeground?: string
+    darkPrimary?: string
+    darkPrimaryForeground?: string
+    themeMode?: 'light' | 'dark' | 'user'
+  }
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   imageUploadsInWidget?: boolean
   hmacRequired?: boolean
@@ -1556,199 +1307,13 @@ git commit -m "feat(widget): remote config fetch"
 
 ### Task 9: SDK orchestrator (`sdk.ts`)
 
-Wires launcher + panel + postmessage + config + events into the dispatcher that replaces the old string template. Ports the state machine from `sdk-template.ts` lines 402–500.
+**Status:** Done (shipped on `feat/widget-sdk` — see commit `79dd15ed`).
 
-**Files:**
+Composes events, postmessage, launcher, panel, config, and style into the dispatcher that backs the public `Quackback` singleton.
 
-- Create: `packages/widget/src/core/sdk.ts`
-- Create: `packages/widget/__tests__/sdk.test.ts`
-
-- [ ] **Step 1: Write the failing test (high-level behavior)**
-
-`packages/widget/__tests__/sdk.test.ts`:
+**Public SDK interface:**
 
 ```ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createSDK } from '../src/core/sdk'
-
-describe('sdk', () => {
-  beforeEach(() => {
-    document.body.innerHTML = ''
-    document.head.innerHTML = ''
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) }))
-    )
-  })
-
-  afterEach(() => vi.restoreAllMocks())
-
-  it('init creates a launcher and iframe', async () => {
-    const sdk = createSDK()
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    await Promise.resolve()
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
-    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
-  })
-
-  it('init with { launcher: false } does not create a button', async () => {
-    const sdk = createSDK()
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com', launcher: false })
-    await Promise.resolve()
-    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
-  })
-
-  it('init defaults identity to anonymous', () => {
-    const sdk = createSDK()
-    const postMessage = vi.fn()
-    const origSpy = vi
-      .spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get')
-      .mockReturnValue({ postMessage } as unknown as Window)
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    // Simulate iframe ready:
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: 'https://feedback.acme.com',
-        data: { type: 'quackback:ready' },
-      })
-    )
-    expect(postMessage).toHaveBeenCalledWith(
-      { type: 'quackback:identify', data: { anonymous: true } },
-      'https://feedback.acme.com'
-    )
-    origSpy.mockRestore()
-  })
-
-  it('identify sends the given payload after ready', () => {
-    const sdk = createSDK()
-    const postMessage = vi.fn()
-    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
-      postMessage,
-    } as unknown as Window)
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: 'https://feedback.acme.com',
-        data: { type: 'quackback:ready' },
-      })
-    )
-    sdk.dispatch('identify', { id: 'u', email: 'a@b.c', name: 'A' })
-    expect(postMessage).toHaveBeenLastCalledWith(
-      { type: 'quackback:identify', data: { id: 'u', email: 'a@b.c', name: 'A' } },
-      'https://feedback.acme.com'
-    )
-  })
-
-  it('logout sends null identify and keeps the launcher visible', () => {
-    const sdk = createSDK()
-    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
-      postMessage: vi.fn(),
-    } as unknown as Window)
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: 'https://feedback.acme.com',
-        data: { type: 'quackback:ready' },
-      })
-    )
-    sdk.dispatch('logout')
-    const launcher = document.querySelector(
-      'button[aria-label="Open feedback widget"]'
-    ) as HTMLButtonElement
-    expect(launcher).not.toBeNull()
-    expect(launcher.style.display).not.toBe('none')
-  })
-
-  it('isOpen tracks panel state', () => {
-    const sdk = createSDK()
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    expect(sdk.isOpen()).toBe(false)
-    sdk.dispatch('open')
-    expect(sdk.isOpen()).toBe(true)
-    sdk.dispatch('close')
-    expect(sdk.isOpen()).toBe(false)
-  })
-
-  it('getUser / isIdentified reflect identify-result messages', () => {
-    const sdk = createSDK()
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    expect(sdk.getUser()).toBeNull()
-    expect(sdk.isIdentified()).toBe(false)
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: 'https://feedback.acme.com',
-        data: {
-          type: 'quackback:identify-result',
-          success: true,
-          user: { id: 'u1', name: 'Ada', email: 'a@b.c' },
-        },
-      })
-    )
-    expect(sdk.getUser()).toEqual({ id: 'u1', name: 'Ada', email: 'a@b.c' })
-    expect(sdk.isIdentified()).toBe(true)
-    sdk.dispatch('logout')
-    expect(sdk.getUser()).toBeNull()
-    expect(sdk.isIdentified()).toBe(false)
-  })
-
-  it('open emits an open event with view context', () => {
-    const sdk = createSDK()
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    const seen: unknown[] = []
-    sdk.dispatch('on', 'open', (payload: unknown) => seen.push(payload))
-    sdk.dispatch('open', { view: 'new-post', title: 'Bug:' })
-    expect(seen).toHaveLength(1)
-    expect((seen[0] as { view: string }).view).toBe('new-post')
-  })
-
-  it('open passes deep-link fields to the iframe (postId/articleId)', () => {
-    const sdk = createSDK()
-    const postMessage = vi.fn()
-    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
-      postMessage,
-    } as unknown as Window)
-    sdk.dispatch('init', { instanceUrl: 'https://feedback.acme.com' })
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: 'https://feedback.acme.com',
-        data: { type: 'quackback:ready' },
-      })
-    )
-    sdk.dispatch('open', { postId: 'post_01h' })
-    expect(postMessage).toHaveBeenCalledWith(
-      { type: 'quackback:open', data: { postId: 'post_01h' } },
-      'https://feedback.acme.com'
-    )
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify fail**
-
-Run: `cd ~/quackback/packages/widget && bunx vitest run __tests__/sdk.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement `sdk.ts`**
-
-`packages/widget/src/core/sdk.ts`:
-
-```ts
-import type {
-  InitOptions,
-  Identity,
-  OpenOptions,
-  WidgetUser,
-  EventName,
-  EventHandler,
-} from '../types'
-import { createEmitter, type Emitter } from './events'
-import { createBridge, type Bridge } from './postmessage'
-import { createLauncher, type LauncherHandle } from './launcher'
-import { createPanel, type PanelHandle } from './panel'
-import { withDefaults, type ResolvedTheme } from './theme'
-import { fetchServerConfig } from './config'
-import { removeStyles } from './style'
-
 type Command =
   | 'init'
   | 'identify'
@@ -1764,258 +1329,61 @@ type Command =
 
 export interface SDK {
   dispatch(command: Command, arg1?: unknown, arg2?: unknown): unknown
-  // State queries — synchronous reads of internal state
+  // Synchronous state readers — backed by internal panelOpen + currentUser
   isOpen(): boolean
   getUser(): WidgetUser | null
   isIdentified(): boolean
 }
 
-export function createSDK(): SDK {
-  let config: InitOptions | null = null
-  let theme: ResolvedTheme | null = null
-  let launcher: LauncherHandle | null = null
-  let panel: PanelHandle | null = null
-  let bridge: Bridge | null = null
-  let ready = false
-  let metadata: Record<string, string> | null = null
-  let pendingIdentify: Identity | null = null
-  let pendingOpen: OpenOptions | null = null
-  // Tracked state for synchronous getters (isOpen, getUser, isIdentified)
-  let panelOpen = false
-  let currentUser: WidgetUser | null = null
-  const emitter: Emitter = createEmitter()
+export function createSDK(): SDK
+```
 
-  function iframeOrigin(): string {
-    return new URL(config!.instanceUrl).origin
-  }
+**Key internal state:**
 
-  function ensurePanel(): PanelHandle {
-    if (panel) return panel
-    panel = createPanel({
-      widgetUrl: `${config!.instanceUrl}/widget`,
-      placement: config!.placement ?? 'right',
-      defaultBoard: config!.defaultBoard,
-      showCloseButton: config!.launcher === false,
-      locale: config!.locale,
-      onBackdropClick: () => dispatch('close'),
-    })
-    bridge = createBridge({
-      getIframe: () => panel!.iframe,
-      origin: iframeOrigin(),
-    })
-    bridge.onMessage(onIframeMessage)
-    return panel
-  }
+- `config: InitOptions | null` — captured at `init`
+- `launcher: LauncherHandle | null` / `panel: PanelHandle | null` / `bridge: Bridge | null`
+- `ready: boolean` — iframe signalled `quackback:ready`
+- `panelOpen: boolean` / `currentUser: WidgetUser | null` — read by the getters
+- `pendingIdentify` + `pendingIdentifyPresent` — queued until iframe is ready (distinguishes "nothing queued" from "logout queued")
+- `pendingOpen: OpenOptions | null` — queued open call
+- `metadata: Record<string, string> | null` — last-known session metadata
 
-  function onIframeMessage(msg: { type: string; [k: string]: unknown }) {
-    switch (msg.type) {
-      case 'quackback:ready':
-        ready = true
-        if (pendingIdentify !== null) {
-          bridge!.send('quackback:identify', pendingIdentify)
-          pendingIdentify = null
-        }
-        if (config?.locale) bridge!.send('quackback:locale', config.locale)
-        if (metadata) bridge!.send('quackback:metadata', metadata)
-        if (pendingOpen) {
-          bridge!.send('quackback:open', pendingOpen)
-          pendingOpen = null
-        }
-        emitter.emit('ready', {})
-        break
-      case 'quackback:close':
-        dispatch('close')
-        break
-      case 'quackback:identify-result': {
-        const m = msg as { success?: boolean; user?: WidgetUser; error?: string }
-        currentUser = m.user ?? null
-        emitter.emit('identify', {
-          success: !!m.success,
-          user: currentUser,
-          anonymous: !!m.success && !m.user,
-          error: m.error,
-        })
-        break
-      }
-      case 'quackback:auth-change': {
-        const m = msg as { user?: WidgetUser }
-        currentUser = m.user ?? null
-        break
-      }
-      case 'quackback:event': {
-        const name = (msg as { name?: string }).name
-        if (name)
-          emitter.emit(name as EventName, ((msg as { payload?: unknown }).payload ?? {}) as never)
-        break
-      }
-      case 'quackback:navigate': {
-        const url = (msg as { url?: string }).url
-        if (url) window.open(url, '_blank')
-        break
-      }
-    }
-  }
+**Inline theme helper** (replaces the deleted `theme.ts`):
 
-  function sendIdentity(data: unknown) {
-    if (ready) bridge!.send('quackback:identify', data)
-    else pendingIdentify = data as Identity
-  }
-
-  function dispatch(cmd: Command, a?: unknown, b?: unknown): unknown {
-    switch (cmd) {
-      case 'init': {
-        config = { ...(a as InitOptions) }
-        if (!config.instanceUrl) throw new Error('Quackback: init requires { instanceUrl }')
-        theme = withDefaults(config.theme)
-        if (config.launcher !== false) {
-          launcher = createLauncher({
-            theme,
-            placement: config.placement ?? 'right',
-            buttonColor: config.buttonColor,
-            onClick: () => {
-              if (panel && panel.iframe.offsetParent !== null) dispatch('close')
-              else dispatch('open')
-            },
-          })
-        }
-        ensurePanel()
-        // Internal wire format — the iframe's resolveIdentifyAction keys on
-        // `anonymous: true`. Public types don't expose this; it's what we send
-        // to the iframe when no identity is provided.
-        const initialIdentity: Identity | { anonymous: true } = config.identity ?? {
-          anonymous: true,
-        }
-        sendIdentity(initialIdentity)
-        // Fire-and-forget remote theme fetch; override only if caller didn't supply
-        if (!config.theme) {
-          void fetchServerConfig(config.instanceUrl).then((serverCfg) => {
-            if (serverCfg.theme) {
-              theme = withDefaults(serverCfg.theme)
-              launcher?.applyColors()
-            }
-          })
-        }
-        return
-      }
-      case 'identify':
-        // Undefined/null → anonymous; anything else passes through to the iframe.
-        // Runtime is lenient: legacy `{ anonymous: true }` callers still work even
-        // though the type no longer advertises that shape.
-        sendIdentity(
-          (a as Identity | { anonymous: true } | undefined | null) ?? { anonymous: true }
-        )
-        return
-      case 'logout':
-        panel?.hide()
-        launcher?.setOpen(false)
-        panelOpen = false
-        currentUser = null
-        if (ready) bridge!.send('quackback:identify', null as unknown as undefined)
-        else pendingIdentify = null
-        return
-      case 'open': {
-        const opts = (a as OpenOptions) ?? {}
-        // Pass through the entire payload — the iframe selects what it knows how to
-        // render today (view/title/board). Fields like postId/articleId/body/query/
-        // entryId flow through untouched and are handled once the iframe adds
-        // deep-linking support (follow-up work).
-        if (ready && bridge) bridge.send('quackback:open', opts)
-        else pendingOpen = opts
-        panel?.show()
-        launcher?.setOpen(true)
-        panelOpen = true
-        // Emit open event with context so subscribers can react to deep links
-        const ctx = opts as { view?: string; postId?: string; articleId?: string; entryId?: string }
-        emitter.emit('open', {
-          view: ctx.view as 'home' | 'new-post' | 'changelog' | 'help' | undefined,
-          postId: ctx.postId,
-          articleId: ctx.articleId,
-          entryId: ctx.entryId,
-        })
-        return
-      }
-      case 'close':
-        panel?.hide()
-        launcher?.setOpen(false)
-        panelOpen = false
-        emitter.emit('close', {})
-        return
-      case 'showLauncher':
-        if (!launcher && config && config.launcher !== false) {
-          launcher = createLauncher({
-            theme: theme!,
-            placement: config.placement ?? 'right',
-            buttonColor: config.buttonColor,
-            onClick: () => {
-              if (panel && panel.iframe.offsetParent !== null) dispatch('close')
-              else dispatch('open')
-            },
-          })
-        } else if (launcher) {
-          launcher.el.style.display = 'flex'
-        }
-        return
-      case 'hideLauncher':
-        if (launcher) launcher.el.style.display = 'none'
-        return
-      case 'on':
-        return emitter.on(a as EventName, b as EventHandler<EventName>)
-      case 'off':
-        emitter.off(a as EventName, b as EventHandler<EventName> | undefined)
-        return
-      case 'metadata': {
-        const patch = a as Record<string, string | null>
-        metadata = metadata ?? {}
-        for (const k of Object.keys(patch)) {
-          const v = patch[k]
-          if (v === null) delete metadata[k]
-          else metadata[k] = String(v)
-        }
-        if (ready && bridge) bridge.send('quackback:metadata', metadata)
-        return
-      }
-      case 'destroy':
-        panel?.destroy()
-        launcher?.remove()
-        bridge?.dispose()
-        removeStyles()
-        panel = null
-        launcher = null
-        bridge = null
-        ready = false
-        metadata = null
-        pendingIdentify = null
-        pendingOpen = null
-        panelOpen = false
-        currentUser = null
-        config = null
-        theme = null
-        return
-    }
-  }
-
-  return {
-    dispatch,
-    isOpen: () => panelOpen,
-    getUser: () => currentUser,
-    isIdentified: () => currentUser !== null,
-  }
+```ts
+function applyServerTheme(serverCfg: ServerConfig) {
+  if (!launcher || !serverCfg.theme) return
+  const t = serverCfg.theme
+  const themeMode = t.themeMode ?? 'user'
+  const prefersDark =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  const dark = themeMode === 'dark' || (themeMode === 'user' && prefersDark)
+  const backgroundColor = dark ? (t.darkPrimary ?? t.lightPrimary) : t.lightPrimary
+  const foregroundColor = dark
+    ? (t.darkPrimaryForeground ?? t.lightPrimaryForeground)
+    : t.lightPrimaryForeground
+  launcher.setColors({ backgroundColor, foregroundColor })
 }
 ```
 
-- [ ] **Step 4: Run tests**
+Called once `fetchServerConfig` resolves post-init.
 
-Run: `cd ~/quackback/packages/widget && bunx vitest run __tests__/sdk.test.ts`
-Expected: 5 passing. If failures, check state transitions — the test file is the contract.
+**Iframe message routing** handles `quackback:ready`, `quackback:close`, `quackback:identify-result`, `quackback:auth-change`, `quackback:event`, `quackback:navigate`. Updates `currentUser` from identify-result and auth-change.
 
-- [ ] **Step 5: Commit**
+**Command branches:**
 
-```bash
-git add packages/widget/src/core/sdk.ts packages/widget/__tests__/sdk.test.ts
-git commit -m "feat(widget): SDK orchestrator"
-```
+- `init` → capture config, createLauncher (unless `launcher: false`), createPanel + bridge, send initial identify (bundled or `{ anonymous: true }`), kick off `fetchServerConfig` → `applyServerTheme`
+- `identify(data?)` → `sendIdentity(data ?? { anonymous: true })`
+- `logout` → hide panel, clear `currentUser`, send `null` identify
+- `open(opts?)` → send to iframe, show panel, mark `panelOpen = true`, emit `open` event with view context
+- `close` → hide panel, mark `panelOpen = false`, emit `close`
+- `showLauncher` / `hideLauncher` → create/show or hide via `style.display`
+- `metadata(patch)` → merge into stored metadata, forward to iframe
+- `on` / `off` → delegate to emitter
+- `destroy` → tear everything down, null out state
 
----
+**Tests** (`__tests__/sdk.test.ts`, 13 cases): init creates launcher + iframe, `launcher: false` suppresses launcher, init defaults identity to anonymous, bundled identity, identify after ready, logout keeps launcher visible, `isOpen` tracks, getUser/isIdentified reflect identify-result, open emits event with view context, open passes deep-link fields to iframe, metadata merge + remove, hide/showLauncher display, destroy removes all DOM.
 
 ### Task 10: Public API (`index.ts`)
 
@@ -2996,7 +2364,7 @@ git commit -m "chore(widget): prepare v0.1.0 publish"
 7. **Runtime `setLocale`** — Tier 2 imperative method deferred; add when a host app surfaces real demand.
 8. **Unread count** — tracked in the ideal-UX discussion as Tier 2; add when the server surfaces unread notifications through the widget.
 
-**Type consistency check:** `InitOptions`, `Identity`, `OpenOptions`, `WidgetUser`, `WidgetTheme`, `EventMap`, `EventName`, `EventHandler`, `Unsubscribe` names stay consistent from Task 2 through Task 18. The dispatcher's `Command` union in Task 9 (`init | identify | logout | open | close | showLauncher | hideLauncher | destroy | metadata | on | off`) matches the imperative methods exposed in Task 10. The state getters (`isOpen`, `getUser`, `isIdentified`) live on the `SDK` interface alongside `dispatch` and are re-exported on the public `Quackback` object. Mobile field names (`instanceUrl`, `placement`) from Phase 0 match web's `InitOptions` in Task 2. `ResolvedTheme` is internal to `theme.ts` only.
+**Type consistency check:** `InitOptions`, `Identity`, `OpenOptions`, `WidgetUser`, `EventMap`, `EventName`, `EventHandler`, `Unsubscribe` names stay consistent from Task 2 through Task 18. The dispatcher's `Command` union in Task 9 (`init | identify | logout | open | close | showLauncher | hideLauncher | destroy | metadata | on | off`) matches the imperative methods exposed in Task 10. The state getters (`isOpen`, `getUser`, `isIdentified`) live on the `SDK` interface alongside `dispatch` and are re-exported on the public `Quackback` object. Mobile field names (`instanceUrl`, `placement`) from Phase 0 match web's `InitOptions` in Task 2. No public `WidgetTheme` / `ResolvedTheme` type — theme is server-driven via `ServerConfig['theme']` (inline) + `launcher.setColors()`. `tabs` is also server-driven (no client override).
 
 **Placeholder scan:** no "TBD", "similar to Task N", or unimplemented code paths. Task 14's second test (`rerender` + `identify` spy) is intentionally a behavioral smoke test — sharpen if the provider API exposes a spy-friendly hook during implementation. Task 0.1 Step 1 (audit `appId`) is a real audit that may or may not surface code to delete — if `appId` IS in use, plan only removes the config field after finding a replacement.
 

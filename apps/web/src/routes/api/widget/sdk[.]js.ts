@@ -1,6 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { config } from '@/lib/server/config'
-import { buildWidgetSDK, type WidgetTheme } from '@/lib/shared/widget/sdk-template'
+// Vite `?raw` imports ship the bundle content as a string at build time.
+// packages/widget/dist/browser.js must exist — produced by `bun run --filter
+// @quackback/widget build` before the web app builds.
+import widgetBundle from '../../../../../../packages/widget/dist/browser.js?raw'
 
 function jsResponse(body: string, maxAge: number): Response {
   return new Response(body, {
@@ -12,92 +15,23 @@ function jsResponse(body: string, maxAge: number): Response {
   })
 }
 
-/** Extract CSS variable values from a CSS string */
-function parseCssVar(css: string, varName: string): string | undefined {
-  const re = new RegExp(`${varName}:\\s*([^;]+)`)
-  const match = css.match(re)
-  return match ? match[1].trim() : undefined
-}
-
-/** Extract theme values from :root and .dark blocks in custom CSS */
-function extractThemeFromCss(css: string): WidgetTheme {
-  const theme: WidgetTheme = {}
-
-  // Extract :root (light) block
-  const rootMatch = css.match(/:root\s*\{([^}]+)\}/)
-  if (rootMatch) {
-    const rootBlock = rootMatch[1]
-    theme.lightPrimary = parseCssVar(rootBlock, '--primary')
-    theme.lightPrimaryForeground = parseCssVar(rootBlock, '--primary-foreground')
-    theme.radius = parseCssVar(rootBlock, '--radius')
-  }
-
-  // Extract .dark block
-  const darkMatch = css.match(/\.dark\s*\{([^}]+)\}/)
-  if (darkMatch) {
-    const darkBlock = darkMatch[1]
-    theme.darkPrimary = parseCssVar(darkBlock, '--primary')
-    theme.darkPrimaryForeground = parseCssVar(darkBlock, '--primary-foreground')
-  }
-
-  return theme
-}
-
 export const Route = createFileRoute('/api/widget/sdk.js')({
   server: {
     handlers: {
       GET: async () => {
         const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-        const { getBrandingConfig } = await import('@/lib/server/domains/settings/settings.media')
         const widgetConfig = await getWidgetConfig()
-
         if (!widgetConfig.enabled) {
           return jsResponse(
             '/* Quackback widget is disabled */ console.warn("Quackback: Widget is disabled for this workspace.");',
             60
           )
         }
-
-        const baseUrl = config.baseUrl
-
-        // Resolve theme from branding for trigger button styling
-        const theme: WidgetTheme = {}
-        try {
-          const brandingConfig = await getBrandingConfig()
-          const themeMode = brandingConfig.themeMode ?? 'user'
-
-          theme.themeMode = themeMode
-
-          // Read from structured theme config
-          const { oklchToHex } = await import('@/lib/shared/theme/colors')
-          const light = brandingConfig.light
-          const dark = brandingConfig.dark
-          if (light?.primary) theme.lightPrimary = oklchToHex(light.primary)
-          if (light?.primaryForeground)
-            theme.lightPrimaryForeground = oklchToHex(light.primaryForeground)
-          if (dark?.primary) theme.darkPrimary = oklchToHex(dark.primary)
-          if (dark?.primaryForeground)
-            theme.darkPrimaryForeground = oklchToHex(dark.primaryForeground)
-          if (light?.radius) theme.radius = light.radius
-
-          // Custom CSS overrides (if any)
-          const { getCustomCss } = await import('@/lib/server/domains/settings/settings.media')
-          const customCss = await getCustomCss()
-          if (customCss) {
-            const cssOverrides = extractThemeFromCss(customCss)
-            if (cssOverrides.lightPrimary) theme.lightPrimary = cssOverrides.lightPrimary
-            if (cssOverrides.lightPrimaryForeground)
-              theme.lightPrimaryForeground = cssOverrides.lightPrimaryForeground
-            if (cssOverrides.darkPrimary) theme.darkPrimary = cssOverrides.darkPrimary
-            if (cssOverrides.darkPrimaryForeground)
-              theme.darkPrimaryForeground = cssOverrides.darkPrimaryForeground
-            if (cssOverrides.radius) theme.radius = cssOverrides.radius
-          }
-        } catch {
-          // Fall back to SDK defaults
-        }
-
-        return jsResponse(buildWidgetSDK(baseUrl, theme), 3600)
+        // Prepend a tenant-specific URL. The bundle reads window.__QUACKBACK_URL__
+        // during browser-queue init to auto-fire Quackback.init when the script
+        // loads via a raw <script src="/api/widget/sdk.js"> tag.
+        const prelude = `window.__QUACKBACK_URL__=${JSON.stringify(config.baseUrl)};`
+        return jsResponse(prelude + (widgetBundle as string), 3600)
       },
     },
   },

@@ -1,0 +1,68 @@
+{
+  "name": "@quackback/widget",
+  "version": "0.1.0",
+  "license": "AGPL-3.0",
+  "description": "Quackback feedback widget — embed on your site with a tiny SDK.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "development": "./src/index.ts"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js",
+      "require": "./dist/react/index.cjs",
+      "development": "./src/react/index.ts"
+    },
+    "./browser.js": "./dist/browser.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "happy-dom": "^13.0.0",
+    "react-dom": "^19.2.5",
+    "tsup": "^8.0.0",
+    "react": "^19"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QuackbackIO/quackback.git",
+    "directory": "packages/widget"
+  },
+  "homepage": "https://quackback.io/docs/widget",
+  "bugs": "https://github.com/QuackbackIO/quackback/issues",
+  "keywords": [
+    "quackback",
+    "feedback",
+    "widget",
+    "customer-feedback",
+    "feature-requests"
+  ]
+}
