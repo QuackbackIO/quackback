@@ -2,7 +2,7 @@
   "name": "@quackback/widget",
   "version": "0.1.2",
   "license": "AGPL-3.0",
-  "description": "Quackback feedback widget — embed on your site with a tiny SDK.",
+  "description": "Official SDK for the Quackback feedback widget. Embed Quackback in your app.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

@@ -1,11 +1,6 @@
 # @quackback/widget
 
-A real npm package for the [Quackback](https://quackback.io) feedback widget — types, tree-shaking, SSR-safe, no dynamic script injection.
-
-- Tiny — core <10 KB min+gzip, React adapter <2 KB, zero runtime dependencies
-- TypeScript-first — discriminated `Identity` union, typed `EventMap`, autocompleting `open()` deep-link arguments
-- SSR-safe — all DOM access behind effects; `use-init` starts nothing on the server
-- Works without npm too — script-tag integrations continue to work unchanged via `<script src="https://your-quackback.example/api/widget/sdk.js">`
+The official SDK for embedding the [Quackback](https://quackback.io) feedback widget in your app. Ships with TypeScript types and a React adapter.
 
 ## Install
 
@@ -15,23 +10,21 @@ npm install @quackback/widget
 # or:  bun add @quackback/widget
 ```
 
-## Quick start — vanilla
+## Vanilla JS
 
 ```js
 import { Quackback } from '@quackback/widget'
 
-Quackback.init({ instanceUrl: 'https://feedback.acme.com' })
+Quackback.init({ instanceUrl: 'https://feedback.yourcompany.com' })
 
-// Later, when you know who the user is:
+// When you know who the user is:
 Quackback.identify({ id: 'u_123', email: 'ada@example.com', name: 'Ada' })
 
-// Deep-link to a specific board / post / article:
+// Deep-link to a specific view:
 Quackback.open({ view: 'new-post', title: 'Bug:', board: 'bugs' })
 ```
 
-## Quick start — React
-
-No provider. Quackback is a singleton; the hooks wrap its lifecycle.
+## React
 
 ```tsx
 import { useQuackbackInit, useQuackback, useQuackbackEvent } from '@quackback/widget/react'
@@ -40,10 +33,8 @@ function App() {
   const { user } = useAuth()
 
   useQuackbackInit({
-    instanceUrl: 'https://feedback.acme.com',
+    instanceUrl: 'https://feedback.yourcompany.com',
     identity: user ? { id: user.id, email: user.email, name: user.name } : undefined,
-    shouldInitialize: true, // optional — gate on a feature flag
-    initializeDelay: 0, // optional — defer init N ms for perf
   })
 
   useQuackbackEvent('post:created', (post) => {
@@ -57,6 +48,20 @@ function FeedbackButton() {
   const qb = useQuackback()
   return <button onClick={() => qb.open({ view: 'new-post' })}>Feedback</button>
 }
+```
+
+No provider needed — Quackback is a singleton and the hooks wrap its lifecycle.
+
+## Other frameworks
+
+Vue, Svelte, Angular, Solid: import `Quackback` from the main entry and call it directly. Framework adapters ship on request.
+
+## Prefer a script tag?
+
+Drop this in your `<head>` and skip the install step entirely:
+
+```html
+<script src="https://feedback.yourcompany.com/api/widget/sdk.js" defer></script>
 ```
 
 ## API
@@ -74,25 +79,25 @@ function FeedbackButton() {
 | `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key. |
 | `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.              |
 | `Quackback.off(event, handler?)`              | Remove a specific handler, or all listeners for the event.                 |
-| `Quackback.destroy()`                         | Tear down all widget state + DOM.                                          |
-| `Quackback.isOpen()`                          | Returns whether the panel is currently visible.                            |
-| `Quackback.getUser()`                         | Returns the current identified user, or `null`.                            |
-| `Quackback.isIdentified()`                    | Returns `true` when a user is identified (non-anonymous).                  |
+| `Quackback.destroy()`                         | Tear down all widget state and DOM.                                        |
+| `Quackback.isOpen()`                          | Whether the panel is currently visible.                                    |
+| `Quackback.getUser()`                         | The current identified user, or `null`.                                    |
+| `Quackback.isIdentified()`                    | `true` when a user is identified (non-anonymous).                          |
 
 ### `init` options
 
 ```ts
 Quackback.init({
-  instanceUrl: 'https://feedback.acme.com', // required
+  instanceUrl: 'https://feedback.yourcompany.com', // required
   placement: 'right' | 'left', // default 'right'
   defaultBoard: 'bugs', // filter widget to one board
   launcher: true, // false = hide default button
-  locale: 'en' | 'fr' | 'de' | 'es' | 'ar', // override browser/device auto-detect
+  locale: 'en' | 'fr' | 'de' | 'es' | 'ar', // override auto-detect
   identity: { id, email, name } | { ssoToken }, // bundle identify into init
 })
 ```
 
-Theme colors and tab visibility are configured in your Quackback admin (Admin → Settings → Widget) — there's no client override.
+Theme colors and tab visibility come from your Quackback admin (Admin → Settings → Widget).
 
 ### `identify` shapes
 
@@ -104,7 +109,7 @@ Quackback.identify({ ssoToken: 'eyJ...' }) // verified
 
 See the [Identify users guide](https://quackback.io/docs/widget/identify-users) for JWT claims and server examples.
 
-### `open` — deep-link targets
+### `open` deep-links
 
 ```ts
 Quackback.open() // home
@@ -115,7 +120,7 @@ Quackback.open({ postId: 'post_01h...' }) // specific post
 Quackback.open({ articleId: 'art_01h...' }) // help article
 ```
 
-`view`, `title`, and `board` are handled today. `body`, `query`, `postId`, `articleId`, `entryId` pass through the postMessage protocol; full iframe rendering lands in a follow-up release.
+`view`, `title`, and `board` are live. `body`, `query`, `postId`, `articleId`, `entryId` pass through today and render in a follow-up release.
 
 ### Events
 
@@ -123,7 +128,6 @@ Quackback.open({ articleId: 'art_01h...' }) // help article
 const unsubscribe = Quackback.on('vote', (payload) => {
   console.log('Voted on', payload.postId)
 })
-// Later:
 unsubscribe()
 ```
 
@@ -137,10 +141,6 @@ unsubscribe()
 | `comment:created` | `{ postId, commentId, parentId }`          |
 | `identify`        | `{ success, user, anonymous, error? }`     |
 | `email-submitted` | `{ email }`                                |
-
-## Other frameworks
-
-Vue, Svelte, Angular, Solid — use the core `Quackback` import directly; it's framework-agnostic. Dedicated adapters will ship when there's demand.
 
 ## Docs
 
