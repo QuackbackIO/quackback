@@ -1,8 +1,5 @@
 import type { EventName, EventMap, EventHandler, Unsubscribe } from '../types'
 
-type HandlerList<T extends EventName> = EventHandler<T>[]
-type Listeners = { [K in EventName]?: HandlerList<K> }
-
 export interface Emitter {
   on<T extends EventName>(name: T, handler: EventHandler<T>): Unsubscribe
   off<T extends EventName>(name: T, handler?: EventHandler<T>): void
@@ -10,18 +7,19 @@ export interface Emitter {
 }
 
 export function createEmitter(): Emitter {
-  const listeners: Listeners = {}
+  // Internal storage uses `any` arrays; the public API preserves full type-safety.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const listeners: { [K in EventName]?: any[] } = {}
 
   return {
     on(name, handler) {
-      const list = (listeners[name] ??= [] as unknown as HandlerList<typeof name>) as HandlerList<
-        typeof name
-      >
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const list: any[] = (listeners[name] ??= [])
       list.push(handler)
       return () => {
-        const current = listeners[name] as HandlerList<typeof name> | undefined
+        const current = listeners[name]
         if (!current) return
-        listeners[name] = current.filter((h) => h !== handler) as typeof current
+        listeners[name] = current.filter((h) => h !== handler)
       }
     },
 
@@ -30,13 +28,13 @@ export function createEmitter(): Emitter {
         delete listeners[name]
         return
       }
-      const current = listeners[name] as HandlerList<typeof name> | undefined
+      const current = listeners[name]
       if (!current) return
-      listeners[name] = current.filter((h) => h !== handler) as typeof current
+      listeners[name] = current.filter((h) => h !== handler)
     },
 
     emit(name, payload) {
-      const list = listeners[name] as HandlerList<typeof name> | undefined
+      const list = listeners[name]
       if (!list) return
       for (const h of list) {
         try {
