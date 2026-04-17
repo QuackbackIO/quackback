@@ -217,7 +217,7 @@ function WidgetAppearanceControls({
         <div>
           <h3 className="text-sm font-medium text-foreground">Appearance</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Customize the widget trigger button and default behavior
+            Customize the widget launcher button and default behavior
           </p>
         </div>
 

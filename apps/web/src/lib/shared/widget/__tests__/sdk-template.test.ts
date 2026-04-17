@@ -63,17 +63,17 @@ describe('buildWidgetSDK', () => {
 
   it('init shows the widget and defaults to anonymous identity', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // init creates the trigger and starts anonymous unless identity is bundled
-    expect(result).toMatch(/case "init"[\s\S]*createTrigger\(\)/)
+    // init creates the launcher and starts anonymous unless identity is bundled
+    expect(result).toMatch(/case "init"[\s\S]*createLauncher\(\)/)
     expect(result).toMatch(/case "init"[\s\S]*anonymous: true/)
   })
 
-  it('logout keeps the trigger visible (widget stays alive)', () => {
+  it('logout keeps the launcher visible (widget stays alive)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // The logout case should not hide the trigger
+    // The logout case should not hide the launcher
     const logoutBlock = result.match(/case "logout":[\s\S]*?break;/)
     expect(logoutBlock).not.toBeNull()
-    expect(logoutBlock![0]).not.toContain('trigger.style.display = "none"')
+    expect(logoutBlock![0]).not.toContain('launcher.style.display = "none"')
   })
 
   it('should replay the command queue on initialization', () => {
@@ -111,7 +111,7 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('"https://example.com/path?a=1&b=2"')
   })
 
-  it('should create trigger button with accessibility attributes', () => {
+  it('should create launcher button with accessibility attributes', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     expect(result).toContain('aria-label')
     expect(result).toContain('aria-expanded')
@@ -134,9 +134,9 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('window.innerWidth < 640')
   })
 
-  it('positions desktop panel above the trigger button (bottom: 88px)', () => {
+  it('positions desktop panel above the launcher button (bottom: 88px)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // Panel must be offset above the trigger (24px margin + 56px trigger + 8px gap)
+    // Panel must be offset above the launcher (24px margin + 56px launcher + 8px gap)
     expect(result).toContain('bottom:88px')
   })
 
@@ -159,14 +159,14 @@ describe('buildWidgetSDK', () => {
     expect(result).toContain('iconClose.style.opacity = "0"')
   })
 
-  it('hides trigger on mobile when panel opens (conditional on isMobile)', () => {
+  it('hides launcher on mobile when panel opens (conditional on isMobile)', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
-    // Mobile still hides trigger since full-screen panel covers it — must be conditional
+    // Mobile still hides launcher since full-screen panel covers it — must be conditional
     expect(result).toContain('if (isMobile) {')
-    expect(result).toContain('trigger.style.display = "none"')
+    expect(result).toContain('launcher.style.display = "none"')
   })
 
-  it('trigger click dispatches close when panel is open', () => {
+  it('launcher click dispatches close when panel is open', () => {
     const result = buildWidgetSDK('https://feedback.acme.com')
     expect(result).toContain('if (isOpen) dispatch("close")')
   })

@@ -10,10 +10,26 @@
 
 ---
 
+## Design principles
+
+**Declarative setup + imperative changes.** Everything about the widget's _starting state_ goes into `init` / `configure`. Anything that changes at runtime is a method call. This split dictates what lives where:
+
+| Concern                  | Declarative (init)       | Imperative (method)                 |
+| ------------------------ | ------------------------ | ----------------------------------- |
+| Where the widget appears | `placement`, `launcher`  | `showLauncher()` / `hideLauncher()` |
+| Who the user is          | `identity`               | `identify(...)` / `logout()`        |
+| Session context          | _(none — runtime only)_  | `metadata(...)`                     |
+| Panel visibility         | _(always starts hidden)_ | `open(...)` / `close()`             |
+
+Consequence for API design: if you already know the value at startup, you never need an extra method call — bundle it in `init`. If it changes, call the method.
+
+**Cross-platform consistency where it matters, platform idioms where they don't.** Field names (`appUrl`, `placement`, `identity`) are unified across web, iOS, and Android — no vocabulary drift. Setup verb (`init` vs `configure`) follows each platform's ecosystem convention. Config shape (flat options vs typed struct) does the same.
+
 ## Scope
 
-- **In scope:** `packages/widget/` (core + react subpath), updated `/api/widget/sdk.js` route, internal dogfood on `~/website`, v0.1.0 npm publish.
-- **Out of scope:** Vue/Svelte adapters (defer until demand), protocol v2 changes (current postMessage contract is preserved exactly), mobile SDKs (separate repos, already updated).
+- **In scope — Phase 0:** Cross-platform surface unification across `~/quackback` (web), `~/quackback-ios`, `~/quackback-android`, `~/quackback-docs`. Field renames, missing parity methods, canonical API surface before npm work starts.
+- **In scope — Phases 1–5:** `packages/widget/` (core + react subpath), updated `/api/widget/sdk.js` route, internal dogfood on `~/website`, v0.1.0 npm publish.
+- **Out of scope:** Vue/Svelte adapters (defer until demand), protocol v2 changes (current postMessage contract is preserved exactly), Intercom-style `trackEvent` (defer).
 
 ## File Structure
 
@@ -33,7 +49,7 @@ packages/widget/
 │   │   ├── events.ts          # Typed event emitter (listeners by name)
 │   │   ├── postmessage.ts     # Iframe message protocol (quackback:* in/out)
 │   │   ├── theme.ts           # Dark-mode detection + color resolution
-│   │   ├── trigger.ts         # Floating trigger button DOM
+│   │   ├── launcher.ts         # Floating launcher DOM
 │   │   ├── panel.ts           # Iframe panel + backdrop DOM
 │   │   ├── config.ts          # Fetch /api/widget/config.json, merge with init overrides
 │   │   └── style.ts           # Injects the one <style> tag (panel/backdrop CSS)
@@ -85,7 +101,342 @@ packages/widget/
 
 ---
 
-## Phase 1 — Package scaffold
+## Phase 0 — Cross-platform surface unification
+
+Goal: before extracting the web SDK to npm, make sure all three surfaces (web, iOS, Android) share canonical field names and symmetric methods. Pre-production, so breaking changes are fine — no deprecation shims.
+
+**Scope of changes:**
+
+1. **Rename on iOS + Android:** `baseURL` → `appUrl`; `position` → `placement`
+2. **Remove on iOS + Android:** `appId` from `QuackbackConfig` (vestigial — URL is the identifier)
+3. **Add on iOS + Android:** `Quackback.metadata(_:)` method (web already has it)
+4. **Add on iOS + Android:** `view` and `title` parameters to `Quackback.open(...)` (web already has them)
+5. **Add on web:** `Quackback("showLauncher")` and `Quackback("hideLauncher")` imperative commands (mobile already has them)
+6. **Documentation:** update `widget/mobile-sdks.mdx` and `widget/installation.mdx` to reflect the renames and new methods
+
+These changes ship via ~/quackback, ~/quackback-ios, ~/quackback-android, ~/quackback-docs, and the live website deploy. Task 11 onwards (npm SDK extraction) starts from this canonical baseline.
+
+### Task 0.1: iOS — rename config fields, add metadata, extend open
+
+**Files:**
+
+- Modify: `~/quackback-ios/Sources/Quackback/QuackbackConfig.swift`
+- Modify: `~/quackback-ios/Sources/Quackback/Quackback.swift`
+- Modify: `~/quackback-ios/Sources/Quackback/Internal/JSBridge.swift`
+- Modify: `~/quackback-ios/Tests/QuackbackTests/QuackbackConfigTests.swift`
+- Modify: `~/quackback-ios/Tests/QuackbackTests/JSBridgeTests.swift`
+- Modify: `~/quackback-ios/README.md`
+- Modify: `~/quackback-ios/Example/QuackbackExample/QuackbackExampleApp.swift`
+
+- [ ] **Step 1: Audit `appId` usage**
+
+Run: `grep -rn "appId" ~/quackback-ios/Sources/`
+Expected: find every place `appId` is read. If it's only stored in config and never sent to the widget/iframe, it's vestigial — remove it. If it's part of the iframe URL or a postMessage payload, keep it and document why.
+
+- [ ] **Step 2: Rename `baseURL` → `appUrl` and `position` → `placement` in `QuackbackConfig.swift`**
+
+Rewrite the struct initializer so `appUrl: URL` and `placement: QuackbackPosition` are the canonical names. Drop `appId` if Step 1 confirmed it's vestigial. Keep `theme`, `buttonColor`, `locale` unchanged.
+
+```swift
+public struct QuackbackConfig {
+    public let appUrl: URL
+    public var theme: QuackbackTheme
+    public var placement: QuackbackPosition
+    public var buttonColor: String?
+    public var locale: String?
+
+    public init(
+        appUrl: URL,
+        theme: QuackbackTheme = .system,
+        placement: QuackbackPosition = .bottomRight,
+        buttonColor: String? = nil,
+        locale: String? = nil
+    ) {
+        self.appUrl = appUrl
+        self.theme = theme
+        self.placement = placement
+        self.buttonColor = buttonColor
+        self.locale = locale
+    }
+}
+```
+
+- [ ] **Step 3: Update `Quackback.swift` call sites**
+
+Every reference to `config.baseURL` becomes `config.appUrl`. Every `config.position` becomes `config.placement`. Update `fetchTheme(baseURL:)` parameter name too.
+
+- [ ] **Step 4: Add `Quackback.metadata(_:)` method**
+
+In `Quackback.swift`:
+
+```swift
+public static func metadata(_ patch: [String: String?]) {
+    enqueue(JSBridge.metadataCommand(patch: patch))
+}
+```
+
+In `JSBridge.swift`:
+
+```swift
+static func metadataCommand(patch: [String: String?]) -> String {
+    let data = try! JSONSerialization.data(
+        withJSONObject: patch.compactMapValues { $0 as Any? ?? NSNull() },
+        options: [.sortedKeys]
+    )
+    let json = String(data: data, encoding: .utf8)!
+    return "window.postMessage({type:'quackback:metadata',data:\(json)},'*');"
+}
+```
+
+- [ ] **Step 5: Extend `Quackback.open(...)` with view and title**
+
+Define an enum and update the method:
+
+```swift
+public enum OpenView: String {
+    case home = "home"
+    case newPost = "new-post"
+    case changelog = "changelog"
+}
+
+public static func open(view: OpenView? = nil, title: String? = nil, board: String? = nil) {
+    guard let config else { return }
+    ensureWV(config)
+    wvManager?.execute(JSBridge.openCommand(view: view, title: title, board: board))
+    presentPanel()
+}
+```
+
+Update `JSBridge.openCommand` to accept the new params and emit a JSON payload.
+
+- [ ] **Step 6: Update tests**
+
+Adjust `QuackbackConfigTests.swift` to use `appUrl` / `placement`. Add a `JSBridgeTests` case for `metadataCommand` and extended `openCommand` with view/title.
+
+- [ ] **Step 7: Update example app and README**
+
+`Example/QuackbackExample/QuackbackExampleApp.swift`: rename `baseURL:` → `appUrl:`. README: update the API table and quickstart.
+
+- [ ] **Step 8: Verify**
+
+Open `Package.swift` in Xcode (or run `swift build --package-path ~/quackback-ios` if available) and confirm it compiles. Run tests.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd ~/quackback-ios
+git add -A
+git commit -m "feat: unify surface — rename baseURL→appUrl, position→placement; add metadata and open options
+
+- QuackbackConfig: baseURL → appUrl, position → placement, drop vestigial appId
+- New Quackback.metadata(_:) method for parity with web
+- Quackback.open(view:title:board:) for parity with web
+- Pre-production breaking change, no deprecation shims"
+git push origin master:main
+```
+
+---
+
+### Task 0.2: Android — same renames and additions
+
+**Files:**
+
+- Modify: `~/quackback-android/quackback/src/main/kotlin/com/quackback/sdk/QuackbackConfig.kt`
+- Modify: `~/quackback-android/quackback/src/main/kotlin/com/quackback/sdk/Quackback.kt`
+- Modify: `~/quackback-android/quackback/src/main/kotlin/com/quackback/sdk/internal/JSBridge.kt`
+- Modify: `~/quackback-android/quackback/src/test/kotlin/com/quackback/sdk/QuackbackConfigTest.kt`
+- Modify: `~/quackback-android/quackback/src/test/kotlin/com/quackback/sdk/JSBridgeTest.kt`
+- Modify: `~/quackback-android/README.md`
+- Modify: `~/quackback-android/app/src/main/kotlin/com/quackback/example/ExampleApplication.kt`
+
+Same approach as Task 0.1 but in Kotlin. Concrete shapes:
+
+- [ ] **Step 1: Audit `appId` usage**
+
+Run: `grep -rn "appId" ~/quackback-android/quackback/src/main/`
+If vestigial, remove.
+
+- [ ] **Step 2: Rename `QuackbackConfig`**
+
+```kotlin
+data class QuackbackConfig(
+    val appUrl: String,
+    val theme: QuackbackTheme = QuackbackTheme.SYSTEM,
+    val placement: QuackbackPosition = QuackbackPosition.BOTTOM_RIGHT,
+    val buttonColor: String? = null,
+    val locale: String? = null,
+)
+```
+
+- [ ] **Step 3: Update `Quackback.kt` call sites** — `config.baseURL` → `config.appUrl`, `config.position` → `config.placement`.
+
+- [ ] **Step 4: Add metadata method**
+
+```kotlin
+fun metadata(patch: Map<String, String?>) {
+    enqueue(JSBridge.metadataCommand(patch))
+}
+```
+
+In `JSBridge.kt`:
+
+```kotlin
+fun metadataCommand(patch: Map<String, String?>): String {
+    val obj = JSONObject()
+    for ((k, v) in patch) obj.put(k, v ?: JSONObject.NULL)
+    return "window.postMessage({type:'quackback:metadata',data:$obj},'*');"
+}
+```
+
+- [ ] **Step 5: Extend `open(...)`**
+
+```kotlin
+enum class OpenView(val value: String) {
+    HOME("home"), NEW_POST("new-post"), CHANGELOG("changelog")
+}
+
+fun open(view: OpenView? = null, title: String? = null, board: String? = null) {
+    val cfg = config ?: return
+    val act = currentActivity ?: return
+    ensureWV(cfg)
+    wvManager?.execute(JSBridge.openCommand(view, title, board))
+    present(act)
+}
+```
+
+- [ ] **Step 6–8: Update tests, example, README.**
+- [ ] **Step 9: Commit + push.**
+
+```bash
+cd ~/quackback-android
+git add -A
+git commit -m "feat: unify surface — rename baseURL→appUrl, position→placement; add metadata and open options
+
+Matches the iOS and web surface. Pre-production breaking change."
+git push origin master:main
+```
+
+---
+
+### Task 0.3: Web SDK — add `showLauncher` / `hideLauncher` commands
+
+**Files:**
+
+- Modify: `~/quackback/apps/web/src/lib/shared/widget/sdk-template.ts`
+- Modify: `~/quackback/apps/web/src/lib/shared/widget/__tests__/sdk-template.test.ts`
+
+These commands exist on mobile and give developers an imperative hook to show/hide the launcher at runtime. The web SDK currently only supports the declarative `launcher: false` init option.
+
+- [ ] **Step 1: Write failing tests**
+
+Append to `sdk-template.test.ts`:
+
+```ts
+it('handles showLauncher and hideLauncher commands', () => {
+  const result = buildWidgetSDK('https://feedback.acme.com')
+  expect(result).toContain('case "showLauncher"')
+  expect(result).toContain('case "hideLauncher"')
+})
+```
+
+- [ ] **Step 2: Run to verify fail**
+
+Run: `cd ~/quackback && bunx vitest run apps/web/src/lib/shared/widget/__tests__/sdk-template.test.ts`
+Expected: FAIL — new test case fails string match.
+
+- [ ] **Step 3: Implement the commands in `sdk-template.ts`**
+
+Inside the `dispatch` switch (near the existing `init`/`identify`/`logout` cases):
+
+```js
+case "showLauncher":
+  if (!launcher && !(config && config.launcher === false)) createLauncher();
+  else if (launcher) launcher.style.display = "flex";
+  break;
+
+case "hideLauncher":
+  if (launcher) launcher.style.display = "none";
+  break;
+```
+
+- [ ] **Step 4: Run test, verify pass**
+
+Run the same vitest command. Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd ~/quackback
+git add apps/web/src/lib/shared/widget
+git commit -m "feat(widget): add showLauncher/hideLauncher imperative commands
+
+Mirrors iOS/Android showLauncher()/hideLauncher(). The launcher init
+option remains for declarative control at startup; these commands
+let apps toggle launcher visibility at runtime."
+git push origin main
+```
+
+---
+
+### Task 0.4: Docs — update mobile-sdks and installation for the unified surface
+
+**Files:**
+
+- Modify: `~/quackback-docs/widget/mobile-sdks.mdx`
+- Modify: `~/quackback-docs/widget/installation.mdx`
+
+- [ ] **Step 1: Update `mobile-sdks.mdx`**
+
+Replace every `baseURL` with `appUrl`, every `position` with `placement`. Drop the `appId` parameter from all `QuackbackConfig` examples. Add sections for `metadata(...)` and the extended `open(...)` signature. Keep the design-principle line visible: _"Everything about startup state goes in `configure`; changes at runtime are method calls."_
+
+- [ ] **Step 2: Update `installation.mdx`**
+
+Add `showLauncher` / `hideLauncher` rows to the SDK commands reference table. Example block:
+
+```js
+Quackback('showLauncher') // show the launcher
+Quackback('hideLauncher') // hide it
+```
+
+Note under `init` options: _"Set `launcher: false` to start with the button hidden. Use `Quackback("showLauncher")` / `Quackback("hideLauncher")` to toggle at runtime."_
+
+- [ ] **Step 3: Commit + push**
+
+```bash
+cd ~/quackback-docs
+git add widget/
+git commit -m "docs(widget): unified surface — appUrl, placement, metadata, showLauncher/hideLauncher"
+git push origin main
+```
+
+---
+
+### Task 0.5: Redeploy website (docs are build-time fetched)
+
+- [ ] **Step 1: Confirm production widget URL**
+
+Check that `~/website/src/routes/__root.tsx` still uses `https://feedback.quackback.io/api/widget/sdk.js` (not the ngrok local URL).
+
+- [ ] **Step 2: Deploy**
+
+```bash
+cd ~/website
+bun run deploy
+```
+
+Expected: Cloudflare Worker deploys successfully.
+
+- [ ] **Step 3: Verify**
+
+```bash
+curl -s https://quackback.io/docs/widget/installation | grep -c 'showLauncher'
+```
+
+Expected: at least 1 match.
+
+- [ ] **Step 4: Restore ngrok URL locally if used for dev** (not committed).
+
+---
 
 ### Task 1: Create `packages/widget` scaffold
 
@@ -209,8 +560,8 @@ export interface InitOptions {
   appUrl: AppUrl
   placement?: 'left' | 'right'
   defaultBoard?: string
-  /** Set `trigger: false` to hide the default floating button and open programmatically. */
-  trigger?: boolean
+  /** Set `launcher: false` to hide the default floating button and open programmatically. */
+  launcher?: boolean
   buttonColor?: string
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | string
@@ -635,7 +986,7 @@ git commit -m "feat(widget): iframe postmessage bridge"
 
 ### Task 5: Theme resolution (`theme.ts`)
 
-Extract the `isDarkMode`, `getThemeColors`, and `applyTriggerColors` logic from `sdk-template.ts` lines 93–114.
+Extract the `isDarkMode`, `getThemeColors`, and `applyLauncherColors` logic from `sdk-template.ts` lines 93–114.
 
 **Files:**
 
@@ -749,17 +1100,17 @@ git commit -m "feat(widget): extract theme resolution"
 
 ---
 
-### Task 6: Trigger button (`trigger.ts`)
+### Task 6: Launcher button (`launcher.ts`)
 
-Extract the `createTrigger`, icon swap logic, and hover behavior from `sdk-template.ts` lines 115–198.
+Extract the `createLauncher`, icon swap logic, and hover behavior from `sdk-template.ts` lines 115–198.
 
 **Files:**
 
-- Create: `packages/widget/src/core/trigger.ts`
+- Create: `packages/widget/src/core/launcher.ts`
 
 No unit test — this is DOM plumbing that's exercised by `sdk.test.ts` integration tests in Task 9. A separate test would be mocking DOM state to re-assert what the browser already guarantees.
 
-- [ ] **Step 1: Create `trigger.ts`**
+- [ ] **Step 1: Create `launcher.ts`**
 
 Port lines 115–198 of `sdk-template.ts`. The module exports:
 
@@ -767,14 +1118,14 @@ Port lines 115–198 of `sdk-template.ts`. The module exports:
 import type { ResolvedTheme } from './theme'
 import { resolveColors } from './theme'
 
-export interface TriggerOptions {
+export interface LauncherOptions {
   theme: ResolvedTheme
   placement: 'left' | 'right'
   buttonColor?: string
   onClick: () => void
 }
 
-export interface TriggerHandle {
+export interface LauncherHandle {
   el: HTMLButtonElement
   setOpen(open: boolean): void
   applyColors(): void
@@ -786,7 +1137,7 @@ const CHAT_ICON =
 const CLOSE_ICON =
   '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
-export function createTrigger(opts: TriggerOptions): TriggerHandle {
+export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const btn = document.createElement('button')
   const colors = resolveColors({
     theme: opts.theme,
@@ -909,8 +1260,8 @@ Expected: Exit code 0.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/widget/src/core/trigger.ts
-git commit -m "feat(widget): extract trigger button module"
+git add packages/widget/src/core/launcher.ts
+git commit -m "feat(widget): extract launcher module"
 ```
 
 ---
@@ -1170,7 +1521,7 @@ git commit -m "feat(widget): remote config fetch"
 
 ### Task 9: SDK orchestrator (`sdk.ts`)
 
-Wires trigger + panel + postmessage + config + events into the dispatcher that replaces the old string template. Ports the state machine from `sdk-template.ts` lines 402–500.
+Wires launcher + panel + postmessage + config + events into the dispatcher that replaces the old string template. Ports the state machine from `sdk-template.ts` lines 402–500.
 
 **Files:**
 
@@ -1197,7 +1548,7 @@ describe('sdk', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
-  it('init creates a trigger button and iframe', async () => {
+  it('init creates a launcher and iframe', async () => {
     const sdk = createSDK()
     sdk.dispatch('init', { appUrl: 'https://feedback.acme.com' })
     await Promise.resolve()
@@ -1205,9 +1556,9 @@ describe('sdk', () => {
     expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
   })
 
-  it('init with { trigger: false } does not create a button', async () => {
+  it('init with { launcher: false } does not create a button', async () => {
     const sdk = createSDK()
-    sdk.dispatch('init', { appUrl: 'https://feedback.acme.com', trigger: false })
+    sdk.dispatch('init', { appUrl: 'https://feedback.acme.com', launcher: false })
     await Promise.resolve()
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
   })
@@ -1253,7 +1604,7 @@ describe('sdk', () => {
     )
   })
 
-  it('logout sends null identify and keeps the trigger visible', () => {
+  it('logout sends null identify and keeps the launcher visible', () => {
     const sdk = createSDK()
     vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockReturnValue({
       postMessage: vi.fn(),
@@ -1266,11 +1617,11 @@ describe('sdk', () => {
       })
     )
     sdk.dispatch('logout')
-    const trigger = document.querySelector(
+    const launcher = document.querySelector(
       'button[aria-label="Open feedback widget"]'
     ) as HTMLButtonElement
-    expect(trigger).not.toBeNull()
-    expect(trigger.style.display).not.toBe('none')
+    expect(launcher).not.toBeNull()
+    expect(launcher.style.display).not.toBe('none')
   })
 })
 ```
@@ -1288,7 +1639,7 @@ Expected: FAIL.
 import type { InitOptions, Identity, OpenOptions, EventName, EventHandler } from '../types'
 import { createEmitter, type Emitter } from './events'
 import { createBridge, type Bridge } from './postmessage'
-import { createTrigger, type TriggerHandle } from './trigger'
+import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { withDefaults, type ResolvedTheme } from './theme'
 import { fetchServerConfig } from './config'
@@ -1300,6 +1651,8 @@ type Command =
   | 'logout'
   | 'open'
   | 'close'
+  | 'showLauncher'
+  | 'hideLauncher'
   | 'destroy'
   | 'metadata'
   | 'on'
@@ -1312,7 +1665,7 @@ export interface SDK {
 export function createSDK(): SDK {
   let config: InitOptions | null = null
   let theme: ResolvedTheme | null = null
-  let trigger: TriggerHandle | null = null
+  let launcher: LauncherHandle | null = null
   let panel: PanelHandle | null = null
   let bridge: Bridge | null = null
   let ready = false
@@ -1331,7 +1684,7 @@ export function createSDK(): SDK {
       widgetUrl: `${config!.appUrl}/widget`,
       placement: config!.placement ?? 'right',
       defaultBoard: config!.defaultBoard,
-      showCloseButton: config!.trigger === false,
+      showCloseButton: config!.launcher === false,
       locale: config!.locale,
       onBackdropClick: () => dispatch('close'),
     })
@@ -1395,8 +1748,8 @@ export function createSDK(): SDK {
         config = { ...(a as InitOptions) }
         if (!config.appUrl) throw new Error('Quackback: init requires { appUrl }')
         theme = withDefaults(config.theme)
-        if (config.trigger !== false) {
-          trigger = createTrigger({
+        if (config.launcher !== false) {
+          launcher = createLauncher({
             theme,
             placement: config.placement ?? 'right',
             buttonColor: config.buttonColor,
@@ -1419,7 +1772,7 @@ export function createSDK(): SDK {
           void fetchServerConfig(config.appUrl).then((serverCfg) => {
             if (serverCfg.theme) {
               theme = withDefaults(serverCfg.theme)
-              trigger?.applyColors()
+              launcher?.applyColors()
             }
           })
         }
@@ -1435,7 +1788,7 @@ export function createSDK(): SDK {
         return
       case 'logout':
         panel?.hide()
-        trigger?.setOpen(false)
+        launcher?.setOpen(false)
         if (ready) bridge!.send('quackback:identify', null as unknown as undefined)
         else pendingIdentify = null
         return
@@ -1444,13 +1797,31 @@ export function createSDK(): SDK {
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
         panel?.show()
-        trigger?.setOpen(true)
+        launcher?.setOpen(true)
         return
       }
       case 'close':
         panel?.hide()
-        trigger?.setOpen(false)
+        launcher?.setOpen(false)
         emitter.emit('close', {})
+        return
+      case 'showLauncher':
+        if (!launcher && config && config.launcher !== false) {
+          launcher = createLauncher({
+            theme: theme!,
+            placement: config.placement ?? 'right',
+            buttonColor: config.buttonColor,
+            onClick: () => {
+              if (panel && panel.iframe.offsetParent !== null) dispatch('close')
+              else dispatch('open')
+            },
+          })
+        } else if (launcher) {
+          launcher.el.style.display = 'flex'
+        }
+        return
+      case 'hideLauncher':
+        if (launcher) launcher.el.style.display = 'none'
         return
       case 'on':
         return emitter.on(a as EventName, b as EventHandler<EventName>)
@@ -1470,11 +1841,11 @@ export function createSDK(): SDK {
       }
       case 'destroy':
         panel?.destroy()
-        trigger?.remove()
+        launcher?.remove()
         bridge?.dispose()
         removeStyles()
         panel = null
-        trigger = null
+        launcher = null
         bridge = null
         ready = false
         metadata = null
@@ -1546,6 +1917,12 @@ export const Quackback = {
   close(): void {
     sdk.dispatch('close')
   },
+  showLauncher(): void {
+    sdk.dispatch('showLauncher')
+  },
+  hideLauncher(): void {
+    sdk.dispatch('hideLauncher')
+  },
   on<T extends EventName>(name: T, handler: EventHandler<T>): Unsubscribe {
     return sdk.dispatch('on', name, handler) as Unsubscribe
   },
@@ -1578,6 +1955,8 @@ describe('public API', () => {
     expect(typeof Quackback.logout).toBe('function')
     expect(typeof Quackback.open).toBe('function')
     expect(typeof Quackback.close).toBe('function')
+    expect(typeof Quackback.showLauncher).toBe('function')
+    expect(typeof Quackback.hideLauncher).toBe('function')
     expect(typeof Quackback.on).toBe('function')
     expect(typeof Quackback.off).toBe('function')
     expect(typeof Quackback.metadata).toBe('function')
@@ -2411,10 +2790,11 @@ git commit -m "chore(widget): prepare v0.1.0 publish"
 
 ## Self-Review
 
-**Spec coverage:** Each section of the original analysis maps to a task group:
+**Spec coverage:** Each section of the design maps to a task group:
 
+- Cross-platform unification → Tasks 0.1–0.5
 - Extract SDK into real modules → Tasks 3–9
-- Public API surface + types → Tasks 2, 10
+- Public API surface + types → Tasks 2, 10 (including `showLauncher` / `hideLauncher`)
 - Server compat layer → Tasks 11–13
 - React adapter → Tasks 14–15
 - Dogfood on website → Task 16
@@ -2426,10 +2806,11 @@ git commit -m "chore(widget): prepare v0.1.0 publish"
 2. **Vue / Svelte adapters** — explicitly out of scope; add when user demand shows up.
 3. **Protocol versioning** — noted in the analysis; safe to defer because the current protocol is preserved byte-for-byte.
 4. **Size budget verification** — only sanity-checked in Task 12; add a CI guard once 0.1.0 is shipped.
+5. **Intercom-style `trackEvent`** — not added yet; reassess once feedback widgets grow into event analytics.
 
-**Type consistency check:** `InitOptions`, `Identity`, `OpenOptions`, `WidgetTheme`, `EventMap`, `EventName`, `EventHandler`, `Unsubscribe` names stay consistent from Task 2 through Task 18. The dispatcher's `Command` union in Task 9 matches the method surface exposed in Task 10. `ResolvedTheme` is internal to `theme.ts` only.
+**Type consistency check:** `InitOptions`, `Identity`, `OpenOptions`, `WidgetTheme`, `EventMap`, `EventName`, `EventHandler`, `Unsubscribe` names stay consistent from Task 2 through Task 18. The dispatcher's `Command` union in Task 9 (`init | identify | logout | open | close | showLauncher | hideLauncher | destroy | metadata | on | off`) matches the method surface exposed in Task 10. Mobile field names (`appUrl`, `placement`) from Phase 0 match web's `InitOptions` in Task 2. `ResolvedTheme` is internal to `theme.ts` only.
 
-**Placeholder scan:** no "TBD", "similar to Task N", or unimplemented code paths. Task 14's second test (`rerender` + `identify` spy) is intentionally a behavioral smoke test — sharpen if the provider API exposes a spy-friendly hook during implementation.
+**Placeholder scan:** no "TBD", "similar to Task N", or unimplemented code paths. Task 14's second test (`rerender` + `identify` spy) is intentionally a behavioral smoke test — sharpen if the provider API exposes a spy-friendly hook during implementation. Task 0.1 Step 1 (audit `appId`) is a real audit that may or may not surface code to delete — if `appId` IS in use, plan only removes the config field after finding a replacement.
 
 ---
 
@@ -2438,4 +2819,4 @@ git commit -m "chore(widget): prepare v0.1.0 publish"
 - **Circular-dep risk with Vite `?raw` import** (Task 13) — the web app imports a file from `packages/widget/dist/`, which only exists after the widget is built. The root `build` script chains them correctly. For dev mode, the `?raw` import would fail until the widget is built once; suggest adding a `postinstall` hook or a dev-mode fallback that reads from disk at request time.
 - **`.` vs `./react` exports map** — the `development` condition is bun-specific; verify this works in the quackback repo's bun version. If not, drop it and require `bun run build` before `bun run dev`.
 - **Cross-repo publish flow** — CI token and @quackback npm org claim need to happen before Task 18.
-- **Existing integrations regression** — Task 13's Step 6 manual smoke test is the only guard; add a Playwright test that loads `/api/widget/sdk.js` and asserts the trigger renders before shipping to production.
+- **Existing integrations regression** — Task 13's Step 6 manual smoke test is the only guard; add a Playwright test that loads `/api/widget/sdk.js` and asserts the launcher renders before shipping to production.

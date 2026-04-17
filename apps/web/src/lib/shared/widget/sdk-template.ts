@@ -3,7 +3,7 @@
  *
  * Generates a vanilla JS SDK (~10KB) that:
  * - Replays the command queue from the inline snippet
- * - Creates and manages the trigger button + iframe panel
+ * - Creates and manages the launcher button + iframe panel
  * - Handles identify via postMessage to iframe
  * - Supports floating (popover) mode
  *
@@ -44,7 +44,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
   // State
   var config = null;
   var iframe = null;
-  var trigger = null;
+  var launcher = null;
   var backdrop = null;
   var panel = null;
   var isOpen = false;
@@ -86,7 +86,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
   }
 
   // =========================================================================
-  // Trigger Button
+  // Launcher Button
   // =========================================================================
 
   function isDarkMode() {
@@ -104,18 +104,18 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     };
   }
 
-  function applyTriggerColors() {
-    if (!trigger) return;
+  function applyLauncherColors() {
+    if (!launcher) return;
     var colors = getThemeColors();
-    trigger.style.backgroundColor = colors.bg;
-    trigger.style.color = colors.fg;
+    launcher.style.backgroundColor = colors.bg;
+    launcher.style.color = colors.fg;
   }
 
-  function createTrigger() {
+  function createLauncher() {
     var placement = (config && config.placement) || "right";
     var colors = getThemeColors();
 
-    trigger = createElement("button", {
+    launcher = createElement("button", {
       position: "fixed",
       bottom: "24px",
       [placement === "left" ? "left" : "right"]: "24px",
@@ -176,24 +176,24 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
     iconWrapper.appendChild(iconChat);
     iconWrapper.appendChild(iconClose);
-    trigger.appendChild(iconWrapper);
+    launcher.appendChild(iconWrapper);
 
-    trigger.addEventListener("mouseenter", function() {
-      trigger.style.transform = "translateY(-2px)";
-      trigger.style.boxShadow = "0 6px 20px rgba(0,0,0,0.2)";
+    launcher.addEventListener("mouseenter", function() {
+      launcher.style.transform = "translateY(-2px)";
+      launcher.style.boxShadow = "0 6px 20px rgba(0,0,0,0.2)";
     });
-    trigger.addEventListener("mouseleave", function() {
-      trigger.style.transform = "translateY(0)";
-      trigger.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+    launcher.addEventListener("mouseleave", function() {
+      launcher.style.transform = "translateY(0)";
+      launcher.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
     });
-    trigger.addEventListener("click", function() { if (isOpen) dispatch("close"); else dispatch("open"); });
+    launcher.addEventListener("click", function() { if (isOpen) dispatch("close"); else dispatch("open"); });
 
     // Listen for color scheme changes to update button colors
     if (THEME.themeMode === "user" && window.matchMedia) {
-      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTriggerColors);
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyLauncherColors);
     }
 
-    document.body.appendChild(trigger);
+    document.body.appendChild(launcher);
   }
 
   // =========================================================================
@@ -205,7 +205,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
 
     var placement = (config && config.placement) || "right";
     var boardParam = config && config.defaultBoard ? "board=" + encodeURIComponent(config.defaultBoard) : "";
-    var closeParam = config && config.trigger === false ? "showClose=1" : "";
+    var closeParam = config && config.launcher === false ? "showClose=1" : "";
     var localeParam = config && config.locale ? "locale=" + encodeURIComponent(config.locale) : "";
     var queryParts = [boardParam, closeParam, localeParam].filter(Boolean);
     var iframeUrl = WIDGET_URL + (queryParts.length ? "?" + queryParts.join("&") : "");
@@ -216,7 +216,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       var styleEl = document.createElement("style");
       styleEl.id = "quackback-widget-styles";
       styleEl.textContent = [
-        // Desktop: popover anchored to trigger button
+        // Desktop: popover anchored to launcher button
         ".quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;",
         "bottom:88px;" + side + ":24px;width:400px;height:min(600px,calc(100vh - 108px));",
         "border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.12);",
@@ -278,12 +278,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     isOpen = true;
     isMobile = window.innerWidth < 640;
 
-    if (trigger) {
-      trigger.setAttribute("aria-expanded", "true");
+    if (launcher) {
+      launcher.setAttribute("aria-expanded", "true");
       if (isMobile) {
-        trigger.style.display = "none";
+        launcher.style.display = "none";
       } else {
-        trigger.setAttribute("aria-label", "Close feedback widget");
+        launcher.setAttribute("aria-label", "Close feedback widget");
         if (iconChat && iconClose) {
           iconChat.style.opacity = "0";
           iconChat.style.transform = "rotate(90deg)";
@@ -308,11 +308,11 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     isOpen = false;
     isMobile = window.innerWidth < 640;
 
-    if (trigger && !(config && config.trigger === false)) {
-      trigger.setAttribute("aria-expanded", "false");
-      trigger.style.display = "flex";
+    if (launcher && !(config && config.launcher === false)) {
+      launcher.setAttribute("aria-expanded", "false");
+      launcher.style.display = "flex";
       if (!isMobile) {
-        trigger.setAttribute("aria-label", "Open feedback widget");
+        launcher.setAttribute("aria-label", "Open feedback widget");
         if (iconChat && iconClose) {
           iconChat.style.opacity = "1";
           iconChat.style.transform = "rotate(0deg)";
@@ -403,9 +403,9 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
       case "init":
         config = options || {};
         isMobile = window.innerWidth < 640;
-        // Widget is visible after init — create trigger and eagerly load iframe
-        if (!(config.trigger === false)) {
-          if (!trigger) createTrigger();
+        // Widget is visible after init — create launcher and eagerly load iframe
+        if (!(config.launcher === false)) {
+          if (!launcher) createLauncher();
         }
         if (!panel) createPanel();
         // Start identity from bundled value, or fall back to anonymous
@@ -417,7 +417,7 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         break;
 
       case "identify":
-        // Update identity — trigger already visible from init
+        // Update identity — launcher already visible from init
         var identifyPayload = options || { anonymous: true };
         if (isReady) sendToWidget("quackback:identify", identifyPayload);
         else pendingIdentify = identifyPayload;
@@ -479,12 +479,12 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
         hidePanel();
         if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
         if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-        if (trigger && trigger.parentNode) trigger.parentNode.removeChild(trigger);
+        if (launcher && launcher.parentNode) launcher.parentNode.removeChild(launcher);
         var styleTag = document.getElementById("quackback-widget-styles");
         if (styleTag && styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
         panel = null;
         iframe = null;
-        trigger = null;
+        launcher = null;
         backdrop = null;
         config = null;
         metadata = null;
@@ -519,13 +519,13 @@ export function buildWidgetSDK(baseUrl: string, theme?: WidgetTheme): string {
     if (wasMobile !== isMobile) {
       // Notify widget so it can show/hide the close button
       if (isReady) sendToWidget("quackback:mobile", isMobile);
-      // Show/hide trigger when crossing the breakpoint while panel is open
-      if (isOpen && trigger) {
+      // Show/hide launcher when crossing the breakpoint while panel is open
+      if (isOpen && launcher) {
         if (isMobile) {
-          trigger.style.display = "none";
+          launcher.style.display = "none";
         } else {
-          trigger.style.display = "flex";
-          trigger.setAttribute("aria-label", "Close feedback widget");
+          launcher.style.display = "flex";
+          launcher.setAttribute("aria-label", "Close feedback widget");
           if (iconChat && iconClose) {
             iconChat.style.opacity = "0";
             iconChat.style.transform = "rotate(90deg)";
