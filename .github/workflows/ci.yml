@@ -18,6 +18,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      # Build the widget bundle first — apps/web imports
+      # packages/widget/dist/browser.js via Vite ?raw, so it must exist
+      # before the web build runs.
+      - run: bun run --filter @quackback/widget build
       - run: bun run build
         env:
           SKIP_ENV_VALIDATION: true
