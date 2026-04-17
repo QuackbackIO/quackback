@@ -147,6 +147,19 @@ export function createSDK(): SDK {
     launcher.setColors({ backgroundColor, foregroundColor })
   }
 
+  // Reveal the launcher after colors are set (or as a fallback if the fetch
+  // is slow/fails), so users never see the default indigo flash before the
+  // brand color lands.
+  const LAUNCHER_REVEAL_FALLBACK_MS = 1500
+  function revealLauncherOnce(): () => void {
+    let revealed = false
+    return () => {
+      if (revealed) return
+      revealed = true
+      launcher?.reveal()
+    }
+  }
+
   function createLauncherIfNeeded(): void {
     if (launcher || !config || config.launcher === false) return
     launcher = createLauncher({
@@ -169,7 +182,14 @@ export function createSDK(): SDK {
           anonymous: true,
         }
         sendIdentity(initialIdentity)
-        void fetchServerConfig(config.instanceUrl).then(applyServerTheme)
+        const reveal = revealLauncherOnce()
+        const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS)
+        void fetchServerConfig(config.instanceUrl)
+          .then(applyServerTheme)
+          .finally(() => {
+            window.clearTimeout(fallback)
+            reveal()
+          })
         return
       }
       case 'identify':

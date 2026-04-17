@@ -1,5 +1,10 @@
 # @quackback/widget
 
+## 0.1.1 — 2026-04-17
+
+- Launcher now stays hidden until the server theme is applied, avoiding a brief flash of the default color before the brand color lands. A 1.5 s fallback reveal ensures the launcher still shows if the config fetch is slow or fails.
+- Default launcher colors updated to Quackback branding (black background, amber-400 icon) for the pre-theme and fallback state.
+
 ## 0.1.0 — 2026-04-17
 
 Initial release. Extracted from the Quackback monorepo.

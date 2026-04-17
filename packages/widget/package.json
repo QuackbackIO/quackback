@@ -1,6 +1,6 @@
 {
   "name": "@quackback/widget",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "AGPL-3.0",
   "description": "Quackback feedback widget — embed on your site with a tiny SDK.",
   "type": "module",

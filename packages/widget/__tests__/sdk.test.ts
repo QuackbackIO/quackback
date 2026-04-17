@@ -191,6 +191,48 @@ describe('sdk', () => {
     expect(launcher()?.style.display).toBe('flex')
   })
 
+  it('launcher starts hidden and reveals after server config fetch resolves', async () => {
+    stubIframe()
+    let resolveFetch!: (value: unknown) => void
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve
+          })
+      )
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const btn = document.querySelector(
+      'button[aria-label="Open feedback widget"]'
+    ) as HTMLButtonElement
+    expect(btn.style.opacity).toBe('0')
+    resolveFetch({ ok: true, json: async () => ({ theme: {} }) })
+    // Let fetch → json → applyServerTheme → finally settle.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(btn.style.opacity).toBe('1')
+  })
+
+  it('launcher reveals via fallback timer if config fetch never resolves', async () => {
+    vi.useFakeTimers()
+    stubIframe()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {}))
+    ) // never resolves
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const btn = document.querySelector(
+      'button[aria-label="Open feedback widget"]'
+    ) as HTMLButtonElement
+    expect(btn.style.opacity).toBe('0')
+    vi.advanceTimersByTime(1500)
+    expect(btn.style.opacity).toBe('1')
+    vi.useRealTimers()
+  })
+
   it('destroy removes the iframe and launcher', () => {
     stubIframe()
     const sdk = createSDK()
