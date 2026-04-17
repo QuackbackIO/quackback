@@ -9,7 +9,6 @@ export interface InitOptions {
   defaultBoard?: string
   /** Set `launcher: false` to hide the default floating button and open programmatically. */
   launcher?: boolean
-  buttonColor?: string
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
   locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | string
   /** Bundle identity into init — shorthand for init + identify. */

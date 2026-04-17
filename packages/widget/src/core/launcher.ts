@@ -1,9 +1,5 @@
 export interface LauncherOptions {
   placement: 'left' | 'right'
-  /** Background color of the button. Defaults to a neutral indigo if omitted. */
-  backgroundColor?: string
-  /** Foreground (icon) color. Defaults to white if omitted. */
-  foregroundColor?: string
   onClick: () => void
 }
 
@@ -24,8 +20,8 @@ const CLOSE_ICON =
   '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 export function createLauncher(opts: LauncherOptions): LauncherHandle {
-  let bg = opts.backgroundColor ?? DEFAULT_BG
-  let fg = opts.foregroundColor ?? DEFAULT_FG
+  let bg = DEFAULT_BG
+  let fg = DEFAULT_FG
 
   const btn = document.createElement('button')
   Object.assign(btn.style, {
