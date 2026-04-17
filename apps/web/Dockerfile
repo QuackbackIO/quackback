@@ -36,6 +36,10 @@ RUN bun install --frozen-lockfile
 # Set build-time environment
 ENV NODE_ENV=production
 
+# Build the widget bundle first — apps/web imports packages/widget/dist/browser.js
+# via a Vite ?raw import, so the file must exist before the TanStack Start build runs.
+RUN bun run --filter @quackback/widget build
+
 # Build the TanStack Start application
 WORKDIR /app/apps/web
 RUN bun run build
