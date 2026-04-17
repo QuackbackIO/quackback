@@ -49,11 +49,11 @@ describe('getActiveCategory', () => {
   })
 
   it('returns the slug for a category path', () => {
-    expect(getActiveCategory('/hc/getting-started')).toBe('getting-started')
+    expect(getActiveCategory('/hc/categories/getting-started')).toBe('getting-started')
   })
 
-  it('returns the category slug for a nested article path', () => {
-    expect(getActiveCategory('/hc/getting-started/first-steps')).toBe('getting-started')
+  it('returns the category slug for an article path', () => {
+    expect(getActiveCategory('/hc/articles/getting-started/first-steps')).toBe('getting-started')
   })
 
   it('returns null for non-hc portal paths', () => {
@@ -116,8 +116,8 @@ describe('buildCategoryBreadcrumbs (hierarchical)', () => {
       categoryId: 'leaf',
     })
     expect(items.map((i) => i.label)).toEqual(['Help Center', 'Root', 'Middle', 'Leaf'])
-    expect(items[1].href).toBe('/hc/root')
-    expect(items[2].href).toBe('/hc/mid')
+    expect(items[1].href).toBe('/hc/categories/root')
+    expect(items[2].href).toBe('/hc/categories/mid')
     expect(items[3].href).toBeUndefined()
   })
 
@@ -134,7 +134,7 @@ describe('buildCategoryBreadcrumbs (hierarchical)', () => {
       'Leaf',
       'Installing the CLI',
     ])
-    expect(items[3].href).toBe('/hc/leaf')
+    expect(items[3].href).toBe('/hc/categories/leaf')
     expect(items[4].href).toBeUndefined()
   })
 

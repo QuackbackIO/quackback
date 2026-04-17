@@ -1,53 +1,6 @@
-import { createFileRoute, notFound, Outlet } from '@tanstack/react-router'
-import {
-  getPublicCategoryBySlugFn,
-  listPublicArticlesForCategoryFn,
-  listPublicCategoriesFn,
-} from '@/lib/server/functions/help-center'
-import { getSubcategories } from '@/components/help-center/help-center-utils'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
+// Transparent layout — child routes handle their own redirects to the new URL structure.
 export const Route = createFileRoute('/_portal/hc/$categorySlug')({
-  loader: async ({ params }) => {
-    let category: Awaited<ReturnType<typeof getPublicCategoryBySlugFn>>
-    try {
-      category = await getPublicCategoryBySlugFn({ data: { slug: params.categorySlug } })
-    } catch {
-      throw notFound()
-    }
-
-    // Load articles for this category and all categories in parallel
-    const [articles, allCategories] = await Promise.all([
-      listPublicArticlesForCategoryFn({ data: { categoryId: category.id } }),
-      listPublicCategoriesFn({ data: {} }),
-    ])
-
-    // Find subcategories
-    const subcategories = getSubcategories(allCategories, category.id)
-
-    // Load articles for each subcategory (count is small so this is acceptable)
-    const subcategoryArticles = await Promise.all(
-      subcategories.map(async (sub) => ({
-        ...sub,
-        articles: await listPublicArticlesForCategoryFn({ data: { categoryId: sub.id } }),
-      }))
-    )
-
-    return { category, articles, subcategories: subcategoryArticles, allCategories }
-  },
-  head: ({ loaderData }) => {
-    if (!loaderData) return {}
-    const { category } = loaderData
-    return {
-      meta: [{ title: `${category.name} - Help Center` }],
-    }
-  },
-  component: CategoryLayout,
+  component: () => <Outlet />,
 })
-
-function CategoryLayout() {
-  return (
-    <div className="mx-auto max-w-7xl">
-      <Outlet />
-    </div>
-  )
-}

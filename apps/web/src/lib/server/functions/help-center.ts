@@ -9,6 +9,7 @@ import { requireAuth, getOptionalAuth } from './auth-helpers'
 import {
   listCategories,
   listPublicCategories,
+  listPublicCategoryEditors,
   getCategoryById,
   getCategoryBySlug,
   createCategory,
@@ -199,6 +200,12 @@ export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
       ...a,
       publishedAt: toIsoStringOrNull(a.publishedAt),
     }))
+  })
+
+export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({}))
+  .handler(async () => {
+    return listPublicCategoryEditors()
   })
 
 export const getArticleFn = createServerFn({ method: 'GET' })

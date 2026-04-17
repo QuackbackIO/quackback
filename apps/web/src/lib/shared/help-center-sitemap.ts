@@ -32,13 +32,13 @@ export function buildHelpCenterSitemapUrls(
 
   // Category pages
   for (const cat of categories) {
-    urls.push({ loc: `${baseUrl}/${cat.slug}` })
+    urls.push({ loc: `${baseUrl}/categories/${cat.slug}` })
   }
 
   // Article pages
   for (const article of articles) {
     urls.push({
-      loc: `${baseUrl}/${article.category.slug}/${article.slug}`,
+      loc: `${baseUrl}/articles/${article.category.slug}/${article.slug}`,
       lastmod: article.updatedAt.split('T')[0],
     })
   }

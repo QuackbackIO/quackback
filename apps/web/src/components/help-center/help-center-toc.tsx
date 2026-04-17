@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { cn } from '@/lib/shared/utils'
 import type { TocHeading } from './help-center-article-utils'
 
 interface HelpCenterTocProps {
@@ -8,77 +9,62 @@ interface HelpCenterTocProps {
 }
 
 export function HelpCenterToc({ headings }: HelpCenterTocProps) {
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const observerRef = useRef<IntersectionObserver | null>(null)
+  const [activeId, setActiveId] = useState<string>('')
 
   useEffect(() => {
     if (headings.length === 0) return
 
-    // Disconnect previous observer
-    observerRef.current?.disconnect()
-
-    const callback: IntersectionObserverCallback = (entries) => {
-      // Find the first visible heading (top-down)
-      const visible = entries
-        .filter((e) => e.isIntersecting)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-
-      if (visible.length > 0) {
-        setActiveId(visible[0].target.id)
-      }
-    }
-
-    observerRef.current = new IntersectionObserver(callback, {
-      rootMargin: '-80px 0px -60% 0px',
-      threshold: 0,
-    })
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveId(entry.target.id)
+            break
+          }
+        }
+      },
+      { rootMargin: '-24px 0% -80% 0%', threshold: 0 }
+    )
 
     for (const heading of headings) {
       const el = document.getElementById(heading.id)
-      if (el) observerRef.current.observe(el)
+      if (el) observer.observe(el)
     }
 
-    return () => observerRef.current?.disconnect()
+    return () => observer.disconnect()
   }, [headings])
 
   if (headings.length === 0) return null
 
   return (
-    <nav className="hidden xl:block w-40 shrink-0" aria-label="Table of contents">
-      <div className="sticky top-20">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          On this page
-        </p>
-        <ul className="space-y-1">
-          {headings.map((heading) => {
-            const isActive = activeId === heading.id
-            return (
-              <li key={heading.id}>
-                <a
-                  href={`#${heading.id}`}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    const el = document.getElementById(heading.id)
-                    if (el) {
-                      el.scrollIntoView({ behavior: 'smooth' })
-                      setActiveId(heading.id)
-                    }
-                  }}
-                  className={`block text-xs leading-relaxed transition-colors ${
-                    heading.level === 3 ? 'pl-3' : ''
-                  } ${
-                    isActive
-                      ? 'border-l-2 border-primary pl-2 text-foreground font-medium'
-                      : 'border-l-2 border-transparent pl-2 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {heading.text}
-                </a>
-              </li>
-            )
-          })}
+    <aside className="sticky top-14 h-[calc(100vh-3.5rem)] hidden flex-col py-8 pl-6 pr-6 xl:flex">
+      <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        On this page
+      </p>
+      <nav className="min-h-0 flex-1 overflow-y-auto">
+        <ul className="border-l border-border space-y-0.5">
+          {headings.map((heading) => (
+            <li key={heading.id} style={{ paddingLeft: heading.level === 3 ? '20px' : '0px' }}>
+              <a
+                href={`#${heading.id}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById(heading.id)?.scrollIntoView({ behavior: 'smooth' })
+                  setActiveId(heading.id)
+                }}
+                className={cn(
+                  'block -ml-px border-l-2 py-1 pl-3 text-[13px] leading-snug transition-colors',
+                  activeId === heading.id
+                    ? 'border-primary text-foreground font-medium'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                )}
+              >
+                {heading.text}
+              </a>
+            </li>
+          ))}
         </ul>
-      </div>
-    </nav>
+      </nav>
+    </aside>
   )
 }

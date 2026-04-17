@@ -92,7 +92,7 @@ export function HelpCenterHeroSearch() {
   const handleResultClick = (result: SearchResult) => {
     setShowResults(false)
     setQuery('')
-    window.location.href = `/hc/${result.category.slug}/${result.slug}`
+    window.location.href = `/hc/articles/${result.category.slug}/${result.slug}`
   }
 
   return (

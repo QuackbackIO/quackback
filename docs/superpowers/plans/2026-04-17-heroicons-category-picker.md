@@ -25,6 +25,7 @@
 - `apps/web/src/components/admin/help-center/help-center-metadata-sidebar.tsx` — use CategoryIcon
 - `apps/web/src/components/admin/help-center/help-center-article-editor.tsx` — use CategoryIcon (2 sites)
 - `apps/web/src/components/widget/widget-help.tsx` — use CategoryIcon
+- `apps/web/src/components/widget/widget-help-category.tsx` — use CategoryIcon
 - `apps/web/src/routes/_portal/hc/categories/$categorySlug/index.tsx` — use CategoryIcon (2 sites)
 
 ---
@@ -534,6 +535,7 @@ git commit -m "feat(help-center): use CategoryIcon in admin render sites"
 
 - Modify: `apps/web/src/components/help-center/help-center-category-grid.tsx`
 - Modify: `apps/web/src/components/widget/widget-help.tsx`
+- Modify: `apps/web/src/components/widget/widget-help-category.tsx`
 - Modify: `apps/web/src/routes/_portal/hc/categories/$categorySlug/index.tsx`
 
 - [ ] **Step 1: Update help-center-category-grid.tsx**
@@ -576,7 +578,28 @@ Replace line 137 (widget card icon — always render for consistent layout):
 ;<CategoryIcon icon={cat.icon} className="w-6 h-6 mb-1" />
 ```
 
-- [ ] **Step 3: Update portal category route**
+- [ ] **Step 3: Update widget-help-category.tsx**
+
+Add to imports:
+
+```tsx
+import { CategoryIcon } from '@/components/help-center/category-icon'
+```
+
+Replace line 27 (category header in article-list view — keep conditional, `categoryIcon` prop is `string | null`):
+
+```tsx
+// before
+{
+  categoryIcon && <span className="text-lg">{categoryIcon}</span>
+}
+// after
+{
+  categoryIcon && <CategoryIcon icon={categoryIcon} className="w-5 h-5 shrink-0" />
+}
+```
+
+- [ ] **Step 4: Update portal category route**
 
 File: `apps/web/src/routes/_portal/hc/categories/$categorySlug/index.tsx`
 
@@ -610,7 +633,7 @@ Replace lines 237–239 (subcategory section header — remove wrapping span):
 <CategoryIcon icon={sub.icon} className="w-5 h-5 shrink-0" />
 ```
 
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 5: Typecheck**
 
 ```bash
 cd apps/web && bun run typecheck 2>&1 | grep -E "help-center-category-grid|widget-help|categorySlug"
@@ -618,7 +641,7 @@ cd apps/web && bun run typecheck 2>&1 | grep -E "help-center-category-grid|widge
 
 Expected: no output
 
-- [ ] **Step 5: Run existing tests**
+- [ ] **Step 6: Run existing tests**
 
 ```bash
 cd apps/web && bun run test 2>&1 | tail -20
@@ -626,12 +649,13 @@ cd apps/web && bun run test 2>&1 | tail -20
 
 Expected: all tests pass (the `icon` column type is unchanged — existing service tests are unaffected)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add \
   apps/web/src/components/help-center/help-center-category-grid.tsx \
   apps/web/src/components/widget/widget-help.tsx \
+  apps/web/src/components/widget/widget-help-category.tsx \
   "apps/web/src/routes/_portal/hc/categories/\$categorySlug/index.tsx"
 git commit -m "feat(help-center): use CategoryIcon in public and widget render sites"
 ```
