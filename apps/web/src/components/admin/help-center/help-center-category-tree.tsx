@@ -7,6 +7,7 @@ import {
   MAX_CATEGORY_DEPTH,
 } from '@/lib/server/domains/help-center/category-tree'
 import type { HelpCenterCategoryId } from '@quackback/ids'
+import { formatCategoryCount } from './category-count'
 
 export interface TreeCategory {
   id: HelpCenterCategoryId
@@ -16,6 +17,7 @@ export interface TreeCategory {
   icon: string | null
   isPublic: boolean
   articleCount: number
+  recursiveArticleCount: number
 }
 
 /** Handlers for category CRUD, shared between the sidebar tree and the main finder. */
@@ -201,8 +203,15 @@ function TreeRow({
         <span className="shrink-0 text-sm leading-none">{category.icon || '📁'}</span>
         <span className="truncate">{category.name}</span>
       </button>
-      <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity">
-        {category.articleCount}
+      <span
+        className="shrink-0 tabular-nums text-[10px] text-muted-foreground pr-2 group-hover:opacity-0 transition-opacity"
+        title={
+          category.articleCount === category.recursiveArticleCount
+            ? `${category.articleCount} article${category.articleCount === 1 ? '' : 's'}`
+            : `${category.articleCount} direct, ${category.recursiveArticleCount} in subtree`
+        }
+      >
+        {formatCategoryCount(category.articleCount, category.recursiveArticleCount)}
       </span>
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         {canAddSub && (

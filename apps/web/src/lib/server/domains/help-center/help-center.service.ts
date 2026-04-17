@@ -179,8 +179,14 @@ export async function listCategories(
   )
 
   const flat = categories.map((c) => ({ id: c.id, parentId: c.parentId ?? null }))
-  const recursiveTotal = computeRecursiveCounts(flat, (id) => countMap.get(id)?.total ?? 0)
-  const recursivePublished = computeRecursiveCounts(flat, (id) => countMap.get(id)?.published ?? 0)
+  const recursiveTotal = computeRecursiveCounts(
+    flat,
+    (id) => countMap.get(id as HelpCenterCategoryId)?.total ?? 0
+  )
+  const recursivePublished = computeRecursiveCounts(
+    flat,
+    (id) => countMap.get(id as HelpCenterCategoryId)?.published ?? 0
+  )
 
   return categories.map((cat) => {
     const row = countMap.get(cat.id as HelpCenterCategoryId)
