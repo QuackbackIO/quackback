@@ -59,13 +59,12 @@ export function collectDescendantIdsIncludingSelf<T extends CategoryLike>(
 }
 
 /**
- * Return a map of recursive counts: each category's own direct count plus the
- * sum of every descendant's direct count. Categories not in the input contribute
- * nothing. Every id in `flat` receives an entry (0 when nothing is below it).
+ * Map each category id to its direct count plus the sum of its descendants'.
+ * Every id in `flat` gets an entry (0 when nothing contributes).
  *
- * Runs in O(n * d) where d is the tree depth (capped by MAX_CATEGORY_DEPTH),
- * so effectively linear for our use. Terminates on cycles by tracking the
- * ancestor set per walk.
+ * Walks up from each contributing node to its ancestors, so cost is O(n*d)
+ * where d is tree depth (capped by MAX_CATEGORY_DEPTH). Cycle-safe: each walk
+ * tracks its visited ancestors so a corrupted `parentId` loop terminates.
  */
 export function computeRecursiveCounts<T extends CategoryLike>(
   flat: T[],

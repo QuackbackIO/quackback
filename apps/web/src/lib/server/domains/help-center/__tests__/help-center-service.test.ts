@@ -254,8 +254,8 @@ describe('listCategories', () => {
       {
         id: 'category_parent' as HelpCenterCategoryId,
         parentId: null,
-        slug: 'marketplaces',
-        name: 'Marketplaces',
+        slug: 'parent',
+        name: 'Parent',
         description: null,
         isPublic: true,
         position: 0,
@@ -265,8 +265,8 @@ describe('listCategories', () => {
       {
         id: 'category_child' as HelpCenterCategoryId,
         parentId: 'category_parent' as HelpCenterCategoryId,
-        slug: 'amazon',
-        name: 'Amazon',
+        slug: 'child',
+        name: 'Child',
         description: null,
         isPublic: true,
         position: 0,
@@ -337,6 +337,61 @@ describe('listPublicCategories', () => {
     const result = await listPublicCategories()
     expect(result).toHaveLength(1)
     expect(result[0].slug).toBe('public')
+  })
+
+  it('includes a parent category whose only published articles live under children', async () => {
+    mockCategoryFindMany.mockResolvedValue([
+      {
+        id: 'category_parent' as HelpCenterCategoryId,
+        parentId: null,
+        slug: 'parent',
+        name: 'Parent',
+        description: null,
+        isPublic: true,
+        position: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'category_child' as HelpCenterCategoryId,
+        parentId: 'category_parent' as HelpCenterCategoryId,
+        slug: 'child',
+        name: 'Child',
+        description: null,
+        isPublic: true,
+        position: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'category_empty_root' as HelpCenterCategoryId,
+        parentId: null,
+        slug: 'empty',
+        name: 'Empty Root',
+        description: null,
+        isPublic: true,
+        position: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
+
+    mockSelectFrom.mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        groupBy: vi
+          .fn()
+          .mockResolvedValue([
+            { categoryId: 'category_child', totalCount: 14, publishedCount: 14 },
+          ]),
+      }),
+    })
+
+    const result = await listPublicCategories()
+    const slugs = result.map((c) => c.slug).sort()
+    expect(slugs).toEqual(['child', 'parent'])
+
+    const parent = result.find((c) => c.slug === 'parent')!
+    expect(parent.articleCount).toBe(14)
   })
 })
 

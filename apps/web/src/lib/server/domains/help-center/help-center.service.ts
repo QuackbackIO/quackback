@@ -196,12 +196,14 @@ export async function listCategories(
 
 export async function listPublicCategories(): Promise<HelpCenterCategoryWithCount[]> {
   const all = await listCategories()
-  // Public consumers see `articleCount` as the published-only count to avoid
-  // exposing draft counts. Admin consumers call listCategories directly and
-  // see the total count on `articleCount`.
+  // Public landing pages show a category when any article in its subtree is
+  // published, so a parent with only sub-category articles stays visible.
+  // articleCount is remapped to the recursive published total so the card
+  // shows a meaningful number. Admin callers use listCategories() directly
+  // and see the direct counts on both fields.
   return all
-    .filter((cat) => cat.isPublic && cat.publishedArticleCount > 0)
-    .map((cat) => ({ ...cat, articleCount: cat.publishedArticleCount }))
+    .filter((cat) => cat.isPublic && cat.recursivePublishedArticleCount > 0)
+    .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
 export async function getCategoryById(id: HelpCenterCategoryId): Promise<HelpCenterCategory> {
