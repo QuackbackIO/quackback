@@ -33,6 +33,15 @@ export interface SDK {
   isIdentified(): boolean
 }
 
+function isSafeHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'https:' || u.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 export function createSDK(): SDK {
   let config: InitOptions | null = null
   let launcher: LauncherHandle | null = null
@@ -100,7 +109,11 @@ export function createSDK(): SDK {
       }
       case 'quackback:navigate': {
         const m = msg as { url?: string }
-        if (m.url) window.open(m.url, '_blank')
+        if (m.url && isSafeHttpUrl(m.url)) {
+          // noopener: prevent tabnabbing via window.opener on the new tab.
+          // noreferrer: avoid leaking the host page URL to third parties.
+          window.open(m.url, '_blank', 'noopener,noreferrer')
+        }
         break
       }
     }
@@ -176,6 +189,8 @@ export function createSDK(): SDK {
       case 'init': {
         config = { ...(a as InitOptions) }
         if (!config.instanceUrl) throw new Error('Quackback: init requires { instanceUrl }')
+        if (!isSafeHttpUrl(config.instanceUrl))
+          throw new Error('Quackback: instanceUrl must be an http(s) URL')
         createLauncherIfNeeded()
         ensurePanel()
         const initialIdentity: Identity | { anonymous: true } = config.identity ?? {

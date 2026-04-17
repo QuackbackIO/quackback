@@ -233,6 +233,54 @@ describe('sdk', () => {
     vi.useRealTimers()
   })
 
+  it('init throws on non-http(s) instanceUrl (javascript: scheme)', () => {
+    const sdk = createSDK()
+    expect(() => sdk.dispatch('init', { instanceUrl: 'javascript:alert(1)' })).toThrow(
+      /instanceUrl must be an http/
+    )
+  })
+
+  it('init throws on malformed instanceUrl', () => {
+    const sdk = createSDK()
+    expect(() => sdk.dispatch('init', { instanceUrl: 'not a url' })).toThrow(
+      /instanceUrl must be an http/
+    )
+  })
+
+  it('navigate opens http(s) URLs with noopener,noreferrer', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: { type: 'quackback:navigate', url: 'https://example.com/thing' },
+      })
+    )
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://example.com/thing',
+      '_blank',
+      'noopener,noreferrer'
+    )
+    openSpy.mockRestore()
+  })
+
+  it('navigate ignores javascript: URLs', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: ORIGIN,
+        data: { type: 'quackback:navigate', url: 'javascript:alert(1)' },
+      })
+    )
+    expect(openSpy).not.toHaveBeenCalled()
+    openSpy.mockRestore()
+  })
+
   it('destroy removes the iframe and launcher', () => {
     stubIframe()
     const sdk = createSDK()
