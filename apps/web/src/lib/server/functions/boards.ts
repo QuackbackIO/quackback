@@ -16,6 +16,7 @@ import {
   updateBoard,
   deleteBoard,
 } from '@/lib/server/domains/boards/board.service'
+import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 
 // ============================================
 // Schemas
@@ -217,6 +218,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
           .update(settings)
           .set({ setupState: JSON.stringify(updatedState) })
           .where(eq(settings.id, currentSettings.id))
+        await invalidateSettingsCache()
         console.log(`[fn:boards] createBoardsBatchFn: onboarding complete, setupState updated`)
       }
     }
