@@ -41,13 +41,20 @@ function SelectTrigger({
         <span
           role="button"
           aria-label="Clear"
-          tabIndex={-1}
+          tabIndex={0}
           className="pointer-events-auto opacity-40 hover:opacity-100 transition-opacity"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
             onClear()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation()
+              e.preventDefault()
+              onClear()
+            }
           }}
         >
           <XMarkIcon className="size-4" />
