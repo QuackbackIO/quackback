@@ -16,12 +16,10 @@ export function HelpCenterToc({ headings }: HelpCenterTocProps) {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id)
-            break
-          }
-        }
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible.length > 0) setActiveId(visible[0].target.id)
       },
       { rootMargin: '-24px 0% -80% 0%', threshold: 0 }
     )
