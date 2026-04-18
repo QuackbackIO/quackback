@@ -294,7 +294,7 @@ function PostModalContent({
   }
 
   return (
-    <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
+    <div className="flex flex-col h-full">
       {/* Header */}
       <ModalHeader
         section="Feedback"
@@ -350,7 +350,7 @@ function PostModalContent({
           {/* Left: Content, AI, Comments */}
           <div className="flex-1 min-w-0">
             {/* Editor area */}
-            <div className="p-6">
+            <div className="p-6" onKeyDown={handleKeyDown}>
               {/* Title input */}
               <input
                 type="text"
