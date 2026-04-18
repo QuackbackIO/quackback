@@ -1,5 +1,10 @@
 import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router'
-import { DocumentTextIcon, ChevronRightIcon, ArrowLeftIcon } from '@heroicons/react/24/outline'
+import {
+  DocumentTextIcon,
+  ChevronRightIcon,
+  ChevronDownIcon,
+  ArrowLeftIcon,
+} from '@heroicons/react/24/outline'
 import { useMemo } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
@@ -143,49 +148,56 @@ function CategoryIndexPage() {
       <div className="px-4 sm:px-6 md:px-8">
         <div className="relative flex justify-center gap-8 xl:gap-12">
           {/* Left: category nav */}
-          <div className="hidden w-60 shrink-0 xl:block">
-            <aside className="sticky top-14 h-[calc(100vh-3.5rem)] hidden flex-col py-8 pl-4 pr-2 xl:flex">
+          <div className="hidden w-56 shrink-0 overflow-hidden xl:block">
+            <aside className="sticky top-14 flex h-[calc(100vh-3.5rem)] w-full flex-col overflow-hidden py-6 pl-3 pr-2 xl:flex">
               <Link
                 to="/hc"
-                className="mb-5 shrink-0 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                className="mb-4 shrink-0 inline-flex w-full items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <ArrowLeftIcon className="h-4 w-4 shrink-0" />
-                <span className="truncate">All Categories</span>
+                <ArrowLeftIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate">All categories</span>
               </Link>
-              <h4 className="mb-2 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Categories
-              </h4>
+              <p className="mb-1.5 shrink-0 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Browse
+              </p>
               <ScrollArea className="min-h-0 flex-1" scrollBarClassName="w-1.5">
-                <ul className="space-y-0.5 overflow-x-hidden pr-2">
+                <ul className="w-full space-y-px pr-1">
                   {topLevelCategories.map((cat) => {
                     const isActive = cat.id === category.id
+                    const Chevron = isActive ? ChevronDownIcon : ChevronRightIcon
                     return (
-                      <li key={cat.id}>
+                      <li key={cat.id} className="w-full">
                         <Link
                           to={`/hc/categories/${cat.slug}` as '/hc'}
                           className={cn(
-                            'flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-[13px] leading-snug transition-colors',
+                            'flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs leading-snug transition-colors',
                             isActive
-                              ? 'bg-secondary text-foreground font-medium'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                              ? 'bg-secondary font-semibold text-foreground'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                           )}
                         >
+                          <Chevron className="h-3 w-3 shrink-0 opacity-40" />
                           <CategoryIcon
                             icon={cat.icon}
-                            className="h-3.5 w-3.5 shrink-0 opacity-60"
+                            className="h-3.5 w-3.5 shrink-0 opacity-50"
                           />
                           <span className="min-w-0 truncate">{cat.name}</span>
                         </Link>
-                        {isActive && articles.length > 0 && (
-                          <ul className="mt-0.5 ml-3 space-y-0.5 pr-4">
-                            {articles.map((a) => (
-                              <li key={a.id}>
+                        {isActive && subcategories.length > 0 && (
+                          <ul className="mt-px ml-4 w-full space-y-px pr-1">
+                            {subcategories.map((sub) => (
+                              <li key={sub.id} className="w-full">
                                 <Link
-                                  to={`/hc/articles/${cat.slug}/${a.slug}` as '/hc'}
-                                  className="flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-[13px] leading-snug text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                  to={`/hc/categories/${sub.slug}` as '/hc'}
+                                  className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs leading-snug text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 >
-                                  <DocumentTextIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60" />
-                                  <span>{a.title}</span>
+                                  <ChevronRightIcon className="h-3 w-3 shrink-0 opacity-40" />
+                                  <span className="min-w-0 flex-1 truncate">{sub.name}</span>
+                                  {sub.articles.length > 0 && (
+                                    <span className="shrink-0 tabular-nums text-muted-foreground/40">
+                                      {sub.articles.length}
+                                    </span>
+                                  )}
                                 </Link>
                               </li>
                             ))}
