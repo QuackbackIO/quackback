@@ -5,7 +5,7 @@ import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
-import { getSession } from './auth'
+import { getSession } from '@/lib/server/auth/session'
 
 /**
  * Get invitation details for the complete-signup page.

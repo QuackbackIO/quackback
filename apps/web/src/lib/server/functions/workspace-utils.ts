@@ -9,7 +9,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
-import { getSession } from './auth'
+import { getSession } from '@/lib/server/auth/session'
 import { db, principal, eq } from '@/lib/server/db'
 
 const requireWorkspaceRoleSchema = z.object({

@@ -4,7 +4,7 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import { db, principal, eq } from '@/lib/server/db'
-import { getSession } from './auth'
+import { getSession } from '@/lib/server/auth/session'
 
 /**
  * Get the app settings.

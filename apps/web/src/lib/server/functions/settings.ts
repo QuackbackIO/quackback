@@ -36,7 +36,7 @@ import {
 } from '@/lib/server/domains/settings/settings.widget'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { requireAuth } from './auth-helpers'
-import { getSession } from './auth'
+import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, eq, ne } from '@/lib/server/db'
 
 // ============================================
