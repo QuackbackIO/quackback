@@ -9,6 +9,7 @@ import { getSettings } from './workspace'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
+import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { slugify } from '@/lib/shared/utils'
 
 /**
@@ -270,6 +271,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         )
       }
 
+      await invalidateSettingsCache()
       console.log(
         `[fn:onboarding] setupWorkspaceFn: id=${finalSettings!.id}, slug=${finalSettings!.slug}`
       )
@@ -368,6 +370,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
           }
         }
 
+        await invalidateSettingsCache()
         console.log(`[fn:onboarding] saveUseCaseFn: saved useCase=${data.useCase}`)
       } else {
         // Fresh self-hosted install: create minimal settings to store useCase
@@ -406,6 +409,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
           console.log(`[fn:onboarding] saveUseCaseFn: created admin member for first user`)
         }
 
+        await invalidateSettingsCache()
         console.log(
           `[fn:onboarding] saveUseCaseFn: created initial settings with useCase=${data.useCase}`
         )
