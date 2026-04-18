@@ -77,6 +77,7 @@ export const Route = createFileRoute('/widget/')({
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
       },
       imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
+      defaultBoard: settings?.publicWidgetConfig?.defaultBoard ?? null,
     }
   },
   component: WidgetPage,
@@ -101,8 +102,17 @@ interface SuccessPost {
 }
 
 function WidgetPage() {
-  const { posts, postsHasMore, statuses, boards, orgSlug, features, tabs, imageUploadsInWidget } =
-    Route.useLoaderData()
+  const {
+    posts,
+    postsHasMore,
+    statuses,
+    boards,
+    orgSlug,
+    features,
+    tabs,
+    imageUploadsInWidget,
+    defaultBoard,
+  } = Route.useLoaderData()
   const { isIdentified, ensureSession } = useWidgetAuth()
   const canVote = isIdentified || features.anonymousVoting
 
@@ -282,6 +292,7 @@ function WidgetPage() {
           initialHasMore={postsHasMore}
           statuses={statuses}
           boards={boards}
+          defaultBoard={defaultBoard ?? undefined}
           onPostSelect={handlePostSelect}
           onPostCreated={handlePostCreated}
           anonymousVotingEnabled={features.anonymousVoting}

@@ -54,6 +54,7 @@ interface WidgetHomeProps {
   initialHasMore?: boolean
   statuses: StatusInfo[]
   boards: BoardInfo[]
+  defaultBoard?: string
   onPostSelect?: (postId: string) => void
   onPostCreated?: (post: {
     id: string
@@ -199,6 +200,7 @@ export function WidgetHome({
   initialHasMore = false,
   statuses,
   boards,
+  defaultBoard,
   onPostSelect,
   onPostCreated,
   anonymousVotingEnabled = true,
@@ -225,7 +227,13 @@ export function WidgetHome({
 
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
-  const [selectedBoardId, setSelectedBoardId] = useState(boards[0]?.id ?? '')
+  const [selectedBoardId, setSelectedBoardId] = useState(() => {
+    if (defaultBoard) {
+      const match = boards.find((b) => b.slug === defaultBoard)
+      if (match) return match.id
+    }
+    return boards[0]?.id ?? ''
+  })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
   const handleEditorChange = useCallback((json: JSONContent, html: string) => {
