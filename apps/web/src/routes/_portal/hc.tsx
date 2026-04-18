@@ -12,7 +12,7 @@ export const Route = createFileRoute('/_portal/hc')({
     const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
     if (!helpCenterConfig?.enabled) throw notFound()
   },
-  loader: ({ context }) => {
+  loader: async ({ context }) => {
     const { settings } = context
     const helpCenterConfig = (settings?.helpCenterConfig as HelpCenterConfig | null) ?? null
     return { helpCenterConfig }
@@ -24,5 +24,11 @@ export const Route = createFileRoute('/_portal/hc')({
 })
 
 function HelpCenterLayoutRoute() {
-  return <Outlet />
+  return (
+    <div className="flex flex-1 min-h-0">
+      <div className="flex-1 min-w-0">
+        <Outlet />
+      </div>
+    </div>
+  )
 }

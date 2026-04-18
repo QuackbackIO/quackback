@@ -16,14 +16,16 @@ export function getTopLevelCategories<T extends CategoryLike>(categories: T[]): 
 
 /**
  * Extracts the active category slug from the current pathname.
- * Understands both the `/hc/*` inline mount and the help center landing.
+ * Understands /hc/categories/:slug and /hc/articles/:categorySlug/:articleSlug.
  * Returns null when not on a specific category.
  */
 export function getActiveCategory(pathname: string): string | null {
   if (!pathname) return null
   const segments = pathname.split('/').filter(Boolean)
   if (segments[0] !== 'hc') return null
-  return segments[1] ?? null
+  // /hc/categories/:slug  or  /hc/articles/:categorySlug/...
+  if (segments[1] === 'categories' || segments[1] === 'articles') return segments[2] ?? null
+  return null
 }
 
 /**
@@ -88,7 +90,7 @@ export function buildCategoryBreadcrumbs<T extends CategoryLikeWithSlug>(params:
     if (isLast && !params.articleTitle) {
       items.push({ label: cat.name })
     } else {
-      items.push({ label: cat.name, href: `/hc/${cat.slug}` })
+      items.push({ label: cat.name, href: `/hc/categories/${cat.slug}` })
     }
   })
 

@@ -15,8 +15,8 @@ describe('buildHelpCenterSitemapUrls', () => {
     const urls = buildHelpCenterSitemapUrls(baseUrl, categories, [])
 
     expect(urls).toHaveLength(3) // landing + 2 categories
-    expect(urls[1]).toEqual({ loc: 'https://help.example.com/basics' })
-    expect(urls[2]).toEqual({ loc: 'https://help.example.com/advanced' })
+    expect(urls[1]).toEqual({ loc: 'https://help.example.com/categories/basics' })
+    expect(urls[2]).toEqual({ loc: 'https://help.example.com/categories/advanced' })
   })
 
   it('includes article pages with lastmod from updatedAt', () => {
@@ -31,7 +31,7 @@ describe('buildHelpCenterSitemapUrls', () => {
 
     expect(urls).toHaveLength(2) // landing + 1 article
     expect(urls[1]).toEqual({
-      loc: 'https://help.example.com/basics/getting-started',
+      loc: 'https://help.example.com/articles/basics/getting-started',
       lastmod: '2026-04-01',
     })
   })
@@ -56,10 +56,10 @@ describe('buildHelpCenterSitemapUrls', () => {
     expect(urls).toHaveLength(5) // 1 landing + 2 categories + 2 articles
     expect(urls.map((u) => u.loc)).toEqual([
       'https://help.example.com',
-      'https://help.example.com/basics',
-      'https://help.example.com/api',
-      'https://help.example.com/basics/getting-started',
-      'https://help.example.com/api/auth-tokens',
+      'https://help.example.com/categories/basics',
+      'https://help.example.com/categories/api',
+      'https://help.example.com/articles/basics/getting-started',
+      'https://help.example.com/articles/api/auth-tokens',
     ])
   })
 

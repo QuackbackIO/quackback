@@ -632,8 +632,12 @@ export async function listPublicArticlesForCategory(categoryId: string) {
       description: helpCenterArticles.description,
       position: helpCenterArticles.position,
       publishedAt: helpCenterArticles.publishedAt,
+      readingTimeMinutes: sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`,
+      authorName: principal.displayName,
+      authorAvatarUrl: principal.avatarUrl,
     })
     .from(helpCenterArticles)
+    .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
     .where(
       and(
         eq(helpCenterArticles.categoryId, categoryId as HelpCenterCategoryId),
@@ -642,6 +646,36 @@ export async function listPublicArticlesForCategory(categoryId: string) {
       )
     )
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
+}
+
+export async function listPublicCategoryEditors(): Promise<
+  Record<string, Array<{ name: string; avatarUrl: string | null }>>
+> {
+  const rows = await db
+    .select({
+      categoryId: helpCenterArticles.categoryId,
+      principalId: helpCenterArticles.principalId,
+      displayName: principal.displayName,
+      avatarUrl: principal.avatarUrl,
+    })
+    .from(helpCenterArticles)
+    .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
+    .where(and(isNotNull(helpCenterArticles.publishedAt), isNull(helpCenterArticles.deletedAt)))
+    .orderBy(asc(helpCenterArticles.categoryId), desc(helpCenterArticles.publishedAt))
+
+  const result: Record<string, Array<{ name: string; avatarUrl: string | null }>> = {}
+  const seen = new Set<string>()
+  for (const row of rows) {
+    const catId = row.categoryId as string
+    const key = `${catId}:${row.principalId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (!result[catId]) result[catId] = []
+    if (result[catId].length < 3 && row.displayName) {
+      result[catId].push({ name: row.displayName, avatarUrl: row.avatarUrl })
+    }
+  }
+  return result
 }
 
 export async function createArticle(

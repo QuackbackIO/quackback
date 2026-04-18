@@ -1797,7 +1797,20 @@ interface RichTextContentProps {
 
 // Generate HTML from TipTap JSON content for SSR
 function generateContentHTML(content: JSONContent): string {
-  // Simple recursive HTML generator for common node types
+  function extractPlainText(node: JSONContent): string {
+    if (!node) return ''
+    if (node.type === 'text') return node.text ?? ''
+    if (Array.isArray(node.content)) return node.content.map(extractPlainText).join('')
+    return ''
+  }
+
+  function slugifyHeading(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
   function renderNode(node: JSONContent): string {
     if (!node) return ''
 
@@ -1814,7 +1827,9 @@ function generateContentHTML(content: JSONContent): string {
         const rawLevel = Number(node.attrs?.level)
         const level = [1, 2, 3, 4, 5, 6].includes(rawLevel) ? rawLevel : 2
         const headingContent = node.content?.map(renderNode).join('') ?? ''
-        return `<h${level}>${headingContent}</h${level}>`
+        const id = slugifyHeading(extractPlainText(node))
+        const idAttr = id ? ` id="${escapeHtmlAttr(id)}"` : ''
+        return `<h${level}${idAttr}>${headingContent}</h${level}>`
       }
 
       case 'text': {
@@ -1979,6 +1994,7 @@ const DOMPURIFY_CONFIG = {
     'span',
   ],
   ALLOWED_ATTR: [
+    'id',
     'href',
     'src',
     'alt',

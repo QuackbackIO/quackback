@@ -123,10 +123,6 @@ function PortalLayout() {
     locale,
   } = Route.useLoaderData()
 
-  // Theme enforcement is handled by the root ThemeProvider (in __root.tsx) which
-  // reads themeMode from settings and sets forcedTheme on portal routes.
-  // The portal only needs to control toggle visibility and inject CSS.
-
   return (
     <PortalIntlProvider locale={locale}>
       <AuthPopoverProvider>
@@ -142,7 +138,7 @@ function PortalLayout() {
             initialUserData={initialUserData}
             showThemeToggle={themeMode === 'user'}
           />
-          <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6">
+          <main className="flex-1 w-full flex flex-col">
             <Outlet />
           </main>
           <AuthDialog authConfig={authConfig} />

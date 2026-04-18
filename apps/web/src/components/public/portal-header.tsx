@@ -107,7 +107,7 @@ export function PortalHeader({
 
   // Navigation component
   const Navigation = () => (
-    <nav className="portal-nav flex items-center gap-1">
+    <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
       {navItems.map((item) => {
         const isActive =
           item.to === '/'
@@ -256,7 +256,7 @@ export function PortalHeader({
 
   // Two-row layout: Logo + Auth on top, Navigation below
   return (
-    <div className="portal-header w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)]">
+    <div className="portal-header w-full py-2 border-b border-[var(--header-border)] bg-[var(--header-background)] shadow-sm">
       {/* Row 1: Logo + Name + Auth */}
       <div>
         <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
@@ -283,11 +283,9 @@ export function PortalHeader({
       </div>
 
       {/* Row 2: Navigation */}
-      <div className="mt-2">
+      <div className="mt-2 overflow-x-auto scrollbar-none">
         <div className="max-w-6xl mx-auto w-full px-4 sm:px-6">
-          <div className="flex items-center">
-            <Navigation />
-          </div>
+          <Navigation />
         </div>
       </div>
     </div>

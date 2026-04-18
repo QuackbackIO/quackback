@@ -65,10 +65,10 @@ export function WidgetShell({
   const showCloseExplicit =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('showClose') === '1'
-  // The widget runs in a ~400px iframe on desktop, so we can't use
-  // window.innerWidth to detect mobile. Instead the parent SDK sends
-  // a 'quackback:mobile' postMessage when the viewport crosses 640px.
-  // Native SDK context always shows the close button.
+  // The widget runs in a ~400px iframe on desktop, so window.innerWidth is
+  // unreliable for mobile detection. screen.width gives the actual device
+  // screen width regardless of iframe size. The parent SDK also sends
+  // 'quackback:mobile' on resize for the embedded case.
   const [parentIsMobile, setParentIsMobile] = useState(false)
   useEffect(() => {
     function handleMobileMsg(event: MessageEvent) {
@@ -79,7 +79,8 @@ export function WidgetShell({
     window.addEventListener('message', handleMobileMsg)
     return () => window.removeEventListener('message', handleMobileMsg)
   }, [])
-  const showCloseButton = showCloseExplicit || isNative || parentIsMobile
+  const deviceIsMobile = typeof window !== 'undefined' && window.screen.width < 640
+  const showCloseButton = showCloseExplicit || isNative || parentIsMobile || deviceIsMobile
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
@@ -144,7 +145,10 @@ export function WidgetShell({
       <div className="flex-1 overflow-hidden min-h-0">{children}</div>
 
       {/* Bottom tab bar + footer */}
-      <div className="border-t border-border/40 shrink-0">
+      <div
+        className="border-t border-border/40 shrink-0"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         {showTabBar && (
           <div className="flex">
             {TAB_CONFIG.filter(({ tab }) => enabledTabs[tab]).map(

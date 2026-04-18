@@ -1,6 +1,4 @@
 import { useState, useEffect, useMemo } from 'react'
-import * as SolidIcons from '@heroicons/react/20/solid'
-import type { ComponentType, SVGProps } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Dialog,
@@ -22,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { CategoryIcon } from '@/components/help-center/category-icon'
+import { CategoryIcon, ICON_LOOKUP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
 import { cn } from '@/lib/shared/utils'
 import { useCreateCategory, useUpdateCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -35,10 +33,6 @@ import {
 import type { HelpCenterCategoryId } from '@quackback/ids'
 
 const DEFAULT_ICON = 'FolderIcon'
-
-type HeroIcon = ComponentType<SVGProps<SVGSVGElement>>
-const ICON_LOOKUP = SolidIcons as Record<string, HeroIcon>
-const ALL_ICON_KEYS = Object.keys(SolidIcons).filter((k) => k.endsWith('Icon'))
 
 function iconLabel(key: string): string {
   return key

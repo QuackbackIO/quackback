@@ -38,7 +38,7 @@ function ChangelogPage() {
   const intl = useIntl()
 
   return (
-    <div className="py-8">
+    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8">
       <PageHeader
         size="large"
         title={intl.formatMessage({ id: 'portal.changelog.title', defaultMessage: 'Changelog' })}
