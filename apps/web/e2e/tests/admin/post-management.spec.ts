@@ -357,4 +357,34 @@ test.describe('Admin Post Management', () => {
       }
     }
   })
+
+  test('Cmd+Enter in comment box submits comment, not post', async ({ page }) => {
+    // Open first post in the modal
+    const postCards = page.locator('[data-post-id]')
+    if ((await postCards.count()) === 0) {
+      test.skip()
+      return
+    }
+    await postCards.first().click()
+    await page.waitForLoadState('networkidle')
+
+    // Wait for the modal
+    const modal = page.getByRole('dialog')
+    await expect(modal).toBeVisible({ timeout: 10000 })
+
+    // Find the comment textarea and type into it
+    const commentTextarea = modal.locator('textarea[placeholder*="comment" i]')
+    await expect(commentTextarea).toBeVisible({ timeout: 5000 })
+    await commentTextarea.click()
+    await commentTextarea.fill('E2E test comment via keyboard')
+
+    // Cmd+Enter should submit the comment, NOT save/close the post
+    await page.keyboard.press('Meta+Enter')
+
+    // Modal must still be open (post was not saved/closed)
+    await expect(modal).toBeVisible()
+
+    // Comment textarea should be cleared (comment was submitted successfully)
+    await expect(commentTextarea).toHaveValue('')
+  })
 })
