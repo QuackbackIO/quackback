@@ -232,7 +232,10 @@ export function WidgetHome({
       const match = boards.find((b) => b.slug === defaultBoard)
       if (match) return match.id
     }
-    return boards[0]?.id ?? ''
+    // Single board: auto-select (selector is hidden anyway). Multiple boards with no
+    // default: leave empty so the user is prompted to pick one.
+    if (boards.length === 1) return boards[0].id
+    return ''
   })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [contentHtml, setContentHtml] = useState('')
@@ -485,7 +488,8 @@ export function WidgetHome({
     }
   }
 
-  const canSubmitForm = title.trim() && (!needsEmail || email.trim()) && (canPost || needsEmail)
+  const canSubmitForm =
+    title.trim() && selectedBoardId && (!needsEmail || email.trim()) && (canPost || needsEmail)
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -522,7 +526,7 @@ export function WidgetHome({
                         size="xs"
                         className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                       >
-                        <SelectValue />
+                        <SelectValue placeholder="Select a board" />
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (

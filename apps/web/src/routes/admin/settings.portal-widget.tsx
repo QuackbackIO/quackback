@@ -340,24 +340,32 @@ function WidgetAppearanceControls({
         <div>
           <h3 className="text-sm font-medium text-foreground">Default Board</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Which board new posts from the widget are submitted to
+            Which board is selected by default when creating new posts from the widget
           </p>
         </div>
 
         <Select
-          value={defaultBoard || '__all__'}
+          value={defaultBoard || ''}
           onValueChange={(val) => {
-            const resolved = val === '__all__' ? '' : val
-            setDefaultBoard(resolved)
-            save({ defaultBoard: resolved || undefined })
+            setDefaultBoard(val)
+            save({ defaultBoard: val })
           }}
           disabled={isBusy}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="All Boards" />
+          <SelectTrigger
+            className="w-full"
+            onClear={
+              defaultBoard
+                ? () => {
+                    setDefaultBoard('')
+                    save({ defaultBoard: '' })
+                  }
+                : undefined
+            }
+          >
+            <SelectValue placeholder="No default board" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All Boards</SelectItem>
             {boards.map((board) => (
               <SelectItem key={board.id} value={board.slug}>
                 {board.name}
