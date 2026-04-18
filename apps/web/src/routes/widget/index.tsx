@@ -77,7 +77,7 @@ export const Route = createFileRoute('/widget/')({
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
       },
       imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
-      defaultBoard: settings?.publicWidgetConfig?.defaultBoard ?? null,
+      defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
     }
   },
   component: WidgetPage,
@@ -292,7 +292,7 @@ function WidgetPage() {
           initialHasMore={postsHasMore}
           statuses={statuses}
           boards={boards}
-          defaultBoard={defaultBoard ?? undefined}
+          defaultBoard={defaultBoard}
           onPostSelect={handlePostSelect}
           onPostCreated={handlePostCreated}
           anonymousVotingEnabled={features.anonymousVoting}
