@@ -29,11 +29,9 @@ export const Route = createFileRoute('/api/v1/changelog/')({
        * List all changelog entries
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse query params
           const url = new URL(request.url)
           const published = url.searchParams.get('published')
@@ -76,11 +74,8 @@ export const Route = createFileRoute('/api/v1/changelog/')({
        * Create a new changelog entry
        */
       POST: async ({ request }) => {
-        // Authenticate (admin only)
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          const authResult = await withApiKeyAuth(request, { role: 'admin' })
           // Parse and validate body
           const body = await request.json()
           const parsed = createChangelogSchema.safeParse(body)

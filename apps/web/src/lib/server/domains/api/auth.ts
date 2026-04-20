@@ -87,9 +87,7 @@ export type AuthLevel = 'team' | 'admin'
  * @param options.role - Required role level: 'team' (admin or member) or 'admin' (admin only)
  *
  * @example
- * const authResult = await withApiKeyAuth(request, { role: 'team' })
- * if (authResult instanceof Response) return authResult
- * const { apiKey, principalId } = authResult
+ * const { principalId } = await withApiKeyAuth(request, { role: 'team' })
  */
 export async function withApiKeyAuth(
   request: Request,

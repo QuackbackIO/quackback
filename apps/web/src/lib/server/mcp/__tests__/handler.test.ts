@@ -497,6 +497,30 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(403)
     })
 
+    it('should return 429 with Retry-After header when rate limit is exceeded', async () => {
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+      vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
+      const { checkRateLimit } = await import('@/lib/server/domains/api/rate-limit')
+      vi.mocked(checkRateLimit).mockReturnValueOnce({ allowed: false, remaining: 0, retryAfter: 30 })
+
+      const { handleMcpRequest } = await import('../handler')
+      const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('initialize')))
+
+      expect(response.status).toBe(429)
+      expect(response.headers.get('retry-after')).toBe('30')
+    })
+
+    it('should propagate unexpected errors from withApiKeyAuth instead of swallowing as 401', async () => {
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+      vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
+      mockFindFirst.mockRejectedValueOnce(new Error('DB connection lost'))
+
+      const { resolveAuthContext } = await import('../handler')
+      const request = mcpRequest(jsonRpcRequest('initialize'))
+
+      await expect(resolveAuthContext(request)).rejects.toThrow('DB connection lost')
+    })
+
     it('should succeed for OAuth portal user when portal access enabled', async () => {
       const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
       vi.mocked(getDeveloperConfig).mockResolvedValueOnce({

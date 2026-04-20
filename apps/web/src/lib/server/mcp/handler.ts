@@ -13,6 +13,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
@@ -122,12 +123,12 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
     try {
       authResult = await withApiKeyAuth(request, { role: 'team' })
     } catch (err) {
-      const status = err && typeof err === 'object' && 'statusCode' in err
-        ? (err as { statusCode: number }).statusCode
-        : 401
+      if (!(err instanceof DomainException)) throw err
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (err instanceof RateLimitError) headers['Retry-After'] = String(err.retryAfter)
       return new Response(
-        JSON.stringify({ error: err instanceof Error ? err.message : 'Authentication failed' }),
-        { status, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: err.message }),
+        { status: err.statusCode, headers }
       )
     }
 

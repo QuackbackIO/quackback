@@ -11,10 +11,8 @@ export const Route = createFileRoute('/api/v1/suggestions/')({
        * List AI-generated feedback suggestions with filtering and pagination
        */
       GET: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
           const url = new URL(request.url)
 
           // Parse query params

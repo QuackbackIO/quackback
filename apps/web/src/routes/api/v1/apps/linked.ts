@@ -9,10 +9,8 @@ export const Route = createFileRoute('/api/v1/apps/linked')({
       OPTIONS: () => preflightResponse(),
 
       GET: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
           const url = new URL(request.url)
           const integrationType = url.searchParams.get('integrationType')
           const externalId = url.searchParams.get('externalId')

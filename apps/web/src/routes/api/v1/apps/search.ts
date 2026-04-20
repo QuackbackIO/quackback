@@ -9,10 +9,8 @@ export const Route = createFileRoute('/api/v1/apps/search')({
       OPTIONS: () => preflightResponse(),
 
       GET: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
           const url = new URL(request.url)
           const q = url.searchParams.get('q')?.trim()
           const limit = Math.min(Number(url.searchParams.get('limit')) || 10, 20)
