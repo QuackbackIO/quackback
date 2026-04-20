@@ -7,8 +7,8 @@
 
 import { verifyApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
-import { unauthorizedResponse, forbiddenResponse, rateLimitedResponse } from './responses'
 import { checkRateLimit, getClientIp } from './rate-limit'
+import { UnauthorizedError, ForbiddenError, RateLimitError } from '@/lib/shared/errors'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { isAdmin, isTeamMember } from '@/lib/shared/roles'
@@ -94,34 +94,31 @@ export type AuthLevel = 'team' | 'admin'
 export async function withApiKeyAuth(
   request: Request,
   options: { role: AuthLevel }
-): Promise<ApiAuthContext | Response> {
-  // Check rate limit before processing (import mode gets higher limit)
+): Promise<ApiAuthContext> {
   const clientIp = getClientIp(request)
   const wantsImportMode = request.headers.get('x-import-mode') === 'true'
   const rateLimit = checkRateLimit(clientIp, wantsImportMode)
 
   if (!rateLimit.allowed) {
-    return rateLimitedResponse(rateLimit.retryAfter ?? 60)
+    throw new RateLimitError(rateLimit.retryAfter ?? 60)
   }
 
   const auth = await requireApiKey(request)
 
   if (!auth) {
-    return unauthorizedResponse(
+    throw new UnauthorizedError(
       'Invalid or missing API key. Provide a valid key in the Authorization header: Bearer qb_xxx'
     )
   }
 
-  // Check role-based authorization
   if (options.role === 'admin' && !isAdmin(auth.role)) {
-    return forbiddenResponse('Admin access required for this operation')
+    throw new ForbiddenError('FORBIDDEN', 'Admin access required for this operation')
   }
 
   if (options.role === 'team' && !isTeamMember(auth.role)) {
-    return forbiddenResponse('Team member access required for this operation')
+    throw new ForbiddenError('FORBIDDEN', 'Team member access required for this operation')
   }
 
-  // Import mode requires admin role
   if (wantsImportMode && isAdmin(auth.role)) {
     auth.importMode = true
   }

@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import {
   getChangelogById,
   updateChangelog,
@@ -49,16 +49,12 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        * Get a single changelog entry by ID
        */
       GET: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { entryId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const validationError = validateTypeId(entryId, 'changelog', 'changelog entry ID')
-          if (validationError) return validationError
+          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
 
-          const entry = await getChangelogById(entryId as ChangelogId)
+          const entry = await getChangelogById(entryId)
           return successResponse(formatChangelogResponse(entry))
         } catch (error) {
           return handleDomainError(error)
@@ -70,14 +66,10 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        * Update a changelog entry
        */
       PATCH: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { entryId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          const validationError = validateTypeId(entryId, 'changelog', 'changelog entry ID')
-          if (validationError) return validationError
+          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
 
           const body = await request.json()
           const parsed = updateChangelogSchema.safeParse(body)
@@ -102,7 +94,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             }
           }
 
-          const updated = await updateChangelog(entryId as ChangelogId, {
+          const updated = await updateChangelog(entryId, {
             title: parsed.data.title,
             content: parsed.data.content,
             ...(publishState && { publishState }),
@@ -119,16 +111,12 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        * Delete a changelog entry
        */
       DELETE: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { entryId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          const validationError = validateTypeId(entryId, 'changelog', 'changelog entry ID')
-          if (validationError) return validationError
+          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
 
-          await deleteChangelog(entryId as ChangelogId)
+          await deleteChangelog(entryId)
           return noContentResponse()
         } catch (error) {
           return handleDomainError(error)

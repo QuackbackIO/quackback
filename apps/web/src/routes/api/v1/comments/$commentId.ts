@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { CommentId } from '@quackback/ids'
 
 // Input validation schema
@@ -23,21 +23,14 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        * Get a single comment by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { commentId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(commentId, 'comment', 'comment ID')
-          if (validationError) return validationError
+          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
 
-          // Import service function
           const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
 
-          const comment = await getCommentById(commentId as CommentId)
+          const comment = await getCommentById(commentId)
 
           return successResponse({
             id: comment.id,
@@ -62,19 +55,11 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        * Update a comment
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          const { commentId } = params
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(commentId, 'comment', 'comment ID')
-          if (validationError) return validationError
+          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateCommentSchema.safeParse(body)
 
@@ -84,23 +69,20 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             })
           }
 
-          // Import service and get member details
           const { updateComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for role and author name
           const principalRecord = await db.query.principal.findFirst({
             where: eq(principal.id, principalId),
             with: { user: { columns: { name: true } } },
           })
 
           const result = await updateComment(
-            commentId as CommentId,
+            commentId,
             { content: parsed.data.content },
             { principalId, role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user' }
           )
 
-          // Resolve author name from the comment's member->user relation
           const commentMember = await db.query.principal.findFirst({
             where: eq(principal.id, result.principalId),
             with: { user: { columns: { name: true } } },
@@ -127,29 +109,20 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
        * Delete a comment
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          const { commentId } = params
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(commentId, 'comment', 'comment ID')
-          if (validationError) return validationError
+          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
 
-          // Import service and get member details
           const { softDeleteComment } =
             await import('@/lib/server/domains/comments/comment.permissions')
           const { db, principal, eq } = await import('@/lib/server/db')
 
-          // Get member info for role
           const principalRecord = await db.query.principal.findFirst({
             where: eq(principal.id, principalId),
           })
 
-          await softDeleteComment(commentId as CommentId, {
+          await softDeleteComment(commentId, {
             principalId,
             role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
           })

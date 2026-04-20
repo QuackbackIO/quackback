@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { TagId } from '@quackback/ids'
 
 // Input validation schema
@@ -28,21 +28,14 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        * Get a single tag by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { tagId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(tagId, 'tag', 'tag ID')
-          if (validationError) return validationError
+          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
 
-          // Import service function
           const { getTagById } = await import('@/lib/server/domains/tags/tag.service')
 
-          const tag = await getTagById(tagId as TagId)
+          const tag = await getTagById(tagId)
 
           return successResponse({
             id: tag.id,
@@ -61,18 +54,11 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        * Update a tag
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { tagId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(tagId, 'tag', 'tag ID')
-          if (validationError) return validationError
+          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateTagSchema.safeParse(body)
 
@@ -82,10 +68,9 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
             })
           }
 
-          // Import service function
           const { updateTag } = await import('@/lib/server/domains/tags/tag.service')
 
-          const tag = await updateTag(tagId as TagId, {
+          const tag = await updateTag(tagId, {
             name: parsed.data.name,
             color: parsed.data.color,
             description: parsed.data.description,
@@ -108,21 +93,14 @@ export const Route = createFileRoute('/api/v1/tags/$tagId')({
        * Delete a tag
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { tagId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(tagId, 'tag', 'tag ID')
-          if (validationError) return validationError
+          const tagId = parseTypeId<TagId>(params.tagId, 'tag', 'tag ID')
 
-          // Import service function
           const { deleteTag } = await import('@/lib/server/domains/tags/tag.service')
 
-          await deleteTag(tagId as TagId)
+          await deleteTag(tagId)
 
           return noContentResponse()
         } catch (error) {

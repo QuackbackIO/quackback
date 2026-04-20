@@ -8,9 +8,9 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import {
-  validateTypeId,
-  validateOptionalTypeId,
-  validateTypeIdArray,
+  parseTypeId,
+  parseOptionalTypeId,
+  parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
@@ -32,24 +32,17 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        * Get a single post by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { postId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Import service functions
           const { getPostWithDetails } = await import('@/lib/server/domains/posts/post.query')
           const { getMergedPosts } = await import('@/lib/server/domains/posts/post.merge')
 
           const [post, mergedPosts] = await Promise.all([
-            getPostWithDetails(postId as PostId),
-            getMergedPosts(postId as PostId),
+            getPostWithDetails(postId),
+            getMergedPosts(postId),
           ])
 
           return successResponse({
@@ -103,18 +96,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        * Update a post
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { postId } = params
+          const auth = await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updatePostSchema.safeParse(body)
 
@@ -124,31 +110,23 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             })
           }
 
-          // Validate TypeID formats in request body
-          let bodyValidationError = validateOptionalTypeId(
-            parsed.data.statusId,
-            'status',
-            'status ID'
-          )
-          if (bodyValidationError) return bodyValidationError
-          bodyValidationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
-          if (bodyValidationError) return bodyValidationError
+          const statusId = parseOptionalTypeId<StatusId>(parsed.data.statusId, 'status', 'status ID')
+          const tagIds = parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
 
-          // Import service
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
 
           const result = await updatePost(
-            postId as PostId,
+            postId,
             {
               title: parsed.data.title,
               content: parsed.data.content,
-              statusId: parsed.data.statusId as StatusId | undefined,
-              tagIds: parsed.data.tagIds as TagId[] | undefined,
+              statusId,
+              tagIds,
               ownerPrincipalId: parsed.data.ownerPrincipalId as PrincipalId | null | undefined,
             },
             {
-              principalId: authResult.principalId,
-              displayName: authResult.apiKey.name,
+              principalId: auth.principalId,
+              displayName: auth.apiKey.name,
             }
           )
 
@@ -174,21 +152,14 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
        * Soft delete a post
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId, role } = authResult
-
         try {
-          const { postId } = params
+          const { principalId, role } = await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
           const { softDeletePost } = await import('@/lib/server/domains/posts/post.user-actions')
 
-          await softDeletePost(postId as PostId, { principalId, role })
+          await softDeletePost(postId, { principalId, role })
 
           return noContentResponse()
         } catch (error) {

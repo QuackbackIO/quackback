@@ -6,7 +6,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
 
 const mergeSchema = z.object({
@@ -21,15 +21,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/merge')({
        * Merge this post (duplicate) into a canonical post (admin only)
        */
       POST: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          const { postId } = params
+          const { principalId } = await withApiKeyAuth(request, { role: 'admin' })
 
-          const postError = validateTypeId(postId, 'post', 'post ID')
-          if (postError) return postError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
           const body = await request.json()
           const parsed = mergeSchema.safeParse(body)
@@ -40,19 +35,14 @@ export const Route = createFileRoute('/api/v1/posts/$postId/merge')({
             })
           }
 
-          const canonicalError = validateTypeId(
+          const canonicalPostId = parseTypeId<PostId>(
             parsed.data.canonicalPostId,
             'post',
             'canonical post ID'
           )
-          if (canonicalError) return canonicalError
 
           const { mergePost } = await import('@/lib/server/domains/posts/post.merge')
-          const result = await mergePost(
-            postId as PostId,
-            parsed.data.canonicalPostId as PostId,
-            principalId
-          )
+          const result = await mergePost(postId, canonicalPostId, principalId)
 
           return successResponse({
             canonicalPost: {

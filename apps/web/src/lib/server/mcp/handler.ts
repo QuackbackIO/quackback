@@ -118,8 +118,18 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
   // 2. Try API key
   if (token?.startsWith(API_KEY_PREFIX)) {
-    const authResult = await withApiKeyAuth(request, { role: 'team' })
-    if (authResult instanceof Response) return authResult
+    let authResult
+    try {
+      authResult = await withApiKeyAuth(request, { role: 'team' })
+    } catch (err) {
+      const status = err && typeof err === 'object' && 'statusCode' in err
+        ? (err as { statusCode: number }).statusCode
+        : 401
+      return new Response(
+        JSON.stringify({ error: err instanceof Error ? err.message : 'Authentication failed' }),
+        { status, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
 
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.id, authResult.principalId),

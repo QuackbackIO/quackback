@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId, validateOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId, CommentId } from '@quackback/ids'
 
 // Input validation schema
@@ -26,23 +26,15 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
        * List comments for a post (threaded)
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { postId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Import service function
           const { getCommentsWithReplies } = await import('@/lib/server/domains/posts/post.query')
 
-          const comments = await getCommentsWithReplies(postId as PostId)
+          const comments = await getCommentsWithReplies(postId)
 
-          // Transform to API response format
           const serializeComment = (c: (typeof comments)[0]): unknown => ({
             id: c.id,
             postId: c.postId,
@@ -71,19 +63,12 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
        * Create a comment on a post
        */
       POST: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          const { postId } = params
+          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = auth
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = createCommentSchema.safeParse(body)
 
@@ -93,15 +78,8 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             })
           }
 
-          // Validate TypeID format in request body
-          const bodyValidationError = validateOptionalTypeId(
-            parsed.data.parentId,
-            'comment',
-            'parent ID'
-          )
-          if (bodyValidationError) return bodyValidationError
+          const parentId = parseOptionalTypeId<CommentId>(parsed.data.parentId, 'comment', 'parent ID')
 
-          // Import service and get principal details
           const { createComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
@@ -117,15 +95,15 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
 
           // Only admins can set createdAt (for imports)
           const createdAt =
-            parsed.data.createdAt && authResult.role === 'admin'
+            parsed.data.createdAt && auth.role === 'admin'
               ? new Date(parsed.data.createdAt)
               : undefined
 
           const result = await createComment(
             {
-              postId: postId as PostId,
+              postId,
               content: parsed.data.content,
-              parentId: parsed.data.parentId as CommentId | undefined,
+              parentId,
               isPrivate: parsed.data.isPrivate,
               createdAt,
             },
@@ -137,7 +115,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
               email: principalRecord.user?.email ?? undefined,
               role: principalRecord.role as 'admin' | 'member' | 'user',
             },
-            { skipDispatch: authResult.importMode }
+            { skipDispatch: auth.importMode }
           )
 
           return createdResponse({

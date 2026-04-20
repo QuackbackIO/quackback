@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
@@ -26,21 +26,14 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        * Get a single board by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { boardId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(boardId, 'board', 'board ID')
-          if (validationError) return validationError
+          const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          // Import service function
           const { getBoardById } = await import('@/lib/server/domains/boards/board.service')
 
-          const board = await getBoardById(boardId as BoardId)
+          const board = await getBoardById(boardId)
 
           return successResponse({
             id: board.id,
@@ -62,18 +55,11 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        * Update a board
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { boardId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(boardId, 'board', 'board ID')
-          if (validationError) return validationError
+          const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateBoardSchema.safeParse(body)
 
@@ -83,10 +69,9 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             })
           }
 
-          // Import service function
           const { updateBoard } = await import('@/lib/server/domains/boards/board.service')
 
-          const board = await updateBoard(boardId as BoardId, {
+          const board = await updateBoard(boardId, {
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
@@ -113,21 +98,14 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
        * Delete a board
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { boardId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(boardId, 'board', 'board ID')
-          if (validationError) return validationError
+          const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          // Import service function
           const { deleteBoard } = await import('@/lib/server/domains/boards/board.service')
 
-          await deleteBoard(boardId as BoardId)
+          await deleteBoard(boardId)
 
           return noContentResponse()
         } catch (error) {

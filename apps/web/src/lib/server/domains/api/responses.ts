@@ -165,11 +165,14 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
  * Handle domain errors and convert to appropriate API responses
  */
 export function handleDomainError(error: unknown): Response {
-  // Check for known error types
-  if (error && typeof error === 'object' && 'code' in error) {
-    const domainError = error as { code: string; message: string; statusCode?: number }
+  // RateLimitError first — retryAfter isn't accessible through the generic code-string path
+  if (error && typeof error === 'object' && 'retryAfter' in error) {
+    return rateLimitedResponse((error as { retryAfter: number }).retryAfter)
+  }
 
-    // Check if it's a not found error
+  if (error && typeof error === 'object' && 'code' in error) {
+    const domainError = error as { code: string; message: string }
+
     const resourceName = NOT_FOUND_RESOURCES[domainError.code]
     if (resourceName) {
       return notFoundResponse(resourceName)
@@ -193,13 +196,15 @@ export function handleDomainError(error: unknown): Response {
       case 'UNAUTHORIZED':
         return forbiddenResponse(domainError.message)
 
+      case 'API_UNAUTHORIZED':
+        return unauthorizedResponse(domainError.message)
+
       default:
         console.error('[api] Unhandled domain error:', error)
         return internalErrorResponse()
     }
   }
 
-  // Log unexpected errors
   console.error('[api] Unexpected error:', error)
   return internalErrorResponse()
 }
