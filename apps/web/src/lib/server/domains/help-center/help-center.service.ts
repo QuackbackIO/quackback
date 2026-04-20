@@ -661,7 +661,11 @@ export async function listPublicCategoryEditors(): Promise<
     })
     .from(helpCenterArticles)
     .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-    .where(and(isNotNull(helpCenterArticles.publishedAt), isNull(helpCenterArticles.deletedAt)))
+    .where(and(
+      isNotNull(helpCenterArticles.publishedAt),
+      isNull(helpCenterArticles.deletedAt),
+      inArray(principal.role, ['admin', 'member'])
+    ))
     .orderBy(asc(helpCenterArticles.categoryId), desc(helpCenterArticles.publishedAt))
 
   const result: Record<string, Array<{ name: string; avatarUrl: string | null }>> = {}
@@ -758,7 +762,16 @@ export async function updateArticle(
       columns: { id: true, role: true },
     })
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
-    if (!isTeamMember(author.role)) throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+    if (!isTeamMember(author.role)) {
+      // Allow re-asserting a former team member who already owns the article
+      const existing = await db.query.helpCenterArticles.findFirst({
+        where: eq(helpCenterArticles.id, id),
+        columns: { principalId: true },
+      })
+      if (existing?.principalId !== authorPrincipalId) {
+        throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+      }
+    }
     updateData.principalId = authorPrincipalId
   }
 

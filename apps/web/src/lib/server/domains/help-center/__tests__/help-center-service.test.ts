@@ -919,6 +919,32 @@ describe('updateArticle authorId validation', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
+  it('allows re-asserting a former-member as author when they already own the article', async () => {
+    // Former member is the existing article's author — preserving attribution is fine
+    mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_1', principalId: 'principal_former' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', role: 'user' })
+
+    const { db } = await import('@/lib/server/db')
+    const chain: Record<string, unknown> = {}
+    chain.set = vi.fn(() => chain)
+    chain.where = vi.fn(() => chain)
+    chain.returning = vi.fn().mockResolvedValue([{
+      id: 'article_1' as HelpCenterArticleId,
+      slug: 'test', title: 'Test', content: 'Content',
+      contentJson: null, categoryId: 'category_1',
+      principalId: 'principal_former', publishedAt: null,
+      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
+      createdAt: new Date(), updatedAt: new Date(),
+    }])
+    vi.mocked(db.update).mockReturnValueOnce(chain as never)
+    mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', displayName: 'Jane', avatarUrl: null })
+
+    await expect(
+      updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_former' as PrincipalId)
+    ).resolves.toBeDefined()
+  })
+
   it('accepts a member-role authorId in updateArticle', async () => {
     mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member' })
 
