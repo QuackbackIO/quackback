@@ -607,6 +607,7 @@ describe('createArticle', () => {
       id: 'principal_1',
       displayName: 'Author',
       avatarUrl: null,
+      type: 'user',
     })
 
     const result = await createArticle(
@@ -620,6 +621,17 @@ describe('createArticle', () => {
 
     expect(result.title).toBe('How to Start')
     expect(result.category.name).toBe('Getting Started')
+  })
+
+  it('throws ValidationError when the calling principal is a service principal and no authorId is given', async () => {
+    // Service API key has no human identity; caller must supply an explicit authorId
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_svc', type: 'service' })
+    await expect(
+      createArticle(
+        { categoryId: 'category_1', title: 'Title', content: 'Content' },
+        'principal_svc' as PrincipalId
+      )
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
   it('throws ValidationError when title is empty', async () => {
@@ -901,6 +913,7 @@ describe('createArticle with position and description', () => {
       id: 'principal_1',
       displayName: 'Author',
       avatarUrl: null,
+      type: 'user',
     })
 
     const result = await createArticle(

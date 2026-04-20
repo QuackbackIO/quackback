@@ -126,6 +126,10 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       if (!(err instanceof DomainException)) throw err
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (err instanceof RateLimitError) headers['Retry-After'] = String(err.retryAfter)
+      if (err.statusCode === 401) {
+        headers['WWW-Authenticate'] =
+          `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`
+      }
       return new Response(
         JSON.stringify({ error: err.message }),
         { status: err.statusCode, headers }

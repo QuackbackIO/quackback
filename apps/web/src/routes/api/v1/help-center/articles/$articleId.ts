@@ -99,25 +99,28 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
             'author ID'
           )
 
-          // Handle publish/unpublish via publishedAt
-          if (parsed.data.publishedAt !== undefined) {
-            if (parsed.data.publishedAt === null) {
-              await unpublishArticle(articleId)
-            } else {
-              await publishArticle(articleId)
-            }
-          }
-
           const { publishedAt: _, authorId: __, ...updateData } = parsed.data
           const hasUpdates =
             Object.values(updateData).some((v) => v !== undefined) ||
             authorPrincipalId !== undefined
 
+          // Validate + apply field/author updates first so a bad authorId
+          // never leaves the article in a partially-published state.
+          let currentArticle = null
           if (hasUpdates) {
-            const updated = await updateArticle(articleId, updateData, authorPrincipalId)
-            return successResponse(formatArticle(updated))
+            currentArticle = await updateArticle(articleId, updateData, authorPrincipalId)
           }
 
+          // Only change publish state after all validation passes
+          if (parsed.data.publishedAt !== undefined) {
+            if (parsed.data.publishedAt === null) {
+              currentArticle = await unpublishArticle(articleId)
+            } else {
+              currentArticle = await publishArticle(articleId)
+            }
+          }
+
+          if (currentArticle) return successResponse(formatArticle(currentArticle))
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {

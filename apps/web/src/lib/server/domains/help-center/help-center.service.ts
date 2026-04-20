@@ -693,6 +693,7 @@ export async function createArticle(
   if (!title) throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   if (!content) throw new ValidationError('VALIDATION_ERROR', 'Content is required')
 
+  let effectivePrincipalId: PrincipalId
   if (authorPrincipalId !== undefined) {
     const author = await db.query.principal.findFirst({
       where: eq(principal.id, authorPrincipalId),
@@ -701,9 +702,22 @@ export async function createArticle(
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
     if (author.type !== 'user' || !isTeamMember(author.role))
       throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+    effectivePrincipalId = authorPrincipalId
+  } else {
+    // Service principals (API keys) have no human identity and cannot be article bylines.
+    // Require an explicit authorId instead of silently using the API key as the author.
+    const caller = await db.query.principal.findFirst({
+      where: eq(principal.id, principalId),
+      columns: { type: true },
+    })
+    if (caller?.type !== 'user') {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Service principals must provide an explicit authorId'
+      )
+    }
+    effectivePrincipalId = principalId
   }
-
-  const effectivePrincipalId = authorPrincipalId ?? principalId
   const slug = input.slug?.trim() || slugify(title)
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)

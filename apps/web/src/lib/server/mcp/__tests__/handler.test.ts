@@ -399,6 +399,17 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(401)
     })
 
+    it('should return 401 with WWW-Authenticate when API key auth fails', async () => {
+      const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
+      vi.mocked(verifyApiKey).mockResolvedValue(null)
+
+      const { handleMcpRequest } = await import('../handler')
+      const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('initialize'), 'qb_bad'))
+
+      expect(response.status).toBe(401)
+      expect(response.headers.get('www-authenticate')).toContain('resource_metadata=')
+    })
+
     it('should return 403 when member is a portal user (not team)', async () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
