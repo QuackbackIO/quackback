@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { InternalError } from '@/lib/shared/errors'
 import {
   successResponse,
   createdResponse,
@@ -90,7 +91,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           })
 
           if (!principalRecord) {
-            return badRequestResponse('Principal not found')
+            throw new InternalError('PRINCIPAL_NOT_FOUND', 'Principal record missing for verified API key')
           }
 
           // Only admins can set createdAt (for imports)

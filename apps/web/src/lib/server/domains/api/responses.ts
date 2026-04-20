@@ -111,7 +111,10 @@ export function badRequestResponse(message: string, details?: Record<string, unk
 }
 
 export function unauthorizedResponse(message = 'Authentication required'): Response {
-  return errorResponse('UNAUTHORIZED', message, 401)
+  return jsonResponse(
+    { error: { code: 'UNAUTHORIZED', message } },
+    { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="Quackback API"' } }
+  )
 }
 
 export function forbiddenResponse(message = 'Access denied'): Response {
@@ -159,6 +162,9 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   ARTICLE_NOT_FOUND: 'Help center article',
   API_KEY_NOT_FOUND: 'API key',
   SEGMENT_NOT_FOUND: 'Segment',
+  WEBHOOK_NOT_FOUND: 'Webhook',
+  PRINCIPAL_NOT_FOUND: 'User',
+  POST_NOT_IN_ROADMAP: 'Post in roadmap',
 }
 
 /**
@@ -189,6 +195,7 @@ export function handleDomainError(error: unknown): Response {
 
       case 'DUPLICATE_SLUG':
       case 'DUPLICATE_KEY':
+      case 'DUPLICATE_NAME':
       case 'CONFLICT':
         return conflictResponse(domainError.message)
 
@@ -199,9 +206,19 @@ export function handleDomainError(error: unknown): Response {
       case 'API_UNAUTHORIZED':
         return unauthorizedResponse(domainError.message)
 
-      default:
+      default: {
+        // Fall back to the error's own statusCode for any DomainException whose
+        // code string wasn't explicitly listed above (e.g. custom ForbiddenError codes)
+        if ('statusCode' in domainError) {
+          const s = (domainError as { statusCode: number }).statusCode
+          if (s === 400) return validationErrorResponse(domainError.message)
+          if (s === 403) return forbiddenResponse(domainError.message)
+          if (s === 404) return notFoundResponse(domainError.message)
+          if (s === 409) return conflictResponse(domainError.message)
+        }
         console.error('[api] Unhandled domain error:', error)
         return internalErrorResponse()
+      }
     }
   }
 
