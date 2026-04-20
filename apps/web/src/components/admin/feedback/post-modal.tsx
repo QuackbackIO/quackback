@@ -258,7 +258,10 @@ function PostModalContent({
     }
   }
 
-  const handleKeyDown = useKeyboardSubmit(handleSubmit)
+  // Check if there are changes
+  const hasChanges = title !== post.title || contentMarkdown !== (post.content ?? '')
+
+  const handleKeyDown = useKeyboardSubmit(hasChanges ? handleSubmit : () => {})
 
   const currentStatus = statuses.find((s) => s.id === post.statusId)
   const postRoadmaps = (post.roadmapIds || [])
@@ -289,9 +292,6 @@ function PostModalContent({
     isMerged: !!post.mergeInfo,
     hasDuplicateSignals,
   }
-
-  // Check if there are changes
-  const hasChanges = title !== post.title || contentMarkdown !== (post.content ?? '')
 
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>

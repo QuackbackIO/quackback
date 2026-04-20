@@ -198,6 +198,12 @@ export function CommentForm({
                       rows={3}
                       disabled={isSubmitting}
                       className="w-full resize-none border-0 bg-transparent px-3 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                          e.stopPropagation()
+                          void form.handleSubmit(onSubmit)()
+                        }
+                      }}
                       {...field}
                     />
                   </FormControl>
@@ -416,6 +422,12 @@ export function CommentForm({
                   rows={3}
                   disabled={isSubmitting}
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.stopPropagation()
+                      void form.handleSubmit(onSubmit)()
+                    }
+                  }}
                   {...field}
                 />
               </FormControl>
