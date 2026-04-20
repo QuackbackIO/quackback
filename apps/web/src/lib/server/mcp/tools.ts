@@ -1745,7 +1745,22 @@ Examples:
       try {
         const authorPrincipalId = args.authorId as PrincipalId | undefined
 
-        let article
+        const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
+        const hasUpdates =
+          Object.values(updateData).some((v) => v !== undefined) ||
+          authorPrincipalId !== undefined
+
+        // Validate + apply field/author updates first so a bad authorId
+        // never leaves the article in a partially-published state.
+        let article = null
+        if (hasUpdates) {
+          article = await updateArticle(
+            args.articleId as HelpCenterArticleId,
+            updateData,
+            authorPrincipalId
+          )
+        }
+
         if (args.publishedAt !== undefined) {
           article =
             args.publishedAt === null
@@ -1753,18 +1768,7 @@ Examples:
               : await publishArticle(args.articleId as HelpCenterArticleId)
         }
 
-        const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
-        const hasUpdates =
-          Object.values(updateData).some((v) => v !== undefined) ||
-          authorPrincipalId !== undefined
-
-        if (hasUpdates) {
-          article = await updateArticle(
-            args.articleId as HelpCenterArticleId,
-            updateData,
-            authorPrincipalId
-          )
-        } else if (!article) {
+        if (!article) {
           article = await getArticleById(args.articleId as HelpCenterArticleId)
         }
 

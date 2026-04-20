@@ -92,8 +92,8 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
   })
 
   describe('POST /help-center/articles', () => {
-    it('is accessible by team members (not admin-only)', async () => {
-      if (skipIfNoServer() || !state.testCategoryId || !MEMBER_API_KEY) return
+    it.skipIf(!MEMBER_API_KEY)('is accessible by team members (not admin-only)', async () => {
+      if (skipIfNoServer() || !state.testCategoryId) return
 
       const { status, data } = await apiWith('POST', '/help-center/articles', {
         categoryId: state.testCategoryId,
@@ -147,8 +147,8 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
   })
 
   describe('PATCH /help-center/articles/:articleId', () => {
-    it('is accessible by team members (not admin-only)', async () => {
-      if (skipIfNoServer() || !state.testArticleId || !MEMBER_API_KEY) return
+    it.skipIf(!MEMBER_API_KEY)('is accessible by team members (not admin-only)', async () => {
+      if (skipIfNoServer() || !state.testArticleId) return
 
       const { status } = await apiWith('PATCH', `/help-center/articles/${state.testArticleId}`, {
         title: 'Updated by Team Member',
