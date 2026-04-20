@@ -550,6 +550,7 @@ const createHelpCenterArticleSchema = {
       'Article content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   slug: z.string().max(200).optional().describe('URL slug (auto-generated from title if omitted)'),
+  description: z.string().max(300).optional().describe('Short page description for SEO and article previews (max 300 chars)'),
   authorId: z
     .string()
     .optional()
@@ -567,6 +568,7 @@ const updateHelpCenterArticleSchema = {
       'New content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   slug: z.string().max(200).optional().describe('New URL slug'),
+  description: z.string().max(300).optional().describe('New page description (max 300 chars)'),
   categoryId: z.string().optional().describe('Move to a different category TypeID'),
   publishedAt: z
     .string()
@@ -734,6 +736,7 @@ type CreateHelpCenterArticleArgs = {
   title: string
   content: string
   slug?: string
+  description?: string
   authorId?: string
 }
 
@@ -742,6 +745,7 @@ type UpdateHelpCenterArticleArgs = {
   title?: string
   content?: string
   slug?: string
+  description?: string
   categoryId?: string
   publishedAt?: string | null
   authorId?: string
@@ -1716,6 +1720,7 @@ Examples:
             title: args.title,
             content: args.content,
             slug: args.slug,
+            description: args.description,
           },
           auth.principalId,
           args.authorId as PrincipalId | undefined

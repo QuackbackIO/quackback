@@ -24,6 +24,7 @@ const updateArticleBody = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   slug: z.string().max(200).optional(),
+  description: z.string().max(300).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
   authorId: z.string().optional(),
 })
@@ -32,6 +33,7 @@ function formatArticle(article: {
   id: string
   slug: string
   title: string
+  description: string | null
   content: string
   publishedAt: Date | null
   viewCount: number
@@ -46,6 +48,7 @@ function formatArticle(article: {
     id: article.id,
     slug: article.slug,
     title: article.title,
+    description: article.description,
     content: article.content,
     publishedAt: article.publishedAt?.toISOString() || null,
     viewCount: article.viewCount,
