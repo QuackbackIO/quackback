@@ -196,7 +196,7 @@ function PostDetailPage() {
   }, [post.comments])
 
   return (
-    <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
+    <div data-testid="post-detail" className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-6">
       <UnsubscribeBanner postId={post.id as PostId} />
 
       <BackLink to="/" search={{ board: slug }} className="mb-6">
