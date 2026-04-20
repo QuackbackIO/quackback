@@ -55,10 +55,10 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
     handlers: {
       GET: async ({ request }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           const categories = await listCategories()
           return successResponse(
             categories.map((cat) => ({
@@ -73,10 +73,10 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
 
       POST: async ({ request }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
+          await withApiKeyAuth(request, { role: 'admin' })
+
           const body = await request.json()
           const parsed = createCategoryBody.safeParse(body)
 

@@ -19,7 +19,8 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   recordArticleFeedback: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/api/validation', () => ({
-  validateTypeId: vi.fn(),
+  parseTypeId: vi.fn(),
+  parseOptionalTypeId: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/api/responses', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@/lib/server/domains/api/responses')>()
@@ -47,7 +48,8 @@ import {
   deleteArticle,
   recordArticleFeedback,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 
 import { Route as ArticlesListRoute } from '../articles/index'
 import { Route as ArticleDetailRoute } from '../articles/$articleId'
@@ -96,7 +98,7 @@ describe('GET /api/v1/help-center/articles', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
   })
 
   it('returns paginated list with articles', async () => {
@@ -157,7 +159,8 @@ describe('POST /api/v1/help-center/articles', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseOptionalTypeId).mockReturnValue(undefined)
   })
 
   it('creates article with valid body', async () => {
@@ -174,7 +177,64 @@ describe('POST /api/v1/help-center/articles', () => {
     expect(response.status).toBe(201)
     const json = await response.json()
     expect(json.data.id).toBe('article_1')
-    expect(createArticle).toHaveBeenCalledWith(body, 'principal_1')
+    expect(createArticle).toHaveBeenCalledWith(body, 'principal_1', undefined)
+  })
+
+  it('creates article attributed to authorId when provided', async () => {
+    vi.mocked(createArticle).mockResolvedValue(mockArticle)
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as any)
+
+    const body = {
+      categoryId: 'category_1',
+      title: 'Authored Article',
+      content: 'Content',
+      authorId: 'principal_2',
+    }
+    const request = createRequest('POST', 'http://localhost/api/v1/help-center/articles', body)
+    const response = await listHandlers.POST({ request })
+
+    expect(response.status).toBe(201)
+    expect(createArticle).toHaveBeenCalledWith(
+      { categoryId: 'category_1', title: 'Authored Article', content: 'Content' },
+      'principal_1',
+      'principal_2'
+    )
+  })
+
+  it('returns 400 when authorId format is invalid', async () => {
+    vi.mocked(parseOptionalTypeId).mockImplementation(() => {
+      throw new ValidationError('VALIDATION_ERROR', 'Invalid author ID format')
+    })
+
+    const body = {
+      categoryId: 'category_1',
+      title: 'Test',
+      content: 'Content',
+      authorId: 'not-a-valid-id',
+    }
+    const request = createRequest('POST', 'http://localhost/api/v1/help-center/articles', body)
+    const response = await listHandlers.POST({ request })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400 when authorId does not exist', async () => {
+    vi.mocked(createArticle).mockRejectedValue(
+      new ValidationError('VALIDATION_ERROR', 'Author not found')
+    )
+
+    const body = {
+      categoryId: 'category_1',
+      title: 'Test',
+      content: 'Content',
+      authorId: 'principal_ghost',
+    }
+    const request = createRequest('POST', 'http://localhost/api/v1/help-center/articles', body)
+    const response = await listHandlers.POST({ request })
+
+    expect(response.status).toBe(400)
+    const json = await response.json()
+    expect(json.error.message).toMatch(/author not found/i)
   })
 
   it('returns 400 for missing required fields', async () => {
@@ -188,12 +248,10 @@ describe('POST /api/v1/help-center/articles', () => {
     expect(json.error.details?.errors).toBeDefined()
   })
 
-  it('requires admin role', async () => {
-    const forbiddenResponse = new Response(
-      JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin access required' } }),
-      { status: 403 }
+  it('requires team role', async () => {
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Team access required')
     )
-    vi.mocked(withApiKeyAuth).mockResolvedValue(forbiddenResponse)
 
     const body = {
       categoryId: 'category_1',
@@ -212,7 +270,7 @@ describe('GET /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
   })
 
   it('returns single article with category and author', async () => {
@@ -236,11 +294,9 @@ describe('GET /api/v1/help-center/articles/:id', () => {
   })
 
   it('returns error for invalid ID format', async () => {
-    const badIdResponse = new Response(
-      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'Invalid article ID format' } }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
-    )
-    vi.mocked(validateTypeId).mockReturnValue(badIdResponse)
+    vi.mocked(parseTypeId).mockImplementation(() => {
+      throw new ValidationError('VALIDATION_ERROR', 'Invalid article ID format')
+    })
 
     const request = createRequest('GET', 'http://localhost/api/v1/help-center/articles/bad-id')
     const response = await detailHandlers.GET({
@@ -250,7 +306,7 @@ describe('GET /api/v1/help-center/articles/:id', () => {
 
     expect(response.status).toBe(400)
     const json = await response.json()
-    expect(json.error.code).toBe('BAD_REQUEST')
+    expect(json.error.code).toBe('VALIDATION_ERROR')
   })
 })
 
@@ -259,7 +315,8 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseOptionalTypeId).mockReturnValue(undefined)
   })
 
   it('updates article fields', async () => {
@@ -280,7 +337,68 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
     expect(response.status).toBe(200)
     const json = await response.json()
     expect(json.data.title).toBe('Updated Title')
-    expect(updateArticle).toHaveBeenCalledWith('article_1', { title: 'Updated Title' })
+    expect(updateArticle).toHaveBeenCalledWith('article_1', { title: 'Updated Title' }, undefined)
+  })
+
+  it('reassigns author when authorId is provided', async () => {
+    const updatedArticle = { ...mockArticle, author: { id: 'principal_2', name: 'Other', avatarUrl: null } }
+    vi.mocked(updateArticle).mockResolvedValue(updatedArticle)
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as any)
+
+    const body = { authorId: 'principal_2' }
+    const request = createRequest(
+      'PATCH',
+      'http://localhost/api/v1/help-center/articles/article_1',
+      body
+    )
+    const response = await detailHandlers.PATCH({
+      request,
+      params: { articleId: 'article_1' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(updateArticle).toHaveBeenCalledWith('article_1', {}, 'principal_2')
+  })
+
+  it('returns 400 when authorId format is invalid', async () => {
+    vi.mocked(parseOptionalTypeId).mockImplementation(() => {
+      throw new ValidationError('VALIDATION_ERROR', 'Invalid author ID format')
+    })
+
+    const body = { authorId: 'not-a-valid-id' }
+    const request = createRequest(
+      'PATCH',
+      'http://localhost/api/v1/help-center/articles/article_1',
+      body
+    )
+    const response = await detailHandlers.PATCH({
+      request,
+      params: { articleId: 'article_1' },
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400 when authorId does not exist', async () => {
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_ghost' as any)
+    vi.mocked(updateArticle).mockRejectedValue(
+      new ValidationError('VALIDATION_ERROR', 'Author not found')
+    )
+
+    const body = { authorId: 'principal_ghost' }
+    const request = createRequest(
+      'PATCH',
+      'http://localhost/api/v1/help-center/articles/article_1',
+      body
+    )
+    const response = await detailHandlers.PATCH({
+      request,
+      params: { articleId: 'article_1' },
+    })
+
+    expect(response.status).toBe(400)
+    const json = await response.json()
+    expect(json.error.message).toMatch(/author not found/i)
   })
 
   it('publishes article when publishedAt is a datetime string', async () => {
@@ -323,12 +441,10 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
     expect(updateArticle).not.toHaveBeenCalled()
   })
 
-  it('requires admin role', async () => {
-    const forbiddenResponse = new Response(
-      JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin access required' } }),
-      { status: 403 }
+  it('requires team role', async () => {
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Team access required')
     )
-    vi.mocked(withApiKeyAuth).mockResolvedValue(forbiddenResponse)
 
     const body = { title: 'Updated' }
     const request = createRequest(
@@ -367,7 +483,7 @@ describe('DELETE /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
   })
 
   it('soft deletes and returns 204', async () => {
@@ -387,11 +503,9 @@ describe('DELETE /api/v1/help-center/articles/:id', () => {
   })
 
   it('requires admin role', async () => {
-    const forbiddenResponse = new Response(
-      JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin access required' } }),
-      { status: 403 }
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Admin access required')
     )
-    vi.mocked(withApiKeyAuth).mockResolvedValue(forbiddenResponse)
 
     const request = createRequest(
       'DELETE',
@@ -411,7 +525,7 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
   })
 
   it('records helpful=true feedback', async () => {
@@ -470,11 +584,9 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('requires team role', async () => {
-    const forbiddenResponse = new Response(
-      JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Team access required' } }),
-      { status: 403 }
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Team access required')
     )
-    vi.mocked(withApiKeyAuth).mockResolvedValue(forbiddenResponse)
 
     const body = { helpful: true }
     const request = createRequest(

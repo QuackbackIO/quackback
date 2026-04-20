@@ -8,7 +8,7 @@ import {
   notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import {
   getArticleById,
@@ -17,7 +17,7 @@ import {
   unpublishArticle,
   deleteArticle,
 } from '@/lib/server/domains/help-center/help-center.service'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
@@ -25,6 +25,7 @@ const updateArticleBody = z.object({
   content: z.string().min(1).optional(),
   slug: z.string().max(200).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  authorId: z.string().optional(),
 })
 
 function formatArticle(article: {
@@ -62,15 +63,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
     handlers: {
       GET: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const article = await getArticleById(articleId as HelpCenterArticleId)
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+
+          const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)
@@ -79,13 +78,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
       PATCH: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'team' })
+
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
 
           const body = await request.json()
           const parsed = updateArticleBody.safeParse(body)
@@ -96,24 +93,32 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
             })
           }
 
+          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+            parsed.data.authorId,
+            'principal',
+            'author ID'
+          )
+
           // Handle publish/unpublish via publishedAt
           if (parsed.data.publishedAt !== undefined) {
             if (parsed.data.publishedAt === null) {
-              await unpublishArticle(articleId as HelpCenterArticleId)
+              await unpublishArticle(articleId)
             } else {
-              await publishArticle(articleId as HelpCenterArticleId)
+              await publishArticle(articleId)
             }
           }
 
-          const { publishedAt: _, ...updateData } = parsed.data
-          const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
+          const { publishedAt: _, authorId: __, ...updateData } = parsed.data
+          const hasUpdates =
+            Object.values(updateData).some((v) => v !== undefined) ||
+            authorPrincipalId !== undefined
 
           if (hasUpdates) {
-            const updated = await updateArticle(articleId as HelpCenterArticleId, updateData)
+            const updated = await updateArticle(articleId, updateData, authorPrincipalId)
             return successResponse(formatArticle(updated))
           }
 
-          const article = await getArticleById(articleId as HelpCenterArticleId)
+          const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)
@@ -122,15 +127,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
       DELETE: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          await deleteArticle(articleId as HelpCenterArticleId)
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+
+          await deleteArticle(articleId)
           return noContentResponse()
         } catch (error) {
           return handleDomainError(error)

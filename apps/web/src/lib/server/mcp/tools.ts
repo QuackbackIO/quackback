@@ -87,6 +87,7 @@ import {
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import { DomainException } from '@/lib/shared/errors'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -123,7 +124,14 @@ function compactJsonResult(data: unknown): CallToolResult {
 
 /** Convert a domain error to an MCP tool error result. */
 function errorResult(err: unknown): CallToolResult {
-  const message = err instanceof Error ? err.message : 'Unknown error'
+  let message: string
+  if (err instanceof DomainException) {
+    message = `${err.message} (code: ${err.code})`
+  } else if (err instanceof Error) {
+    message = err.message
+  } else {
+    message = 'Unknown error'
+  }
   return {
     isError: true,
     content: [{ type: 'text', text: `Error: ${message}` }],
@@ -542,6 +550,10 @@ const createHelpCenterArticleSchema = {
       'Article content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   slug: z.string().max(200).optional().describe('URL slug (auto-generated from title if omitted)'),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Principal TypeID of the article author (defaults to the authenticated caller)'),
 }
 
 const updateHelpCenterArticleSchema = {
@@ -564,6 +576,10 @@ const updateHelpCenterArticleSchema = {
     .describe(
       'Any ISO 8601 datetime string to publish immediately (e.g. "2026-04-08T00:00:00Z"), or null to unpublish. The exact timestamp is not used — articles are always published at the current time.'
     ),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Principal TypeID to reassign as the article author'),
 }
 
 const deleteHelpCenterArticleSchema = {
@@ -718,6 +734,7 @@ type CreateHelpCenterArticleArgs = {
   title: string
   content: string
   slug?: string
+  authorId?: string
 }
 
 type UpdateHelpCenterArticleArgs = {
@@ -727,6 +744,7 @@ type UpdateHelpCenterArticleArgs = {
   slug?: string
   categoryId?: string
   publishedAt?: string | null
+  authorId?: string
 }
 
 type DeleteHelpCenterArticleArgs = { articleId: string }
@@ -1699,7 +1717,8 @@ Examples:
             content: args.content,
             slug: args.slug,
           },
-          auth.principalId
+          auth.principalId,
+          args.authorId as PrincipalId | undefined
         )
 
         return articleResult(article)
@@ -1724,6 +1743,8 @@ Examples:
       const denied = await requireHelpCenterWrite(auth)
       if (denied) return denied
       try {
+        const authorPrincipalId = args.authorId as PrincipalId | undefined
+
         let article
         if (args.publishedAt !== undefined) {
           article =
@@ -1732,11 +1753,17 @@ Examples:
               : await publishArticle(args.articleId as HelpCenterArticleId)
         }
 
-        const { articleId: _, publishedAt: __, ...updateData } = args
-        const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
+        const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
+        const hasUpdates =
+          Object.values(updateData).some((v) => v !== undefined) ||
+          authorPrincipalId !== undefined
 
         if (hasUpdates) {
-          article = await updateArticle(args.articleId as HelpCenterArticleId, updateData)
+          article = await updateArticle(
+            args.articleId as HelpCenterArticleId,
+            updateData,
+            authorPrincipalId
+          )
         } else if (!article) {
           article = await getArticleById(args.articleId as HelpCenterArticleId)
         }

@@ -680,13 +680,23 @@ export async function listPublicCategoryEditors(): Promise<
 
 export async function createArticle(
   input: CreateArticleInput,
-  principalId: PrincipalId
+  principalId: PrincipalId,
+  authorPrincipalId?: PrincipalId
 ): Promise<HelpCenterArticleWithCategory> {
   const title = input.title?.trim()
   const content = input.content?.trim()
   if (!title) throw new ValidationError('VALIDATION_ERROR', 'Title is required')
   if (!content) throw new ValidationError('VALIDATION_ERROR', 'Content is required')
 
+  if (authorPrincipalId !== undefined) {
+    const author = await db.query.principal.findFirst({
+      where: eq(principal.id, authorPrincipalId),
+      columns: { id: true },
+    })
+    if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+  }
+
+  const effectivePrincipalId = authorPrincipalId ?? principalId
   const slug = input.slug?.trim() || slugify(title)
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
@@ -703,7 +713,7 @@ export async function createArticle(
       content,
       contentJson,
       slug,
-      principalId,
+      principalId: effectivePrincipalId,
       position: input.position ?? null,
       description: input.description?.trim() || null,
     })
@@ -721,7 +731,8 @@ export async function createArticle(
 
 export async function updateArticle(
   id: HelpCenterArticleId,
-  input: UpdateArticleInput
+  input: UpdateArticleInput,
+  authorPrincipalId?: PrincipalId
 ): Promise<HelpCenterArticleWithCategory> {
   const updateData: Partial<typeof helpCenterArticles.$inferInsert> = { updatedAt: new Date() }
   if (input.title !== undefined) updateData.title = input.title.trim()
@@ -739,6 +750,14 @@ export async function updateArticle(
   if (input.slug !== undefined) updateData.slug = input.slug.trim()
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
+  if (authorPrincipalId !== undefined) {
+    const author = await db.query.principal.findFirst({
+      where: eq(principal.id, authorPrincipalId),
+      columns: { id: true },
+    })
+    if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+    updateData.principalId = authorPrincipalId
+  }
 
   const [updated] = await db
     .update(helpCenterArticles)
