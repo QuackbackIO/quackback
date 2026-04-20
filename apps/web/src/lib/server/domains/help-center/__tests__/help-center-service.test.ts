@@ -641,8 +641,7 @@ describe('createArticle', () => {
   })
 
   it('throws ValidationError when authorId is a non-member principal', async () => {
-    // findFirst returns a portal user (role: 'user')
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user', type: 'user' })
     await expect(
       createArticle(
         { categoryId: 'category_1', title: 'Title', content: 'Content' },
@@ -652,9 +651,20 @@ describe('createArticle', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
+  it('throws ValidationError when authorId is a service principal', async () => {
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_svc', role: 'admin', type: 'service' })
+    await expect(
+      createArticle(
+        { categoryId: 'category_1', title: 'Title', content: 'Content' },
+        'principal_admin' as PrincipalId,
+        'principal_svc' as PrincipalId
+      )
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
   it('accepts a member-role authorId', async () => {
     // findFirst for authorId check → member principal
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member', type: 'user' })
     // Second call is from resolveArticleWithCategory
     mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
     mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', displayName: 'Jane', avatarUrl: null })
@@ -913,16 +923,23 @@ describe('createArticle with position and description', () => {
 
 describe('updateArticle authorId validation', () => {
   it('throws ValidationError when authorId is a non-member principal', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user', type: 'user' })
     await expect(
       updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_portal' as PrincipalId)
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('throws ValidationError when authorId is a service principal', async () => {
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_svc', role: 'member', type: 'service' })
+    await expect(
+      updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_svc' as PrincipalId)
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
   it('allows re-asserting a former-member as author when they already own the article', async () => {
     // Former member is the existing article's author — preserving attribution is fine
     mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_1', principalId: 'principal_former' })
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', role: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', role: 'user', type: 'user' })
 
     const { db } = await import('@/lib/server/db')
     const chain: Record<string, unknown> = {}
@@ -946,7 +963,7 @@ describe('updateArticle authorId validation', () => {
   })
 
   it('accepts a member-role authorId in updateArticle', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member', type: 'user' })
 
     const { db } = await import('@/lib/server/db')
     const chain: Record<string, unknown> = {}

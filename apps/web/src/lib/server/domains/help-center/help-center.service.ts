@@ -696,10 +696,11 @@ export async function createArticle(
   if (authorPrincipalId !== undefined) {
     const author = await db.query.principal.findFirst({
       where: eq(principal.id, authorPrincipalId),
-      columns: { id: true, role: true },
+      columns: { id: true, role: true, type: true },
     })
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
-    if (!isTeamMember(author.role)) throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+    if (author.type !== 'user' || !isTeamMember(author.role))
+      throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
   }
 
   const effectivePrincipalId = authorPrincipalId ?? principalId
@@ -759,11 +760,13 @@ export async function updateArticle(
   if (authorPrincipalId !== undefined) {
     const author = await db.query.principal.findFirst({
       where: eq(principal.id, authorPrincipalId),
-      columns: { id: true, role: true },
+      columns: { id: true, role: true, type: true },
     })
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+    if (author.type !== 'user')
+      throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
     if (!isTeamMember(author.role)) {
-      // Allow re-asserting a former team member who already owns the article
+      // Allow re-asserting a former human team member who already owns the article
       const existing = await db.query.helpCenterArticles.findFirst({
         where: eq(helpCenterArticles.id, id),
         columns: { principalId: true },

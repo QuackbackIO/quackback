@@ -4,17 +4,19 @@
 
 export const BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api/v1'
 export const API_KEY = process.env.API_KEY || ''
+export const MEMBER_API_KEY = process.env.MEMBER_API_KEY || ''
 export const SKIP_INTEGRATION = process.env.SKIP_INTEGRATION === 'true'
 
-// Helper to make API calls
-export async function api(
+// Helper to make API calls with a specific key (defaults to admin API_KEY)
+export async function apiWith(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  key?: string
 ): Promise<{ status: number; data: unknown }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${API_KEY}`,
+    Authorization: `Bearer ${key ?? API_KEY}`,
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -33,6 +35,15 @@ export async function api(
   }
 
   return { status: res.status, data }
+}
+
+// Helper to make API calls using the admin API_KEY
+export async function api(
+  method: string,
+  path: string,
+  body?: unknown
+): Promise<{ status: number; data: unknown }> {
+  return apiWith(method, path, body, API_KEY)
 }
 
 export interface TestState {

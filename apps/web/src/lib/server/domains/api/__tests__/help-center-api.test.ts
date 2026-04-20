@@ -2,13 +2,16 @@
  * Help Center API Integration Tests
  *
  * Run with: API_KEY=qb_xxx bun run test help-center-api
+ * Member-access tests also require: MEMBER_API_KEY=qb_xxx (a key with role='member')
  * To skip: SKIP_INTEGRATION=true bun run test
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   SKIP_INTEGRATION,
+  MEMBER_API_KEY,
   api,
+  apiWith,
   createTestState,
   checkServerAndSetup,
   cleanupCreatedResources,
@@ -59,14 +62,22 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
     state.testCategoryId = (catData as { data: { id: string } }).data.id
     state.createdIds.categories.push(state.testCategoryId)
 
-    // Create a test principal via identify
-    const { data: identifyData } = await api('POST', '/users/identify', {
-      externalId: `hc-author-test-${Date.now()}`,
-      name: 'HC Author Test User',
-      email: `hc-author-${Date.now()}@example.com`,
+    // Get a team member principal for authorId tests — use the first result from
+    // GET /principals (always a human admin/member, never a service principal)
+    const { data: principalsData } = await api('GET', '/principals')
+    const members = (principalsData as { data: Array<{ id: string }> })?.data ?? []
+    state.testPrincipalId = members[0]?.id ?? null
+
+    // Create a test article used by PATCH tests (created as admin to ensure it exists)
+    const { status: artStatus, data: artData } = await api('POST', '/help-center/articles', {
+      categoryId: state.testCategoryId,
+      title: `Test Article ${Date.now()}`,
+      content: 'Setup article for PATCH tests',
     })
-    state.testPrincipalId =
-      (identifyData as { data: { principalId: string } })?.data?.principalId ?? null
+    if (artStatus === 201) {
+      state.testArticleId = (artData as { data: { id: string } }).data.id
+      state.createdIds.articles.push(state.testArticleId)
+    }
   })
 
   afterAll(async () => {
@@ -82,16 +93,15 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
 
   describe('POST /help-center/articles', () => {
     it('is accessible by team members (not admin-only)', async () => {
-      if (skipIfNoServer() || !state.testCategoryId) return
+      if (skipIfNoServer() || !state.testCategoryId || !MEMBER_API_KEY) return
 
-      const { status, data } = await api('POST', '/help-center/articles', {
+      const { status, data } = await apiWith('POST', '/help-center/articles', {
         categoryId: state.testCategoryId,
         title: `Team Member Article ${Date.now()}`,
         content: 'Created by team member',
-      })
+      }, MEMBER_API_KEY)
       expect(status).toBe(201)
       const id = (data as { data: { id: string } }).data.id
-      state.testArticleId = id
       state.createdIds.articles.push(id)
     })
 
@@ -138,11 +148,11 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
 
   describe('PATCH /help-center/articles/:articleId', () => {
     it('is accessible by team members (not admin-only)', async () => {
-      if (skipIfNoServer() || !state.testArticleId) return
+      if (skipIfNoServer() || !state.testArticleId || !MEMBER_API_KEY) return
 
-      const { status } = await api('PATCH', `/help-center/articles/${state.testArticleId}`, {
+      const { status } = await apiWith('PATCH', `/help-center/articles/${state.testArticleId}`, {
         title: 'Updated by Team Member',
-      })
+      }, MEMBER_API_KEY)
       expect(status).toBe(200)
     })
 
