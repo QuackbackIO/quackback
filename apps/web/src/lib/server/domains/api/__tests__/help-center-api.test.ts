@@ -44,16 +44,20 @@ describe.skipIf(SKIP_INTEGRATION)('Help Center Articles API', () => {
     state.serverAvailable = await checkServerAndSetup(baseState)
     if (!state.serverAvailable) return
 
-    // Create a test category
+    // Create a test category — requires admin role; fail loudly if key lacks it
     const { status: catStatus, data: catData } = await api(
       'POST',
       '/help-center/categories',
       { name: `Test Category ${Date.now()}`, slug: `test-cat-${Date.now()}` }
     )
-    if (catStatus === 201) {
-      state.testCategoryId = (catData as { data: { id: string } }).data.id
-      state.createdIds.categories.push(state.testCategoryId)
+    if (catStatus !== 201) {
+      throw new Error(
+        `Help Center test setup failed: POST /help-center/categories returned ${catStatus}. ` +
+        `API_KEY must have admin role to run these tests.`
+      )
     }
+    state.testCategoryId = (catData as { data: { id: string } }).data.id
+    state.createdIds.categories.push(state.testCategoryId)
 
     // Create a test principal via identify
     const { data: identifyData } = await api('POST', '/users/identify', {

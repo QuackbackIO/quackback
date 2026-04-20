@@ -25,6 +25,7 @@ import {
 } from '@/lib/server/db'
 import type { HelpCenterCategoryId, HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
+import { isTeamMember } from '@/lib/shared/roles'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
@@ -691,9 +692,10 @@ export async function createArticle(
   if (authorPrincipalId !== undefined) {
     const author = await db.query.principal.findFirst({
       where: eq(principal.id, authorPrincipalId),
-      columns: { id: true },
+      columns: { id: true, role: true },
     })
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+    if (!isTeamMember(author.role)) throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
   }
 
   const effectivePrincipalId = authorPrincipalId ?? principalId
@@ -753,9 +755,10 @@ export async function updateArticle(
   if (authorPrincipalId !== undefined) {
     const author = await db.query.principal.findFirst({
       where: eq(principal.id, authorPrincipalId),
-      columns: { id: true },
+      columns: { id: true, role: true },
     })
     if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+    if (!isTeamMember(author.role)) throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
     updateData.principalId = authorPrincipalId
   }
 

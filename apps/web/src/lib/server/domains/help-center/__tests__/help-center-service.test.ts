@@ -639,6 +639,47 @@ describe('createArticle', () => {
       )
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
+
+  it('throws ValidationError when authorId is a non-member principal', async () => {
+    // findFirst returns a portal user (role: 'user')
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user' })
+    await expect(
+      createArticle(
+        { categoryId: 'category_1', title: 'Title', content: 'Content' },
+        'principal_admin' as PrincipalId,
+        'principal_portal' as PrincipalId
+      )
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('accepts a member-role authorId', async () => {
+    // findFirst for authorId check → member principal
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member' })
+    // Second call is from resolveArticleWithCategory
+    mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', displayName: 'Jane', avatarUrl: null })
+
+    const { db } = await import('@/lib/server/db')
+    const chain: Record<string, unknown> = {}
+    chain.values = vi.fn(() => chain)
+    chain.returning = vi.fn().mockResolvedValue([{
+      id: 'article_new' as HelpCenterArticleId,
+      slug: 'title', title: 'Title', content: 'Content',
+      contentJson: null, categoryId: 'category_1',
+      principalId: 'principal_member', publishedAt: null,
+      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
+      createdAt: new Date(), updatedAt: new Date(),
+    }])
+    vi.mocked(db.insert).mockReturnValueOnce(chain as never)
+
+    await expect(
+      createArticle(
+        { categoryId: 'category_1', title: 'Title', content: 'Content' },
+        'principal_admin' as PrincipalId,
+        'principal_member' as PrincipalId
+      )
+    ).resolves.toBeDefined()
+  })
 })
 
 describe('publishArticle', () => {
@@ -867,6 +908,39 @@ describe('createArticle with position and description', () => {
     const insertedValues = insertValuesCalls[0][0] as Record<string, unknown>
     expect(insertedValues.position).toBe(5)
     expect(insertedValues.description).toBe('A short intro')
+  })
+})
+
+describe('updateArticle authorId validation', () => {
+  it('throws ValidationError when authorId is a non-member principal', async () => {
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user' })
+    await expect(
+      updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_portal' as PrincipalId)
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('accepts a member-role authorId in updateArticle', async () => {
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member' })
+
+    const { db } = await import('@/lib/server/db')
+    const chain: Record<string, unknown> = {}
+    chain.set = vi.fn(() => chain)
+    chain.where = vi.fn(() => chain)
+    chain.returning = vi.fn().mockResolvedValue([{
+      id: 'article_1' as HelpCenterArticleId,
+      slug: 'test', title: 'Test', content: 'Content',
+      contentJson: null, categoryId: 'category_1',
+      principalId: 'principal_member', publishedAt: null,
+      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
+      createdAt: new Date(), updatedAt: new Date(),
+    }])
+    vi.mocked(db.update).mockReturnValueOnce(chain as never)
+    mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', displayName: 'Jane', avatarUrl: null })
+
+    await expect(
+      updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_member' as PrincipalId)
+    ).resolves.toBeDefined()
   })
 })
 
