@@ -250,6 +250,7 @@ function LiveHelpCenterFinder({
                   <HelpCenterListItem
                     id={article.id as HelpCenterArticleId}
                     title={article.title}
+                    description={article.description}
                     content={article.content}
                     publishedAt={article.publishedAt}
                     createdAt={article.createdAt}

@@ -15,7 +15,7 @@ import {
 } from '@/components/help-center/help-center-article-utils'
 import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
-import { cn } from '@/lib/shared/utils'
+import { cn, stripMarkdownPreview } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
@@ -43,7 +43,8 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
 
     const description =
       article.description ||
-      (article.content ? article.content.slice(0, 160) : `${article.title} - ${workspaceName}`)
+      (article.content ? stripMarkdownPreview(article.content, 160) : undefined)
+    const pageTitle = `${article.title} - ${workspaceName}`
 
     const baseUrl =
       ((portalMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
@@ -51,12 +52,16 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
 
     return {
       meta: [
-        { title: `${article.title} - ${workspaceName}` },
-        { name: 'description', content: description },
-        { property: 'og:title', content: `${article.title} - ${workspaceName}` },
-        { property: 'og:description', content: description },
+        { title: pageTitle },
+        ...(description ? [{ name: 'description', content: description }] : []),
+        { property: 'og:title', content: pageTitle },
+        ...(description ? [{ property: 'og:description', content: description }] : []),
         { property: 'og:type', content: 'article' },
         { property: 'og:url', content: canonicalUrl },
+        { property: 'og:site_name', content: workspaceName },
+        { name: 'twitter:card', content: 'summary' },
+        { name: 'twitter:title', content: pageTitle },
+        ...(description ? [{ name: 'twitter:description', content: description }] : []),
       ],
       links: [{ rel: 'canonical', href: canonicalUrl }],
     }

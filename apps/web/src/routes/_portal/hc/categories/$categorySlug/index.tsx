@@ -66,27 +66,36 @@ function AuthorAvatar({ author, index }: { author: Author; index: number }) {
 function ArticleRow({
   href,
   title,
+  description,
   readingTimeMinutes,
 }: {
   href: string
   title: string
+  description?: string | null
   readingTimeMinutes?: number
 }) {
   return (
     <Link
       to={href as '/hc'}
-      className="group flex items-center gap-3 px-5 py-3.5 hover:bg-accent/40 transition-colors"
+      className="group flex items-start gap-3 px-5 py-3.5 hover:bg-accent/40 transition-colors"
     >
-      <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-      <span className="text-sm text-foreground group-hover:text-primary transition-colors flex-1 min-w-0 font-medium">
-        {title}
-      </span>
+      <DocumentTextIcon className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <span className="block text-sm text-foreground group-hover:text-primary transition-colors font-medium">
+          {title}
+        </span>
+        {description && (
+          <span className="block text-xs text-muted-foreground/60 mt-0.5 line-clamp-1">
+            {description}
+          </span>
+        )}
+      </div>
       {readingTimeMinutes != null && (
-        <span className="text-xs text-muted-foreground/50 shrink-0 tabular-nums">
+        <span className="text-xs text-muted-foreground/50 shrink-0 tabular-nums mt-0.5">
           {readingTimeMinutes} min read
         </span>
       )}
-      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+      <ChevronRightIcon className="h-4 w-4 shrink-0 text-muted-foreground/40 group-hover:text-primary transition-colors mt-0.5" />
     </Link>
   )
 }
@@ -267,6 +276,7 @@ function CategoryIndexPage() {
                                 key={article.id}
                                 href={`/hc/articles/${sub.slug}/${article.slug}`}
                                 title={article.title}
+                                description={article.description}
                                 readingTimeMinutes={article.readingTimeMinutes}
                               />
                             ))}
@@ -301,6 +311,7 @@ function CategoryIndexPage() {
                     key={article.id}
                     href={`/hc/articles/${categorySlug}/${article.slug}`}
                     title={article.title}
+                    description={article.description}
                     readingTimeMinutes={article.readingTimeMinutes}
                   />
                 ))}
