@@ -12,10 +12,8 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
       OPTIONS: () => preflightResponse(),
 
       GET: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
           const url = new URL(request.url)
           const text = url.searchParams.get('text')?.trim()
           const limit = Math.min(Number(url.searchParams.get('limit')) || 5, 20)

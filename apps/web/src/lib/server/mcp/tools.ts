@@ -87,6 +87,8 @@ import {
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import { DomainException } from '@/lib/shared/errors'
+import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -123,7 +125,14 @@ function compactJsonResult(data: unknown): CallToolResult {
 
 /** Convert a domain error to an MCP tool error result. */
 function errorResult(err: unknown): CallToolResult {
-  const message = err instanceof Error ? err.message : 'Unknown error'
+  let message: string
+  if (err instanceof DomainException) {
+    message = `${err.message} (code: ${err.code})`
+  } else if (err instanceof Error) {
+    message = err.message
+  } else {
+    message = 'Unknown error'
+  }
   return {
     isError: true,
     content: [{ type: 'text', text: `Error: ${message}` }],
@@ -542,6 +551,11 @@ const createHelpCenterArticleSchema = {
       'Article content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   slug: z.string().max(200).optional().describe('URL slug (auto-generated from title if omitted)'),
+  description: z.string().max(300).optional().describe('Short page description for SEO and article previews (max 300 chars)'),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Principal TypeID of the article author (defaults to the authenticated caller)'),
 }
 
 const updateHelpCenterArticleSchema = {
@@ -555,6 +569,7 @@ const updateHelpCenterArticleSchema = {
       'New content. Markdown (GFM), max 50,000 chars. Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   slug: z.string().max(200).optional().describe('New URL slug'),
+  description: z.string().max(300).optional().describe('New page description (max 300 chars)'),
   categoryId: z.string().optional().describe('Move to a different category TypeID'),
   publishedAt: z
     .string()
@@ -564,6 +579,10 @@ const updateHelpCenterArticleSchema = {
     .describe(
       'Any ISO 8601 datetime string to publish immediately (e.g. "2026-04-08T00:00:00Z"), or null to unpublish. The exact timestamp is not used — articles are always published at the current time.'
     ),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Principal TypeID to reassign as the article author'),
 }
 
 const deleteHelpCenterArticleSchema = {
@@ -718,6 +737,8 @@ type CreateHelpCenterArticleArgs = {
   title: string
   content: string
   slug?: string
+  description?: string
+  authorId?: string
 }
 
 type UpdateHelpCenterArticleArgs = {
@@ -725,8 +746,10 @@ type UpdateHelpCenterArticleArgs = {
   title?: string
   content?: string
   slug?: string
+  description?: string
   categoryId?: string
   publishedAt?: string | null
+  authorId?: string
 }
 
 type DeleteHelpCenterArticleArgs = { articleId: string }
@@ -1692,14 +1715,21 @@ Examples:
       const denied = await requireHelpCenterWrite(auth)
       if (denied) return denied
       try {
+        const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+          args.authorId,
+          'principal',
+          'author ID'
+        )
         const article = await createArticle(
           {
             categoryId: args.categoryId,
             title: args.title,
             content: args.content,
             slug: args.slug,
+            description: args.description,
           },
-          auth.principalId
+          auth.principalId,
+          authorPrincipalId
         )
 
         return articleResult(article)
@@ -1724,7 +1754,28 @@ Examples:
       const denied = await requireHelpCenterWrite(auth)
       if (denied) return denied
       try {
-        let article
+        const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+          args.authorId,
+          'principal',
+          'author ID'
+        )
+
+        const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
+        const hasUpdates =
+          Object.values(updateData).some((v) => v !== undefined) ||
+          authorPrincipalId !== undefined
+
+        // Validate + apply field/author updates first so a bad authorId
+        // never leaves the article in a partially-published state.
+        let article = null
+        if (hasUpdates) {
+          article = await updateArticle(
+            args.articleId as HelpCenterArticleId,
+            updateData,
+            authorPrincipalId
+          )
+        }
+
         if (args.publishedAt !== undefined) {
           article =
             args.publishedAt === null
@@ -1732,12 +1783,7 @@ Examples:
               : await publishArticle(args.articleId as HelpCenterArticleId)
         }
 
-        const { articleId: _, publishedAt: __, ...updateData } = args
-        const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
-
-        if (hasUpdates) {
-          article = await updateArticle(args.articleId as HelpCenterArticleId, updateData)
-        } else if (!article) {
+        if (!article) {
           article = await getArticleById(args.articleId as HelpCenterArticleId)
         }
 

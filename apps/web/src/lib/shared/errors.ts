@@ -92,3 +92,28 @@ export class InternalError extends DomainException {
     super(code, message, cause)
   }
 }
+
+/**
+ * HTTP 401 - Authentication required
+ * Use for: missing/invalid API key (auth layer only, not domain-level permission checks)
+ */
+export class UnauthorizedError extends DomainException {
+  readonly statusCode = 401
+
+  constructor(message: string, cause?: unknown) {
+    super('API_UNAUTHORIZED', message, cause)
+  }
+}
+
+/**
+ * HTTP 429 - Rate limit exceeded
+ */
+export class RateLimitError extends DomainException {
+  readonly statusCode = 429
+  readonly retryAfter: number
+
+  constructor(retryAfter: number, cause?: unknown) {
+    super('RATE_LIMITED', 'Too many requests. Please try again later.', cause)
+    this.retryAfter = retryAfter
+  }
+}

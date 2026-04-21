@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { InternalError } from '@/lib/shared/errors'
 import {
   successResponse,
   createdResponse,
@@ -8,9 +9,9 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import {
-  validateTypeId,
-  validateOptionalTypeId,
-  validateTypeIdArray,
+  parseTypeId,
+  parseOptionalTypeId,
+  parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import type { BoardId, StatusId, TagId } from '@quackback/ids'
 
@@ -32,21 +33,17 @@ export const Route = createFileRoute('/api/v1/posts/')({
        * List posts with optional filtering and pagination
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           const url = new URL(request.url)
 
-          // Parse pagination (cursor-based keyset)
           const cursor = url.searchParams.get('cursor') ?? undefined
           const limit = Math.min(
             100,
             Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
           )
 
-          // Parse filters
           const boardIdParam = url.searchParams.get('boardId') ?? undefined
           const statusSlug = url.searchParams.get('status') ?? undefined
           const tagIdsParam = url.searchParams.get('tagIds') ?? undefined
@@ -56,23 +53,18 @@ export const Route = createFileRoute('/api/v1/posts/')({
           const sort = (url.searchParams.get('sort') as 'newest' | 'oldest' | 'votes') ?? 'newest'
           const showDeleted = url.searchParams.get('showDeleted') === 'true'
 
-          // Validate boardId filter if provided
           const { isValidTypeId } = await import('@quackback/ids')
           const boardId =
             boardIdParam && isValidTypeId(boardIdParam, 'board')
               ? (boardIdParam as BoardId)
               : undefined
 
-          // Import service function
           const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
 
-          // Convert comma-separated tagIds to array (filter out invalid ones)
           const tagIdArray = tagIdsParam
             ? (tagIdsParam.split(',').filter((id) => id && isValidTypeId(id, 'tag')) as TagId[])
             : undefined
 
-          // Fetch posts
-          // Parse date filters (ISO 8601 strings)
           const dateFrom = dateFromParam ? new Date(dateFromParam) : undefined
           const dateTo = dateToParam ? new Date(dateToParam) : undefined
           // Treat date-only dateTo (e.g. "2024-06-30") as end-of-day so the full day is included
@@ -132,13 +124,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
        * Create a new post
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          // Parse and validate body
+          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = auth
+
           const body = await request.json()
           const parsed = createPostSchema.safeParse(body)
 
@@ -148,15 +137,10 @@ export const Route = createFileRoute('/api/v1/posts/')({
             })
           }
 
-          // Validate TypeID formats in request body
-          let validationError = validateTypeId(parsed.data.boardId, 'board', 'board ID')
-          if (validationError) return validationError
-          validationError = validateOptionalTypeId(parsed.data.statusId, 'status', 'status ID')
-          if (validationError) return validationError
-          validationError = validateTypeIdArray(parsed.data.tagIds, 'tag', 'tag IDs')
-          if (validationError) return validationError
+          const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
+          const statusId = parseOptionalTypeId<StatusId>(parsed.data.statusId, 'status', 'status ID')
+          const tagIds = parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
 
-          // Import service and get principal details
           const { createPost } = await import('@/lib/server/domains/posts/post.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
@@ -167,22 +151,22 @@ export const Route = createFileRoute('/api/v1/posts/')({
           })
 
           if (!principalRecord) {
-            return badRequestResponse('Principal not found')
+            throw new InternalError('PRINCIPAL_NOT_FOUND', 'Principal record missing for verified API key')
           }
 
           // Only admins can set createdAt (for imports)
           const createdAt =
-            parsed.data.createdAt && authResult.role === 'admin'
+            parsed.data.createdAt && auth.role === 'admin'
               ? new Date(parsed.data.createdAt)
               : undefined
 
           const result = await createPost(
             {
-              boardId: parsed.data.boardId as BoardId,
+              boardId,
               title: parsed.data.title,
               content: parsed.data.content,
-              statusId: parsed.data.statusId as StatusId | undefined,
-              tagIds: parsed.data.tagIds as TagId[] | undefined,
+              statusId,
+              tagIds,
               createdAt,
             },
             {
@@ -192,10 +176,8 @@ export const Route = createFileRoute('/api/v1/posts/')({
               name: principalRecord.user?.name,
               email: principalRecord.user?.email ?? undefined,
             },
-            { skipDispatch: authResult.importMode }
+            { skipDispatch: auth.importMode }
           )
-
-          // Events are dispatched by the service layer
 
           return createdResponse({
             id: result.id,

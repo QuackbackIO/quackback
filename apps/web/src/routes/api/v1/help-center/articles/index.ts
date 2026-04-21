@@ -9,6 +9,7 @@ import {
   handleDomainError,
   parsePaginationParams,
 } from '@/lib/server/domains/api/responses'
+import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
 import type { PrincipalId } from '@quackback/ids'
@@ -18,12 +19,15 @@ const createArticleBody = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   slug: z.string().max(200).optional(),
+  description: z.string().max(300).optional(),
+  authorId: z.string().optional(),
 })
 
 function formatArticle(article: {
   id: string
   slug: string
   title: string
+  description: string | null
   content: string
   publishedAt: Date | null
   viewCount: number
@@ -38,6 +42,7 @@ function formatArticle(article: {
     id: article.id,
     slug: article.slug,
     title: article.title,
+    description: article.description,
     content: article.content,
     publishedAt: article.publishedAt?.toISOString() || null,
     viewCount: article.viewCount,
@@ -55,10 +60,10 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
     handlers: {
       GET: async ({ request }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           const url = new URL(request.url)
           const { cursor, limit } = parsePaginationParams(url)
           const categoryId = url.searchParams.get('categoryId') ?? undefined
@@ -80,10 +85,10 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
 
       POST: async ({ request }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+
           const body = await request.json()
           const parsed = createArticleBody.safeParse(body)
 
@@ -93,7 +98,15 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
             })
           }
 
-          const article = await createArticle(parsed.data, authResult.principalId as PrincipalId)
+          const { authorId, ...articleData } = parsed.data
+
+          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(authorId, 'principal', 'author ID')
+
+          const article = await createArticle(
+            articleData,
+            principalId as PrincipalId,
+            authorPrincipalId
+          )
           return createdResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)

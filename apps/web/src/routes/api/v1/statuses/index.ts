@@ -31,11 +31,9 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        * List all statuses
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Import service function
           const { listStatuses } = await import('@/lib/server/domains/statuses/status.service')
 
@@ -64,11 +62,9 @@ export const Route = createFileRoute('/api/v1/statuses/')({
        * Create a new status
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse and validate body
           const body = await request.json()
           const parsed = createStatusSchema.safeParse(body)

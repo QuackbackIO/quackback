@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { noContentResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId, PostId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts/$postId')({
@@ -12,24 +12,16 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts/$postId'
        * Remove a post from a roadmap
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { roadmapId, postId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID formats
-          let validationError = validateTypeId(roadmapId, 'roadmap', 'roadmap ID')
-          if (validationError) return validationError
-          validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Import service function
           const { removePostFromRoadmap } =
             await import('@/lib/server/domains/roadmaps/roadmap.service')
 
-          await removePostFromRoadmap(postId as PostId, roadmapId as RoadmapId)
+          await removePostFromRoadmap(postId, roadmapId)
 
           return noContentResponse()
         } catch (error) {

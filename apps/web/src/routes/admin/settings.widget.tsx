@@ -621,7 +621,7 @@ function WidgetInstallation({
   const [activeTab, setActiveTab] = useState('snippet')
 
   // Persisted state
-  const [hmacEnabled, setHmacEnabled] = useState(config.identifyVerification ?? false)
+  const [verifiedIdentityOnly, setVerifiedIdentityOnly] = useState(config.identifyVerification ?? false)
   const [currentSecret, setCurrentSecret] = useState(secret)
   const [secretVisible, setSecretVisible] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)
@@ -669,8 +669,8 @@ function WidgetInstallation({
 
   const activeTabData = tabs.find((t) => t.id === activeTab) ?? tabs[0]
 
-  async function handleHmacToggle(checked: boolean) {
-    setHmacEnabled(checked)
+  async function handleVerifiedIdentityToggle(checked: boolean) {
+    setVerifiedIdentityOnly(checked)
     setSaving(true)
     try {
       await updateWidgetConfigFn({ data: { identifyVerification: checked } })
@@ -763,8 +763,8 @@ function WidgetInstallation({
                 <div className="flex items-center gap-2">
                   <InlineSpinner visible={isBusy} />
                   <Switch
-                    checked={hmacEnabled}
-                    onCheckedChange={handleHmacToggle}
+                    checked={verifiedIdentityOnly}
+                    onCheckedChange={handleVerifiedIdentityToggle}
                     disabled={isBusy}
                     aria-label="Require verified widget identity"
                   />

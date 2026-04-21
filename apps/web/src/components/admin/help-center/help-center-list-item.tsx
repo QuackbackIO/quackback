@@ -15,6 +15,7 @@ import { stripMarkdownPreview } from '@/lib/shared/utils'
 interface HelpCenterListItemProps {
   id: HelpCenterArticleId
   title: string
+  description?: string | null
   content: string
   publishedAt: string | null
   createdAt: string
@@ -29,6 +30,7 @@ interface HelpCenterListItemProps {
 export function HelpCenterListItem({
   id,
   title,
+  description,
   content,
   publishedAt,
   createdAt,
@@ -44,7 +46,7 @@ export function HelpCenterListItem({
     ? { label: 'Published', color: '#22c55e' }
     : { label: 'Draft', color: '#a1a1aa' }
 
-  const contentPreview = stripMarkdownPreview(content)
+  const contentPreview = description || stripMarkdownPreview(content)
 
   return (
     <div

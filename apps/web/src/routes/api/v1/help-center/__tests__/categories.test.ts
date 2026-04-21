@@ -15,14 +15,15 @@ vi.mock('@/lib/server/domains/help-center/help-center.service', () => ({
   deleteCategory: vi.fn(),
 }))
 vi.mock('@/lib/server/domains/api/validation', () => ({
-  validateTypeId: vi.fn(),
+  parseTypeId: vi.fn(),
 }))
 // Mock createFileRoute to avoid TanStack side effects
 vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: vi.fn(() => (opts: any) => ({ options: opts })),
+  createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
 }))
 
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import {
   listCategories,
@@ -31,22 +32,31 @@ import {
   updateCategory,
   deleteCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import type { HelpCenterCategoryId, PrincipalId, ApiKeyId } from '@quackback/ids'
+import type {
+  HelpCenterCategory,
+  HelpCenterCategoryWithCount,
+} from '@/lib/server/domains/help-center/help-center.types'
 
 // Import routes (createFileRoute is mocked, so this returns { options: { server: { handlers } } })
 import { Route } from '../categories/index'
 import { Route as CategoryDetailRoute } from '../categories/$categoryId'
 
+type MockedHandler = (ctx: { request: Request; params?: Record<string, string> }) => Promise<Response>
+type MockedRouteShape = { options: { server: { handlers: Record<string, MockedHandler> } } }
+
 // Access handlers
-const handlers = (Route as any).options.server.handlers
-const detailHandlers = (CategoryDetailRoute as any).options.server.handlers
+const handlers = (Route as unknown as MockedRouteShape).options.server.handlers
+const detailHandlers = (CategoryDetailRoute as unknown as MockedRouteShape).options.server.handlers
 
 // Helpers
 function createRequest(method: string, url: string, body?: unknown): Request {
   return new Request(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
 }
 
@@ -54,19 +64,39 @@ async function parseJson(response: Response) {
   return response.json()
 }
 
-const mockAuthContext = {
-  apiKey: { id: 'key_1', name: 'test' },
-  principalId: 'principal_1',
-  role: 'admin' as const,
+const mockAuthContext: ApiAuthContext = {
+  apiKey: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    keyPrefix: 'qb_',
+    createdById: null,
+    principalId: 'principal_1' as PrincipalId,
+    lastUsedAt: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01'),
+    revokedAt: null,
+  },
+  principalId: 'principal_1' as PrincipalId,
+  role: 'admin',
   importMode: false,
-} as any
+}
 
-const mockTeamAuthContext = {
-  apiKey: { id: 'key_1', name: 'test' },
-  principalId: 'principal_1',
-  role: 'team' as const,
+const mockTeamAuthContext: ApiAuthContext = {
+  apiKey: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    keyPrefix: 'qb_',
+    createdById: null,
+    principalId: 'principal_1' as PrincipalId,
+    lastUsedAt: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01'),
+    revokedAt: null,
+  },
+  principalId: 'principal_1' as PrincipalId,
+  role: 'member',
   importMode: false,
-} as any
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -80,24 +110,23 @@ describe('GET /api/v1/help-center/categories', () => {
   it('returns list of categories with article counts', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
-    vi.mocked(listCategories).mockResolvedValue([
-      {
-        id: 'category_01jk0000000000000000000001' as any,
-        slug: 'getting-started',
-        name: 'Getting Started',
-        description: 'Intro guides',
-        icon: '\u{1F4DA}',
-        parentId: null,
-        isPublic: true,
-        position: 0,
-        articleCount: 5,
-        publishedArticleCount: 5,
-        recursiveArticleCount: 5,
-        recursivePublishedArticleCount: 5,
-        createdAt: new Date('2026-01-01'),
-        updatedAt: new Date('2026-01-02'),
-      },
-    ])
+    const mockCategory: HelpCenterCategoryWithCount = {
+      id: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
+      slug: 'getting-started',
+      name: 'Getting Started',
+      description: 'Intro guides',
+      icon: '\u{1F4DA}',
+      parentId: null,
+      isPublic: true,
+      position: 0,
+      articleCount: 5,
+      publishedArticleCount: 5,
+      recursiveArticleCount: 5,
+      recursivePublishedArticleCount: 5,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-02'),
+    }
+    vi.mocked(listCategories).mockResolvedValue([mockCategory])
 
     const request = createRequest('GET', 'http://localhost/api/v1/help-center/categories')
     const response = await handlers.GET({ request })
@@ -117,24 +146,23 @@ describe('GET /api/v1/help-center/categories', () => {
   it('returns categories with null icon and parentId', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
-    vi.mocked(listCategories).mockResolvedValue([
-      {
-        id: 'category_01jk0000000000000000000002' as any,
-        slug: 'faq',
-        name: 'FAQ',
-        description: null,
-        icon: null,
-        parentId: null,
-        isPublic: true,
-        position: 1,
-        articleCount: 0,
-        publishedArticleCount: 0,
-        recursiveArticleCount: 0,
-        recursivePublishedArticleCount: 0,
-        createdAt: new Date('2026-01-01'),
-        updatedAt: new Date('2026-01-01'),
-      },
-    ])
+    const mockCategory: HelpCenterCategoryWithCount = {
+      id: 'category_01jk0000000000000000000002' as HelpCenterCategoryId,
+      slug: 'faq',
+      name: 'FAQ',
+      description: null,
+      icon: null,
+      parentId: null,
+      isPublic: true,
+      position: 1,
+      articleCount: 0,
+      publishedArticleCount: 0,
+      recursiveArticleCount: 0,
+      recursivePublishedArticleCount: 0,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+    }
+    vi.mocked(listCategories).mockResolvedValue([mockCategory])
 
     const request = createRequest('GET', 'http://localhost/api/v1/help-center/categories')
     const response = await handlers.GET({ request })
@@ -157,18 +185,19 @@ describe('POST /api/v1/help-center/categories', () => {
   it('creates a category with icon and parentId', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(createCategory).mockResolvedValue({
-      id: 'category_01jk0000000000000000000003' as any,
+    const newCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000003' as HelpCenterCategoryId,
       slug: 'billing',
       name: 'Billing',
       description: null,
       icon: '\u{1F4B0}',
-      parentId: 'category_01jk0000000000000000000001' as any,
+      parentId: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       isPublic: true,
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-01'),
-    })
+    }
+    vi.mocked(createCategory).mockResolvedValue(newCategory)
 
     const request = createRequest('POST', 'http://localhost/api/v1/help-center/categories', {
       name: 'Billing',
@@ -194,8 +223,8 @@ describe('POST /api/v1/help-center/categories', () => {
   it('creates a category without optional icon (defaults to null in response)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(createCategory).mockResolvedValue({
-      id: 'category_01jk0000000000000000000004' as any,
+    const newCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000004' as HelpCenterCategoryId,
       slug: 'general',
       name: 'General',
       description: null,
@@ -205,7 +234,8 @@ describe('POST /api/v1/help-center/categories', () => {
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-01'),
-    })
+    }
+    vi.mocked(createCategory).mockResolvedValue(newCategory)
 
     const request = createRequest('POST', 'http://localhost/api/v1/help-center/categories', {
       name: 'General',
@@ -229,10 +259,8 @@ describe('POST /api/v1/help-center/categories', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin required' } }), {
-        status: 403,
-      })
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Admin required')
     )
 
     const request = createRequest('POST', 'http://localhost/api/v1/help-center/categories', {
@@ -251,9 +279,9 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
   it('returns a single category with icon and parentId', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
-    vi.mocked(getCategoryById).mockResolvedValue({
-      id: 'category_01jk0000000000000000000001' as any,
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
+    const mockCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: 'Intro guides',
@@ -263,7 +291,8 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-02'),
-    })
+    }
+    vi.mocked(getCategoryById).mockResolvedValue(mockCategory)
 
     const request = createRequest(
       'GET',
@@ -300,12 +329,9 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
   it('returns 400 for invalid category ID format', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockTeamAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(
-      new Response(
-        JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'Invalid category ID format' } }),
-        { status: 400 }
-      )
-    )
+    vi.mocked(parseTypeId).mockImplementation(() => {
+      throw new ValidationError('VALIDATION_ERROR', 'Invalid category ID format')
+    })
 
     const request = createRequest(
       'GET',
@@ -323,9 +349,9 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
   it('updates a category with icon', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
-    vi.mocked(updateCategory).mockResolvedValue({
-      id: 'category_01jk0000000000000000000001' as any,
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
+    const updatedCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: 'Intro guides',
@@ -335,7 +361,8 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
-    })
+    }
+    vi.mocked(updateCategory).mockResolvedValue(updatedCategory)
 
     const request = createRequest(
       'PATCH',
@@ -359,19 +386,20 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
   it('updates a category with parentId', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
-    vi.mocked(updateCategory).mockResolvedValue({
-      id: 'category_01jk0000000000000000000001' as any,
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
+    const updatedCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
       icon: null,
-      parentId: 'category_01jk0000000000000000000002' as any,
+      parentId: 'category_01jk0000000000000000000002' as HelpCenterCategoryId,
       isPublic: true,
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
-    })
+    }
+    vi.mocked(updateCategory).mockResolvedValue(updatedCategory)
 
     const request = createRequest(
       'PATCH',
@@ -397,9 +425,9 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
   it('clears icon by setting to null', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
-    vi.mocked(updateCategory).mockResolvedValue({
-      id: 'category_01jk0000000000000000000001' as any,
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
+    const updatedCategory: HelpCenterCategory = {
+      id: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       slug: 'getting-started',
       name: 'Getting Started',
       description: null,
@@ -409,7 +437,8 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
-    })
+    }
+    vi.mocked(updateCategory).mockResolvedValue(updatedCategory)
 
     const request = createRequest(
       'PATCH',
@@ -432,10 +461,8 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin required' } }), {
-        status: 403,
-      })
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Admin required')
     )
 
     const request = createRequest(
@@ -455,7 +482,7 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
   it('deletes a category and returns 204', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(undefined)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
     vi.mocked(deleteCategory).mockResolvedValue(undefined)
 
     const request = createRequest(
@@ -473,10 +500,8 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: 'FORBIDDEN', message: 'Admin required' } }), {
-        status: 403,
-      })
+    vi.mocked(withApiKeyAuth).mockRejectedValue(
+      new ForbiddenError('FORBIDDEN', 'Admin required')
     )
 
     const request = createRequest(
@@ -493,12 +518,9 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
   it('returns 400 for invalid category ID format', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(validateTypeId).mockReturnValue(
-      new Response(
-        JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'Invalid category ID format' } }),
-        { status: 400 }
-      )
-    )
+    vi.mocked(parseTypeId).mockImplementation(() => {
+      throw new ValidationError('VALIDATION_ERROR', 'Invalid category ID format')
+    })
 
     const request = createRequest('DELETE', 'http://localhost/api/v1/help-center/categories/bad-id')
     const response = await detailHandlers.DELETE({

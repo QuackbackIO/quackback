@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
@@ -18,10 +18,9 @@ export const Route = createFileRoute('/api/v1/apps/unlink')({
       OPTIONS: () => preflightResponse(),
 
       POST: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           const body = await request.json()
           const parsed = unlinkSchema.safeParse(body)
 
@@ -31,13 +30,12 @@ export const Route = createFileRoute('/api/v1/apps/unlink')({
             })
           }
 
-          const validationError = validateTypeId(parsed.data.postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(parsed.data.postId, 'post', 'post ID')
 
           const { unlinkTicketFromPost } = await import('@/lib/server/integrations/apps/service')
 
           await unlinkTicketFromPost({
-            postId: parsed.data.postId as PostId,
+            postId,
             integrationType: parsed.data.integrationType,
             externalId: parsed.data.externalId,
           })

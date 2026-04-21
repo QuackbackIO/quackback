@@ -1,4 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import {
+  ForbiddenError,
+  ValidationError,
+  ConflictError,
+  NotFoundError,
+} from '@/lib/shared/errors'
 
 // Type for error response body
 type ErrorBody = { error: { code: string; message: string; details?: unknown } }
@@ -256,6 +262,52 @@ describe('API Responses', () => {
       const response = handleDomainError(error)
 
       expect(response.status).toBe(403)
+    })
+
+    // Missing NOT_FOUND_RESOURCES entries
+    it('should handle WEBHOOK_NOT_FOUND as 404', () => {
+      expect(handleDomainError({ code: 'WEBHOOK_NOT_FOUND', message: 'x' }).status).toBe(404)
+    })
+
+    it('should handle PRINCIPAL_NOT_FOUND as 404', () => {
+      expect(handleDomainError({ code: 'PRINCIPAL_NOT_FOUND', message: 'x' }).status).toBe(404)
+    })
+
+    it('should handle POST_NOT_IN_ROADMAP as 404', () => {
+      expect(handleDomainError({ code: 'POST_NOT_IN_ROADMAP', message: 'x' }).status).toBe(404)
+    })
+
+    // Missing conflict case
+    it('should handle DUPLICATE_NAME as 409', () => {
+      expect(handleDomainError({ code: 'DUPLICATE_NAME', message: 'x' }).status).toBe(409)
+    })
+
+    // DomainException statusCode fallback for custom codes
+    it('should use statusCode fallback for ForbiddenError with custom code', () => {
+      const err = new ForbiddenError('EDIT_NOT_ALLOWED', 'Post is deleted')
+      expect(handleDomainError(err).status).toBe(403)
+    })
+
+    it('should use statusCode fallback for ValidationError with custom code', () => {
+      const err = new ValidationError('INVALID_MERGE', 'Cannot merge into itself')
+      expect(handleDomainError(err).status).toBe(400)
+    })
+
+    it('should use statusCode fallback for ConflictError with custom code', () => {
+      const err = new ConflictError('DUPLICATE_NAME', 'Tag name already exists')
+      expect(handleDomainError(err).status).toBe(409)
+    })
+
+    it('should use statusCode fallback for NotFoundError with unmapped code', () => {
+      const err = new NotFoundError('WIDGET_NOT_FOUND', 'Widget not found')
+      expect(handleDomainError(err).status).toBe(404)
+    })
+
+    // WWW-Authenticate header on 401
+    it('should include WWW-Authenticate header on unauthorizedResponse', () => {
+      const response = handleDomainError({ code: 'API_UNAUTHORIZED', message: 'Invalid key' })
+      expect(response.status).toBe(401)
+      expect(response.headers.get('www-authenticate')).not.toBeNull()
     })
 
     it('should return 500 for unknown errors', async () => {

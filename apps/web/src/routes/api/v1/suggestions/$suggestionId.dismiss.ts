@@ -16,11 +16,8 @@ export const Route = createFileRoute('/api/v1/suggestions/$suggestionId/dismiss'
        * Dismiss an AI-generated suggestion
        */
       POST: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
           const { suggestionId } = params
 
           // Validate suggestion ID format

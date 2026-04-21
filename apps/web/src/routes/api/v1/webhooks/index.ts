@@ -8,8 +8,9 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
-import { validateTypeIdArray } from '@/lib/server/domains/api/validation'
+import { parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { toWebhookListResponse } from '@/lib/server/domains/api/webhooks'
+import type { BoardId } from '@quackback/ids'
 
 // Input validation schema
 const createWebhookSchema = z.object({
@@ -26,11 +27,9 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        * List all webhooks
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'admin' })
+
           const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
           const allWebhooks = await listWebhooks()
 
@@ -45,13 +44,9 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
        * Create a new webhook
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          // Parse and validate body
+          const { principalId } = await withApiKeyAuth(request, { role: 'admin' })
+
           const body = await request.json()
           const parsed = createWebhookSchema.safeParse(body)
 
@@ -61,18 +56,14 @@ export const Route = createFileRoute('/api/v1/webhooks/')({
             })
           }
 
-          // Validate board IDs if provided
-          if (parsed.data.boardIds && parsed.data.boardIds.length > 0) {
-            const validationError = validateTypeIdArray(parsed.data.boardIds, 'board', 'board IDs')
-            if (validationError) return validationError
-          }
+          const boardIds = parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
 
           const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
           const result = await createWebhook(
             {
               url: parsed.data.url,
               events: parsed.data.events,
-              boardIds: parsed.data.boardIds,
+              boardIds,
             },
             principalId
           )

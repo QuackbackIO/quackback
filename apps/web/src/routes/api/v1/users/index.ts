@@ -15,11 +15,9 @@ export const Route = createFileRoute('/api/v1/users/')({
        * List all portal users (role='user')
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse query params
           const url = new URL(request.url)
           const search = url.searchParams.get('search') || undefined

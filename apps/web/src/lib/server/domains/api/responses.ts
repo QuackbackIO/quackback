@@ -111,7 +111,10 @@ export function badRequestResponse(message: string, details?: Record<string, unk
 }
 
 export function unauthorizedResponse(message = 'Authentication required'): Response {
-  return errorResponse('UNAUTHORIZED', message, 401)
+  return jsonResponse(
+    { error: { code: 'UNAUTHORIZED', message } },
+    { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="Quackback API"' } }
+  )
 }
 
 export function forbiddenResponse(message = 'Access denied'): Response {
@@ -153,23 +156,30 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   TAG_NOT_FOUND: 'Tag',
   STATUS_NOT_FOUND: 'Status',
   MEMBER_NOT_FOUND: 'Member',
+  USER_NOT_FOUND: 'User',
   ROADMAP_NOT_FOUND: 'Roadmap',
   CHANGELOG_NOT_FOUND: 'Changelog entry',
   CATEGORY_NOT_FOUND: 'Help center category',
   ARTICLE_NOT_FOUND: 'Help center article',
   API_KEY_NOT_FOUND: 'API key',
   SEGMENT_NOT_FOUND: 'Segment',
+  WEBHOOK_NOT_FOUND: 'Webhook',
+  PRINCIPAL_NOT_FOUND: 'User',
+  POST_NOT_IN_ROADMAP: 'Post in roadmap',
 }
 
 /**
  * Handle domain errors and convert to appropriate API responses
  */
 export function handleDomainError(error: unknown): Response {
-  // Check for known error types
-  if (error && typeof error === 'object' && 'code' in error) {
-    const domainError = error as { code: string; message: string; statusCode?: number }
+  // RateLimitError first — retryAfter isn't accessible through the generic code-string path
+  if (error && typeof error === 'object' && 'retryAfter' in error) {
+    return rateLimitedResponse((error as { retryAfter: number }).retryAfter)
+  }
 
-    // Check if it's a not found error
+  if (error && typeof error === 'object' && 'code' in error) {
+    const domainError = error as { code: string; message: string }
+
     const resourceName = NOT_FOUND_RESOURCES[domainError.code]
     if (resourceName) {
       return notFoundResponse(resourceName)
@@ -186,6 +196,7 @@ export function handleDomainError(error: unknown): Response {
 
       case 'DUPLICATE_SLUG':
       case 'DUPLICATE_KEY':
+      case 'DUPLICATE_NAME':
       case 'CONFLICT':
         return conflictResponse(domainError.message)
 
@@ -193,13 +204,25 @@ export function handleDomainError(error: unknown): Response {
       case 'UNAUTHORIZED':
         return forbiddenResponse(domainError.message)
 
-      default:
+      case 'API_UNAUTHORIZED':
+        return unauthorizedResponse(domainError.message)
+
+      default: {
+        // Fall back to the error's own statusCode for any DomainException whose
+        // code string wasn't explicitly listed above (e.g. custom ForbiddenError codes)
+        if ('statusCode' in domainError) {
+          const s = (domainError as { statusCode: number }).statusCode
+          if (s === 400) return validationErrorResponse(domainError.message)
+          if (s === 403) return forbiddenResponse(domainError.message)
+          if (s === 404) return notFoundResponse(domainError.message)
+          if (s === 409) return conflictResponse(domainError.message)
+        }
         console.error('[api] Unhandled domain error:', error)
         return internalErrorResponse()
+      }
     }
   }
 
-  // Log unexpected errors
   console.error('[api] Unexpected error:', error)
   return internalErrorResponse()
 }

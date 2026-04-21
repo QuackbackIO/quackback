@@ -9,7 +9,6 @@ import {
   EllipsisHorizontalIcon,
   ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline'
-import { ChevronRightIcon } from '@heroicons/react/16/solid'
 import { CategoryIcon } from '@/components/help-center/category-icon'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -22,7 +21,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/shared/utils'
 import { HelpCenterListItem } from './help-center-list-item'
 import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
@@ -30,6 +28,7 @@ import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { useRestoreCategory, useRestoreArticle } from '@/lib/client/mutations/help-center'
 import { buildAncestorChain } from '@/lib/server/domains/help-center/category-tree'
 import { useHelpCenterFilters } from './use-help-center-filters'
+import { Route } from '@/routes/admin/help-center'
 import { HelpCenterActiveFiltersBar } from './help-center-active-filters-bar'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { AdminListHeader } from '@/components/admin/admin-list-header'
@@ -67,9 +66,9 @@ interface HelpCenterFinderProps {
 }
 
 export function HelpCenterFinder(props: HelpCenterFinderProps) {
-  const { filters } = useHelpCenterFilters()
+  const search = Route.useSearch()
 
-  if (filters.showDeleted) {
+  if (search.deleted) {
     return <DeletedItemsView />
   }
 
@@ -87,24 +86,20 @@ function LiveHelpCenterFinder({
 
   const { data: allCategories = [] } = useQuery(helpCenterQueries.categories())
 
-  const currentCategory = useMemo(
-    () => allCategories.find((c) => c.id === filters.category),
-    [allCategories, filters.category]
-  )
-
-  // Direct children of the currently-selected category (or top-level at root).
-  const directChildren = useMemo(() => {
-    if (!filters.category) {
-      return allCategories.filter((c) => c.parentId === null)
-    }
-    return allCategories.filter((c) => c.parentId === filters.category)
-  }, [allCategories, filters.category])
-
-  // Ancestor chain (top-level → current) for breadcrumbs.
   const ancestorChain = useMemo(() => {
     if (!filters.category) return []
     return buildAncestorChain(allCategories, filters.category)
   }, [allCategories, filters.category])
+
+  const currentCategory = useMemo(
+    () => ancestorChain[ancestorChain.length - 1] ?? null,
+    [ancestorChain]
+  )
+
+  const categoryLabel = useMemo(
+    () => (ancestorChain.length > 0 ? ancestorChain.map((c) => c.name).join(' › ') : undefined),
+    [ancestorChain]
+  )
 
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
@@ -128,7 +123,7 @@ function LiveHelpCenterFinder({
     threshold: 0.1,
   })
 
-  const articles = data?.pages.flatMap((page) => page.items) ?? []
+  const articles = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data])
 
   const headerActions = currentCategory ? (
     <div className="flex items-center gap-1">
@@ -136,15 +131,17 @@ function LiveHelpCenterFinder({
         onEdit={() => categoryActions.onEdit(currentCategory)}
         onDelete={() => categoryActions.onDelete(currentCategory)}
       />
-      <NewInsideDropdown
+      <NewDropdown
         onNewArticle={() => setCreateArticleOpen(true)}
-        onNewSubcategory={() => categoryActions.onNew(currentCategory.id)}
+        onNewFolder={() => categoryActions.onNew(currentCategory.id)}
+        folderLabel="New sub-category"
       />
     </div>
   ) : (
-    <NewAtRootDropdown
+    <NewDropdown
       onNewArticle={() => setCreateArticleOpen(true)}
-      onNewCategory={() => categoryActions.onNew(null)}
+      onNewFolder={() => categoryActions.onNew(null)}
+      folderLabel="New category"
     />
   )
 
@@ -168,32 +165,19 @@ function LiveHelpCenterFinder({
         <HelpCenterActiveFiltersBar
           status={filters.status}
           category={filters.category}
+          categoryLabel={categoryLabel}
+          categories={allCategories}
           showDeleted={filters.showDeleted}
           onClearStatus={() => setFilters({ status: 'all' })}
           onClearCategory={() => setFilters({ category: undefined })}
           onClearShowDeleted={() => setFilters({ showDeleted: undefined })}
           onClearAll={clearFilters}
+          onSetStatus={(s) => setFilters({ status: s })}
+          onSetCategory={(id) => setFilters({ category: id })}
         />
       </AdminListHeader>
 
       <div className="px-3 pb-4 space-y-3">
-        {/* Breadcrumbs — only when a category is selected */}
-        {ancestorChain.length > 0 && (
-          <BreadcrumbRow
-            chain={ancestorChain}
-            onNavigate={(id) => setFilters({ category: id ?? undefined })}
-          />
-        )}
-
-        {/* Sub-category chip row — lateral nav */}
-        <SubCategoryChipRow
-          categories={directChildren}
-          onNavigate={(id) => setFilters({ category: id })}
-          onNew={() => categoryActions.onNew(currentCategory?.id ?? null)}
-          canAddSub={!currentCategory || ancestorChain.length < 3}
-        />
-
-        {/* Article list */}
         <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -250,6 +234,7 @@ function LiveHelpCenterFinder({
                   <HelpCenterListItem
                     id={article.id as HelpCenterArticleId}
                     title={article.title}
+                    description={article.description}
                     content={article.content}
                     publishedAt={article.publishedAt}
                     createdAt={article.createdAt}
@@ -281,105 +266,6 @@ function LiveHelpCenterFinder({
       </div>
 
       <CreateArticleDialog open={createArticleOpen} onOpenChange={setCreateArticleOpen} />
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Breadcrumb row
-// ---------------------------------------------------------------------------
-
-interface BreadcrumbRowProps {
-  chain: ReadonlyArray<{ id: string; name: string }>
-  onNavigate: (id: string | null) => void
-}
-
-function BreadcrumbRow({ chain, onNavigate }: BreadcrumbRowProps) {
-  return (
-    <nav
-      aria-label="Breadcrumb"
-      className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap"
-    >
-      <button
-        type="button"
-        onClick={() => onNavigate(null)}
-        className="hover:text-foreground transition-colors"
-      >
-        Help Center
-      </button>
-      {chain.map((cat, index) => {
-        const isLast = index === chain.length - 1
-        return (
-          <span key={cat.id} className="flex items-center gap-1">
-            <ChevronRightIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-            {isLast ? (
-              <span className="text-foreground font-medium truncate max-w-[200px]">{cat.name}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onNavigate(cat.id)}
-                className="hover:text-foreground transition-colors truncate max-w-[160px]"
-              >
-                {cat.name}
-              </button>
-            )}
-          </span>
-        )
-      })}
-    </nav>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Sub-category chip row
-// ---------------------------------------------------------------------------
-
-interface SubCategoryChipRowProps {
-  categories: ReadonlyArray<{
-    id: string
-    name: string
-    icon: string | null
-    articleCount: number
-  }>
-  onNavigate: (id: string) => void
-  onNew: () => void
-  canAddSub: boolean
-}
-
-function SubCategoryChipRow({ categories, onNavigate, onNew, canAddSub }: SubCategoryChipRowProps) {
-  if (categories.length === 0 && !canAddSub) return null
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {categories.map((cat) => (
-        <button
-          key={cat.id}
-          type="button"
-          onClick={() => onNavigate(cat.id)}
-          className={cn(
-            'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs',
-            'bg-muted text-foreground/80 hover:bg-muted/70 hover:text-foreground',
-            'transition-colors'
-          )}
-        >
-          {cat.icon && <CategoryIcon icon={cat.icon} className="w-4 h-4 shrink-0" />}
-          <span className="truncate max-w-[160px]">{cat.name}</span>
-          <span className="text-muted-foreground tabular-nums">{cat.articleCount}</span>
-        </button>
-      ))}
-      {canAddSub && (
-        <button
-          type="button"
-          onClick={onNew}
-          className={cn(
-            'inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-xs',
-            'border border-dashed border-border/50 text-muted-foreground',
-            'hover:text-foreground hover:border-border hover:bg-muted/30 transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          New {categories.length === 0 ? 'category' : 'sub-category'}
-        </button>
-      )}
     </div>
   )
 }
@@ -529,12 +415,13 @@ function CategoryActionsDropdown({ onEdit, onDelete }: CategoryActionsDropdownPr
   )
 }
 
-interface NewInsideDropdownProps {
+interface NewDropdownProps {
   onNewArticle: () => void
-  onNewSubcategory: () => void
+  onNewFolder: () => void
+  folderLabel: string
 }
 
-function NewInsideDropdown({ onNewArticle, onNewSubcategory }: NewInsideDropdownProps) {
+function NewDropdown({ onNewArticle, onNewFolder, folderLabel }: NewDropdownProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -548,37 +435,9 @@ function NewInsideDropdown({ onNewArticle, onNewSubcategory }: NewInsideDropdown
           <PlusIcon className="h-4 w-4 mr-2" />
           New article
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onNewSubcategory}>
+        <DropdownMenuItem onClick={onNewFolder}>
           <FolderPlusIcon className="h-4 w-4 mr-2" />
-          New sub-category
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-interface NewAtRootDropdownProps {
-  onNewArticle: () => void
-  onNewCategory: () => void
-}
-
-function NewAtRootDropdown({ onNewArticle, onNewCategory }: NewAtRootDropdownProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm">
-          <PlusIcon className="h-4 w-4 mr-1" />
-          New
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onNewArticle}>
-          <PlusIcon className="h-4 w-4 mr-2" />
-          New article
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onNewCategory}>
-          <FolderPlusIcon className="h-4 w-4 mr-2" />
-          New category
+          {folderLabel}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

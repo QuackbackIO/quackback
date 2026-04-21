@@ -8,7 +8,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PrincipalId } from '@quackback/ids'
 
 const updateUserSchema = z.object({
@@ -27,22 +27,15 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        * Get a single portal user by principal ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { principalId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          // Import service function
           const { getPortalUserDetail } = await import('@/lib/server/domains/users/user.detail')
           const { parseUserAttributes } = await import('@/lib/server/domains/users/user.attributes')
 
-          const user = await getPortalUserDetail(principalId as PrincipalId)
+          const user = await getPortalUserDetail(principalId)
 
           if (!user) {
             return notFoundResponse('Portal user not found')
@@ -89,18 +82,11 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        * User attributes must be configured in Settings before they can be set.
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { principalId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateUserSchema.safeParse(body)
 
@@ -110,10 +96,9 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
             })
           }
 
-          // Import service function
           const { updatePortalUser } = await import('@/lib/server/domains/users/user.identify')
 
-          const result = await updatePortalUser(principalId as PrincipalId, parsed.data)
+          const result = await updatePortalUser(principalId, parsed.data)
 
           return successResponse({
             principalId: result.principalId,
@@ -136,21 +121,14 @@ export const Route = createFileRoute('/api/v1/users/$principalId')({
        * Remove a portal user
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate (admin only)
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { principalId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          // Import service function
           const { removePortalUser } = await import('@/lib/server/domains/users/user.service')
 
-          await removePortalUser(principalId as PrincipalId)
+          await removePortalUser(principalId)
 
           return noContentResponse()
         } catch (error) {

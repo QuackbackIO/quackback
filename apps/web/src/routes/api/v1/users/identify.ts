@@ -26,11 +26,9 @@ export const Route = createFileRoute('/api/v1/users/identify')({
        * User attributes must be configured in Settings before they can be set.
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse and validate body
           const body = await request.json()
           const parsed = identifyUserSchema.safeParse(body)

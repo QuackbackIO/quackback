@@ -22,7 +22,7 @@ export function UrlModalShell({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[95vw] sm:w-[90vw] lg:max-w-5xl xl:max-w-6xl h-[85vh] p-0 gap-0 flex flex-col"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{srTitle}</DialogTitle>
