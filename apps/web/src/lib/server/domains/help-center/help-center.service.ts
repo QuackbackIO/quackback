@@ -771,32 +771,38 @@ export async function updateArticle(
   if (input.slug !== undefined) updateData.slug = input.slug.trim()
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
-  if (authorPrincipalId !== undefined) {
-    const author = await db.query.principal.findFirst({
-      where: eq(principal.id, authorPrincipalId),
-      columns: { id: true, role: true, type: true },
-    })
-    if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
-    if (author.type !== 'user')
-      throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
-    if (!isTeamMember(author.role)) {
-      // Allow re-asserting a former human team member who already owns the article
-      const existing = await db.query.helpCenterArticles.findFirst({
-        where: eq(helpCenterArticles.id, id),
-        columns: { principalId: true },
+  const updated = await db.transaction(async (tx) => {
+    if (authorPrincipalId !== undefined) {
+      const author = await tx.query.principal.findFirst({
+        where: eq(principal.id, authorPrincipalId),
+        columns: { id: true, role: true, type: true },
       })
-      if (existing?.principalId !== authorPrincipalId) {
+      if (!author) throw new ValidationError('VALIDATION_ERROR', 'Author not found')
+      if (author.type !== 'user')
         throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+      if (!isTeamMember(author.role)) {
+        // Allow re-asserting a former human team member who already owns the article.
+        // Both reads are inside the transaction so a concurrent author reassignment
+        // cannot slip between the role check and the ownership check.
+        const existing = await tx.query.helpCenterArticles.findFirst({
+          where: eq(helpCenterArticles.id, id),
+          columns: { principalId: true },
+        })
+        if (existing?.principalId !== authorPrincipalId) {
+          throw new ValidationError('VALIDATION_ERROR', 'Author must be a team member')
+        }
       }
+      updateData.principalId = authorPrincipalId
     }
-    updateData.principalId = authorPrincipalId
-  }
 
-  const [updated] = await db
-    .update(helpCenterArticles)
-    .set(updateData)
-    .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
-    .returning()
+    const [row] = await tx
+      .update(helpCenterArticles)
+      .set(updateData)
+      .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
+      .returning()
+
+    return row
+  })
 
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
 

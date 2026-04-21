@@ -36,15 +36,16 @@ export function parseOptionalTypeId<T extends string>(
 
 /**
  * Validate an array of TypeIDs.
+ * Returns undefined when input is absent (not provided).
+ * Returns [] when input is an explicit empty array.
  * Throws ValidationError if any entry has an invalid format.
- * Returns the array cast to T[] so callers don't need a separate cast.
  */
 export function parseTypeIdArray<T extends string>(
   values: string[] | undefined,
   prefix: IdPrefix,
   paramName = 'IDs'
-): T[] {
-  if (!values || values.length === 0) return []
+): T[] | undefined {
+  if (values === undefined) return undefined
   for (const value of values) {
     if (!isValidTypeId(value, prefix)) {
       throw new ValidationError('VALIDATION_ERROR', `Invalid ${paramName} format`)

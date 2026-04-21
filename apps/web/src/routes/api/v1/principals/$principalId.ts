@@ -5,9 +5,9 @@ import {
   successResponse,
   noContentResponse,
   badRequestResponse,
-  notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
+import { NotFoundError } from '@/lib/shared/errors'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -17,22 +17,22 @@ const updateMemberSchema = z.object({
   role: z.enum(['admin', 'member']),
 })
 
-/** Fetch a team member with user details, or return a notFoundResponse. */
+/** Fetch a team member with user details, or throw NotFoundError. */
 async function fetchTeamMemberWithUser(principalId: PrincipalId) {
   const { getMemberById } = await import('@/lib/server/domains/principals/principal.service')
   const { db, eq, user } = await import('@/lib/server/db')
 
   const member = await getMemberById(principalId)
-  if (!member) return notFoundResponse('Member not found')
+  if (!member) throw new NotFoundError('MEMBER_NOT_FOUND', 'Member not found')
   if (!isTeamMember(member.role)) {
-    return notFoundResponse('Team member not found')
+    throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
   }
-  if (!member.userId) return notFoundResponse('User not found')
+  if (!member.userId) throw new NotFoundError('USER_NOT_FOUND', 'User not found')
 
   const userDetails = await db.query.user.findFirst({
     where: eq(user.id, member.userId),
   })
-  if (!userDetails) return notFoundResponse('User not found')
+  if (!userDetails) throw new NotFoundError('USER_NOT_FOUND', 'User not found')
 
   return {
     id: member.id,
@@ -59,7 +59,6 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
           const result = await fetchTeamMemberWithUser(principalId)
-          if (result instanceof Response) return result
 
           return successResponse(result)
         } catch (error) {
@@ -92,7 +91,6 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           await updateMemberRole(principalId, parsed.data.role, actingPrincipalId)
 
           const result = await fetchTeamMemberWithUser(principalId)
-          if (result instanceof Response) return result
 
           return successResponse(result)
         } catch (error) {

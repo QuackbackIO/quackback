@@ -156,6 +156,7 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
   TAG_NOT_FOUND: 'Tag',
   STATUS_NOT_FOUND: 'Status',
   MEMBER_NOT_FOUND: 'Member',
+  USER_NOT_FOUND: 'User',
   ROADMAP_NOT_FOUND: 'Roadmap',
   CHANGELOG_NOT_FOUND: 'Changelog entry',
   CATEGORY_NOT_FOUND: 'Help center category',

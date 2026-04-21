@@ -88,6 +88,7 @@ import {
 } from '@/lib/server/domains/help-center/help-center.service'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { DomainException } from '@/lib/shared/errors'
+import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
@@ -1714,6 +1715,11 @@ Examples:
       const denied = await requireHelpCenterWrite(auth)
       if (denied) return denied
       try {
+        const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+          args.authorId,
+          'principal',
+          'author ID'
+        )
         const article = await createArticle(
           {
             categoryId: args.categoryId,
@@ -1723,7 +1729,7 @@ Examples:
             description: args.description,
           },
           auth.principalId,
-          args.authorId as PrincipalId | undefined
+          authorPrincipalId
         )
 
         return articleResult(article)
@@ -1748,7 +1754,11 @@ Examples:
       const denied = await requireHelpCenterWrite(auth)
       if (denied) return denied
       try {
-        const authorPrincipalId = args.authorId as PrincipalId | undefined
+        const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+          args.authorId,
+          'principal',
+          'author ID'
+        )
 
         const { articleId: _, publishedAt: __, authorId: ___, ...updateData } = args
         const hasUpdates =

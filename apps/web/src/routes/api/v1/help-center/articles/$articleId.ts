@@ -103,6 +103,8 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
           )
 
           const { publishedAt: _, authorId: __, ...updateData } = parsed.data
+          // authorPrincipalId is included because reassigning the author requires
+          // the same updateArticle call even when no other fields change.
           const hasUpdates =
             Object.values(updateData).some((v) => v !== undefined) ||
             authorPrincipalId !== undefined

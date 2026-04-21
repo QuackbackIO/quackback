@@ -192,6 +192,9 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   }
 
   const auth = await resolveAuthContext(request)
+  // resolveAuthContext returns a Response by design: it covers both OAuth and
+  // API key auth paths, and the API key path converts failures to Response
+  // objects internally rather than throwing.
   if (auth instanceof Response) return auth
 
   // Portal user access check
