@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PlusIcon, XMarkIcon } from '@heroicons/react/16/solid'
+import { PlusIcon } from '@heroicons/react/16/solid'
 import { FolderIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -55,7 +55,6 @@ export function HelpCenterActiveFiltersBar({
 
   const hasStatusFilter = status !== 'all'
   const hasCategoryFilter = !!categoryName
-  const hasAnyActive = hasStatusFilter || hasCategoryFilter || !!showDeleted
 
   const canAddStatus = !hasStatusFilter
   const canAddCategory = !hasCategoryFilter
