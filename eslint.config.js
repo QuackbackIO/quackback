@@ -87,8 +87,16 @@ export default tseslint.config(
   // Service file size limits
   {
     files: ["**/server/domains/**/*.{ts,tsx}"],
+    ignores: ["**/server/domains/**/__tests__/**"],
     rules: {
       "max-lines": ["warn", { max: 400, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  // Test files grow to 2-3x source size due to shared mock setup; allow a higher limit
+  {
+    files: ["**/server/domains/**/__tests__/**/*.{ts,tsx}"],
+    rules: {
+      "max-lines": ["warn", { max: 800, skipBlankLines: true, skipComments: true }],
     },
   },
   {
