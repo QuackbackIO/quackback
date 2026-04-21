@@ -28,11 +28,9 @@ test.describe('Admin Users Page', () => {
   })
 
   test('displays sort dropdown', async ({ page }) => {
-    // Sort dropdown should be visible with default value
-    const sortTrigger = page
-      .getByRole('combobox')
-      .filter({ hasText: /newest|oldest|most active|name/i })
-    await expect(sortTrigger).toBeVisible({ timeout: 5000 })
+    // Sort options are pill buttons; "Newest" is the default selected pill
+    const newestButton = page.getByRole('button', { name: 'Newest' })
+    await expect(newestButton).toBeVisible({ timeout: 5000 })
   })
 
   test('can search for users', async ({ page }) => {
@@ -71,13 +69,10 @@ test.describe('Admin Users Page', () => {
   })
 
   test('can change sort order', async ({ page }) => {
-    // Open sort dropdown
-    const sortTrigger = page.getByRole('combobox').filter({ hasText: /newest/i })
-    await expect(sortTrigger).toBeVisible({ timeout: 5000 })
-    await sortTrigger.click()
-
-    // Select "Most Active"
-    await page.getByRole('option', { name: 'Most Active' }).click()
+    // Sort options are pill buttons — click "Most Active" directly
+    const mostActiveButton = page.getByRole('button', { name: 'Most Active' })
+    await expect(mostActiveButton).toBeVisible({ timeout: 5000 })
+    await mostActiveButton.click()
 
     // Wait for update
     await page.waitForLoadState('networkidle')
@@ -87,12 +82,10 @@ test.describe('Admin Users Page', () => {
   })
 
   test('can sort by name', async ({ page }) => {
-    // Open sort dropdown
-    const sortTrigger = page.getByRole('combobox').filter({ hasText: /newest/i })
-    await sortTrigger.click()
-
-    // Select "Name A-Z"
-    await page.getByRole('option', { name: 'Name A-Z' }).click()
+    // Sort options are pill buttons — click "Name A-Z" directly
+    const nameButton = page.getByRole('button', { name: 'Name A-Z' })
+    await expect(nameButton).toBeVisible({ timeout: 5000 })
+    await nameButton.click()
 
     // Wait for update
     await page.waitForLoadState('networkidle')
@@ -102,12 +95,10 @@ test.describe('Admin Users Page', () => {
   })
 
   test('can sort by oldest', async ({ page }) => {
-    // Open sort dropdown
-    const sortTrigger = page.getByRole('combobox').filter({ hasText: /newest/i })
-    await sortTrigger.click()
-
-    // Select "Oldest"
-    await page.getByRole('option', { name: 'Oldest' }).click()
+    // Sort options are pill buttons — click "Oldest" directly
+    const oldestButton = page.getByRole('button', { name: 'Oldest' })
+    await expect(oldestButton).toBeVisible({ timeout: 5000 })
+    await oldestButton.click()
 
     // Wait for update
     await page.waitForLoadState('networkidle')
@@ -139,9 +130,9 @@ test.describe('Admin Users - User Selection', () => {
       // URL should update with selected user
       await expect(page).toHaveURL(/selected=/, { timeout: 10000 })
 
-      // The detail panel should show "User Details" header after loading
+      // The detail panel should show "Account" section after loading
       // We wait for this to appear, which indicates the detail data has loaded
-      await expect(page.getByText('User Details', { exact: true })).toBeVisible({
+      await expect(page.getByText('Account', { exact: true })).toBeVisible({
         timeout: 15000,
       })
     }
@@ -197,9 +188,9 @@ test.describe('Admin Users - User Selection', () => {
       await userCards.first().click()
       await page.waitForLoadState('networkidle')
 
-      // Find and click close button
-      const closeButton = page.locator('button').filter({ has: page.locator('svg.lucide-x') })
-      await closeButton.first().click()
+      // Find and click the "Back to users" button which closes the detail panel
+      const closeButton = page.getByRole('button', { name: /back to users/i })
+      await closeButton.click()
 
       // URL should not have selected param
       await expect(page).not.toHaveURL(/selected=/)

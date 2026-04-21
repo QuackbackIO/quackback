@@ -31,6 +31,11 @@ async function createEntry(
   // Title input uses "What's new?" placeholder
   await dialog.getByPlaceholder("What's new?").fill(title)
 
+  // Fill the rich text editor so the form can be submitted
+  const editor = dialog.locator('.ProseMirror[contenteditable="true"]')
+  await editor.click()
+  await page.keyboard.type('Test content for article.')
+
   // Submit as draft
   await dialog.getByRole('button', { name: /save draft/i }).click()
   await expect(dialog).toBeHidden({ timeout: 15000 })
@@ -44,28 +49,6 @@ async function createEntry(
  */
 function entryCard(page: import('@playwright/test').Page, title: string) {
   return page.locator('h3').filter({ hasText: title }).first()
-}
-
-/**
- * Hover the entry card to reveal the actions dropdown, then open it.
- * Returns the dropdown trigger, or null if the entry isn't found.
- */
-async function openEntryActionsDropdown(
-  page: import('@playwright/test').Page,
-  title: string
-): Promise<import('@playwright/test').Locator | null> {
-  const card = entryCard(page, title)
-  if ((await card.count()) === 0) return null
-
-  // The actions button is inside the same row container
-  const row = card.locator('xpath=ancestor::div[contains(@class,"group")]').first()
-  await row.hover()
-
-  const actionsBtn = row.locator('button[data-slot="dropdown-menu-trigger"]')
-    .or(row.locator('button').filter({ has: page.locator('svg') }).last())
-  await actionsBtn.click()
-
-  return actionsBtn
 }
 
 // ---------------------------------------------------------------------------

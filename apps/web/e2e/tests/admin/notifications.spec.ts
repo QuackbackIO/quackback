@@ -191,9 +191,7 @@ test.describe('Admin Notifications — Loading State', () => {
     await page.goto('/admin/notifications')
 
     // The spinner renders while isLoading is true
-    // It may flash briefly — capture it before networkidle
-    const spinner = page.locator('div').filter({ hasText: '' }).locator('[class*="animate-spin"]')
-    // The spinner may or may not be visible depending on cache; just verify no crash
+    // It may flash briefly — capture it before networkidle; just verify no crash
     await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL('/admin/notifications')
   })

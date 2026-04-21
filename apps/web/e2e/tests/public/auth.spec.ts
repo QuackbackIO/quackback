@@ -356,6 +356,7 @@ test.describe('Portal Auth Dialog', () => {
 
     // Click the "Sign up" mode-switch link inside the dialog
     const signUpModeLink = page.getByRole('dialog').getByRole('button', { name: /sign up/i })
+    expect(await signUpModeLink.count()).toBeGreaterThan(0)
     if ((await signUpModeLink.count()) > 0) {
       await signUpModeLink.first().click()
       await expect(page.getByRole('heading', { name: /create an account/i })).toBeVisible({

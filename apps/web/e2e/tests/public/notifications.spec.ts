@@ -25,10 +25,11 @@ test.describe('Portal Notifications (unauthenticated)', () => {
       const loginTrigger = page.getByRole('button', { name: /log in|sign in|sign up/i })
       const isHeadingVisible = (await heading.count()) > 0 && (await heading.isVisible())
 
-      if (!isHeadingVisible) {
-        // No heading rendered — auth gate in place
-        await expect(loginTrigger.first()).toBeVisible({ timeout: 10000 })
-      }
+      // Unauthenticated users must NOT see the notifications content heading
+      expect(isHeadingVisible).toBe(false)
+
+      // No heading rendered — auth gate in place
+      await expect(loginTrigger.first()).toBeVisible({ timeout: 10000 })
     }
   })
 

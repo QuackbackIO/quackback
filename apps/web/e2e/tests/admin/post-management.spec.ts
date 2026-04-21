@@ -234,12 +234,16 @@ test.describe('Admin Post Management', () => {
       // Wait for detail panel to load
       await page.waitForLoadState('networkidle')
 
+      // The post opens in a modal dialog
+      const modal = page.getByRole('dialog')
+      await expect(modal).toBeVisible({ timeout: 10000 })
+
       // Look for the vote button in the detail panel
       const voteButton = page.getByTestId('vote-button')
 
       if ((await voteButton.count()) > 0) {
-        // Get initial vote count
-        const voteCount = page.getByTestId('vote-count')
+        // Get initial vote count scoped to the modal to avoid strict-mode violation
+        const voteCount = modal.getByTestId('vote-count')
         const initialCount = await voteCount.textContent()
 
         // Click to vote
@@ -373,7 +377,7 @@ test.describe('Admin Post Management', () => {
     await expect(modal).toBeVisible({ timeout: 10000 })
 
     // Find the comment textarea and type into it
-    const commentTextarea = modal.locator('textarea[placeholder*="comment" i]')
+    const commentTextarea = modal.locator('textarea[placeholder*="comment" i]').first()
     await expect(commentTextarea).toBeVisible({ timeout: 5000 })
     await commentTextarea.click()
     await commentTextarea.fill('E2E test comment via keyboard')
@@ -423,6 +427,7 @@ test.describe('Admin Post Management - Status Transitions', () => {
     const statusText = statusRow.locator('span').filter({ hasNot: statusRow.locator('svg') })
     // At minimum the row itself should be visible
     await expect(modal.getByText('Status')).toBeVisible()
+    await expect(statusText.first()).toBeVisible()
 
     // Close modal
     await page.keyboard.press('Escape')
@@ -441,12 +446,6 @@ test.describe('Admin Post Management - Status Transitions', () => {
     // It's rendered as a <button> wrapping a <StatusBadge> inside the sidebar
     const sidebar = modal.locator('aside')
     await expect(sidebar).toBeVisible({ timeout: 5000 })
-
-    // Read the current status name from the sidebar badge
-    const statusTrigger = sidebar
-      .locator('button')
-      .filter({ hasText: /\w/ })
-      .first()
 
     // The StatusDropdown trigger sits next to the "Status" label row.
     // Scope to the row that contains the word "Status".
@@ -625,9 +624,15 @@ test.describe('Admin Post Management - Status Transitions', () => {
       return
     }
 
-    // Sonner toast should appear (success or any notification)
+    // Sonner toast should appear (success or any notification) — non-fatal check
     const toast = page.locator('[data-sonner-toast]')
-    await expect(toast).toBeVisible({ timeout: 5000 })
+    if ((await toast.count()) > 0) {
+      await expect(toast.first()).toBeVisible({ timeout: 5000 })
+    } else {
+      // Toast may have already dismissed; verify the status badge changed instead
+      const updatedStatusText = (await statusBadgeButton.textContent()) ?? ''
+      expect(updatedStatusText.trim()).not.toBe(initialStatusText.trim())
+    }
 
     await page.keyboard.press('Escape')
   })
@@ -701,16 +706,11 @@ test.describe('Admin Post Management - Post Detail Panel Accuracy', () => {
     }
 
     // Find a post that has a visible comment count in the list
-    let postWithComments: import('@playwright/test').Locator | null = null
     for (let i = 0; i < Math.min(await postCards.count(), 5); i++) {
       const card = postCards.nth(i)
-      const commentBubble = card.locator('[class*="ChatBubble"]').or(
-        card.locator('svg').filter({ hasText: /\d/ })
-      )
       // Comment icon + count is rendered via ChatBubbleLeftIcon + commentCount text
       const commentText = card.locator('span').filter({ hasText: /^\d+$/ })
       if ((await commentText.count()) > 0) {
-        postWithComments = card
         break
       }
     }
@@ -788,7 +788,6 @@ test.describe('Admin Post Management - Post Detail Panel Accuracy', () => {
     // The editor content should not be completely empty (posts from seed data have bodies)
     // We check that the editor exists and is rendered; content presence depends on seed data
     // For seed posts with content the editor renders at least one <p> tag
-    const editorText = (await editor.textContent()) ?? ''
     // Accept either content present or editor visible — this test confirms the editor renders
     expect(editor).toBeTruthy()
 
@@ -860,9 +859,11 @@ test.describe('Admin Post Management - Filter + Pagination Accuracy', () => {
     // The active filters bar should show the selected board name as a chip
     const activeFiltersBar = page.locator('[class*="ActiveFilters"], [data-testid="active-filters"]')
     // Board filter chip: text contains the board name (trimmed)
-    const boardChip = page.getByText(boardName.trim(), { exact: false })
+    const boardChip = activeFiltersBar.first().getByText(boardName.trim(), { exact: false })
+    await expect(activeFiltersBar.first()).toBeVisible()
     // At minimum the board option we clicked has the right name
     expect(boardName.trim().length).toBeGreaterThan(0)
+    await expect(boardChip).toBeVisible()
   })
 
   test('after filtering by status, all visible posts show that status badge', async ({ page }) => {
@@ -892,8 +893,6 @@ test.describe('Admin Post Management - Filter + Pagination Accuracy', () => {
     // Each visible post card should show the status badge with the selected status name
     for (let i = 0; i < Math.min(cardCount, 5); i++) {
       const card = postCards.nth(i)
-      // StatusBadge renders: <span class="inline-flex items-center gap-1.5 text-xs font-medium">{name}</span>
-      const badge = card.locator('span.text-xs.font-medium').filter({ hasText: statusName })
       // The status name may be split by the color dot span — use a broader text match
       await expect(card.getByText(statusName, { exact: false })).toBeVisible()
     }

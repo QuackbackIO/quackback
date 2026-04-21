@@ -252,6 +252,7 @@ test.describe('Public Roadmap', () => {
     // It contains at least a search field or filter controls
     // The bar wraps board/tag filters — check for a parent container after the tab area
     const filtersBar = page.locator('form, [class*="filters"]').first()
+    await expect(filtersBar).toBeVisible({ timeout: 5000 })
     // This is a soft check — just verify the board section of the UI loaded
     await page.waitForLoadState('networkidle')
     // Page should not show an error state

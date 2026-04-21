@@ -71,6 +71,9 @@ async function createAndOpenArticle(
   await dialog.getByPlaceholder('Article title').fill(title)
   await selectFirstCategoryIfAvailable(dialog, page)
 
+  await dialog.locator('.ProseMirror[contenteditable="true"]').click()
+  await page.keyboard.type('Test article content for e2e test.')
+
   await dialog.getByRole('button', { name: /save draft/i }).click()
   await expect(dialog).toBeHidden({ timeout: 15000 })
   await expect(page).toHaveURL(/\/admin\/help-center\/articles\//, { timeout: 15000 })

@@ -64,14 +64,16 @@ test.describe('Post detail page', () => {
   test('shows status badge', async ({ page }) => {
     // StatusBadge is rendered in PostContentSection and MetadataSidebar
     // It renders a styled span; look for text that matches known seeded statuses
-    const statusBadge = page
+    const statusBadges = page
       .locator('[class*="rounded"]')
       .filter({ hasText: /open|planned|in progress|completed|closed|under review/i })
-      .first()
 
-    if ((await statusBadge.count()) > 0) {
-      await expect(statusBadge).toBeVisible({ timeout: 5000 })
-    }
+    test.skip(
+      (await statusBadges.count()) === 0,
+      'No status badges visible on this post — post may have no status assigned'
+    )
+
+    await expect(statusBadges.first()).toBeVisible({ timeout: 5000 })
   })
 
   // ---- Vote button ----

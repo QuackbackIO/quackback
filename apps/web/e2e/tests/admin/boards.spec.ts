@@ -8,13 +8,13 @@ test.describe('Admin Board Management', () => {
   })
 
   test('displays board settings page', async ({ page }) => {
-    // Should show general settings card (page redirects to first board)
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    // Should show board details card (page redirects to first board)
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
   })
 
   test('can access board general settings', async ({ page }) => {
-    // Should show general settings card
-    const generalSettings = page.getByText('General Settings')
+    // Should show board details card
+    const generalSettings = page.getByText('Board Details')
     await expect(generalSettings).toBeVisible({ timeout: 10000 })
   })
 
@@ -179,7 +179,7 @@ test.describe('Board Access Settings', () => {
     await page.waitForLoadState('networkidle')
 
     // Wait for the board settings page to fully load (redirects to first board)
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
     // Navigate to Access tab
     const accessLink = page.getByRole('link', { name: 'Access' })
@@ -287,7 +287,7 @@ test.describe('Board Deletion Flow', () => {
 
     // After creating a board, the page automatically navigates to the new board's settings
     // Wait for the page to show the new board's settings
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
     // Verify we're on the correct board's settings page (board switcher shows the board name)
     await expect(page.getByTestId('board-switcher')).toContainText(testBoardName)
@@ -355,7 +355,7 @@ test.describe('Create Board Dialog', () => {
 
     // Wait for page to be ready - either board settings or empty state
     await expect(
-      page.getByText('General Settings').or(page.getByText('No boards yet'))
+      page.getByText('Board Details').or(page.getByText('No boards yet'))
     ).toBeVisible({ timeout: 10000 })
   })
 
@@ -464,7 +464,7 @@ test.describe('Create Board Dialog', () => {
 
     // Verify board was created by checking we're on the new board's settings page
     // The board name should be visible in the page heading/switcher
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 5000 })
 
     // Open the board switcher dropdown to verify the board exists in the list
     await boardSwitcherButton.click()
