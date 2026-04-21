@@ -7,7 +7,7 @@ test.describe('Admin Segments Settings', () => {
   })
 
   test('page loads and shows heading', async ({ page }) => {
-    await expect(page.getByText('Segments')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Segments' })).toBeVisible({ timeout: 10000 })
   })
 
   test('shows page description', async ({ page }) => {
@@ -61,7 +61,7 @@ test.describe('Admin Segments Settings', () => {
   test('dynamic segments show "Auto" badge', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    const autoBadge = page.locator('[class*="badge"]').filter({ hasText: /auto/i })
+    const autoBadge = page.locator('[data-slot="badge"]').filter({ hasText: /auto/i })
 
     if ((await autoBadge.count()) > 0) {
       await expect(autoBadge.first()).toBeVisible()
