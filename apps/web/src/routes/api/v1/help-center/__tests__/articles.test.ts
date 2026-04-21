@@ -426,7 +426,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
 
   it('publishes article when publishedAt is a datetime string', async () => {
     vi.mocked(getArticleById).mockResolvedValue(mockArticle)
-    vi.mocked(publishArticle).mockResolvedValue(undefined)
+    vi.mocked(publishArticle).mockResolvedValue(mockArticle)
 
     const body = { publishedAt: '2026-04-01T00:00:00.000Z' }
     const request = createRequest(
@@ -446,7 +446,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
 
   it('unpublishes article when publishedAt is null', async () => {
     vi.mocked(getArticleById).mockResolvedValue(mockArticle)
-    vi.mocked(unpublishArticle).mockResolvedValue(undefined)
+    vi.mocked(unpublishArticle).mockResolvedValue(mockArticle)
 
     const body = { publishedAt: null }
     const request = createRequest(

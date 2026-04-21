@@ -94,7 +94,7 @@ const mockTeamAuthContext: ApiAuthContext = {
     revokedAt: null,
   },
   principalId: 'principal_1' as PrincipalId,
-  role: 'team',
+  role: 'member',
   importMode: false,
 }
 
