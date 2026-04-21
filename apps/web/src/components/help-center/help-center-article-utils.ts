@@ -24,7 +24,14 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-function extractTextFromNode(node: any): string {
+interface TipTapNode {
+  type?: string
+  text?: string
+  content?: TipTapNode[]
+  attrs?: Record<string, unknown>
+}
+
+function extractTextFromNode(node: TipTapNode | null | undefined): string {
   if (!node) return ''
   if (node.type === 'text') return node.text ?? ''
   if (Array.isArray(node.content)) {
@@ -33,7 +40,7 @@ function extractTextFromNode(node: any): string {
   return ''
 }
 
-export function extractHeadings(contentJson: any): TocHeading[] {
+export function extractHeadings(contentJson: { content?: TipTapNode[] } | null | undefined): TocHeading[] {
   if (!contentJson || !Array.isArray(contentJson.content)) return []
 
   const headings: TocHeading[] = []

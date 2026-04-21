@@ -47,7 +47,7 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
     const pageTitle = `${article.title} - ${workspaceName}`
 
     const baseUrl =
-      ((portalMatch?.context as Record<string, any> | undefined)?.baseUrl as string) ?? ''
+      ((portalMatch?.context as Record<string, unknown> | undefined)?.baseUrl as string) ?? ''
     const canonicalUrl = `${baseUrl}/hc/articles/${params.categorySlug}/${params.articleSlug}`
 
     return {

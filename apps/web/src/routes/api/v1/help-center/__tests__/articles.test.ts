@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
+import type { ApiKeyId } from '@/lib/server/domains/api-keys'
+import type { HelpCenterArticleWithCategory } from '@/lib/server/domains/help-center/help-center.types'
+import type { HelpCenterArticleId, HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
 
 // --- Mocks ---
 
@@ -31,7 +35,7 @@ vi.mock('@/lib/server/domains/api/responses', async (importOriginal) => {
 })
 // Mock createFileRoute to avoid TanStack side effects
 vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: vi.fn(() => (opts: any) => ({ options: opts })),
+  createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
 }))
 
 // --- Imports ---
@@ -55,9 +59,12 @@ import { Route as ArticlesListRoute } from '../articles/index'
 import { Route as ArticleDetailRoute } from '../articles/$articleId'
 import { Route as ArticleFeedbackRoute } from '../articles/$articleId.feedback'
 
-const listHandlers = (ArticlesListRoute as any).options.server.handlers
-const detailHandlers = (ArticleDetailRoute as any).options.server.handlers
-const feedbackHandlers = (ArticleFeedbackRoute as any).options.server.handlers
+type MockedHandler = (ctx: { request: Request; params?: Record<string, string> }) => Promise<Response>
+type MockedRouteShape = { options: { server: { handlers: Record<string, MockedHandler> } } }
+
+const listHandlers = (ArticlesListRoute as unknown as MockedRouteShape).options.server.handlers
+const detailHandlers = (ArticleDetailRoute as unknown as MockedRouteShape).options.server.handlers
+const feedbackHandlers = (ArticleFeedbackRoute as unknown as MockedRouteShape).options.server.handlers
 
 // --- Helpers ---
 
@@ -69,27 +76,43 @@ function createRequest(method: string, url: string, body?: unknown): Request {
   })
 }
 
-const mockAuthContext = {
-  apiKey: { id: 'key_1', name: 'test' },
-  principalId: 'principal_1',
-  role: 'admin' as const,
+const mockAuthContext: ApiAuthContext = {
+  apiKey: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    keyPrefix: 'qb_',
+    createdById: null,
+    principalId: 'principal_1' as PrincipalId,
+    lastUsedAt: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01'),
+    revokedAt: null,
+  },
+  principalId: 'principal_1' as PrincipalId,
+  role: 'admin',
   importMode: false,
-} as any
+}
 
-const mockArticle = {
-  id: 'article_1',
+const mockArticle: HelpCenterArticleWithCategory = {
+  id: 'article_1' as HelpCenterArticleId,
+  categoryId: 'category_1' as HelpCenterCategoryId,
   slug: 'how-to-start',
   title: 'How to Get Started',
+  description: null,
+  position: null,
   content: 'Follow these steps...',
+  contentJson: null,
+  principalId: 'principal_1' as PrincipalId,
   publishedAt: new Date('2026-01-15'),
   viewCount: 42,
   helpfulCount: 10,
   notHelpfulCount: 2,
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-10'),
-  category: { id: 'category_1', slug: 'getting-started', name: 'Getting Started' },
-  author: { id: 'principal_1', name: 'Admin', avatarUrl: null },
-} as any
+  deletedAt: null,
+  category: { id: 'category_1' as HelpCenterCategoryId, slug: 'getting-started', name: 'Getting Started' },
+  author: { id: 'principal_1' as PrincipalId, name: 'Admin', avatarUrl: null },
+}
 
 // --- Tests ---
 
@@ -98,7 +121,7 @@ describe('GET /api/v1/help-center/articles', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
   })
 
   it('returns paginated list with articles', async () => {
@@ -159,7 +182,7 @@ describe('POST /api/v1/help-center/articles', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
     vi.mocked(parseOptionalTypeId).mockReturnValue(undefined)
   })
 
@@ -182,7 +205,7 @@ describe('POST /api/v1/help-center/articles', () => {
 
   it('creates article attributed to authorId when provided', async () => {
     vi.mocked(createArticle).mockResolvedValue(mockArticle)
-    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as any)
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as PrincipalId)
 
     const body = {
       categoryId: 'category_1',
@@ -270,7 +293,7 @@ describe('GET /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
   })
 
   it('returns single article with category and author', async () => {
@@ -315,7 +338,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
     vi.mocked(parseOptionalTypeId).mockReturnValue(undefined)
   })
 
@@ -341,9 +364,9 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
   })
 
   it('reassigns author when authorId is provided', async () => {
-    const updatedArticle = { ...mockArticle, author: { id: 'principal_2', name: 'Other', avatarUrl: null } }
+    const updatedArticle = { ...mockArticle, author: { id: 'principal_2' as PrincipalId, name: 'Other', avatarUrl: null } }
     vi.mocked(updateArticle).mockResolvedValue(updatedArticle)
-    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as any)
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as PrincipalId)
 
     const body = { authorId: 'principal_2' }
     const request = createRequest(
@@ -380,7 +403,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
   })
 
   it('returns 400 when authorId does not exist', async () => {
-    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_ghost' as any)
+    vi.mocked(parseOptionalTypeId).mockReturnValue('principal_ghost' as PrincipalId)
     vi.mocked(updateArticle).mockRejectedValue(
       new ValidationError('VALIDATION_ERROR', 'Author not found')
     )
@@ -403,7 +426,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
 
   it('publishes article when publishedAt is a datetime string', async () => {
     vi.mocked(getArticleById).mockResolvedValue(mockArticle)
-    vi.mocked(publishArticle).mockResolvedValue(undefined as any)
+    vi.mocked(publishArticle).mockResolvedValue(undefined)
 
     const body = { publishedAt: '2026-04-01T00:00:00.000Z' }
     const request = createRequest(
@@ -423,7 +446,7 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
 
   it('unpublishes article when publishedAt is null', async () => {
     vi.mocked(getArticleById).mockResolvedValue(mockArticle)
-    vi.mocked(unpublishArticle).mockResolvedValue(undefined as any)
+    vi.mocked(unpublishArticle).mockResolvedValue(undefined)
 
     const body = { publishedAt: null }
     const request = createRequest(
@@ -483,11 +506,11 @@ describe('DELETE /api/v1/help-center/articles/:id', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
   })
 
   it('soft deletes and returns 204', async () => {
-    vi.mocked(deleteArticle).mockResolvedValue(undefined as any)
+    vi.mocked(deleteArticle).mockResolvedValue(undefined)
 
     const request = createRequest(
       'DELETE',
@@ -525,11 +548,11 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
     vi.clearAllMocks()
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
     vi.mocked(withApiKeyAuth).mockResolvedValue(mockAuthContext)
-    vi.mocked(parseTypeId).mockImplementation((v) => v as any)
+    vi.mocked(parseTypeId).mockImplementation((v) => v as string)
   })
 
   it('records helpful=true feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined as any)
+    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined)
 
     const body = { helpful: true }
     const request = createRequest(
@@ -549,7 +572,7 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('records helpful=false feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined as any)
+    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined)
 
     const body = { helpful: false }
     const request = createRequest(
