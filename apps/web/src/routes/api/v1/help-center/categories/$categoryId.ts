@@ -8,7 +8,7 @@ import {
   notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import {
   getCategoryById,
@@ -58,15 +58,13 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
     handlers: {
       GET: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'category', 'category ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const category = await getCategoryById(categoryId as HelpCenterCategoryId)
+          const categoryId = parseTypeId<HelpCenterCategoryId>(params.categoryId, 'category', 'category ID')
+
+          const category = await getCategoryById(categoryId)
           return successResponse(formatCategory(category))
         } catch (error) {
           return handleDomainError(error)
@@ -75,13 +73,11 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
 
       PATCH: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'category', 'category ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'admin' })
+
+          const categoryId = parseTypeId<HelpCenterCategoryId>(params.categoryId, 'category', 'category ID')
 
           const body = await request.json()
           const parsed = updateCategoryBody.safeParse(body)
@@ -92,7 +88,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
             })
           }
 
-          const updated = await updateCategory(categoryId as HelpCenterCategoryId, parsed.data)
+          const updated = await updateCategory(categoryId, parsed.data)
           return successResponse(formatCategory(updated))
         } catch (error) {
           return handleDomainError(error)
@@ -101,15 +97,13 @@ export const Route = createFileRoute('/api/v1/help-center/categories/$categoryId
 
       DELETE: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { categoryId } = params
-          const validationError = validateTypeId(categoryId, 'category', 'category ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          await deleteCategory(categoryId as HelpCenterCategoryId)
+          const categoryId = parseTypeId<HelpCenterCategoryId>(params.categoryId, 'category', 'category ID')
+
+          await deleteCategory(categoryId)
           return noContentResponse()
         } catch (error) {
           return handleDomainError(error)

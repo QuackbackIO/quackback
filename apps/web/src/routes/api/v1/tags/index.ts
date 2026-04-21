@@ -27,11 +27,9 @@ export const Route = createFileRoute('/api/v1/tags/')({
        * List all tags
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Import service function
           const { listTags } = await import('@/lib/server/domains/tags/tag.service')
 
@@ -56,11 +54,9 @@ export const Route = createFileRoute('/api/v1/tags/')({
        * Create a new tag
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse and validate body
           const body = await request.json()
           const parsed = createTagSchema.safeParse(body)

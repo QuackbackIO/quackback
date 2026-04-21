@@ -7,10 +7,10 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId, validateTypeIdArray } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseTypeIdArray } from '@/lib/server/domains/api/validation'
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
 import { toWebhookResponse } from '@/lib/server/domains/api/webhooks'
-import type { WebhookId } from '@quackback/ids'
+import type { BoardId, WebhookId } from '@quackback/ids'
 
 // Input validation schema
 const updateWebhookSchema = z.object({
@@ -28,19 +28,13 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        * Get a single webhook by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { webhookId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
-          if (validationError) return validationError
+          const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
           const { getWebhookById } = await import('@/lib/server/domains/webhooks/webhook.service')
-          const webhook = await getWebhookById(webhookId as WebhookId)
+          const webhook = await getWebhookById(webhookId)
 
           return successResponse(toWebhookResponse(webhook))
         } catch (error) {
@@ -53,18 +47,11 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        * Update a webhook
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { webhookId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
-          if (validationError) return validationError
+          const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateWebhookSchema.safeParse(body)
 
@@ -74,21 +61,15 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
             })
           }
 
-          // Validate board IDs if provided
-          if (parsed.data.boardIds && parsed.data.boardIds.length > 0) {
-            const boardValidationError = validateTypeIdArray(
-              parsed.data.boardIds,
-              'board',
-              'board IDs'
-            )
-            if (boardValidationError) return boardValidationError
-          }
+          const boardIds = parsed.data.boardIds != null
+            ? parseTypeIdArray<BoardId>(parsed.data.boardIds, 'board', 'board IDs')
+            : parsed.data.boardIds
 
           const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
-          const webhook = await updateWebhook(webhookId as WebhookId, {
+          const webhook = await updateWebhook(webhookId, {
             url: parsed.data.url,
             events: parsed.data.events,
-            boardIds: parsed.data.boardIds,
+            boardIds,
             status: parsed.data.status,
           })
 
@@ -103,19 +84,13 @@ export const Route = createFileRoute('/api/v1/webhooks/$webhookId')({
        * Delete a webhook
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { webhookId } = params
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(webhookId, 'webhook', 'webhook ID')
-          if (validationError) return validationError
+          const webhookId = parseTypeId<WebhookId>(params.webhookId, 'webhook', 'webhook ID')
 
           const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
-          await deleteWebhook(webhookId as WebhookId)
+          await deleteWebhook(webhookId)
 
           return noContentResponse()
         } catch (error) {

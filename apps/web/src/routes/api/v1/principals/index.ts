@@ -10,11 +10,9 @@ export const Route = createFileRoute('/api/v1/principals/')({
        * List all team members (admin and member roles)
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Import service function
           const { listTeamMembers } =
             await import('@/lib/server/domains/principals/principal.service')

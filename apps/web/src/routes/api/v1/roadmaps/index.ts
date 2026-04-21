@@ -28,11 +28,9 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
        * List all roadmaps
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Import service function
           const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
@@ -59,11 +57,9 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
        * Create a new roadmap
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse and validate body
           const body = await request.json()
           const parsed = createRoadmapSchema.safeParse(body)

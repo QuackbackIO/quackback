@@ -8,7 +8,7 @@ import {
   notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import {
   getArticleById,
@@ -17,20 +17,23 @@ import {
   unpublishArticle,
   deleteArticle,
 } from '@/lib/server/domains/help-center/help-center.service'
-import type { HelpCenterArticleId } from '@quackback/ids'
+import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
   categoryId: z.string().optional(),
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   slug: z.string().max(200).optional(),
+  description: z.string().max(300).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  authorId: z.string().optional(),
 })
 
 function formatArticle(article: {
   id: string
   slug: string
   title: string
+  description: string | null
   content: string
   publishedAt: Date | null
   viewCount: number
@@ -45,6 +48,7 @@ function formatArticle(article: {
     id: article.id,
     slug: article.slug,
     title: article.title,
+    description: article.description,
     content: article.content,
     publishedAt: article.publishedAt?.toISOString() || null,
     viewCount: article.viewCount,
@@ -62,15 +66,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
     handlers: {
       GET: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const article = await getArticleById(articleId as HelpCenterArticleId)
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+
+          const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)
@@ -79,13 +81,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
       PATCH: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'team' })
+
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
 
           const body = await request.json()
           const parsed = updateArticleBody.safeParse(body)
@@ -96,24 +96,37 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
             })
           }
 
-          // Handle publish/unpublish via publishedAt
+          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+            parsed.data.authorId,
+            'principal',
+            'author ID'
+          )
+
+          const { publishedAt: _, authorId: __, ...updateData } = parsed.data
+          // authorPrincipalId is included because reassigning the author requires
+          // the same updateArticle call even when no other fields change.
+          const hasUpdates =
+            Object.values(updateData).some((v) => v !== undefined) ||
+            authorPrincipalId !== undefined
+
+          // Validate + apply field/author updates first so a bad authorId
+          // never leaves the article in a partially-published state.
+          let currentArticle = null
+          if (hasUpdates) {
+            currentArticle = await updateArticle(articleId, updateData, authorPrincipalId)
+          }
+
+          // Only change publish state after all validation passes
           if (parsed.data.publishedAt !== undefined) {
             if (parsed.data.publishedAt === null) {
-              await unpublishArticle(articleId as HelpCenterArticleId)
+              currentArticle = await unpublishArticle(articleId)
             } else {
-              await publishArticle(articleId as HelpCenterArticleId)
+              currentArticle = await publishArticle(articleId)
             }
           }
 
-          const { publishedAt: _, ...updateData } = parsed.data
-          const hasUpdates = Object.values(updateData).some((v) => v !== undefined)
-
-          if (hasUpdates) {
-            const updated = await updateArticle(articleId as HelpCenterArticleId, updateData)
-            return successResponse(formatArticle(updated))
-          }
-
-          const article = await getArticleById(articleId as HelpCenterArticleId)
+          if (currentArticle) return successResponse(formatArticle(currentArticle))
+          const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
         } catch (error) {
           return handleDomainError(error)
@@ -122,15 +135,13 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
 
       DELETE: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          await withApiKeyAuth(request, { role: 'admin' })
 
-          await deleteArticle(articleId as HelpCenterArticleId)
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+
+          await deleteArticle(articleId)
           return noContentResponse()
         } catch (error) {
           return handleDomainError(error)

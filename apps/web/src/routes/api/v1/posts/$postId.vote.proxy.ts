@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId, PrincipalId } from '@quackback/ids'
 
 const bodySchema = z.object({
@@ -23,15 +23,11 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
        * Add a proxy vote on behalf of a user (insert-only, never toggles)
        */
       POST: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId: addedByPrincipalId } = authResult
-
         try {
-          const { postId } = params
+          const auth = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId: addedByPrincipalId } = auth
 
-          const postError = validateTypeId(postId, 'post', 'post ID')
-          if (postError) return postError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
           const body = await request.json().catch(() => null)
           const parsed = bodySchema.safeParse(body)
@@ -41,30 +37,32 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
             })
           }
 
-          const { voterPrincipalId } = parsed.data
-          const voterError = validateTypeId(voterPrincipalId, 'principal', 'voter principal ID')
-          if (voterError) return voterError
+          const voterPrincipalId = parseTypeId<PrincipalId>(
+            parsed.data.voterPrincipalId,
+            'principal',
+            'voter principal ID'
+          )
 
           // Only admins can set createdAt (for imports)
           const createdAt =
-            parsed.data.createdAt && authResult.role === 'admin'
+            parsed.data.createdAt && auth.role === 'admin'
               ? new Date(parsed.data.createdAt)
               : undefined
 
           const { addVoteOnBehalf } = await import('@/lib/server/domains/posts/post.voting')
           const { createActivity } = await import('@/lib/server/domains/activity/activity.service')
           const result = await addVoteOnBehalf(
-            postId as PostId,
-            voterPrincipalId as PrincipalId,
+            postId,
+            voterPrincipalId,
             { type: 'proxy', externalUrl: '' },
             null,
             addedByPrincipalId,
             createdAt
           )
 
-          if (result.voted && !authResult.importMode) {
+          if (result.voted && !auth.importMode) {
             createActivity({
-              postId: postId as PostId,
+              postId,
               principalId: addedByPrincipalId,
               type: 'vote.proxy',
               metadata: { voterPrincipalId },
@@ -85,15 +83,10 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
        * Remove a vote on behalf of a user
        */
       DELETE: async ({ request, params }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId: removedByPrincipalId } = authResult
-
         try {
-          const { postId } = params
+          const { principalId: removedByPrincipalId } = await withApiKeyAuth(request, { role: 'team' })
 
-          const postError = validateTypeId(postId, 'post', 'post ID')
-          if (postError) return postError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
           const body = await request.json().catch(() => null)
           const parsed = bodySchema.safeParse(body)
@@ -103,17 +96,19 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote/proxy')({
             })
           }
 
-          const { voterPrincipalId } = parsed.data
-          const voterError = validateTypeId(voterPrincipalId, 'principal', 'voter principal ID')
-          if (voterError) return voterError
+          const voterPrincipalId = parseTypeId<PrincipalId>(
+            parsed.data.voterPrincipalId,
+            'principal',
+            'voter principal ID'
+          )
 
           const { removeVote } = await import('@/lib/server/domains/posts/post.voting')
           const { createActivity } = await import('@/lib/server/domains/activity/activity.service')
-          const result = await removeVote(postId as PostId, voterPrincipalId as PrincipalId)
+          const result = await removeVote(postId, voterPrincipalId)
 
           if (result.removed) {
             createActivity({
-              postId: postId as PostId,
+              postId,
               principalId: removedByPrincipalId,
               type: 'vote.removed',
               metadata: { voterPrincipalId },

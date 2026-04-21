@@ -9,10 +9,8 @@ export const Route = createFileRoute('/api/v1/apps/boards')({
       OPTIONS: () => preflightResponse(),
 
       GET: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
           const { listPublicBoardsWithStats } =
             await import('@/lib/server/domains/boards/board.public')
 

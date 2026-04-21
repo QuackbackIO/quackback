@@ -13,6 +13,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
+import { DomainException, RateLimitError } from '@/lib/shared/errors'
 import { getDeveloperConfig } from '@/lib/server/domains/settings/settings.service'
 import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
@@ -118,8 +119,22 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
 
   // 2. Try API key
   if (token?.startsWith(API_KEY_PREFIX)) {
-    const authResult = await withApiKeyAuth(request, { role: 'team' })
-    if (authResult instanceof Response) return authResult
+    let authResult
+    try {
+      authResult = await withApiKeyAuth(request, { role: 'team' })
+    } catch (err) {
+      if (!(err instanceof DomainException)) throw err
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (err instanceof RateLimitError) headers['Retry-After'] = String(err.retryAfter)
+      if (err.statusCode === 401) {
+        headers['WWW-Authenticate'] =
+          `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`
+      }
+      return new Response(
+        JSON.stringify({ error: err.message }),
+        { status: err.statusCode, headers }
+      )
+    }
 
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.id, authResult.principalId),
@@ -177,6 +192,9 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   }
 
   const auth = await resolveAuthContext(request)
+  // resolveAuthContext returns a Response by design: it covers both OAuth and
+  // API key auth paths, and the API key path converts failures to Response
+  // objects internally rather than throwing.
   if (auth instanceof Response) return auth
 
   // Portal user access check

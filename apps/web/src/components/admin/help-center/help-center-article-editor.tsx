@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { useQuery } from '@tanstack/react-query'
@@ -56,9 +56,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const navigate = useNavigate()
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
-  const [categoryId, setCategoryId] = useState('')
-  const [isPublished, setIsPublished] = useState(false)
-  const [hasInitialized, setHasInitialized] = useState(false)
+  const hasInitialized = useRef(false)
 
   const updateArticleMutation = useUpdateArticle()
   const publishArticleMutation = usePublishArticle()
@@ -76,58 +74,72 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
       title: '',
       description: '',
       content: '',
+      categoryId: '',
     },
   })
 
+  const { isDirty } = form.formState
+  const categoryId = form.watch('categoryId')
+
   useEffect(() => {
-    if (article && !hasInitialized) {
-      form.setValue('title', article.title)
-      form.setValue('description', article.description ?? '')
-      form.setValue('content', article.content)
+    if (article && !hasInitialized.current) {
+      hasInitialized.current = true
+      form.reset({
+        id: articleId as string,
+        title: article.title,
+        description: article.description ?? '',
+        content: article.content,
+        categoryId: article.categoryId,
+      })
       setContentJson(getInitialContentJson(article))
-      setCategoryId(article.categoryId)
-      setIsPublished(!!article.publishedAt)
-      setHasInitialized(true)
     }
-  }, [article, form, hasInitialized])
+  }, [article, articleId, form])
 
   const handleContentChange = useCallback(
     (json: JSONContent, _html: string, markdown: string) => {
       setContentJson(json)
-      form.setValue('content', markdown, { shouldValidate: true })
+      form.setValue('content', markdown, { shouldValidate: true, shouldDirty: true })
     },
     [form]
   )
 
   const handleCategoryChange = useCallback(
     (id: string) => {
-      setCategoryId(id)
-      form.setValue('categoryId', id)
+      form.setValue('categoryId', id, { shouldDirty: true })
     },
     [form]
   )
 
   const handlePublish = useCallback(() => {
-    publishArticleMutation.mutate(articleId, {
-      onSuccess: () => setIsPublished(true),
-    })
+    publishArticleMutation.mutate(articleId)
   }, [articleId, publishArticleMutation])
 
   const handleUnpublish = useCallback(() => {
-    unpublishArticleMutation.mutate(articleId, {
-      onSuccess: () => setIsPublished(false),
-    })
+    unpublishArticleMutation.mutate(articleId)
   }, [articleId, unpublishArticleMutation])
 
   const handleSubmit = form.handleSubmit((data) => {
-    updateArticleMutation.mutate({
-      id: articleId,
-      title: data.title,
-      description: data.description?.trim() || undefined,
-      content: data.content,
-      contentJson: contentJson as TiptapContent | null,
-      categoryId,
-    })
+    updateArticleMutation.mutate(
+      {
+        id: articleId,
+        title: data.title,
+        description: data.description?.trim() || undefined,
+        content: data.content,
+        contentJson: contentJson as TiptapContent | null,
+        categoryId: data.categoryId,
+      },
+      {
+        onSuccess: () => {
+          form.reset({
+            id: articleId as string,
+            title: data.title,
+            description: data.description?.trim() ?? '',
+            content: data.content,
+            categoryId: data.categoryId,
+          })
+        },
+      }
+    )
   })
 
   const handleBack = useCallback(() => {
@@ -143,7 +155,9 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
 
   const handleKeyDown = useKeyboardSubmit(handleSubmit)
 
-  if (isLoading || !article) {
+  const isPublished = !!article?.publishedAt
+
+  if (isLoading || !article || !hasInitialized.current) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -160,7 +174,6 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   return (
     <Form {...form}>
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex flex-col h-full">
-        {/* Slim top bar: breadcrumbs + category + publish state + save */}
         <div className="border-b border-border/50 shrink-0">
           <div className="mx-auto w-full max-w-4xl px-4 py-2.5 flex items-center gap-2">
             <Button
@@ -195,7 +208,6 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
             </div>
 
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
-              {/* Category pill */}
               <Select value={categoryId || undefined} onValueChange={handleCategoryChange}>
                 <SelectTrigger
                   size="sm"
@@ -222,7 +234,6 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 </SelectContent>
               </Select>
 
-              {/* Publish primary action — changes to "View article" once published */}
               {isPublished ? (
                 <div className="flex items-center gap-1">
                   {publicArticleUrl && (
@@ -277,11 +288,10 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 </Button>
               )}
 
-              {/* Save primary action */}
               <Button
                 type="submit"
                 size="sm"
-                disabled={updateArticleMutation.isPending}
+                disabled={updateArticleMutation.isPending || !isDirty}
                 className="h-8 rounded-full text-xs px-3"
               >
                 {updateArticleMutation.isPending ? 'Saving…' : 'Save changes'}
@@ -290,14 +300,12 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
           </div>
         </div>
 
-        {/* Editor body — constrained to reader width */}
         <ScrollArea className="flex-1 min-h-0">
           <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-12">
             {updateArticleMutation.isError && (
               <FormError message={updateArticleMutation.error.message} className="mb-4" />
             )}
 
-            {/* Big title */}
             <FormField
               control={form.control}
               name="title"
@@ -317,7 +325,6 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
               )}
             />
 
-            {/* Description / subtitle */}
             <FormField
               control={form.control}
               name="description"
@@ -337,7 +344,6 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
               )}
             />
 
-            {/* Body */}
             <div className="mt-8">
               <FormField
                 control={form.control}

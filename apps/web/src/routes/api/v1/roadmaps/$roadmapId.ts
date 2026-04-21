@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { RoadmapId } from '@quackback/ids'
 
 // Input validation schema
@@ -25,21 +25,14 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        * Get a single roadmap by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { roadmapId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(roadmapId, 'roadmap', 'roadmap ID')
-          if (validationError) return validationError
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
-          // Import service function
           const { getRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
-          const roadmap = await getRoadmap(roadmapId as RoadmapId)
+          const roadmap = await getRoadmap(roadmapId)
 
           return successResponse({
             id: roadmap.id,
@@ -60,18 +53,11 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        * Update a roadmap
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { roadmapId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(roadmapId, 'roadmap', 'roadmap ID')
-          if (validationError) return validationError
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateRoadmapSchema.safeParse(body)
 
@@ -81,10 +67,9 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
             })
           }
 
-          // Import service function
           const { updateRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
-          const roadmap = await updateRoadmap(roadmapId as RoadmapId, {
+          const roadmap = await updateRoadmap(roadmapId, {
             name: parsed.data.name,
             description: parsed.data.description,
             isPublic: parsed.data.isPublic,
@@ -109,21 +94,14 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId')({
        * Delete a roadmap
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { roadmapId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(roadmapId, 'roadmap', 'roadmap ID')
-          if (validationError) return validationError
+          const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
-          // Import service function
           const { deleteRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
 
-          await deleteRoadmap(roadmapId as RoadmapId)
+          await deleteRoadmap(roadmapId)
 
           return noContentResponse()
         } catch (error) {

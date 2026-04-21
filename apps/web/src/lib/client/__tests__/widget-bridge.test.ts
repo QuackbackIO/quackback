@@ -76,7 +76,7 @@ describe('widget-bridge', () => {
     const dispatch = vi.fn()
     window.__quackbackNative = { dispatch }
     const { sendToHost } = await import('../widget-bridge')
-    sendToHost({ type: 123 as any })
+    sendToHost({ type: 123 as unknown as string })
     expect(dispatch).toHaveBeenCalledWith('unknown', expect.anything())
   })
 

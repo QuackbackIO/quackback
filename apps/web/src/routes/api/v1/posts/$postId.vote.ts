@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PostId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
@@ -12,22 +12,14 @@ export const Route = createFileRoute('/api/v1/posts/$postId/vote')({
        * Toggle vote on a post (vote if not voted, unvote if already voted)
        */
       POST: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
-          const { postId } = params
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(postId, 'post', 'post ID')
-          if (validationError) return validationError
+          const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
-          // Import service function
           const { voteOnPost } = await import('@/lib/server/domains/posts/post.voting')
 
-          const result = await voteOnPost(postId as PostId, principalId)
+          const result = await voteOnPost(postId, principalId)
 
           return successResponse({
             voted: result.voted,

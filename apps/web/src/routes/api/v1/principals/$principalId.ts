@@ -5,10 +5,10 @@ import {
   successResponse,
   noContentResponse,
   badRequestResponse,
-  notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { NotFoundError } from '@/lib/shared/errors'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { PrincipalId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
 
@@ -17,22 +17,22 @@ const updateMemberSchema = z.object({
   role: z.enum(['admin', 'member']),
 })
 
-/** Fetch a team member with user details, or return a notFoundResponse. */
+/** Fetch a team member with user details, or throw NotFoundError. */
 async function fetchTeamMemberWithUser(principalId: PrincipalId) {
   const { getMemberById } = await import('@/lib/server/domains/principals/principal.service')
   const { db, eq, user } = await import('@/lib/server/db')
 
   const member = await getMemberById(principalId)
-  if (!member) return notFoundResponse('Member not found')
+  if (!member) throw new NotFoundError('MEMBER_NOT_FOUND', 'Member not found')
   if (!isTeamMember(member.role)) {
-    return notFoundResponse('Team member not found')
+    throw new NotFoundError('MEMBER_NOT_FOUND', 'Team member not found')
   }
-  if (!member.userId) return notFoundResponse('User not found')
+  if (!member.userId) throw new NotFoundError('USER_NOT_FOUND', 'User not found')
 
   const userDetails = await db.query.user.findFirst({
     where: eq(user.id, member.userId),
   })
-  if (!userDetails) return notFoundResponse('User not found')
+  if (!userDetails) throw new NotFoundError('USER_NOT_FOUND', 'User not found')
 
   return {
     id: member.id,
@@ -53,19 +53,12 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        * Get a single team member by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { principalId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          const result = await fetchTeamMemberWithUser(principalId as PrincipalId)
-          if (result instanceof Response) return result
+          const result = await fetchTeamMemberWithUser(principalId)
 
           return successResponse(result)
         } catch (error) {
@@ -78,19 +71,11 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        * Update a team member's role
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate (admin only)
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-        const { principalId: actingPrincipalId } = authResult
-
         try {
-          const { principalId } = params
+          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateMemberSchema.safeParse(body)
 
@@ -103,10 +88,9 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
           const { updateMemberRole } =
             await import('@/lib/server/domains/principals/principal.service')
 
-          await updateMemberRole(principalId as PrincipalId, parsed.data.role, actingPrincipalId)
+          await updateMemberRole(principalId, parsed.data.role, actingPrincipalId)
 
-          const result = await fetchTeamMemberWithUser(principalId as PrincipalId)
-          if (result instanceof Response) return result
+          const result = await fetchTeamMemberWithUser(principalId)
 
           return successResponse(result)
         } catch (error) {
@@ -119,23 +103,15 @@ export const Route = createFileRoute('/api/v1/principals/$principalId')({
        * Remove a team member (converts them to a portal user)
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate (admin only)
-        const authResult = await withApiKeyAuth(request, { role: 'admin' })
-        if (authResult instanceof Response) return authResult
-        const { principalId: actingPrincipalId } = authResult
-
         try {
-          const { principalId } = params
+          const { principalId: actingPrincipalId } = await withApiKeyAuth(request, { role: 'admin' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(principalId, 'principal', 'principal ID')
-          if (validationError) return validationError
+          const principalId = parseTypeId<PrincipalId>(params.principalId, 'principal', 'principal ID')
 
-          // Import service function
           const { removeTeamMember } =
             await import('@/lib/server/domains/principals/principal.service')
 
-          await removeTeamMember(principalId as PrincipalId, actingPrincipalId)
+          await removeTeamMember(principalId, actingPrincipalId)
 
           return noContentResponse()
         } catch (error) {

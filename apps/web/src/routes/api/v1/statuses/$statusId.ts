@@ -7,7 +7,7 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { StatusId } from '@quackback/ids'
 
 // Input validation schema - matches UpdateStatusInput from service
@@ -29,21 +29,14 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        * Get a single status by ID
        */
       GET: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { statusId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(statusId, 'status', 'status ID')
-          if (validationError) return validationError
+          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
 
-          // Import service function
           const { getStatusById } = await import('@/lib/server/domains/statuses/status.service')
 
-          const status = await getStatusById(statusId as StatusId)
+          const status = await getStatusById(statusId)
 
           return successResponse({
             id: status.id,
@@ -66,18 +59,11 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        * Update a status
        */
       PATCH: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { statusId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(statusId, 'status', 'status ID')
-          if (validationError) return validationError
+          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
 
-          // Parse and validate body
           const body = await request.json()
           const parsed = updateStatusSchema.safeParse(body)
 
@@ -87,10 +73,9 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
             })
           }
 
-          // Import service function
           const { updateStatus } = await import('@/lib/server/domains/statuses/status.service')
 
-          const status = await updateStatus(statusId as StatusId, {
+          const status = await updateStatus(statusId, {
             name: parsed.data.name,
             color: parsed.data.color,
             showOnRoadmap: parsed.data.showOnRoadmap,
@@ -118,21 +103,14 @@ export const Route = createFileRoute('/api/v1/statuses/$statusId')({
        * Delete a status
        */
       DELETE: async ({ request, params }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
-          const { statusId } = params
+          await withApiKeyAuth(request, { role: 'team' })
 
-          // Validate TypeID format
-          const validationError = validateTypeId(statusId, 'status', 'status ID')
-          if (validationError) return validationError
+          const statusId = parseTypeId<StatusId>(params.statusId, 'status', 'status ID')
 
-          // Import service function
           const { deleteStatus } = await import('@/lib/server/domains/statuses/status.service')
 
-          await deleteStatus(statusId as StatusId)
+          await deleteStatus(statusId)
 
           return noContentResponse()
         } catch (error) {

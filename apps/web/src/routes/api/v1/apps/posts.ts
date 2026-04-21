@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId, PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 
@@ -33,11 +33,9 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
       OPTIONS: () => preflightResponse(),
 
       POST: async ({ request }) => {
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-        const { principalId } = authResult
-
         try {
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+
           const body = await request.json()
           const parsed = createPostSchema.safeParse(body)
 
@@ -47,8 +45,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
             })
           }
 
-          const validationError = validateTypeId(parsed.data.boardId, 'board', 'board ID')
-          if (validationError) return validationError
+          const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
 
           // Resolve author: use requester if provided, else the API key principal
           let authorPrincipalId = principalId
@@ -72,7 +69,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
 
           const result = await createPost(
             {
-              boardId: parsed.data.boardId as BoardId,
+              boardId,
               title: parsed.data.title,
               content: parsed.data.content,
             },

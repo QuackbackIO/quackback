@@ -7,7 +7,7 @@ import {
   notFoundResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-import { validateTypeId } from '@/lib/server/domains/api/validation'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { recordArticleFeedback } from '@/lib/server/domains/help-center/help-center.service'
 import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
@@ -21,13 +21,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
     handlers: {
       POST: async ({ request, params }) => {
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
 
         try {
-          const { articleId } = params
-          const validationError = validateTypeId(articleId, 'article', 'article ID')
-          if (validationError) return validationError
+          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+
+          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
 
           const body = await request.json()
           const parsed = feedbackBody.safeParse(body)
@@ -38,11 +36,7 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId/fe
             })
           }
 
-          await recordArticleFeedback(
-            articleId as HelpCenterArticleId,
-            parsed.data.helpful,
-            authResult.principalId as PrincipalId
-          )
+          await recordArticleFeedback(articleId, parsed.data.helpful, principalId as PrincipalId)
 
           return successResponse({ success: true })
         } catch (error) {

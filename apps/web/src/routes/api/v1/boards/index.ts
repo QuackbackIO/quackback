@@ -29,11 +29,9 @@ export const Route = createFileRoute('/api/v1/boards/')({
        * List all boards
        */
       GET: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Import service function
           const { listBoardsWithDetails } =
             await import('@/lib/server/domains/boards/board.service')
@@ -62,11 +60,9 @@ export const Route = createFileRoute('/api/v1/boards/')({
        * Create a new board
        */
       POST: async ({ request }) => {
-        // Authenticate
-        const authResult = await withApiKeyAuth(request, { role: 'team' })
-        if (authResult instanceof Response) return authResult
-
         try {
+          await withApiKeyAuth(request, { role: 'team' })
+
           // Parse and validate body
           const body = await request.json()
           const parsed = createBoardSchema.safeParse(body)
