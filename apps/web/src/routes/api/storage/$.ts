@@ -5,9 +5,61 @@ import { createFileRoute } from '@tanstack/react-router'
 const proxyCache = new Map<string, { data: ArrayBuffer; contentType: string; cachedAt: number }>()
 const PROXY_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
+const KEY_PREFIX = '/api/storage/'
+
+function extractKey(url: URL): string | null {
+  const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  return key && !key.includes('..') ? key : null
+}
+
 export const Route = createFileRoute('/api/storage/$')({
   server: {
     handlers: {
+      /**
+       * PUT /api/storage/*
+       * Proxy upload endpoint used when S3_PROXY=true.
+       *
+       * Browsers send the file directly here instead of to a presigned S3 URL.
+       * The server streams the body to S3/MinIO, so the browser never needs to
+       * reach the storage endpoint directly. The request must carry a valid
+       * HMAC-signed token issued by generatePresignedUploadUrl.
+       */
+      PUT: async ({ request }) => {
+        const { isS3Configured, getS3Config, uploadObject, verifyProxyUploadToken, MAX_FILE_SIZE } =
+          await import('@/lib/server/storage/s3')
+        const { config } = await import('@/lib/server/config')
+
+        if (!isS3Configured() || !config.s3Proxy) {
+          return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
+        }
+
+        const contentLength = Number(request.headers.get('content-length') ?? 0)
+        if (contentLength > MAX_FILE_SIZE) {
+          return Response.json({ error: 'File too large' }, { status: 413 })
+        }
+
+        const url = new URL(request.url)
+        const key = extractKey(url)
+        if (!key) return Response.json({ error: 'Invalid storage key' }, { status: 400 })
+
+        const ct = url.searchParams.get('ct') ?? ''
+        const exp = url.searchParams.get('exp')
+        const sig = url.searchParams.get('sig')
+        const { secretAccessKey } = getS3Config()
+
+        if (!verifyProxyUploadToken(secretAccessKey, key, ct, exp, sig)) {
+          return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
+        }
+
+        const body = await request.arrayBuffer()
+        if (body.byteLength > MAX_FILE_SIZE) {
+          return Response.json({ error: 'File too large' }, { status: 413 })
+        }
+
+        await uploadObject(key, Buffer.from(body), ct)
+        return new Response(null, { status: 200 })
+      },
+
       /**
        * GET /api/storage/*
        * Serve files from S3 storage.
@@ -28,10 +80,9 @@ export const Route = createFileRoute('/api/storage/$')({
         }
 
         const url = new URL(request.url)
-        const prefix = '/api/storage/'
-        const key = decodeURIComponent(url.pathname.slice(prefix.length))
+        const key = extractKey(url)
 
-        if (!key || key.includes('..')) {
+        if (!key) {
           return Response.json({ error: 'Invalid storage key' }, { status: 400 })
         }
 

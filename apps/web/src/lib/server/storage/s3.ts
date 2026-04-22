@@ -17,6 +17,7 @@
  * typed with no `any`.
  */
 
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { config } from '@/lib/server/config'
 
 // ============================================================================
@@ -203,6 +204,11 @@ export interface PresignedUploadUrl {
 /**
  * Generate a presigned URL for uploading a file.
  *
+ * When S3_PROXY is enabled, returns a server-side proxy upload URL instead of a
+ * direct S3 presigned URL. This is needed for self-hosted deployments where the
+ * browser cannot reach the S3/MinIO endpoint (e.g. Docker Compose with internal
+ * service hostnames). The proxy URL is HMAC-signed so it cannot be forged.
+ *
  * @param key - Storage key (path within bucket), e.g., "changelog-images/abc123/image.jpg"
  * @param contentType - MIME type of the file, e.g., "image/jpeg"
  * @param expiresIn - URL expiration time in seconds (default: 900 = 15 minutes)
@@ -213,6 +219,13 @@ export async function generatePresignedUploadUrl(
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
   const s3Config = getS3Config()
+  const publicUrl = buildPublicUrl(s3Config, key)
+
+  if (config.s3Proxy) {
+    const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
+    return { uploadUrl, publicUrl, key }
+  }
+
   const client = await getS3Client()
   const { PutObjectCommand } = await getS3Module()
   const { getSignedUrl } = await getPresignerModule()
@@ -224,9 +237,52 @@ export async function generatePresignedUploadUrl(
   })
 
   const uploadUrl = await getSignedUrl(client, command, { expiresIn })
-  const publicUrl = buildPublicUrl(s3Config, key)
-
   return { uploadUrl, publicUrl, key }
+}
+
+// ============================================================================
+// Proxy Upload Token (used when S3_PROXY=true)
+// ============================================================================
+
+function proxyUploadSig(secret: string, key: string, contentType: string, exp: number): string {
+  return createHmac('sha256', secret)
+    .update(`${key}|${contentType}|${exp}`)
+    .digest('hex')
+    .slice(0, 32)
+}
+
+function buildProxyUploadUrl(
+  secret: string,
+  key: string,
+  contentType: string,
+  expiresIn: number
+): string {
+  const exp = Date.now() + expiresIn * 1000
+  const sig = proxyUploadSig(secret, key, contentType, exp)
+  const base = config.baseUrl.replace(/\/$/, '')
+  return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
+}
+
+/**
+ * Verify a proxy upload token from the PUT /api/storage/* handler.
+ * Returns true only if the signature is valid and the token has not expired.
+ */
+export function verifyProxyUploadToken(
+  secret: string,
+  key: string,
+  contentType: string,
+  exp: string | null,
+  sig: string | null
+): boolean {
+  if (!exp || !sig) return false
+  const expNum = Number(exp)
+  if (!Number.isFinite(expNum) || Date.now() > expNum) return false
+  const expected = proxyUploadSig(secret, key, contentType, expNum)
+  try {
+    return timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  } catch {
+    return false
+  }
 }
 
 /**
