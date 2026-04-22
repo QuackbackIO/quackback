@@ -19,6 +19,7 @@ import { type CommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { dispatchCommentUpdated, buildEventActor } from '@/lib/server/events/dispatch'
 import type { CommentPermissionCheckResult } from './comment.types'
 
 // ============================================================================
@@ -173,12 +174,16 @@ export async function userEditComment(
     throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
-  // Get the existing comment
+  // Get the existing comment with post+board for event dispatch
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
+    with: { post: { with: { board: true } } },
   })
   if (!existingComment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
+  if (!existingComment.post || !existingComment.post.board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post for comment ${commentId} not found`)
   }
 
   // Validate input
@@ -189,7 +194,7 @@ export async function userEditComment(
     throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
   }
 
-  return await db.transaction(async (tx) => {
+  const updatedComment = await db.transaction(async (tx) => {
     if (actor.principalId) {
       await tx.insert(commentEditHistory).values({
         commentId,
@@ -198,18 +203,32 @@ export async function userEditComment(
       })
     }
 
-    const [updatedComment] = await tx
+    const [result] = await tx
       .update(comments)
       .set({ content: content.trim(), updatedAt: new Date() })
       .where(eq(comments.id, commentId))
       .returning()
 
-    if (!updatedComment) {
+    if (!result) {
       throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
     }
 
-    return updatedComment
+    return result
   })
+
+  const { post } = existingComment
+  const { board } = post
+  dispatchCommentUpdated(
+    buildEventActor({ principalId: actor.principalId }),
+    {
+      id: updatedComment.id,
+      content: updatedComment.content,
+      isPrivate: updatedComment.isPrivate ?? undefined,
+    },
+    { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
+  )
+
+  return updatedComment
 }
 
 /**
