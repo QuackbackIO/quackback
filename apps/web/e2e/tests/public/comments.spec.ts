@@ -118,6 +118,13 @@ test.describe('Unauthenticated user — comments section', () => {
   })
 
   // -------------------------------------------------------------------------
+  test('Edit button is NOT shown to unauthenticated users', async ({ page }) => {
+    const commentItems = page.locator('[id^="comment-"]')
+    if ((await commentItems.count()) === 0) return
+    await expect(page.getByRole('button', { name: /^edit$/i })).toHaveCount(0, { timeout: 5000 })
+  })
+
+  // -------------------------------------------------------------------------
   test('existing comments are visible to unauthenticated users', async ({ page }) => {
     // The comment list is always rendered regardless of auth state.
     // If there are no seed comments we get the empty-state message — either is valid.
@@ -594,6 +601,177 @@ test.describe('Edge cases — comment content', () => {
         .first()
         .locator('textarea[placeholder*="Write a comment" i]')
       await expect(replyTextarea).toBeVisible({ timeout: 5000 })
+    } finally {
+      await page.close()
+    }
+  })
+})
+
+// ===========================================================================
+// COMMENT EDITING (authenticated)
+// ===========================================================================
+test.describe('Comment editing', () => {
+  test.setTimeout(90000)
+
+  let sharedContext: BrowserContext
+
+  test.beforeAll(async ({ browser }) => {
+    sharedContext = await browser.newContext()
+    const page = await sharedContext.newPage()
+    await authenticateViaOTP(page)
+    await page.close()
+  })
+
+  test.afterAll(async () => {
+    if (sharedContext) await sharedContext.close()
+  })
+
+  /** Submit a new comment and return a stable element ID + the unique text used. */
+  async function submitAndLocate(page: Page): Promise<{ elementId: string; uniqueText: string }> {
+    await goToFirstPost(page)
+    const uniqueText = `Edit test ${Date.now()}`
+    const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
+    await textarea.fill(uniqueText)
+    await page.getByRole('button', { name: /^comment$/i }).first().click()
+    await expect(textarea).toHaveValue('', { timeout: 10000 })
+    await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
+    // Wait for the optimistic placeholder ID to be replaced with a real server ID
+    await page.waitForFunction(() => !document.querySelector('[id*="optimistic"]'))
+    const commentItem = page.locator('[id^="comment-"]').filter({ hasText: uniqueText }).first()
+    const elementId = (await commentItem.getAttribute('id'))!
+    return { elementId, uniqueText }
+  }
+
+  // -------------------------------------------------------------------------
+  test('Edit button is visible on own comments', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { uniqueText } = await submitAndLocate(page)
+      const commentItem = page.locator('[id^="comment-"]').filter({ hasText: uniqueText }).first()
+      await expect(commentItem.getByRole('button', { name: /^edit$/i })).toBeVisible({
+        timeout: 5000,
+      })
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('clicking Edit opens an inline form with the current content', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId, uniqueText } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+
+      const editTextarea = comment.getByTestId('edit-comment-textarea')
+      await expect(editTextarea).toBeVisible({ timeout: 5000 })
+      await expect(editTextarea).toHaveValue(uniqueText)
+      // Edit button is replaced by Save / Cancel
+      await expect(comment.getByRole('button', { name: /^edit$/i })).not.toBeVisible()
+      await expect(comment.getByRole('button', { name: /^save$/i })).toBeVisible()
+      // The reply form also renders a hidden Cancel, so use first() to target the edit Cancel
+      await expect(comment.getByRole('button', { name: /^cancel$/i }).first()).toBeVisible()
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('Cancel closes the edit form and restores the original content', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId, uniqueText } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+      await comment.getByTestId('edit-comment-textarea').fill('should not be saved')
+      await comment.getByRole('button', { name: /^cancel$/i }).first().click()
+
+      await expect(comment.getByTestId('edit-comment-textarea')).not.toBeVisible({ timeout: 5000 })
+      await expect(comment.getByText(uniqueText)).toBeVisible()
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('Escape closes the edit form without saving', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId, uniqueText } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+      const editTextarea = comment.getByTestId('edit-comment-textarea')
+      await expect(editTextarea).toBeVisible({ timeout: 5000 })
+
+      await editTextarea.press('Escape')
+
+      await expect(editTextarea).not.toBeVisible({ timeout: 5000 })
+      await expect(comment.getByText(uniqueText)).toBeVisible()
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('Save updates the comment and shows an (edited) marker', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId, uniqueText } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+      const editedText = `Edited: ${uniqueText}`
+      await comment.getByTestId('edit-comment-textarea').fill(editedText)
+      await comment.getByRole('button', { name: /^save$/i }).click()
+
+      await expect(comment.getByTestId('edit-comment-textarea')).not.toBeVisible({
+        timeout: 10000,
+      })
+      await expect(comment.getByText(editedText)).toBeVisible({ timeout: 10000 })
+      await expect(comment.getByText('(edited)')).toBeVisible({ timeout: 10000 })
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('Cmd+Enter saves the edit', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId, uniqueText } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+      const editedText = `Cmd-Enter edit: ${uniqueText}`
+      const editTextarea = comment.getByTestId('edit-comment-textarea')
+      await editTextarea.fill(editedText)
+      await editTextarea.press('Meta+Enter')
+
+      await expect(editTextarea).not.toBeVisible({ timeout: 10000 })
+      await expect(comment.getByText(editedText)).toBeVisible({ timeout: 10000 })
+      await expect(comment.getByText('(edited)')).toBeVisible({ timeout: 10000 })
+    } finally {
+      await page.close()
+    }
+  })
+
+  // -------------------------------------------------------------------------
+  test('Save button is disabled when the edit content is empty', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      const { elementId } = await submitAndLocate(page)
+      const comment = page.locator(`[id="${elementId}"]`)
+
+      await comment.getByRole('button', { name: /^edit$/i }).click()
+      await comment.getByTestId('edit-comment-textarea').fill('')
+
+      await expect(comment.getByRole('button', { name: /^save$/i })).toBeDisabled({
+        timeout: 5000,
+      })
     } finally {
       await page.close()
     }

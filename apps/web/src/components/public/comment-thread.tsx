@@ -566,6 +566,7 @@ function CommentItem({
             <div className="mt-1.5 ms-10">
               <textarea
                 ref={editTextareaRef}
+                data-testid="edit-comment-textarea"
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={(e) => {
