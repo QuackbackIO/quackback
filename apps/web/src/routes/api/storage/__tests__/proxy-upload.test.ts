@@ -81,6 +81,14 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     expect(res.status).toBe(413)
   })
 
+  it('returns 400 when content-type is missing', async () => {
+    const url = new URL(`http://localhost/api/storage/${KEY}`)
+    url.searchParams.set('exp', String(Date.now() + 60_000))
+    url.searchParams.set('sig', 'mock-sig')
+    const res = await handleProxyUpload({ request: makeRequest({ urlOverride: url.toString() }) })
+    expect(res.status).toBe(400)
+  })
+
   it('returns 400 for a path-traversal key', async () => {
     const url = `http://localhost/api/storage/..%2F..%2Fetc%2Fpasswd`
     const res = await handleProxyUpload({ request: makeRequest({ urlOverride: url }) })

@@ -30,7 +30,9 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   const key = extractKey(url)
   if (!key) return Response.json({ error: 'Invalid storage key' }, { status: 400 })
 
-  const ct = url.searchParams.get('ct') ?? ''
+  const ct = url.searchParams.get('ct')
+  if (!ct) return Response.json({ error: 'Missing content-type' }, { status: 400 })
+
   const exp = url.searchParams.get('exp')
   const sig = url.searchParams.get('sig')
   const { secretAccessKey } = getS3Config()
@@ -45,6 +47,7 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   }
 
   await uploadObject(key, Buffer.from(body), ct)
+  proxyCache.delete(key)
   return new Response(null, { status: 200 })
 }
 
@@ -52,13 +55,11 @@ export const Route = createFileRoute('/api/storage/$')({
   server: {
     handlers: {
       /**
-       * PUT /api/storage/*
-       * Proxy upload endpoint used when S3_PROXY=true.
+       * PUT /api/storage/*  (S3_PROXY=true only)
        *
-       * Browsers send the file directly here instead of to a presigned S3 URL.
-       * The server streams the body to S3/MinIO, so the browser never needs to
-       * reach the storage endpoint directly. The request must carry a valid
-       * HMAC-signed token issued by generatePresignedUploadUrl.
+       * Server streams the body to S3/MinIO so the browser never needs direct
+       * access to the storage endpoint. Requires a valid HMAC-signed token
+       * issued by generatePresignedUploadUrl.
        */
       PUT: handleProxyUpload,
 
