@@ -104,8 +104,10 @@ test.describe('Admin Status Management', () => {
   })
 
   test('shows default status indicator', async ({ page }) => {
-    // Default status should be indicated with a lock icon or "Default" text
-    const defaultIndicator = page.locator('svg.lucide-lock').or(page.getByText(/default/i))
+    // Default status is indicated by a LockClosedIcon (Heroicons, not Lucide).
+    // The icon renders with className "h-3 w-3 text-muted-foreground" which is unique
+    // to the lock icon within the status list on this page.
+    const defaultIndicator = page.locator('svg.h-3.w-3.text-muted-foreground').or(page.getByText(/default/i))
 
     await expect(defaultIndicator.first()).toBeVisible({ timeout: 10000 })
   })

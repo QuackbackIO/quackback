@@ -152,8 +152,13 @@ async function createAuth() {
     // Base URL for auth callbacks and redirects
     baseURL,
 
-    // Trusted origins for CORS/CSRF protection
-    trustedOrigins: [baseURL],
+    // Trusted origins for CORS/CSRF protection.
+    // TRUSTED_ORIGINS (comma-separated) adds extra origins — useful for dev/test
+    // environments where BASE_URL differs from the browser origin (e.g. ngrok + localhost).
+    trustedOrigins: [
+      baseURL,
+      ...(process.env.TRUSTED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+    ],
 
     // Password auth — default sign-in method for self-hosted deployments
     emailAndPassword: {

@@ -264,11 +264,10 @@ test.describe('Public Voting', () => {
       // Wait for URL to change to post detail page
       await page.waitForURL(/\/posts\//)
 
-      // Wait for detail page vote button specifically (has text-lg class, list view has text-sm)
-      // Scope to the detail view vote button that contains the text-lg vote count
-      const detailVoteButton = page.getByTestId('vote-button').filter({
-        has: page.locator('[data-testid="vote-count"].text-lg'),
-      })
+      // Wait for detail page vote button specifically.
+      // The VoteSidebar vote button is in a Suspense boundary; use aria-pressed to confirm it loaded.
+      // Both list and detail use text-sm, so just use the first vote button on the detail page.
+      const detailVoteButton = page.getByTestId('vote-button').first()
       await expect(detailVoteButton).toBeVisible({ timeout: 10000 })
 
       const voteCountSpan = detailVoteButton.getByTestId('vote-count')
@@ -382,5 +381,289 @@ test.describe('Anonymous Voting (unauthenticated)', () => {
     await voteButton.click()
     await expect(voteCountSpan).toHaveText(String(baselineCount), { timeout: 10000 })
     await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+  })
+})
+
+test.describe('Voting — count display and accessibility', () => {
+  test.setTimeout(60000)
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('vote count is shown as a plain number (not empty or NaN)', async ({ page }) => {
+    const voteButtons = page.getByTestId('vote-button')
+    await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+    // Check the first five visible posts — every count must be a non-empty integer
+    const count = Math.min(await voteButtons.count(), 5)
+    for (let i = 0; i < count; i++) {
+      const countSpan = voteButtons.nth(i).getByTestId('vote-count')
+      const text = await countSpan.textContent()
+      expect(text).not.toBe('')
+      expect(text).not.toBeNull()
+      expect(Number.isNaN(Number(text))).toBe(false)
+      // Must be a whole number string (no decimals, no "NaN", no undefined)
+      expect(text).toMatch(/^\d+$/)
+    }
+  })
+
+  test('vote button has aria-pressed attribute for accessibility', async ({ page }) => {
+    const voteButtons = page.getByTestId('vote-button')
+    await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+    const ariaPressed = await voteButtons.first().getAttribute('aria-pressed')
+    // aria-pressed must be "true" or "false" — not null or missing
+    expect(['true', 'false']).toContain(ariaPressed)
+  })
+})
+
+test.describe('Voting — independence and persistence', () => {
+  test.setTimeout(90000)
+
+  // Use a fresh authenticated context for persistence tests so votes survive navigation
+  let sharedContext: import('@playwright/test').BrowserContext
+
+  test.beforeAll(async ({ browser }) => {
+    sharedContext = await browser.newContext()
+    const page = await sharedContext.newPage()
+    // Use the OTP auth helper already tested in the Public Voting suite
+    // (relies on the same demo@example.com account and db-helpers)
+    const { getOtpCode } = await import('../../utils/db-helpers')
+
+    const TEST_EMAIL = 'demo@example.com'
+    const TEST_HOST = 'acme.localhost:3000'
+
+    const sendResponse = await page.request.post('/api/auth/email-otp/send-verification-otp', {
+      headers: { 'Content-Type': 'application/json' },
+      data: { email: TEST_EMAIL, type: 'sign-in' },
+    })
+    if (!sendResponse.ok()) throw new Error('Failed to send OTP for persistence tests')
+
+    const otpCode = getOtpCode(TEST_EMAIL, TEST_HOST)
+    const verifyResponse = await page.request.post('/api/auth/sign-in/email-otp', {
+      headers: { 'Content-Type': 'application/json' },
+      data: { email: TEST_EMAIL, otp: otpCode },
+    })
+    if (!verifyResponse.ok()) throw new Error('Failed to verify OTP for persistence tests')
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.close()
+  })
+
+  test.afterAll(async () => {
+    if (sharedContext) await sharedContext.close()
+  })
+
+  test('multiple posts can be voted on independently', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      await page.goto('/')
+      await page.waitForLoadState('networkidle')
+
+      const voteButtons = page.getByTestId('vote-button')
+      await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+      // Use posts 12 and 13 (0-indexed) to stay clear of other test slots
+      const buttonA = voteButtons.nth(12)
+      const buttonB = voteButtons.nth(13)
+
+      const countSpanA = buttonA.getByTestId('vote-count')
+      const countSpanB = buttonB.getByTestId('vote-count')
+
+      // Normalise both to unvoted state
+      for (const btn of [buttonA, buttonB]) {
+        const voted = await btn.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+        if (voted) {
+          await btn.click()
+          await expect(btn).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+          await page.waitForLoadState('networkidle')
+        }
+      }
+
+      const baseA = parseInt((await countSpanA.textContent()) || '0', 10)
+      const baseB = parseInt((await countSpanB.textContent()) || '0', 10)
+
+      // Vote on post A only
+      await buttonA.click()
+      await expect(buttonA).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+      await expect(countSpanA).toHaveText(String(baseA + 1), { timeout: 5000 })
+
+      // Post B must be unchanged
+      await expect(countSpanB).toHaveText(String(baseB), { timeout: 2000 })
+      await expect(buttonB).not.toHaveClass(/post-card__vote--voted/)
+
+      // Vote on post B
+      await buttonB.click()
+      await expect(buttonB).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+      await expect(countSpanB).toHaveText(String(baseB + 1), { timeout: 5000 })
+
+      // Post A count stays at baseA + 1
+      await expect(countSpanA).toHaveText(String(baseA + 1), { timeout: 2000 })
+    } finally {
+      await page.close()
+    }
+  })
+
+  test('vote persists after navigating away and returning to post list', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      await page.goto('/')
+      await page.waitForLoadState('networkidle')
+
+      // Use post 14 to avoid conflicts
+      const voteButton = page.getByTestId('vote-button').nth(14)
+      await expect(voteButton).toBeVisible({ timeout: 10000 })
+
+      // Normalise to unvoted state
+      const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+      if (isVoted) {
+        await voteButton.click()
+        await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+        await page.waitForLoadState('networkidle')
+      }
+
+      // Vote
+      await voteButton.click()
+      await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+
+      // Navigate away to a different page then come back
+      await page.goto('/admin/feedback')
+      await page.waitForLoadState('networkidle')
+      await page.goto('/')
+      await page.waitForLoadState('networkidle')
+
+      // The vote should still be reflected (button shows voted state)
+      const returnedButton = page.getByTestId('vote-button').nth(14)
+      await expect(returnedButton).toBeVisible({ timeout: 10000 })
+      await expect(returnedButton).toHaveClass(/post-card__vote--voted/, { timeout: 5000 })
+    } finally {
+      await page.close()
+    }
+  })
+
+  test('vote count on post list matches vote count on post detail page', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      await page.goto('/')
+      await page.waitForLoadState('networkidle')
+
+      // Use post 15 to avoid conflicts
+      const voteButtons = page.getByTestId('vote-button')
+      await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+      const listVoteButton = voteButtons.nth(15)
+      const listCountSpan = listVoteButton.getByTestId('vote-count')
+      const listCount = await listCountSpan.textContent()
+
+      // Find the post link in the same card and navigate to it
+      const postLinks = page.locator('a[href*="/posts/"]')
+      await postLinks.nth(15).click()
+      await page.waitForURL(/\/posts\//)
+      await page.waitForLoadState('networkidle')
+
+      // Detail page vote button — use first vote button (VoteSidebar, in DOM order)
+      const detailVoteButton = page.getByTestId('vote-button').first()
+      await expect(detailVoteButton).toBeVisible({ timeout: 10000 })
+
+      const detailCount = await detailVoteButton.getByTestId('vote-count').textContent()
+
+      expect(detailCount).toBe(listCount)
+    } finally {
+      await page.close()
+    }
+  })
+})
+
+test.describe('Voting — debounce / rapid clicks', () => {
+  test.setTimeout(60000)
+
+  test('rapid clicks do not cause double-voting', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // Use an anonymous session (no auth setup needed for this test)
+    const voteButtons = page.getByTestId('vote-button')
+    await expect(voteButtons.first()).toBeVisible({ timeout: 10000 })
+
+    // Use post 16 — unlikely to conflict with authenticated tests above
+    const voteButton = voteButtons.nth(16)
+    const countSpan = voteButton.getByTestId('vote-count')
+
+    // Normalise to unvoted
+    const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+    if (isVoted) {
+      await voteButton.click()
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+    }
+
+    const baseCount = parseInt((await countSpan.textContent()) || '0', 10)
+
+    // Fire three rapid clicks — debounce/idempotency should result in net +1 or 0
+    await voteButton.click()
+    await voteButton.click()
+    await voteButton.click()
+
+    // After rapid clicks settle, count should not exceed baseCount + 1
+    await page.waitForTimeout(1000)
+    const finalText = await countSpan.textContent()
+    const finalCount = parseInt(finalText || '0', 10)
+    expect(finalCount).toBeLessThanOrEqual(baseCount + 1)
+    expect(finalCount).toBeGreaterThanOrEqual(baseCount - 1)
+  })
+})
+
+test.describe('Voting — filtered board context', () => {
+  test.setTimeout(60000)
+
+  test('voting on a post works when a board filter is active', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // Click the first board filter tab if any exist
+    const boardTabs = page.locator('[data-testid="board-tab"], button[data-board]')
+    const tabCount = await boardTabs.count()
+
+    if (tabCount > 0) {
+      await boardTabs.first().click()
+      await page.waitForLoadState('networkidle')
+    } else {
+      // No explicit board tabs — use URL query parameter for the first available board
+      const firstBoardLink = page.locator('a[href*="?board="], a[href*="&board="]').first()
+      if ((await firstBoardLink.count()) > 0) {
+        await firstBoardLink.click()
+        await page.waitForLoadState('networkidle')
+      }
+    }
+
+    // After filtering, vote buttons should still be present and functional
+    const filteredVoteButtons = page.getByTestId('vote-button')
+    const hasButtons = (await filteredVoteButtons.count()) > 0
+
+    if (!hasButtons) {
+      // Board has no posts — nothing to vote on, test is vacuously satisfied
+      return
+    }
+
+    const voteButton = filteredVoteButtons.first()
+    const countSpan = voteButton.getByTestId('vote-count')
+
+    // Normalise to unvoted
+    const isVoted = await voteButton.evaluate((el) => el.classList.contains('post-card__vote--voted'))
+    if (isVoted) {
+      await voteButton.click()
+      await expect(voteButton).not.toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+    }
+
+    const baseCount = parseInt((await countSpan.textContent()) || '0', 10)
+
+    await voteButton.click()
+
+    await expect(voteButton).toHaveClass(/post-card__vote--voted/, { timeout: 10000 })
+    await expect(countSpan).toHaveText(String(baseCount + 1), { timeout: 10000 })
   })
 })

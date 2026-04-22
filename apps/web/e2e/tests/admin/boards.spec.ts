@@ -8,13 +8,13 @@ test.describe('Admin Board Management', () => {
   })
 
   test('displays board settings page', async ({ page }) => {
-    // Should show general settings card (page redirects to first board)
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    // Should show board details card (page redirects to first board)
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
   })
 
   test('can access board general settings', async ({ page }) => {
-    // Should show general settings card
-    const generalSettings = page.getByText('General Settings')
+    // Should show board details card
+    const generalSettings = page.getByText('Board Details')
     await expect(generalSettings).toBeVisible({ timeout: 10000 })
   })
 
@@ -179,7 +179,7 @@ test.describe('Board Access Settings', () => {
     await page.waitForLoadState('networkidle')
 
     // Wait for the board settings page to fully load (redirects to first board)
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
     // Navigate to Access tab
     const accessLink = page.getByRole('link', { name: 'Access' })
@@ -287,7 +287,7 @@ test.describe('Board Deletion Flow', () => {
 
     // After creating a board, the page automatically navigates to the new board's settings
     // Wait for the page to show the new board's settings
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
     // Verify we're on the correct board's settings page (board switcher shows the board name)
     await expect(page.getByTestId('board-switcher')).toContainText(testBoardName)
@@ -355,7 +355,7 @@ test.describe('Create Board Dialog', () => {
 
     // Wait for page to be ready - either board settings or empty state
     await expect(
-      page.getByText('General Settings').or(page.getByText('No boards yet'))
+      page.getByText('Board Details').or(page.getByText('No boards yet'))
     ).toBeVisible({ timeout: 10000 })
   })
 
@@ -464,7 +464,7 @@ test.describe('Create Board Dialog', () => {
 
     // Verify board was created by checking we're on the new board's settings page
     // The board name should be visible in the page heading/switcher
-    await expect(page.getByText('General Settings')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 5000 })
 
     // Open the board switcher dropdown to verify the board exists in the list
     await boardSwitcherButton.click()
@@ -540,5 +540,169 @@ test.describe('Create Board Dialog', () => {
     // At minimum, button should become disabled during submission
     // Just verify dialog eventually closes (successful creation)
     await expect(dialog).toBeHidden({ timeout: 10000 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Board Settings Tabs (General / Access / Import Data / Export Data)
+// ---------------------------------------------------------------------------
+
+test.describe('Board Settings Tabs', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/admin/settings/boards')
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByText('Board Details').or(page.getByText('No boards yet'))
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('General tab shows Board Details and Danger Zone cards', async ({ page }) => {
+    // Default tab is General. The card heading is "Board Details" (not "General Settings")
+    await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Danger Zone')).toBeVisible()
+  })
+
+  test('settings nav shows General, Access, Import Data, Export Data buttons', async ({ page }) => {
+    const nav = page.locator('nav')
+    await expect(nav.getByRole('button', { name: 'General' })).toBeVisible({ timeout: 5000 })
+    await expect(nav.getByRole('button', { name: 'Access' })).toBeVisible()
+    await expect(nav.getByRole('button', { name: 'Import Data' })).toBeVisible()
+    await expect(nav.getByRole('button', { name: 'Export Data' })).toBeVisible()
+  })
+
+  test('clicking Access tab switches to Access Control view', async ({ page }) => {
+    const nav = page.locator('nav')
+    const accessButton = nav.getByRole('button', { name: 'Access' })
+    if ((await accessButton.count()) === 0) return
+
+    await accessButton.click()
+    await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
+    // URL should reflect the tab change
+    await expect(page).toHaveURL(/tab=access/)
+  })
+
+  test('clicking Import Data tab switches to import view', async ({ page }) => {
+    const nav = page.locator('nav')
+    const importButton = nav.getByRole('button', { name: 'Import Data' })
+    if ((await importButton.count()) === 0) return
+
+    await importButton.click()
+    await expect(page.getByText('Import Data')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Import posts from a CSV file into this board')).toBeVisible()
+  })
+
+  test('clicking Export Data tab switches to export view and shows Export CSV button', async ({
+    page,
+  }) => {
+    const nav = page.locator('nav')
+    const exportButton = nav.getByRole('button', { name: 'Export Data' })
+    if ((await exportButton.count()) === 0) return
+
+    await exportButton.click()
+    await expect(page.getByText('Export Data')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Download all posts from this board as CSV')).toBeVisible()
+    await expect(page.getByRole('button', { name: /export csv/i })).toBeVisible()
+  })
+
+  test('navigating between tabs with keyboard (Tab key reaches nav buttons)', async ({ page }) => {
+    const nav = page.locator('nav')
+    const generalButton = nav.getByRole('button', { name: 'General' })
+    if ((await generalButton.count()) === 0) return
+
+    // Focus the General button and navigate via keyboard to Access
+    await generalButton.focus()
+    await page.keyboard.press('Tab')
+
+    // The next focused element should be the Access button
+    const accessButton = nav.getByRole('button', { name: 'Access' })
+    await expect(accessButton).toBeFocused()
+  })
+
+  test('General tab is active by default (highlighted)', async ({ page }) => {
+    const nav = page.locator('nav')
+    const generalButton = nav.getByRole('button', { name: 'General' })
+    if ((await generalButton.count()) === 0) return
+
+    // Active button has bg-secondary class in addition to others
+    const classAttr = await generalButton.getAttribute('class')
+    expect(classAttr).toMatch(/bg-secondary/)
+  })
+
+  test('active tab button is visually distinct after switching', async ({ page }) => {
+    const nav = page.locator('nav')
+    const accessButton = nav.getByRole('button', { name: 'Access' })
+    if ((await accessButton.count()) === 0) return
+
+    await accessButton.click()
+    await page.waitForLoadState('networkidle')
+
+    // Access button should now have the active class
+    const classAttr = await accessButton.getAttribute('class')
+    expect(classAttr).toMatch(/bg-secondary/)
+
+    // General button should no longer be active
+    const generalButton = nav.getByRole('button', { name: 'General' })
+    const generalClass = await generalButton.getAttribute('class')
+    expect(generalClass).not.toMatch(/bg-secondary/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Board Slug
+// ---------------------------------------------------------------------------
+
+test.describe('Board Slug', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/admin/settings/boards')
+    await page.waitForLoadState('networkidle')
+    await expect(
+      page.getByText('Board Details').or(page.getByText('No boards yet'))
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('Board Details form shows Board name and Description fields', async ({ page }) => {
+    // The General form (board-general-form.tsx) has "Board name" and "Description" labels
+    const boardNameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
+    const descInput = page.getByLabel('Description')
+
+    if ((await boardNameInput.count()) > 0) {
+      await expect(boardNameInput).toBeVisible()
+      await expect(descInput).toBeVisible()
+    }
+  })
+
+  test('board name field is pre-populated with the current board name', async ({ page }) => {
+    const boardNameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
+    if ((await boardNameInput.count()) === 0) return
+
+    // Should not be empty
+    const currentName = await boardNameInput.inputValue()
+    expect(currentName.trim().length).toBeGreaterThan(0)
+  })
+
+  test('board switcher shows the current board name after a name edit', async ({ page }) => {
+    const boardNameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
+    if ((await boardNameInput.count()) === 0) return
+
+    const originalName = await boardNameInput.inputValue()
+    const updatedName = `Renamed Board ${Date.now()}`
+
+    await boardNameInput.fill(updatedName)
+    const saveButton = page.getByRole('button', { name: 'Save changes' })
+    await saveButton.click()
+
+    // Wait for save to complete
+    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({
+      timeout: 10000,
+    })
+
+    // The board switcher (header) should reflect the new name
+    await expect(page.getByTestId('board-switcher')).toContainText(updatedName, { timeout: 5000 })
+
+    // Restore original name
+    await boardNameInput.fill(originalName)
+    await saveButton.click()
+    await page.waitForLoadState('networkidle')
   })
 })

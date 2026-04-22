@@ -11,12 +11,14 @@ test.describe('Admin Login with OTP', () => {
   test.describe.configure({ mode: 'serial' })
 
   test.beforeEach(async ({ page }) => {
-    // Start fresh - clear any existing session
+    // addInitScript fires before page scripts — prevents stale OTP cooldown from localStorage.
     await page.context().clearCookies()
+    await page.addInitScript(() => { localStorage.clear(); sessionStorage.clear() })
   })
 
   test('shows OTP login form with email input', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Wait for page heading
     const heading = page.getByRole('heading', { name: /team sign in/i, level: 1 })
@@ -36,6 +38,7 @@ test.describe('Admin Login with OTP', () => {
 
   test('completes full OTP login flow', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Step 1: Enter email
     const emailInput = page.locator('input[type="email"]')
@@ -87,6 +90,7 @@ test.describe('Admin Login with OTP', () => {
 
   test('shows error with invalid OTP code', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Step 1: Enter email and request OTP
     const emailInput = page.locator('input[type="email"]')
@@ -118,6 +122,7 @@ test.describe('Admin Login with OTP', () => {
 
   test('allows going back from code step to email step', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Enter email and proceed to code step
     const emailInput = page.locator('input[type="email"]')
@@ -146,6 +151,7 @@ test.describe('Admin Login with OTP', () => {
   test('redirects to callback URL after successful login', async ({ page }) => {
     const callbackUrl = '/admin/settings/boards'
     await page.goto(`/admin/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+    await page.waitForLoadState('networkidle')
 
     // Complete OTP flow
     const emailInput = page.locator('input[type="email"]')
@@ -177,6 +183,7 @@ test.describe('Admin Login with OTP', () => {
 
   test('shows resend code option after cooldown', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Request OTP code
     const emailInput = page.locator('input[type="email"]')
@@ -202,6 +209,7 @@ test.describe('Admin Login with OTP', () => {
 
   test('verify code button is disabled until 6 digits entered', async ({ page }) => {
     await page.goto('/admin/login')
+    await page.waitForLoadState('networkidle')
 
     // Request OTP code
     const emailInput = page.locator('input[type="email"]')

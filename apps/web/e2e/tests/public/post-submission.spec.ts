@@ -63,8 +63,8 @@ async function loginWithOTP(page: Page) {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
 
-  // Verify we're on the home page (portal)
-  await expect(page).toHaveURL('/', { timeout: 10000 })
+  // Verify we're on the home page (portal); URL may include query params like ?sort=top
+  await expect(page).toHaveURL(/^http:\/\/[^/]+\/?(\?.*)?$/, { timeout: 10000 })
 }
 
 // Global variables to share context and page across all tests

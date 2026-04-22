@@ -79,7 +79,9 @@ function AdminLoginPage() {
         <PortalAuthForm
           mode="login"
           callbackUrl={safeCallbackUrl}
-          authConfig={authConfig}
+          // Admin login always uses email OTP — password auth is for portal users only.
+          // Force email: true and suppress password so the OTP form shows by default.
+          authConfig={{ ...authConfig, email: true, password: false }}
           customProviderNames={customProviderNames}
         />
       </div>
