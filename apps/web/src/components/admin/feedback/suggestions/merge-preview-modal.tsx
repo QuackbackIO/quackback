@@ -97,6 +97,7 @@ function MergePreviewContent({
           !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
         parentId: c.parentId as CommentId | null,
         isTeamMember: c.isTeamMember,
+        isEdited: false,
         avatarUrl: c.avatarUrl ?? null,
         statusChange: c.statusChange ?? null,
         reactions: c.reactions,

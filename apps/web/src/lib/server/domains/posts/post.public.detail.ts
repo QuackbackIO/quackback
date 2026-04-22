@@ -92,6 +92,7 @@ export async function getPublicPostDetail(
       is_team_member: boolean
       is_private: boolean
       created_at: Date | string
+      updated_at: Date | string | null
       deleted_at: Date | string | null
       deleted_by_principal_id: string | null
       avatar_key: string | null
@@ -112,6 +113,7 @@ export async function getPublicPostDetail(
         c.is_team_member,
         c.is_private,
         c.created_at,
+        c.updated_at,
         c.deleted_at,
         c.deleted_by_principal_id,
         m.avatar_key,
@@ -166,6 +168,7 @@ export async function getPublicPostDetail(
     is_team_member: boolean
     is_private: boolean
     created_at: Date | string
+    updated_at: Date | string | null
     deleted_at: Date | string | null
     deleted_by_principal_id: string | null
     avatar_key: string | null
@@ -192,6 +195,7 @@ export async function getPublicPostDetail(
     isTeamMember: comment.is_team_member,
     isPrivate: comment.is_private,
     createdAt: ensureDate(comment.created_at),
+    updatedAt: comment.updated_at ? ensureDate(comment.updated_at) : null,
     deletedAt: comment.deleted_at ? ensureDate(comment.deleted_at) : null,
     deletedByPrincipalId: comment.deleted_by_principal_id,
     avatarUrl: resolveAvatarUrl({
@@ -226,6 +230,7 @@ export async function getPublicPostDetail(
       parentId: node.parentId as CommentId | null,
       isTeamMember: deleted ? false : node.isTeamMember,
       isPrivate: node.isPrivate,
+      isEdited: !deleted && !!node.updatedAt,
       avatarUrl: deleted ? null : (node.avatarUrl ?? null),
       statusChange: deleted ? null : (node.statusChange ?? null),
       replies: node.replies.map(mapToPublicComment),

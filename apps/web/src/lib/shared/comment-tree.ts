@@ -54,6 +54,7 @@ export interface CommentWithReactions {
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
+  updatedAt?: Date | null
   deletedAt?: Date | null
   deletedByPrincipalId?: string | null
   avatarUrl?: string | null
@@ -77,6 +78,7 @@ export interface CommentTreeNode {
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
+  updatedAt: Date | null
   deletedAt: Date | null
   deletedByPrincipalId: string | null
   avatarUrl?: string | null
@@ -154,6 +156,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       isTeamMember: comment.isTeamMember,
       isPrivate: comment.isPrivate,
       createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt ?? null,
       deletedAt: comment.deletedAt ?? null,
       deletedByPrincipalId: comment.deletedByPrincipalId ?? null,
       avatarUrl: comment.avatarUrl,

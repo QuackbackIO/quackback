@@ -198,12 +198,9 @@ export async function userEditComment(
     })
   }
 
-  // Update the comment (content only, not timestamps per PRD)
   const [updatedComment] = await db
     .update(comments)
-    .set({
-      content: content.trim(),
-    })
+    .set({ content: content.trim(), updatedAt: new Date() })
     .where(eq(comments.id, commentId))
     .returning()
 

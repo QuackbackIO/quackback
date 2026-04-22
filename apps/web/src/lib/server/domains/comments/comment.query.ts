@@ -103,6 +103,7 @@ export async function getCommentsByPost(
     isTeamMember: comment.isTeamMember,
     isPrivate: comment.isPrivate,
     createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt ?? null,
     deletedAt: comment.deletedAt ?? null,
     deletedByPrincipalId: comment.deletedByPrincipalId ?? null,
     statusChange: toStatusChange(comment.statusChangeFrom, comment.statusChangeTo),

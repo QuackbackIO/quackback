@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -9,7 +9,7 @@ import {
   LockClosedIcon,
   MapPinIcon,
 } from '@heroicons/react/24/solid'
-import { TrashIcon } from '@heroicons/react/24/outline'
+import { PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { TimeAgo } from '@/components/ui/time-ago'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
+import { useEditComment } from '@/lib/client/mutations/portal-comments'
 import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
@@ -298,10 +299,26 @@ function CommentItem({
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [isPending, setIsPending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(comment.content)
+  const [editError, setEditError] = useState<string | null>(null)
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const editMutation = useEditComment({
+    commentId: comment.id as CommentId,
+    postId,
+  })
 
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
+
+  useEffect(() => {
+    if (isEditing) {
+      editTextareaRef.current?.focus()
+      editTextareaRef.current?.setSelectionRange(editContent.length, editContent.length)
+    }
+  }, [isEditing])
 
   const isDeleted = !!comment.deletedAt
   const canNest = depth < MAX_NESTING_DEPTH
@@ -315,11 +332,14 @@ function CommentItem({
     depth === 0 &&
     !isDeleted &&
     !comment.isPrivate
-  // Can delete: not already deleted, and user is author or team member
+  // Can edit/delete: not already deleted, and user is author or team member
+  // Server re-checks; client heuristic avoids showing the button to unrelated users
+  const isAuthor = !!user?.principalId && comment.principalId === user.principalId
+  const canEdit = !isDeleted && (isTeamMember || isAuthor)
   const canDelete =
     !isDeleted &&
     !!onDeleteComment &&
-    (isTeamMember || (!!user?.principalId && comment.principalId === user.principalId))
+    (isTeamMember || isAuthor)
   const isBeingDeleted = deletingCommentId === comment.id
   // Can restore: deleted, team member, and restore handler provided
   const canRestore = isDeleted && isTeamMember && !!onRestoreComment
@@ -339,6 +359,18 @@ function CommentItem({
       console.error('Failed to update reaction:', error)
     } finally {
       setIsPending(false)
+    }
+  }
+
+  async function handleSaveEdit(): Promise<void> {
+    const trimmed = editContent.trim()
+    if (!trimmed) return
+    setEditError(null)
+    try {
+      await editMutation.mutateAsync(trimmed)
+      setIsEditing(false)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to save edit')
     }
   }
 
@@ -519,12 +551,60 @@ function CommentItem({
             )}
             <span className="text-muted-foreground text-xs">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
+            {comment.isEdited && (
+              <span className="text-xs text-muted-foreground/60">
+                {intl.formatMessage({
+                  id: 'portal.commentThread.edited',
+                  defaultMessage: '(edited)',
+                })}
+              </span>
+            )}
           </div>
 
-          {/* Comment content */}
-          <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
-            {comment.content}
-          </p>
+          {/* Comment content — switches to an edit form when isEditing */}
+          {isEditing ? (
+            <div className="mt-1.5 ms-10">
+              <textarea
+                ref={editTextareaRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSaveEdit()
+                  if (e.key === 'Escape') { setIsEditing(false); setEditContent(comment.content); setEditError(null) }
+                }}
+                rows={3}
+                className="w-full max-w-lg rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={handleSaveEdit}
+                  disabled={editMutation.isPending || !editContent.trim()}
+                >
+                  <CheckIcon className="h-3 w-3 me-1" />
+                  {editMutation.isPending
+                    ? intl.formatMessage({ id: 'portal.commentThread.saving', defaultMessage: 'Saving…' })
+                    : intl.formatMessage({ id: 'portal.commentThread.save', defaultMessage: 'Save' })}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => { setIsEditing(false); setEditContent(comment.content); setEditError(null) }}
+                  disabled={editMutation.isPending}
+                >
+                  <XMarkIcon className="h-3 w-3 me-1" />
+                  {intl.formatMessage({ id: 'portal.commentThread.cancel', defaultMessage: 'Cancel' })}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
+              {comment.content}
+            </p>
+          )}
 
           {/* Status change indicator */}
           {comment.statusChange && (
@@ -666,6 +746,19 @@ function CommentItem({
                       id: 'portal.commentThread.restore',
                       defaultMessage: 'Restore',
                     })}
+              </Button>
+            )}
+
+            {/* Edit button */}
+            {canEdit && !isEditing && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => { setIsEditing(true); setEditContent(comment.content) }}
+              >
+                <PencilSquareIcon className="h-3 w-3 me-1" />
+                {intl.formatMessage({ id: 'portal.commentThread.edit', defaultMessage: 'Edit' })}
               </Button>
             )}
 

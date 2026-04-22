@@ -23,6 +23,7 @@ export function toPortalComments(post: PostDetails): PublicCommentView[] {
     parentId: c.parentId as CommentId | null,
     isTeamMember: c.isTeamMember,
     isPrivate: c.isPrivate,
+    isEdited: false,
     avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
     statusChange: c.statusChange ?? null,
     reactions: c.reactions,

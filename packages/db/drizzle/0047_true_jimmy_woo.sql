@@ -1,0 +1,1 @@
+ALTER TABLE "comments" ADD COLUMN "updated_at" timestamp with time zone;

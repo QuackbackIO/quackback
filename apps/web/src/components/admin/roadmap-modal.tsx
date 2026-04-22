@@ -74,6 +74,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
         !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
       parentId: c.parentId as CommentId | null,
       isTeamMember: c.isTeamMember,
+      isEdited: false,
       avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
       reactions: c.reactions,
       replies: c.replies.map((r) => ({
@@ -87,6 +88,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
           !!r.deletedAt && !!r.deletedByPrincipalId && r.deletedByPrincipalId !== r.principalId,
         parentId: r.parentId as CommentId | null,
         isTeamMember: r.isTeamMember,
+        isEdited: false,
         avatarUrl: (r.principalId && post.avatarUrls?.[r.principalId]) || null,
         reactions: r.reactions,
         replies: [],
