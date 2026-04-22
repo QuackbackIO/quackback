@@ -189,26 +189,27 @@ export async function userEditComment(
     throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
   }
 
-  // Record edit history (always record for comments)
-  if (actor.principalId) {
-    await db.insert(commentEditHistory).values({
-      commentId,
-      editorPrincipalId: actor.principalId,
-      previousContent: existingComment.content,
-    })
-  }
+  return await db.transaction(async (tx) => {
+    if (actor.principalId) {
+      await tx.insert(commentEditHistory).values({
+        commentId,
+        editorPrincipalId: actor.principalId,
+        previousContent: existingComment.content,
+      })
+    }
 
-  const [updatedComment] = await db
-    .update(comments)
-    .set({ content: content.trim(), updatedAt: new Date() })
-    .where(eq(comments.id, commentId))
-    .returning()
+    const [updatedComment] = await tx
+      .update(comments)
+      .set({ content: content.trim(), updatedAt: new Date() })
+      .where(eq(comments.id, commentId))
+      .returning()
 
-  if (!updatedComment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
+    if (!updatedComment) {
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+    }
 
-  return updatedComment
+    return updatedComment
+  })
 }
 
 /**

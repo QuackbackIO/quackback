@@ -635,10 +635,17 @@ test.describe('Comment editing', () => {
     await page.getByRole('button', { name: /^comment$/i }).first().click()
     await expect(textarea).toHaveValue('', { timeout: 10000 })
     await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
-    // Wait for the optimistic placeholder ID to be replaced with a real server ID
-    await page.waitForFunction(() => !document.querySelector('[id*="optimistic"]'))
+    // Wait for this specific comment to receive a real server ID (not optimistic placeholder)
+    await page.waitForFunction(
+      (text) =>
+        Array.from(document.querySelectorAll('[id^="comment-"]')).some(
+          (el) => el.textContent?.includes(text) && !el.id.includes('optimistic')
+        ),
+      uniqueText
+    )
     const commentItem = page.locator('[id^="comment-"]').filter({ hasText: uniqueText }).first()
-    const elementId = (await commentItem.getAttribute('id'))!
+    const elementId = await commentItem.getAttribute('id')
+    if (!elementId) throw new Error(`Could not resolve element ID for comment: ${uniqueText}`)
     return { elementId, uniqueText }
   }
 

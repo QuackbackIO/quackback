@@ -316,9 +316,9 @@ function CommentItem({
   useEffect(() => {
     if (isEditing) {
       editTextareaRef.current?.focus()
-      editTextareaRef.current?.setSelectionRange(editContent.length, editContent.length)
+      editTextareaRef.current?.setSelectionRange(comment.content.length, comment.content.length)
     }
-  }, [isEditing])
+  }, [isEditing, comment.content])
 
   const isDeleted = !!comment.deletedAt
   const canNest = depth < MAX_NESTING_DEPTH
@@ -571,7 +571,7 @@ function CommentItem({
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSaveEdit()
-                  if (e.key === 'Escape') { setIsEditing(false); setEditContent(comment.content); setEditError(null) }
+                  else if (e.key === 'Escape') { setIsEditing(false); setEditContent(comment.content); setEditError(null) }
                 }}
                 rows={3}
                 className="w-full max-w-lg rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
