@@ -22,6 +22,7 @@ export interface PublicCommentView {
   parentId: CommentId | null
   isTeamMember: boolean
   isPrivate?: boolean
+  isEdited: boolean
   avatarUrl: string | null
   statusChange?: CommentStatusChange | null
   replies: PublicCommentView[]

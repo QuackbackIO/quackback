@@ -19,6 +19,7 @@ import { type CommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { dispatchCommentUpdated, buildEventActor } from '@/lib/server/events/dispatch'
 import type { CommentPermissionCheckResult } from './comment.types'
 
 // ============================================================================
@@ -173,12 +174,15 @@ export async function userEditComment(
     throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
-  // Get the existing comment
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
+    with: { post: { with: { board: true } } },
   })
   if (!existingComment) {
     throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+  }
+  if (!existingComment.post || !existingComment.post.board) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post for comment ${commentId} not found`)
   }
 
   // Validate input
@@ -189,27 +193,42 @@ export async function userEditComment(
     throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
   }
 
-  // Record edit history (always record for comments)
-  if (actor.principalId) {
-    await db.insert(commentEditHistory).values({
-      commentId,
-      editorPrincipalId: actor.principalId,
-      previousContent: existingComment.content,
-    })
-  }
+  const updatedComment = await db.transaction(async (tx) => {
+    if (actor.principalId) {
+      await tx.insert(commentEditHistory).values({
+        commentId,
+        editorPrincipalId: actor.principalId,
+        previousContent: existingComment.content,
+      })
+    }
 
-  // Update the comment (content only, not timestamps per PRD)
-  const [updatedComment] = await db
-    .update(comments)
-    .set({
-      content: content.trim(),
-    })
-    .where(eq(comments.id, commentId))
-    .returning()
+    const [result] = await tx
+      .update(comments)
+      .set({ content: content.trim(), updatedAt: new Date() })
+      .where(eq(comments.id, commentId))
+      .returning()
 
-  if (!updatedComment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
+    if (!result) {
+      throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
+    }
+
+    return result
+  })
+
+  dispatchCommentUpdated(
+    buildEventActor({ principalId: actor.principalId }),
+    {
+      id: updatedComment.id,
+      content: updatedComment.content,
+      isPrivate: updatedComment.isPrivate ?? undefined,
+    },
+    {
+      id: existingComment.post.id,
+      title: existingComment.post.title,
+      boardId: existingComment.post.board.id,
+      boardSlug: existingComment.post.board.slug,
+    }
+  )
 
   return updatedComment
 }

@@ -164,13 +164,19 @@ vi.mock('@/lib/server/domains/comments/comment.service', () => ({
     },
     post: { id: 'post_test', title: 'Test Post', boardSlug: 'bugs' },
   }),
-  updateComment: vi.fn().mockResolvedValue({
+  deleteComment: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/server/domains/comments/comment.permissions', () => ({
+  userEditComment: vi.fn().mockResolvedValue({
     id: 'comment_new',
     postId: 'post_test',
     content: 'Updated comment',
     updatedAt: new Date('2026-01-02'),
   }),
-  deleteComment: vi.fn().mockResolvedValue(undefined),
+  softDeleteComment: vi.fn().mockResolvedValue(undefined),
+  canEditComment: vi.fn().mockResolvedValue({ allowed: true }),
+  canDeleteComment: vi.fn().mockResolvedValue({ allowed: true }),
 }))
 
 vi.mock('@/lib/server/domains/comments/comment.reactions', () => ({
@@ -512,7 +518,11 @@ describe('MCP HTTP Handler', () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       const { checkRateLimit } = await import('@/lib/server/domains/api/rate-limit')
-      vi.mocked(checkRateLimit).mockReturnValueOnce({ allowed: false, remaining: 0, retryAfter: 30 })
+      vi.mocked(checkRateLimit).mockReturnValueOnce({
+        allowed: false,
+        remaining: 0,
+        retryAfter: 30,
+      })
 
       const { handleMcpRequest } = await import('../handler')
       const response = await handleMcpRequest(mcpRequest(jsonRpcRequest('initialize')))

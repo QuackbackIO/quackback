@@ -54,9 +54,9 @@ import {
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
 import {
   createComment,
-  updateComment,
   deleteComment,
 } from '@/lib/server/domains/comments/comment.service'
+import { userEditComment } from '@/lib/server/domains/comments/comment.permissions'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import {
   createChangelog,
@@ -1238,9 +1238,9 @@ Examples:
       if (scopeDenied) return scopeDenied
       // No team role gate — the service layer allows comment authors OR team members
       try {
-        const result = await updateComment(
+        const result = await userEditComment(
           args.commentId as CommentId,
-          { content: args.content },
+          args.content,
           { principalId: auth.principalId, role: auth.role }
         )
 

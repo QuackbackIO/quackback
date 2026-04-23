@@ -209,6 +209,7 @@ export function useAddComment() {
         isTeamMember: !!principalId,
         isPrivate: isPrivate ?? false,
         createdAt: new Date(),
+        updatedAt: null,
         deletedAt: null,
         deletedByPrincipalId: null,
         replies: [],

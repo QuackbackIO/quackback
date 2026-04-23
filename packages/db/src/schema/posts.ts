@@ -250,6 +250,7 @@ export const comments = pgTable(
       { onDelete: 'set null' }
     ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     // Who initiated the deletion (self-delete vs team-removed)
