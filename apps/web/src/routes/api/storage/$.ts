@@ -21,8 +21,8 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
   }
 
-  const contentLength = Number(request.headers.get('content-length') ?? 0)
-  if (contentLength > MAX_FILE_SIZE) {
+  const contentLengthHeader = request.headers.get('content-length')
+  if (contentLengthHeader !== null && Number(contentLengthHeader) > MAX_FILE_SIZE) {
     return Response.json({ error: 'File too large' }, { status: 413 })
   }
 
@@ -46,7 +46,7 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     return Response.json({ error: 'File too large' }, { status: 413 })
   }
 
-  await uploadObject(key, Buffer.from(body), ct)
+  await uploadObject(key, new Uint8Array(body), ct)
   proxyCache.delete(key)
   return new Response(null, { status: 200 })
 }
@@ -94,16 +94,18 @@ export const Route = createFileRoute('/api/storage/$')({
 
         try {
           if (config.s3Proxy || forceProxy) {
-            // Serve from cache if fresh
             const cached = proxyCache.get(key)
-            if (cached && Date.now() - cached.cachedAt < PROXY_CACHE_TTL) {
-              return new Response(cached.data, {
-                status: 200,
-                headers: {
-                  'Content-Type': cached.contentType,
-                  'Cache-Control': 'public, max-age=31536000, immutable',
-                },
-              })
+            if (cached) {
+              if (Date.now() - cached.cachedAt < PROXY_CACHE_TTL) {
+                return new Response(cached.data, {
+                  status: 200,
+                  headers: {
+                    'Content-Type': cached.contentType,
+                    'Cache-Control': 'public, max-age=31536000, immutable',
+                  },
+                })
+              }
+              proxyCache.delete(key)
             }
 
             const { body, contentType } = await getS3Object(key)

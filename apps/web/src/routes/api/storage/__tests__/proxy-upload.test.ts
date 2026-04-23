@@ -110,7 +110,7 @@ describe('PUT /api/storage/* (proxy upload)', () => {
   it('uploads to the correct key and returns 200', async () => {
     const res = await handleProxyUpload({ request: makeRequest() })
     expect(res.status).toBe(200)
-    expect(mockUploadObject).toHaveBeenCalledWith(KEY, expect.any(Buffer), CT)
+    expect(mockUploadObject).toHaveBeenCalledWith(KEY, expect.any(Uint8Array), CT)
   })
 
   it('passes the secretAccessKey from getS3Config to verifyProxyUploadToken', async () => {

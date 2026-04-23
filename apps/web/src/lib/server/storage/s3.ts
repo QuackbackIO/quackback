@@ -202,12 +202,8 @@ export interface PresignedUploadUrl {
 }
 
 /**
- * Generate a presigned URL for uploading a file.
- *
- * When S3_PROXY is enabled, returns a server-side proxy upload URL instead of a
- * direct S3 presigned URL. This is needed for self-hosted deployments where the
- * browser cannot reach the S3/MinIO endpoint (e.g. Docker Compose with internal
- * service hostnames). The proxy URL is HMAC-signed so it cannot be forged.
+ * Generate a presigned URL for uploading a file. When S3_PROXY is enabled,
+ * returns a server-proxied URL instead of a direct presigned S3 URL.
  *
  * @param key - Storage key (path within bucket), e.g., "changelog-images/abc123/image.jpg"
  * @param contentType - MIME type of the file, e.g., "image/jpeg"
@@ -222,7 +218,13 @@ export async function generatePresignedUploadUrl(
   const publicUrl = buildPublicUrl(s3Config, key)
 
   if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
+    const uploadUrl = buildProxyUploadUrl(
+      publicUrl,
+      s3Config.secretAccessKey,
+      key,
+      contentType,
+      expiresIn
+    )
     return { uploadUrl, publicUrl, key }
   }
 
@@ -245,7 +247,7 @@ export async function generatePresignedUploadUrl(
 // ============================================================================
 
 function proxyUploadSig(secret: string, key: string, contentType: string, exp: number): string {
-  // 32 hex chars = 128-bit token; sufficient for short-lived upload auth
+  // truncated to 128 bits; sufficient for short-lived upload auth
   return createHmac('sha256', secret)
     .update(`${key}|${contentType}|${exp}`)
     .digest('hex')
@@ -253,16 +255,15 @@ function proxyUploadSig(secret: string, key: string, contentType: string, exp: n
 }
 
 function buildProxyUploadUrl(
+  baseStorageUrl: string,
   secret: string,
   key: string,
   contentType: string,
   expiresIn: number
 ): string {
-  if (!config.baseUrl) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  const base = config.baseUrl.replace(/\/$/, '')
-  return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
+  return `${baseStorageUrl}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
 /**
