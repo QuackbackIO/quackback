@@ -33,22 +33,13 @@ function makeUrl(key = KEY) {
 }
 
 function makeRequest(
-  options: {
-    key?: string
-    body?: BodyInit
-    contentLength?: number
-    urlOverride?: string
-  } = {}
+  options: { key?: string; body?: BodyInit; urlOverride?: string } = {}
 ): Request {
   const url = options.urlOverride ?? makeUrl(options.key)
-  const headers: Record<string, string> = { 'Content-Type': CT }
-  if (options.contentLength !== undefined) {
-    headers['Content-Length'] = String(options.contentLength)
-  }
   return new Request(url, {
     method: 'PUT',
     body: options.body ?? new Uint8Array(100),
-    headers,
+    headers: { 'Content-Type': CT },
   })
 }
 
@@ -74,13 +65,6 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     expect(res.status).toBe(403)
   })
 
-  it('returns 413 when Content-Length header exceeds MAX_FILE_SIZE', async () => {
-    const res = await handleProxyUpload({
-      request: makeRequest({ contentLength: MAX_FILE_SIZE + 1 }),
-    })
-    expect(res.status).toBe(413)
-  })
-
   it('returns 400 when content-type is missing', async () => {
     const url = new URL(`http://localhost/api/storage/${KEY}`)
     url.searchParams.set('exp', String(Date.now() + 60_000))
@@ -101,10 +85,13 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns 413 when body exceeds MAX_FILE_SIZE even if Content-Length was absent', async () => {
+  it('returns 413 when body exceeds MAX_FILE_SIZE without buffering the full payload', async () => {
+    // Stream is cancelled as soon as the byte count exceeds the limit,
+    // so the handler never holds more than MAX_FILE_SIZE bytes in memory.
     const oversized = new Uint8Array(MAX_FILE_SIZE + 1)
     const res = await handleProxyUpload({ request: makeRequest({ body: oversized }) })
     expect(res.status).toBe(413)
+    expect(mockUploadObject).not.toHaveBeenCalled()
   })
 
   it('uploads to the correct key and returns 200', async () => {

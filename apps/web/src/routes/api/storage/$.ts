@@ -12,6 +12,39 @@ function extractKey(url: URL): string | null {
   return key && !key.includes('..') ? key : null
 }
 
+// Reads up to maxBytes from the request body stream, cancelling early if exceeded.
+// Returns null when the body exceeds the limit, avoiding full buffering of oversized payloads.
+async function readBodyWithLimit(request: Request, maxBytes: number): Promise<Uint8Array | null> {
+  const reader = request.body?.getReader()
+  if (!reader) return new Uint8Array(0)
+
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body
+}
+
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
   const { isS3Configured, getS3Config, uploadObject, verifyProxyUploadToken, MAX_FILE_SIZE } =
     await import('@/lib/server/storage/s3')
@@ -19,11 +52,6 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   if (!isS3Configured() || !config.s3Proxy) {
     return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
-  }
-
-  const contentLengthHeader = request.headers.get('content-length')
-  if (contentLengthHeader !== null && Number(contentLengthHeader) > MAX_FILE_SIZE) {
-    return Response.json({ error: 'File too large' }, { status: 413 })
   }
 
   const url = new URL(request.url)
@@ -41,12 +69,10 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
     return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
   }
 
-  const body = await request.arrayBuffer()
-  if (body.byteLength > MAX_FILE_SIZE) {
-    return Response.json({ error: 'File too large' }, { status: 413 })
-  }
+  const body = await readBodyWithLimit(request, MAX_FILE_SIZE)
+  if (!body) return Response.json({ error: 'File too large' }, { status: 413 })
 
-  await uploadObject(key, new Uint8Array(body), ct)
+  await uploadObject(key, body, ct)
   proxyCache.delete(key)
   return new Response(null, { status: 200 })
 }
