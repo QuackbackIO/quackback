@@ -218,13 +218,7 @@ export async function generatePresignedUploadUrl(
   const publicUrl = buildPublicUrl(s3Config, key)
 
   if (config.s3Proxy) {
-    const uploadUrl = buildProxyUploadUrl(
-      publicUrl,
-      s3Config.secretAccessKey,
-      key,
-      contentType,
-      expiresIn
-    )
+    const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
     return { uploadUrl, publicUrl, key }
   }
 
@@ -255,15 +249,16 @@ function proxyUploadSig(secret: string, key: string, contentType: string, exp: n
 }
 
 function buildProxyUploadUrl(
-  baseStorageUrl: string,
   secret: string,
   key: string,
   contentType: string,
   expiresIn: number
 ): string {
+  if (!config.baseUrl) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  return `${baseStorageUrl}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
+  const base = config.baseUrl.replace(/\/$/, '')
+  return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
 /**
