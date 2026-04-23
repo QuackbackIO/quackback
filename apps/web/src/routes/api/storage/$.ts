@@ -5,9 +5,93 @@ import { createFileRoute } from '@tanstack/react-router'
 const proxyCache = new Map<string, { data: ArrayBuffer; contentType: string; cachedAt: number }>()
 const PROXY_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
+const KEY_PREFIX = '/api/storage/'
+
+function extractKey(url: URL): string | null {
+  const key = decodeURIComponent(url.pathname.slice(KEY_PREFIX.length))
+  return key && !key.includes('..') ? key : null
+}
+
+// Reads up to maxBytes from the request body stream, cancelling early if exceeded.
+// Returns null when the body exceeds the limit, avoiding full buffering of oversized payloads.
+export async function readBodyWithLimit(
+  request: Request,
+  maxBytes: number
+): Promise<Uint8Array | null> {
+  const reader = request.body?.getReader()
+  if (!reader) return new Uint8Array(0)
+
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body
+}
+
+export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
+  const { isS3Configured, getS3Config, uploadObject, verifyProxyUploadToken, MAX_FILE_SIZE } =
+    await import('@/lib/server/storage/s3')
+  const { config } = await import('@/lib/server/config')
+
+  if (!isS3Configured() || !config.s3Proxy) {
+    return Response.json({ error: 'Proxy uploads not enabled' }, { status: 403 })
+  }
+
+  const url = new URL(request.url)
+  const key = extractKey(url)
+  if (!key) return Response.json({ error: 'Invalid storage key' }, { status: 400 })
+
+  const ct = url.searchParams.get('ct')
+  if (!ct) return Response.json({ error: 'Missing content-type' }, { status: 400 })
+
+  const exp = url.searchParams.get('exp')
+  const sig = url.searchParams.get('sig')
+  const { secretAccessKey } = getS3Config()
+
+  if (!verifyProxyUploadToken(secretAccessKey, key, ct, exp, sig)) {
+    return Response.json({ error: 'Invalid or expired upload token' }, { status: 401 })
+  }
+
+  const body = await readBodyWithLimit(request, MAX_FILE_SIZE)
+  if (!body) return Response.json({ error: 'File too large' }, { status: 413 })
+
+  await uploadObject(key, body, ct)
+  proxyCache.delete(key)
+  return new Response(null, { status: 200 })
+}
+
 export const Route = createFileRoute('/api/storage/$')({
   server: {
     handlers: {
+      /**
+       * PUT /api/storage/*  (S3_PROXY=true only)
+       *
+       * Server streams the body to S3/MinIO so the browser never needs direct
+       * access to the storage endpoint. Requires a valid HMAC-signed token
+       * issued by generatePresignedUploadUrl.
+       */
+      PUT: handleProxyUpload,
+
       /**
        * GET /api/storage/*
        * Serve files from S3 storage.
@@ -28,10 +112,9 @@ export const Route = createFileRoute('/api/storage/$')({
         }
 
         const url = new URL(request.url)
-        const prefix = '/api/storage/'
-        const key = decodeURIComponent(url.pathname.slice(prefix.length))
+        const key = extractKey(url)
 
-        if (!key || key.includes('..')) {
+        if (!key) {
           return Response.json({ error: 'Invalid storage key' }, { status: 400 })
         }
 
@@ -40,16 +123,18 @@ export const Route = createFileRoute('/api/storage/$')({
 
         try {
           if (config.s3Proxy || forceProxy) {
-            // Serve from cache if fresh
             const cached = proxyCache.get(key)
-            if (cached && Date.now() - cached.cachedAt < PROXY_CACHE_TTL) {
-              return new Response(cached.data, {
-                status: 200,
-                headers: {
-                  'Content-Type': cached.contentType,
-                  'Cache-Control': 'public, max-age=31536000, immutable',
-                },
-              })
+            if (cached) {
+              if (Date.now() - cached.cachedAt < PROXY_CACHE_TTL) {
+                return new Response(cached.data, {
+                  status: 200,
+                  headers: {
+                    'Content-Type': cached.contentType,
+                    'Cache-Control': 'public, max-age=31536000, immutable',
+                  },
+                })
+              }
+              proxyCache.delete(key)
             }
 
             const { body, contentType } = await getS3Object(key)
