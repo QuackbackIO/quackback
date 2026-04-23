@@ -26,15 +26,10 @@ import {
 } from '@/lib/client/mutations'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/roadmap'
-import {
-  type PostId,
-  type StatusId,
-  type TagId,
-  type RoadmapId,
-  type CommentId,
-} from '@quackback/ids'
+import { type PostId, type StatusId, type TagId, type RoadmapId } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
+import { toPortalComments } from '@/components/admin/feedback/detail/post-utils'
 
 interface RoadmapModalProps {
   postId: string | undefined
@@ -63,37 +58,7 @@ function toPortalPostView(post: PostDetails): PublicPostDetailView {
     board: post.board,
     tags: post.tags,
     roadmaps: [],
-    comments: post.comments.map((c) => ({
-      id: c.id as CommentId,
-      content: c.content,
-      authorName: c.authorName,
-      principalId: c.principalId,
-      createdAt: c.createdAt,
-      deletedAt: c.deletedAt ?? null,
-      isRemovedByTeam:
-        !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
-      parentId: c.parentId as CommentId | null,
-      isTeamMember: c.isTeamMember,
-      isEdited: !!c.updatedAt,
-      avatarUrl: (c.principalId && post.avatarUrls?.[c.principalId]) || null,
-      reactions: c.reactions,
-      replies: c.replies.map((r) => ({
-        id: r.id as CommentId,
-        content: r.content,
-        authorName: r.authorName,
-        principalId: r.principalId,
-        createdAt: r.createdAt,
-        deletedAt: r.deletedAt ?? null,
-        isRemovedByTeam:
-          !!r.deletedAt && !!r.deletedByPrincipalId && r.deletedByPrincipalId !== r.principalId,
-        parentId: r.parentId as CommentId | null,
-        isTeamMember: r.isTeamMember,
-        isEdited: !!r.updatedAt,
-        avatarUrl: (r.principalId && post.avatarUrls?.[r.principalId]) || null,
-        reactions: r.reactions,
-        replies: [],
-      })),
-    })),
+    comments: toPortalComments(post),
     pinnedComment: post.pinnedComment,
     pinnedCommentId: post.pinnedCommentId,
   }

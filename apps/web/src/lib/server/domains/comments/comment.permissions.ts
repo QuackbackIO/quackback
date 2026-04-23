@@ -174,7 +174,6 @@ export async function userEditComment(
     throw new ForbiddenError('EDIT_NOT_ALLOWED', permResult.reason || 'Edit not allowed')
   }
 
-  // Get the existing comment with post+board for event dispatch
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
     with: { post: { with: { board: true } } },
@@ -216,8 +215,6 @@ export async function userEditComment(
     return result
   })
 
-  const { post } = existingComment
-  const { board } = post
   dispatchCommentUpdated(
     buildEventActor({ principalId: actor.principalId }),
     {
@@ -225,7 +222,12 @@ export async function userEditComment(
       content: updatedComment.content,
       isPrivate: updatedComment.isPrivate ?? undefined,
     },
-    { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
+    {
+      id: existingComment.post.id,
+      title: existingComment.post.title,
+      boardId: existingComment.post.board.id,
+      boardSlug: existingComment.post.board.slug,
+    }
   )
 
   return updatedComment
