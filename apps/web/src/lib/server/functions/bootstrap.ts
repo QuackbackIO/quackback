@@ -12,7 +12,14 @@ export interface BootstrapData {
   themeCookie: Theme
 }
 
-async function getSessionInternal(): Promise<Session | null> {
+// Returns both the session (with principalType) AND the user role in
+// one principal-table query — avoids the duplicate read the caller
+// previously did to compute role separately. Saves one round-trip per
+// page render for authenticated users.
+async function getSessionAndRole(): Promise<{
+  session: Session | null
+  role: 'admin' | 'member' | 'user' | null
+}> {
   const [{ getRequestHeaders }, { auth }, { db, principal, eq }] = await Promise.all([
     import('@tanstack/react-start/server'),
     import('@/lib/server/auth/index'),
@@ -25,67 +32,62 @@ async function getSessionInternal(): Promise<Session | null> {
     })
 
     if (!session?.user) {
-      return null
+      return { session: null, role: null }
     }
 
     const userId = session.user.id as UserId
 
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.userId, userId),
-      columns: { type: true },
+      columns: { type: true, role: true },
     })
 
     return {
       session: {
-        id: session.session.id as SessionId,
-        expiresAt: session.session.expiresAt.toISOString(),
-        token: session.session.token,
-        createdAt: session.session.createdAt.toISOString(),
-        updatedAt: session.session.updatedAt.toISOString(),
-        userId,
+        session: {
+          id: session.session.id as SessionId,
+          expiresAt: session.session.expiresAt.toISOString(),
+          token: session.session.token,
+          createdAt: session.session.createdAt.toISOString(),
+          updatedAt: session.session.updatedAt.toISOString(),
+          userId,
+        },
+        user: {
+          id: userId,
+          name: session.user.name,
+          email: session.user.email,
+          emailVerified: session.user.emailVerified,
+          image: session.user.image ?? null,
+          principalType: (principalRecord?.type as PrincipalType) ?? 'user',
+          createdAt: session.user.createdAt.toISOString(),
+          updatedAt: session.user.updatedAt.toISOString(),
+        },
       },
-      user: {
-        id: userId,
-        name: session.user.name,
-        email: session.user.email,
-        emailVerified: session.user.emailVerified,
-        image: session.user.image ?? null,
-        principalType: (principalRecord?.type as PrincipalType) ?? 'user',
-        createdAt: session.user.createdAt.toISOString(),
-        updatedAt: session.user.updatedAt.toISOString(),
-      },
+      role: (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null,
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues
     // Return null session and let the client retry
     console.error('[bootstrap] getSession error:', error)
-    return null
+    return { session: null, role: null }
   }
 }
 
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
-  const [{ getTenantSettings }, { db, principal, eq }, { config }, { getRequestHeaders }] =
-    await Promise.all([
-      import('@/lib/server/domains/settings/settings.service'),
-      import('@/lib/server/db'),
-      import('@/lib/server/config'),
-      import('@tanstack/react-start/server'),
-    ])
+  const [{ getTenantSettings }, { config }, { getRequestHeaders }] = await Promise.all([
+    import('@/lib/server/domains/settings/settings.service'),
+    import('@/lib/server/config'),
+    import('@tanstack/react-start/server'),
+  ])
 
-  // Fetch session and settings in parallel
-  const [session, settings] = await Promise.all([getSessionInternal(), getTenantSettings()])
-
-  // Get user role
-  const userRole = session
-    ? await db.query.principal
-        .findFirst({
-          where: eq(principal.userId, session.user.id as UserId),
-          columns: { role: true },
-        })
-        .then((m) => (m?.role as 'admin' | 'member' | 'user' | null) ?? null)
-    : null
+  // Single principal read returns both session.principalType + userRole;
+  // run in parallel with the settings fetch.
+  const [{ session, role: userRole }, settings] = await Promise.all([
+    getSessionAndRole(),
+    getTenantSettings(),
+  ])
 
   // One-time initialization on first request
   if (!_initialized) {
