@@ -349,7 +349,10 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       faviconData: brandingData.faviconUrl ? { url: brandingData.faviconUrl } : null,
     }
 
-    await cacheSet(CACHE_KEYS.TENANT_SETTINGS, result, 300)
+    // 1h TTL: settings change rarely and every mutation in this file
+    // calls invalidateSettingsCache(), so a long TTL is safe and keeps
+    // the per-request cost of getTenantSettings to a single Redis GET.
+    await cacheSet(CACHE_KEYS.TENANT_SETTINGS, result, 3600)
     return result
   } catch (error) {
     console.error(`[domain:settings] getTenantSettings failed:`, error)

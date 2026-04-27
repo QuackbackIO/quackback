@@ -48,6 +48,35 @@ export default defineConfig(({ mode }) => {
         // that end up in the client bundle. Mark node: imports as external since they're
         // SSR-only code paths that never execute in the browser.
         external: [/^node:/],
+        output: {
+          // TanStack Router auto-splits each route file into its own chunk.
+          // For a page like the public portal that's ~120 modulepreload links
+          // per render — each tiny, each costing a parse + HTTP round-trip.
+          // Collapse routes (and their per-section component trees) into one
+          // chunk per top-level segment so a single portal render fetches a
+          // handful of larger chunks instead of dozens of micro-ones. Browser
+          // cache benefits stay intact (the per-segment chunk is invalidated
+          // only when something inside it changes), but cold-page modulepreload
+          // count drops sharply.
+          manualChunks: (id: string) => {
+            // Only apply to first-party code under src/. node_modules vendor
+            // splitting (react, react-dom, etc.) is left to the default heuristics.
+            if (!id.includes('/src/')) return undefined
+
+            const routeMatch = id.match(/\/src\/routes\/(_?[a-z][a-z0-9-]*)/i)
+            if (routeMatch) {
+              // Strip leading underscore so '_portal' and 'portal' bundle together.
+              return `route-${routeMatch[1].replace(/^_/, '')}`
+            }
+
+            const componentMatch = id.match(/\/src\/components\/([a-z][a-z0-9-]*)/i)
+            if (componentMatch) {
+              return `components-${componentMatch[1]}`
+            }
+
+            return undefined
+          },
+        },
       },
     },
     resolve: {

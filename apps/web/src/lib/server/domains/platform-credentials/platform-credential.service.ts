@@ -8,7 +8,7 @@
 
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import {
   encryptPlatformCredentials,
   decryptPlatformCredentials,
@@ -51,12 +51,16 @@ export async function savePlatformCredentials({
       },
     })
 
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }
 
 /**
  * Get decrypted platform credentials for an integration type.
  * Returns null if not configured.
+ *
+ * Intentionally NOT cached — the returned value contains decrypted OAuth
+ * client secrets / bot tokens, and Redis snapshots / replication shouldn't
+ * carry plaintext credentials.
  */
 export async function getPlatformCredentials(
   integrationType: string
@@ -92,12 +96,21 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
 
 /**
  * Get the set of integration types that have platform credentials configured.
+ *
+ * Cached: hot dependency of getTenantSettings, runs on every settings cache
+ * miss. Only the integration-type *names* are cached (no secret material),
+ * and save/delete flows invalidate the key.
  */
 export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
+  const cached = await cacheGet<string[]>(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  if (cached) return new Set(cached)
+
   const rows = await db.query.integrationPlatformCredentials.findMany({
     columns: { integrationType: true },
   })
-  return new Set(rows.map((r) => r.integrationType))
+  const types = rows.map((r) => r.integrationType)
+  await cacheSet(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES, types, 3600)
+  return new Set(types)
 }
 
 /**
@@ -108,5 +121,5 @@ export async function deletePlatformCredentials(integrationType: string): Promis
     .delete(integrationPlatformCredentials)
     .where(eq(integrationPlatformCredentials.integrationType, integrationType))
 
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }

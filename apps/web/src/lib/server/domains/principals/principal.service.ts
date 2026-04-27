@@ -9,6 +9,7 @@ import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, isAdmin } from '@/lib/shared/roles'
+import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import type { TeamMember } from './principal.types'
 
 // Re-export types for backwards compatibility
@@ -206,6 +207,9 @@ export async function updateMemberRole(
 
     // Update the role
     await db.update(principal).set({ role: newRole }).where(eq(principal.id, principalId))
+    if (targetMember.userId) {
+      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
+    }
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error
@@ -259,6 +263,9 @@ export async function removeTeamMember(
 
     // Convert to portal user by setting role to 'user'
     await db.update(principal).set({ role: 'user' }).where(eq(principal.id, principalId))
+    if (targetMember.userId) {
+      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
+    }
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error

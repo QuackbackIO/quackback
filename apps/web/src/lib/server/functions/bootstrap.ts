@@ -20,10 +20,16 @@ async function getSessionAndRole(): Promise<{
   session: Session | null
   role: 'admin' | 'member' | 'user' | null
 }> {
-  const [{ getRequestHeaders }, { auth }, { db, principal, eq }] = await Promise.all([
+  const [
+    { getRequestHeaders },
+    { auth },
+    { db, principal, eq },
+    { cacheGet, cacheSet, CACHE_KEYS },
+  ] = await Promise.all([
     import('@tanstack/react-start/server'),
     import('@/lib/server/auth/index'),
     import('@/lib/server/db'),
+    import('@/lib/server/redis'),
   ])
 
   try {
@@ -37,10 +43,20 @@ async function getSessionAndRole(): Promise<{
 
     const userId = session.user.id as UserId
 
-    const principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId),
-      columns: { type: true, role: true },
-    })
+    // Cache the principal type/role per user. Hot path on every
+    // authenticated SSR render. 5min TTL trades a small staleness window
+    // (role demotions take effect within 5min) for a Redis GET in place
+    // of a DB query on every page render.
+    const cacheKey = CACHE_KEYS.PRINCIPAL_BY_USER(userId)
+    let principalRecord = await cacheGet<{ type: string | null; role: string | null }>(cacheKey)
+    if (!principalRecord) {
+      principalRecord =
+        (await db.query.principal.findFirst({
+          where: eq(principal.userId, userId),
+          columns: { type: true, role: true },
+        })) ?? null
+      if (principalRecord) await cacheSet(cacheKey, principalRecord, 300)
+    }
 
     return {
       session: {
