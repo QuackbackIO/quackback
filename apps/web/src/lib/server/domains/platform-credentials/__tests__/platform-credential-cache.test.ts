@@ -11,10 +11,16 @@ import type { PrincipalId } from '@quackback/ids'
 // --- Redis cache mocks ---
 const mockCacheDel = vi.fn()
 
+const mockCacheGet = vi.fn()
+const mockCacheSet = vi.fn()
+
 vi.mock('@/lib/server/redis', () => ({
   cacheDel: (...args: unknown[]) => mockCacheDel(...args),
+  cacheGet: (...args: unknown[]) => mockCacheGet(...args),
+  cacheSet: (...args: unknown[]) => mockCacheSet(...args),
   CACHE_KEYS: {
     TENANT_SETTINGS: 'settings:tenant',
+    PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
   },
 }))
 
@@ -61,19 +67,19 @@ beforeEach(() => {
 })
 
 describe('platform credential cache invalidation', () => {
-  it('savePlatformCredentials invalidates TENANT_SETTINGS cache', async () => {
+  it('savePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await savePlatformCredentials({
       integrationType: 'slack',
       credentials: { clientId: 'id', clientSecret: 'secret' },
       principalId: 'principal_1' as PrincipalId,
     })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
   })
 
-  it('deletePlatformCredentials invalidates TENANT_SETTINGS cache', async () => {
+  it('deletePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await deletePlatformCredentials('slack')
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
   })
 })

@@ -154,7 +154,7 @@ describe('getTenantSettings', () => {
     expect(mockCacheSet).toHaveBeenCalledWith(
       'settings:tenant',
       expect.objectContaining({ name: 'Test Workspace' }),
-      300
+      3600
     )
   })
 
