@@ -27,11 +27,17 @@ vi.mock('@/lib/server/redis', () => ({
 // --- DB mocks ---
 const mockInsert = vi.fn()
 const mockDelete = vi.fn()
+const mockFindMany = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
     insert: (...args: unknown[]) => mockInsert(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
+    query: {
+      integrationPlatformCredentials: {
+        findMany: (...args: unknown[]) => mockFindMany(...args),
+      },
+    },
   },
   integrationPlatformCredentials: {
     integrationType: 'integrationType',
@@ -48,12 +54,13 @@ vi.mock('@quackback/ids', () => ({
   generateId: vi.fn().mockReturnValue('platform_cred_1'),
 }))
 
-const { savePlatformCredentials, deletePlatformCredentials } =
+const { savePlatformCredentials, deletePlatformCredentials, getConfiguredIntegrationTypes } =
   await import('../platform-credential.service')
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockCacheDel.mockResolvedValue(undefined)
+  mockCacheSet.mockResolvedValue(undefined)
   // insert chain: .values().onConflictDoUpdate()
   mockInsert.mockReturnValue({
     values: vi.fn().mockReturnValue({
@@ -81,5 +88,47 @@ describe('platform credential cache invalidation', () => {
     await deletePlatformCredentials('slack')
 
     expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
+  })
+})
+
+describe('getConfiguredIntegrationTypes caching', () => {
+  it('returns cached set without hitting DB on cache hit', async () => {
+    mockCacheGet.mockResolvedValue(['slack', 'auth_github'])
+
+    const result = await getConfiguredIntegrationTypes()
+
+    expect(result).toBeInstanceOf(Set)
+    expect(Array.from(result)).toEqual(['slack', 'auth_github'])
+    expect(mockCacheGet).toHaveBeenCalledWith('platform-cred:configured-types')
+    expect(mockFindMany).not.toHaveBeenCalled()
+    expect(mockCacheSet).not.toHaveBeenCalled()
+  })
+
+  it('queries DB and caches the type list with 1h TTL on cache miss', async () => {
+    mockCacheGet.mockResolvedValue(null)
+    mockFindMany.mockResolvedValue([
+      { integrationType: 'slack' },
+      { integrationType: 'auth_github' },
+    ])
+
+    const result = await getConfiguredIntegrationTypes()
+
+    expect(Array.from(result).sort()).toEqual(['auth_github', 'slack'])
+    expect(mockFindMany).toHaveBeenCalledTimes(1)
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      'platform-cred:configured-types',
+      ['slack', 'auth_github'],
+      3600
+    )
+  })
+
+  it('handles empty DB result without crashing', async () => {
+    mockCacheGet.mockResolvedValue(null)
+    mockFindMany.mockResolvedValue([])
+
+    const result = await getConfiguredIntegrationTypes()
+
+    expect(result.size).toBe(0)
+    expect(mockCacheSet).toHaveBeenCalledWith('platform-cred:configured-types', [], 3600)
   })
 })
