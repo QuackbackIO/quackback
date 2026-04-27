@@ -33,23 +33,14 @@ export const CACHE_KEYS = {
   INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
   ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
   SLACK_CHANNELS: 'slack:channels',
-  // Set of integration types with platform credentials configured.
-  // Hot dependency of getTenantSettings (filters OAuth providers); only
-  // changes when an admin saves/deletes a platform credential, so a long
-  // TTL with explicit invalidation keeps it cheap.
+  // Hot dependency of getTenantSettings; invalidated by save/delete in
+  // platform-credential.service.ts.
   PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
-  // Per-user principal type/role lookup. Hit on every authenticated
-  // SSR render (bootstrap), changes only on signup or role mutation.
-  // Short TTL is fine since the data is tiny and we don't strictly need
-  // explicit invalidation for the MVP.
+  // Per-user principal type/role lookup hit on every authenticated SSR
+  // render. Invalidated by role/type mutations; 5min TTL backstops anything
+  // we miss.
   PRINCIPAL_BY_USER: (userId: string) => `principal:user:${userId}` as const,
 } as const
-
-// PRINCIPAL_BY_USER values share the `principal:user:` prefix so we can
-// scan-and-delete with a single SCAN call when bulk role changes happen
-// (e.g. a tenant-wide migration). Not used yet; kept as a hook for future
-// invalidation needs.
-export const PRINCIPAL_KEY_PREFIX = 'principal:user:'
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {

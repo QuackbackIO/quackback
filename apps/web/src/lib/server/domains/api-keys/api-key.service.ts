@@ -213,6 +213,16 @@ export async function revokeApiKey(id: ApiKeyId): Promise<void> {
   const revokedKey = result[0]
   if (revokedKey.principalId) {
     await db.update(principal).set({ role: 'user' }).where(eq(principal.id, revokedKey.principalId))
+    // Service principals don't typically render SSR pages, but keep the
+    // PRINCIPAL_BY_USER cache consistent in case one ever does.
+    const p = await db.query.principal.findFirst({
+      where: eq(principal.id, revokedKey.principalId),
+      columns: { userId: true },
+    })
+    if (p?.userId) {
+      const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(p.userId))
+    }
   }
 }
 

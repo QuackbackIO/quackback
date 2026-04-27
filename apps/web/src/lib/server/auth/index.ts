@@ -157,7 +157,9 @@ async function createAuth() {
     // environments where BASE_URL differs from the browser origin (e.g. ngrok + localhost).
     trustedOrigins: [
       baseURL,
-      ...(process.env.TRUSTED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+      ...(process.env.TRUSTED_ORIGINS?.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) ?? []),
     ],
 
     // Password auth — default sign-in method for self-hosted deployments
@@ -442,6 +444,11 @@ async function createAuth() {
                   .where(eq(principalTable.userId, anonUserId)),
               ])
             })
+
+            // The principal's `type` flipped from 'anonymous' → 'user'; drop
+            // any cached entry so the next SSR render reads the new value.
+            const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
+            await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(anonUserId))
 
             console.log(
               `[auth] Linked anonymous to new account: kept anonUserId=${anonUserId}, deleted newUserId=${newUserId}`

@@ -44,11 +44,11 @@ async function getSessionAndRole(): Promise<{
     const userId = session.user.id as UserId
 
     // Cache the principal type/role per user. Hot path on every
-    // authenticated SSR render. 5min TTL trades a small staleness window
-    // (role demotions take effect within 5min) for a Redis GET in place
-    // of a DB query on every page render.
+    // authenticated SSR render. Mutation paths (principal.service.ts,
+    // api-key.service.ts, auth/index.ts anon-link) invalidate explicitly;
+    // the 5min TTL backstops anything we miss.
     const cacheKey = CACHE_KEYS.PRINCIPAL_BY_USER(userId)
-    let principalRecord = await cacheGet<{ type: string | null; role: string | null }>(cacheKey)
+    let principalRecord = await cacheGet<{ type: string; role: string }>(cacheKey)
     if (!principalRecord) {
       principalRecord =
         (await db.query.principal.findFirst({

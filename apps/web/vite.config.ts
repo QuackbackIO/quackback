@@ -63,13 +63,25 @@ export default defineConfig(({ mode }) => {
             // splitting (react, react-dom, etc.) is left to the default heuristics.
             if (!id.includes('/src/')) return undefined
 
-            const routeMatch = id.match(/\/src\/routes\/(_?[a-z][a-z0-9-]*)/i)
+            // Lowercase-only on purpose — fail fast if a route/component dir
+            // is renamed to something with capitals so the chunk name doesn't
+            // silently diverge.
+            const routeMatch = id.match(/\/src\/routes\/(_?[a-z][a-z0-9-]*)/)
             if (routeMatch) {
               // Strip leading underscore so '_portal' and 'portal' bundle together.
               return `route-${routeMatch[1].replace(/^_/, '')}`
             }
 
-            const componentMatch = id.match(/\/src\/components\/([a-z][a-z0-9-]*)/i)
+            // Sub-group components/admin/* by second segment so the admin
+            // tree (~1.6 MB of source) splits per-section — admin/settings,
+            // admin/feedback, admin/help-center, admin/users — instead of
+            // shipping as one monolithic chunk that all admin routes parse.
+            const adminMatch = id.match(/\/src\/components\/admin\/([a-z][a-z0-9-]*)/)
+            if (adminMatch) {
+              return `components-admin-${adminMatch[1]}`
+            }
+
+            const componentMatch = id.match(/\/src\/components\/([a-z][a-z0-9-]*)/)
             if (componentMatch) {
               return `components-${componentMatch[1]}`
             }
