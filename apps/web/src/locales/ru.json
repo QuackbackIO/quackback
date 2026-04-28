@@ -80,7 +80,6 @@
   "widget.emailCapture.error": "Что-то пошло не так. Попробуйте снова.",
   "widget.voteButton.ariaVote": "Проголосовать ({count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}})",
   "widget.voteButton.ariaRemoveVote": "Убрать голос ({count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}})",
-
   "portal.header.nav.feedback": "Обратная связь",
   "portal.header.nav.roadmap": "Дорожная карта",
   "portal.header.nav.changelog": "Журнал изменений",
@@ -94,7 +93,6 @@
   "portal.header.theme.system": "Системная",
   "portal.header.theme.light": "Светлая",
   "portal.header.theme.dark": "Тёмная",
-
   "portal.feedback.empty.comingSoonTitle": "Скоро откроется",
   "portal.feedback.empty.comingSoonDescription": "{orgName} еще настраивает портал обратной связи. Загляните позже, чтобы оставить предложение.",
   "portal.feedback.list.noPostsFiltered": "По выбранным фильтрам ничего не найдено.",
@@ -125,12 +123,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Поиск предложений...",
   "portal.feedback.toolbar.searchSubmit": "Поиск",
   "portal.feedback.toolbar.clearSearch": "Очистить поиск",
-  "portal.feedback.toolbar.filter": "Фильтр",
-  "portal.feedback.filter.title": "Фильтры",
   "portal.feedback.filter.clearAll": "Сбросить всё",
-  "portal.feedback.filter.statusLabel": "Статус",
-  "portal.feedback.filter.tagsLabel": "Теги",
-  "portal.feedback.filter.noFilters": "Фильтры недоступны",
   "portal.feedback.sidebar.boards": "Категории",
   "portal.feedback.sidebar.viewAllPosts": "Все предложения",
   "portal.feedback.sidebar.poweredBy": "На базе {brand}",
@@ -138,7 +131,6 @@
   "portal.feedback.mobileSheet.title": "Категории",
   "portal.feedback.mobileSheet.viewAllPosts": "Все предложения",
   "portal.feedback.similarPosts.heading": "Похожие предложения",
-
   "portal.postDetail.comments": "{count, plural, one {# комментарий} few {# комментария} many {# комментариев} other {# комментария}}",
   "portal.postDetail.postActions.ariaLabel": "Действия",
   "portal.postDetail.postActions.edit": "Редактировать",
@@ -184,20 +176,17 @@
   "portal.postDetail.deleteDialog.errorLinks": "Не удалось загрузить связанные интеграции. Закройте окно и попробуйте снова.",
   "portal.postDetail.notFound": "Предложение не найдено",
   "portal.postDetail.commentsLocked": "Комментарии закрыты",
-
   "portal.changelog.title": "Журнал изменений",
   "portal.changelog.description": "Следите за новыми релизами и обновлениями продукта.",
   "portal.changelog.rssFeed": "RSS-лента",
   "portal.changelog.entryNotFound.title": "Запись в журнале изменений не найдена",
   "portal.changelog.entryNotFound.description": "Эта запись могла быть удалена или ещё не опубликована.",
   "portal.changelog.entryNotFound.backLink": "Журнал изменений",
-
   "portal.roadmap.title": "Дорожная карта",
   "portal.roadmap.description": "Посмотрите, над чем мы работаем и что будет дальше.",
   "portal.roadmap.empty.title": "Дорожные карты недоступны",
   "portal.roadmap.empty.description": "Загляните позже, чтобы посмотреть, над чем мы работаем.",
   "portal.roadmap.column.empty": "Пока пусто",
-
   "portal.help.title": "Помощь",
   "portal.help.description": "Найдите ответы на вопросы и узнайте, как получить максимум от нашего продукта.",
   "portal.help.categoryNotFound.title": "Категория не найдена",
@@ -206,7 +195,6 @@
   "portal.help.articleNotFound.title": "Статья не найдена",
   "portal.help.articleNotFound.description": "Эта статья могла быть удалена или ещё не опубликована.",
   "portal.help.articleNotFound.backLink": "Помощь",
-
   "portal.notifications.title": "Уведомления",
   "portal.notifications.subtitle": "Обновления по предложениям, на которые вы подписаны",
   "portal.notifications.markAllRead": "Отметить всё прочитанным",
@@ -216,7 +204,6 @@
   "portal.notifications.groupEarlier": "Ранее",
   "portal.notifications.empty.title": "Все прочитано",
   "portal.notifications.empty.description": "Голосуйте или комментируйте чтобы подписаться. Мы сообщим об изменениях статуса и новой активности.",
-
   "portal.settings.profile.title": "Профиль",
   "portal.settings.profile.description": "Управляйте личной информацией",
   "portal.settings.preferences.title": "Настройки",
@@ -226,7 +213,6 @@
   "portal.settings.preferences.appearance.themeLabel": "Цветовая схема",
   "portal.settings.preferences.notifications.title": "Уведомления по почте",
   "portal.settings.preferences.notifications.description": "Настройте уведомления по предложениям, на которые вы подписаны",
-
   "portal.subscriptionBell.aria.subscribe": "Подписаться на уведомления",
   "portal.subscriptionBell.aria.subscribedStatusOnly": "Вы подписаны только на изменения статуса",
   "portal.subscriptionBell.aria.subscribedAll": "Вы подписаны на всю активность",
@@ -237,12 +223,9 @@
   "portal.subscriptionBell.level.statusOnly": "Только статус",
   "portal.subscriptionBell.level.statusOnlyHint": "Когда меняется статус",
   "portal.subscriptionBell.level.unsubscribe": "Отписаться",
-
   "portal.unsubscribeBanner.message": "Вы отписались от этого предложения. Нажмите на колокольчик, чтобы подписаться снова.",
   "portal.unsubscribeBanner.dismiss": "Скрыть",
-
   "portal.pinnedComment.pinnedBadge": "Закреплено",
-
   "portal.postCard.authorFallback": "Аноним",
   "portal.postCard.editNotAllowed": "Редактирование недоступно",
   "portal.postCard.deleteNotAllowed": "Удаление недоступно",
@@ -255,7 +238,6 @@
   "portal.postCard.vote.ariaRemoveVote": "Убрать голос ({count, plural, one {# голос} few {# голоса} many {# голосов} other {# голоса}})",
   "portal.postCard.toast.linkCopied": "Ссылка скопирована в буфер обмена",
   "portal.postCard.toast.linkCopyFailed": "Не удалось скопировать ссылку",
-
   "portal.commentThread.empty": "Комментариев пока нет. Оставьте первый.",
   "portal.commentThread.signInToComment": "Войдите, чтобы комментировать",
   "portal.commentThread.signIn": "Войти",
@@ -275,7 +257,6 @@
   "portal.commentThread.restoring": "Восстановление...",
   "portal.commentThread.delete": "Удалить",
   "portal.commentThread.deleting": "Удаление...",
-
   "portal.commentForm.labelSrOnly": "Ваш комментарий",
   "portal.commentForm.placeholder": "Напишите комментарий...",
   "portal.commentForm.authorFallback": "Аноним",

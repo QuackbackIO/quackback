@@ -80,7 +80,6 @@
   "widget.emailCapture.error": "Something went wrong. Please try again.",
   "widget.voteButton.ariaVote": "Vote ({count, plural, one {# vote} other {# votes}})",
   "widget.voteButton.ariaRemoveVote": "Remove vote ({count, plural, one {# vote} other {# votes}})",
-
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Changelog",
@@ -94,7 +93,6 @@
   "portal.header.theme.system": "System",
   "portal.header.theme.light": "Light",
   "portal.header.theme.dark": "Dark",
-
   "portal.feedback.empty.comingSoonTitle": "Coming Soon",
   "portal.feedback.empty.comingSoonDescription": "{orgName} is setting up their feedback portal. Check back soon to share your ideas and suggestions.",
   "portal.feedback.list.noPostsFiltered": "No posts match your filters.",
@@ -125,12 +123,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Search posts...",
   "portal.feedback.toolbar.searchSubmit": "Search",
   "portal.feedback.toolbar.clearSearch": "Clear search",
-  "portal.feedback.toolbar.filter": "Filter",
-  "portal.feedback.filter.title": "Filters",
   "portal.feedback.filter.clearAll": "Clear all",
-  "portal.feedback.filter.statusLabel": "Status",
-  "portal.feedback.filter.tagsLabel": "Tags",
-  "portal.feedback.filter.noFilters": "No filters available",
   "portal.feedback.sidebar.boards": "Boards",
   "portal.feedback.sidebar.viewAllPosts": "View all posts",
   "portal.feedback.sidebar.poweredBy": "Powered by {brand}",
@@ -138,7 +131,6 @@
   "portal.feedback.mobileSheet.title": "Boards",
   "portal.feedback.mobileSheet.viewAllPosts": "View all posts",
   "portal.feedback.similarPosts.heading": "Similar ideas",
-
   "portal.postDetail.comments": "{count, plural, one {# Comment} other {# Comments}}",
   "portal.postDetail.postActions.ariaLabel": "Post actions",
   "portal.postDetail.postActions.edit": "Edit",
@@ -184,20 +176,17 @@
   "portal.postDetail.deleteDialog.errorLinks": "Failed to load linked integrations. Please close and try again.",
   "portal.postDetail.notFound": "Post not found",
   "portal.postDetail.commentsLocked": "Comments are locked on this post",
-
   "portal.changelog.title": "Changelog",
   "portal.changelog.description": "Stay up to date with the latest product updates and shipped features.",
   "portal.changelog.rssFeed": "RSS Feed",
   "portal.changelog.entryNotFound.title": "Changelog entry not found",
   "portal.changelog.entryNotFound.description": "This entry may have been removed or is not yet published.",
   "portal.changelog.entryNotFound.backLink": "Changelog",
-
   "portal.roadmap.title": "Roadmap",
   "portal.roadmap.description": "See what we're working on and what's coming next.",
   "portal.roadmap.empty.title": "No roadmaps available",
   "portal.roadmap.empty.description": "Check back later to see what we're working on.",
   "portal.roadmap.column.empty": "No items yet",
-
   "portal.help.title": "Help Center",
   "portal.help.description": "Find answers to your questions and learn how to get the most out of our product.",
   "portal.help.categoryNotFound.title": "Category not found",
@@ -206,7 +195,6 @@
   "portal.help.articleNotFound.title": "Article not found",
   "portal.help.articleNotFound.description": "This article may have been removed or is not yet published.",
   "portal.help.articleNotFound.backLink": "Help Center",
-
   "portal.notifications.title": "Notifications",
   "portal.notifications.subtitle": "Updates on posts you've subscribed to",
   "portal.notifications.markAllRead": "Mark all read",
@@ -216,7 +204,6 @@
   "portal.notifications.groupEarlier": "Earlier",
   "portal.notifications.empty.title": "All caught up!",
   "portal.notifications.empty.description": "Vote or comment on posts to subscribe. You'll get notified when there are status changes or new activity.",
-
   "portal.settings.profile.title": "Profile",
   "portal.settings.profile.description": "Manage your personal information",
   "portal.settings.preferences.title": "Preferences",
@@ -226,7 +213,6 @@
   "portal.settings.preferences.appearance.themeLabel": "Theme",
   "portal.settings.preferences.notifications.title": "Email Notifications",
   "portal.settings.preferences.notifications.description": "Manage email notifications for posts you're subscribed to",
-
   "portal.subscriptionBell.aria.subscribe": "Subscribe to notifications",
   "portal.subscriptionBell.aria.subscribedStatusOnly": "Subscribed to status changes only",
   "portal.subscriptionBell.aria.subscribedAll": "Subscribed to all activity",
@@ -237,12 +223,9 @@
   "portal.subscriptionBell.level.statusOnly": "Status changes",
   "portal.subscriptionBell.level.statusOnlyHint": "When status is updated",
   "portal.subscriptionBell.level.unsubscribe": "Unsubscribe",
-
   "portal.unsubscribeBanner.message": "You've been unsubscribed from this post. Use the bell icon to resubscribe.",
   "portal.unsubscribeBanner.dismiss": "Dismiss",
-
   "portal.pinnedComment.pinnedBadge": "Pinned",
-
   "portal.postCard.authorFallback": "Anonymous",
   "portal.postCard.editNotAllowed": "Edit not allowed",
   "portal.postCard.deleteNotAllowed": "Delete not allowed",
@@ -255,7 +238,6 @@
   "portal.postCard.vote.ariaRemoveVote": "Remove vote ({count, plural, one {# vote} other {# votes}})",
   "portal.postCard.toast.linkCopied": "Link copied to clipboard",
   "portal.postCard.toast.linkCopyFailed": "Failed to copy link",
-
   "portal.commentThread.empty": "No comments yet. Be the first to share your thoughts!",
   "portal.commentThread.signInToComment": "Sign in to comment",
   "portal.commentThread.signIn": "Sign in",
@@ -275,7 +257,6 @@
   "portal.commentThread.restoring": "Restoring...",
   "portal.commentThread.delete": "Delete",
   "portal.commentThread.deleting": "Deleting...",
-
   "portal.commentForm.labelSrOnly": "Your comment",
   "portal.commentForm.placeholder": "Write a comment...",
   "portal.commentForm.authorFallback": "Anonymous",
@@ -294,5 +275,23 @@
   "portal.commentForm.submitWithStatus": "Comment & mark {statusName}",
   "portal.commentForm.reply": "Reply",
   "portal.commentForm.submitting": "Posting...",
-  "portal.commentForm.errorPost": "Failed to post comment"
+  "portal.commentForm.errorPost": "Failed to post comment",
+  "portal.feedback.filter.addFilter": "Add filter",
+  "portal.feedback.filter.back": "Back",
+  "portal.feedback.filter.hidingCompleted": "Hiding completed and closed posts.",
+  "portal.feedback.filter.showAll": "Show all",
+  "portal.feedback.filter.category.status": "Status",
+  "portal.feedback.filter.category.tag": "Tag",
+  "portal.feedback.filter.category.votes": "Vote count",
+  "portal.feedback.filter.category.date": "Created date",
+  "portal.feedback.filter.category.response": "Team response",
+  "portal.feedback.filter.statusGroup.active": "Active",
+  "portal.feedback.filter.statusGroup.complete": "Complete",
+  "portal.feedback.filter.statusGroup.closed": "Closed",
+  "portal.feedback.filter.chip.status": "Status:",
+  "portal.feedback.filter.chip.tag": "Tag:",
+  "portal.feedback.filter.chip.tags": "Tags:",
+  "portal.feedback.filter.chip.votes": "Min votes:",
+  "portal.feedback.filter.chip.date": "Date:",
+  "portal.feedback.filter.chip.response": "Team response:"
 }

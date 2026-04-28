@@ -80,7 +80,6 @@
   "widget.emailCapture.error": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
   "widget.voteButton.ariaVote": "تصويت ({count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}})",
   "widget.voteButton.ariaRemoveVote": "إزالة التصويت ({count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}})",
-
   "portal.header.nav.feedback": "الملاحظات",
   "portal.header.nav.roadmap": "خارطة الطريق",
   "portal.header.nav.changelog": "آخر المستجدات",
@@ -94,7 +93,6 @@
   "portal.header.theme.system": "النظام",
   "portal.header.theme.light": "فاتح",
   "portal.header.theme.dark": "داكن",
-
   "portal.feedback.empty.comingSoonTitle": "قريبًا",
   "portal.feedback.empty.comingSoonDescription": "يقوم {orgName} بإعداد بوابة الملاحظات الخاصة به. عد قريبًا لمشاركة أفكارك واقتراحاتك.",
   "portal.feedback.list.noPostsFiltered": "لا توجد منشورات تطابق الفلاتر المحددة.",
@@ -125,12 +123,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "ابحث في المنشورات...",
   "portal.feedback.toolbar.searchSubmit": "بحث",
   "portal.feedback.toolbar.clearSearch": "مسح البحث",
-  "portal.feedback.toolbar.filter": "تصفية",
-  "portal.feedback.filter.title": "الفلاتر",
   "portal.feedback.filter.clearAll": "مسح الكل",
-  "portal.feedback.filter.statusLabel": "الحالة",
-  "portal.feedback.filter.tagsLabel": "الوسوم",
-  "portal.feedback.filter.noFilters": "لا توجد فلاتر متاحة",
   "portal.feedback.sidebar.boards": "الفئات",
   "portal.feedback.sidebar.viewAllPosts": "عرض جميع المنشورات",
   "portal.feedback.sidebar.poweredBy": "مدعوم بواسطة {brand}",
@@ -138,7 +131,6 @@
   "portal.feedback.mobileSheet.title": "الفئات",
   "portal.feedback.mobileSheet.viewAllPosts": "عرض جميع المنشورات",
   "portal.feedback.similarPosts.heading": "أفكار مشابهة",
-
   "portal.postDetail.comments": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقًا} other {# تعليق}}",
   "portal.postDetail.postActions.ariaLabel": "إجراءات المنشور",
   "portal.postDetail.postActions.edit": "تعديل",
@@ -184,20 +176,17 @@
   "portal.postDetail.deleteDialog.errorLinks": "فشل تحميل عمليات التكامل المرتبطة. يرجى الإغلاق والمحاولة مرة أخرى.",
   "portal.postDetail.notFound": "المنشور غير موجود",
   "portal.postDetail.commentsLocked": "التعليقات مغلقة على هذا المنشور",
-
   "portal.changelog.title": "آخر المستجدات",
   "portal.changelog.description": "ابقَ على اطلاع بآخر تحديثات المنتج والميزات المُطلقة.",
   "portal.changelog.rssFeed": "خلاصة RSS",
   "portal.changelog.entryNotFound.title": "الإدخال غير موجود",
   "portal.changelog.entryNotFound.description": "ربما تمت إزالة هذا الإدخال أو لم يُنشر بعد.",
   "portal.changelog.entryNotFound.backLink": "آخر المستجدات",
-
   "portal.roadmap.title": "خارطة الطريق",
   "portal.roadmap.description": "اطّلع على ما نعمل عليه وما هو قادم.",
   "portal.roadmap.empty.title": "لا توجد خارطة طريق متاحة",
   "portal.roadmap.empty.description": "عد لاحقًا لمعرفة ما نعمل عليه.",
   "portal.roadmap.column.empty": "لا توجد عناصر بعد",
-
   "portal.help.title": "مركز المساعدة",
   "portal.help.description": "ابحث عن إجابات لأسئلتك وتعلّم كيفية الاستفادة القصوى من منتجنا.",
   "portal.help.categoryNotFound.title": "الفئة غير موجودة",
@@ -206,7 +195,6 @@
   "portal.help.articleNotFound.title": "المقالة غير موجودة",
   "portal.help.articleNotFound.description": "ربما تمت إزالة هذه المقالة أو لم تُنشر بعد.",
   "portal.help.articleNotFound.backLink": "مركز المساعدة",
-
   "portal.notifications.title": "الإشعارات",
   "portal.notifications.subtitle": "تحديثات حول المنشورات التي اشتركت فيها",
   "portal.notifications.markAllRead": "تحديد الكل كمقروء",
@@ -216,7 +204,6 @@
   "portal.notifications.groupEarlier": "سابقًا",
   "portal.notifications.empty.title": "أنت على اطلاع بكل جديد!",
   "portal.notifications.empty.description": "صوّت أو علّق على المنشورات للاشتراك. ستتلقى إشعارات عند تغيّر الحالة أو وجود نشاط جديد.",
-
   "portal.settings.profile.title": "الملف الشخصي",
   "portal.settings.profile.description": "إدارة معلوماتك الشخصية",
   "portal.settings.preferences.title": "التفضيلات",
@@ -226,7 +213,6 @@
   "portal.settings.preferences.appearance.themeLabel": "المظهر",
   "portal.settings.preferences.notifications.title": "إشعارات البريد الإلكتروني",
   "portal.settings.preferences.notifications.description": "إدارة إشعارات البريد الإلكتروني للمنشورات التي اشتركت فيها",
-
   "portal.subscriptionBell.aria.subscribe": "الاشتراك في الإشعارات",
   "portal.subscriptionBell.aria.subscribedStatusOnly": "مشترك في تغييرات الحالة فقط",
   "portal.subscriptionBell.aria.subscribedAll": "مشترك في جميع الأنشطة",
@@ -237,12 +223,9 @@
   "portal.subscriptionBell.level.statusOnly": "تغييرات الحالة",
   "portal.subscriptionBell.level.statusOnlyHint": "عند تحديث الحالة",
   "portal.subscriptionBell.level.unsubscribe": "إلغاء الاشتراك",
-
   "portal.unsubscribeBanner.message": "تم إلغاء اشتراكك من هذا المنشور. استخدم أيقونة الجرس لإعادة الاشتراك.",
   "portal.unsubscribeBanner.dismiss": "إغلاق",
-
   "portal.pinnedComment.pinnedBadge": "مثبّت",
-
   "portal.postCard.authorFallback": "مجهول",
   "portal.postCard.editNotAllowed": "التعديل غير مسموح",
   "portal.postCard.deleteNotAllowed": "الحذف غير مسموح",
@@ -255,7 +238,6 @@
   "portal.postCard.vote.ariaRemoveVote": "إزالة التصويت ({count, plural, zero {لا أصوات} one {صوت واحد} two {صوتان} few {# أصوات} many {# صوتًا} other {# صوت}})",
   "portal.postCard.toast.linkCopied": "تم نسخ الرابط إلى الحافظة",
   "portal.postCard.toast.linkCopyFailed": "فشل نسخ الرابط",
-
   "portal.commentThread.empty": "لا توجد تعليقات بعد. كن أول من يشارك رأيه!",
   "portal.commentThread.signInToComment": "سجّل الدخول للتعليق",
   "portal.commentThread.signIn": "تسجيل الدخول",
@@ -275,7 +257,6 @@
   "portal.commentThread.restoring": "جارٍ الاستعادة...",
   "portal.commentThread.delete": "حذف",
   "portal.commentThread.deleting": "جارٍ الحذف...",
-
   "portal.commentForm.labelSrOnly": "تعليقك",
   "portal.commentForm.placeholder": "اكتب تعليقًا...",
   "portal.commentForm.authorFallback": "مجهول",

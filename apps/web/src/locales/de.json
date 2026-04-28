@@ -80,7 +80,6 @@
   "widget.emailCapture.error": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
   "widget.voteButton.ariaVote": "Abstimmen ({count, plural, one {# Stimme} other {# Stimmen}})",
   "widget.voteButton.ariaRemoveVote": "Stimme zurücknehmen ({count, plural, one {# Stimme} other {# Stimmen}})",
-
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Neuigkeiten",
@@ -94,7 +93,6 @@
   "portal.header.theme.system": "System",
   "portal.header.theme.light": "Hell",
   "portal.header.theme.dark": "Dunkel",
-
   "portal.feedback.empty.comingSoonTitle": "Demnächst verfügbar",
   "portal.feedback.empty.comingSoonDescription": "{orgName} richtet das Feedback-Portal ein. Schauen Sie bald wieder vorbei, um Ihre Ideen und Vorschläge zu teilen.",
   "portal.feedback.list.noPostsFiltered": "Keine Beiträge entsprechen Ihren Filtern.",
@@ -125,12 +123,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Beiträge suchen...",
   "portal.feedback.toolbar.searchSubmit": "Suchen",
   "portal.feedback.toolbar.clearSearch": "Suche löschen",
-  "portal.feedback.toolbar.filter": "Filtern",
-  "portal.feedback.filter.title": "Filter",
   "portal.feedback.filter.clearAll": "Alle löschen",
-  "portal.feedback.filter.statusLabel": "Status",
-  "portal.feedback.filter.tagsLabel": "Tags",
-  "portal.feedback.filter.noFilters": "Keine Filter verfügbar",
   "portal.feedback.sidebar.boards": "Kategorien",
   "portal.feedback.sidebar.viewAllPosts": "Alle Beiträge anzeigen",
   "portal.feedback.sidebar.poweredBy": "Bereitgestellt von {brand}",
@@ -138,7 +131,6 @@
   "portal.feedback.mobileSheet.title": "Kategorien",
   "portal.feedback.mobileSheet.viewAllPosts": "Alle Beiträge anzeigen",
   "portal.feedback.similarPosts.heading": "Ähnliche Ideen",
-
   "portal.postDetail.comments": "{count, plural, one {# Kommentar} other {# Kommentare}}",
   "portal.postDetail.postActions.ariaLabel": "Beitragsaktionen",
   "portal.postDetail.postActions.edit": "Bearbeiten",
@@ -177,27 +169,24 @@
   "portal.postDetail.metadata.restorePost": "Beitrag wiederherstellen",
   "portal.postDetail.metadata.deletePost": "Beitrag löschen",
   "portal.postDetail.deleteDialog.title": "Beitrag löschen",
-  "portal.postDetail.deleteDialog.description": "Sind Sie sicher, dass Sie \u201E{title}\u201C löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "portal.postDetail.deleteDialog.description": "Sind Sie sicher, dass Sie „{title}“ löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
   "portal.postDetail.deleteDialog.confirmLabel": "Beitrag löschen",
   "portal.postDetail.deleteDialog.deleting": "Wird gelöscht...",
   "portal.postDetail.deleteDialog.loading": "Wird geladen...",
   "portal.postDetail.deleteDialog.errorLinks": "Verknüpfte Integrationen konnten nicht geladen werden. Bitte schließen Sie das Fenster und versuchen Sie es erneut.",
   "portal.postDetail.notFound": "Beitrag nicht gefunden",
   "portal.postDetail.commentsLocked": "Die Kommentare zu diesem Beitrag sind gesperrt",
-
   "portal.changelog.title": "Neuigkeiten",
   "portal.changelog.description": "Bleiben Sie auf dem Laufenden über die neuesten Produkt-Updates und veröffentlichten Funktionen.",
   "portal.changelog.rssFeed": "RSS-Feed",
   "portal.changelog.entryNotFound.title": "Eintrag nicht gefunden",
   "portal.changelog.entryNotFound.description": "Dieser Eintrag wurde möglicherweise entfernt oder ist noch nicht veröffentlicht.",
   "portal.changelog.entryNotFound.backLink": "Neuigkeiten",
-
   "portal.roadmap.title": "Roadmap",
   "portal.roadmap.description": "Sehen Sie, woran wir arbeiten und was als Nächstes kommt.",
   "portal.roadmap.empty.title": "Keine Roadmaps verfügbar",
   "portal.roadmap.empty.description": "Schauen Sie später wieder vorbei, um zu sehen, woran wir arbeiten.",
   "portal.roadmap.column.empty": "Noch keine Einträge",
-
   "portal.help.title": "Hilfecenter",
   "portal.help.description": "Finden Sie Antworten auf Ihre Fragen und erfahren Sie, wie Sie unser Produkt optimal nutzen.",
   "portal.help.categoryNotFound.title": "Kategorie nicht gefunden",
@@ -206,7 +195,6 @@
   "portal.help.articleNotFound.title": "Artikel nicht gefunden",
   "portal.help.articleNotFound.description": "Dieser Artikel wurde möglicherweise entfernt oder ist noch nicht veröffentlicht.",
   "portal.help.articleNotFound.backLink": "Hilfecenter",
-
   "portal.notifications.title": "Benachrichtigungen",
   "portal.notifications.subtitle": "Neuigkeiten zu Beiträgen, die Sie abonniert haben",
   "portal.notifications.markAllRead": "Alle als gelesen markieren",
@@ -216,7 +204,6 @@
   "portal.notifications.groupEarlier": "Älter",
   "portal.notifications.empty.title": "Sie sind auf dem neuesten Stand!",
   "portal.notifications.empty.description": "Stimmen Sie ab oder kommentieren Sie Beiträge, um diese zu abonnieren. Sie werden bei Statusänderungen oder neuer Aktivität benachrichtigt.",
-
   "portal.settings.profile.title": "Profil",
   "portal.settings.profile.description": "Verwalten Sie Ihre persönlichen Daten",
   "portal.settings.preferences.title": "Einstellungen",
@@ -226,7 +213,6 @@
   "portal.settings.preferences.appearance.themeLabel": "Design",
   "portal.settings.preferences.notifications.title": "E-Mail-Benachrichtigungen",
   "portal.settings.preferences.notifications.description": "Verwalten Sie E-Mail-Benachrichtigungen für Beiträge, die Sie abonniert haben",
-
   "portal.subscriptionBell.aria.subscribe": "Benachrichtigungen abonnieren",
   "portal.subscriptionBell.aria.subscribedStatusOnly": "Nur Statusänderungen abonniert",
   "portal.subscriptionBell.aria.subscribedAll": "Alle Aktivitäten abonniert",
@@ -237,12 +223,9 @@
   "portal.subscriptionBell.level.statusOnly": "Statusänderungen",
   "portal.subscriptionBell.level.statusOnlyHint": "Wenn der Status aktualisiert wird",
   "portal.subscriptionBell.level.unsubscribe": "Abbestellen",
-
   "portal.unsubscribeBanner.message": "Sie haben diesen Beitrag abbestellt. Verwenden Sie das Glockensymbol, um ihn erneut zu abonnieren.",
   "portal.unsubscribeBanner.dismiss": "Schließen",
-
   "portal.pinnedComment.pinnedBadge": "Angepinnt",
-
   "portal.postCard.authorFallback": "Anonym",
   "portal.postCard.editNotAllowed": "Bearbeitung nicht erlaubt",
   "portal.postCard.deleteNotAllowed": "Löschen nicht erlaubt",
@@ -255,7 +238,6 @@
   "portal.postCard.vote.ariaRemoveVote": "Stimme zurücknehmen ({count, plural, one {# Stimme} other {# Stimmen}})",
   "portal.postCard.toast.linkCopied": "Link in die Zwischenablage kopiert",
   "portal.postCard.toast.linkCopyFailed": "Link konnte nicht kopiert werden",
-
   "portal.commentThread.empty": "Noch keine Kommentare. Teilen Sie als Erste(r) Ihre Gedanken!",
   "portal.commentThread.signInToComment": "Melden Sie sich an, um zu kommentieren",
   "portal.commentThread.signIn": "Anmelden",
@@ -275,7 +257,6 @@
   "portal.commentThread.restoring": "Wird wiederhergestellt...",
   "portal.commentThread.delete": "Löschen",
   "portal.commentThread.deleting": "Wird gelöscht...",
-
   "portal.commentForm.labelSrOnly": "Ihr Kommentar",
   "portal.commentForm.placeholder": "Kommentar schreiben...",
   "portal.commentForm.authorFallback": "Anonym",

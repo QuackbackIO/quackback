@@ -80,7 +80,6 @@
   "widget.emailCapture.error": "Algo salió mal. Inténtalo de nuevo.",
   "widget.voteButton.ariaVote": "Votar ({count, plural, one {# voto} other {# votos}})",
   "widget.voteButton.ariaRemoveVote": "Quitar voto ({count, plural, one {# voto} other {# votos}})",
-
   "portal.header.nav.feedback": "Feedback",
   "portal.header.nav.roadmap": "Roadmap",
   "portal.header.nav.changelog": "Novedades",
@@ -94,7 +93,6 @@
   "portal.header.theme.system": "Sistema",
   "portal.header.theme.light": "Claro",
   "portal.header.theme.dark": "Oscuro",
-
   "portal.feedback.empty.comingSoonTitle": "Próximamente",
   "portal.feedback.empty.comingSoonDescription": "{orgName} está configurando su portal de feedback. Vuelve pronto para compartir tus ideas y sugerencias.",
   "portal.feedback.list.noPostsFiltered": "Ninguna publicación coincide con tus filtros.",
@@ -125,12 +123,7 @@
   "portal.feedback.toolbar.searchPlaceholder": "Buscar publicaciones...",
   "portal.feedback.toolbar.searchSubmit": "Buscar",
   "portal.feedback.toolbar.clearSearch": "Borrar búsqueda",
-  "portal.feedback.toolbar.filter": "Filtrar",
-  "portal.feedback.filter.title": "Filtros",
   "portal.feedback.filter.clearAll": "Borrar todo",
-  "portal.feedback.filter.statusLabel": "Estado",
-  "portal.feedback.filter.tagsLabel": "Etiquetas",
-  "portal.feedback.filter.noFilters": "No hay filtros disponibles",
   "portal.feedback.sidebar.boards": "Categorías",
   "portal.feedback.sidebar.viewAllPosts": "Ver todas las publicaciones",
   "portal.feedback.sidebar.poweredBy": "Desarrollado con {brand}",
@@ -138,7 +131,6 @@
   "portal.feedback.mobileSheet.title": "Categorías",
   "portal.feedback.mobileSheet.viewAllPosts": "Ver todas las publicaciones",
   "portal.feedback.similarPosts.heading": "Ideas similares",
-
   "portal.postDetail.comments": "{count, plural, one {# comentario} other {# comentarios}}",
   "portal.postDetail.postActions.ariaLabel": "Acciones de la publicación",
   "portal.postDetail.postActions.edit": "Editar",
@@ -184,20 +176,17 @@
   "portal.postDetail.deleteDialog.errorLinks": "No se pudieron cargar las integraciones vinculadas. Cierra e inténtalo de nuevo.",
   "portal.postDetail.notFound": "Publicación no encontrada",
   "portal.postDetail.commentsLocked": "Los comentarios están bloqueados en esta publicación",
-
   "portal.changelog.title": "Novedades",
   "portal.changelog.description": "Mantente al día con las últimas actualizaciones del producto y funcionalidades lanzadas.",
   "portal.changelog.rssFeed": "Feed RSS",
   "portal.changelog.entryNotFound.title": "Entrada no encontrada",
   "portal.changelog.entryNotFound.description": "Esta entrada puede haber sido eliminada o aún no está publicada.",
   "portal.changelog.entryNotFound.backLink": "Novedades",
-
   "portal.roadmap.title": "Roadmap",
   "portal.roadmap.description": "Consulta en qué estamos trabajando y qué viene a continuación.",
   "portal.roadmap.empty.title": "No hay roadmaps disponibles",
   "portal.roadmap.empty.description": "Vuelve más tarde para ver en qué estamos trabajando.",
   "portal.roadmap.column.empty": "Aún no hay elementos",
-
   "portal.help.title": "Centro de ayuda",
   "portal.help.description": "Encuentra respuestas a tus preguntas y aprende a sacar el máximo partido a nuestro producto.",
   "portal.help.categoryNotFound.title": "Categoría no encontrada",
@@ -206,7 +195,6 @@
   "portal.help.articleNotFound.title": "Artículo no encontrado",
   "portal.help.articleNotFound.description": "Este artículo puede haber sido eliminado o aún no está publicado.",
   "portal.help.articleNotFound.backLink": "Centro de ayuda",
-
   "portal.notifications.title": "Notificaciones",
   "portal.notifications.subtitle": "Actualizaciones sobre publicaciones a las que te has suscrito",
   "portal.notifications.markAllRead": "Marcar todo como leído",
@@ -216,7 +204,6 @@
   "portal.notifications.groupEarlier": "Anteriores",
   "portal.notifications.empty.title": "¡Estás al día!",
   "portal.notifications.empty.description": "Vota o comenta en publicaciones para suscribirte. Recibirás notificaciones cuando haya cambios de estado o nueva actividad.",
-
   "portal.settings.profile.title": "Perfil",
   "portal.settings.profile.description": "Gestiona tu información personal",
   "portal.settings.preferences.title": "Preferencias",
@@ -226,7 +213,6 @@
   "portal.settings.preferences.appearance.themeLabel": "Tema",
   "portal.settings.preferences.notifications.title": "Notificaciones por correo electrónico",
   "portal.settings.preferences.notifications.description": "Gestiona las notificaciones por correo electrónico de las publicaciones a las que te has suscrito",
-
   "portal.subscriptionBell.aria.subscribe": "Suscribirse a notificaciones",
   "portal.subscriptionBell.aria.subscribedStatusOnly": "Suscrito/a solo a cambios de estado",
   "portal.subscriptionBell.aria.subscribedAll": "Suscrito/a a toda la actividad",
@@ -237,12 +223,9 @@
   "portal.subscriptionBell.level.statusOnly": "Cambios de estado",
   "portal.subscriptionBell.level.statusOnlyHint": "Cuando se actualiza el estado",
   "portal.subscriptionBell.level.unsubscribe": "Cancelar suscripción",
-
   "portal.unsubscribeBanner.message": "Te has dado de baja de esta publicación. Usa el icono de campana para volver a suscribirte.",
   "portal.unsubscribeBanner.dismiss": "Cerrar",
-
   "portal.pinnedComment.pinnedBadge": "Fijado",
-
   "portal.postCard.authorFallback": "Anónimo/a",
   "portal.postCard.editNotAllowed": "Edición no permitida",
   "portal.postCard.deleteNotAllowed": "Eliminación no permitida",
@@ -255,7 +238,6 @@
   "portal.postCard.vote.ariaRemoveVote": "Quitar voto ({count, plural, one {# voto} other {# votos}})",
   "portal.postCard.toast.linkCopied": "Enlace copiado al portapapeles",
   "portal.postCard.toast.linkCopyFailed": "No se pudo copiar el enlace",
-
   "portal.commentThread.empty": "Aún no hay comentarios. ¡Sé el primero en compartir tus ideas!",
   "portal.commentThread.signInToComment": "Inicia sesión para comentar",
   "portal.commentThread.signIn": "Iniciar sesión",
@@ -275,7 +257,6 @@
   "portal.commentThread.restoring": "Restaurando...",
   "portal.commentThread.delete": "Eliminar",
   "portal.commentThread.deleting": "Eliminando...",
-
   "portal.commentForm.labelSrOnly": "Tu comentario",
   "portal.commentForm.placeholder": "Escribe un comentario...",
   "portal.commentForm.authorFallback": "Anónimo/a",
