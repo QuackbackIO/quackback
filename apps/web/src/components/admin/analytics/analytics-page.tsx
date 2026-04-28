@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
 import { formatDistanceToNow } from 'date-fns'
@@ -8,12 +8,24 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon, InboxIcon, DocumentTextIcon, UsersIcon } from '@heroicons/react/24/solid'
 import { AnalyticsSummaryCards, METRICS, type MetricKey } from './analytics-summary-cards'
-import { AnalyticsActivityChart } from './analytics-activity-chart'
-import { AnalyticsStatusChart } from './analytics-status-chart'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
 import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
+
+// Defer recharts (~580KB minified, including victory-vendor) and the chart
+// primitives that wrap it. Analytics is admin-gated and rarely the first
+// page hit, so SSR doesn't need recharts in the server bundle.
+const AnalyticsActivityChart = lazy(() =>
+  import('./analytics-activity-chart').then((m) => ({ default: m.AnalyticsActivityChart }))
+)
+const AnalyticsStatusChart = lazy(() =>
+  import('./analytics-status-chart').then((m) => ({ default: m.AnalyticsStatusChart }))
+)
+
+function ChartSkeleton({ className }: { className?: string }) {
+  return <div className={cn('w-full rounded-md bg-muted/50 animate-pulse', className)} />
+}
 
 type Section = 'overview' | 'feedback' | 'changelog' | 'users'
 
@@ -120,11 +132,13 @@ export function AnalyticsPage() {
                       onMetricChange={setActiveMetric}
                     />
                     <div className="border-t border-border/50 px-6 pt-7 pb-6">
-                      <AnalyticsActivityChart
-                        dailyStats={data.dailyStats}
-                        activeMetric={activeMetric}
-                        color={activeColor}
-                      />
+                      <Suspense fallback={<ChartSkeleton className="h-[260px]" />}>
+                        <AnalyticsActivityChart
+                          dailyStats={data.dailyStats}
+                          activeMetric={activeMetric}
+                          color={activeColor}
+                        />
+                      </Suspense>
                     </div>
                   </Card>
                 )}
@@ -137,7 +151,9 @@ export function AnalyticsPage() {
                           <CardTitle>Status distribution</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <AnalyticsStatusChart data={data.statusDistribution} />
+                          <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
+                            <AnalyticsStatusChart data={data.statusDistribution} />
+                          </Suspense>
                         </CardContent>
                       </Card>
                       <Card>

@@ -63,6 +63,23 @@ export default defineConfig(({ mode }) => {
             // splitting (react, react-dom, etc.) is left to the default heuristics.
             if (!id.includes('/src/')) return undefined
 
+            // Files dynamically imported via React.lazy() to defer heavy
+            // client-only deps (framer-motion, recharts) MUST stay in their
+            // own auto-split chunks. Otherwise manualChunks coalesces them
+            // back into the parent route bundle and the lazy() boundary is
+            // lost — the heavy lib gets statically imported by the SSR
+            // entry chunk again. Returning undefined here lets Rollup
+            // honour the dynamic-import boundary.
+            if (
+              id.endsWith('-animated.tsx') ||
+              id.endsWith('/analytics-activity-chart.tsx') ||
+              id.endsWith('/analytics-status-chart.tsx') ||
+              id.endsWith('/components/ui/chart.tsx') ||
+              id.endsWith('/components/public/similar-posts-card.tsx')
+            ) {
+              return undefined
+            }
+
             // Lowercase-only on purpose — fail fast if a route/component dir
             // is renamed to something with capitals so the chunk name doesn't
             // silently diverge.

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useForm, Controller } from 'react-hook-form'
@@ -15,7 +15,11 @@ import { Button } from '@/components/ui/button'
 import { FolderIcon, TagIcon, UserIcon } from '@heroicons/react/24/outline'
 import { PencilSquareIcon } from '@heroicons/react/24/solid'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { SimilarPostsCard } from '@/components/public/similar-posts-card'
+// Defer framer-motion via the public similar-posts-card lazy boundary so the
+// admin/feedback bundle no longer pulls framer-motion into the SSR bundle.
+const SimilarPostsCard = lazy(() =>
+  import('@/components/public/similar-posts-card').then((m) => ({ default: m.SimilarPostsCard }))
+)
 import {
   Select,
   SelectContent,
@@ -223,11 +227,13 @@ export function CreatePostDialog({
 
                 {/* Similar posts card */}
                 <div className="px-4 sm:px-6">
-                  <SimilarPostsCard
-                    posts={similarPosts}
-                    show={watchedTitle.length >= 10}
-                    className="pt-2"
-                  />
+                  <Suspense fallback={null}>
+                    <SimilarPostsCard
+                      posts={similarPosts}
+                      show={watchedTitle.length >= 10}
+                      className="pt-2"
+                    />
+                  </Suspense>
                 </div>
               </div>
 
