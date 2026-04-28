@@ -29,6 +29,9 @@ export const portalQueries = {
     statusSlugs?: string[]
     tagIds?: string[]
     userId?: string
+    minVotes?: number
+    dateFrom?: string
+    responded?: 'responded' | 'unresponded'
   }) =>
     queryOptions({
       queryKey: [
@@ -40,6 +43,9 @@ export const portalQueries = {
         params.statusSlugs,
         params.tagIds,
         params.userId,
+        params.minVotes,
+        params.dateFrom,
+        params.responded,
       ],
       queryFn: async () => {
         const data = await fetchPortalData({ data: params })

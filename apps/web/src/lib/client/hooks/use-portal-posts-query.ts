@@ -97,6 +97,9 @@ async function fetchPublicPosts(
       sort: filters.sort || 'top',
       page,
       limit: 20,
+      minVotes: filters.minVotes,
+      dateFrom: filters.dateFrom,
+      responded: filters.responded,
     },
   })) as unknown as PublicPostListResult
 }

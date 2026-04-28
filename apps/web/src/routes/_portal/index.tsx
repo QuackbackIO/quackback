@@ -16,6 +16,12 @@ const searchSchema = z.object({
   sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
   status: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
+  minVotes: z.coerce.number().int().min(1).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  responded: z.enum(['responded', 'unresponded']).optional(),
 })
 
 export const Route = createFileRoute('/_portal/')({
@@ -45,6 +51,9 @@ export const Route = createFileRoute('/_portal/')({
         statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
         tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
         userId: session?.user?.id,
+        minVotes: searchParams.minVotes,
+        dateFrom: searchParams.dateFrom,
+        responded: searchParams.responded,
       })
     )
 
@@ -109,6 +118,9 @@ function PublicPortalPage() {
       statusSlugs: search.status?.length ? search.status : undefined,
       tagIds: search.tagIds?.length ? search.tagIds : undefined,
       userId: session?.user?.id,
+      minVotes: search.minVotes,
+      dateFrom: search.dateFrom,
+      responded: search.responded,
     }),
     placeholderData: keepPreviousData,
   })

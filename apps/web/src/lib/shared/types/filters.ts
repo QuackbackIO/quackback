@@ -38,6 +38,9 @@ export interface PublicFeedbackFilters {
   sort?: 'top' | 'new' | 'trending'
   status?: string[]
   tagIds?: string[]
+  minVotes?: number
+  dateFrom?: string
+  responded?: 'responded' | 'unresponded'
 }
 
 /**
