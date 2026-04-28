@@ -5,8 +5,6 @@ import type { PublicFeedbackFilters } from '@/lib/shared/types'
 
 export type { PublicFeedbackFilters }
 
-// Simple store for optimistic filter state that persists across renders
-// but resets on navigation completion
 let optimisticState: PublicFeedbackFilters | null = null
 const listeners = new Set<() => void>()
 
@@ -20,7 +18,7 @@ function getSnapshot() {
 }
 
 function getServerSnapshot() {
-  return null // Always null on server to avoid hydration mismatch
+  return null
 }
 
 function setOptimistic(filters: PublicFeedbackFilters | null) {
@@ -28,34 +26,30 @@ function setOptimistic(filters: PublicFeedbackFilters | null) {
   listeners.forEach((l) => l())
 }
 
-/**
- * Hook for managing public feedback filters with optimistic UI updates.
- *
- * Uses external store for optimistic state to avoid hydration mismatches.
- * Server always renders with router state, client can show optimistic updates.
- */
 export function usePublicFilters() {
   const navigate = useNavigate()
   const routerSearch = Route.useSearch()
 
-  // Use external store - returns null on server, optimistic state on client
   const optimistic = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 
-  // Track the last router search to detect when navigation completes
   const lastRouterSearchRef = useRef(routerSearch)
 
-  // Clear optimistic state when router search changes (navigation completed)
+  // Clear optimistic state when ANY tracked field changes (navigation completed)
   if (
     optimistic &&
     (lastRouterSearchRef.current.board !== routerSearch.board ||
       lastRouterSearchRef.current.sort !== routerSearch.sort ||
-      lastRouterSearchRef.current.search !== routerSearch.search)
+      lastRouterSearchRef.current.search !== routerSearch.search ||
+      lastRouterSearchRef.current.minVotes !== routerSearch.minVotes ||
+      lastRouterSearchRef.current.dateFrom !== routerSearch.dateFrom ||
+      lastRouterSearchRef.current.responded !== routerSearch.responded ||
+      lastRouterSearchRef.current.status?.join() !== routerSearch.status?.join() ||
+      lastRouterSearchRef.current.tagIds?.join() !== routerSearch.tagIds?.join())
   ) {
     setOptimistic(null)
   }
   lastRouterSearchRef.current = routerSearch
 
-  // Use optimistic state if set, otherwise router state
   const filters: PublicFeedbackFilters = useMemo(() => {
     if (optimistic) return optimistic
     return {
@@ -64,17 +58,17 @@ export function usePublicFilters() {
       sort: routerSearch.sort,
       status: routerSearch.status?.length ? routerSearch.status : undefined,
       tagIds: routerSearch.tagIds?.length ? routerSearch.tagIds : undefined,
+      minVotes: routerSearch.minVotes,
+      dateFrom: routerSearch.dateFrom,
+      responded: routerSearch.responded,
     }
   }, [optimistic, routerSearch])
 
   const setFilters = useCallback(
     (updates: Partial<PublicFeedbackFilters>) => {
       const newFilters = { ...filters, ...updates }
-
-      // Set optimistic state immediately
       setOptimistic(newFilters)
 
-      // Trigger navigation
       void navigate({
         to: '/',
         search: {
@@ -83,6 +77,9 @@ export function usePublicFilters() {
           sort: newFilters.sort,
           status: newFilters.status,
           tagIds: newFilters.tagIds,
+          minVotes: newFilters.minVotes,
+          dateFrom: newFilters.dateFrom,
+          responded: newFilters.responded,
         },
         replace: true,
       })
@@ -91,15 +88,24 @@ export function usePublicFilters() {
   )
 
   const clearFilters = useCallback(() => {
-    setFilters({ search: undefined, status: undefined, tagIds: undefined })
+    setFilters({
+      status: undefined,
+      tagIds: undefined,
+      minVotes: undefined,
+      dateFrom: undefined,
+      responded: undefined,
+    })
   }, [setFilters])
 
   const activeFilterCount = useMemo(() => {
     let count = 0
     if (filters.status?.length) count += filters.status.length
     if (filters.tagIds?.length) count += filters.tagIds.length
+    if (filters.minVotes) count += 1
+    if (filters.dateFrom) count += 1
+    if (filters.responded) count += 1
     return count
-  }, [filters.status, filters.tagIds])
+  }, [filters.status, filters.tagIds, filters.minVotes, filters.dateFrom, filters.responded])
 
   const hasActiveFilters = activeFilterCount > 0
 
