@@ -14,9 +14,14 @@ import {
   PlusIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/solid'
-import { cn, toIsoDateOnly } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
+import {
+  VOTE_THRESHOLDS,
+  DATE_PRESETS,
+  getDateFromDaysAgo,
+} from '@/components/shared/filter-presets'
 import type { InboxFilters } from './use-inbox-filters'
 import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
@@ -90,14 +95,6 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconCompone
   { key: 'duplicates', label: 'Has duplicates', icon: Square2StackIcon },
 ]
 
-const VOTE_THRESHOLDS = [
-  { value: 5, label: '5+ votes' },
-  { value: 10, label: '10+ votes' },
-  { value: 25, label: '25+ votes' },
-  { value: 50, label: '50+ votes' },
-  { value: 100, label: '100+ votes' },
-]
-
 const COMMENT_THRESHOLDS = [
   { value: 1, label: '1+ comments' },
   { value: 5, label: '5+ comments' },
@@ -105,23 +102,6 @@ const COMMENT_THRESHOLDS = [
   { value: 25, label: '25+ comments' },
   { value: 50, label: '50+ comments' },
 ]
-
-function getDateFromDaysAgo(days: number): string {
-  const date = new Date()
-  if (days > 0) {
-    date.setDate(date.getDate() - days)
-  } else {
-    date.setHours(0, 0, 0, 0)
-  }
-  return toIsoDateOnly(date)
-}
-
-const DATE_PRESETS = [
-  { value: 'today', label: 'Today', daysAgo: 0 },
-  { value: '7days', label: 'Last 7 days', daysAgo: 7 },
-  { value: '30days', label: 'Last 30 days', daysAgo: 30 },
-  { value: '90days', label: 'Last 90 days', daysAgo: 90 },
-] as const
 
 const MENU_BUTTON_STYLES =
   'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors'
@@ -628,7 +608,7 @@ function computeActiveFilters(
   const thresholdFilters: Array<{
     key: 'minVotes' | 'minComments'
     label: string
-    thresholds: typeof VOTE_THRESHOLDS
+    thresholds: ReadonlyArray<{ value: number; label: string }>
   }> = [
     { key: 'minVotes', label: 'Min votes:', thresholds: VOTE_THRESHOLDS },
     { key: 'minComments', label: 'Min comments:', thresholds: COMMENT_THRESHOLDS },
