@@ -53,6 +53,7 @@ const listPublicPostsSchema = z.object({
   dateFrom: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((s) => !Number.isNaN(new Date(s).getTime()), 'Invalid calendar date')
     .optional(),
   responded: z.enum(['responded', 'unresponded']).optional(),
 })
