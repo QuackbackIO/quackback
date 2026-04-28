@@ -7,6 +7,7 @@ import {
   desc,
   sql,
   isNull,
+  gte,
   posts,
   boards,
   postTags,
@@ -84,6 +85,9 @@ interface PostListParams {
   sort?: SortOrder
   page?: number
   limit?: number
+  minVotes?: number
+  dateFrom?: string
+  responded?: 'responded' | 'unresponded'
 }
 
 function buildPostFilterConditions(params: PostListParams) {
@@ -125,6 +129,26 @@ function buildPostFilterConditions(params: PostListParams) {
 
   if (search) {
     conditions.push(sql`${posts.searchVector} @@ websearch_to_tsquery('english', ${search})`)
+  }
+
+  if (typeof params.minVotes === 'number' && params.minVotes > 0) {
+    conditions.push(gte(posts.voteCount, params.minVotes))
+  }
+
+  if (params.dateFrom) {
+    conditions.push(gte(posts.createdAt, new Date(params.dateFrom)))
+  }
+
+  if (params.responded === 'responded') {
+    // Explicit table-qualified column reference — Drizzle interpolation would split the
+    // template string and the correlated subquery needs posts.id from the outer query anyway.
+    conditions.push(
+      sql`EXISTS (SELECT 1 FROM comments WHERE comments.post_id = posts.id AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
+    )
+  } else if (params.responded === 'unresponded') {
+    conditions.push(
+      sql`NOT EXISTS (SELECT 1 FROM comments WHERE comments.post_id = posts.id AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
+    )
   }
 
   return conditions

@@ -8,6 +8,7 @@ const mockInArray = vi.fn((col, arr) => ({ _tag: 'inArray', col, arr }))
 const mockAnd = vi.fn((...args) => ({ _tag: 'and', args }))
 const mockDesc = vi.fn((col) => ({ _tag: 'desc', col }))
 const mockSql = vi.fn(() => ({ as: vi.fn(() => ({ _tag: 'sql_as' })) }))
+const mockGte = vi.fn((col, val) => ({ _tag: 'gte', col, val }))
 
 const mockPosts = {
   id: Symbol('posts.id'),
@@ -65,6 +66,7 @@ vi.mock('@/lib/server/db', () => ({
   inArray: mockInArray,
   desc: mockDesc,
   sql: mockSql,
+  gte: mockGte,
   posts: mockPosts,
   boards: mockBoards,
   postStatuses: mockPostStatuses,
@@ -119,5 +121,79 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
     expect(activeFilterApplied).toBe(false)
     expect(mockOr).not.toHaveBeenCalled()
     expect(mockInArray).toHaveBeenCalledWith(mockPosts.statusId, ['status_1'])
+  })
+})
+
+describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubWhere.mockReturnValue(SUBQUERY_MARKER)
+    mockMainOffset.mockResolvedValue([])
+    mockMainLimit.mockReturnValue({ offset: mockMainOffset })
+    mockMainOrderBy.mockReturnValue({ limit: mockMainLimit })
+    mockMainWhere.mockReturnValue({ orderBy: mockMainOrderBy })
+    mockMainInnerJoin.mockReturnValue({ where: mockMainWhere })
+  })
+
+  it('applies gte(voteCount, n) when minVotes is provided', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ minVotes: 10 })
+
+    expect(mockGte).toHaveBeenCalledWith(mockPosts.voteCount, 10)
+  })
+
+  it('does not apply minVotes condition when minVotes is 0 or unset', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ minVotes: 0 })
+
+    const voteCountCalls = mockGte.mock.calls.filter(([col]) => col === mockPosts.voteCount)
+    expect(voteCountCalls).toHaveLength(0)
+  })
+
+  it('applies gte(createdAt, …) when dateFrom is provided', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ dateFrom: '2026-04-01' })
+
+    const createdAtCall = mockGte.mock.calls.find(([col]) => col === mockPosts.createdAt)
+    expect(createdAtCall).toBeDefined()
+    expect(createdAtCall?.[1]).toBeInstanceOf(Date)
+  })
+
+  it('applies an EXISTS(is_team_member) raw SQL when responded=responded', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ responded: 'responded' })
+
+    const sqlCalls = mockSql.mock.calls
+    const hasExists = sqlCalls.some((call) => {
+      const fragments = call[0] as TemplateStringsArray | undefined
+      return fragments?.some((s) => s.includes('EXISTS') && s.includes('is_team_member'))
+    })
+    expect(hasExists).toBe(true)
+  })
+
+  it('applies a NOT EXISTS raw SQL when responded=unresponded', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ responded: 'unresponded' })
+
+    const sqlCalls = mockSql.mock.calls
+    const hasNotExists = sqlCalls.some((call) => {
+      const fragments = call[0] as TemplateStringsArray | undefined
+      return fragments?.some((s) => s.includes('NOT EXISTS') && s.includes('is_team_member'))
+    })
+    expect(hasNotExists).toBe(true)
+  })
+
+  it('applies the active-category default alongside minVotes (status default is gated only on status absence)', async () => {
+    const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
+
+    await listPublicPostsWithVotesAndAvatars({ minVotes: 5 })
+
+    expect(mockEq).toHaveBeenCalledWith(mockPostStatuses.category, 'active')
+    expect(mockGte).toHaveBeenCalledWith(mockPosts.voteCount, 5)
   })
 })
