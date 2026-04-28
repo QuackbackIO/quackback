@@ -1,5 +1,5 @@
 import { FilterList, StatusFilterList, BoardFilterList } from './single-select-filter-list'
-import { toggleItem } from './filter-utils'
+import { toggleItem } from '@/components/shared/filter-utils'
 import { FilterSection } from '@/components/shared/filter-section'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
 import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'

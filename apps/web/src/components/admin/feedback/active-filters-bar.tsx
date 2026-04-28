@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { toggleItem } from './filter-utils'
+import { toggleItem } from '@/components/shared/filter-utils'
 import {
   Squares2X2Icon,
   TagIcon,

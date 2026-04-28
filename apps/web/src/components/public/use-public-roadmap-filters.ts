@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/_portal/roadmap.index'
 import { useMemo, useCallback } from 'react'
-import { toggleItem } from '@/components/admin/feedback/filter-utils'
+import { toggleItem } from '@/components/shared/filter-utils'
 import type { RoadmapFilters } from '@/lib/shared/types'
 
 export function usePublicRoadmapFilters() {

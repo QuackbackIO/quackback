@@ -13,10 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
-// `toggleItem` is a generic include-array helper. It currently lives in the
-// admin tree but use-public-roadmap-filters.ts also imports from there.
-// A future refactor should move it to components/shared/filter-utils.ts.
-import { toggleItem } from '@/components/admin/feedback/filter-utils'
+import { toggleItem } from '@/components/shared/filter-utils'
 import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,

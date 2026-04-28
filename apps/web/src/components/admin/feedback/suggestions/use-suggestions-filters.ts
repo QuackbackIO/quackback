@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/feedback'
 import { useMemo, useCallback } from 'react'
-import { toggleItem } from '../filter-utils'
+import { toggleItem } from '@/components/shared/filter-utils'
 import type { SuggestionsFilters } from '@/lib/shared/types'
 
 export type { SuggestionsFilters }
