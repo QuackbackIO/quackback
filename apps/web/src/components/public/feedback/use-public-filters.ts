@@ -88,6 +88,8 @@ export function usePublicFilters() {
   )
 
   const clearFilters = useCallback(() => {
+    // Clears chip-level filters only — preserves board, sort, and search,
+    // which have their own dedicated UI affordances.
     setFilters({
       status: undefined,
       tagIds: undefined,
