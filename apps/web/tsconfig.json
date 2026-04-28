@@ -16,9 +16,7 @@
     "incremental": true,
     "composite": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@testing-library/react": ["../../packages/widget/node_modules/@testing-library/react"],
-      "@testing-library/dom": ["../../packages/widget/node_modules/@testing-library/dom"]
+      "@/*": ["./src/*"]
     },
     "resolvePackageJsonExports": true,
     "resolvePackageJsonImports": true,

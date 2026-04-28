@@ -37,15 +37,6 @@ export default defineConfig({
       '@quackback/db': path.resolve(__dirname, './packages/db/index.ts'),
       // Path alias for apps/web (matches tsconfig.json baseUrl: "./src" + "@/*": ["./*"])
       '@': path.resolve(__dirname, './apps/web/src'),
-      // @testing-library/react lives in packages/widget — expose it for apps/web tests
-      '@testing-library/react': path.resolve(
-        __dirname,
-        './packages/widget/node_modules/@testing-library/react'
-      ),
-      '@testing-library/dom': path.resolve(
-        __dirname,
-        './packages/widget/node_modules/@testing-library/dom'
-      ),
     },
   },
 })
