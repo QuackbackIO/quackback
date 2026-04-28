@@ -49,6 +49,12 @@ const listPublicPostsSchema = z.object({
   sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
   page: z.number().int().min(1).optional().default(1),
   limit: z.number().int().min(1).max(100).optional().default(20),
+  minVotes: z.number().int().min(1).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  responded: z.enum(['responded', 'unresponded']).optional(),
 })
 
 const getPostPermissionsSchema = z.object({
@@ -133,6 +139,9 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
         sort: data.sort,
         page: data.page,
         limit: data.limit,
+        minVotes: data.minVotes,
+        dateFrom: data.dateFrom,
+        responded: data.responded,
       })
 
       console.log(`[fn:public-posts] listPublicPostsFn: count=${result.items.length}`)

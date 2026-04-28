@@ -48,6 +48,12 @@ const fetchPortalDataSchema = z.object({
   statusSlugs: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   userId: z.string().optional(),
+  minVotes: z.number().int().min(1).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  responded: z.enum(['responded', 'unresponded']).optional(),
 })
 
 export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
@@ -90,6 +96,9 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           sort: data.sort,
           page: 1,
           limit: 20,
+          minVotes: data.minVotes,
+          dateFrom: data.dateFrom,
+          responded: data.responded,
         }),
         listPublicStatuses(),
         listPublicTags(),
