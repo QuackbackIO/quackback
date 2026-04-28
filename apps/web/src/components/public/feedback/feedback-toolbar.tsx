@@ -6,11 +6,9 @@ import {
   FireIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/solid'
-import { FilterDropdown } from '@/components/public/feedback/filter-dropdown'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
 
 interface FeedbackToolbarProps {
@@ -18,14 +16,6 @@ interface FeedbackToolbarProps {
   onSortChange: (sort: 'top' | 'new' | 'trending') => void
   currentSearch?: string
   onSearchChange: (search: string) => void
-  statuses: PostStatusEntity[]
-  tags: Tag[]
-  selectedStatuses: string[]
-  selectedTagIds: string[]
-  onStatusChange: (statuses: string[]) => void
-  onTagChange: (tagIds: string[]) => void
-  onClearFilters: () => void
-  activeFilterCount: number
   /** Show loading indicator */
   isLoading?: boolean
 }
@@ -56,14 +46,6 @@ export function FeedbackToolbar({
   onSortChange,
   currentSearch,
   onSearchChange,
-  statuses,
-  tags,
-  selectedStatuses,
-  selectedTagIds,
-  onStatusChange,
-  onTagChange,
-  onClearFilters,
-  activeFilterCount,
   isLoading = false,
 }: FeedbackToolbarProps): React.ReactElement {
   const intl = useIntl()
@@ -151,18 +133,6 @@ export function FeedbackToolbar({
             )}
           </PopoverContent>
         </Popover>
-
-        {/* Filter Dropdown */}
-        <FilterDropdown
-          statuses={statuses}
-          tags={tags}
-          selectedStatuses={selectedStatuses}
-          selectedTagIds={selectedTagIds}
-          onStatusChange={onStatusChange}
-          onTagChange={onTagChange}
-          onClearFilters={onClearFilters}
-          activeCount={activeFilterCount}
-        />
       </div>
     </div>
   )

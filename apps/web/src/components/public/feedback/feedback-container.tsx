@@ -6,6 +6,7 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
+import { PublicFiltersBar } from '@/components/public/feedback/public-filters-bar'
 import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard } from '@/components/public/post-card'
@@ -58,11 +59,11 @@ export function FeedbackContainer({
   const intl = useIntl()
   const router = useRouter()
   const { session } = useRouteContext({ from: '__root__' })
-  const { filters, setFilters, activeFilterCount } = usePublicFilters()
+  const { filters, setFilters, clearFilters, activeFilterCount } = usePublicFilters()
 
   // List key for animations - only updates when data finishes loading
   // This prevents double animations when filters change (stale data → new data)
-  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}`
+  const filterKey = `${filters.board ?? currentBoard}-${filters.sort ?? currentSort}-${filters.search ?? currentSearch}-${(filters.status ?? []).join()}-${(filters.tagIds ?? []).join()}-${filters.minVotes ?? ''}-${filters.dateFrom ?? ''}-${filters.responded ?? ''}`
   const [listKey, setListKey] = useState(filterKey)
 
   const effectiveUser = session?.user
@@ -84,8 +85,20 @@ export function FeedbackContainer({
       sort: activeSort,
       status: activeStatuses.length > 0 ? activeStatuses : undefined,
       tagIds: activeTagIds.length > 0 ? activeTagIds : undefined,
+      minVotes: filters.minVotes,
+      dateFrom: filters.dateFrom,
+      responded: filters.responded,
     }),
-    [activeBoard, activeSearch, activeSort, activeStatuses, activeTagIds]
+    [
+      activeBoard,
+      activeSearch,
+      activeSort,
+      activeStatuses,
+      activeTagIds,
+      filters.minVotes,
+      filters.dateFrom,
+      filters.responded,
+    ]
   )
 
   // Track initial filters from server props to know when to use initialData
@@ -101,7 +114,10 @@ export function FeedbackContainer({
     mergedFilters.search === initialFiltersRef.current.search &&
     mergedFilters.sort === initialFiltersRef.current.sort &&
     !mergedFilters.status?.length &&
-    !mergedFilters.tagIds?.length
+    !mergedFilters.tagIds?.length &&
+    !mergedFilters.minVotes &&
+    !mergedFilters.dateFrom &&
+    !mergedFilters.responded
 
   // Server state - Posts list using TanStack Query
   const {
@@ -176,18 +192,6 @@ export function FeedbackContainer({
     setFilters({ search: search || undefined })
   }
 
-  function handleStatusChange(values: string[]): void {
-    setFilters({ status: values.length > 0 ? values : undefined })
-  }
-
-  function handleTagChange(tagIds: string[]): void {
-    setFilters({ tagIds: tagIds.length > 0 ? tagIds : undefined })
-  }
-
-  function handleClearFilters(): void {
-    setFilters({ status: undefined, tagIds: undefined })
-  }
-
   const currentBoardInfo = activeBoard ? boards.find((b) => b.slug === activeBoard) : boards[0]
   const boardIdForCreate = currentBoardInfo?.id || defaultBoardId
 
@@ -223,16 +227,17 @@ export function FeedbackContainer({
                 onSortChange={handleSortChange}
                 currentSearch={activeSearch}
                 onSearchChange={handleSearchChange}
-                statuses={statuses}
-                tags={tags}
-                selectedStatuses={activeStatuses}
-                selectedTagIds={activeTagIds}
-                onStatusChange={handleStatusChange}
-                onTagChange={handleTagChange}
-                onClearFilters={handleClearFilters}
-                activeFilterCount={activeFilterCount}
                 isLoading={isLoading}
               />
+              <div className="mt-2">
+                <PublicFiltersBar
+                  filters={filters}
+                  setFilters={setFilters}
+                  clearFilters={clearFilters}
+                  statuses={statuses}
+                  tags={tags}
+                />
+              </div>
             </div>
           </div>
 
