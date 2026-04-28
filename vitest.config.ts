@@ -13,6 +13,9 @@ export default defineConfig({
       '**/e2e/**',
       '**/.output/**',
       '**/*-integration.test.ts',
+      // Widget package has its own vitest.config.ts with happy-dom — run via
+      // `bun run --cwd packages/widget test`. Don't double-run from the root.
+      'packages/widget/**',
     ],
     // Use ts-node or vite's transformation instead of stripping
     typecheck: {
