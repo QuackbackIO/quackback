@@ -14,6 +14,7 @@ import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
+import { CircleIcon, MenuButton } from '@/components/shared/filter-menu'
 import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,
@@ -27,27 +28,6 @@ import {
 type FilterCategory = 'status' | 'tag' | 'votes' | 'date' | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
-
-function CircleIcon({ className }: { className?: string }) {
-  return <span className={`inline-block rounded-full bg-current ${className}`} />
-}
-
-const MENU_BUTTON_STYLES =
-  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors'
-
-interface MenuButtonProps {
-  onClick: () => void
-  children: React.ReactNode
-  className?: string
-}
-
-function MenuButton({ onClick, children, className }: MenuButtonProps) {
-  return (
-    <button type="button" onClick={onClick} className={cn(MENU_BUTTON_STYLES, className)}>
-      {children}
-    </button>
-  )
-}
 
 interface PublicFiltersBarProps {
   filters: PublicFeedbackFilters

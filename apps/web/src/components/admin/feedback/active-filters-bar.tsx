@@ -22,6 +22,7 @@ import {
   DATE_PRESETS,
   getDateFromDaysAgo,
 } from '@/components/shared/filter-presets'
+import { CircleIcon, MenuButton } from '@/components/shared/filter-menu'
 import type { InboxFilters } from './use-inbox-filters'
 import type { Board, Tag as TagType, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
@@ -78,10 +79,6 @@ type FilterCategory =
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
-function CircleIcon({ className }: { className?: string }) {
-  return <span className={`inline-block rounded-full bg-current ${className}`} />
-}
-
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
   { key: 'status', label: 'Status', icon: CircleIcon },
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
@@ -102,23 +99,6 @@ const COMMENT_THRESHOLDS = [
   { value: 25, label: '25+ comments' },
   { value: 50, label: '50+ comments' },
 ]
-
-const MENU_BUTTON_STYLES =
-  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors'
-
-interface MenuButtonProps {
-  onClick: () => void
-  children: React.ReactNode
-  className?: string
-}
-
-function MenuButton({ onClick, children, className }: MenuButtonProps) {
-  return (
-    <button type="button" onClick={onClick} className={cn(MENU_BUTTON_STYLES, className)}>
-      {children}
-    </button>
-  )
-}
 
 function AddFilterButton({
   filters,
