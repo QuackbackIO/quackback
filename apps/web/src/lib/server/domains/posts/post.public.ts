@@ -140,14 +140,15 @@ function buildPostFilterConditions(params: PostListParams) {
   }
 
   if (params.responded === 'responded') {
-    // Explicit table-qualified column reference — Drizzle interpolation would split the
-    // template string and the correlated subquery needs posts.id from the outer query anyway.
+    // Raw column names for the inner comments table; outer posts.id via Drizzle
+    // interpolation. Mirrors post.inbox.ts — see its comment for why ${comments.postId}
+    // would be incorrectly rewritten by Drizzle's relational query builder.
     conditions.push(
-      sql`EXISTS (SELECT 1 FROM comments WHERE comments.post_id = posts.id AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
+      sql`EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
     )
   } else if (params.responded === 'unresponded') {
     conditions.push(
-      sql`NOT EXISTS (SELECT 1 FROM comments WHERE comments.post_id = posts.id AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
+      sql`NOT EXISTS (SELECT 1 FROM comments WHERE comments.post_id = ${posts.id} AND comments.is_team_member = true AND comments.deleted_at IS NULL)`
     )
   }
 

@@ -167,10 +167,18 @@ describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
 
     await listPublicPostsWithVotesAndAvatars({ responded: 'responded' })
 
+    // ${posts.id} interpolation splits the template into multiple fragments;
+    // join them to assert the template as a whole rather than per-fragment.
     const sqlCalls = mockSql.mock.calls
     const hasExists = sqlCalls.some((call) => {
       const fragments = call[0] as TemplateStringsArray | undefined
-      return fragments?.some((s) => s.includes('EXISTS') && s.includes('is_team_member'))
+      if (!fragments) return false
+      const combined = fragments.join('?')
+      return (
+        combined.includes('EXISTS') &&
+        !combined.includes('NOT EXISTS') &&
+        combined.includes('is_team_member')
+      )
     })
     expect(hasExists).toBe(true)
   })
@@ -183,7 +191,9 @@ describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
     const sqlCalls = mockSql.mock.calls
     const hasNotExists = sqlCalls.some((call) => {
       const fragments = call[0] as TemplateStringsArray | undefined
-      return fragments?.some((s) => s.includes('NOT EXISTS') && s.includes('is_team_member'))
+      if (!fragments) return false
+      const combined = fragments.join('?')
+      return combined.includes('NOT EXISTS') && combined.includes('is_team_member')
     })
     expect(hasNotExists).toBe(true)
   })
