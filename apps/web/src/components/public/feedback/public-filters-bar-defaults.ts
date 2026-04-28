@@ -10,7 +10,7 @@ export const RESPONDED_OPTIONS = [
   { value: 'unresponded', label: 'Awaiting team response' },
 ] as const
 
-export type RespondedValue = (typeof RESPONDED_OPTIONS)[number]['value']
+export type { RespondedFilter as RespondedValue } from '@/lib/shared/types/filters'
 
 /**
  * Status category groups for the Status submenu.

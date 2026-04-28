@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { PrincipalId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
+import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
   fetchPublicBoards,
   fetchPublicPosts,
@@ -31,7 +32,7 @@ export const portalQueries = {
     userId?: string
     minVotes?: number
     dateFrom?: string
-    responded?: 'responded' | 'unresponded'
+    responded?: RespondedFilter
   }) =>
     queryOptions({
       queryKey: [

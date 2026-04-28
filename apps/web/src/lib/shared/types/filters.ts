@@ -30,6 +30,11 @@ export interface InboxFilters {
 }
 
 /**
+ * The responded filter values for public portal filtering.
+ */
+export type RespondedFilter = 'responded' | 'unresponded'
+
+/**
  * Filters for the public portal post list.
  */
 export interface PublicFeedbackFilters {
@@ -40,7 +45,7 @@ export interface PublicFeedbackFilters {
   tagIds?: string[]
   minVotes?: number
   dateFrom?: string
-  responded?: 'responded' | 'unresponded'
+  responded?: RespondedFilter
 }
 
 /**

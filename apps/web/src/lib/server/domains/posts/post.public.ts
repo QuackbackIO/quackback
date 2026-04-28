@@ -18,6 +18,7 @@ import {
 } from '@/lib/server/db'
 import { toUuid, type PostId, type StatusId, type TagId, type PrincipalId } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
+import type { RespondedFilter } from '@/lib/shared/types/filters'
 
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
@@ -87,7 +88,7 @@ interface PostListParams {
   limit?: number
   minVotes?: number
   dateFrom?: string
-  responded?: 'responded' | 'unresponded'
+  responded?: RespondedFilter
 }
 
 function buildPostFilterConditions(params: PostListParams) {
