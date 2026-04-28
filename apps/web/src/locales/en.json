@@ -293,5 +293,6 @@
   "portal.feedback.filter.chip.tags": "Tags:",
   "portal.feedback.filter.chip.votes": "Min votes:",
   "portal.feedback.filter.chip.date": "Date:",
-  "portal.feedback.filter.chip.response": "Team response:"
+  "portal.feedback.filter.chip.response": "Team response:",
+  "widget.home.posting.selectBoard": "Select a board"
 }

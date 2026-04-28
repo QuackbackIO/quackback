@@ -455,7 +455,12 @@ export function MetadataSidebar({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ChevronUpIcon className="h-4 w-4" />
-                <span>Upvotes</span>
+                <span>
+                  <FormattedMessage
+                    id="portal.postDetail.metadata.upvotes"
+                    defaultMessage="Upvotes"
+                  />
+                </span>
               </div>
               {/* Portal mode: interactive vote button with auth */}
               <AuthVoteButton

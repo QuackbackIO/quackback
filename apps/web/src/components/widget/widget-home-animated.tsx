@@ -526,7 +526,12 @@ export function WidgetHomeAnimated({
                         size="xs"
                         className="border-0 bg-transparent shadow-none font-medium text-foreground hover:text-foreground/80 focus-visible:ring-0"
                       >
-                        <SelectValue placeholder="Select a board" />
+                        <SelectValue
+                          placeholder={intl.formatMessage({
+                            id: 'widget.home.posting.selectBoard',
+                            defaultMessage: 'Select a board',
+                          })}
+                        />
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (
