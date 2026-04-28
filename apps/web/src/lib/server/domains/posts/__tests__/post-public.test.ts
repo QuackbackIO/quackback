@@ -171,7 +171,7 @@ describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
     // join them to assert the template as a whole rather than per-fragment.
     const sqlCalls = mockSql.mock.calls
     const hasExists = sqlCalls.some((call) => {
-      const fragments = call[0] as TemplateStringsArray | undefined
+      const [fragments] = call as unknown as [TemplateStringsArray | undefined]
       if (!fragments) return false
       const combined = fragments.join('?')
       return (
@@ -190,7 +190,7 @@ describe('listPublicPostsWithVotesAndAvatars — additional filters', () => {
 
     const sqlCalls = mockSql.mock.calls
     const hasNotExists = sqlCalls.some((call) => {
-      const fragments = call[0] as TemplateStringsArray | undefined
+      const [fragments] = call as unknown as [TemplateStringsArray | undefined]
       if (!fragments) return false
       const combined = fragments.join('?')
       return combined.includes('NOT EXISTS') && combined.includes('is_team_member')
