@@ -2,6 +2,7 @@ import {
   db,
   eq,
   and,
+  or,
   inArray,
   desc,
   sql,
@@ -105,6 +106,13 @@ function buildPostFilterConditions(params: PostListParams) {
     conditions.push(inArray(posts.statusId, statusIdSubquery))
   } else if (statusIds && statusIds.length > 0) {
     conditions.push(inArray(posts.statusId, statusIds))
+  } else {
+    // Default: exclude complete/closed posts — only show active-category statuses (or unstatused)
+    const activeStatusSubquery = db
+      .select({ id: postStatuses.id })
+      .from(postStatuses)
+      .where(eq(postStatuses.category, 'active'))
+    conditions.push(or(isNull(posts.statusId), inArray(posts.statusId, activeStatusSubquery))!)
   }
 
   if (tagIds && tagIds.length > 0) {
