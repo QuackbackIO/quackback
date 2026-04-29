@@ -68,8 +68,8 @@ export function FeedbackToolbar({
   }
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-      <div className="flex items-center gap-1">
+    <div className="flex items-center justify-between gap-3 sm:gap-4">
+      <div className="flex items-center gap-1 min-w-0">
         {SORT_OPTIONS.map((option) => {
           const Icon = option.icon
           const isActive = currentSort === option.value
@@ -79,7 +79,7 @@ export function FeedbackToolbar({
               type="button"
               onClick={() => onSortChange(option.value)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
+                'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
                 isActive
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -95,8 +95,7 @@ export function FeedbackToolbar({
         )}
       </div>
 
-      {/* Right Actions */}
-      <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
+      <div className="flex items-center gap-2">
         {/* Search */}
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>
