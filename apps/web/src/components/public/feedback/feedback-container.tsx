@@ -10,7 +10,6 @@ import {
   PublicFiltersBar,
   PublicFiltersToolbarButton,
 } from '@/components/public/feedback/public-filters-bar'
-import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard } from '@/components/public/post-card'
 import type { BoardWithStats } from '@/lib/shared/types'
@@ -217,39 +216,31 @@ export function FeedbackContainer({
             onPostCreated={handlePostCreated}
           />
 
-          {/* Mobile board selector + Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <MobileBoardSheet
-              boards={boards}
-              currentBoard={activeBoard}
-              onBoardChange={handleBoardChange}
-            />
-            <div className="flex-1">
-              <FeedbackToolbar
-                currentSort={activeSort}
-                onSortChange={handleSortChange}
-                currentSearch={activeSearch}
-                onSearchChange={handleSearchChange}
-                isLoading={isLoading}
-                filterButton={
-                  <PublicFiltersToolbarButton
-                    filters={filters}
-                    setFilters={setFilters}
-                    statuses={statuses}
-                    tags={tags}
-                  />
-                }
+          <FeedbackToolbar
+            currentSort={activeSort}
+            onSortChange={handleSortChange}
+            currentSearch={activeSearch}
+            onSearchChange={handleSearchChange}
+            isLoading={isLoading}
+            filterButton={
+              <PublicFiltersToolbarButton
+                filters={filters}
+                setFilters={setFilters}
+                statuses={statuses}
+                tags={tags}
+                boards={boards}
               />
-              <div className="mt-3">
-                <PublicFiltersBar
-                  filters={filters}
-                  setFilters={setFilters}
-                  clearFilters={clearFilters}
-                  statuses={statuses}
-                  tags={tags}
-                />
-              </div>
-            </div>
+            }
+          />
+          <div className="mt-3">
+            <PublicFiltersBar
+              filters={filters}
+              setFilters={setFilters}
+              clearFilters={clearFilters}
+              statuses={statuses}
+              tags={tags}
+              boards={boards}
+            />
           </div>
 
           <div className="mt-5">

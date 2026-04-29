@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import {
+  Squares2X2Icon,
   TagIcon,
   CalendarIcon,
   ArrowTrendingUpIcon,
@@ -35,18 +36,25 @@ import {
   type RespondedValue,
 } from './public-filters-bar-defaults'
 
-type FilterCategory = 'status' | 'tag' | 'votes' | 'date' | 'response'
+interface FilterBarBoard {
+  id: string
+  slug: string
+  name: string
+}
+
+type FilterCategory = 'board' | 'status' | 'tag' | 'votes' | 'date' | 'response'
+type ChipType = 'board' | 'status' | 'tags' | 'votes' | 'date' | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
-const CHIP_ICON_BY_TYPE: Record<'status' | 'tags' | 'votes' | 'date' | 'response', IconComponent> =
-  {
-    status: CircleIcon,
-    tags: TagIcon,
-    votes: ArrowTrendingUpIcon,
-    date: CalendarIcon,
-    response: ChatBubbleLeftRightIcon,
-  }
+const CHIP_ICON_BY_TYPE: Record<ChipType, IconComponent> = {
+  board: Squares2X2Icon,
+  status: CircleIcon,
+  tags: TagIcon,
+  votes: ArrowTrendingUpIcon,
+  date: CalendarIcon,
+  response: ChatBubbleLeftRightIcon,
+}
 
 interface PublicFiltersBarProps {
   filters: PublicFeedbackFilters
@@ -54,6 +62,7 @@ interface PublicFiltersBarProps {
   clearFilters: () => void
   statuses: PostStatusEntity[]
   tags: Tag[]
+  boards: FilterBarBoard[]
 }
 
 export function PublicFiltersBar({
@@ -62,12 +71,13 @@ export function PublicFiltersBar({
   clearFilters,
   statuses,
   tags,
+  boards,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
 
   const activeChips = useMemo(
-    () => buildActiveChips({ filters, setFilters, statuses, tags, intl }),
-    [filters, setFilters, statuses, tags, intl]
+    () => buildActiveChips({ filters, setFilters, statuses, tags, boards, intl }),
+    [filters, setFilters, statuses, tags, boards, intl]
   )
 
   if (activeChips.length === 0) return null
@@ -87,6 +97,7 @@ export function PublicFiltersBar({
         setFilters={setFilters}
         statuses={statuses}
         tags={tags}
+        boards={boards}
         variant="pill"
       />
 
@@ -113,6 +124,7 @@ interface AddFilterButtonProps {
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
   tags: Tag[]
+  boards: FilterBarBoard[]
   /**
    * Trigger style:
    *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
@@ -144,6 +156,7 @@ function AddFilterButton({
   setFilters,
   statuses,
   tags,
+  boards,
   variant = 'pill',
 }: AddFilterButtonProps) {
   const intl = useIntl()
@@ -155,8 +168,21 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(
-    () => [
+  const showBoardCategory = boards.length > 1
+
+  const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(() => {
+    const list: { key: FilterCategory; label: string; icon: IconComponent }[] = []
+    if (showBoardCategory) {
+      list.push({
+        key: 'board',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.board',
+          defaultMessage: 'Board',
+        }),
+        icon: Squares2X2Icon,
+      })
+    }
+    list.push(
       {
         key: 'status',
         label: intl.formatMessage({
@@ -196,10 +222,10 @@ function AddFilterButton({
           defaultMessage: 'Team response',
         }),
         icon: ChatBubbleLeftRightIcon,
-      },
-    ],
-    [intl]
-  )
+      }
+    )
+    return list
+  }, [intl, showBoardCategory])
 
   const groupedStatuses = useMemo(() => {
     const groups: Record<string, PostStatusEntity[]> = {}
@@ -284,7 +310,9 @@ function AddFilterButton({
             <Command>
               {/* Hide the search input for short, fixed-preset lists where
                   filtering adds no value (votes / date / response). */}
-              {(activeCategory === 'status' || activeCategory === 'tag') && (
+              {(activeCategory === 'board' ||
+                activeCategory === 'status' ||
+                activeCategory === 'tag') && (
                 <CommandInput
                   placeholder={intl.formatMessage({
                     id: 'portal.feedback.filter.search',
@@ -299,6 +327,23 @@ function AddFilterButton({
                     defaultMessage="No results."
                   />
                 </CommandEmpty>
+
+                {activeCategory === 'board' && (
+                  <CommandGroup>
+                    {boards.map((board) => (
+                      <CommandItem
+                        key={board.id}
+                        value={board.name}
+                        onSelect={() => {
+                          setFilters({ board: board.slug })
+                          closePopover()
+                        }}
+                      >
+                        {board.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
 
                 {activeCategory === 'status' &&
                   STATUS_CATEGORY_ORDER.map((cat) => {
@@ -410,7 +455,7 @@ function AddFilterButton({
 
 interface ActiveChipDescriptor {
   key: string
-  type: 'status' | 'tags' | 'votes' | 'date' | 'response'
+  type: ChipType
   label: string
   value: string
   valueId: string
@@ -425,10 +470,33 @@ function buildActiveChips(args: {
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
   tags: Tag[]
+  boards: FilterBarBoard[]
   intl: ReturnType<typeof useIntl>
 }): ActiveChipDescriptor[] {
-  const { filters, setFilters, statuses, tags, intl } = args
+  const { filters, setFilters, statuses, tags, boards, intl } = args
   const chips: ActiveChipDescriptor[] = []
+
+  // Board chip — only shown when a specific board is selected (omit for
+  // "All Posts"). Single-select: switching replaces the value.
+  if (filters.board && boards.length > 1) {
+    const board = boards.find((b) => b.slug === filters.board)
+    if (board) {
+      const boardOptions: FilterOption[] = boards.map((b) => ({ id: b.slug, label: b.name }))
+      chips.push({
+        key: `board-${board.slug}`,
+        type: 'board',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.chip.board',
+          defaultMessage: 'Board:',
+        }),
+        value: board.name,
+        valueId: board.slug,
+        options: boardOptions,
+        onChange: (newSlug) => setFilters({ board: newSlug }),
+        onRemove: () => setFilters({ board: undefined }),
+      })
+    }
+  }
 
   const statusOptions: FilterOption[] = statuses.map((s) => ({
     id: s.slug,

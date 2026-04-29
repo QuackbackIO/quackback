@@ -31,6 +31,11 @@ const tags: Tag[] = [
   { id: 'tag_2', name: 'Frontend', color: '#ec4899' } as unknown as Tag,
 ]
 
+const boards = [
+  { id: 'board_1', slug: 'feature-requests', name: 'Feature Requests' },
+  { id: 'board_2', slug: 'bugs', name: 'Bugs' },
+]
+
 function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersBar>> = {}) {
   const setFilters = vi.fn()
   const clearFilters = vi.fn()
@@ -42,6 +47,7 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersB
         clearFilters={clearFilters}
         statuses={statuses}
         tags={tags}
+        boards={boards}
         {...overrides}
       />
     </IntlProvider>
@@ -60,6 +66,20 @@ describe('PublicFiltersBar', () => {
     expect(screen.getByText('Open')).toBeInTheDocument()
     expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /add filter/i })).toBeInTheDocument()
+  })
+
+  it('renders a board chip when filters.board is set', () => {
+    renderBar({ filters: { sort: 'top', board: 'bugs' } })
+    expect(screen.getByText(/^Board:$/)).toBeInTheDocument()
+    expect(screen.getByText('Bugs')).toBeInTheDocument()
+  })
+
+  it('does not render a board chip when only one board exists', () => {
+    renderBar({
+      filters: { sort: 'top', board: 'bugs' },
+      boards: [{ id: 'board_2', slug: 'bugs', name: 'Bugs' }],
+    })
+    expect(screen.queryByText(/^Board:$/)).not.toBeInTheDocument()
   })
 
   it('renders combined Tags chip when 3+ tags selected', () => {
@@ -104,6 +124,7 @@ describe('PublicFiltersToolbarButton', () => {
           setFilters={setFilters}
           statuses={statuses}
           tags={tags}
+          boards={boards}
         />
       </IntlProvider>
     )
@@ -119,6 +140,7 @@ describe('PublicFiltersToolbarButton', () => {
           setFilters={setFilters}
           statuses={statuses}
           tags={tags}
+          boards={boards}
         />
       </IntlProvider>
     )
@@ -127,6 +149,43 @@ describe('PublicFiltersToolbarButton', () => {
     // cmdk's CommandItem renders with role="option"
     fireEvent.click(screen.getByRole('option', { name: /25\+ votes/i }))
     expect(setFilters).toHaveBeenCalledWith({ minVotes: 25 })
+  })
+
+  it('lets users pick a board from the filter menu', () => {
+    const setFilters = vi.fn()
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PublicFiltersToolbarButton
+          filters={{ sort: 'top' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+          boards={boards}
+        />
+      </IntlProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Board$/i }))
+    // cmdk's CommandItem renders with role="option"
+    fireEvent.click(screen.getByRole('option', { name: 'Bugs' }))
+    expect(setFilters).toHaveBeenCalledWith({ board: 'bugs' })
+  })
+
+  it('hides the Board category when only a single board exists', () => {
+    const setFilters = vi.fn()
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PublicFiltersToolbarButton
+          filters={{ sort: 'top' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+          boards={[{ id: 'board_1', slug: 'feature-requests', name: 'Feature Requests' }]}
+        />
+      </IntlProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    expect(screen.queryByRole('button', { name: /^Board$/i })).not.toBeInTheDocument()
   })
 })
 
@@ -140,6 +199,7 @@ describe('PublicFiltersAddButton (pill variant)', () => {
           setFilters={setFilters}
           statuses={statuses}
           tags={tags}
+          boards={boards}
         />
       </IntlProvider>
     )
