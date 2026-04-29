@@ -1,103 +1,92 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
-import {
-  ArrowTrendingUpIcon,
-  ClockIcon,
-  FireIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/solid'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { cn } from '@/lib/shared/utils'
 
-interface FeedbackToolbarProps {
-  currentSort: 'top' | 'new' | 'trending'
-  onSortChange: (sort: 'top' | 'new' | 'trending') => void
+type RoadmapSort = 'votes' | 'newest' | 'oldest'
+
+interface PublicRoadmapToolbarProps {
+  currentSort: RoadmapSort
+  onSortChange: (sort: RoadmapSort) => void
   currentSearch?: string
-  onSearchChange: (search: string) => void
-  /** Show loading indicator */
-  isLoading?: boolean
+  onSearchChange: (search: string | undefined) => void
   /** Optional slot rendered after the search button on the right (typically the Filter button). */
   filterButton?: React.ReactNode
 }
 
-const SORT_OPTIONS = [
-  {
-    value: 'top',
-    messageId: 'portal.feedback.toolbar.sortTop',
-    defaultMessage: 'Top',
-    icon: ArrowTrendingUpIcon,
-  },
-  {
-    value: 'new',
-    messageId: 'portal.feedback.toolbar.sortNew',
-    defaultMessage: 'New',
-    icon: ClockIcon,
-  },
-  {
-    value: 'trending',
-    messageId: 'portal.feedback.toolbar.sortTrending',
-    defaultMessage: 'Trending',
-    icon: FireIcon,
-  },
-] as const
-
-export function FeedbackToolbar({
+export function PublicRoadmapToolbar({
   currentSort,
   onSortChange,
   currentSearch,
   onSearchChange,
-  isLoading = false,
   filterButton,
-}: FeedbackToolbarProps): React.ReactElement {
+}: PublicRoadmapToolbarProps): React.ReactElement {
   const intl = useIntl()
   const [searchOpen, setSearchOpen] = useState(false)
-  const [searchValue, setSearchValue] = useState(currentSearch || '')
+  const [searchValue, setSearchValue] = useState(currentSearch ?? '')
 
-  function handleSearchSubmit(e: React.FormEvent): void {
+  // Keep local input value in sync when filter cleared from elsewhere
+  useEffect(() => {
+    setSearchValue(currentSearch ?? '')
+  }, [currentSearch])
+
+  const handleSearchSubmit = (e: React.FormEvent): void => {
     e.preventDefault()
-    onSearchChange(searchValue)
+    onSearchChange(searchValue.trim() || undefined)
     setSearchOpen(false)
   }
 
-  function handleClearSearch(): void {
+  const handleClearSearch = (): void => {
     setSearchValue('')
-    onSearchChange('')
+    onSearchChange(undefined)
     setSearchOpen(false)
   }
+
+  const sortOptions: ComboboxOption<RoadmapSort>[] = [
+    {
+      value: 'votes',
+      label: intl.formatMessage({
+        id: 'portal.roadmap.toolbar.sortVotes',
+        defaultMessage: 'Most votes',
+      }),
+    },
+    {
+      value: 'newest',
+      label: intl.formatMessage({
+        id: 'portal.roadmap.toolbar.sortNewest',
+        defaultMessage: 'Newest',
+      }),
+    },
+    {
+      value: 'oldest',
+      label: intl.formatMessage({
+        id: 'portal.roadmap.toolbar.sortOldest',
+        defaultMessage: 'Oldest',
+      }),
+    },
+  ]
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-      <div className="flex items-center gap-1">
-        {SORT_OPTIONS.map((option) => {
-          const Icon = option.icon
-          const isActive = currentSort === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSortChange(option.value)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors cursor-pointer',
-                isActive
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              )}
-            >
-              <Icon className={cn('h-3.5 w-3.5', isActive && 'text-primary')} />
-              {intl.formatMessage({ id: option.messageId, defaultMessage: option.defaultMessage })}
-            </button>
-          )
-        })}
-        {isLoading && (
-          <span className="ml-1 h-4 w-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
-        )}
+      {/* Sort */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          <FormattedMessage id="portal.roadmap.toolbar.sortBy" defaultMessage="Sort by" />
+        </span>
+        <Combobox
+          value={currentSort}
+          onValueChange={onSortChange}
+          options={sortOptions}
+          size="sm"
+          className="w-[140px]"
+        />
       </div>
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
-        {/* Search */}
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">

@@ -278,8 +278,6 @@
   "portal.commentForm.errorPost": "No se pudo publicar el comentario",
   "portal.feedback.filter.addFilter": "Añadir filtro",
   "portal.feedback.filter.back": "Volver",
-  "portal.feedback.filter.hidingCompleted": "Ocultando publicaciones completadas y cerradas.",
-  "portal.feedback.filter.showAll": "Mostrar todo",
   "portal.feedback.filter.category.status": "Estado",
   "portal.feedback.filter.category.tag": "Etiqueta",
   "portal.feedback.filter.category.votes": "Número de votos",
@@ -294,5 +292,6 @@
   "portal.feedback.filter.chip.votes": "Votos mínimos:",
   "portal.feedback.filter.chip.date": "Fecha:",
   "portal.feedback.filter.chip.response": "Respuesta del equipo:",
-  "widget.home.posting.selectBoard": "Seleccionar una categoría"
+  "widget.home.posting.selectBoard": "Seleccionar una categoría",
+  "portal.feedback.toolbar.filter": "Filtrar"
 }

@@ -278,8 +278,6 @@
   "portal.commentForm.errorPost": "Не удалось отправить комментарий",
   "portal.feedback.filter.addFilter": "Добавить фильтр",
   "portal.feedback.filter.back": "Назад",
-  "portal.feedback.filter.hidingCompleted": "Завершённые и закрытые предложения скрыты.",
-  "portal.feedback.filter.showAll": "Показать все",
   "portal.feedback.filter.category.status": "Статус",
   "portal.feedback.filter.category.tag": "Тег",
   "portal.feedback.filter.category.votes": "Количество голосов",
@@ -294,5 +292,6 @@
   "portal.feedback.filter.chip.votes": "Мин. голосов:",
   "portal.feedback.filter.chip.date": "Дата:",
   "portal.feedback.filter.chip.response": "Ответ команды:",
-  "widget.home.posting.selectBoard": "Выберите категорию"
+  "widget.home.posting.selectBoard": "Выберите категорию",
+  "portal.feedback.toolbar.filter": "Фильтр"
 }

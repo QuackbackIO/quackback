@@ -7,14 +7,24 @@ import {
   ChatBubbleLeftRightIcon,
   PlusIcon,
   ChevronRightIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
-import { CircleIcon, MenuButton } from '@/components/shared/filter-menu'
+import { CircleIcon } from '@/components/shared/filter-menu'
 import {
   VOTE_THRESHOLDS,
   DATE_PRESETS,
@@ -45,20 +55,21 @@ export function PublicFiltersBar({
   tags,
 }: PublicFiltersBarProps) {
   const intl = useIntl()
-  const showHidingHint = !filters.status?.length
-
-  const handleShowAll = () => {
-    setFilters({ status: statuses.map((s) => s.slug) })
-  }
 
   const activeChips = useMemo(
     () => buildActiveChips({ filters, setFilters, statuses, tags, intl }),
     [filters, setFilters, statuses, tags, intl]
   )
 
+  // The toolbar always carries the primary "Filter" button. This row only
+  // appears when there's something to show — chips active. The trailing
+  // dashed "+ Add filter" pill is the "add another" affordance familiar
+  // from Linear/Notion, mirroring the chip shape.
+  if (activeChips.length === 0) return null
+
   return (
-    <div className="bg-card/50" role="region" aria-label="Active filters">
-      <div className="flex flex-wrap gap-1 items-center">
+    <div role="region" aria-label="Active filters" className="py-0.5">
+      <div className="flex flex-wrap gap-2 items-center">
         {activeChips.map(({ key, type, ...chipProps }) => (
           <FilterChip key={key} icon={getIconForType(type)} {...chipProps} />
         ))}
@@ -68,6 +79,7 @@ export function PublicFiltersBar({
           setFilters={setFilters}
           statuses={statuses}
           tags={tags}
+          variant="pill"
         />
 
         {activeChips.length >= 2 && (
@@ -75,8 +87,8 @@ export function PublicFiltersBar({
             type="button"
             onClick={clearFilters}
             className={cn(
-              'text-[11px] text-muted-foreground hover:text-foreground',
-              'px-1.5 py-0.5 rounded',
+              'text-xs text-muted-foreground hover:text-foreground',
+              'px-2 py-1 rounded',
               'hover:bg-muted/50',
               'transition-colors'
             )}
@@ -85,24 +97,6 @@ export function PublicFiltersBar({
           </button>
         )}
       </div>
-
-      {showHidingHint && (
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>
-            <FormattedMessage
-              id="portal.feedback.filter.hidingCompleted"
-              defaultMessage="Hiding completed and closed posts."
-            />
-          </span>
-          <button
-            type="button"
-            onClick={handleShowAll}
-            className="underline hover:text-foreground transition-colors"
-          >
-            <FormattedMessage id="portal.feedback.filter.showAll" defaultMessage="Show all" />
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -112,9 +106,39 @@ interface AddFilterButtonProps {
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
   tags: Tag[]
+  /**
+   * Trigger style:
+   *   - "pill" (default): dashed "+ Add filter" pill that matches the chip shape.
+   *     Use inside the active-chips row.
+   *   - "toolbar": solid Filter button matching the toolbar's Search button.
+   *     Use as the primary entry point next to Search.
+   */
+  variant?: 'pill' | 'toolbar'
 }
 
-function AddFilterButton({ filters, setFilters, statuses, tags }: AddFilterButtonProps) {
+/**
+ * "Filter" button styled to match the toolbar's Search button. Use as the
+ * primary filter entry point inline with Search.
+ */
+export function PublicFiltersToolbarButton(props: Omit<AddFilterButtonProps, 'variant'>) {
+  return <AddFilterButton {...props} variant="toolbar" />
+}
+
+/**
+ * Dashed "+ Add filter" pill styled to match the chip shape. Use as the
+ * "add another" affordance at the end of the active-chips row.
+ */
+export function PublicFiltersAddButton(props: Omit<AddFilterButtonProps, 'variant'>) {
+  return <AddFilterButton {...props} variant="pill" />
+}
+
+function AddFilterButton({
+  filters,
+  setFilters,
+  statuses,
+  tags,
+  variant = 'pill',
+}: AddFilterButtonProps) {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<FilterCategory | null>(null)
@@ -187,20 +211,29 @@ function AddFilterButton({ filters, setFilters, statuses, tags }: AddFilterButto
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-xs',
-            'border border-dashed border-border/50',
-            'text-muted-foreground hover:text-foreground',
-            'hover:border-border hover:bg-muted/30',
-            'transition-colors'
-          )}
-        >
-          <PlusIcon className="h-3 w-3" />
-          <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
-        </button>
+        {variant === 'toolbar' ? (
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <FunnelIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">
+              <FormattedMessage id="portal.feedback.toolbar.filter" defaultMessage="Filter" />
+            </span>
+          </Button>
+        ) : (
+          <button
+            type="button"
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-0.5',
+              'rounded-full text-xs',
+              'border border-dashed border-border/50',
+              'text-muted-foreground hover:text-foreground',
+              'hover:border-border hover:bg-muted/30',
+              'transition-colors'
+            )}
+          >
+            <PlusIcon className="h-3 w-3" />
+            <FormattedMessage id="portal.feedback.filter.addFilter" defaultMessage="Add filter" />
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-48 p-0">
         {activeCategory === null ? (
@@ -238,90 +271,126 @@ function AddFilterButton({ filters, setFilters, statuses, tags }: AddFilterButto
               <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               <FormattedMessage id="portal.feedback.filter.back" defaultMessage="Back" />
             </button>
-            <div className="max-h-[250px] overflow-y-auto py-1">
-              {activeCategory === 'status' &&
-                STATUS_CATEGORY_ORDER.map((cat) => {
-                  const list = groupedStatuses[cat] ?? []
-                  if (list.length === 0) return null
-                  return (
-                    <div key={cat}>
-                      <div className="px-2.5 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <FormattedMessage
-                          id={`portal.feedback.filter.statusGroup.${cat}`}
-                          defaultMessage={cat[0].toUpperCase() + cat.slice(1)}
-                        />
-                      </div>
-                      {list.map((status) => (
-                        <MenuButton
-                          key={status.id}
-                          onClick={() => {
-                            setFilters({ status: toggleItem(filters.status, status.slug) })
-                            closePopover()
-                          }}
-                        >
-                          <span
-                            className="h-2 w-2 rounded-full shrink-0"
-                            style={{ backgroundColor: status.color }}
-                          />
-                          {status.name}
-                        </MenuButton>
-                      ))}
-                    </div>
-                  )
-                })}
+            <Command>
+              {/* Hide the search input for short, fixed-preset lists where
+                  filtering adds no value (votes / date / response). */}
+              {(activeCategory === 'status' || activeCategory === 'tag') && (
+                <CommandInput
+                  placeholder={intl.formatMessage({
+                    id: 'portal.feedback.filter.search',
+                    defaultMessage: 'Search…',
+                  })}
+                />
+              )}
+              <CommandList>
+                <CommandEmpty>
+                  <FormattedMessage
+                    id="portal.feedback.filter.noResults"
+                    defaultMessage="No results."
+                  />
+                </CommandEmpty>
 
-              {activeCategory === 'tag' &&
-                tags.map((tag) => (
-                  <MenuButton
-                    key={tag.id}
-                    onClick={() => {
-                      setFilters({ tagIds: toggleItem(filters.tagIds, tag.id) })
-                      closePopover()
-                    }}
-                  >
-                    {tag.name}
-                  </MenuButton>
-                ))}
+                {activeCategory === 'status' &&
+                  STATUS_CATEGORY_ORDER.map((cat) => {
+                    const list = groupedStatuses[cat] ?? []
+                    if (list.length === 0) return null
+                    return (
+                      <CommandGroup
+                        key={cat}
+                        heading={intl.formatMessage({
+                          id: `portal.feedback.filter.statusGroup.${cat}`,
+                          defaultMessage: cat[0].toUpperCase() + cat.slice(1),
+                        })}
+                      >
+                        {list.map((status) => (
+                          <CommandItem
+                            key={status.id}
+                            value={status.name}
+                            onSelect={() => {
+                              setFilters({ status: toggleItem(filters.status, status.slug) })
+                              closePopover()
+                            }}
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{ backgroundColor: status.color }}
+                            />
+                            {status.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )
+                  })}
 
-              {activeCategory === 'votes' &&
-                VOTE_THRESHOLDS.map((t) => (
-                  <MenuButton
-                    key={t.value}
-                    onClick={() => {
-                      setFilters({ minVotes: t.value })
-                      closePopover()
-                    }}
-                  >
-                    {t.label}
-                  </MenuButton>
-                ))}
+                {activeCategory === 'tag' && (
+                  <CommandGroup>
+                    {tags.map((tag) => (
+                      <CommandItem
+                        key={tag.id}
+                        value={tag.name}
+                        onSelect={() => {
+                          setFilters({ tagIds: toggleItem(filters.tagIds, tag.id) })
+                          closePopover()
+                        }}
+                      >
+                        {tag.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
 
-              {activeCategory === 'date' &&
-                DATE_PRESETS.map((p) => (
-                  <MenuButton
-                    key={p.value}
-                    onClick={() => {
-                      setFilters({ dateFrom: getDateFromDaysAgo(p.daysAgo) })
-                      closePopover()
-                    }}
-                  >
-                    {p.label}
-                  </MenuButton>
-                ))}
+                {activeCategory === 'votes' && (
+                  <CommandGroup>
+                    {VOTE_THRESHOLDS.map((t) => (
+                      <CommandItem
+                        key={t.value}
+                        value={t.label}
+                        onSelect={() => {
+                          setFilters({ minVotes: t.value })
+                          closePopover()
+                        }}
+                      >
+                        {t.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
 
-              {activeCategory === 'response' &&
-                RESPONDED_OPTIONS.map((opt) => (
-                  <MenuButton
-                    key={opt.value}
-                    onClick={() => {
-                      setFilters({ responded: opt.value })
-                      closePopover()
-                    }}
-                  >
-                    {opt.label}
-                  </MenuButton>
-                ))}
-            </div>
+                {activeCategory === 'date' && (
+                  <CommandGroup>
+                    {DATE_PRESETS.map((p) => (
+                      <CommandItem
+                        key={p.value}
+                        value={p.label}
+                        onSelect={() => {
+                          setFilters({ dateFrom: getDateFromDaysAgo(p.daysAgo) })
+                          closePopover()
+                        }}
+                      >
+                        {p.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+
+                {activeCategory === 'response' && (
+                  <CommandGroup>
+                    {RESPONDED_OPTIONS.map((opt) => (
+                      <CommandItem
+                        key={opt.value}
+                        value={opt.label}
+                        onSelect={() => {
+                          setFilters({ responded: opt.value })
+                          closePopover()
+                        }}
+                      >
+                        {opt.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
           </div>
         )}
       </PopoverContent>

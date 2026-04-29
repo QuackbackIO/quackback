@@ -278,8 +278,6 @@
   "portal.commentForm.errorPost": "فشل نشر التعليق",
   "portal.feedback.filter.addFilter": "إضافة فلتر",
   "portal.feedback.filter.back": "رجوع",
-  "portal.feedback.filter.hidingCompleted": "إخفاء المنشورات المكتملة والمغلقة.",
-  "portal.feedback.filter.showAll": "عرض الكل",
   "portal.feedback.filter.category.status": "الحالة",
   "portal.feedback.filter.category.tag": "الوسم",
   "portal.feedback.filter.category.votes": "عدد الأصوات",
@@ -294,5 +292,6 @@
   "portal.feedback.filter.chip.votes": "الحد الأدنى للأصوات:",
   "portal.feedback.filter.chip.date": "التاريخ:",
   "portal.feedback.filter.chip.response": "رد الفريق:",
-  "widget.home.posting.selectBoard": "اختر فئة"
+  "widget.home.posting.selectBoard": "اختر فئة",
+  "portal.feedback.toolbar.filter": "تصفية"
 }

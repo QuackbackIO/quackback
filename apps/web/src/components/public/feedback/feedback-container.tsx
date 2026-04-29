@@ -6,7 +6,10 @@ import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
-import { PublicFiltersBar } from '@/components/public/feedback/public-filters-bar'
+import {
+  PublicFiltersBar,
+  PublicFiltersToolbarButton,
+} from '@/components/public/feedback/public-filters-bar'
 import { MobileBoardSheet } from '@/components/public/feedback/mobile-board-sheet'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard } from '@/components/public/post-card'
@@ -228,8 +231,16 @@ export function FeedbackContainer({
                 currentSearch={activeSearch}
                 onSearchChange={handleSearchChange}
                 isLoading={isLoading}
+                filterButton={
+                  <PublicFiltersToolbarButton
+                    filters={filters}
+                    setFilters={setFilters}
+                    statuses={statuses}
+                    tags={tags}
+                  />
+                }
               />
-              <div className="mt-2">
+              <div className="mt-3">
                 <PublicFiltersBar
                   filters={filters}
                   setFilters={setFilters}
@@ -241,7 +252,7 @@ export function FeedbackContainer({
             </div>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-5">
             {posts.length === 0 && !isLoading ? (
               <p className="text-muted-foreground text-center py-8">
                 {activeSearch || activeFilterCount > 0

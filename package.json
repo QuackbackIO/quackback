@@ -81,6 +81,7 @@
     "@tiptap/extension-underline": "^3.22.3",
     "@uiw/codemirror-extensions-color": "^4.25.9",
     "@uiw/react-codemirror": "^4.25.9",
+    "cmdk": "^1.1.1",
     "tiptap-extension-resizable-image": "^2.1.0"
   }
 }

@@ -278,8 +278,6 @@
   "portal.commentForm.errorPost": "Kommentar konnte nicht veröffentlicht werden",
   "portal.feedback.filter.addFilter": "Filter hinzufügen",
   "portal.feedback.filter.back": "Zurück",
-  "portal.feedback.filter.hidingCompleted": "Abgeschlossene und geschlossene Beiträge werden ausgeblendet.",
-  "portal.feedback.filter.showAll": "Alle anzeigen",
   "portal.feedback.filter.category.status": "Status",
   "portal.feedback.filter.category.tag": "Tag",
   "portal.feedback.filter.category.votes": "Stimmenanzahl",
@@ -294,5 +292,6 @@
   "portal.feedback.filter.chip.votes": "Mindest-Stimmen:",
   "portal.feedback.filter.chip.date": "Datum:",
   "portal.feedback.filter.chip.response": "Team-Antwort:",
-  "widget.home.posting.selectBoard": "Kategorie auswählen"
+  "widget.home.posting.selectBoard": "Kategorie auswählen",
+  "portal.feedback.toolbar.filter": "Filtern"
 }

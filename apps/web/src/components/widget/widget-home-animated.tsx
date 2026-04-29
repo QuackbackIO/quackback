@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, memo, useRef, useState } from 'react'
+import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { Squares2X2Icon, PencilIcon } from '@heroicons/react/24/solid'
 import {
   LightBulbIcon,
@@ -158,40 +159,6 @@ const WidgetPostRow = memo(
     prev.compact === next.compact &&
     prev.canVote === next.canVote
 )
-
-function usePillsScroll() {
-  const ref = useRef<HTMLDivElement>(null)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(false)
-
-  const update = useCallback(() => {
-    const el = ref.current
-    if (!el) return
-    const left = el.scrollLeft > 0
-    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
-    setCanScrollLeft((prev) => (prev === left ? prev : left))
-    setCanScrollRight((prev) => (prev === right ? prev : right))
-  }, [])
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => {
-      el.removeEventListener('scroll', update)
-      ro.disconnect()
-    }
-  }, [update])
-
-  const scrollBy = useCallback((delta: number) => {
-    ref.current?.scrollBy({ left: delta, behavior: 'smooth' })
-  }, [])
-
-  return { ref, canScrollLeft, canScrollRight, scrollBy }
-}
 
 // ── Main component ──
 

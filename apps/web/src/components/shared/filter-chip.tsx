@@ -50,7 +50,7 @@ export function FilterChip({
     <>
       {color ? (
         <span
-          className="h-1.5 w-1.5 rounded-full shrink-0"
+          className="h-2 w-2 rounded-full shrink-0"
           style={{ backgroundColor: color }}
           aria-hidden="true"
         />
@@ -65,8 +65,8 @@ export function FilterChip({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5',
-        'rounded-full bg-muted/60 text-xs',
+        'inline-flex items-center gap-1.5 px-2.5 py-0.5',
+        'rounded-full bg-muted/60 text-[13px]',
         'border border-border/30 hover:border-border/50',
         'transition-colors'
       )}

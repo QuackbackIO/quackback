@@ -2,15 +2,20 @@ import { useEffect } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { MapIcon } from '@heroicons/react/24/solid'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Card, CardContent } from '@/components/ui/card'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePublicRoadmaps, type RoadmapView } from '@/lib/client/hooks/use-roadmaps-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import { usePillsScroll } from '@/lib/client/hooks/use-pills-scroll'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { RoadmapColumn } from './roadmap-column'
-import { RoadmapFiltersBar } from '@/components/admin/roadmap/roadmap-filters-bar'
+import {
+  PublicRoadmapFiltersBar,
+  PublicRoadmapToolbarFilterButton,
+} from './public-roadmap-filters-bar'
+import { PublicRoadmapToolbar } from './public-roadmap-toolbar'
+import { RoadmapTabs } from './roadmap-tabs'
 import { usePublicRoadmapFilters } from './use-public-roadmap-filters'
 import { usePublicRoadmapSelection } from './use-public-roadmap-selection'
 
@@ -30,6 +35,7 @@ export function RoadmapBoard({
   const intl = useIntl()
   const { selectedRoadmapId, setSelectedRoadmap } = usePublicRoadmapSelection()
   const { data: roadmaps } = usePublicRoadmaps({ enabled: !initialRoadmaps })
+  const columnsScroll = usePillsScroll()
 
   // Filter state
   const { filters, setFilters, clearFilters, toggleBoard, toggleTag, toggleSegment } =
@@ -75,18 +81,14 @@ export function RoadmapBoard({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 flex flex-col gap-4">
       {availableRoadmaps.length > 1 && (
         <div className="space-y-2">
-          <Tabs value={effectiveSelectedId ?? undefined} onValueChange={setSelectedRoadmap}>
-            <TabsList>
-              {availableRoadmaps.map((roadmap) => (
-                <TabsTrigger key={roadmap.id} value={roadmap.id}>
-                  {roadmap.name}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <RoadmapTabs
+            roadmaps={availableRoadmaps}
+            selectedId={effectiveSelectedId}
+            onSelect={setSelectedRoadmap}
+          />
           {selectedRoadmap?.description && (
             <Card className="bg-muted/50 border-none shadow-none">
               <CardContent className="py-3 px-4">
@@ -97,7 +99,24 @@ export function RoadmapBoard({
         </div>
       )}
 
-      <RoadmapFiltersBar
+      <PublicRoadmapToolbar
+        currentSort={filters.sort ?? 'votes'}
+        onSortChange={(sort) => setFilters({ sort })}
+        currentSearch={filters.search}
+        onSearchChange={(search) => setFilters({ search })}
+        filterButton={
+          <PublicRoadmapToolbarFilterButton
+            boards={boards}
+            tags={tags}
+            segments={isTeamMember ? segments : undefined}
+            onToggleBoard={toggleBoard}
+            onToggleTag={toggleTag}
+            onToggleSegment={isTeamMember ? toggleSegment : undefined}
+          />
+        }
+      />
+
+      <PublicRoadmapFiltersBar
         filters={filters}
         onFiltersChange={setFilters}
         onClearAll={clearFilters}
@@ -110,12 +129,15 @@ export function RoadmapBoard({
       />
 
       {effectiveSelectedId && (
-        <ScrollArea className="w-full" style={{ height: 'calc(100dvh - 13rem)' }}>
-          <div className="flex gap-4 pb-4 h-full">
+        <div className="relative flex-1 min-h-0">
+          <div
+            ref={columnsScroll.ref}
+            className="flex gap-4 pb-4 h-full overflow-x-auto overflow-y-hidden scrollbar-none snap-x snap-mandatory"
+          >
             {statuses.map((status, index) => (
               <div
                 key={status.id}
-                className="animate-in fade-in duration-200 fill-mode-backwards"
+                className="snap-center sm:snap-start flex flex-col animate-in fade-in duration-200 fill-mode-backwards"
                 style={{ animationDelay: `${index * 75}ms` }}
               >
                 <RoadmapColumn
@@ -128,8 +150,34 @@ export function RoadmapBoard({
               </div>
             ))}
           </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+
+          {columnsScroll.canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => columnsScroll.scrollBy(-320)}
+              aria-label={intl.formatMessage({
+                id: 'portal.roadmap.columns.scrollLeft',
+                defaultMessage: 'Scroll columns left',
+              })}
+              className="absolute start-0 top-0 bottom-4 flex items-center ps-1 pe-10 bg-gradient-to-r from-background/70 to-transparent z-10"
+            >
+              <ChevronLeftIcon className="w-5 h-5 text-muted-foreground/70" />
+            </button>
+          )}
+          {columnsScroll.canScrollRight && (
+            <button
+              type="button"
+              onClick={() => columnsScroll.scrollBy(320)}
+              aria-label={intl.formatMessage({
+                id: 'portal.roadmap.columns.scrollRight',
+                defaultMessage: 'Scroll columns right',
+              })}
+              className="absolute end-0 top-0 bottom-4 flex items-center pe-1 ps-10 bg-gradient-to-l from-background/70 to-transparent z-10"
+            >
+              <ChevronRightIcon className="w-5 h-5 text-muted-foreground/70" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

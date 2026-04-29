@@ -2,7 +2,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
-import { PublicFiltersBar } from '../public-filters-bar'
+import {
+  PublicFiltersBar,
+  PublicFiltersAddButton,
+  PublicFiltersToolbarButton,
+} from '../public-filters-bar'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 
 const statuses: PostStatusEntity[] = [
@@ -30,7 +34,7 @@ const tags: Tag[] = [
 function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersBar>> = {}) {
   const setFilters = vi.fn()
   const clearFilters = vi.fn()
-  render(
+  const result = render(
     <IntlProvider locale="en" defaultLocale="en">
       <PublicFiltersBar
         filters={{ sort: 'top' }}
@@ -42,36 +46,20 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof PublicFiltersB
       />
     </IntlProvider>
   )
-  return { setFilters, clearFilters }
+  return { setFilters, clearFilters, ...result }
 }
 
 describe('PublicFiltersBar', () => {
-  it('renders the Add filter button when no filters are active', () => {
-    renderBar()
-    expect(screen.getByRole('button', { name: /add filter/i })).toBeInTheDocument()
+  it('renders nothing when no filters are active (toolbar carries the entry point)', () => {
+    const { container } = renderBar()
+    expect(container).toBeEmptyDOMElement()
   })
 
-  it('shows the "Hiding completed and closed" hint when no status filter is set', () => {
-    renderBar()
-    expect(screen.getByText(/hiding completed and closed/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /show all/i })).toBeInTheDocument()
-  })
-
-  it('hides the hint once a status is selected', () => {
-    renderBar({ filters: { sort: 'top', status: ['open'] } })
-    expect(screen.queryByText(/hiding completed and closed/i)).not.toBeInTheDocument()
-  })
-
-  it('Show all sets status to all known status slugs', () => {
-    const { setFilters } = renderBar()
-    fireEvent.click(screen.getByRole('button', { name: /show all/i }))
-    expect(setFilters).toHaveBeenCalledWith({ status: ['open', 'complete'] })
-  })
-
-  it('renders a status chip per active status with correct label', () => {
+  it('renders chips + the dashed Add filter pill when chips are active', () => {
     renderBar({ filters: { sort: 'top', status: ['open'] } })
     expect(screen.getByText('Open')).toBeInTheDocument()
     expect(screen.getByText(/^Status:$/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add filter/i })).toBeInTheDocument()
   })
 
   it('renders combined Tags chip when 3+ tags selected', () => {
@@ -97,28 +85,68 @@ describe('PublicFiltersBar', () => {
     expect(screen.queryByRole('button', { name: /clear all/i })).not.toBeInTheDocument()
   })
 
-  it('clicking a vote-count preset calls setFilters with minVotes', () => {
-    const { setFilters } = renderBar()
-    fireEvent.click(screen.getByRole('button', { name: /add filter/i }))
-    fireEvent.click(screen.getByRole('button', { name: /vote count/i }))
-    fireEvent.click(screen.getByRole('button', { name: /25\+ votes/i }))
-    expect(setFilters).toHaveBeenCalledWith({ minVotes: 25 })
-  })
-
-  it('clicking a status in the submenu adds it via setFilters', () => {
-    const { setFilters } = renderBar()
-    fireEvent.click(screen.getByRole('button', { name: /^add filter$/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^Status$/i }))
-    // 'Open' status is rendered as a button with the status name as text content.
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-    expect(setFilters).toHaveBeenCalledWith({ status: ['open'] })
-  })
-
   it('Clear all calls clearFilters', () => {
     const { clearFilters } = renderBar({
       filters: { sort: 'top', minVotes: 10, dateFrom: '2026-04-01' },
     })
     fireEvent.click(screen.getByRole('button', { name: /clear all/i }))
     expect(clearFilters).toHaveBeenCalled()
+  })
+})
+
+describe('PublicFiltersToolbarButton', () => {
+  it('renders the solid Filter button (toolbar variant)', () => {
+    const setFilters = vi.fn()
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PublicFiltersToolbarButton
+          filters={{ sort: 'top' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+        />
+      </IntlProvider>
+    )
+    expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument()
+  })
+
+  it('opens the same category menu and lets users add a vote-count filter', () => {
+    const setFilters = vi.fn()
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PublicFiltersToolbarButton
+          filters={{ sort: 'top' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+        />
+      </IntlProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /filter/i }))
+    fireEvent.click(screen.getByRole('button', { name: /vote count/i }))
+    // cmdk's CommandItem renders with role="option"
+    fireEvent.click(screen.getByRole('option', { name: /25\+ votes/i }))
+    expect(setFilters).toHaveBeenCalledWith({ minVotes: 25 })
+  })
+})
+
+describe('PublicFiltersAddButton (pill variant)', () => {
+  it('clicking a status in the submenu adds it via setFilters', () => {
+    const setFilters = vi.fn()
+    render(
+      <IntlProvider locale="en" defaultLocale="en">
+        <PublicFiltersAddButton
+          filters={{ sort: 'top' }}
+          setFilters={setFilters}
+          statuses={statuses}
+          tags={tags}
+        />
+      </IntlProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^add filter$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Status$/i }))
+    // cmdk's CommandItem renders with role="option"
+    fireEvent.click(screen.getByRole('option', { name: 'Open' }))
+    expect(setFilters).toHaveBeenCalledWith({ status: ['open'] })
   })
 })
