@@ -20,13 +20,17 @@ async function getSessionAndRole(): Promise<{
   session: Session | null
   role: 'admin' | 'member' | 'user' | null
 }> {
-  const [
-    { getRequestHeaders },
-    { auth },
-    { db, principal, eq },
-    { cacheGet, cacheSet, CACHE_KEYS },
-  ] = await Promise.all([
-    import('@tanstack/react-start/server'),
+  // Fast-path for unauthenticated requests: if there's no Cookie header at
+  // all the request can't possibly carry a session token, so we can skip
+  // every dynamic import below + auth.api.getSession's DB lookup. Hot path
+  // for every cold-start landing-page hit since the visitor has no cookies.
+  const { getRequestHeaders } = await import('@tanstack/react-start/server')
+  const headers = getRequestHeaders()
+  if (!headers.get('cookie')) {
+    return { session: null, role: null }
+  }
+
+  const [{ auth }, { db, principal, eq }, { cacheGet, cacheSet, CACHE_KEYS }] = await Promise.all([
     import('@/lib/server/auth/index'),
     import('@/lib/server/db'),
     import('@/lib/server/redis'),
@@ -34,7 +38,7 @@ async function getSessionAndRole(): Promise<{
 
   try {
     const session = await auth.api.getSession({
-      headers: getRequestHeaders(),
+      headers,
     })
 
     if (!session?.user) {

@@ -44,6 +44,20 @@ RUN bun run --filter @quackback/widget build
 WORKDIR /app/apps/web
 RUN bun run build
 
+# Patch Nitro's lazy SSR loading: Nitro 3.x wraps the SSR service in
+# `lazyService(() => import('./_ssr/ssr.mjs'))` which only fires the import
+# when the FIRST request arrives. That puts ~200ms of module evaluation +
+# ~1s of dependency cold-start on the critical path of every cold start.
+#
+# Inject an unconditional `import("./_ssr/ssr.mjs")` right after the
+# services are declared. Bun fires the import as a side effect; by the
+# time Knative finishes its pod-readiness propagation (~1s) and forwards
+# the buffered request, the SSR module is already in V8's module cache
+# and lazyService's loader resolves synchronously. Top-level await (TLA)
+# would also work but delays the TCP listen — losing the parallelism
+# between Bun module load and Knative routing setup.
+RUN sed -i 's|globalThis.__nitro_vite_envs__ = services;|globalThis.__nitro_vite_envs__ = services;\nimport("./_ssr/ssr.mjs").catch(() => {});|' /app/apps/web/.output/server/index.mjs
+
 # Bundle the migration script so the runner doesn't need /app/node_modules.
 # The CLI entrypoint at packages/db/src/migrate.ts pulls in dotenv + drizzle-orm
 # + postgres + a few node builtins. `bun build --target=bun --bundle` rolls all
