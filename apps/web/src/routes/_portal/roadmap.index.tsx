@@ -70,11 +70,8 @@ function RoadmapPage() {
   const isTeamMember = userRole === 'admin' || userRole === 'member'
 
   return (
-    // Hard-cap the page at the available viewport height (minus PortalHeader).
-    // The kanban inside uses flex-1 chains to fill remaining space; each column
-    // has its own internal scroll for cards. Without this cap, a column with
-    // enough cards pushes the page taller than the viewport and the body
-    // scrolls vertically — we want column-internal scroll instead.
+    // Cap at viewport height so a column with many cards scrolls internally
+    // instead of pushing the body taller. 7rem ≈ PortalHeader.
     <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 py-8 h-[calc(100dvh-7rem)] flex flex-col min-h-0">
       <div className="mb-6 animate-in fade-in duration-200 fill-mode-backwards">
         <h1 className="text-3xl font-bold mb-2">

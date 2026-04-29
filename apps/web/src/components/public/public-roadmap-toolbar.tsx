@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ export function PublicRoadmapToolbar({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState(currentSearch ?? '')
 
-  // Keep local input value in sync when filter cleared from elsewhere
+  // Sync local input when the search filter is cleared from somewhere else.
   useEffect(() => {
     setSearchValue(currentSearch ?? '')
   }, [currentSearch])
@@ -45,29 +45,32 @@ export function PublicRoadmapToolbar({
     setSearchOpen(false)
   }
 
-  const sortOptions: ComboboxOption<RoadmapSort>[] = [
-    {
-      value: 'votes',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.toolbar.sortVotes',
-        defaultMessage: 'Most votes',
-      }),
-    },
-    {
-      value: 'newest',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.toolbar.sortNewest',
-        defaultMessage: 'Newest',
-      }),
-    },
-    {
-      value: 'oldest',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.toolbar.sortOldest',
-        defaultMessage: 'Oldest',
-      }),
-    },
-  ]
+  const sortOptions = useMemo<ComboboxOption<RoadmapSort>[]>(
+    () => [
+      {
+        value: 'votes',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.toolbar.sortVotes',
+          defaultMessage: 'Most votes',
+        }),
+      },
+      {
+        value: 'newest',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.toolbar.sortNewest',
+          defaultMessage: 'Newest',
+        }),
+      },
+      {
+        value: 'oldest',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.toolbar.sortOldest',
+          defaultMessage: 'Oldest',
+        }),
+      },
+    ],
+    [intl]
+  )
 
   return (
     <div className="flex items-center justify-between gap-3 sm:gap-4">

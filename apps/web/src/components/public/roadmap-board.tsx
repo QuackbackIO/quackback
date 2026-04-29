@@ -37,15 +37,12 @@ export function RoadmapBoard({
   const { data: roadmaps } = usePublicRoadmaps({ enabled: !initialRoadmaps })
   const columnsScroll = usePillsScroll()
 
-  // Filter state
   const { filters, setFilters, clearFilters, toggleBoard, toggleTag, toggleSegment } =
     usePublicRoadmapFilters()
 
-  // Reference data for filter bar (pre-fetched in route loader)
   const { data: boards } = useSuspenseQuery(portalQueries.boards())
   const { data: tags } = useSuspenseQuery(portalQueries.tags())
-
-  // Segments only available for team members
+  // Segments are admin/member-only — anonymous viewers can't filter on them.
   const { data: segments } = useSegments({ enabled: !!isTeamMember })
 
   const availableRoadmaps = initialRoadmaps ?? roadmaps ?? []

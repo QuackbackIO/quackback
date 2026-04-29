@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Horizontal-scroll pills with directional indicators. Returns a ref to
- * attach to the scroll container plus state flags for whether the user
- * can still scroll left or right (used to gate fade/arrow controls), and
- * a `scrollBy(delta)` helper for click-to-scroll.
- *
- * Originally extracted from the widget's board pills row; reused on the
- * public roadmap selector and anywhere a horizontal scroll-tabs pattern
- * is needed.
+ * Horizontal-scroll pills with directional indicators. Returns a ref for the
+ * scroll container, flags for whether the user can scroll left/right (gates
+ * fade/arrow controls), and a `scrollBy(delta)` helper.
  */
 export function usePillsScroll() {
   const ref = useRef<HTMLDivElement>(null)
@@ -18,10 +13,8 @@ export function usePillsScroll() {
   const update = useCallback(() => {
     const el = ref.current
     if (!el) return
-    const left = el.scrollLeft > 0
-    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
-    setCanScrollLeft((prev) => (prev === left ? prev : left))
-    setCanScrollRight((prev) => (prev === right ? prev : right))
+    setCanScrollLeft(el.scrollLeft > 0)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
   }, [])
 
   useEffect(() => {

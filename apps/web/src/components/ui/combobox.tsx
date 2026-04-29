@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronUpDownIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { useIntl } from 'react-intl'
 import {
@@ -58,14 +58,6 @@ export function Combobox<T extends string>({
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const selected = options.find((o) => o.value === value)
-
-  // Reset cmdk's internal search filter when the popover closes — otherwise
-  // it persists between opens which is surprising.
-  useEffect(() => {
-    if (!open) {
-      // no-op; cmdk's input is uncontrolled by us so we rely on remount
-    }
-  }, [open])
 
   const showSearch = options.length > hideSearchBelow
 

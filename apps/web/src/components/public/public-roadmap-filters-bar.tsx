@@ -68,43 +68,42 @@ export function PublicRoadmapFiltersBar({
     [filters, onFiltersChange, boards, tags, segments, intl]
   )
 
-  // Toolbar carries the primary Filter button; this row appears only when
-  // chips are active. Trailing dashed "+ Add filter" pill mirrors the chip
-  // shape — the familiar "add another" affordance.
   if (activeChips.length === 0) return null
 
   return (
-    <div role="region" aria-label="Active filters" className="py-0.5">
-      <div className="flex flex-wrap gap-2 items-center">
-        {activeChips.map(({ key, type, ...chipProps }) => (
-          <FilterChip key={key} icon={FILTER_ICON_MAP[type]} {...chipProps} />
-        ))}
+    <div
+      role="region"
+      aria-label="Active filters"
+      className="flex flex-wrap gap-2 items-center py-0.5"
+    >
+      {activeChips.map(({ key, type, ...chipProps }) => (
+        <FilterChip key={key} icon={FILTER_ICON_MAP[type]} {...chipProps} />
+      ))}
 
-        <AddFilterButton
-          variant="pill"
-          boards={boards}
-          tags={tags}
-          segments={segments}
-          onToggleBoard={onToggleBoard}
-          onToggleTag={onToggleTag}
-          onToggleSegment={onToggleSegment}
-        />
+      <AddFilterButton
+        variant="pill"
+        boards={boards}
+        tags={tags}
+        segments={segments}
+        onToggleBoard={onToggleBoard}
+        onToggleTag={onToggleTag}
+        onToggleSegment={onToggleSegment}
+      />
 
-        {activeChips.length >= 2 && (
-          <button
-            type="button"
-            onClick={onClearAll}
-            className={cn(
-              'text-xs text-muted-foreground hover:text-foreground',
-              'px-2 py-1 rounded',
-              'hover:bg-muted/50',
-              'transition-colors'
-            )}
-          >
-            <FormattedMessage id="portal.feedback.filter.clearAll" defaultMessage="Clear all" />
-          </button>
-        )}
-      </div>
+      {activeChips.length >= 2 && (
+        <button
+          type="button"
+          onClick={onClearAll}
+          className={cn(
+            'text-xs text-muted-foreground hover:text-foreground',
+            'px-2 py-1 rounded',
+            'hover:bg-muted/50',
+            'transition-colors'
+          )}
+        >
+          <FormattedMessage id="portal.feedback.filter.clearAll" defaultMessage="Clear all" />
+        </button>
+      )}
     </div>
   )
 }
@@ -146,36 +145,39 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const categories: { key: FilterCategory; label: string; icon: IconComponent }[] = [
-    {
-      key: 'board',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.filter.category.board',
-        defaultMessage: 'Board',
-      }),
-      icon: Squares2X2Icon,
-    },
-    {
-      key: 'tags',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.filter.category.tag',
-        defaultMessage: 'Tag',
-      }),
-      icon: TagIcon,
-    },
-  ]
+  const showSegment = !!(onToggleSegment && segments && segments.length > 0)
 
-  // Segments only show for team members (segments prop populated)
-  if (onToggleSegment && segments && segments.length > 0) {
-    categories.push({
-      key: 'segment',
-      label: intl.formatMessage({
-        id: 'portal.roadmap.filter.category.segment',
-        defaultMessage: 'Segment',
-      }),
-      icon: UserGroupIcon,
-    })
-  }
+  const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(() => {
+    const list: { key: FilterCategory; label: string; icon: IconComponent }[] = [
+      {
+        key: 'board',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.filter.category.board',
+          defaultMessage: 'Board',
+        }),
+        icon: Squares2X2Icon,
+      },
+      {
+        key: 'tags',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.filter.category.tag',
+          defaultMessage: 'Tag',
+        }),
+        icon: TagIcon,
+      },
+    ]
+    if (showSegment) {
+      list.push({
+        key: 'segment',
+        label: intl.formatMessage({
+          id: 'portal.roadmap.filter.category.segment',
+          defaultMessage: 'Segment',
+        }),
+        icon: UserGroupIcon,
+      })
+    }
+    return list
+  }, [intl, showSegment])
 
   return (
     <Popover

@@ -14,12 +14,7 @@ interface RoadmapTabsProps {
   onSelect: (id: string) => void
 }
 
-/**
- * Horizontal scrolling tab strip for switching between roadmaps. Mirrors
- * the widget's board-pills pattern: an overflow-x-auto row with directional
- * fade/chevron controls that appear only when more content sits beyond the
- * viewport edges.
- */
+/** Horizontal scrolling tab strip for switching between roadmaps. */
 export function RoadmapTabs({ roadmaps, selectedId, onSelect }: RoadmapTabsProps) {
   const intl = useIntl()
   const pills = usePillsScroll()

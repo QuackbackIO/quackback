@@ -39,6 +39,15 @@ type FilterCategory = 'status' | 'tag' | 'votes' | 'date' | 'response'
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
+const CHIP_ICON_BY_TYPE: Record<'status' | 'tags' | 'votes' | 'date' | 'response', IconComponent> =
+  {
+    status: CircleIcon,
+    tags: TagIcon,
+    votes: ArrowTrendingUpIcon,
+    date: CalendarIcon,
+    response: ChatBubbleLeftRightIcon,
+  }
+
 interface PublicFiltersBarProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
@@ -61,42 +70,40 @@ export function PublicFiltersBar({
     [filters, setFilters, statuses, tags, intl]
   )
 
-  // The toolbar always carries the primary "Filter" button. This row only
-  // appears when there's something to show — chips active. The trailing
-  // dashed "+ Add filter" pill is the "add another" affordance familiar
-  // from Linear/Notion, mirroring the chip shape.
   if (activeChips.length === 0) return null
 
   return (
-    <div role="region" aria-label="Active filters" className="py-0.5">
-      <div className="flex flex-wrap gap-2 items-center">
-        {activeChips.map(({ key, type, ...chipProps }) => (
-          <FilterChip key={key} icon={getIconForType(type)} {...chipProps} />
-        ))}
+    <div
+      role="region"
+      aria-label="Active filters"
+      className="flex flex-wrap gap-2 items-center py-0.5"
+    >
+      {activeChips.map(({ key, type, ...chipProps }) => (
+        <FilterChip key={key} icon={CHIP_ICON_BY_TYPE[type]} {...chipProps} />
+      ))}
 
-        <AddFilterButton
-          filters={filters}
-          setFilters={setFilters}
-          statuses={statuses}
-          tags={tags}
-          variant="pill"
-        />
+      <AddFilterButton
+        filters={filters}
+        setFilters={setFilters}
+        statuses={statuses}
+        tags={tags}
+        variant="pill"
+      />
 
-        {activeChips.length >= 2 && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className={cn(
-              'text-xs text-muted-foreground hover:text-foreground',
-              'px-2 py-1 rounded',
-              'hover:bg-muted/50',
-              'transition-colors'
-            )}
-          >
-            <FormattedMessage id="portal.feedback.filter.clearAll" defaultMessage="Clear all" />
-          </button>
-        )}
-      </div>
+      {activeChips.length >= 2 && (
+        <button
+          type="button"
+          onClick={clearFilters}
+          className={cn(
+            'text-xs text-muted-foreground hover:text-foreground',
+            'px-2 py-1 rounded',
+            'hover:bg-muted/50',
+            'transition-colors'
+          )}
+        >
+          <FormattedMessage id="portal.feedback.filter.clearAll" defaultMessage="Clear all" />
+        </button>
+      )}
     </div>
   )
 }
@@ -148,48 +155,51 @@ function AddFilterButton({
     setActiveCategory(null)
   }
 
-  const categories: { key: FilterCategory; label: string; icon: IconComponent }[] = [
-    {
-      key: 'status',
-      label: intl.formatMessage({
-        id: 'portal.feedback.filter.category.status',
-        defaultMessage: 'Status',
-      }),
-      icon: CircleIcon,
-    },
-    {
-      key: 'tag',
-      label: intl.formatMessage({
-        id: 'portal.feedback.filter.category.tag',
-        defaultMessage: 'Tag',
-      }),
-      icon: TagIcon,
-    },
-    {
-      key: 'votes',
-      label: intl.formatMessage({
-        id: 'portal.feedback.filter.category.votes',
-        defaultMessage: 'Vote count',
-      }),
-      icon: ArrowTrendingUpIcon,
-    },
-    {
-      key: 'date',
-      label: intl.formatMessage({
-        id: 'portal.feedback.filter.category.date',
-        defaultMessage: 'Created date',
-      }),
-      icon: CalendarIcon,
-    },
-    {
-      key: 'response',
-      label: intl.formatMessage({
-        id: 'portal.feedback.filter.category.response',
-        defaultMessage: 'Team response',
-      }),
-      icon: ChatBubbleLeftRightIcon,
-    },
-  ]
+  const categories = useMemo<{ key: FilterCategory; label: string; icon: IconComponent }[]>(
+    () => [
+      {
+        key: 'status',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.status',
+          defaultMessage: 'Status',
+        }),
+        icon: CircleIcon,
+      },
+      {
+        key: 'tag',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.tag',
+          defaultMessage: 'Tag',
+        }),
+        icon: TagIcon,
+      },
+      {
+        key: 'votes',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.votes',
+          defaultMessage: 'Vote count',
+        }),
+        icon: ArrowTrendingUpIcon,
+      },
+      {
+        key: 'date',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.date',
+          defaultMessage: 'Created date',
+        }),
+        icon: CalendarIcon,
+      },
+      {
+        key: 'response',
+        label: intl.formatMessage({
+          id: 'portal.feedback.filter.category.response',
+          defaultMessage: 'Team response',
+        }),
+        icon: ChatBubbleLeftRightIcon,
+      },
+    ],
+    [intl]
+  )
 
   const groupedStatuses = useMemo(() => {
     const groups: Record<string, PostStatusEntity[]> = {}
@@ -563,15 +573,4 @@ function buildActiveChips(args: {
   }
 
   return chips
-}
-
-function getIconForType(type: ActiveChipDescriptor['type']): IconComponent {
-  const map: Record<ActiveChipDescriptor['type'], IconComponent> = {
-    status: CircleIcon,
-    tags: TagIcon,
-    votes: ArrowTrendingUpIcon,
-    date: CalendarIcon,
-    response: ChatBubbleLeftRightIcon,
-  }
-  return map[type]
 }
