@@ -70,10 +70,10 @@ export function PublicRoadmapToolbar({
   ]
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="flex items-center justify-between gap-3 sm:gap-4">
       {/* Sort */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-xs text-muted-foreground hidden sm:inline">
           <FormattedMessage id="portal.roadmap.toolbar.sortBy" defaultMessage="Sort by" />
         </span>
         <Combobox
@@ -86,7 +86,7 @@ export function PublicRoadmapToolbar({
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
+      <div className="flex items-center gap-2">
         <Popover open={searchOpen} onOpenChange={setSearchOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="gap-1.5">
