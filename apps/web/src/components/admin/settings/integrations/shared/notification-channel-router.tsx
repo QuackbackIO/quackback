@@ -8,8 +8,6 @@
  * mental model and should get their own UI rather than be forced through here.
  */
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
 import { useState, useRef, useMemo, type ReactNode } from 'react'
 import {
   ArrowPathIcon,
@@ -85,7 +83,10 @@ export function NotificationChannelRouter<TChannel extends Channel>(
   props: NotificationChannelRouterProps<TChannel>
 ) {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const existingChannelIds = props.notificationChannels.map((c) => c.channelId)
+  const existingChannelIds = useMemo(
+    () => props.notificationChannels.map((c) => c.channelId),
+    [props.notificationChannels]
+  )
 
   return (
     <div className="space-y-3">
@@ -135,7 +136,25 @@ export function NotificationChannelRouter<TChannel extends Channel>(
 }
 
 // ============================================
-// Internal components (stubs) — see Task 1.2 for full bodies
+// Helpers
+// ============================================
+
+function getBoardSummary(channel: NotificationChannel, boards: Board[]): string {
+  if (!channel.boardIds?.length) return 'All boards'
+  if (channel.boardIds.length === 1) {
+    return boards.find((b) => b.id === channel.boardIds![0])?.name ?? '1 board'
+  }
+  const firstName = boards.find((b) => b.id === channel.boardIds![0])?.name
+  if (firstName) return `${firstName} + ${channel.boardIds.length - 1} more`
+  return `${channel.boardIds.length} boards`
+}
+
+function tableGrid(eventCount: number) {
+  return `grid-cols-[minmax(0,1fr)${'_5rem'.repeat(eventCount)}]`
+}
+
+// ============================================
+// Internal component interfaces
 // ============================================
 
 interface RoutingTableProps<TChannel extends Channel> {
@@ -162,10 +181,621 @@ interface AddChannelDialogProps<TChannel extends Channel> {
   onRefreshChannels: () => void
 }
 
-function RoutingTable<TChannel extends Channel>(_props: RoutingTableProps<TChannel>): null {
-  return null
+// ============================================
+// Searchable Channel Picker
+// ============================================
+
+function ChannelPicker<TChannel extends Channel>({
+  channels,
+  value,
+  onSelect,
+  loading,
+  onRefresh,
+  renderChannelIcon,
+  placeholder = 'Select a channel...',
+}: {
+  channels: TChannel[]
+  value: string
+  onSelect: (channelId: string) => void
+  loading?: boolean
+  onRefresh?: () => void
+  renderChannelIcon: (channel: TChannel | undefined) => ReactNode
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const selected = channels.find((c) => c.id === value)
+  const filtered = useMemo(
+    () =>
+      search
+        ? channels.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+        : channels,
+    [channels, search]
+  )
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {loading ? (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+              Loading channels...
+            </span>
+          ) : selected ? (
+            <span className="flex items-center gap-2">
+              {renderChannelIcon(selected)}
+              {selected.name}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+          <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          inputRef.current?.focus()
+        }}
+      >
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search channels..."
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              title="Refresh channels"
+            >
+              <ArrowPathIcon className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
+        <div className="max-h-[200px] overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+              {search ? 'No channels match your search.' : 'No channels available.'}
+            </div>
+          ) : (
+            filtered.map((channel) => (
+              <button
+                key={channel.id}
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors ${
+                  channel.id === value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                }`}
+                onClick={() => {
+                  onSelect(channel.id)
+                  setOpen(false)
+                  setSearch('')
+                }}
+              >
+                {renderChannelIcon(channel)}
+                <span className="truncate">{channel.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
-function AddChannelDialog<TChannel extends Channel>(_props: AddChannelDialogProps<TChannel>): null {
-  return null
+// ============================================
+// Board Filter Pills
+// ============================================
+
+function BoardFilterPills({
+  boardIds,
+  boards,
+  onBoardIdsChange,
+  disabled,
+}: {
+  boardIds: string[] | null
+  boards: Board[]
+  onBoardIdsChange: (boardIds: string[] | null) => void
+  disabled?: boolean
+}) {
+  const isAllBoards = !boardIds?.length
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-medium text-muted-foreground">Board filter</div>
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <Checkbox
+            checked={isAllBoards}
+            onCheckedChange={(checked) => {
+              if (checked) onBoardIdsChange(null)
+            }}
+            disabled={disabled}
+          />
+          All boards
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <Checkbox
+            checked={!isAllBoards}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                onBoardIdsChange(boards.map((b) => b.id))
+              } else {
+                onBoardIdsChange(null)
+              }
+            }}
+            disabled={disabled}
+          />
+          Specific boards
+        </label>
+        {!isAllBoards && (
+          <div className="ml-6 flex flex-wrap gap-1.5 pt-0.5">
+            {boards.map((board) => {
+              const selected = boardIds?.includes(board.id) ?? false
+              return (
+                <button
+                  key={board.id}
+                  type="button"
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors disabled:opacity-50 ${
+                    selected
+                      ? 'bg-primary/10 border-primary/20 text-primary font-medium'
+                      : 'border-border/60 text-muted-foreground hover:bg-muted/50'
+                  }`}
+                  onClick={() => {
+                    if (selected) {
+                      const next = (boardIds ?? []).filter((id) => id !== board.id)
+                      onBoardIdsChange(next.length > 0 ? next : null)
+                    } else {
+                      onBoardIdsChange([...(boardIds ?? []), board.id])
+                    }
+                  }}
+                  disabled={disabled}
+                >
+                  {board.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// Channel Row (table row with expandable detail)
+// ============================================
+
+function ChannelRow<TChannel extends Channel>({
+  channel,
+  channelInfo,
+  integrationId,
+  disabled,
+  expanded,
+  onToggleExpand,
+  boards,
+  hasBorder,
+  events,
+  renderChannelIcon,
+}: {
+  channel: NotificationChannel
+  channelInfo: TChannel | undefined
+  integrationId: string
+  disabled: boolean
+  expanded: boolean
+  onToggleExpand: () => void
+  boards: Board[]
+  hasBorder: boolean
+  events: EventConfig[]
+  renderChannelIcon: (c: TChannel | undefined) => ReactNode
+}) {
+  const updateMutation = useUpdateNotificationChannel()
+  const removeMutation = useRemoveNotificationChannel()
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  const channelName = channelInfo?.name || channel.channelId
+  const saving = updateMutation.isPending
+  const hasFilter = !!channel.boardIds?.length
+
+  const handleEventToggle = (eventId: string, checked: boolean) => {
+    updateMutation.mutate({
+      integrationId,
+      channelId: channel.channelId,
+      events: events.map((e) => ({
+        eventType: e.id,
+        enabled:
+          e.id === eventId
+            ? checked
+            : (channel.events.find((ev) => ev.eventType === e.id)?.enabled ?? false),
+      })),
+      boardIds: channel.boardIds,
+    })
+  }
+
+  const handleBoardIdsChange = (boardIds: string[] | null) => {
+    updateMutation.mutate({
+      integrationId,
+      channelId: channel.channelId,
+      events: events.map((e) => ({
+        eventType: e.id,
+        enabled: channel.events.find((ev) => ev.eventType === e.id)?.enabled ?? false,
+      })),
+      boardIds,
+    })
+  }
+
+  const handleRemove = () => {
+    removeMutation.mutate(
+      { integrationId, channelId: channel.channelId },
+      { onSuccess: () => setConfirmRemove(false) }
+    )
+  }
+
+  return (
+    <>
+      <div className={hasBorder ? 'border-b border-border/50' : ''}>
+        <div
+          className={`grid ${tableGrid(events.length)} items-center hover:bg-muted/10 transition-colors cursor-pointer`}
+          onClick={onToggleExpand}
+        >
+          <div className="flex items-center gap-2 px-4 py-3">
+            <ChevronRightIcon
+              className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-150 ${
+                expanded ? 'rotate-90' : ''
+              }`}
+            />
+            {renderChannelIcon(channelInfo)}
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="text-sm font-medium truncate">{channelName}</span>
+              {hasFilter && (
+                <span className="text-[11px] text-muted-foreground shrink-0">
+                  {getBoardSummary(channel, boards)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {events.map((event) => {
+            const enabled = channel.events.find((e) => e.eventType === event.id)?.enabled ?? false
+            return (
+              <div
+                key={event.id}
+                className="flex justify-center py-3"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Checkbox
+                  checked={enabled}
+                  onCheckedChange={(checked) => handleEventToggle(event.id, checked === true)}
+                  disabled={disabled || saving}
+                />
+              </div>
+            )
+          })}
+        </div>
+
+        {expanded && (
+          <div className="border-t border-border/30 bg-muted/5 px-4 pb-4">
+            <div className="pl-10 pt-3 space-y-3">
+              <BoardFilterPills
+                boardIds={channel.boardIds}
+                boards={boards}
+                onBoardIdsChange={handleBoardIdsChange}
+                disabled={disabled || saving}
+              />
+              <div className="pt-2 border-t border-border/30">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={disabled}
+                >
+                  <XMarkIcon className="h-3.5 w-3.5 mr-1" />
+                  Remove channel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove notification channel</DialogTitle>
+            <DialogDescription>
+              Stop sending notifications to #{channelName}? This will delete all event mappings for
+              this channel.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRemove(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRemove}
+              disabled={removeMutation.isPending}
+            >
+              {removeMutation.isPending ? 'Removing...' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+// ============================================
+// Routing Table
+// ============================================
+
+function RoutingTable<TChannel extends Channel>({
+  channels: notificationChannels,
+  channelInfoList,
+  integrationId,
+  disabled,
+  boards,
+  events,
+  renderChannelIcon,
+  onAddChannel,
+}: RoutingTableProps<TChannel>) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  return (
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <div
+        className={`grid ${tableGrid(events.length)} items-end bg-muted/40 border-b border-border/50`}
+      >
+        <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          Channel
+        </div>
+        {events.map((event) => (
+          <div
+            key={event.id}
+            className="py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight"
+            title={event.label}
+          >
+            {event.shortLabel}
+          </div>
+        ))}
+      </div>
+
+      {notificationChannels.map((nc, idx) => (
+        <ChannelRow<TChannel>
+          key={nc.channelId}
+          channel={nc}
+          channelInfo={channelInfoList.find((c) => c.id === nc.channelId)}
+          integrationId={integrationId}
+          disabled={disabled}
+          expanded={expandedId === nc.channelId}
+          onToggleExpand={() =>
+            setExpandedId((prev) => (prev === nc.channelId ? null : nc.channelId))
+          }
+          boards={boards}
+          hasBorder={idx < notificationChannels.length - 1 || expandedId === nc.channelId}
+          events={events}
+          renderChannelIcon={renderChannelIcon}
+        />
+      ))}
+
+      {onAddChannel && (
+        <button
+          type="button"
+          className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors w-full border-t border-border/50"
+          onClick={onAddChannel}
+          disabled={disabled}
+        >
+          <PlusIcon className="h-3.5 w-3.5" />
+          Add channel
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// Add Channel Dialog
+// ============================================
+
+function AddChannelDialog<TChannel extends Channel>({
+  open,
+  onOpenChange,
+  integrationId,
+  channels,
+  loadingChannels,
+  existingChannelIds,
+  boards,
+  events,
+  renderChannelIcon,
+  onRefreshChannels,
+}: AddChannelDialogProps<TChannel>) {
+  const addMutation = useAddNotificationChannel()
+  const [selectedChannelId, setSelectedChannelId] = useState('')
+  const [selectedEvents, setSelectedEvents] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(events.map((e) => [e.id, true]))
+  )
+  const [boardIds, setBoardIds] = useState<string[] | null>(null)
+  const [showBoardFilter, setShowBoardFilter] = useState(false)
+
+  const availableChannels = channels.filter((c) => !existingChannelIds.includes(c.id))
+  const allEventsSelected = events.every((e) => selectedEvents[e.id])
+  const noEventsSelected = events.every((e) => !selectedEvents[e.id])
+
+  const handleSave = () => {
+    if (!selectedChannelId) return
+    const eventsToSave = Object.entries(selectedEvents)
+      .filter(([, enabled]) => enabled)
+      .map(([eventType]) => eventType)
+
+    if (eventsToSave.length === 0) return
+
+    addMutation.mutate(
+      {
+        integrationId,
+        channelId: selectedChannelId,
+        events: eventsToSave,
+        boardIds: boardIds ?? undefined,
+      },
+      {
+        onSuccess: () => {
+          onOpenChange(false)
+          setSelectedChannelId('')
+          setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
+          setBoardIds(null)
+          setShowBoardFilter(false)
+        },
+      }
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add notification channel</DialogTitle>
+          <DialogDescription>Route events to a channel.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Channel</Label>
+            <ChannelPicker<TChannel>
+              channels={availableChannels}
+              value={selectedChannelId}
+              onSelect={setSelectedChannelId}
+              loading={loadingChannels}
+              onRefresh={onRefreshChannels}
+              renderChannelIcon={renderChannelIcon}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Events</Label>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = allEventsSelected ? false : true
+                  setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, next])))
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {allEventsSelected ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {events.map((event) => (
+                <label
+                  key={event.id}
+                  className="flex items-center gap-2 text-sm cursor-pointer py-1"
+                >
+                  <Checkbox
+                    checked={selectedEvents[event.id] ?? true}
+                    onCheckedChange={(checked) =>
+                      setSelectedEvents((prev) => ({
+                        ...prev,
+                        [event.id]: checked === true,
+                      }))
+                    }
+                  />
+                  {event.shortLabel}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            {!showBoardFilter && !boardIds?.length ? (
+              <button
+                type="button"
+                onClick={() => setShowBoardFilter(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                <PlusIcon className="h-3 w-3" />
+                Filter by board
+              </button>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Board filter</Label>
+                  {boardIds?.length ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoardIds(null)
+                        setShowBoardFilter(false)
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {boards.map((board) => {
+                    const selected = boardIds?.includes(board.id) ?? false
+                    return (
+                      <button
+                        key={board.id}
+                        type="button"
+                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                          selected
+                            ? 'bg-primary/10 border-primary/20 text-primary font-medium'
+                            : 'border-border/60 text-muted-foreground hover:bg-muted/50'
+                        }`}
+                        onClick={() => {
+                          if (selected) {
+                            const next = (boardIds ?? []).filter((id) => id !== board.id)
+                            setBoardIds(next.length > 0 ? next : null)
+                          } else {
+                            setBoardIds([...(boardIds ?? []), board.id])
+                          }
+                        }}
+                      >
+                        {board.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                {!boardIds?.length && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Select boards to filter, or leave empty for all boards.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!selectedChannelId || noEventsSelected || addMutation.isPending}
+          >
+            {addMutation.isPending ? 'Adding...' : 'Add channel'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
