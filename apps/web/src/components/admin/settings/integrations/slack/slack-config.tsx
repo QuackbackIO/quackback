@@ -550,7 +550,7 @@ export function SlackConfig({
 
         <NotificationChannelRouter<SlackChannel>
           integrationId={integrationId}
-          enabled={integrationEnabled && !saving}
+          enabled={integrationEnabled}
           events={SLACK_EVENT_CONFIG}
           channels={channels}
           notificationChannels={notificationChannels}
