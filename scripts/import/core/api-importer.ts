@@ -63,6 +63,7 @@ function commentDedupKey(
 }
 
 interface ExistingComment {
+  id: string
   content: string
   createdAt: string
   replies?: ExistingComment[]
@@ -125,26 +126,33 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
   // Dedup state, only populated when options.incremental is set
   const existingPostByKey = new Map<string, string>()
   const preExistingPostIds = new Set<string>()
-  const existingCommentKeysByPost = new Map<string, Set<string>>()
+  // Per-post: dedupKey -> Quackback comment id. Stored as a map (not a set) so
+  // that when a UV comment is matched against an existing one, we can register
+  // idMap.comments for it and let new replies under that parent attach.
+  const existingCommentsByPost = new Map<string, Map<string, string>>()
 
-  async function getExistingCommentKeys(postId: string): Promise<Set<string>> {
-    const cached = existingCommentKeysByPost.get(postId)
+  async function getExistingComments(postId: string): Promise<Map<string, string>> {
+    const cached = existingCommentsByPost.get(postId)
     if (cached) return cached
     const resp = await qb.get<{ data: ExistingComment[] }>(`/api/v1/posts/${postId}/comments`)
     const flat = flattenComments(resp.data ?? [])
-    const keys = new Set<string>()
+    const byKey = new Map<string, string>()
     for (const c of flat) {
       const k = commentDedupKey(c.content, c.createdAt)
-      if (k) keys.add(k)
+      if (k) byKey.set(k, c.id)
     }
-    existingCommentKeysByPost.set(postId, keys)
-    return keys
+    existingCommentsByPost.set(postId, byKey)
+    return byKey
   }
 
   if (options.incremental) {
     progress.start('Pre-fetching existing posts for dedup')
+    // showDeleted=true so soft-deleted posts are still in the dedup index;
+    // re-importing a UV idea whose Quackback row was deleted should not
+    // resurrect it as a duplicate.
     const existing = await qb.listAll<{ id: string; title: string; createdAt: string }>(
-      '/api/v1/posts'
+      '/api/v1/posts',
+      { showDeleted: 'true' }
     )
     for (const p of existing) {
       const key = postDedupKey(p.title, p.createdAt)
@@ -328,13 +336,15 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
         if (options.incremental && preExistingPostIds.has(postId)) {
           const dedupKey = commentDedupKey(comment.body, comment.createdAt)
           if (dedupKey) {
-            const existingKeys = await getExistingCommentKeys(postId)
-            if (existingKeys.has(dedupKey)) {
+            const existingByKey = await getExistingComments(postId)
+            const existingCommentId = existingByKey.get(dedupKey)
+            if (existingCommentId) {
+              // Register the mapping so new replies under this parent in the
+              // current run can still resolve their parentId.
+              if (comment.id) idMap.comments.set(comment.id, existingCommentId)
               result.comments.skipped++
               continue
             }
-            // Record the key so a duplicate later in the same run is also skipped
-            existingKeys.add(dedupKey)
           }
         }
 
@@ -348,6 +358,12 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
         // Track comment ID for threading
         if (comment.id) {
           idMap.comments.set(comment.id, resp.data.id)
+        }
+        // Record in the per-post dedup cache so repeated rows in the same run
+        // are also caught
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(comment.body, comment.createdAt)
+          if (dedupKey) (await getExistingComments(postId)).set(dedupKey, resp.data.id)
         }
 
         result.comments.imported++
@@ -441,20 +457,24 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
         if (options.incremental && preExistingPostIds.has(postId)) {
           const dedupKey = commentDedupKey(note.body, note.createdAt)
           if (dedupKey) {
-            const existingKeys = await getExistingCommentKeys(postId)
-            if (existingKeys.has(dedupKey)) {
+            const existingByKey = await getExistingComments(postId)
+            if (existingByKey.has(dedupKey)) {
               result.notes.skipped++
               continue
             }
-            existingKeys.add(dedupKey)
           }
         }
 
-        await qb.post(`/api/v1/posts/${postId}/comments`, {
+        const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
           content: note.body,
           isPrivate: true,
           ...(note.createdAt && { createdAt: new Date(note.createdAt).toISOString() }),
         })
+
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(note.body, note.createdAt)
+          if (dedupKey) (await getExistingComments(postId)).set(dedupKey, resp.data.id)
+        }
 
         result.notes.imported++
       } catch (err) {
