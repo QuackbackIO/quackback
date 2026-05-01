@@ -60,6 +60,10 @@ test.describe('Slack notification routing', () => {
 
   test('channel monitoring section still renders', async ({ page }) => {
     // PR1 left the monitored-channel UI unchanged. Guards against accidental removal.
+    // Skip when Slack isn't connected — the page shows the setup card instead.
+    const setupCard = page.getByText(/connect your slack workspace/i)
+    if (await setupCard.isVisible()) test.skip()
+
     await expect(page.getByText(/channel monitoring/i)).toBeVisible()
   })
 })
