@@ -88,18 +88,7 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
 }))
 vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchCommentCreated: vi.fn(),
-  dispatchCommentUpdated: vi.fn(),
-  dispatchCommentDeleted: vi.fn(),
-  dispatchPostStatusChanged: vi.fn(),
   buildEventActor: vi.fn(() => ({})),
-}))
-vi.mock('@/lib/server/domains/activity/activity.service', () => ({
-  createActivity: vi.fn(),
-}))
-vi.mock('@/lib/shared', () => ({
-  buildCommentTree: vi.fn(() => []),
-  aggregateReactions: vi.fn(() => []),
-  toStatusChange: vi.fn(),
 }))
 
 describe('createComment isTeamMember derivation', () => {
@@ -112,6 +101,16 @@ describe('createComment isTeamMember derivation', () => {
     await createComment(
       { postId: 'post_p' as unknown as PostId, content: 'Hi' },
       { principalId: 'principal_admin' as unknown as PrincipalId, role: 'admin' },
+      { skipDispatch: true }
+    )
+    expect(insertedComments[0]).toMatchObject({ isTeamMember: true })
+  })
+
+  it('marks comment as team-member when author.role is member', async () => {
+    const { createComment } = await import('../comment.service')
+    await createComment(
+      { postId: 'post_p' as unknown as PostId, content: 'Hi' },
+      { principalId: 'principal_member' as unknown as PrincipalId, role: 'member' },
       { skipDispatch: true }
     )
     expect(insertedComments[0]).toMatchObject({ isTeamMember: true })
