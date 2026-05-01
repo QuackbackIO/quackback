@@ -68,21 +68,21 @@ interface SlackConfigProps {
 const SLACK_EVENT_CONFIG = [
   {
     id: 'post.created' as const,
-    label: 'New feedback submitted',
-    shortLabel: 'Feedback',
-    description: 'When a user submits new feedback',
+    label: 'New post submitted',
+    shortLabel: 'New post',
+    description: 'When someone submits a new post',
   },
   {
     id: 'post.status_changed' as const,
-    label: 'Feedback status changed',
+    label: 'Post status changed',
     shortLabel: 'Status',
-    description: 'When the status of a feedback post is updated',
+    description: "When a post's status is updated",
   },
   {
     id: 'comment.created' as const,
-    label: 'New comment on feedback',
+    label: 'New comment posted',
     shortLabel: 'Comment',
-    description: 'When someone comments on a feedback post',
+    description: 'When someone comments on a post',
   },
   {
     id: 'changelog.published' as const,

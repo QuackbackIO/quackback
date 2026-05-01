@@ -56,6 +56,7 @@ function DiscordIntegrationPage() {
             integrationId={integration.id}
             initialConfig={integration.config}
             initialEventMappings={integration.eventMappings}
+            notificationChannels={integration.notificationChannels}
             enabled={isConnected}
           />
         </div>
