@@ -29,7 +29,8 @@
 **Create:**
 
 - `packages/db/drizzle/0048_consolidate_chat_target_keys.sql` — one-time data cleanup migration.
-- `apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts` — new E2E coverage.
+- `apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts` — new E2E coverage for Discord (3 events).
+- `apps/web/e2e/tests/admin/integrations-slack-routing.spec.ts` — new E2E coverage for Slack (4 events, public/private icons). Sibling spec so the shared `NotificationChannelRouter` is exercised through both consumers.
 
 **Modify:**
 
@@ -872,11 +873,14 @@ git commit -m "feat(integrations): pass notificationChannels to DiscordConfig"
 
 ---
 
-### Task 2.5: Write Discord routing E2E spec
+### Task 2.5: Write routing E2E specs (Discord + Slack)
 
 **Files:**
 
 - Create: `apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts`
+- Create: `apps/web/e2e/tests/admin/integrations-slack-routing.spec.ts`
+
+**Why both:** The shared `NotificationChannelRouter` introduced in PR1 had zero direct test coverage. Writing parallel specs for both consumers exercises the generic `<TChannel extends Channel>` shape with two different channel types and confirms the per-consumer event lists differ correctly (Discord: 3 events, no Changelog; Slack: 4 events including Changelog, plus public/private icon variation).
 
 - [ ] **Step 1: Inspect existing E2E patterns**
 
@@ -886,9 +890,9 @@ Read `apps/web/e2e/tests/admin/notifications.spec.ts` (or another spec in that d
 - How the test fixtures and helpers are imported (`@playwright/test`, project helpers, etc.).
 - The base URL convention.
 
-This determines the imports and fixtures used below — adapt to match the project's existing pattern.
+This determines the imports and fixtures used in both specs below — adapt to match the project's existing pattern.
 
-- [ ] **Step 2: Create the spec file**
+- [ ] **Step 2: Create the Discord routing spec**
 
 Create `apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts`:
 
@@ -948,17 +952,82 @@ test.describe('Discord notification routing', () => {
 
 These tests cover the structural surface — empty state vs routing table render, add-channel dialog open/close, board filter accessibility, and Discord-specific event-list (3 events, no Changelog). They don't drive a full add-channel flow because that requires Discord channel data which depends on environment seeding.
 
-- [ ] **Step 3: Run the new E2E spec**
+- [ ] **Step 3: Create the Slack routing spec**
 
-Run: `bun run test:e2e --grep "Discord notification routing"`
+Create `apps/web/e2e/tests/admin/integrations-slack-routing.spec.ts`:
+
+```ts
+import { test, expect } from '@playwright/test'
+
+test.describe('Slack notification routing', () => {
+  test.beforeEach(async ({ page }) => {
+    // Same auth pattern as the Discord sibling.
+    await page.goto('/admin/settings/integrations/slack')
+  })
+
+  test('renders the routing UI when Slack is connected', async ({ page }) => {
+    const hasTable = await page.getByRole('button', { name: /add channel/i }).isVisible()
+    const hasEmptyState = await page
+      .getByText(/no notification channels configured yet/i)
+      .isVisible()
+    expect(hasTable || hasEmptyState).toBe(true)
+  })
+
+  test('add channel dialog opens and closes', async ({ page }) => {
+    const addBtn = page.getByRole('button', { name: /add (your first )?channel/i }).first()
+    await addBtn.click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    // Same shared component renders the same dialog title and description for Slack.
+    await expect(page.getByText(/route events to a channel/i)).toBeVisible()
+    await page.getByRole('button', { name: /cancel/i }).click()
+    await expect(page.getByRole('dialog')).not.toBeVisible()
+  })
+
+  test('exposes board filter in add dialog', async ({ page }) => {
+    await page
+      .getByRole('button', { name: /add (your first )?channel/i })
+      .first()
+      .click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: /filter by board/i }).click()
+    await expect(page.getByText(/board filter/i)).toBeVisible()
+    await page.getByRole('button', { name: /cancel/i }).click()
+  })
+
+  test('event columns reflect Slack event list (4 events including Changelog)', async ({
+    page,
+  }) => {
+    const tableHeader = page.getByText(/^Channel$/)
+    if (await tableHeader.isVisible()) {
+      await expect(page.getByText(/^Feedback$/)).toBeVisible()
+      await expect(page.getByText(/^Status$/)).toBeVisible()
+      await expect(page.getByText(/^Comment$/)).toBeVisible()
+      // Slack-only event — must be present (mirrors the negative assertion in the Discord spec).
+      await expect(page.getByText(/^Changelog$/)).toBeVisible()
+    }
+  })
+
+  test('channel monitoring section still renders', async ({ page }) => {
+    // PR1 left the monitored-channel UI unchanged. This guards against the
+    // refactor accidentally removing it.
+    await expect(page.getByText(/channel monitoring/i)).toBeVisible()
+  })
+})
+```
+
+The 4-events-including-Changelog assertion is the symmetric proof against the Discord spec's 3-events-no-Changelog assertion. Together they prove the shared component's `events` prop is wired correctly through both consumers. The "channel monitoring section still renders" test is a small safety net — it would catch a refactor that accidentally deleted the Slack-only monitoring UI.
+
+- [ ] **Step 4: Run both new specs**
+
+Run: `bun run test:e2e --grep "(Discord|Slack) notification routing"`
 (Or whatever the project's E2E command is — check the root `package.json` if unsure.)
-Expected: passes. If the test environment doesn't have Discord connected, some tests may skip naturally via the `if (await tableHeader.isVisible())` guards. That's acceptable — the structural assertions still cover what they can.
+Expected: passes. If the test environment doesn't have one of the integrations connected, the table-conditional tests skip naturally via the `if (await tableHeader.isVisible())` guards. The structural assertions (page renders, dialog opens, etc.) still cover what they can.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts
-git commit -m "test(integrations): e2e for Discord notification routing"
+git add apps/web/e2e/tests/admin/integrations-discord-routing.spec.ts apps/web/e2e/tests/admin/integrations-slack-routing.spec.ts
+git commit -m "test(integrations): e2e for chat-routing UI (Discord + Slack)"
 ```
 
 ---
@@ -1022,7 +1091,7 @@ Spec: `docs/superpowers/specs/2026-04-30-discord-per-board-channels-design.md`
 - [ ] `bun run typecheck` clean
 - [ ] `bun run lint` clean
 - [ ] `bun run test` clean
-- [ ] `bun run test:e2e` clean (new `integrations-discord-routing.spec.ts` passes)
+- [ ] `bun run test:e2e` clean (new `integrations-discord-routing.spec.ts` and `integrations-slack-routing.spec.ts` pass)
 - [ ] Manual: add a Discord notification channel, set board filter, toggle events, remove channel
 - [ ] Manual: legacy fallback — existing Discord install with one configured channel renders as one row in the new UI without action
 
@@ -1048,7 +1117,7 @@ EOF
 - Migration step 2 (backfill remaining) → Task 2.1 step 2.
 - Discord route loader pass-through → Task 2.4.
 - Discord legacy-fallback synth → Task 2.3 step 4.
-- E2E coverage → Task 2.5.
+- E2E coverage (Discord + Slack) → Task 2.5.
 - Slack parity gate → Task 1.3 step 6 (manual smoke).
 
 **Placeholder scan:** No "TBD" / "TODO" / "implement later" / "appropriate error handling" patterns. Code blocks include the actual code where applicable; ports reference exact line ranges in `slack-config.tsx` rather than restating ~600 LOC verbatim — acceptable for a refactor task.
