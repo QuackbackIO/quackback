@@ -256,11 +256,11 @@ function ChannelPicker<TChannel extends Channel>({
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
           )}
-          <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-(--radix-popover-trigger-width) p-0"
         align="start"
         onOpenAutoFocus={(e) => {
           e.preventDefault()
@@ -327,11 +327,13 @@ function BoardFilterCombobox({
   boards,
   onBoardIdsChange,
   disabled,
+  ariaLabel = 'Board filter',
 }: {
   boardIds: string[] | null
   boards: Board[]
   onBoardIdsChange: (boardIds: string[] | null) => void
   disabled?: boolean
+  ariaLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const isAllBoards = !boardIds?.length
@@ -359,6 +361,7 @@ function BoardFilterCombobox({
           type="button"
           variant="outline"
           role="combobox"
+          aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled}
           className="w-full justify-between font-normal"
@@ -766,11 +769,12 @@ function AddChannelDialog<TChannel extends Channel>({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Board filter</Label>
+            <Label>Board filter</Label>
             <BoardFilterCombobox
               boardIds={boardIds}
               boards={boards}
               onBoardIdsChange={setBoardIds}
+              disabled={addMutation.isPending}
             />
           </div>
         </div>
