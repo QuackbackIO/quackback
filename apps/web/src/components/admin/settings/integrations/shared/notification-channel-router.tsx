@@ -8,7 +8,7 @@
  * mental model and should get their own UI rather than be forced through here.
  */
 
-import { useState, useRef, useMemo, type ReactNode, type CSSProperties } from 'react'
+import { useState, useRef, useMemo, useEffect, type ReactNode, type CSSProperties } from 'react'
 import {
   ArrowPathIcon,
   XMarkIcon,
@@ -643,6 +643,17 @@ function AddChannelDialog<TChannel extends Channel>({
   )
   const [boardIds, setBoardIds] = useState<string[] | null>(null)
   const [showBoardFilter, setShowBoardFilter] = useState(false)
+
+  // Reset form state when dialog closes (covers cancel/X paths;
+  // the onSuccess handler resets explicitly on save).
+  useEffect(() => {
+    if (!open) {
+      setSelectedChannelId('')
+      setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
+      setBoardIds(null)
+      setShowBoardFilter(false)
+    }
+  }, [open, events])
 
   const availableChannels = channels.filter((c) => !existingChannelIds.includes(c.id))
   const allEventsSelected = events.every((e) => selectedEvents[e.id])
