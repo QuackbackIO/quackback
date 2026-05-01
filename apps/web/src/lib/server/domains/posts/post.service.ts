@@ -25,6 +25,9 @@ import {
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
+import { sql, isNull } from 'drizzle-orm'
+import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import {
@@ -66,6 +69,23 @@ export async function createPost(
   options?: { skipDispatch?: boolean }
 ): Promise<CreatePostResult> {
   console.log(`[domain:posts] createPost: boardId=${input.boardId}`)
+
+  // Tier-limit gate (no-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS
+  // which has maxPosts: null, so enforceCountLimit returns immediately).
+  const limits = await getTierLimits()
+  await enforceCountLimit({
+    limit: limits.maxPosts,
+    name: 'maxPosts',
+    friendly: 'posts',
+    currentCount: async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(posts)
+        .where(isNull(posts.deletedAt))
+      return row?.count ?? 0
+    },
+  })
+
   // Basic validation (also done at action layer, but enforced here for direct service calls)
   const title = input.title?.trim()
   const content = input.content?.trim() ?? ''
