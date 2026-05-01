@@ -20,6 +20,56 @@ export interface ApiImportOptions {
   dryRun?: boolean
   /** Verbose output */
   verbose?: boolean
+  /**
+   * Top-up an instance that has been imported before. Skip rows already
+   * present on the server: posts dedup by normalised title + createdAt date,
+   * comments dedup by normalised content + createdAt minute on a per-post
+   * cache. Votes and user identify are already idempotent server-side.
+   */
+  incremental?: boolean
+}
+
+function normalizeText(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function dayKey(ts: Date | string | null | undefined): string {
+  if (!ts) return ''
+  const d = ts instanceof Date ? ts : new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
+
+function minuteKey(ts: Date | string | null | undefined): string {
+  if (!ts) return ''
+  const d = ts instanceof Date ? ts : new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 16)
+}
+
+function postDedupKey(title: string, createdAt: Date | string | null | undefined): string | null {
+  const day = dayKey(createdAt)
+  if (!day) return null
+  return `${normalizeText(title)}|${day}`
+}
+
+function commentDedupKey(
+  content: string,
+  createdAt: Date | string | null | undefined
+): string | null {
+  const min = minuteKey(createdAt)
+  if (!min) return null
+  return `${normalizeText(content)}|${min}`
+}
+
+interface ExistingComment {
+  content: string
+  createdAt: string
+  replies?: ExistingComment[]
+}
+
+function flattenComments(cs: ExistingComment[]): ExistingComment[] {
+  return cs.flatMap((c) => [c, ...flattenComments(c.replies ?? [])])
 }
 
 interface IdMap {
@@ -70,6 +120,37 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
     posts: new Map(),
     comments: new Map(),
     users: new Map(),
+  }
+
+  // Dedup state, only populated when options.incremental is set
+  const existingPostByKey = new Map<string, string>()
+  const preExistingPostIds = new Set<string>()
+  const existingCommentKeysByPost = new Map<string, Set<string>>()
+
+  async function getExistingCommentKeys(postId: string): Promise<Set<string>> {
+    const cached = existingCommentKeysByPost.get(postId)
+    if (cached) return cached
+    const resp = await qb.get<{ data: ExistingComment[] }>(`/api/v1/posts/${postId}/comments`)
+    const flat = flattenComments(resp.data ?? [])
+    const keys = new Set<string>()
+    for (const c of flat) {
+      const k = commentDedupKey(c.content, c.createdAt)
+      if (k) keys.add(k)
+    }
+    existingCommentKeysByPost.set(postId, keys)
+    return keys
+  }
+
+  if (options.incremental) {
+    progress.start('Pre-fetching existing posts for dedup')
+    const existing = await qb.listAll<{ id: string; title: string; createdAt: string }>(
+      '/api/v1/posts'
+    )
+    for (const p of existing) {
+      const key = postDedupKey(p.title, p.createdAt)
+      if (key) existingPostByKey.set(key, p.id)
+    }
+    progress.success(`Loaded ${existing.length} existing posts (${existingPostByKey.size} keyed)`)
   }
 
   // Step 1: Identify users
@@ -141,6 +222,18 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
             progress.warn(`Skipping post "${post.title}": no board found for "${post.board}"`)
           }
           continue
+        }
+
+        // Incremental dedup against existing Quackback posts
+        if (options.incremental) {
+          const key = postDedupKey(post.title, post.createdAt)
+          const existingId = key ? existingPostByKey.get(key) : undefined
+          if (existingId) {
+            idMap.posts.set(post.id, existingId)
+            preExistingPostIds.add(existingId)
+            result.posts.skipped++
+            continue
+          }
         }
 
         // Resolve status
@@ -227,6 +320,21 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           if (!parentId) {
             result.comments.skipped++
             continue
+          }
+        }
+
+        // Incremental dedup: only check pre-existing posts (newly created
+        // posts in this run have no comments yet, so the GET would be wasted)
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(comment.body, comment.createdAt)
+          if (dedupKey) {
+            const existingKeys = await getExistingCommentKeys(postId)
+            if (existingKeys.has(dedupKey)) {
+              result.comments.skipped++
+              continue
+            }
+            // Record the key so a duplicate later in the same run is also skipped
+            existingKeys.add(dedupKey)
           }
         }
 
@@ -328,6 +436,18 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
         if (!postId) {
           result.notes.skipped++
           continue
+        }
+
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(note.body, note.createdAt)
+          if (dedupKey) {
+            const existingKeys = await getExistingCommentKeys(postId)
+            if (existingKeys.has(dedupKey)) {
+              result.notes.skipped++
+              continue
+            }
+            existingKeys.add(dedupKey)
+          }
         }
 
         await qb.post(`/api/v1/posts/${postId}/comments`, {
