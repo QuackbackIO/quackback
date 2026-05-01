@@ -44,3 +44,9 @@ export {
 
 // Consolidated tenant settings type (in types.ts to avoid server dep leak via barrel)
 export type { TenantSettings, SettingsBrandingData } from './settings.types'
+
+// Tier limits — type + OSS defaults are barrel-safe (no DB dep).
+// The resolver service (tier-limits.service.ts) must NOT be exported here;
+// import it directly in server-only code to avoid leaking DB into the client bundle.
+export type { TierLimits, TierLimit, TierFeatureFlags } from './tier-limits.types'
+export { OSS_TIER_LIMITS } from './tier-limits.types'
