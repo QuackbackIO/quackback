@@ -207,6 +207,13 @@ export const settings = pgTable('settings', {
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
    */
   helpCenterConfig: text('help_center_config'),
+  /**
+   * Tier limits — written by the cloud control plane.
+   * Null/absent means OSS defaults (everything unlimited, all features on).
+   * Read in OSS code via getTierLimits() (apps/web/src/lib/server/domains/settings/tier-limits.service.ts)
+   * which short-circuits to OSS_TIER_LIMITS when EDITION!=cloud.
+   */
+  tierLimits: text('tier_limits'),
 })
 
 /**
