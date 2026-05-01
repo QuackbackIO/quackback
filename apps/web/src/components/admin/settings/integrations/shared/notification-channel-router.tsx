@@ -644,8 +644,7 @@ function AddChannelDialog<TChannel extends Channel>({
   const [boardIds, setBoardIds] = useState<string[] | null>(null)
   const [showBoardFilter, setShowBoardFilter] = useState(false)
 
-  // Reset form state when dialog closes (covers cancel/X paths;
-  // the onSuccess handler resets explicitly on save).
+  // Reset form state whenever the dialog closes (cancel, X, or save).
   useEffect(() => {
     if (!open) {
       setSelectedChannelId('')
@@ -675,13 +674,7 @@ function AddChannelDialog<TChannel extends Channel>({
         boardIds: boardIds ?? undefined,
       },
       {
-        onSuccess: () => {
-          onOpenChange(false)
-          setSelectedChannelId('')
-          setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
-          setBoardIds(null)
-          setShowBoardFilter(false)
-        },
+        onSuccess: () => onOpenChange(false),
       }
     )
   }

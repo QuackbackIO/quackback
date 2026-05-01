@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowPathIcon, HashtagIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -89,7 +89,10 @@ export function DiscordConfig({
     refresh: refreshChannels,
   } = useDiscordChannels()
   const boardsQuery = useQuery(adminQueries.boards())
-  const boards = (boardsQuery.data ?? []).map((b) => ({ id: b.id, name: b.name }))
+  const boards = useMemo(
+    () => (boardsQuery.data ?? []).map((b) => ({ id: b.id, name: b.name })),
+    [boardsQuery.data]
+  )
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
 
   // Use notificationChannels if provided; otherwise synthesize from legacy
