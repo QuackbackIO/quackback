@@ -8,7 +8,7 @@
  * mental model and should get their own UI rather than be forced through here.
  */
 
-import { useState, useRef, useMemo, type ReactNode } from 'react'
+import { useState, useRef, useMemo, type ReactNode, type CSSProperties } from 'react'
 import {
   ArrowPathIcon,
   XMarkIcon,
@@ -149,8 +149,16 @@ function getBoardSummary(channel: NotificationChannel, boards: Board[]): string 
   return `${channel.boardIds.length} boards`
 }
 
-function tableGrid(eventCount: number) {
-  return `grid-cols-[minmax(0,1fr)${'_5rem'.repeat(eventCount)}]`
+/**
+ * Inline grid-template-columns for the routing table.
+ *
+ * Built as inline style instead of a `grid-cols-[...]` Tailwind class because
+ * Tailwind's JIT scanner only emits CSS for class strings it sees literally
+ * in source — a dynamic template-literal class wouldn't get its CSS generated
+ * and the grid would silently collapse.
+ */
+function tableGridStyle(eventCount: number): CSSProperties {
+  return { gridTemplateColumns: `minmax(0,1fr) ${'5rem '.repeat(eventCount).trim()}` }
 }
 
 // ============================================
@@ -451,7 +459,8 @@ function ChannelRow<TChannel extends Channel>({
     <>
       <div className={hasBorder ? 'border-b border-border/50' : ''}>
         <div
-          className={`grid ${tableGrid(events.length)} items-center hover:bg-muted/10 transition-colors cursor-pointer`}
+          className="grid items-center hover:bg-muted/10 transition-colors cursor-pointer"
+          style={tableGridStyle(events.length)}
           onClick={onToggleExpand}
         >
           <div className="flex items-center gap-2 px-4 py-3">
@@ -561,7 +570,8 @@ function RoutingTable<TChannel extends Channel>({
   return (
     <div className="rounded-lg border border-border/50 overflow-hidden">
       <div
-        className={`grid ${tableGrid(events.length)} items-end bg-muted/40 border-b border-border/50`}
+        className="grid items-end bg-muted/40 border-b border-border/50"
+        style={tableGridStyle(events.length)}
       >
         <div className="px-4 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
           Channel
