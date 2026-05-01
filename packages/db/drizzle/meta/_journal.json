@@ -355,8 +355,15 @@
     {
       "idx": 50,
       "version": "7",
-      "when": 1777668617289,
-      "tag": "0050_ai_usage_log_month_index",
+      "when": 1777669821603,
+      "tag": "0050_api_keys_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1777669821604,
+      "tag": "0051_ai_usage_log_month_index",
       "breakpoints": true
     }
   ]

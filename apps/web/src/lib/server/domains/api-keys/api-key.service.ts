@@ -126,6 +126,41 @@ export async function createApiKey(
  * Uses prefix-based DB lookup + timing-safe hash comparison to prevent
  * timing oracle attacks. Returns null if the key is invalid, expired, or revoked.
  */
+/**
+ * Pure helper: parse the JSON-encoded scopes column and check membership.
+ * Exported for unit testing; consumers should prefer verifyApiKeyWithScope.
+ */
+export function hasScope(scopesRaw: string | null, scope: string): boolean {
+  if (!scopesRaw) return false
+  try {
+    const parsed = JSON.parse(scopesRaw)
+    return Array.isArray(parsed) && parsed.includes(scope)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Verify an API key AND assert it carries a specific capability scope.
+ * Returns the api key record on success, null on any failure (invalid
+ * format, hash mismatch, expired, revoked, missing scope).
+ *
+ * Used by /api/v1/internal/* endpoints to gate access by the
+ * `internal:tier-limits` scope. The control plane mints these keys
+ * via the tenant-bootstrap Job and stashes the plaintext in OpenBao.
+ */
+export async function verifyApiKeyWithScope(key: string, scope: string): Promise<ApiKey | null> {
+  const apiKey = await verifyApiKey(key)
+  if (!apiKey) return null
+
+  // Re-fetch to read scopes (verifyApiKey strips them via toApiKey).
+  const row = await db.query.apiKeys.findFirst({
+    where: eq(apiKeys.id, apiKey.id),
+  })
+  if (!hasScope(row?.scopes ?? null, scope)) return null
+  return apiKey
+}
+
 export async function verifyApiKey(key: string): Promise<ApiKey | null> {
   // Basic format validation
   if (!key || !key.startsWith(API_KEY_PREFIX)) {

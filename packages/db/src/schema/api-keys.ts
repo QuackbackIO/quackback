@@ -4,7 +4,7 @@
  * API keys are created by admins and used by external integrations
  * to authenticate with the public REST API.
  */
-import { pgTable, timestamp, varchar, index } from 'drizzle-orm/pg-core'
+import { pgTable, timestamp, varchar, index, text } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -41,6 +41,14 @@ export const apiKeys = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     /** When the key was revoked (soft delete) */
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /**
+     * Optional JSON-encoded array of capability scopes.
+     * Used by the internal control-plane endpoints — e.g.
+     * `["internal:tier-limits"]`. Null/empty means a normal API key
+     * with no special capabilities (subject to the principal's role
+     * for authorization). Never serialized to the public API.
+     */
+    scopes: text('scopes'),
   },
   (table) => [
     // Index for listing keys by creator

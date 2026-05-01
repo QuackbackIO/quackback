@@ -49,7 +49,7 @@ describe('mergeTierLimits', () => {
 
   it('overrides feature flags individually without dropping the rest', () => {
     const result = mergeTierLimits({
-      features: { customDomain: false, ipAllowlist: false } as Partial<TierLimits['features']>,
+      features: { customDomain: false, ipAllowlist: false },
     })
     expect(result.features.customDomain).toBe(false)
     expect(result.features.ipAllowlist).toBe(false)

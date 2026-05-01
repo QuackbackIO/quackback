@@ -20,6 +20,6 @@ export async function aiOpsThisMonth(): Promise<number> {
       AND status = 'success'
   `)
   // db.execute returns array-shaped rows under postgres-js.
-  const rows = result as Array<{ count: number }>
+  const rows = result as unknown as Array<{ count: number }>
   return rows[0]?.count ?? 0
 }

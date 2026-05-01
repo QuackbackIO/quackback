@@ -1,7 +1,7 @@
 import { IS_CLOUD } from '../../edition'
 import { OSS_TIER_LIMITS, type TierLimits } from './tier-limits.types'
 
-export type StoredTierLimits = Partial<TierLimits> & {
+export type StoredTierLimits = Partial<Omit<TierLimits, 'features'>> & {
   features?: Partial<TierLimits['features']>
 }
 
