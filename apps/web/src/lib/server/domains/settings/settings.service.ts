@@ -59,10 +59,10 @@ function filterOAuthByCredentials(
 
 async function getPortalPassthroughKeys(): Promise<string[]> {
   const { isEmailConfigured } = await import('@quackback/email')
-  // password is always passthrough; email-based methods (OTP +
-  // magicLink) only render when SMTP/Resend is wired so we don't
-  // surface buttons that would silently fail.
-  return isEmailConfigured() ? ['email', 'magicLink', 'password'] : ['password']
+  // password is always passthrough; magicLink only renders when
+  // SMTP/Resend is wired so we don't surface a button that would
+  // silently fail.
+  return isEmailConfigured() ? ['magicLink', 'password'] : ['password']
 }
 
 /**

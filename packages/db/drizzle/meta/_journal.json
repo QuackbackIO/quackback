@@ -344,6 +344,13 @@
       "when": 1777620521131,
       "tag": "0048_consolidate_chat_target_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1777655280134,
+      "tag": "0049_otp_to_magic_link",
+      "breakpoints": true
     }
   ]
 }

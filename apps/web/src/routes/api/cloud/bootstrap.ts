@@ -162,13 +162,13 @@ async function ensureCompleteSettings(workspaceName: string, slug: string): Prom
     completedAt: new Date().toISOString(),
   }
   // Cloud-tenant defaults — opinionated, differ from self-hosted:
-  //   * portal allows password + email OTP for end-users so the
-  //     feedback portal stays accessible without OAuth wiring;
+  //   * portal allows password + magic-link sign-in for end-users so
+  //     the feedback portal stays accessible without OAuth wiring;
   //   * admin authConfig closes openSignup since random visitors
   //     should never become admins on a hosted tenant — admin access
   //     is invitation-only (and the bootstrap call we just ran).
   const portalConfigDefault = JSON.stringify({
-    oauth: { password: true, email: true, google: true, github: true },
+    oauth: { password: true, magicLink: true, google: true, github: true },
     features: { publicView: true, submissions: true, comments: true, voting: true },
   })
   const authConfigDefault = JSON.stringify({

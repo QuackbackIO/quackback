@@ -11,7 +11,7 @@ import { render } from '@react-email/components'
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
-import { SigninCodeEmail } from './templates/signin-code'
+import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
@@ -227,33 +227,35 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 }
 
 // ============================================================================
-// Sign-in Code Email
+// Sign-in Email (magic link + 6-digit code combined)
 // ============================================================================
 
-interface SendSigninCodeParams {
+interface SendMagicLinkParams {
   to: string
+  signInUrl: string
   code: string
   logoUrl?: string
 }
 
-export async function sendSigninCodeEmail(params: SendSigninCodeParams): Promise<EmailResult> {
-  const { to, code, logoUrl } = params
+export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
+  const { to, signInUrl, code, logoUrl } = params
 
   if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Sign-in Code Email')
+    console.log('│ [DEV] Sign-in Email (magic link + OTP)')
     console.log('├────────────────────────────────────────────────────────────')
     console.log(`│ To: ${to}`)
+    console.log(`│ Link: ${signInUrl}`)
     console.log(`│ Code: ${code}`)
     console.log('└────────────────────────────────────────────────────────────\n')
     return { sent: false }
   }
 
-  console.log(`[Email] Sending sign-in code to ${to}`)
+  console.log(`[Email] Sending sign-in email to ${to}`)
   return sendEmail({
     to,
-    subject: `Your Quackback sign-in code is ${code}`,
-    react: SigninCodeEmail({ code, logoUrl }),
+    subject: 'Your Quackback sign-in link',
+    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
   })
 }
 
@@ -524,7 +526,7 @@ export async function sendFeedbackLinkedEmail(
 
 export { InvitationEmail } from './templates/invitation'
 export { WelcomeEmail } from './templates/welcome'
-export { SigninCodeEmail } from './templates/signin-code'
+export { MagicLinkEmail } from './templates/magic-link'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
 export { ChangelogPublishedEmail } from './templates/changelog-published'

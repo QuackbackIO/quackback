@@ -79,11 +79,10 @@ function AdminLoginPage() {
         <PortalAuthForm
           mode="login"
           callbackUrl={safeCallbackUrl}
-          // Admin login is passwordless — both magic link (one-click)
-          // and email OTP (6-digit code) are available; OAuth too if
-          // configured. Cloud customers in particular never set a
-          // password, so a magic-link option is required.
-          authConfig={{ ...authConfig, magicLink: true, email: true, password: false }}
+          // Admin login is passwordless — magic link only, OAuth too
+          // if configured. Cloud customers in particular never set a
+          // password, so the magic-link option is required.
+          authConfig={{ ...authConfig, magicLink: true, password: false }}
           customProviderNames={customProviderNames}
         />
       </div>

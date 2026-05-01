@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { OAuthButtons, getEnabledOAuthProviders } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,9 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/client/auth-client'
+import { OtpCodeStep } from './otp-code-step'
+import { useEmailSignin } from './use-email-signin'
+import type { AuthFormStep } from './email-signin-types'
 import type { PortalAuthMethods } from '@/lib/shared/types'
 
 interface InvitationInfo {
@@ -32,21 +35,11 @@ interface PortalAuthFormProps {
   customProviderNames?: Record<string, string>
 }
 
-type Step = 'credentials' | 'email' | 'code' | 'forgot' | 'reset' | 'link-sent'
-
 /**
- * Portal Auth Form
- *
- * Unified authentication form for portal users supporting:
- * - Password (sign in / sign up)
- * - Email OTP (magic codes)
- * - OAuth (GitHub, Google, etc.)
- * - Forgot/reset password via email link
- *
- * Flow: credentials → redirect (or email → code → redirect for OTP)
- * - Better-auth automatically creates users if they don't exist
- * - Name can be provided during signup
- * - Invitation acceptance happens after authentication
+ * Full-page auth form for portal users. Supports password, OAuth, and the
+ * combined magic-link + OTP email sign-in (POST /api/auth/portal-signin
+ * mints both, server emails one message; user can either click the link
+ * or type the 6-digit code).
  */
 export function PortalAuthForm({
   mode = 'login',
@@ -56,30 +49,26 @@ export function PortalAuthForm({
   customProviderNames,
 }: PortalAuthFormProps) {
   const passwordEnabled = authConfig?.password ?? true
-  const emailOtpEnabled = authConfig?.email ?? false
   const magicLinkEnabled = authConfig?.magicLink ?? false
   const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig, customProviderNames) : []
 
-  // Default step depends on what's enabled. Email collection serves
-  // both magic link and OTP, so default there if password is off.
-  const defaultStep: Step = passwordEnabled
-    ? 'credentials'
-    : magicLinkEnabled || emailOtpEnabled
-      ? 'email'
-      : 'credentials'
+  const defaultStep: AuthFormStep = !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
 
-  const [step, setStep] = useState<Step>(defaultStep)
+  const [step, setStep] = useState<AuthFormStep>(defaultStep)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [resendCooldown, setResendCooldown] = useState(0)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
 
-  const codeInputRef = useRef<HTMLInputElement>(null)
+  const emailSignin = useEmailSignin({
+    callbackUrl,
+    onSuccess: () => {
+      window.location.href = callbackUrl
+    },
+  })
 
   // Fetch invitation details if invitationId is provided
   useEffect(() => {
@@ -108,21 +97,6 @@ export function PortalAuthForm({
 
     fetchInvitation()
   }, [invitationId])
-
-  // Resend cooldown timer
-  useEffect(() => {
-    if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [resendCooldown])
-
-  // Focus code input when entering code/reset steps
-  useEffect(() => {
-    if ((step === 'code' || step === 'reset') && codeInputRef.current) {
-      codeInputRef.current.focus()
-    }
-  }, [step])
 
   // --- Password auth handlers ---
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -170,70 +144,11 @@ export function PortalAuthForm({
     }
   }
 
-  // --- Email OTP handlers ---
-  const sendCode = async () => {
+  const requestSigninEmail = async () => {
     setError('')
-    setLoading(true)
-
-    try {
-      const result = await authClient.emailOtp.sendVerificationOtp({
-        email,
-        type: 'sign-in',
-      })
-
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to send code')
-      }
-
-      setStep('code')
-      setResendCooldown(60)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send code')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // --- Magic-link handler ---
-  const sendMagicLink = async () => {
-    setError('')
-    setLoading(true)
-    try {
-      const result = await authClient.signIn.magicLink({
-        email,
-        callbackURL: callbackUrl,
-      })
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to send sign-in link')
-      }
-      setStep('link-sent')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send sign-in link')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const verifyCode = async () => {
-    setError('')
-    setLoading(true)
-
-    try {
-      const result = await authClient.signIn.emailOtp({
-        email,
-        otp: code,
-      })
-
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to verify code')
-      }
-
-      window.location.href = callbackUrl
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify code')
-    } finally {
-      setLoading(false)
-    }
+    const res = await emailSignin.requestEmail(email)
+    if (res.ok) setStep('code')
+    else if (res.error) setError(res.error)
   }
 
   // --- Forgot password handler ---
@@ -270,33 +185,19 @@ export function PortalAuthForm({
       setError('Email is required')
       return
     }
-    // Prefer the one-click magic link when available — a single
-    // click in the inbox beats copy-pasting a 6-digit code.
-    if (magicLinkEnabled) {
-      sendMagicLink()
-      return
-    }
-    sendCode()
+    requestSigninEmail()
   }
 
   const handleCodeSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!code.trim() || code.length !== 6) {
-      setError('Please enter the 6-digit code')
-      return
-    }
-    verifyCode()
+    emailSignin.verify(email, emailSignin.code)
   }
 
-  const handleResend = () => {
-    if (resendCooldown > 0) return
-    setCode('')
-    sendCode()
-  }
+  const handleResend = () => emailSignin.resend(email)
 
   const handleBack = () => {
     setError('')
-    setCode('')
+    emailSignin.reset()
     setStep(defaultStep)
   }
 
@@ -323,7 +224,7 @@ export function PortalAuthForm({
   const showOAuthOnDefault =
     (step === 'credentials' || step === 'email') && !invitation && oauthProviders.length > 0
   const hasCredentialForm = step === 'credentials' && passwordEnabled
-  const hasEmailForm = step === 'email' && (emailOtpEnabled || magicLinkEnabled)
+  const hasEmailForm = step === 'email' && magicLinkEnabled
 
   return (
     <div className="space-y-6">
@@ -349,14 +250,14 @@ export function PortalAuthForm({
         <>
           <OAuthButtons callbackUrl={callbackUrl} providers={oauthProviders} />
           {/* Divider - only show when another method is also enabled below */}
-          {(passwordEnabled || emailOtpEnabled) && (
+          {(passwordEnabled || magicLinkEnabled) && (
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with {passwordEnabled ? 'email' : 'email code'}
+                  Or continue with email
                 </span>
               </div>
             </div>
@@ -446,8 +347,8 @@ export function PortalAuthForm({
                 : 'Sign in'}
           </Button>
 
-          {/* Link to email OTP if also enabled */}
-          {emailOtpEnabled && (
+          {/* Link to email sign-in if also enabled */}
+          {magicLinkEnabled && (
             <div className="text-center">
               <button
                 type="button"
@@ -457,14 +358,14 @@ export function PortalAuthForm({
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Use email code instead
+                Sign in with email instead
               </button>
             </div>
           )}
         </form>
       )}
 
-      {/* Email OTP: email input step */}
+      {/* Magic-link: email input step */}
       {hasEmailForm && (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           {error && <FormError message={error} />}
@@ -492,37 +393,12 @@ export function PortalAuthForm({
             {loading ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                {magicLinkEnabled ? 'Sending link…' : 'Sending code…'}
+                Sending email…
               </>
-            ) : magicLinkEnabled ? (
-              'Email me a sign-in link'
             ) : (
               'Continue with email'
             )}
           </Button>
-
-          {/* Secondary email path: when both magic link AND OTP are
-              available, give a fallback to OTP for users whose mail
-              client mangles links. */}
-          {magicLinkEnabled && emailOtpEnabled && (
-            <div className="text-center">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  if (!email.trim()) {
-                    setError('Email is required')
-                    return
-                  }
-                  setError('')
-                  sendCode()
-                }}
-                className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-              >
-                Email a 6-digit code instead
-              </button>
-            </div>
-          )}
 
           {/* Link back to password if also enabled */}
           {passwordEnabled && (
@@ -542,107 +418,20 @@ export function PortalAuthForm({
         </form>
       )}
 
-      {/* Magic-link sent confirmation */}
-      {step === 'link-sent' && (
-        <div className="space-y-4 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <EnvelopeIcon className="h-6 w-6 text-primary" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-medium">Check your email</h2>
-            <p className="text-sm text-muted-foreground">
-              We sent a sign-in link to <strong>{email}</strong>. Click it to finish signing in.
-            </p>
-          </div>
-          {emailOtpEnabled && (
-            <button
-              type="button"
-              onClick={() => {
-                setError('')
-                sendCode()
-              }}
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Send a 6-digit code instead
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setError('')
-              setStep('email')
-            }}
-            className="block w-full text-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            Use a different email
-          </button>
-        </div>
-      )}
-
-      {/* Email OTP: code verification step */}
       {step === 'code' && (
-        <form onSubmit={handleCodeSubmit} className="space-y-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeftIcon className="mr-1 h-4 w-4" />
-            Back
-          </button>
-
-          <div className="rounded-lg bg-muted/50 p-4">
-            <p className="text-sm text-center">
-              We sent a 6-digit code to <span className="font-medium text-foreground">{email}</span>
-            </p>
-          </div>
-
-          {error && <FormError message={error} />}
-
-          <div className="space-y-2">
-            <label htmlFor="code" className="text-sm font-medium">
-              Verification code
-            </label>
-            <Input
-              ref={codeInputRef}
-              id="code"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              placeholder="000000"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loading}
-              className="text-center text-2xl tracking-widest"
-              autoComplete="one-time-code"
-            />
-          </div>
-
-          <Button type="submit" disabled={loading || code.length !== 6} className="w-full">
-            {loading ? (
-              <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              'Verify code'
-            )}
-          </Button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resendCooldown > 0 || loading}
-              className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {resendCooldown > 0
-                ? `Resend code in ${resendCooldown}s`
-                : "Didn't receive a code? Resend"}
-            </button>
-          </div>
-        </form>
+        <OtpCodeStep
+          email={email}
+          code={emailSignin.code}
+          onCodeChange={emailSignin.setCode}
+          onComplete={(otp) => emailSignin.verify(email, otp)}
+          onSubmit={handleCodeSubmit}
+          onResend={handleResend}
+          onBack={handleBack}
+          loading={emailSignin.loading}
+          error={emailSignin.error}
+          resendCooldown={emailSignin.resendCooldown}
+          showInnerHeader
+        />
       )}
 
       {/* Forgot password: enter email */}

@@ -3,7 +3,7 @@ import {
   isEmailConfigured,
   sendInvitationEmail,
   sendWelcomeEmail,
-  sendSigninCodeEmail,
+  sendMagicLinkEmail,
   sendStatusChangeEmail,
   sendNewCommentEmail,
   sendPasswordResetEmail,
@@ -92,9 +92,10 @@ describe('console mode returns { sent: false }', () => {
     expect(result).toEqual({ sent: false })
   })
 
-  it('sendSigninCodeEmail returns { sent: false }', async () => {
-    const result = await sendSigninCodeEmail({
+  it('sendMagicLinkEmail returns { sent: false }', async () => {
+    const result = await sendMagicLinkEmail({
       to: 'test@example.com',
+      signInUrl: 'https://example.com/verify-magic-link?token=abc',
       code: '123456',
     })
     expect(result).toEqual({ sent: false })

@@ -147,7 +147,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         throw new Error('Workspace already initialized')
       }
 
-      // Update user's name if provided (for users created via emailOTP without a name)
+      // Update user's name if provided (for users created via magic link without a name)
       if (userName) {
         await db
           .update(user)

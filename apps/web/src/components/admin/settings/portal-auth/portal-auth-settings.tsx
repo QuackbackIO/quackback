@@ -65,8 +65,12 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
 
   const emailConfigured = credentialStatus._emailConfigured !== false
 
-  // Count enabled auth methods to prevent disabling the last one
-  const enabledMethodCount = Object.values(oauthState).filter(Boolean).length
+  // Count enabled auth methods to prevent disabling the last one. The
+  // legacy `email` (OTP) flag is excluded — migration 0049 retired it
+  // in favour of magicLink.
+  const enabledMethodCount = Object.entries(oauthState).filter(
+    ([k, v]) => v && k !== 'email'
+  ).length
   const isLastEnabledMethod = (providerId: string) =>
     !!oauthState[providerId] && enabledMethodCount === 1
 
@@ -147,11 +151,11 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
         </div>
       </div>
 
-      {/* Email OTP — always available, no credentials needed */}
+      {/* Magic Link — passwordless email sign-in */}
       <div>
         <div className="mb-3">
-          <h2 className="text-sm font-semibold text-foreground">Email OTP</h2>
-          <p className="text-xs text-muted-foreground">Passwordless sign in with magic codes</p>
+          <h2 className="text-sm font-semibold text-foreground">Magic Link</h2>
+          <p className="text-xs text-muted-foreground">Passwordless sign in via email</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -161,10 +165,10 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="email-toggle" className="font-medium cursor-pointer">
-                    Email OTP
+                  <Label htmlFor="magic-link-toggle" className="font-medium cursor-pointer">
+                    Magic Link
                   </Label>
-                  {(!emailConfigured || isLastEnabledMethod('email')) && (
+                  {(!emailConfigured || isLastEnabledMethod('magicLink')) && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -176,7 +180,7 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
                               <>
                                 Requires email to be configured (SMTP or Resend).{' '}
                                 <a
-                                  href="https://www.quackback.io/docs/auth/email-otp"
+                                  href="https://www.quackback.io/docs/auth/magic-link"
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="underline"
@@ -194,16 +198,16 @@ export function PortalAuthSettings({ initialConfig, credentialStatus }: PortalAu
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Users receive a 6-digit code via email to sign in
+                  Users receive a one-click sign-in link via email
                 </p>
               </div>
             </div>
             <Switch
-              id="email-toggle"
-              checked={oauthState.email ?? false}
-              onCheckedChange={(checked) => handleToggle('email', checked)}
-              disabled={saving || isPending || !emailConfigured || isLastEnabledMethod('email')}
-              aria-label="Email OTP authentication"
+              id="magic-link-toggle"
+              checked={oauthState.magicLink ?? false}
+              onCheckedChange={(checked) => handleToggle('magicLink', checked)}
+              disabled={saving || isPending || !emailConfigured || isLastEnabledMethod('magicLink')}
+              aria-label="Magic Link authentication"
             />
           </div>
         </div>

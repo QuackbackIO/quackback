@@ -6,11 +6,9 @@ vi.mock('@/lib/client/auth-client', () => ({
   authClient: {
     signIn: {
       email: vi.fn(),
-      magicLink: vi.fn(),
       emailOtp: vi.fn(),
     },
     signUp: { email: vi.fn() },
-    emailOtp: { sendVerificationOtp: vi.fn() },
     requestPasswordReset: vi.fn(),
   },
 }))
@@ -26,109 +24,134 @@ vi.mock('../oauth-buttons', () => ({
 import { PortalAuthForm } from '../portal-auth-form'
 import { authClient } from '@/lib/client/auth-client'
 
-const signInMagicLinkMock = authClient.signIn.magicLink as ReturnType<typeof vi.fn>
-const sendVerificationOtpMock = authClient.emailOtp.sendVerificationOtp as ReturnType<typeof vi.fn>
+const signInEmailOtpMock = authClient.signIn.emailOtp as ReturnType<typeof vi.fn>
 
-describe('PortalAuthForm — admin login (magicLink + OTP enabled, password disabled)', () => {
+// Mock fetch globally; per-test override the response.
+const fetchMock = vi.fn()
+beforeEach(() => {
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
+})
+afterEach(() => {
+  fetchMock.mockReset()
+})
+
+function okResponse(body: object = { ok: true }) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function errorResponse(status: number, body: object = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+describe('PortalAuthForm — admin login (magicLink only, password disabled)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    signInMagicLinkMock.mockResolvedValue({ data: {}, error: null })
-    sendVerificationOtpMock.mockResolvedValue({ data: {}, error: null })
+    signInEmailOtpMock.mockResolvedValue({ data: {}, error: null })
+    fetchMock.mockResolvedValue(okResponse())
   })
   afterEach(() => cleanup())
 
   // Mirrors what `apps/web/src/routes/admin.login.tsx` passes today:
-  // magicLink + email OTP both available, password explicitly off,
-  // OAuth providers empty (would only render if DB credentials
-  // configured — outside this test's scope).
-  const adminAuthConfig = { magicLink: true, email: true, password: false }
+  // magicLink the only email-based auth, password explicitly off,
+  // OAuth providers empty.
+  const adminAuthConfig = { magicLink: true, password: false }
 
-  it('starts on the email step with the magic-link primary button', () => {
+  it('starts on the email step with the Continue with email button', () => {
     render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /email me a sign-in link/i })).toBeInTheDocument()
-    // OTP fallback is a text-button, not a primary action
-    expect(screen.getByRole('button', { name: /6-digit code/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument()
   })
 
-  it('submitting email triggers signIn.magicLink with the callback URL', async () => {
+  it('submitting email POSTs to /api/auth/portal-signin and flips to the code step', async () => {
     render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a sign-in link/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
 
-    await waitFor(() => expect(signInMagicLinkMock).toHaveBeenCalledOnce())
-    expect(signInMagicLinkMock).toHaveBeenCalledWith({
-      email: 'founder@acme.com',
-      callbackURL: '/admin/feedback',
-    })
-    // OTP path must NOT have fired
-    expect(sendVerificationOtpMock).not.toHaveBeenCalled()
-  })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/portal-signin',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ email: 'founder@acme.com', callbackURL: '/admin/feedback' }),
+      })
+    )
 
-  it('after a successful send, shows the link-sent confirmation with the email', async () => {
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a sign-in link/i }))
-
-    await screen.findByText(/check your email/i)
+    // The form flips to the code step
+    await screen.findByText(/we sent a 6-digit code to/i)
+    expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument()
     expect(screen.getByText('founder@acme.com')).toBeInTheDocument()
-    // Recovery affordance: "Use a different email" must always be reachable
-    expect(screen.getByRole('button', { name: /use a different email/i })).toBeInTheDocument()
+    expect(screen.getByText(/sign-in link in your email also works/i)).toBeInTheDocument()
   })
 
-  it('OTP fallback button on the email step sends a 6-digit code instead', async () => {
+  it('auto-submits when 6 digits are entered (no manual button click needed)', async () => {
     render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /6-digit code/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
+    await screen.findByLabelText(/verification code/i)
 
-    await waitFor(() => expect(sendVerificationOtpMock).toHaveBeenCalledOnce())
-    expect(sendVerificationOtpMock).toHaveBeenCalledWith({
+    // Typing 6 digits should trigger onComplete → verifyCode without
+    // needing to click the Verify button.
+    fireEvent.change(screen.getByLabelText(/verification code/i), { target: { value: '123456' } })
+
+    await waitFor(() => expect(signInEmailOtpMock).toHaveBeenCalledOnce())
+    expect(signInEmailOtpMock).toHaveBeenCalledWith({
       email: 'founder@acme.com',
-      type: 'sign-in',
+      otp: '123456',
     })
-    // Magic-link must NOT have fired on the fallback path
-    expect(signInMagicLinkMock).not.toHaveBeenCalled()
   })
 
-  it('surfaces the better-auth error message when sendMagicLink fails', async () => {
-    signInMagicLinkMock.mockResolvedValueOnce({ data: null, error: { message: 'Rate limited' } })
+  it('surfaces the server error message when portal-signin fails', async () => {
+    fetchMock.mockResolvedValueOnce(errorResponse(500, { error: 'Email not configured' }))
     render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
-    fireEvent.click(screen.getByRole('button', { name: /email me a sign-in link/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
 
-    await screen.findByText(/rate limited/i)
-    // Stay on the email step so the user can try a different email or fall back to OTP
-    expect(screen.queryByText(/check your email/i)).not.toBeInTheDocument()
+    await screen.findByText(/email not configured/i)
+    // Stay on the email step
+    expect(screen.queryByLabelText(/verification code/i)).not.toBeInTheDocument()
   })
 
-  it('rejects empty-email submit without calling the magic-link API', async () => {
+  it('surfaces the better-auth error when OTP verification fails', async () => {
+    signInEmailOtpMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Invalid or expired code' },
+    })
     render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.click(screen.getByRole('button', { name: /email me a sign-in link/i }))
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
+    await screen.findByLabelText(/verification code/i)
+
+    // Auto-submit fires on 6th digit; error message bubbles up
+    fireEvent.change(screen.getByLabelText(/verification code/i), { target: { value: '999999' } })
+
+    await screen.findByText(/invalid or expired code/i)
+  })
+
+  it('rejects empty-email submit without calling the signin endpoint', async () => {
+    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
+    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
 
     await screen.findByText(/email is required/i)
-    expect(signInMagicLinkMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
 describe('PortalAuthForm — portal login (password + OAuth, magicLink off)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    sendVerificationOtpMock.mockResolvedValue({ data: {}, error: null })
   })
   afterEach(() => cleanup())
 
-  it('does not render the magic-link button when magicLink is off', () => {
-    render(<PortalAuthForm authConfig={{ password: true, email: false, magicLink: false }} />)
+  it('does not render the "Sign in with email instead" link when magicLink is off', () => {
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
     expect(
-      screen.queryByRole('button', { name: /email me a sign-in link/i })
+      screen.queryByRole('button', { name: /sign in with email instead/i })
     ).not.toBeInTheDocument()
-  })
-
-  it('falls back to OTP-only when only email is enabled', async () => {
-    render(<PortalAuthForm authConfig={{ password: false, email: true, magicLink: false }} />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'a@b.c' } })
-    // Without magicLink, the primary button is the OTP send button
-    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
-    await waitFor(() => expect(sendVerificationOtpMock).toHaveBeenCalledOnce())
   })
 })

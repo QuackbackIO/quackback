@@ -13,21 +13,15 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 /**
- * Get OTP code for an email address from the database
- *
- * Executes a CLI script that queries the database directly,
- * ensuring proper environment variables are loaded.
- *
- * @param email - The email address to get the OTP for
- * @param host - The host (domain) to resolve the workspace
- * @returns The OTP code or throws if not found/expired
+ * Get the most recent live magic-link token for an email from the
+ * verification table. Used by e2e tests to complete the magic-link
+ * sign-in flow without going through real email delivery.
  */
-export function getOtpCode(email: string, host: string): string {
-  const scriptPath = resolve(__dirname, '../scripts/get-otp.ts')
+export function getMagicLinkToken(email: string): string {
+  const scriptPath = resolve(__dirname, '../scripts/get-magic-link-token.ts')
 
   try {
-    // Execute the script with dotenv to load environment variables
-    const result = execSync(`dotenv -e ../../.env -- bun "${scriptPath}" "${email}" "${host}"`, {
+    const result = execSync(`dotenv -e ../../.env -- bun "${scriptPath}" "${email}"`, {
       encoding: 'utf-8',
       cwd: resolve(__dirname, '../..'), // apps/web directory
     })
@@ -35,7 +29,9 @@ export function getOtpCode(email: string, host: string): string {
     return result.trim()
   } catch (error) {
     const err = error as { stderr?: string; message: string }
-    throw new Error(`Failed to get OTP code: ${err.stderr || err.message}`, { cause: error })
+    throw new Error(`Failed to get magic-link token: ${err.stderr || err.message}`, {
+      cause: error,
+    })
   }
 }
 
