@@ -31,6 +31,25 @@ interface EnforceFeatureGateArgs {
   friendly: string
 }
 
+interface EnforceAiQuotaArgs {
+  /** Null = unlimited (OSS default). 0 = feature blocked entirely. */
+  limit: number | null
+  currentCount: () => Promise<number>
+}
+
+export async function enforceAiQuota(args: EnforceAiQuotaArgs): Promise<void> {
+  if (args.limit === null) return
+  const current = await args.currentCount()
+  if (current < args.limit) return
+
+  throw new TierLimitError({
+    limit: 'aiOpsPerMonth',
+    current,
+    max: args.limit,
+    message: `You've reached your plan's AI operation quota for this month (${args.limit}). Upgrade to increase it.`,
+  })
+}
+
 export function enforceFeatureGate(args: EnforceFeatureGateArgs): void {
   if (args.enabled) return
   throw new TierLimitError({

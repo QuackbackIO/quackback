@@ -351,6 +351,13 @@
       "when": 1777668617288,
       "tag": "0049_settings_tier_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1777668617289,
+      "tag": "0050_ai_usage_log_month_index",
+      "breakpoints": true
     }
   ]
 }
