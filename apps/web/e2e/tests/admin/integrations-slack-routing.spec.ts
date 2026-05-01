@@ -36,8 +36,9 @@ test.describe('Slack notification routing', () => {
 
     await addBtn.click()
     await expect(page.getByRole('dialog')).toBeVisible()
-    await page.getByRole('button', { name: /filter by board/i }).click()
+    // Board filter is a combobox showing "All boards" by default.
     await expect(page.getByText(/board filter/i)).toBeVisible()
+    await expect(page.getByRole('combobox').filter({ hasText: /all boards/i })).toBeVisible()
     await page.getByRole('button', { name: /cancel/i }).click()
   })
 

@@ -16,10 +16,20 @@ import {
   ChevronRightIcon,
   MagnifyingGlassIcon,
   ChevronUpDownIcon,
+  CheckIcon,
 } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +39,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/shared/utils'
 import {
   useAddNotificationChannel,
   useUpdateNotificationChannel,
@@ -308,10 +319,10 @@ function ChannelPicker<TChannel extends Channel>({
 }
 
 // ============================================
-// Board Filter Pills
+// Board Filter (searchable multi-select)
 // ============================================
 
-function BoardFilterPills({
+function BoardFilterCombobox({
   boardIds,
   boards,
   onBoardIdsChange,
@@ -322,67 +333,85 @@ function BoardFilterPills({
   onBoardIdsChange: (boardIds: string[] | null) => void
   disabled?: boolean
 }) {
+  const [open, setOpen] = useState(false)
   const isAllBoards = !boardIds?.length
+  const selectedSet = useMemo(() => new Set(boardIds ?? []), [boardIds])
+
+  const triggerLabel = isAllBoards
+    ? 'All boards'
+    : boardIds!.length === 1
+      ? (boards.find((b) => b.id === boardIds![0])?.name ?? '1 board')
+      : `${boardIds!.length} boards`
+
+  const toggleBoard = (id: string) => {
+    if (selectedSet.has(id)) {
+      const next = (boardIds ?? []).filter((b) => b !== id)
+      onBoardIdsChange(next.length > 0 ? next : null)
+    } else {
+      onBoardIdsChange([...(boardIds ?? []), id])
+    }
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium text-muted-foreground">Board filter</div>
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <Checkbox
-            checked={isAllBoards}
-            onCheckedChange={(checked) => {
-              if (checked) onBoardIdsChange(null)
-            }}
-            disabled={disabled}
-          />
-          All boards
-        </label>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <Checkbox
-            checked={!isAllBoards}
-            onCheckedChange={(checked) => {
-              if (checked) {
-                onBoardIdsChange(boards.map((b) => b.id))
-              } else {
-                onBoardIdsChange(null)
-              }
-            }}
-            disabled={disabled}
-          />
-          Specific boards
-        </label>
-        {!isAllBoards && (
-          <div className="ml-6 flex flex-wrap gap-1.5 pt-0.5">
-            {boards.map((board) => {
-              const selected = boardIds?.includes(board.id) ?? false
-              return (
-                <button
-                  key={board.id}
-                  type="button"
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors disabled:opacity-50 ${
-                    selected
-                      ? 'bg-primary/10 border-primary/20 text-primary font-medium'
-                      : 'border-border/60 text-muted-foreground hover:bg-muted/50'
-                  }`}
-                  onClick={() => {
-                    if (selected) {
-                      const next = (boardIds ?? []).filter((id) => id !== board.id)
-                      onBoardIdsChange(next.length > 0 ? next : null)
-                    } else {
-                      onBoardIdsChange([...(boardIds ?? []), board.id])
-                    }
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn('truncate', isAllBoards && 'text-muted-foreground')}>
+            {triggerLabel}
+          </span>
+          <ChevronUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-0">
+        {open && (
+          <Command>
+            <CommandInput placeholder="Search boards..." />
+            <CommandList>
+              <CommandEmpty>No boards found.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value="__all_boards__"
+                  onSelect={() => {
+                    onBoardIdsChange(null)
+                    setOpen(false)
                   }}
-                  disabled={disabled}
                 >
-                  {board.name}
-                </button>
-              )
-            })}
-          </div>
+                  <CheckIcon
+                    className={cn('mr-2 h-4 w-4', isAllBoards ? 'opacity-100' : 'opacity-0')}
+                  />
+                  All boards
+                </CommandItem>
+              </CommandGroup>
+              {boards.length > 0 && <CommandSeparator />}
+              <CommandGroup>
+                {boards.map((board) => (
+                  <CommandItem
+                    key={board.id}
+                    value={board.name}
+                    onSelect={() => toggleBoard(board.id)}
+                  >
+                    <CheckIcon
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        selectedSet.has(board.id) ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    <span className="truncate">{board.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
         )}
-      </div>
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -501,12 +530,15 @@ function ChannelRow<TChannel extends Channel>({
         {expanded && (
           <div className="border-t border-border/30 bg-muted/5 px-4 pb-4">
             <div className="pl-10 pt-3 space-y-3">
-              <BoardFilterPills
-                boardIds={channel.boardIds}
-                boards={boards}
-                onBoardIdsChange={handleBoardIdsChange}
-                disabled={disabled || saving}
-              />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Board filter</Label>
+                <BoardFilterCombobox
+                  boardIds={channel.boardIds}
+                  boards={boards}
+                  onBoardIdsChange={handleBoardIdsChange}
+                  disabled={disabled || saving}
+                />
+              </div>
               <div className="pt-2 border-t border-border/30">
                 <Button
                   variant="ghost"
@@ -642,7 +674,6 @@ function AddChannelDialog<TChannel extends Channel>({
     Object.fromEntries(events.map((e) => [e.id, true]))
   )
   const [boardIds, setBoardIds] = useState<string[] | null>(null)
-  const [showBoardFilter, setShowBoardFilter] = useState(false)
 
   // Reset form state whenever the dialog closes (cancel, X, or save).
   useEffect(() => {
@@ -650,7 +681,6 @@ function AddChannelDialog<TChannel extends Channel>({
       setSelectedChannelId('')
       setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, true])))
       setBoardIds(null)
-      setShowBoardFilter(false)
     }
   }, [open, events])
 
@@ -736,65 +766,12 @@ function AddChannelDialog<TChannel extends Channel>({
           </div>
 
           <div className="space-y-1.5">
-            {!showBoardFilter && !boardIds?.length ? (
-              <button
-                type="button"
-                onClick={() => setShowBoardFilter(true)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                <PlusIcon className="h-3 w-3" />
-                Filter by board
-              </button>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Board filter</Label>
-                  {boardIds?.length ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBoardIds(null)
-                        setShowBoardFilter(false)
-                      }}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Clear
-                    </button>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {boards.map((board) => {
-                    const selected = boardIds?.includes(board.id) ?? false
-                    return (
-                      <button
-                        key={board.id}
-                        type="button"
-                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                          selected
-                            ? 'bg-primary/10 border-primary/20 text-primary font-medium'
-                            : 'border-border/60 text-muted-foreground hover:bg-muted/50'
-                        }`}
-                        onClick={() => {
-                          if (selected) {
-                            const next = (boardIds ?? []).filter((id) => id !== board.id)
-                            setBoardIds(next.length > 0 ? next : null)
-                          } else {
-                            setBoardIds([...(boardIds ?? []), board.id])
-                          }
-                        }}
-                      >
-                        {board.name}
-                      </button>
-                    )
-                  })}
-                </div>
-                {!boardIds?.length && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Select boards to filter, or leave empty for all boards.
-                  </p>
-                )}
-              </>
-            )}
+            <Label className="text-xs text-muted-foreground">Board filter</Label>
+            <BoardFilterCombobox
+              boardIds={boardIds}
+              boards={boards}
+              onBoardIdsChange={setBoardIds}
+            />
           </div>
         </div>
 
