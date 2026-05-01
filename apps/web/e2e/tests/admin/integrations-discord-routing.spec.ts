@@ -7,6 +7,11 @@ test.describe('Discord notification routing', () => {
   })
 
   test('renders the routing UI when Discord is connected', async ({ page }) => {
+    // Skip when Discord isn't connected in this environment — the page shows
+    // the connection-setup card instead of the routing UI.
+    const setupCard = page.getByText(/connect your discord server/i)
+    if (await setupCard.isVisible()) test.skip()
+
     const hasTable = await page.getByRole('button', { name: /add channel/i }).isVisible()
     const hasEmptyState = await page
       .getByText(/no notification channels configured yet/i)
@@ -37,13 +42,16 @@ test.describe('Discord notification routing', () => {
   })
 
   test('event columns reflect Discord event list (3 events, no changelog)', async ({ page }) => {
-    const tableHeader = page.getByText(/^Channel$/)
-    if (!(await tableHeader.isVisible())) test.skip()
+    // Column headers use `title` attributes derived from EventConfig.label,
+    // which is more specific than text matching (event names also appear in
+    // the AddChannelDialog event multi-select).
+    const feedbackHeader = page.getByTitle('When a user submits new feedback')
+    if (!(await feedbackHeader.isVisible())) test.skip()
 
-    await expect(page.getByText(/^Feedback$/)).toBeVisible()
-    await expect(page.getByText(/^Status$/)).toBeVisible()
-    await expect(page.getByText(/^Comment$/)).toBeVisible()
-    // Slack has Changelog; Discord must not.
-    await expect(page.getByText(/^Changelog$/)).not.toBeVisible()
+    await expect(feedbackHeader).toBeVisible()
+    await expect(page.getByTitle('When the status of a feedback post is updated')).toBeVisible()
+    await expect(page.getByTitle('When someone comments on a feedback post')).toBeVisible()
+    // Slack has a Changelog column; Discord must not.
+    await expect(page.getByTitle('When a changelog entry is published')).not.toBeVisible()
   })
 })
