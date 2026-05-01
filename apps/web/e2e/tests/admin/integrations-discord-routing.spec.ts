@@ -43,15 +43,15 @@ test.describe('Discord notification routing', () => {
   })
 
   test('event columns reflect Discord event list (3 events, no changelog)', async ({ page }) => {
-    // Column headers use `title` attributes derived from EventConfig.label,
+    // Column headers carry `title` attributes equal to EventConfig.description,
     // which is more specific than text matching (event names also appear in
     // the AddChannelDialog event multi-select).
-    const feedbackHeader = page.getByTitle('When a user submits new feedback')
-    if (!(await feedbackHeader.isVisible())) test.skip()
+    const newPostHeader = page.getByTitle('When someone submits a new post')
+    if (!(await newPostHeader.isVisible())) test.skip()
 
-    await expect(feedbackHeader).toBeVisible()
-    await expect(page.getByTitle('When the status of a feedback post is updated')).toBeVisible()
-    await expect(page.getByTitle('When someone comments on a feedback post')).toBeVisible()
+    await expect(newPostHeader).toBeVisible()
+    await expect(page.getByTitle("When a post's status is updated")).toBeVisible()
+    await expect(page.getByTitle('When someone comments on a post')).toBeVisible()
     // Slack has a Changelog column; Discord must not.
     await expect(page.getByTitle('When a changelog entry is published')).not.toBeVisible()
   })

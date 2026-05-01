@@ -615,7 +615,7 @@ function RoutingTable<TChannel extends Channel>({
           <div
             key={event.id}
             className="py-2 text-[11px] font-medium text-muted-foreground text-center leading-tight"
-            title={event.label}
+            title={event.description}
           >
             {event.shortLabel}
           </div>
@@ -751,6 +751,7 @@ function AddChannelDialog<TChannel extends Channel>({
               {events.map((event) => (
                 <label
                   key={event.id}
+                  title={event.description}
                   className="flex items-center gap-2 text-sm cursor-pointer py-1"
                 >
                   <Checkbox
@@ -762,7 +763,7 @@ function AddChannelDialog<TChannel extends Channel>({
                       }))
                     }
                   />
-                  {event.shortLabel}
+                  {event.label}
                 </label>
               ))}
             </div>
