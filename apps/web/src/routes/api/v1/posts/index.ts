@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { InternalError } from '@/lib/shared/errors'
+import { InternalError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import {
   successResponse,
   createdResponse,
@@ -13,7 +13,7 @@ import {
   parseOptionalTypeId,
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
-import type { BoardId, StatusId, TagId } from '@quackback/ids'
+import type { BoardId, PrincipalId, StatusId, TagId } from '@quackback/ids'
 
 // Input validation schemas
 const createPostSchema = z.object({
@@ -23,6 +23,7 @@ const createPostSchema = z.object({
   statusId: z.string().optional(),
   tagIds: z.array(z.string()).optional(),
   createdAt: z.string().datetime().optional(),
+  authorPrincipalId: z.string().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/posts/')({
@@ -126,7 +127,6 @@ export const Route = createFileRoute('/api/v1/posts/')({
       POST: async ({ request }) => {
         try {
           const auth = await withApiKeyAuth(request, { role: 'team' })
-          const { principalId } = auth
 
           const body = await request.json()
           const parsed = createPostSchema.safeParse(body)
@@ -138,20 +138,51 @@ export const Route = createFileRoute('/api/v1/posts/')({
           }
 
           const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
-          const statusId = parseOptionalTypeId<StatusId>(parsed.data.statusId, 'status', 'status ID')
+          const statusId = parseOptionalTypeId<StatusId>(
+            parsed.data.statusId,
+            'status',
+            'status ID'
+          )
           const tagIds = parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+
+          // Admin-only override; mirrors how createdAt is gated below.
+          const overridePrincipalId =
+            auth.role === 'admin'
+              ? parseOptionalTypeId<PrincipalId>(
+                  parsed.data.authorPrincipalId,
+                  'principal',
+                  'authorPrincipalId'
+                )
+              : undefined
+          const targetPrincipalId = overridePrincipalId ?? auth.principalId
 
           const { createPost } = await import('@/lib/server/domains/posts/post.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
           const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.id, principalId),
+            where: eq(principal.id, targetPrincipalId),
             columns: { id: true, displayName: true, type: true },
             with: { user: { columns: { id: true, name: true, email: true } } },
           })
 
           if (!principalRecord) {
-            throw new InternalError('PRINCIPAL_NOT_FOUND', 'Principal record missing for verified API key')
+            if (overridePrincipalId) {
+              throw new NotFoundError(
+                'PRINCIPAL_NOT_FOUND',
+                `Principal ${targetPrincipalId} not found`
+              )
+            }
+            throw new InternalError(
+              'PRINCIPAL_NOT_FOUND',
+              'Principal record missing for verified API key'
+            )
+          }
+
+          if (overridePrincipalId && principalRecord.type === 'service') {
+            throw new ValidationError(
+              'INVALID_AUTHOR',
+              'authorPrincipalId may not reference a service principal'
+            )
           }
 
           // Only admins can set createdAt (for imports)
@@ -170,7 +201,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
               createdAt,
             },
             {
-              principalId,
+              principalId: targetPrincipalId,
               userId: principalRecord.user?.id,
               displayName: principalRecord.displayName ?? undefined,
               name: principalRecord.user?.name,

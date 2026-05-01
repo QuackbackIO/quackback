@@ -145,6 +145,24 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
     return byKey
   }
 
+  async function resolveAuthorPrincipal(email: string | undefined): Promise<string | undefined> {
+    if (!email) return undefined
+    const key = email.toLowerCase()
+    const cached = idMap.users.get(key)
+    if (cached) return cached
+    try {
+      const resp = await qb.post<{ data: { principalId: string } }>('/api/v1/users/identify', {
+        email,
+        name: email.split('@')[0],
+      })
+      idMap.users.set(key, resp.data.principalId)
+      return resp.data.principalId
+    } catch (err) {
+      if (options.verbose) progress.warn(`identify failed for ${email}: ${err}`)
+      return undefined
+    }
+  }
+
   if (options.incremental) {
     progress.start('Pre-fetching existing posts for dedup')
     // showDeleted=true so soft-deleted posts are still in the dedup index;
@@ -159,6 +177,19 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
       if (key) existingPostByKey.set(key, p.id)
     }
     progress.success(`Loaded ${existing.length} existing posts (${existingPostByKey.size} keyed)`)
+  }
+
+  // Used to gate authorPrincipalId on note imports: createComment rejects
+  // private comments from non-team principals (PRIVATE_COMMENT_FORBIDDEN), so
+  // we only attribute notes when the author email is a known team member.
+  const teamMemberEmails = new Set<string>()
+  try {
+    const members = await qb.listAll<{ id: string; email: string | null }>('/api/v1/members')
+    for (const m of members) {
+      if (m.email) teamMemberEmails.add(m.email.toLowerCase())
+    }
+  } catch (err) {
+    if (options.verbose) progress.warn(`Failed to fetch team members: ${err}`)
   }
 
   // Step 1: Identify users
@@ -258,6 +289,8 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
+        const authorPrincipalId = await resolveAuthorPrincipal(post.authorEmail)
+
         const resp = await qb.post<{ data: { id: string } }>('/api/v1/posts', {
           boardId,
           title: post.title,
@@ -265,6 +298,7 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           ...(statusId && { statusId }),
           ...(tagIds.length > 0 && { tagIds }),
           ...(post.createdAt && { createdAt: new Date(post.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
 
         idMap.posts.set(post.id, resp.data.id)
@@ -348,11 +382,14 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
+        const authorPrincipalId = await resolveAuthorPrincipal(comment.authorEmail)
+
         const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
           content: comment.body,
           ...(parentId && { parentId }),
           ...(comment.isPrivate && { isPrivate: true }),
           ...(comment.createdAt && { createdAt: new Date(comment.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
 
         // Track comment ID for threading
@@ -398,23 +435,10 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           continue
         }
 
-        // Identify voter on the fly if not already in the map
-        let principalId = idMap.users.get(vote.voterEmail.toLowerCase())
+        const principalId = await resolveAuthorPrincipal(vote.voterEmail)
         if (!principalId) {
-          try {
-            const resp = await qb.post<{ data: { principalId: string } }>(
-              '/api/v1/users/identify',
-              {
-                email: vote.voterEmail,
-                name: vote.voterEmail.split('@')[0],
-              }
-            )
-            principalId = resp.data.principalId
-            idMap.users.set(vote.voterEmail.toLowerCase(), principalId)
-          } catch {
-            result.votes.skipped++
-            continue
-          }
+          result.votes.skipped++
+          continue
         }
 
         await qb.post(`/api/v1/posts/${postId}/vote/proxy`, {
@@ -465,10 +489,21 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
+        // Only attribute the note to the UV author when their email is a
+        // known team member. Otherwise omit authorPrincipalId so the server
+        // falls back to the API-key holder (admin) — createComment rejects
+        // private comments from non-team principals with PRIVATE_COMMENT_FORBIDDEN.
+        const noteAuthorEmail = note.authorEmail?.toLowerCase()
+        const authorPrincipalId =
+          noteAuthorEmail && teamMemberEmails.has(noteAuthorEmail)
+            ? await resolveAuthorPrincipal(note.authorEmail)
+            : undefined
+
         const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
           content: note.body,
           isPrivate: true,
           ...(note.createdAt && { createdAt: new Date(note.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
 
         if (options.incremental && preExistingPostIds.has(postId)) {
