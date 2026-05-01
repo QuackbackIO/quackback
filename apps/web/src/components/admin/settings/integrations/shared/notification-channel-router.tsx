@@ -45,6 +45,7 @@ import {
   useUpdateNotificationChannel,
   useRemoveNotificationChannel,
 } from '@/lib/client/mutations'
+import type { EventType } from '@/lib/server/events/types'
 
 // ============================================
 // Public types
@@ -62,7 +63,7 @@ export interface NotificationChannel {
 }
 
 export interface EventConfig {
-  id: string
+  id: EventType
   label: string
   shortLabel: string
   description: string
@@ -339,11 +340,13 @@ function BoardFilterCombobox({
   const isAllBoards = !boardIds?.length
   const selectedSet = useMemo(() => new Set(boardIds ?? []), [boardIds])
 
-  const triggerLabel = isAllBoards
-    ? 'All boards'
-    : boardIds!.length === 1
-      ? (boards.find((b) => b.id === boardIds![0])?.name ?? '1 board')
-      : `${boardIds!.length} boards`
+  const triggerLabel = useMemo(() => {
+    if (isAllBoards) return 'All boards'
+    if (boardIds!.length === 1) {
+      return boards.find((b) => b.id === boardIds![0])?.name ?? '1 board'
+    }
+    return `${boardIds!.length} boards`
+  }, [isAllBoards, boardIds, boards])
 
   const toggleBoard = (id: string) => {
     if (selectedSet.has(id)) {
@@ -739,7 +742,7 @@ function AddChannelDialog<TChannel extends Channel>({
               <button
                 type="button"
                 onClick={() => {
-                  const next = allEventsSelected ? false : true
+                  const next = !allEventsSelected
                   setSelectedEvents(Object.fromEntries(events.map((e) => [e.id, next])))
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"

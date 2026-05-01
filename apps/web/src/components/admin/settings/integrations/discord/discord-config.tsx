@@ -60,10 +60,7 @@ function useDiscordChannels() {
   })
 
   const refresh = () => {
-    queryClient.fetchQuery({
-      queryKey: ['discord-channels'],
-      queryFn: () => fetchDiscordChannelsFn(),
-    })
+    queryClient.invalidateQueries({ queryKey: ['discord-channels'] })
   }
 
   return {
@@ -97,20 +94,20 @@ export function DiscordConfig({
 
   // Use notificationChannels if provided; otherwise synthesize from legacy
   // single-channel config so the user can keep editing without re-adding.
-  const notificationChannels: NotificationChannel[] = initialChannels?.length
-    ? initialChannels
-    : initialConfig.channelId
-      ? [
-          {
-            channelId: initialConfig.channelId,
-            events: DISCORD_EVENT_CONFIG.map((e) => ({
-              eventType: e.id,
-              enabled: initialEventMappings.find((m) => m.eventType === e.id)?.enabled ?? false,
-            })),
-            boardIds: null,
-          },
-        ]
-      : []
+  const notificationChannels = useMemo<NotificationChannel[]>(() => {
+    if (initialChannels?.length) return initialChannels
+    if (!initialConfig.channelId) return []
+    return [
+      {
+        channelId: initialConfig.channelId,
+        events: DISCORD_EVENT_CONFIG.map((e) => ({
+          eventType: e.id,
+          enabled: initialEventMappings.find((m) => m.eventType === e.id)?.enabled ?? false,
+        })),
+        boardIds: null,
+      },
+    ]
+  }, [initialChannels, initialConfig.channelId, initialEventMappings])
 
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
