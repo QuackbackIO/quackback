@@ -18,8 +18,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>()
 
 // Configuration
 const WINDOW_MS = 60_000 // 1 minute
-const MAX_REQUESTS = 100 // 100 requests per minute per IP
-const MAX_REQUESTS_IMPORT = 2000 // 2000 requests per minute per IP in import mode
+const MAX_REQUESTS = 100 // 100 requests per minute per IP — used when tier limit is null (OSS)
 const MAX_STORE_SIZE = 50_000 // Cap store size to prevent memory exhaustion
 const CLEANUP_INTERVAL_MS = 60_000 // Cleanup every minute
 
@@ -48,17 +47,28 @@ startCleanup()
  * @param ip - The client IP address
  * @param importMode - Whether the request is in import mode (higher limit)
  * @returns Object with allowed flag and remaining requests
+ *
+ * Tier-aware: when EDITION=cloud and the tenant has a non-null
+ * apiRequestsPerMinute, that value overrides the default cap. Import
+ * mode multiplies the per-minute cap by 20 (matching the historical
+ * 100 -> 2000 ratio).
+ *
+ * In OSS the resolver short-circuits to OSS_TIER_LIMITS (apiRequestsPerMinute=null)
+ * so we keep the existing constants — no behavior change for self-hosters.
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   ip: string,
   importMode?: boolean
-): {
+): Promise<{
   allowed: boolean
   remaining: number
   retryAfter?: number
-} {
+}> {
   const now = Date.now()
-  const maxRequests = importMode ? MAX_REQUESTS_IMPORT : MAX_REQUESTS
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const limits = await getTierLimits()
+  const baseLimit = limits.apiRequestsPerMinute ?? MAX_REQUESTS
+  const maxRequests = importMode ? baseLimit * 20 : baseLimit
   const entry = rateLimitStore.get(ip)
 
   // New IP or window expired - reset
