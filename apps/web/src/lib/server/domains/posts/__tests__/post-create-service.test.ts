@@ -58,7 +58,7 @@ vi.mock('@/lib/server/db', async () => {
             const label =
               table === undefined
                 ? 'unknown'
-                : (table.__name ?? (table as { [k: string]: unknown }).name ?? 'posts')
+                : (table.__name ?? (table as { [k: string]: unknown }).name ?? 'unknown')
             return chain(typeof label === 'string' ? label : 'posts')
           }),
         }
