@@ -3,6 +3,7 @@ import {
   anonymousClient,
   emailOTPClient,
   genericOAuthClient,
+  magicLinkClient,
   oneTimeTokenClient,
 } from 'better-auth/client/plugins'
 
@@ -18,7 +19,13 @@ import {
  * Note: No baseURL needed - Better Auth client defaults to current origin
  */
 export const authClient = createAuthClient({
-  plugins: [anonymousClient(), emailOTPClient(), genericOAuthClient(), oneTimeTokenClient()],
+  plugins: [
+    anonymousClient(),
+    emailOTPClient(),
+    genericOAuthClient(),
+    magicLinkClient(),
+    oneTimeTokenClient(),
+  ],
 })
 
 /**

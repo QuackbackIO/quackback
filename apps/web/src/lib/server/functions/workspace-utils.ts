@@ -11,6 +11,7 @@ import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, eq } from '@/lib/server/db'
+import { isTeamMember } from '@/lib/shared/roles'
 
 const requireWorkspaceRoleSchema = z.object({
   allowedRoles: z.array(z.string()),
@@ -18,7 +19,9 @@ const requireWorkspaceRoleSchema = z.object({
 
 /**
  * Route guard: require authenticated user with specific workspace role.
- * Throws redirect to '/' if not authenticated or lacks required role.
+ * Unauthenticated callers go to `/admin/login` when guarding admin
+ * routes (so a session expiry takes the customer back to a sign-in
+ * surface, not the public portal); other callers fall back to '/'.
  *
  * Use in route beforeLoad:
  * @example
@@ -35,10 +38,16 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     console.log(
       `[fn:workspace-utils] requireWorkspaceRole: allowedRoles=${data.allowedRoles.join(',')}`
     )
+    // If the route restricts to team roles only, unauthenticated
+    // callers belong on /admin/login. If the route also allows
+    // role='user' (public portal), fall back to '/' for the regular
+    // sign-in flow.
+    const teamOnly = data.allowedRoles.every(isTeamMember)
+    const unauthRedirect = teamOnly ? { to: '/admin/login' as const } : { to: '/' as const }
     try {
       const session = await getSession()
       if (!session?.user) {
-        throw redirect({ to: '/' })
+        throw redirect(unauthRedirect)
       }
 
       const appSettings = await db.query.settings.findFirst()
@@ -52,7 +61,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
         where: eq(principal.userId, session.user.id as UserId),
       })
       if (!principalRecord) {
-        throw redirect({ to: '/' })
+        throw redirect(unauthRedirect)
       }
 
       if (!data.allowedRoles.includes(principalRecord.role)) {

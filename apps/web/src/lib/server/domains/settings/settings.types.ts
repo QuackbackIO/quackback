@@ -52,6 +52,13 @@ export interface PortalAuthMethods {
   password?: boolean
   /** Whether email OTP authentication is enabled (defaults to false for new installs) */
   email?: boolean
+  /** Whether one-click magic-link sign-in is enabled. The magicLink
+   * better-auth plugin is always wired (used by team invitations);
+   * this toggle just controls whether the login UI surfaces it as a
+   * sign-in option. Cloud admins always have it on; self-hosted
+   * defaults to off so the only auth surface is what the admin
+   * explicitly chose. */
+  magicLink?: boolean
   /** Dynamic OAuth provider toggles keyed by provider ID (github, google, discord, etc.) */
   [providerId: string]: boolean | undefined
 }

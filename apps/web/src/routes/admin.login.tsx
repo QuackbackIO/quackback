@@ -79,9 +79,11 @@ function AdminLoginPage() {
         <PortalAuthForm
           mode="login"
           callbackUrl={safeCallbackUrl}
-          // Admin login always uses email OTP — password auth is for portal users only.
-          // Force email: true and suppress password so the OTP form shows by default.
-          authConfig={{ ...authConfig, email: true, password: false }}
+          // Admin login is passwordless — both magic link (one-click)
+          // and email OTP (6-digit code) are available; OAuth too if
+          // configured. Cloud customers in particular never set a
+          // password, so a magic-link option is required.
+          authConfig={{ ...authConfig, magicLink: true, email: true, password: false }}
           customProviderNames={customProviderNames}
         />
       </div>

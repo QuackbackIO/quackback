@@ -32,7 +32,7 @@ interface PortalAuthFormProps {
   customProviderNames?: Record<string, string>
 }
 
-type Step = 'credentials' | 'email' | 'code' | 'forgot' | 'reset'
+type Step = 'credentials' | 'email' | 'code' | 'forgot' | 'reset' | 'link-sent'
 
 /**
  * Portal Auth Form
@@ -57,10 +57,16 @@ export function PortalAuthForm({
 }: PortalAuthFormProps) {
   const passwordEnabled = authConfig?.password ?? true
   const emailOtpEnabled = authConfig?.email ?? false
+  const magicLinkEnabled = authConfig?.magicLink ?? false
   const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig, customProviderNames) : []
 
-  // Default step depends on what's enabled
-  const defaultStep: Step = passwordEnabled ? 'credentials' : 'email'
+  // Default step depends on what's enabled. Email collection serves
+  // both magic link and OTP, so default there if password is off.
+  const defaultStep: Step = passwordEnabled
+    ? 'credentials'
+    : magicLinkEnabled || emailOtpEnabled
+      ? 'email'
+      : 'credentials'
 
   const [step, setStep] = useState<Step>(defaultStep)
   const [name, setName] = useState('')
@@ -188,6 +194,26 @@ export function PortalAuthForm({
     }
   }
 
+  // --- Magic-link handler ---
+  const sendMagicLink = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const result = await authClient.signIn.magicLink({
+        email,
+        callbackURL: callbackUrl,
+      })
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to send sign-in link')
+      }
+      setStep('link-sent')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send sign-in link')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const verifyCode = async () => {
     setError('')
     setLoading(true)
@@ -244,6 +270,12 @@ export function PortalAuthForm({
       setError('Email is required')
       return
     }
+    // Prefer the one-click magic link when available — a single
+    // click in the inbox beats copy-pasting a 6-digit code.
+    if (magicLinkEnabled) {
+      sendMagicLink()
+      return
+    }
     sendCode()
   }
 
@@ -291,7 +323,7 @@ export function PortalAuthForm({
   const showOAuthOnDefault =
     (step === 'credentials' || step === 'email') && !invitation && oauthProviders.length > 0
   const hasCredentialForm = step === 'credentials' && passwordEnabled
-  const hasEmailForm = step === 'email' && emailOtpEnabled
+  const hasEmailForm = step === 'email' && (emailOtpEnabled || magicLinkEnabled)
 
   return (
     <div className="space-y-6">
@@ -460,12 +492,37 @@ export function PortalAuthForm({
             {loading ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Sending code...
+                {magicLinkEnabled ? 'Sending link…' : 'Sending code…'}
               </>
+            ) : magicLinkEnabled ? (
+              'Email me a sign-in link'
             ) : (
               'Continue with email'
             )}
           </Button>
+
+          {/* Secondary email path: when both magic link AND OTP are
+              available, give a fallback to OTP for users whose mail
+              client mangles links. */}
+          {magicLinkEnabled && emailOtpEnabled && (
+            <div className="text-center">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  if (!email.trim()) {
+                    setError('Email is required')
+                    return
+                  }
+                  setError('')
+                  sendCode()
+                }}
+                className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                Email a 6-digit code instead
+              </button>
+            </div>
+          )}
 
           {/* Link back to password if also enabled */}
           {passwordEnabled && (
@@ -483,6 +540,43 @@ export function PortalAuthForm({
             </div>
           )}
         </form>
+      )}
+
+      {/* Magic-link sent confirmation */}
+      {step === 'link-sent' && (
+        <div className="space-y-4 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <EnvelopeIcon className="h-6 w-6 text-primary" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium">Check your email</h2>
+            <p className="text-sm text-muted-foreground">
+              We sent a sign-in link to <strong>{email}</strong>. Click it to finish signing in.
+            </p>
+          </div>
+          {emailOtpEnabled && (
+            <button
+              type="button"
+              onClick={() => {
+                setError('')
+                sendCode()
+              }}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Send a 6-digit code instead
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setError('')
+              setStep('email')
+            }}
+            className="block w-full text-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            Use a different email
+          </button>
+        </div>
       )}
 
       {/* Email OTP: code verification step */}
