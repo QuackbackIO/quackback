@@ -104,9 +104,33 @@ export async function getAuthConfig(): Promise<AuthConfig> {
   }
 }
 
+/**
+ * OAuth providers that are always available regardless of tier.
+ * Anything outside this set requires the customOidcProvider feature flag.
+ */
+const STANDARD_OAUTH_PROVIDERS = new Set(['google', 'github', 'microsoft', 'discord'])
+
 export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
   console.log(`[domain:settings] updateAuthConfig`)
   try {
+    // Tier gate: refuse non-standard OAuth providers when customOidcProvider is off.
+    // No-op in OSS (feature is true).
+    if (input.oauth) {
+      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+      const limits = await getTierLimits()
+      const enablingNonStandard = Object.entries(input.oauth).some(
+        ([id, enabled]) => enabled && !STANDARD_OAUTH_PROVIDERS.has(id)
+      )
+      if (enablingNonStandard) {
+        enforceFeatureGate({
+          enabled: limits.features.customOidcProvider,
+          feature: 'customOidcProvider',
+          friendly: 'Custom OIDC providers',
+        })
+      }
+    }
+
     const org = await requireSettings()
     const existing = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
     const updated = deepMerge(existing, input as Partial<AuthConfig>)
@@ -174,6 +198,19 @@ export async function updateDeveloperConfig(
 ): Promise<DeveloperConfig> {
   console.log(`[domain:settings] updateDeveloperConfig`)
   try {
+    // Tier gate: refuse mcpEnabled=true when mcpServer feature is off.
+    // No-op in OSS. Disabling MCP is always allowed (no upgrade required).
+    if (input.mcpEnabled === true) {
+      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+      const limits = await getTierLimits()
+      enforceFeatureGate({
+        enabled: limits.features.mcpServer,
+        feature: 'mcpServer',
+        friendly: 'MCP server',
+      })
+    }
+
     const org = await requireSettings()
     const existing = parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
     const updated = deepMerge(existing, input as Partial<DeveloperConfig>)
