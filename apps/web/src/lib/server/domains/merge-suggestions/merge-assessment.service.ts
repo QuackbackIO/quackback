@@ -55,6 +55,16 @@ export async function assessMergeCandidates(
   sourcePost: PostInfo,
   candidates: MergeCandidate[]
 ): Promise<MergeAssessment[]> {
+  // Tier gate: skip when aiMergeSuggestions is off. No-op in OSS.
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+  const limits = await getTierLimits()
+  enforceFeatureGate({
+    enabled: limits.features.aiMergeSuggestions,
+    feature: 'aiMergeSuggestions',
+    friendly: 'AI merge suggestions',
+  })
+
   const openai = getOpenAI()
   if (!openai || candidates.length === 0) return []
 

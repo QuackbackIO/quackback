@@ -65,6 +65,16 @@ export async function analyzeSentiment(
   content: string,
   postId?: string
 ): Promise<SentimentResult | null> {
+  // Tier gate: skip when aiSentiment is off. No-op in OSS.
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+  const limits = await getTierLimits()
+  enforceFeatureGate({
+    enabled: limits.features.aiSentiment,
+    feature: 'aiSentiment',
+    friendly: 'AI sentiment analysis',
+  })
+
   const openai = getOpenAI()
   if (!openai) return null
 

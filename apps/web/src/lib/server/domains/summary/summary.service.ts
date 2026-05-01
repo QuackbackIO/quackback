@@ -53,6 +53,17 @@ interface PostSummaryJson {
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
+  // Tier gate: skip the LLM call entirely when the feature is off.
+  // No-op in OSS (OSS_TIER_LIMITS.features.aiSummaries=true).
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+  const limits = await getTierLimits()
+  enforceFeatureGate({
+    enabled: limits.features.aiSummaries,
+    feature: 'aiSummaries',
+    friendly: 'AI post summaries',
+  })
+
   const openai = getOpenAI()
   if (!openai) return
 
