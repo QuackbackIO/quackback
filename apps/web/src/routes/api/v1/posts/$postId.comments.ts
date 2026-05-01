@@ -9,6 +9,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import type { Role } from '@/lib/shared/roles'
 import type { PostId, CommentId, PrincipalId } from '@quackback/ids'
 
 // Input validation schema
@@ -145,7 +146,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
               displayName: principalRecord.displayName ?? undefined,
               name: principalRecord.user?.name,
               email: principalRecord.user?.email ?? undefined,
-              role: principalRecord.role as 'admin' | 'member' | 'user',
+              role: principalRecord.role as Role,
             },
             { skipDispatch: auth.importMode }
           )

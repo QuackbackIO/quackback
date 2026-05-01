@@ -422,23 +422,10 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           continue
         }
 
-        // Identify voter on the fly if not already in the map
-        let principalId = idMap.users.get(vote.voterEmail.toLowerCase())
+        const principalId = await resolveAuthorPrincipal(vote.voterEmail)
         if (!principalId) {
-          try {
-            const resp = await qb.post<{ data: { principalId: string } }>(
-              '/api/v1/users/identify',
-              {
-                email: vote.voterEmail,
-                name: vote.voterEmail.split('@')[0],
-              }
-            )
-            principalId = resp.data.principalId
-            idMap.users.set(vote.voterEmail.toLowerCase(), principalId)
-          } catch {
-            result.votes.skipped++
-            continue
-          }
+          result.votes.skipped++
+          continue
         }
 
         await qb.post(`/api/v1/posts/${postId}/vote/proxy`, {
