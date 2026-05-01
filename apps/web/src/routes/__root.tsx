@@ -24,6 +24,7 @@ export interface RouterContext {
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
   themeCookie?: BootstrapData['themeCookie']
+  isCloud?: boolean
 }
 
 // Paths that are allowed before onboarding is complete
@@ -45,7 +46,7 @@ function isOnboardingExempt(pathname: string): boolean {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ location }) => {
-    const { baseUrl, session, settings, userRole, themeCookie } = await getBootstrapData()
+    const { baseUrl, session, settings, userRole, themeCookie, isCloud } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
       const setupState = getSetupState(settings?.settings?.setupState ?? null)
@@ -60,6 +61,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       settings,
       userRole,
       themeCookie,
+      isCloud,
     }
   },
   head: () => ({
