@@ -179,6 +179,19 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
     progress.success(`Loaded ${existing.length} existing posts (${existingPostByKey.size} keyed)`)
   }
 
+  // Used to gate authorPrincipalId on note imports: createComment rejects
+  // private comments from non-team principals (PRIVATE_COMMENT_FORBIDDEN), so
+  // we only attribute notes when the author email is a known team member.
+  const teamMemberEmails = new Set<string>()
+  try {
+    const members = await qb.listAll<{ id: string; email: string | null }>('/api/v1/members')
+    for (const m of members) {
+      if (m.email) teamMemberEmails.add(m.email.toLowerCase())
+    }
+  } catch (err) {
+    if (options.verbose) progress.warn(`Failed to fetch team members: ${err}`)
+  }
+
   // Step 1: Identify users
   if (data.users.length > 0) {
     progress.start(`Identifying ${data.users.length} users`)
@@ -476,17 +489,22 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
-        const authorPrincipalId = await resolveAuthorPrincipal(note.authorEmail)
+        // Only attribute the note to the UV author when their email is a
+        // known team member. Otherwise omit authorPrincipalId so the server
+        // falls back to the API-key holder (admin) — createComment rejects
+        // private comments from non-team principals with PRIVATE_COMMENT_FORBIDDEN.
+        const noteAuthorEmail = note.authorEmail?.toLowerCase()
+        const authorPrincipalId =
+          noteAuthorEmail && teamMemberEmails.has(noteAuthorEmail)
+            ? await resolveAuthorPrincipal(note.authorEmail)
+            : undefined
 
-        const resp = await qb.post<{ data: { id: string } }>(
-          `/api/v1/posts/${postId}/comments`,
-          {
-            content: note.body,
-            isPrivate: true,
-            ...(note.createdAt && { createdAt: new Date(note.createdAt).toISOString() }),
-            ...(authorPrincipalId && { authorPrincipalId }),
-          }
-        )
+        const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
+          content: note.body,
+          isPrivate: true,
+          ...(note.createdAt && { createdAt: new Date(note.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
+        })
 
         if (options.incremental && preExistingPostIds.has(postId)) {
           const dedupKey = commentDedupKey(note.body, note.createdAt)
