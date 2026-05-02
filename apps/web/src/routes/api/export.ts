@@ -57,6 +57,17 @@ export const Route = createFileRoute('/api/export')({
             return Response.json({ error: 'Only admins can export data' }, { status: 403 })
           }
 
+          // Tier gate: analyticsExports is a Pro+ feature.
+          const { getTierLimits } =
+            await import('@/lib/server/domains/settings/tier-limits.service')
+          const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+          const limits = await getTierLimits()
+          enforceFeatureGate({
+            enabled: limits.features.analyticsExports,
+            feature: 'analyticsExports',
+            friendly: 'Data export',
+          })
+
           // Validate boardId TypeID format
           let boardId: BoardId | undefined
           if (boardIdParam) {
@@ -121,6 +132,10 @@ export const Route = createFileRoute('/api/export')({
             },
           })
         } catch (error) {
+          const { TierLimitError } = await import('@/lib/server/errors/tier-limit-error')
+          if (error instanceof TierLimitError) {
+            return Response.json(error.toResponseBody(), { status: error.statusCode })
+          }
           console.error(`[export] ❌ Export failed:`, error)
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
