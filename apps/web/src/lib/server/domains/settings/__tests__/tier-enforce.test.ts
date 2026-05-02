@@ -86,11 +86,11 @@ describe('enforceFeatureGate', () => {
   it('error names the feature with features.* prefix', () => {
     let caught: TierLimitError | null = null
     try {
-      enforceFeatureGate({ enabled: false, feature: 'aiSummaries', friendly: 'AI summaries' })
+      enforceFeatureGate({ enabled: false, feature: 'mcpServer', friendly: 'MCP server' })
     } catch (err) {
       caught = err as TierLimitError
     }
-    expect(caught!.limit).toBe('features.aiSummaries')
+    expect(caught!.limit).toBe('features.mcpServer')
     expect(caught!.current).toBeUndefined()
     expect(caught!.max).toBeUndefined()
   })

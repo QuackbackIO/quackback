@@ -1,5 +1,5 @@
 import { TierLimitError } from '../../errors/tier-limit-error'
-import { aiOpsThisMonth } from '../ai/usage-counter'
+import { aiTokensThisMonth } from '../ai/usage-counter'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
 
@@ -42,23 +42,25 @@ export function enforceFeatureGate(args: EnforceFeatureGateArgs): void {
 }
 
 /**
- * Combined gate for AI services: refuses if the feature flag is off OR the
- * monthly aiOpsPerMonth quota has been reached. Each AI service caller becomes
- * a one-liner instead of repeating the same 5-line preamble.
+ * Pre-call gate for any LLM-driven AI service. Refuses when the tenant
+ * has used up its monthly token budget. Token usage is recorded after
+ * each call by withUsageLogging, so this is a "you're already at/over"
+ * check — small overruns are possible if many calls fire concurrently.
+ *
+ * 0 budget blocks AI entirely. Null = unlimited (the OSS default).
  */
-export async function enforceAiOp(
-  feature: keyof TierFeatureFlags,
-  friendly: string
-): Promise<void> {
+export async function enforceAiTokenBudget(): Promise<void> {
   const limits = await getTierLimits()
-  enforceFeatureGate({ enabled: limits.features[feature], feature, friendly })
-  if (limits.aiOpsPerMonth === null) return
-  const current = await aiOpsThisMonth()
-  if (current < limits.aiOpsPerMonth) return
+  if (limits.aiTokensPerMonth === null) return
+  const used = await aiTokensThisMonth()
+  if (used < limits.aiTokensPerMonth) return
   throw new TierLimitError({
-    limit: 'aiOpsPerMonth',
-    current,
-    max: limits.aiOpsPerMonth,
-    message: `You've reached your plan's AI operation quota for this month (${limits.aiOpsPerMonth}). Upgrade to increase it.`,
+    limit: 'aiTokensPerMonth',
+    current: used,
+    max: limits.aiTokensPerMonth,
+    message:
+      limits.aiTokensPerMonth === 0
+        ? 'AI features are not included on your plan. Upgrade to enable them.'
+        : `You've used your AI token budget for this month (${used.toLocaleString()} of ${limits.aiTokensPerMonth.toLocaleString()}). Upgrade to increase it.`,
   })
 }

@@ -2,24 +2,23 @@ import { db } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 
 /**
- * Count successful chat-completion calls in the current calendar month.
- * Backs the aiOpsPerMonth tier quota. Embeddings are excluded
- * (call_type != 'chat_completion'), failed calls are excluded
- * (status != 'success').
+ * Sum of total_tokens (input + output) for successful chat-completion
+ * calls in the current calendar month. Backs the aiTokensPerMonth tier
+ * quota. Embeddings are excluded (call_type != 'chat_completion').
  *
- * Should be served by the partial index ai_usage_log_month_chat_idx
- * (migration 0051) for fast monthly aggregation.
+ * Served by the partial index ai_usage_log_month_chat_idx on created_at
+ * with WHERE call_type='chat_completion' AND status='success'.
  */
-export async function aiOpsThisMonth(): Promise<number> {
+export async function aiTokensThisMonth(): Promise<number> {
   const result = await db.execute(sql`
-    SELECT count(*)::int AS count
+    SELECT coalesce(sum(total_tokens), 0)::bigint AS total
     FROM ai_usage_log
     WHERE created_at >= date_trunc('month', now())
       AND created_at < date_trunc('month', now() + interval '1 month')
       AND call_type = 'chat_completion'
       AND status = 'success'
   `)
-  // db.execute returns array-shaped rows under postgres-js.
-  const rows = result as unknown as Array<{ count: number }>
-  return rows[0]?.count ?? 0
+  const rows = result as unknown as Array<{ total: string | number }>
+  // bigint comes back as string from postgres-js
+  return Number(rows[0]?.total ?? 0)
 }

@@ -8,31 +8,37 @@ vi.mock('@/lib/server/db', () => ({
   db: { execute: (...a: unknown[]) => hoisted.mockExecute(...a) },
 }))
 
-import { aiOpsThisMonth } from '../usage-counter'
+import { aiTokensThisMonth } from '../usage-counter'
 
-describe('aiOpsThisMonth', () => {
+describe('aiTokensThisMonth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('returns 0 when no rows', async () => {
     hoisted.mockExecute.mockResolvedValue([])
-    expect(await aiOpsThisMonth()).toBe(0)
+    expect(await aiTokensThisMonth()).toBe(0)
   })
 
-  it('returns the integer count from the first row', async () => {
-    hoisted.mockExecute.mockResolvedValue([{ count: 42 }])
-    expect(await aiOpsThisMonth()).toBe(42)
+  it('returns the numeric sum from the first row', async () => {
+    hoisted.mockExecute.mockResolvedValue([{ total: 12345 }])
+    expect(await aiTokensThisMonth()).toBe(12345)
   })
 
-  it('issues a SQL query that filters chat_completion + success and date_trunc(month)', async () => {
-    hoisted.mockExecute.mockResolvedValue([{ count: 0 }])
-    await aiOpsThisMonth()
+  it('coerces the bigint string return shape from postgres', async () => {
+    // postgres-js serialises BIGINT as a string
+    hoisted.mockExecute.mockResolvedValue([{ total: '987654321' }])
+    expect(await aiTokensThisMonth()).toBe(987654321)
+  })
+
+  it('issues a SUM query filtering chat_completion + success in the current month', async () => {
+    hoisted.mockExecute.mockResolvedValue([{ total: 0 }])
+    await aiTokensThisMonth()
     const sqlArg = hoisted.mockExecute.mock.calls[0]?.[0]
-    // The drizzle SQL fragment contains the relevant tokens.
     const text = JSON.stringify(sqlArg)
     expect(text).toContain('chat_completion')
     expect(text).toContain('success')
     expect(text).toContain('date_trunc')
+    expect(text).toContain('total_tokens')
   })
 })

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { inArray, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards, principal } from '@/lib/server/db'
-import { aiOpsThisMonth } from '@/lib/server/domains/ai/usage-counter'
+import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
 import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
 import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes'
 
@@ -19,8 +19,8 @@ export const Route = createFileRoute('/api/v1/internal/usage')({
         const auth = await authenticateInternal(request, SCOPE_INTERNAL_TIER_LIMITS)
         if (auth instanceof Response) return auth
 
-        const [aiOps, postRow, boardRow, seatRow] = await Promise.all([
-          aiOpsThisMonth(),
+        const [aiTokens, postRow, boardRow, seatRow] = await Promise.all([
+          aiTokensThisMonth(),
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(posts)
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/v1/internal/usage')({
 
         return new Response(
           JSON.stringify({
-            aiOpsThisMonth: aiOps,
+            aiTokensThisMonth: aiTokens,
             postCount: postRow[0]?.count ?? 0,
             boardCount: boardRow[0]?.count ?? 0,
             teamSeatCount: seatRow[0]?.count ?? 0,

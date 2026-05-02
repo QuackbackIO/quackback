@@ -7,7 +7,7 @@ describe('OSS_TIER_LIMITS', () => {
     expect(OSS_TIER_LIMITS.maxBoards).toBeNull()
     expect(OSS_TIER_LIMITS.maxPosts).toBeNull()
     expect(OSS_TIER_LIMITS.maxTeamSeats).toBeNull()
-    expect(OSS_TIER_LIMITS.aiOpsPerMonth).toBeNull()
+    expect(OSS_TIER_LIMITS.aiTokensPerMonth).toBeNull()
     expect(OSS_TIER_LIMITS.apiRequestsPerMonth).toBeNull()
     expect(OSS_TIER_LIMITS.apiRequestsPerMinute).toBeNull()
   })
@@ -17,9 +17,6 @@ describe('OSS_TIER_LIMITS', () => {
     expect(features.customDomain).toBe(true)
     expect(features.customOidcProvider).toBe(true)
     expect(features.ipAllowlist).toBe(true)
-    expect(features.aiSummaries).toBe(true)
-    expect(features.aiMergeSuggestions).toBe(true)
-    expect(features.aiSentiment).toBe(true)
     expect(features.webhooks).toBe(true)
     expect(features.mcpServer).toBe(true)
     expect(features.analyticsExports).toBe(true)
@@ -54,7 +51,7 @@ describe('mergeTierLimits', () => {
     expect(result.features.customDomain).toBe(false)
     expect(result.features.ipAllowlist).toBe(false)
     expect(result.features.customOidcProvider).toBe(true)
-    expect(result.features.aiSummaries).toBe(true)
+    expect(result.features.webhooks).toBe(true)
   })
 
   it('treats explicit null as unlimited (not as missing)', () => {

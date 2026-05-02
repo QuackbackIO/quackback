@@ -1,25 +1,18 @@
 /**
- * Per-workspace tier limits. Written by the cloud control plane;
- * read by every enforcement seam in OSS code via getTierLimits().
+ * Per-workspace tier limits. Read by every enforcement seam in OSS code
+ * via getTierLimits(). Default (no row) is OSS_TIER_LIMITS — unlimited
+ * everything, all features on.
  *
  * Null in any numeric field = unlimited.
  * features.* = true = feature is on.
- *
- * OSS self-hosters keep unlimited behaviour (OSS_TIER_LIMITS).
  */
 
 export type TierLimit<T> = T | null
 
 export interface TierFeatureFlags {
   customDomain: boolean
-
   customOidcProvider: boolean
   ipAllowlist: boolean
-
-  aiSummaries: boolean
-  aiMergeSuggestions: boolean
-  aiSentiment: boolean
-
   webhooks: boolean
   mcpServer: boolean
   analyticsExports: boolean
@@ -30,7 +23,14 @@ export interface TierLimits {
   maxPosts: TierLimit<number>
   maxTeamSeats: TierLimit<number>
 
-  aiOpsPerMonth: TierLimit<number>
+  /**
+   * Monthly LLM token budget (input + output combined). All AI features
+   * (summaries, merge suggestions, sentiment, future ones) draw from
+   * this single budget. 0 blocks AI entirely; null = unlimited.
+   * Embeddings are excluded (they're tracked but not billed).
+   */
+  aiTokensPerMonth: TierLimit<number>
+
   apiRequestsPerMonth: TierLimit<number>
   apiRequestsPerMinute: TierLimit<number>
 
@@ -42,7 +42,8 @@ export const OSS_TIER_LIMITS: TierLimits = {
   maxPosts: null,
   maxTeamSeats: null,
 
-  aiOpsPerMonth: null,
+  aiTokensPerMonth: null,
+
   apiRequestsPerMonth: null,
   apiRequestsPerMinute: null,
 
@@ -50,9 +51,6 @@ export const OSS_TIER_LIMITS: TierLimits = {
     customDomain: true,
     customOidcProvider: true,
     ipAllowlist: true,
-    aiSummaries: true,
-    aiMergeSuggestions: true,
-    aiSentiment: true,
     webhooks: true,
     mcpServer: true,
     analyticsExports: true,
