@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards, principal } from '@/lib/server/db'
 import { aiTokensThisMonth } from '@/lib/server/domains/ai/usage-counter'
 import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
@@ -32,7 +32,9 @@ export const Route = createFileRoute('/api/v1/internal/usage')({
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(principal)
-            .where(inArray(principal.role, ['admin', 'member'])),
+            // Mirror enforceSeatLimit's predicate — humans only,
+            // service principals (API keys / integrations) don't count.
+            .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user'))),
         ])
 
         return new Response(

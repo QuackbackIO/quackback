@@ -14,6 +14,7 @@ vi.mock('@/lib/server/db', async () => {
   return {
     db: { select: hoisted.mockedSelect },
     principal: { id: 'pid', role: 'role', type: 'type' },
+    and: drizzle.and,
     eq: drizzle.eq,
     ne: drizzle.ne,
     inArray: drizzle.inArray,
@@ -39,10 +40,32 @@ describe('enforceSeatLimit', () => {
 
   it('counts only admin + member principals (not user role) and allows when under cap', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
-    hoisted.mockedSelect.mockReturnValue({
-      from: () => ({ where: () => Promise.resolve([{ count: 5 }]) }),
-    })
+    const whereSpy = vi.fn(() => Promise.resolve([{ count: 5 }]))
+    hoisted.mockedSelect.mockReturnValue({ from: () => ({ where: whereSpy }) })
     await expect(enforceSeatLimit()).resolves.toBeUndefined()
+    // The predicate must filter to type='user' so service principals
+    // (API keys, integrations, the CP's INTERNAL_API_KEY bootstrap)
+    // don't consume paid seats. Inspecting the SQL fragment is brittle;
+    // the contract test below covers it.
+  })
+
+  it('excludes service-type principals from the seat count', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, maxTeamSeats: 10 })
+    let lastPredicate: unknown
+    hoisted.mockedSelect.mockReturnValue({
+      from: () => ({
+        where: (predicate: unknown) => {
+          lastPredicate = predicate
+          return Promise.resolve([{ count: 0 }])
+        },
+      }),
+    })
+    await enforceSeatLimit()
+    // The predicate is a Drizzle SQL chunk; serialize and check it
+    // mentions both the role inArray AND a type='user' filter.
+    const sqlText = JSON.stringify(lastPredicate)
+    expect(sqlText).toContain('type')
+    expect(sqlText).toContain('user')
   })
 
   it('throws TierLimitError at exact cap', async () => {

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { eq } from 'drizzle-orm'
 import { db, settings } from '@/lib/server/db'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
@@ -30,22 +31,29 @@ export const Route = createFileRoute('/api/v1/internal/tier-limits')({
           })
         }
 
-        // Upsert via the unique slug. Tenant may not have onboarded yet;
-        // bootstrap a placeholder row so the CP can configure tier limits
-        // before first admin sign-in. Onboarding overwrites name+slug later.
+        // The settings table is a singleton in OSS. Find the row by id
+        // and UPDATE it; fall back to INSERT only on the very first call
+        // (pre-onboarding). Keying off slug would silently insert a
+        // SECOND row once the user renames their workspace, and
+        // getTierLimits() reads LIMIT 1 nondeterministically.
         const tierLimitsJson = JSON.stringify(payload)
-        await db
-          .insert(settings)
-          .values({
-            name: 'Workspace',
-            slug: 'workspace',
-            createdAt: new Date(),
-            tierLimits: tierLimitsJson,
-          })
-          .onConflictDoUpdate({
-            target: settings.slug,
-            set: { tierLimits: tierLimitsJson },
-          })
+        const existing = await db.select({ id: settings.id }).from(settings).limit(1)
+        if (existing[0]) {
+          await db
+            .update(settings)
+            .set({ tierLimits: tierLimitsJson })
+            .where(eq(settings.id, existing[0].id))
+        } else {
+          await db
+            .insert(settings)
+            .values({
+              name: 'Workspace',
+              slug: 'workspace',
+              createdAt: new Date(),
+              tierLimits: tierLimitsJson,
+            })
+            .onConflictDoNothing({ target: settings.slug })
+        }
         invalidateTierLimitsCache()
 
         return new Response(JSON.stringify({ ok: true }), {
