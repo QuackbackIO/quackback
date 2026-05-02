@@ -172,7 +172,19 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
  * Handle domain errors and convert to appropriate API responses
  */
 export function handleDomainError(error: unknown): Response {
-  // RateLimitError first — retryAfter isn't accessible through the generic code-string path
+  // TierLimitError: 402 Payment Required with structured upgrade payload.
+  // Identified by name (avoids importing the class to keep this module deps-free).
+  if (
+    error &&
+    typeof error === 'object' &&
+    (error as { name?: string }).name === 'TierLimitError' &&
+    typeof (error as { toResponseBody?: unknown }).toResponseBody === 'function'
+  ) {
+    const body = (error as { toResponseBody: () => Record<string, unknown> }).toResponseBody()
+    return jsonResponse(body, { status: 402 })
+  }
+
+  // RateLimitError next — retryAfter isn't accessible through the generic code-string path
   if (error && typeof error === 'object' && 'retryAfter' in error) {
     return rateLimitedResponse((error as { retryAfter: number }).retryAfter)
   }
