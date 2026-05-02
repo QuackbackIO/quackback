@@ -3,6 +3,7 @@ import { db, settings } from '@/lib/server/db'
 import { IS_CLOUD } from '@/lib/server/edition'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { verifyApiKeyWithScope } from '@/lib/server/domains/api-keys/api-key.service'
+import { eq } from 'drizzle-orm'
 
 const SCOPE = 'internal:tier-limits'
 
@@ -51,7 +52,25 @@ export const Route = createFileRoute('/api/v1/internal/tier-limits')({
           })
         }
 
-        await db.update(settings).set({ tierLimits: JSON.stringify(payload) })
+        // Upsert: tenant may not have onboarded yet (no settings row), so
+        // bootstrap one with placeholder name+slug if missing. The CP needs to
+        // be able to set tier limits on a fresh tenant before its admin first
+        // signs in. Onboarding overwrites name/slug on first admin sign-in.
+        const tierLimitsJson = JSON.stringify(payload)
+        const existing = await db.select({ id: settings.id }).from(settings).limit(1)
+        if (existing[0]) {
+          await db
+            .update(settings)
+            .set({ tierLimits: tierLimitsJson })
+            .where(eq(settings.id, existing[0].id))
+        } else {
+          await db.insert(settings).values({
+            name: 'Workspace',
+            slug: 'workspace',
+            createdAt: new Date(),
+            tierLimits: tierLimitsJson,
+          })
+        }
         invalidateTierLimitsCache()
 
         return new Response(JSON.stringify({ ok: true }), {
