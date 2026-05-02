@@ -52,13 +52,41 @@ describe('verifyApiKeyWithScope', () => {
   })
 })
 
-describe('hasScope (helper)', () => {
-  it('checks scope membership in a JSON-encoded array', async () => {
-    const { hasScope } = await import('../api-key.service')
-    expect(hasScope(JSON.stringify(['internal:tier-limits']), 'internal:tier-limits')).toBe(true)
-    expect(hasScope(JSON.stringify(['other:scope']), 'internal:tier-limits')).toBe(false)
-    expect(hasScope(null, 'internal:tier-limits')).toBe(false)
-    expect(hasScope('not-json', 'internal:tier-limits')).toBe(false)
-    expect(hasScope(JSON.stringify([]), 'internal:tier-limits')).toBe(false)
+describe('verifyApiKeyWithScope — scope parsing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('rejects when scopes is null', async () => {
+    hoisted.mockedFindFirst.mockResolvedValue({
+      id: 'k',
+      keyHash: '0'.repeat(64),
+      scopes: null,
+      revokedAt: null,
+      expiresAt: null,
+    })
+    expect(await verifyApiKeyWithScope('qb_aaaaaaaaaaaaaaaaaa', 'internal:tier-limits')).toBeNull()
+  })
+
+  it('rejects when scopes JSON is malformed', async () => {
+    hoisted.mockedFindFirst.mockResolvedValue({
+      id: 'k',
+      keyHash: '0'.repeat(64),
+      scopes: 'not-json',
+      revokedAt: null,
+      expiresAt: null,
+    })
+    expect(await verifyApiKeyWithScope('qb_aaaaaaaaaaaaaaaaaa', 'internal:tier-limits')).toBeNull()
+  })
+
+  it('rejects when scope not present in array', async () => {
+    hoisted.mockedFindFirst.mockResolvedValue({
+      id: 'k',
+      keyHash: '0'.repeat(64),
+      scopes: JSON.stringify(['other:scope']),
+      revokedAt: null,
+      expiresAt: null,
+    })
+    expect(await verifyApiKeyWithScope('qb_aaaaaaaaaaaaaaaaaa', 'internal:tier-limits')).toBeNull()
   })
 })

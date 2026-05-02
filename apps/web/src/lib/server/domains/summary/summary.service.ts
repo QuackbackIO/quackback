@@ -8,6 +8,7 @@
 import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { enforceAiOp } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 
 const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
@@ -53,19 +54,7 @@ interface PostSummaryJson {
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
-  // Tier gate: skip the LLM call entirely when the feature is off or the
-  // monthly AI-ops quota is exceeded. No-op in OSS.
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { enforceFeatureGate, enforceAiQuota } =
-    await import('@/lib/server/domains/settings/tier-enforce')
-  const { aiOpsThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
-  const limits = await getTierLimits()
-  enforceFeatureGate({
-    enabled: limits.features.aiSummaries,
-    feature: 'aiSummaries',
-    friendly: 'AI post summaries',
-  })
-  await enforceAiQuota({ limit: limits.aiOpsPerMonth, currentCount: aiOpsThisMonth })
+  await enforceAiOp('aiSummaries', 'AI post summaries')
 
   const openai = getOpenAI()
   if (!openai) return

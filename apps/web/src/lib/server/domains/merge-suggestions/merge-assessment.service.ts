@@ -6,6 +6,7 @@
 
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { enforceAiOp } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
@@ -55,18 +56,7 @@ export async function assessMergeCandidates(
   sourcePost: PostInfo,
   candidates: MergeCandidate[]
 ): Promise<MergeAssessment[]> {
-  // Tier gate: skip when aiMergeSuggestions is off or the monthly quota is exceeded.
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { enforceFeatureGate, enforceAiQuota } =
-    await import('@/lib/server/domains/settings/tier-enforce')
-  const { aiOpsThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
-  const limits = await getTierLimits()
-  enforceFeatureGate({
-    enabled: limits.features.aiMergeSuggestions,
-    feature: 'aiMergeSuggestions',
-    friendly: 'AI merge suggestions',
-  })
-  await enforceAiQuota({ limit: limits.aiOpsPerMonth, currentCount: aiOpsThisMonth })
+  await enforceAiOp('aiMergeSuggestions', 'AI merge suggestions')
 
   const openai = getOpenAI()
   if (!openai || candidates.length === 0) return []

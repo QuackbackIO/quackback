@@ -70,35 +70,6 @@ describe('enforceCountLimit', () => {
   })
 })
 
-describe('enforceAiQuota', () => {
-  it('does nothing when limit is null', async () => {
-    const { enforceAiQuota } = await import('../tier-enforce')
-    await expect(
-      enforceAiQuota({ limit: null, currentCount: async () => 9999 })
-    ).resolves.toBeUndefined()
-  })
-
-  it('throws TierLimitError when current >= limit', async () => {
-    const { enforceAiQuota } = await import('../tier-enforce')
-    await expect(enforceAiQuota({ limit: 100, currentCount: async () => 100 })).rejects.toThrow(
-      TierLimitError
-    )
-  })
-
-  it('error names the limit as aiOpsPerMonth', async () => {
-    const { enforceAiQuota } = await import('../tier-enforce')
-    let caught: TierLimitError | null = null
-    try {
-      await enforceAiQuota({ limit: 100, currentCount: async () => 100 })
-    } catch (err) {
-      caught = err as TierLimitError
-    }
-    expect(caught!.limit).toBe('aiOpsPerMonth')
-    expect(caught!.current).toBe(100)
-    expect(caught!.max).toBe(100)
-  })
-})
-
 describe('enforceFeatureGate', () => {
   it('does nothing when enabled', () => {
     expect(() =>

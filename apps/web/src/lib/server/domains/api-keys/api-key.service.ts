@@ -121,51 +121,17 @@ export async function createApiKey(
 }
 
 /**
- * Verify an API key and return the key record if valid
+ * Verify an API key and return the key record if valid.
  *
  * Uses prefix-based DB lookup + timing-safe hash comparison to prevent
  * timing oracle attacks. Returns null if the key is invalid, expired, or revoked.
- */
-/**
- * Pure helper: parse the JSON-encoded scopes column and check membership.
- * Exported for unit testing; consumers should prefer verifyApiKeyWithScope.
- */
-export function hasScope(scopesRaw: string | null, scope: string): boolean {
-  if (!scopesRaw) return false
-  try {
-    const parsed = JSON.parse(scopesRaw)
-    return Array.isArray(parsed) && parsed.includes(scope)
-  } catch {
-    return false
-  }
-}
-
-/**
- * Verify an API key AND assert it carries a specific capability scope.
- * Returns the api key record on success, null on any failure (invalid
- * format, hash mismatch, expired, revoked, missing scope).
  *
- * Used by /api/v1/internal/* endpoints to gate access by the
- * `internal:tier-limits` scope. The control plane mints these keys
- * via the tenant-bootstrap Job and stashes the plaintext in OpenBao.
+ * If `scope` is provided, the key must carry that capability scope or the
+ * call returns null. Used by /api/v1/internal/* endpoints which require
+ * the `internal:tier-limits` scope.
  */
-export async function verifyApiKeyWithScope(key: string, scope: string): Promise<ApiKey | null> {
-  const apiKey = await verifyApiKey(key)
-  if (!apiKey) return null
-
-  // Re-fetch to read scopes (verifyApiKey strips them via toApiKey).
-  const row = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.id, apiKey.id),
-  })
-  if (!hasScope(row?.scopes ?? null, scope)) return null
-  return apiKey
-}
-
-export async function verifyApiKey(key: string): Promise<ApiKey | null> {
-  // Basic format validation
-  if (!key || !key.startsWith(API_KEY_PREFIX)) {
-    return null
-  }
+export async function verifyApiKey(key: string, scope?: string): Promise<ApiKey | null> {
+  if (!key || !key.startsWith(API_KEY_PREFIX)) return null
 
   const keyPrefix = getKeyPrefix(key)
   const keyHash = hashApiKey(key)
@@ -179,14 +145,10 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
   const storedHash = apiKey?.keyHash ?? '0'.repeat(64)
   const hashesMatch = timingSafeEqual(Buffer.from(keyHash, 'hex'), Buffer.from(storedHash, 'hex'))
 
-  if (!apiKey || !hashesMatch) {
-    return null
-  }
+  if (!apiKey || !hashesMatch) return null
+  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return null
 
-  // Check expiration
-  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-    return null
-  }
+  if (scope && !hasScope(apiKey.scopes, scope)) return null
 
   // Update last used timestamp (fire and forget)
   db.update(apiKeys)
@@ -198,6 +160,24 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
     })
 
   return toApiKey(apiKey)
+}
+
+/**
+ * Convenience alias for callers that always pass a scope. Equivalent to
+ * `verifyApiKey(key, scope)` but the name documents intent at the call site.
+ */
+export async function verifyApiKeyWithScope(key: string, scope: string): Promise<ApiKey | null> {
+  return verifyApiKey(key, scope)
+}
+
+function hasScope(scopesRaw: string | null, scope: string): boolean {
+  if (!scopesRaw) return false
+  try {
+    const parsed = JSON.parse(scopesRaw)
+    return Array.isArray(parsed) && parsed.includes(scope)
+  } catch {
+    return false
+  }
 }
 
 /**

@@ -1,10 +1,12 @@
 import { TierLimitError } from '../../errors/tier-limit-error'
+import { aiOpsThisMonth } from '../ai/usage-counter'
+import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
 
 interface EnforceCountLimitArgs {
-  /** Null = unlimited (OSS default). */
+  /** Null = unlimited. */
   limit: number | null
-  /** Lazy — only called when limit is set, so OSS pays nothing. */
+  /** Lazy — only called when limit is set, so unlimited tenants pay nothing. */
   currentCount: () => Promise<number>
   /** Matches the TierLimits key (e.g. 'maxBoards'). */
   name: string
@@ -31,29 +33,32 @@ interface EnforceFeatureGateArgs {
   friendly: string
 }
 
-interface EnforceAiQuotaArgs {
-  /** Null = unlimited (OSS default). 0 = feature blocked entirely. */
-  limit: number | null
-  currentCount: () => Promise<number>
-}
-
-export async function enforceAiQuota(args: EnforceAiQuotaArgs): Promise<void> {
-  if (args.limit === null) return
-  const current = await args.currentCount()
-  if (current < args.limit) return
-
-  throw new TierLimitError({
-    limit: 'aiOpsPerMonth',
-    current,
-    max: args.limit,
-    message: `You've reached your plan's AI operation quota for this month (${args.limit}). Upgrade to increase it.`,
-  })
-}
-
 export function enforceFeatureGate(args: EnforceFeatureGateArgs): void {
   if (args.enabled) return
   throw new TierLimitError({
     limit: `features.${args.feature}`,
     message: `${args.friendly} is not available on your plan. Upgrade to enable it.`,
+  })
+}
+
+/**
+ * Combined gate for AI services: refuses if the feature flag is off OR the
+ * monthly aiOpsPerMonth quota has been reached. Each AI service caller becomes
+ * a one-liner instead of repeating the same 5-line preamble.
+ */
+export async function enforceAiOp(
+  feature: keyof TierFeatureFlags,
+  friendly: string
+): Promise<void> {
+  const limits = await getTierLimits()
+  enforceFeatureGate({ enabled: limits.features[feature], feature, friendly })
+  if (limits.aiOpsPerMonth === null) return
+  const current = await aiOpsThisMonth()
+  if (current < limits.aiOpsPerMonth) return
+  throw new TierLimitError({
+    limit: 'aiOpsPerMonth',
+    current,
+    max: limits.aiOpsPerMonth,
+    message: `You've reached your plan's AI operation quota for this month (${limits.aiOpsPerMonth}). Upgrade to increase it.`,
   })
 }

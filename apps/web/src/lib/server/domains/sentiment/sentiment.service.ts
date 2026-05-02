@@ -10,6 +10,7 @@ import { createId, type PostId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { enforceAiOp } from '@/lib/server/domains/settings/tier-enforce'
 
 const SENTIMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
@@ -65,18 +66,7 @@ export async function analyzeSentiment(
   content: string,
   postId?: string
 ): Promise<SentimentResult | null> {
-  // Tier gate: skip when aiSentiment is off or the monthly quota is exceeded.
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { enforceFeatureGate, enforceAiQuota } =
-    await import('@/lib/server/domains/settings/tier-enforce')
-  const { aiOpsThisMonth } = await import('@/lib/server/domains/ai/usage-counter')
-  const limits = await getTierLimits()
-  enforceFeatureGate({
-    enabled: limits.features.aiSentiment,
-    feature: 'aiSentiment',
-    friendly: 'AI sentiment analysis',
-  })
-  await enforceAiQuota({ limit: limits.aiOpsPerMonth, currentCount: aiOpsThisMonth })
+  await enforceAiOp('aiSentiment', 'AI sentiment analysis')
 
   const openai = getOpenAI()
   if (!openai) return null

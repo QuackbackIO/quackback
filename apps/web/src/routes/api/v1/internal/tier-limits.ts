@@ -1,9 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { db, settings } from '@/lib/server/db'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
-import { verifyApiKeyWithScope } from '@/lib/server/domains/api-keys/api-key.service'
-
-const SCOPE = 'internal:tier-limits'
+import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
+import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes'
 
 /**
  * POST /api/v1/internal/tier-limits
@@ -11,32 +10,15 @@ const SCOPE = 'internal:tier-limits'
  * Trusted endpoint used by the cloud control plane (~/quackback-cp) to
  * write per-tenant tier limits. Body is the JSON-encoded TierLimits
  * shape (see apps/web/src/lib/server/domains/settings/tier-limits.types.ts).
- * No deep validation — the CP is the trusted writer.
- *
- * Self-hosters who want to impose their own limits can mint an api_keys
- * row with the `internal:tier-limits` scope and call this endpoint
- * themselves. The endpoint behaves identically regardless of who calls it.
+ * No deep validation — the caller carries the internal:tier-limits scope
+ * and is the trusted writer.
  */
 export const Route = createFileRoute('/api/v1/internal/tier-limits')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = request.headers.get('authorization')
-        const bearer = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null
-        if (!bearer) {
-          return new Response(JSON.stringify({ error: 'unauthenticated' }), {
-            status: 401,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
-
-        const key = await verifyApiKeyWithScope(bearer, SCOPE)
-        if (!key) {
-          return new Response(JSON.stringify({ error: 'forbidden' }), {
-            status: 403,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
+        const auth = await authenticateInternal(request, SCOPE_INTERNAL_TIER_LIMITS)
+        if (auth instanceof Response) return auth
 
         let payload: unknown
         try {
@@ -48,11 +30,9 @@ export const Route = createFileRoute('/api/v1/internal/tier-limits')({
           })
         }
 
-        // Upsert. Tenant may not have onboarded yet (no settings row), so
-        // bootstrap one with placeholder name+slug if missing — onboarding
-        // overwrites them on first admin sign-in. The settings.slug unique
-        // constraint guards against the SELECT-then-INSERT race when two
-        // CPs (or one CP retrying) call concurrently.
+        // Upsert via the unique slug. Tenant may not have onboarded yet;
+        // bootstrap a placeholder row so the CP can configure tier limits
+        // before first admin sign-in. Onboarding overwrites name+slug later.
         const tierLimitsJson = JSON.stringify(payload)
         await db
           .insert(settings)

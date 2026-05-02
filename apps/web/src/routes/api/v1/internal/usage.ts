@@ -2,9 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { inArray, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards, principal } from '@/lib/server/db'
 import { aiOpsThisMonth } from '@/lib/server/domains/ai/usage-counter'
-import { verifyApiKeyWithScope } from '@/lib/server/domains/api-keys/api-key.service'
-
-const SCOPE = 'internal:tier-limits'
+import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
+import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes'
 
 /**
  * GET /api/v1/internal/usage
@@ -17,22 +16,8 @@ export const Route = createFileRoute('/api/v1/internal/usage')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const auth = request.headers.get('authorization')
-        const bearer = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null
-        if (!bearer) {
-          return new Response(JSON.stringify({ error: 'unauthenticated' }), {
-            status: 401,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
-
-        const key = await verifyApiKeyWithScope(bearer, SCOPE)
-        if (!key) {
-          return new Response(JSON.stringify({ error: 'forbidden' }), {
-            status: 403,
-            headers: { 'content-type': 'application/json' },
-          })
-        }
+        const auth = await authenticateInternal(request, SCOPE_INTERNAL_TIER_LIMITS)
+        if (auth instanceof Response) return auth
 
         const [aiOps, postRow, boardRow, seatRow] = await Promise.all([
           aiOpsThisMonth(),
