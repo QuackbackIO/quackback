@@ -4,6 +4,7 @@
  * Provides consistent response formatting for the public REST API.
  * All responses include security headers (X-Content-Type-Options, Cache-Control).
  */
+import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
 /** Security headers applied to all API responses. */
 const SECURITY_HEADERS: Record<string, string> = {
@@ -172,16 +173,9 @@ const NOT_FOUND_RESOURCES: Record<string, string> = {
  * Handle domain errors and convert to appropriate API responses
  */
 export function handleDomainError(error: unknown): Response {
-  // TierLimitError: 402 Payment Required with structured upgrade payload.
-  // Identified by name (avoids importing the class to keep this module deps-free).
-  if (
-    error &&
-    typeof error === 'object' &&
-    (error as { name?: string }).name === 'TierLimitError' &&
-    typeof (error as { toResponseBody?: unknown }).toResponseBody === 'function'
-  ) {
-    const body = (error as { toResponseBody: () => Record<string, unknown> }).toResponseBody()
-    return jsonResponse(body, { status: 402 })
+  // TierLimitError carries an upgrade-modal payload; route via toResponseBody().
+  if (error instanceof TierLimitError) {
+    return jsonResponse(error.toResponseBody(), { status: error.statusCode })
   }
 
   // RateLimitError next — retryAfter isn't accessible through the generic code-string path

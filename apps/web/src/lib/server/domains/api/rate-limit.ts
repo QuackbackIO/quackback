@@ -19,6 +19,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>()
 // Configuration
 const WINDOW_MS = 60_000 // 1 minute
 const MAX_REQUESTS = 100 // 100 requests per minute per IP — used when tier limit is null (OSS)
+const IMPORT_MIN = 2000 // Floor for import-mode caps so a tight per-minute tier doesn't choke bulk imports
 const MAX_STORE_SIZE = 50_000 // Cap store size to prevent memory exhaustion
 const CLEANUP_INTERVAL_MS = 60_000 // Cleanup every minute
 
@@ -66,7 +67,7 @@ export async function checkRateLimit(
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const limits = await getTierLimits()
   const baseLimit = limits.apiRequestsPerMinute ?? MAX_REQUESTS
-  const maxRequests = importMode ? baseLimit * 20 : baseLimit
+  const maxRequests = importMode ? Math.max(baseLimit * 20, IMPORT_MIN) : baseLimit
   const entry = rateLimitStore.get(ip)
 
   // New IP or window expired - reset

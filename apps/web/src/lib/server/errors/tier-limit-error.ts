@@ -1,3 +1,5 @@
+import { DomainException } from '@/lib/shared/errors'
+
 export interface TierLimitErrorPayload {
   limit: string
   message: string
@@ -13,15 +15,14 @@ export interface TierLimitErrorPayload {
  * Never reached when no tier limits are set (the OSS default) because
  * the enforce* helpers short-circuit on null limits / true feature flags.
  */
-export class TierLimitError extends Error {
+export class TierLimitError extends DomainException {
   readonly statusCode = 402
   readonly limit: string
   readonly current?: number
   readonly max?: number
 
   constructor(payload: TierLimitErrorPayload) {
-    super(payload.message)
-    this.name = 'TierLimitError'
+    super('TIER_LIMIT_EXCEEDED', payload.message)
     this.limit = payload.limit
     this.current = payload.current
     this.max = payload.max

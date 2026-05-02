@@ -33,6 +33,18 @@ import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
  * Create a new board
  */
 export async function createBoard(input: CreateBoardInput): Promise<Board> {
+  // Validate input before the tier gate — invalid input doesn't deserve a
+  // count(*) query.
+  if (!input.name?.trim()) {
+    throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
+  }
+  if (input.name.length > 100) {
+    throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
+  }
+  if (input.description && input.description.length > 500) {
+    throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
+  }
+
   // Tier-limit gate (no-op in OSS).
   const limits = await getTierLimits()
   await enforceCountLimit({
@@ -47,17 +59,6 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
       return row?.count ?? 0
     },
   })
-
-  // Validate input
-  if (!input.name?.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
-  }
-  if (input.name.length > 100) {
-    throw new ValidationError('VALIDATION_ERROR', 'Board name must be 100 characters or less')
-  }
-  if (input.description && input.description.length > 500) {
-    throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
-  }
 
   // Generate or validate slug
   const baseSlug = input.slug ? slugify(input.slug) : slugify(input.name)

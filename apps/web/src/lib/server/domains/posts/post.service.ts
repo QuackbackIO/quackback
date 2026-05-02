@@ -70,6 +70,21 @@ export async function createPost(
 ): Promise<CreatePostResult> {
   console.log(`[domain:posts] createPost: boardId=${input.boardId}`)
 
+  // Validate input before the tier gate — invalid input doesn't deserve a
+  // count(*) query.
+  const title = input.title?.trim()
+  const content = input.content?.trim() ?? ''
+
+  if (!title) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
+  }
+  if (title.length > 200) {
+    throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
+  }
+  if (content.length > 10000) {
+    throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
+  }
+
   // Tier-limit gate (no-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS
   // which has maxPosts: null, so enforceCountLimit returns immediately).
   const limits = await getTierLimits()
@@ -85,20 +100,6 @@ export async function createPost(
       return row?.count ?? 0
     },
   })
-
-  // Basic validation (also done at action layer, but enforced here for direct service calls)
-  const title = input.title?.trim()
-  const content = input.content?.trim() ?? ''
-
-  if (!title) {
-    throw new ValidationError('VALIDATION_ERROR', 'Title is required')
-  }
-  if (title.length > 200) {
-    throw new ValidationError('VALIDATION_ERROR', 'Title must not exceed 200 characters')
-  }
-  if (content.length > 10000) {
-    throw new ValidationError('VALIDATION_ERROR', 'Content must not exceed 10,000 characters')
-  }
 
   // Validate board exists and get status in parallel
   const needsDefaultStatus = !input.statusId
