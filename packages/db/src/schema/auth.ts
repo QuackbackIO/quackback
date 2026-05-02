@@ -208,10 +208,10 @@ export const settings = pgTable('settings', {
    */
   helpCenterConfig: text('help_center_config'),
   /**
-   * Tier limits — written by the cloud control plane.
-   * Null/absent means OSS defaults (everything unlimited, all features on).
-   * Read in OSS code via getTierLimits() (apps/web/src/lib/server/domains/settings/tier-limits.service.ts)
-   * which short-circuits to OSS_TIER_LIMITS when EDITION!=cloud.
+   * Optional per-workspace tier limits (JSON-encoded TierLimits).
+   * Written by the cloud control plane via /api/v1/internal/tier-limits,
+   * or by self-hosters who want to impose their own caps. Null/absent
+   * means OSS defaults (everything unlimited, all features on).
    */
   tierLimits: text('tier_limits'),
 })

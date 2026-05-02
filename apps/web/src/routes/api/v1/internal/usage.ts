@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { inArray, isNull, sql } from 'drizzle-orm'
 import { db, posts, boards, principal } from '@/lib/server/db'
-import { IS_CLOUD } from '@/lib/server/edition'
 import { aiOpsThisMonth } from '@/lib/server/domains/ai/usage-counter'
 import { verifyApiKeyWithScope } from '@/lib/server/domains/api-keys/api-key.service'
 
@@ -10,19 +9,14 @@ const SCOPE = 'internal:tier-limits'
 /**
  * GET /api/v1/internal/usage
  *
- * Reports current usage counters for the control plane to display in
- * its admin UI and to drive Stripe metered billing if/when we add it.
- *
- * Returns 404 when EDITION != cloud.
+ * Reports current usage counters. Used by the cloud control plane
+ * admin UI and Stripe metered billing. Self-hosters can also call
+ * this with a scoped api key for monitoring.
  */
 export const Route = createFileRoute('/api/v1/internal/usage')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!IS_CLOUD) {
-          return new Response('Not Found', { status: 404 })
-        }
-
         const auth = request.headers.get('authorization')
         const bearer = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null
         if (!bearer) {

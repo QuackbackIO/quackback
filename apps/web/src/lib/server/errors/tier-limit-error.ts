@@ -10,10 +10,8 @@ export interface TierLimitErrorPayload {
  * Payment Required. The structured payload (toResponseBody) is what
  * the upgrade-modal UX renders.
  *
- * Construction is cheap and pure — only thrown by enforcement seams,
- * never reached when EDITION!=cloud (because OSS_TIER_LIMITS leaves
- * every numeric limit null and every feature flag true, so the helpers
- * short-circuit before throwing).
+ * Never reached when no tier limits are set (the OSS default) because
+ * the enforce* helpers short-circuit on null limits / true feature flags.
  */
 export class TierLimitError extends Error {
   readonly statusCode = 402

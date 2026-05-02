@@ -59,10 +59,35 @@ vi.mock('@/lib/server/db', () => ({
     status: 'status',
     deletedAt: 'deletedAt',
   },
+  settings: { tierLimits: 'tier_limits' },
   eq: vi.fn(),
   and: vi.fn(),
   isNull: vi.fn(),
   sql: vi.fn(),
+}))
+
+// Stub the tier-limits resolver so it doesn't trigger db.select inside getTierLimits
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: vi.fn(async () => ({
+    maxBoards: null,
+    maxPosts: null,
+    maxTeamSeats: null,
+    aiOpsPerMonth: null,
+    apiRequestsPerMonth: null,
+    apiRequestsPerMinute: null,
+    features: {
+      customDomain: true,
+      customOidcProvider: true,
+      ipAllowlist: true,
+      aiSummaries: true,
+      aiMergeSuggestions: true,
+      aiSentiment: true,
+      webhooks: true,
+      mcpServer: true,
+      analyticsExports: true,
+    },
+  })),
+  invalidateTierLimitsCache: vi.fn(),
 }))
 
 vi.mock('../encryption', () => ({

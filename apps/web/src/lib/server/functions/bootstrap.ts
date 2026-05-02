@@ -3,7 +3,6 @@ import { getThemeCookie, type Theme } from '@/lib/shared/theme'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
-import { IS_CLOUD } from '@/lib/server/edition'
 
 export interface BootstrapData {
   baseUrl: string
@@ -11,11 +10,6 @@ export interface BootstrapData {
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
   themeCookie: Theme
-  /**
-   * True when EDITION=cloud. UI shells use this to gate upgrade chrome,
-   * tier-related settings UI, and 402 modals. Self-hosted defaults to false.
-   */
-  isCloud: boolean
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -133,7 +127,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
 
-  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie, isCloud: IS_CLOUD }
+  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
 })
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(

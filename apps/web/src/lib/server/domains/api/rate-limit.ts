@@ -48,13 +48,11 @@ startCleanup()
  * @param importMode - Whether the request is in import mode (higher limit)
  * @returns Object with allowed flag and remaining requests
  *
- * Tier-aware: when EDITION=cloud and the tenant has a non-null
- * apiRequestsPerMinute, that value overrides the default cap. Import
- * mode multiplies the per-minute cap by 20 (matching the historical
- * 100 -> 2000 ratio).
+ * Tier-aware: when settings.tier_limits has a non-null apiRequestsPerMinute,
+ * that value overrides the default cap. Import mode multiplies the per-minute
+ * cap by 20 (matching the historical 100 -> 2000 ratio).
  *
- * In OSS the resolver short-circuits to OSS_TIER_LIMITS (apiRequestsPerMinute=null)
- * so we keep the existing constants — no behavior change for self-hosters.
+ * Self-hosters with no tier_limits row get null and fall back to MAX_REQUESTS.
  */
 export async function checkRateLimit(
   ip: string,
