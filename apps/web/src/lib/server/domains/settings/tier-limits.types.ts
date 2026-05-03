@@ -1,7 +1,9 @@
 /**
- * Per-workspace tier limits. Read by every enforcement seam in OSS code
- * via getTierLimits(). Default (no row) is OSS_TIER_LIMITS — unlimited
- * everything, all features on.
+ * Per-workspace tier limits. Read by every enforcement seam via
+ * getTierLimits(). Default (no row) is OSS_TIER_LIMITS — unlimited
+ * everything, all features on. Operators can write a tighter row to
+ * cap a workspace; the trusted internal endpoint at
+ * /api/v1/internal/tier-limits is the canonical writer.
  *
  * Null in any numeric field = unlimited.
  * features.* = true = feature is on.
@@ -16,6 +18,8 @@ export interface TierFeatureFlags {
   webhooks: boolean
   mcpServer: boolean
   analyticsExports: boolean
+  customColors: boolean
+  customCss: boolean
 }
 
 export interface TierLimits {
@@ -54,5 +58,7 @@ export const OSS_TIER_LIMITS: TierLimits = {
     webhooks: true,
     mcpServer: true,
     analyticsExports: true,
+    customColors: true,
+    customCss: true,
   },
 }

@@ -8,11 +8,14 @@ import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes
 /**
  * POST /api/v1/internal/tier-limits
  *
- * Trusted endpoint used by the cloud control plane (~/quackback-cp) to
- * write per-tenant tier limits. Body is the JSON-encoded TierLimits
- * shape (see apps/web/src/lib/server/domains/settings/tier-limits.types.ts).
- * No deep validation — the caller carries the internal:tier-limits scope
- * and is the trusted writer.
+ * Trusted endpoint for writing this workspace's tier limits. Used by an
+ * external orchestrator or operator script to cap features and counts on
+ * a per-workspace basis. Body is the JSON-encoded TierLimits shape (see
+ * apps/web/src/lib/server/domains/settings/tier-limits.types.ts). No deep
+ * validation — the caller carries the internal:tier-limits scope and is
+ * the trusted writer.
+ *
+ * Self-hosters can ignore this endpoint; the default (no row) is unlimited.
  */
 export const Route = createFileRoute('/api/v1/internal/tier-limits')({
   server: {

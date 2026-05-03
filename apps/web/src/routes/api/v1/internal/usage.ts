@@ -8,9 +8,9 @@ import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes
 /**
  * GET /api/v1/internal/usage
  *
- * Reports current usage counters. Used by the cloud control plane
- * admin UI and Stripe metered billing. Self-hosters can also call
- * this with a scoped api key for monitoring.
+ * Reports current usage counters (AI tokens, posts, boards, team seats).
+ * Trusted endpoint authenticated with a scoped API key — useful for
+ * monitoring dashboards or any external tool tracking workspace activity.
  */
 export const Route = createFileRoute('/api/v1/internal/usage')({
   server: {
