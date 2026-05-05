@@ -25,9 +25,10 @@ A rota:
 1. recebe o JWT;
 2. valida assinatura, `issuer`, `audience`, `exp` e payload mínimo;
 3. cria o usuário no Quackback se ele ainda não existir;
-4. autentica o usuário via Better Auth;
-5. redireciona para `redirectTo` ou `/`;
-6. preserva os fluxos atuais de login, magic link, OAuth, OTP e anonymous auth.
+4. grava o vínculo Taglyze em `user.metadata`;
+5. autentica o usuário via Better Auth;
+6. redireciona para `redirectTo` ou `/`;
+7. preserva os fluxos atuais de login, magic link, OAuth, OTP e anonymous auth.
 
 ## Variáveis de ambiente no Quackback
 
@@ -123,9 +124,10 @@ O Quackback faz o seguinte:
 
 1. normaliza o e-mail;
 2. procura usuário existente pelo e-mail;
-3. se existir, autentica esse usuário;
+3. se existir, atualiza o vínculo em `user.metadata`;
 4. se não existir, cria uma conta automaticamente;
-5. autentica a conta criada usando Better Auth.
+5. grava o vínculo em `user.metadata`;
+6. autentica a conta usando Better Auth.
 
 A senha técnica de provisionamento é derivada de forma determinística usando:
 
@@ -134,6 +136,24 @@ TAGLYZE_JWT_SECRET + taglyze_user_id + email
 ```
 
 Essa senha não precisa ser exibida nem conhecida pelo usuário.
+
+## Vínculo Taglyze salvo no usuário
+
+O schema atual do Quackback possui `user.metadata`, portanto esta implementação salva o vínculo externo sem migration nova.
+
+Formato salvo em `user.metadata`:
+
+```json
+{
+  "taglyze": {
+    "userId": "taglyze_user_123",
+    "workspaceId": "workspace_123",
+    "lastSsoAt": "2026-05-05T19:00:00.000Z"
+  }
+}
+```
+
+Se já existir metadata, ela é preservada e apenas a chave `taglyze` é atualizada.
 
 ## Segurança
 
@@ -147,16 +167,16 @@ Essa senha não precisa ser exibida nem conhecida pelo usuário.
 
 ## Limitação atual
 
-Esta versão faz o auto-provisioning pelo e-mail.
+Esta versão usa o e-mail como chave primária de auto-provisioning e grava `JWT.sub` dentro de `user.metadata.taglyze.userId`.
 
-O vínculo persistente por `sub` da Taglyze deve ser adicionado em uma etapa seguinte usando a tabela existente `externalUserMappings`, após confirmação da estrutura exata dos campos dessa tabela.
+Isso resolve:
 
-Até lá:
+- criação automática do usuário;
+- reaproveitamento de usuário por e-mail;
+- rastreio do ID externo da Taglyze;
+- identificação posterior do vínculo.
 
-- usuário novo é criado por e-mail;
-- usuário existente é reaproveitado por e-mail;
-- não há duplicidade se o e-mail for o mesmo;
-- se o usuário trocar de e-mail na Taglyze, será necessário tratar em uma evolução posterior.
+Em uma evolução futura, se for necessário suportar troca de e-mail de forma totalmente robusta, pode-se consultar também `user.metadata.taglyze.userId` ou migrar para uma tabela relacional/indexada.
 
 ## Arquivos implementados
 
@@ -175,6 +195,7 @@ Quackback /api/auth/taglyze-sso
   ↓ verifyTaglyzeJwt()
   ↓ ensureTaglyzeUser()
   ↓ auth.api.signUpEmail() se necessário
+  ↓ salva user.metadata.taglyze
   ↓ auth.api.signInEmail(asResponse: true)
   ↓ copia Set-Cookie do Better Auth
   ↓ redirect
@@ -185,6 +206,7 @@ Quackback /api/auth/taglyze-sso
 - Token válido autentica o usuário.
 - Usuário inexistente é criado automaticamente.
 - Usuário existente pelo mesmo e-mail é reutilizado.
+- `user.metadata.taglyze.userId` é salvo/atualizado.
 - Token sem `sub` é rejeitado.
 - Token sem `email` é rejeitado.
 - Token expirado é rejeitado.
@@ -195,12 +217,4 @@ Quackback /api/auth/taglyze-sso
 
 ## Próxima evolução recomendada
 
-Implementar vínculo persistente usando `externalUserMappings`:
-
-```txt
-provider = taglyze
-external_user_id = JWT.sub
-internal user/principal = usuário Quackback
-```
-
-Isso melhora o suporte a troca de e-mail e sincronização futura.
+Se a busca por `metadata.taglyze.userId` precisar ser performática ou suportar troca de e-mail em larga escala, criar uma tabela relacional/indexada para identidades externas.
