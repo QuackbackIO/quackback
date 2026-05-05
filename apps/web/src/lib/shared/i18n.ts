@@ -1,6 +1,6 @@
-export const DEFAULT_LOCALE = 'en' as const
+export const DEFAULT_LOCALE = 'pt' as const
 
-export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'ar', 'ru'] as const
+export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt'] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -106,7 +106,7 @@ export function loadMessages(locale: SupportedLocale): Promise<Record<string, st
 
   const promise = (async () => {
     if (locale === DEFAULT_LOCALE) {
-      const messages = await import('../../locales/en.json')
+      const messages = await import('../../locales/pt.json')
       return messages.default as Record<string, string>
     }
     try {
