@@ -68,6 +68,7 @@ async function createAuth() {
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
 
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, string>> = {}
@@ -82,11 +83,18 @@ async function createAuth() {
     scopes?: string[]
   }> = []
 
+  // Defense-in-depth: a Pro tenant who configured SSO before downgrading
+  // would still have OIDC creds in the DB. Skip generic-oauth providers
+  // when the tier flag is off so the login button never renders and the
+  // /sign-in/oauth2 callback path 404s on that providerId.
+  const tierLimits = await getTierLimits()
+
   for (const provider of getAllAuthProviders()) {
     const creds = await getPlatformCredentials(provider.credentialType)
     if (!creds?.clientId || !creds?.clientSecret) continue
 
     if (provider.type === 'generic-oauth') {
+      if (!tierLimits.features.customOidcProvider) continue
       // Generic OAuth providers use the genericOAuth plugin
       const scopeStr = creds.scopes || 'openid email profile'
       genericOAuthConfigs.push({

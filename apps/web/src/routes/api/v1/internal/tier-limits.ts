@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { eq } from 'drizzle-orm'
 import { db, settings } from '@/lib/server/db'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
+import { resetAuth } from '@/lib/server/auth/index'
 import { authenticateInternal } from '@/lib/server/domains/api-keys/internal-auth'
 import { SCOPE_INTERNAL_TIER_LIMITS } from '@/lib/server/domains/api-keys/scopes'
 
@@ -58,6 +59,11 @@ export const Route = createFileRoute('/api/v1/internal/tier-limits')({
             .onConflictDoNothing({ target: settings.slug })
         }
         invalidateTierLimitsCache()
+        // The auth instance caches `tierLimits.features.customOidcProvider`
+        // at build time so the genericOAuth plugin can be conditionally
+        // registered. Reset it so a tier change (e.g. Pro → Starter)
+        // immediately stops accepting SSO logins.
+        resetAuth()
 
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,

@@ -46,6 +46,21 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
         throw new Error(`Unknown auth provider: ${data.credentialType}`)
       }
 
+      // Tier gate: enterprise SSO (any provider with type 'generic-oauth')
+      // is Scale-only. Built-in social providers (Google, GitHub, Microsoft)
+      // are not gated — they're operator infrastructure for self-hosters.
+      // No-op in OSS — getTierLimits short-circuits to OSS_TIER_LIMITS.
+      if (provider.type === 'generic-oauth') {
+        const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+        const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
+        const limits = await getTierLimits()
+        enforceFeatureGate({
+          enabled: limits.features.customOidcProvider,
+          feature: 'customOidcProvider',
+          friendly: 'Single sign-on (custom OIDC)',
+        })
+      }
+
       // Validate required base fields (clientId + clientSecret are always required)
       const requiredKeys = ['clientId', 'clientSecret']
       for (const key of requiredKeys) {
