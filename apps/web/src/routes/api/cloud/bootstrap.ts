@@ -87,6 +87,9 @@ export async function handleCloudBootstrap({ request }: { request: Request }): P
     // request a fresh link in one click instead of bouncing through
     // the deep admin route guard.
     errorCallbackPath: '/admin/login',
+    // 7 days for the new-tenant claim window. The default plugin
+    // expiry of 10 min is sized for portal/admin sign-in safety.
+    expiresInSeconds: 60 * 60 * 24 * 7,
   })
 
   return Response.json({

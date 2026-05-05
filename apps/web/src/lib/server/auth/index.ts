@@ -286,7 +286,11 @@ async function createAuth() {
         async sendMagicLink({ email, token }) {
           storeMagicLinkToken(email, token)
         },
-        expiresIn: 60 * 60 * 24 * 7,
+        // 10 min matches the OTP expiry + the user-facing claim in the
+        // sign-in email. Bootstrap claim URLs need a longer window —
+        // see `extendMagicLinkExpiry` in `magic-link-mint.ts` which
+        // pushes their verification row out to 7 days post-mint.
+        expiresIn: 60 * 10,
         disableSignUp: false,
         // Outlook Safe Links / Slack unfurl can consume tokens before the user clicks.
         allowedAttempts: 3,

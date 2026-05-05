@@ -23,11 +23,18 @@ export async function requestEmailSignin(opts: {
   const { isEmailConfigured, sendMagicLinkEmail } = await import('@quackback/email')
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
 
+  // Failed verifies (token consumed by an email scanner, expired, etc.)
+  // need to land on the right login page. Admin callbacks (`/admin/...`)
+  // bounce to /admin/login — that page is configured for team auth and
+  // can immediately request a replacement link. Portal callbacks fall
+  // back to /auth/login (the public signup/login screen).
+  const errorCallbackPath = opts.callbackURL.startsWith('/admin') ? '/admin/login' : '/auth/login'
+
   const [signInUrl, , settings] = await Promise.all([
     mintMagicLinkUrl({
       email: opts.email,
       callbackPath: opts.callbackURL,
-      errorCallbackPath: '/auth/login',
+      errorCallbackPath,
       portalUrl: config.baseUrl,
     }),
     auth.api.sendVerificationOTP({
