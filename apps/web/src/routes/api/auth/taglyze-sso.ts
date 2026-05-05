@@ -19,6 +19,21 @@ function getRedirectTarget(request: Request): string {
   }
 }
 
+function normalizeToken(rawToken: string): string {
+  return rawToken
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^['"]|['"]$/g, '')
+    .trim()
+}
+
+function logInvalidTokenShape(token: string): void {
+  const partCount = token.split('.').length
+  console.warn(
+    `[taglyze-sso] invalid token shape: length=${token.length}, parts=${partCount}, startsWith=${token.slice(0, 8)}, endsWith=${token.slice(-8)}`
+  )
+}
+
 export const Route = createFileRoute('/api/auth/taglyze-sso')({
   server: {
     handlers: {
@@ -31,10 +46,16 @@ export const Route = createFileRoute('/api/auth/taglyze-sso')({
        */
       GET: async ({ request }) => {
         const url = new URL(request.url)
-        const token = url.searchParams.get('token')
+        const rawToken = url.searchParams.get('token')
 
-        if (!token) {
+        if (!rawToken) {
           return Response.json({ error: 'Missing token' }, { status: 400 })
+        }
+
+        const token = normalizeToken(rawToken)
+        if (token.split('.').length !== 3) {
+          logInvalidTokenShape(token)
+          return Response.redirect('/auth/login?error=taglyze_sso_invalid_token', 302)
         }
 
         try {
