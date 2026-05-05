@@ -39,6 +39,9 @@ export async function createWebhook(
   console.log(
     `[domain:webhooks] createWebhook: url=${input.url} events=${input.events.length} createdById=${createdById}`
   )
+  const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+  await assertTierFeature('webhooks', 'Webhooks')
+
   // Validate URL
   if (!input.url?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Webhook URL is required')

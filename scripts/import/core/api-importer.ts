@@ -20,6 +20,57 @@ export interface ApiImportOptions {
   dryRun?: boolean
   /** Verbose output */
   verbose?: boolean
+  /**
+   * Top-up an instance that has been imported before. Skip rows already
+   * present on the server: posts dedup by normalised title + createdAt date,
+   * comments dedup by normalised content + createdAt minute on a per-post
+   * cache. Votes and user identify are already idempotent server-side.
+   */
+  incremental?: boolean
+}
+
+function normalizeText(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function dayKey(ts: Date | string | null | undefined): string {
+  if (!ts) return ''
+  const d = ts instanceof Date ? ts : new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
+
+function minuteKey(ts: Date | string | null | undefined): string {
+  if (!ts) return ''
+  const d = ts instanceof Date ? ts : new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 16)
+}
+
+function postDedupKey(title: string, createdAt: Date | string | null | undefined): string | null {
+  const day = dayKey(createdAt)
+  if (!day) return null
+  return `${normalizeText(title)}|${day}`
+}
+
+function commentDedupKey(
+  content: string,
+  createdAt: Date | string | null | undefined
+): string | null {
+  const min = minuteKey(createdAt)
+  if (!min) return null
+  return `${normalizeText(content)}|${min}`
+}
+
+interface ExistingComment {
+  id: string
+  content: string
+  createdAt: string
+  replies?: ExistingComment[]
+}
+
+function flattenComments(cs: ExistingComment[]): ExistingComment[] {
+  return cs.flatMap((c) => [c, ...flattenComments(c.replies ?? [])])
 }
 
 interface IdMap {
@@ -70,6 +121,75 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
     posts: new Map(),
     comments: new Map(),
     users: new Map(),
+  }
+
+  // Dedup state, only populated when options.incremental is set
+  const existingPostByKey = new Map<string, string>()
+  const preExistingPostIds = new Set<string>()
+  // Per-post: dedupKey -> Quackback comment id. Stored as a map (not a set) so
+  // that when a UV comment is matched against an existing one, we can register
+  // idMap.comments for it and let new replies under that parent attach.
+  const existingCommentsByPost = new Map<string, Map<string, string>>()
+
+  async function getExistingComments(postId: string): Promise<Map<string, string>> {
+    const cached = existingCommentsByPost.get(postId)
+    if (cached) return cached
+    const resp = await qb.get<{ data: ExistingComment[] }>(`/api/v1/posts/${postId}/comments`)
+    const flat = flattenComments(resp.data ?? [])
+    const byKey = new Map<string, string>()
+    for (const c of flat) {
+      const k = commentDedupKey(c.content, c.createdAt)
+      if (k) byKey.set(k, c.id)
+    }
+    existingCommentsByPost.set(postId, byKey)
+    return byKey
+  }
+
+  async function resolveAuthorPrincipal(email: string | undefined): Promise<string | undefined> {
+    if (!email) return undefined
+    const key = email.toLowerCase()
+    const cached = idMap.users.get(key)
+    if (cached) return cached
+    try {
+      const resp = await qb.post<{ data: { principalId: string } }>('/api/v1/users/identify', {
+        email,
+        name: email.split('@')[0],
+      })
+      idMap.users.set(key, resp.data.principalId)
+      return resp.data.principalId
+    } catch (err) {
+      if (options.verbose) progress.warn(`identify failed for ${email}: ${err}`)
+      return undefined
+    }
+  }
+
+  if (options.incremental) {
+    progress.start('Pre-fetching existing posts for dedup')
+    // showDeleted=true so soft-deleted posts are still in the dedup index;
+    // re-importing a UV idea whose Quackback row was deleted should not
+    // resurrect it as a duplicate.
+    const existing = await qb.listAll<{ id: string; title: string; createdAt: string }>(
+      '/api/v1/posts',
+      { showDeleted: 'true' }
+    )
+    for (const p of existing) {
+      const key = postDedupKey(p.title, p.createdAt)
+      if (key) existingPostByKey.set(key, p.id)
+    }
+    progress.success(`Loaded ${existing.length} existing posts (${existingPostByKey.size} keyed)`)
+  }
+
+  // Used to gate authorPrincipalId on note imports: createComment rejects
+  // private comments from non-team principals (PRIVATE_COMMENT_FORBIDDEN), so
+  // we only attribute notes when the author email is a known team member.
+  const teamMemberEmails = new Set<string>()
+  try {
+    const members = await qb.listAll<{ id: string; email: string | null }>('/api/v1/members')
+    for (const m of members) {
+      if (m.email) teamMemberEmails.add(m.email.toLowerCase())
+    }
+  } catch (err) {
+    if (options.verbose) progress.warn(`Failed to fetch team members: ${err}`)
   }
 
   // Step 1: Identify users
@@ -143,6 +263,18 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           continue
         }
 
+        // Incremental dedup against existing Quackback posts
+        if (options.incremental) {
+          const key = postDedupKey(post.title, post.createdAt)
+          const existingId = key ? existingPostByKey.get(key) : undefined
+          if (existingId) {
+            idMap.posts.set(post.id, existingId)
+            preExistingPostIds.add(existingId)
+            result.posts.skipped++
+            continue
+          }
+        }
+
         // Resolve status
         const statusId = post.status
           ? (statusMap.get(post.status) ?? statusMap.get(post.status.toLowerCase()))
@@ -157,6 +289,8 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
+        const authorPrincipalId = await resolveAuthorPrincipal(post.authorEmail)
+
         const resp = await qb.post<{ data: { id: string } }>('/api/v1/posts', {
           boardId,
           title: post.title,
@@ -164,6 +298,7 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           ...(statusId && { statusId }),
           ...(tagIds.length > 0 && { tagIds }),
           ...(post.createdAt && { createdAt: new Date(post.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
 
         idMap.posts.set(post.id, resp.data.id)
@@ -230,16 +365,42 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           }
         }
 
+        // Incremental dedup: only check pre-existing posts (newly created
+        // posts in this run have no comments yet, so the GET would be wasted)
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(comment.body, comment.createdAt)
+          if (dedupKey) {
+            const existingByKey = await getExistingComments(postId)
+            const existingCommentId = existingByKey.get(dedupKey)
+            if (existingCommentId) {
+              // Register the mapping so new replies under this parent in the
+              // current run can still resolve their parentId.
+              if (comment.id) idMap.comments.set(comment.id, existingCommentId)
+              result.comments.skipped++
+              continue
+            }
+          }
+        }
+
+        const authorPrincipalId = await resolveAuthorPrincipal(comment.authorEmail)
+
         const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
           content: comment.body,
           ...(parentId && { parentId }),
           ...(comment.isPrivate && { isPrivate: true }),
           ...(comment.createdAt && { createdAt: new Date(comment.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
 
         // Track comment ID for threading
         if (comment.id) {
           idMap.comments.set(comment.id, resp.data.id)
+        }
+        // Record in the per-post dedup cache so repeated rows in the same run
+        // are also caught
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(comment.body, comment.createdAt)
+          if (dedupKey) (await getExistingComments(postId)).set(dedupKey, resp.data.id)
         }
 
         result.comments.imported++
@@ -274,23 +435,10 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           continue
         }
 
-        // Identify voter on the fly if not already in the map
-        let principalId = idMap.users.get(vote.voterEmail.toLowerCase())
+        const principalId = await resolveAuthorPrincipal(vote.voterEmail)
         if (!principalId) {
-          try {
-            const resp = await qb.post<{ data: { principalId: string } }>(
-              '/api/v1/users/identify',
-              {
-                email: vote.voterEmail,
-                name: vote.voterEmail.split('@')[0],
-              }
-            )
-            principalId = resp.data.principalId
-            idMap.users.set(vote.voterEmail.toLowerCase(), principalId)
-          } catch {
-            result.votes.skipped++
-            continue
-          }
+          result.votes.skipped++
+          continue
         }
 
         await qb.post(`/api/v1/posts/${postId}/vote/proxy`, {
@@ -330,11 +478,38 @@ export async function runApiImport(options: ApiImportOptions): Promise<ImportRes
           continue
         }
 
-        await qb.post(`/api/v1/posts/${postId}/comments`, {
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(note.body, note.createdAt)
+          if (dedupKey) {
+            const existingByKey = await getExistingComments(postId)
+            if (existingByKey.has(dedupKey)) {
+              result.notes.skipped++
+              continue
+            }
+          }
+        }
+
+        // Only attribute the note to the UV author when their email is a
+        // known team member. Otherwise omit authorPrincipalId so the server
+        // falls back to the API-key holder (admin) — createComment rejects
+        // private comments from non-team principals with PRIVATE_COMMENT_FORBIDDEN.
+        const noteAuthorEmail = note.authorEmail?.toLowerCase()
+        const authorPrincipalId =
+          noteAuthorEmail && teamMemberEmails.has(noteAuthorEmail)
+            ? await resolveAuthorPrincipal(note.authorEmail)
+            : undefined
+
+        const resp = await qb.post<{ data: { id: string } }>(`/api/v1/posts/${postId}/comments`, {
           content: note.body,
           isPrivate: true,
           ...(note.createdAt && { createdAt: new Date(note.createdAt).toISOString() }),
+          ...(authorPrincipalId && { authorPrincipalId }),
         })
+
+        if (options.incremental && preExistingPostIds.has(postId)) {
+          const dedupKey = commentDedupKey(note.body, note.createdAt)
+          if (dedupKey) (await getExistingComments(postId)).set(dedupKey, resp.data.id)
+        }
 
         result.notes.imported++
       } catch (err) {

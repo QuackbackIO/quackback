@@ -207,6 +207,13 @@ export const settings = pgTable('settings', {
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
    */
   helpCenterConfig: text('help_center_config'),
+  /**
+   * Optional per-workspace tier limits (JSON-encoded TierLimits).
+   * Written by the cloud control plane via /api/v1/internal/tier-limits,
+   * or by self-hosters who want to impose their own caps. Null/absent
+   * means OSS defaults (everything unlimited, all features on).
+   */
+  tierLimits: text('tier_limits'),
 })
 
 /**

@@ -95,7 +95,7 @@ export async function withApiKeyAuth(
 ): Promise<ApiAuthContext> {
   const clientIp = getClientIp(request)
   const wantsImportMode = request.headers.get('x-import-mode') === 'true'
-  const rateLimit = checkRateLimit(clientIp, wantsImportMode)
+  const rateLimit = await checkRateLimit(clientIp, wantsImportMode)
 
   if (!rateLimit.allowed) {
     throw new RateLimitError(rateLimit.retryAfter ?? 60)

@@ -23,6 +23,28 @@ vi.mock('@/lib/server/domains/ai/retry', () => ({
   ),
 }))
 
+// Tier-limit gate runs before the LLM call. Stub the resolver so it
+// returns OSS defaults (everything unlimited) — these tests exercise
+// the merge logic, not the gate.
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: vi.fn(async () => ({
+    maxBoards: null,
+    maxPosts: null,
+    maxTeamSeats: null,
+    aiTokensPerMonth: null,
+    apiRequestsPerMonth: null,
+    apiRequestsPerMinute: null,
+    features: {
+      customDomain: true,
+      customOidcProvider: true,
+      ipAllowlist: true,
+      webhooks: true,
+      mcpServer: true,
+      analyticsExports: true,
+    },
+  })),
+}))
+
 describe('merge-assessment.service', () => {
   beforeEach(() => {
     vi.clearAllMocks()

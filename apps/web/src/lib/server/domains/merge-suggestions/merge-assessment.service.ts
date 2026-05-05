@@ -6,6 +6,7 @@
 
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
@@ -55,6 +56,8 @@ export async function assessMergeCandidates(
   sourcePost: PostInfo,
   candidates: MergeCandidate[]
 ): Promise<MergeAssessment[]> {
+  await enforceAiTokenBudget()
+
   const openai = getOpenAI()
   if (!openai || candidates.length === 0) return []
 
