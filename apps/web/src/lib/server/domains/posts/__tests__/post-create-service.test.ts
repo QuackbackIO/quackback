@@ -97,6 +97,12 @@ vi.mock('@/lib/server/content/rehost-images', () => ({
   rehostExternalImages: vi.fn(async (json: unknown) => json),
 }))
 
+// createPost runs a tier-limit gate after validation. Stub the
+// resolver so this test focuses on author attribution, not enforcement.
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: vi.fn(async () => ({ maxPosts: null, features: {} })),
+}))
+
 describe('createPost author attribution', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0

@@ -41,9 +41,10 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
     update: (...args: unknown[]) => mockUpdate(...args),
+    select: () => ({ from: () => ({ limit: () => Promise.resolve([]) }) }),
   },
   eq: vi.fn(),
-  settings: { id: 'id' },
+  settings: { id: 'id', tierLimits: 'tier_limits' },
 }))
 
 // --- S3 mock ---

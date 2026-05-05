@@ -38,6 +38,9 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
+      const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+      await assertTierFeature('integrations', 'Integrations')
+
       // Validate required fields against the integration definition
       const { getIntegration } = await import('@/lib/server/integrations')
       const definition = getIntegration(data.integrationType)

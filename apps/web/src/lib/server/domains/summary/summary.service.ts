@@ -8,6 +8,7 @@
 import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 
 const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
@@ -53,6 +54,8 @@ interface PostSummaryJson {
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
+  await enforceAiTokenBudget()
+
   const openai = getOpenAI()
   if (!openai) return
 

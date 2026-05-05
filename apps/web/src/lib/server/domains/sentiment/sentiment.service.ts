@@ -10,6 +10,7 @@ import { createId, type PostId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
+import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 
 const SENTIMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
@@ -65,6 +66,8 @@ export async function analyzeSentiment(
   content: string,
   postId?: string
 ): Promise<SentimentResult | null> {
+  await enforceAiTokenBudget()
+
   const openai = getOpenAI()
   if (!openai) return null
 

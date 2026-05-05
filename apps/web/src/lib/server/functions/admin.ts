@@ -897,6 +897,10 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
+      // Tier-limit gate (no-op in OSS).
+      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
+      await enforceSeatLimit()
+
       const email = data.email.toLowerCase()
 
       // Parallelize invitation and user validation queries

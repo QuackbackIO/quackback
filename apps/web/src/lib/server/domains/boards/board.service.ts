@@ -26,12 +26,15 @@ import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
+import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
+import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 
 /**
  * Create a new board
  */
 export async function createBoard(input: CreateBoardInput): Promise<Board> {
-  // Validate input
+  // Validate input before the tier gate — invalid input doesn't deserve a
+  // count(*) query.
   if (!input.name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Board name is required')
   }
@@ -41,6 +44,21 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
   if (input.description && input.description.length > 500) {
     throw new ValidationError('VALIDATION_ERROR', 'Description must be 500 characters or less')
   }
+
+  // Tier-limit gate (no-op in OSS).
+  const limits = await getTierLimits()
+  await enforceCountLimit({
+    limit: limits.maxBoards,
+    name: 'maxBoards',
+    friendly: 'boards',
+    currentCount: async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(boards)
+        .where(isNull(boards.deletedAt))
+      return row?.count ?? 0
+    },
+  })
 
   // Generate or validate slug
   const baseSlug = input.slug ? slugify(input.slug) : slugify(input.name)

@@ -66,3 +66,4 @@ apps/web/next-env.d.ts
 .superpowers/
 docs/superpowers/
 .codex
+.claude/

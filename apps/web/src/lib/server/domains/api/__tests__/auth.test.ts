@@ -20,8 +20,10 @@ vi.mock('@/lib/server/db', () => ({
         findFirst: mockFindFirst,
       },
     },
+    select: () => ({ from: () => ({ limit: () => Promise.resolve([]) }) }),
   },
   principal: { id: 'id' },
+  settings: { tierLimits: 'tier_limits' },
   eq: vi.fn(),
 }))
 
@@ -182,7 +184,9 @@ describe('API Auth', () => {
       })
 
       await expect(withApiKeyAuth(request, { role: 'admin' })).rejects.toThrow(ForbiddenError)
-      await expect(withApiKeyAuth(request, { role: 'admin' })).rejects.toThrow('Admin access required')
+      await expect(withApiKeyAuth(request, { role: 'admin' })).rejects.toThrow(
+        'Admin access required'
+      )
     })
 
     it('should throw ForbiddenError when team role required but member is a portal user', async () => {
@@ -199,7 +203,9 @@ describe('API Auth', () => {
       })
 
       await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow(ForbiddenError)
-      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow('Team member access required')
+      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow(
+        'Team member access required'
+      )
     })
 
     it('should allow admin through for both team and admin roles', async () => {
