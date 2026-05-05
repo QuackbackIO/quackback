@@ -20,6 +20,9 @@ export interface TierFeatureFlags {
   analyticsExports: boolean
   customColors: boolean
   customCss: boolean
+  /** Connecting external tools (GitHub, Slack, Linear, Jira, etc.).
+   *  Pro and Scale on cloud; always on for self-hosters. */
+  integrations: boolean
 }
 
 export interface TierLimits {
@@ -60,5 +63,6 @@ export const OSS_TIER_LIMITS: TierLimits = {
     analyticsExports: true,
     customColors: true,
     customCss: true,
+    integrations: true,
   },
 }
