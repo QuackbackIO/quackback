@@ -31,14 +31,8 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
     // they pick from the curated set the workspace already has access to.
     const isCustomisingColors = config.light !== undefined || config.dark !== undefined
     if (isCustomisingColors) {
-      const { getTierLimits } = await import('./tier-limits.service')
-      const { enforceFeatureGate } = await import('./tier-enforce')
-      const limits = await getTierLimits()
-      enforceFeatureGate({
-        enabled: limits.features.customColors,
-        feature: 'customColors',
-        friendly: 'Custom colours',
-      })
+      const { assertTierFeature } = await import('./tier-enforce')
+      await assertTierFeature('customColors', 'Custom colours')
     }
 
     const org = await requireSettings()
@@ -75,14 +69,8 @@ export async function updateCustomCss(css: string): Promise<string> {
     // tier just stopped including custom CSS can wipe it without being
     // blocked. Anything non-empty hits the feature gate.
     if (css.trim().length > 0) {
-      const { getTierLimits } = await import('./tier-limits.service')
-      const { enforceFeatureGate } = await import('./tier-enforce')
-      const limits = await getTierLimits()
-      enforceFeatureGate({
-        enabled: limits.features.customCss,
-        feature: 'customCss',
-        friendly: 'Custom CSS',
-      })
+      const { assertTierFeature } = await import('./tier-enforce')
+      await assertTierFeature('customCss', 'Custom CSS')
     }
 
     const org = await requireSettings()

@@ -201,14 +201,8 @@ export async function updateDeveloperConfig(
     // Tier gate: refuse mcpEnabled=true when mcpServer feature is off.
     // No-op in OSS. Disabling MCP is always allowed (no upgrade required).
     if (input.mcpEnabled === true) {
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-      const limits = await getTierLimits()
-      enforceFeatureGate({
-        enabled: limits.features.mcpServer,
-        feature: 'mcpServer',
-        friendly: 'MCP server',
-      })
+      const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+      await assertTierFeature('mcpServer', 'MCP server')
     }
 
     const org = await requireSettings()

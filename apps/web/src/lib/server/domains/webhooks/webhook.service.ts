@@ -39,15 +39,8 @@ export async function createWebhook(
   console.log(
     `[domain:webhooks] createWebhook: url=${input.url} events=${input.events.length} createdById=${createdById}`
   )
-  // Tier gate: refuse outright when webhooks feature is off. No-op in OSS.
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-  const limits = await getTierLimits()
-  enforceFeatureGate({
-    enabled: limits.features.webhooks,
-    feature: 'webhooks',
-    friendly: 'Webhooks',
-  })
+  const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+  await assertTierFeature('webhooks', 'Webhooks')
 
   // Validate URL
   if (!input.url?.trim()) {

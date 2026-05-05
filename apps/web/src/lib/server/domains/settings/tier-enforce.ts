@@ -42,6 +42,19 @@ export function enforceFeatureGate(args: EnforceFeatureGateArgs): void {
 }
 
 /**
+ * Combined helper: read tier limits and refuse if the feature is off.
+ * Replaces the 4-line `getTierLimits + enforceFeatureGate` pattern at
+ * each call site.
+ */
+export async function assertTierFeature(
+  feature: keyof TierFeatureFlags,
+  friendly: string
+): Promise<void> {
+  const limits = await getTierLimits()
+  enforceFeatureGate({ enabled: limits.features[feature], feature, friendly })
+}
+
+/**
  * Pre-call gate for any LLM-driven AI service. Refuses when the tenant
  * has used up its monthly token budget. Token usage is recorded after
  * each call by withUsageLogging, so this is a "you're already at/over"
