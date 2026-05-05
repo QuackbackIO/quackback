@@ -15,13 +15,16 @@ export function normalizeLocale(locale: string): SupportedLocale | null {
 
   const lower = locale.toLowerCase()
 
+  // Try exact match first
   if ((SUPPORTED_LOCALES as readonly string[]).includes(lower)) {
     return lower as SupportedLocale
   }
 
+  // Strip region subtag (e.g. "fr-FR" -> "fr"), but only accept 2-letter base codes
   const parts = lower.split('-')
   if (parts.length >= 2) {
     const base = parts[0]
+    // Only treat as a locale if the base is a 2–3 letter code
     if (base.length >= 2 && base.length <= 3 && /^[a-z]+$/.test(base)) {
       if ((SUPPORTED_LOCALES as readonly string[]).includes(base)) {
         return base as SupportedLocale
@@ -32,15 +35,22 @@ export function normalizeLocale(locale: string): SupportedLocale | null {
   return null
 }
 
+/**
+ * Parses an Accept-Language header and returns the best matching supported
+ * locale. An explicit locale override takes precedence when supported.
+ * Falls back to DEFAULT_LOCALE if nothing matches.
+ */
 export function resolveLocale(
   acceptLanguage: string | null | undefined,
   explicitLocale?: string
 ): SupportedLocale {
+  // Explicit locale wins if it's supported
   if (explicitLocale) {
     const normalized = normalizeLocale(explicitLocale)
     if (normalized !== null) return normalized
   }
 
+  // Parse Accept-Language header
   if (!acceptLanguage) return DEFAULT_LOCALE
 
   const entries = acceptLanguage
@@ -60,10 +70,18 @@ export function resolveLocale(
   return DEFAULT_LOCALE
 }
 
+/**
+ * Returns true if the given locale is written right-to-left.
+ */
 export function isRtlLocale(locale: string): boolean {
   return RTL_LOCALES.has(locale.toLowerCase())
 }
 
+/**
+ * Returns true if the `?rtl=1` debug query param is set.
+ * Safe to call during SSR (returns false when `window` is unavailable).
+ * Result is computed once and cached for the lifetime of the page.
+ */
 export const isRtlForced = (() => {
   let cached: boolean | undefined
   return (): boolean => {
@@ -77,6 +95,11 @@ export const isRtlForced = (() => {
 
 const messageCache = new Map<SupportedLocale, Promise<Record<string, string>>>()
 
+/**
+ * Dynamically imports the message catalog for the given locale.
+ * Falls back to English on error (e.g. locale file doesn't exist yet).
+ * Results are cached per locale for the lifetime of the page.
+ */
 export function loadMessages(locale: SupportedLocale): Promise<Record<string, string>> {
   const cached = messageCache.get(locale)
   if (cached) return cached
