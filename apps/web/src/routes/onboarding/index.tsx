@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
+import { pickOnboardingStep } from './onboarding-step'
 
 /**
  * Onboarding index route - redirects to the appropriate step.
@@ -10,29 +11,20 @@ export const Route = createFileRoute('/onboarding/')({
   loader: async ({ context }) => {
     const { session } = context
 
-    // Not authenticated - start with account creation
     if (!session?.user) {
       throw redirect({ to: '/onboarding/account' })
     }
 
-    // Authenticated - check onboarding state
     const state = await checkOnboardingState({ data: session.user.id })
-
-    if (state.needsInvitation) {
-      // Not first user - they need an invitation
-      throw redirect({ to: '/auth/login' })
-    }
-
-    // Determine which step to go to based on progress
-    if (state.setupState?.steps?.workspace) {
-      throw redirect({ to: '/onboarding/boards' })
-    }
-
-    if (state.setupState?.useCase) {
-      throw redirect({ to: '/onboarding/workspace' })
-    }
-
-    throw redirect({ to: '/onboarding/usecase' })
+    const target = pickOnboardingStep({
+      session: { userId: session.user.id },
+      state: {
+        needsInvitation: state.needsInvitation,
+        setupState: state.setupState,
+        principalRecord: state.principalRecord,
+      },
+    })
+    throw redirect({ to: target })
   },
-  component: () => null, // This route only redirects
+  component: () => null,
 })
