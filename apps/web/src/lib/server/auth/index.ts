@@ -14,30 +14,40 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 
-/** Temporary storage for magic link tokens during invitation flow */
-const pendingMagicLinkTokens = new Map<string, { token: string; timestamp: number }>()
+// Plugin callbacks (magicLink, emailOTP) stash tokens here instead of
+// emailing — callers that own the email template (invitations, Cloud
+// bootstrap, combined sign-in email) drain the stash and email themselves.
+const STASH_TTL_MS = 30_000
 
-export function storeMagicLinkToken(email: string, token: string): void {
-  const normalizedEmail = email.toLowerCase()
-  pendingMagicLinkTokens.set(normalizedEmail, { token, timestamp: Date.now() })
-
-  // Clean up after 30 seconds (invitation flow should retrieve immediately)
-  setTimeout(() => {
-    const stored = pendingMagicLinkTokens.get(normalizedEmail)
-    if (stored && Date.now() - stored.timestamp >= 30000) {
-      pendingMagicLinkTokens.delete(normalizedEmail)
-    }
-  }, 30000)
+function makeStash<T>() {
+  const m = new Map<string, { value: T; ts: number }>()
+  return {
+    set(key: string, value: T) {
+      const k = key.toLowerCase()
+      m.set(k, { value, ts: Date.now() })
+      setTimeout(() => {
+        const s = m.get(k)
+        if (s && Date.now() - s.ts >= STASH_TTL_MS) m.delete(k)
+      }, STASH_TTL_MS)
+    },
+    take(key: string): T | undefined {
+      const k = key.toLowerCase()
+      const s = m.get(k)
+      if (!s) return undefined
+      m.delete(k)
+      return s.value
+    },
+  }
 }
 
-export function getMagicLinkToken(email: string): string | undefined {
-  const normalizedEmail = email.toLowerCase()
-  const stored = pendingMagicLinkTokens.get(normalizedEmail)
-  if (!stored) return undefined
+const magicLinkStash = makeStash<string>()
+const otpStash = makeStash<string>()
 
-  pendingMagicLinkTokens.delete(normalizedEmail)
-  return stored.token
-}
+export const storeMagicLinkToken = (email: string, token: string) =>
+  magicLinkStash.set(email, token)
+export const getMagicLinkToken = (email: string) => magicLinkStash.take(email)
+export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
+export const getOTP = (email: string) => otpStash.take(email)
 
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
@@ -63,8 +73,7 @@ async function createAuth() {
     oauthConsent: oauthConsentTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendSigninCodeEmail, sendPasswordResetEmail, isEmailConfigured } =
-    await import('@quackback/email')
+  const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
@@ -132,7 +141,7 @@ async function createAuth() {
     secret: config.secretKey,
 
     // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
-    // Does NOT affect emailOTP, magicLink, or session management
+    // Does NOT affect magicLink or session management
     disabledPaths: ['/token'],
 
     database: drizzleAdapter(db, {
@@ -270,34 +279,29 @@ async function createAuth() {
     },
 
     plugins: [
-      // Email OTP plugin for passwordless authentication (used by portal users)
-      emailOTP({
-        async sendVerificationOTP({ email, otp }) {
-          if (!isEmailConfigured()) {
-            console.warn(
-              `[auth] Email OTP requested for ${email} but email is not configured. OTP will not be delivered.`
-            )
-          }
-          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-          const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
-          const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-          await sendSigninCodeEmail({ to: email, code: otp, logoUrl })
-        },
-        otpLength: 6,
-        expiresIn: 600, // 10 minutes
-      }),
-
-      // Magic link plugin for team member invitations
-      // When invitations are sent, the sendMagicLink callback stores the token
-      // which is then retrieved by sendInvitationFn to build the URL with correct workspace domain
+      // magicLink + emailOTP plugins stash tokens; callers in
+      // auth/email-signin.ts and auth/magic-link-mint.ts drain the
+      // stashes and ship their own email templates.
       magicLink({
         async sendMagicLink({ email, token }) {
-          // Store only the token - we'll construct the URL with the workspace domain
           storeMagicLinkToken(email, token)
         },
-        expiresIn: 60 * 60 * 24 * 7, // 7 days - match invitation expiry
-        disableSignUp: false, // Allow new users to sign up via invitation
-        allowedAttempts: 3, // Allow multiple attempts (Outlook Safe Links consumes tokens)
+        // 10 min matches the OTP expiry + the user-facing claim in the
+        // sign-in email. Bootstrap claim URLs need a longer window —
+        // see `extendMagicLinkExpiry` in `magic-link-mint.ts` which
+        // pushes their verification row out to 7 days post-mint.
+        expiresIn: 60 * 10,
+        disableSignUp: false,
+        // Outlook Safe Links / Slack unfurl can consume tokens before the user clicks.
+        allowedAttempts: 3,
+      }),
+
+      emailOTP({
+        async sendVerificationOTP({ email, otp }) {
+          storeOTP(email, otp)
+        },
+        otpLength: 6,
+        expiresIn: 600,
       }),
 
       // One-time token plugin for cross-domain session transfer (used by /get-started)

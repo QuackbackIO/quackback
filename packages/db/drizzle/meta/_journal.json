@@ -365,6 +365,13 @@
       "when": 1777669821604,
       "tag": "0051_ai_usage_log_month_index",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1777655280134,
+      "tag": "0052_otp_to_magic_link",
+      "breakpoints": true
     }
   ]
 }

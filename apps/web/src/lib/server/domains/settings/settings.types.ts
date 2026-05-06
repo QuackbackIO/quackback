@@ -44,14 +44,23 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
 // =============================================================================
 
 /**
- * Portal OAuth settings — dynamic provider support.
- * 'email' controls email OTP; all other keys are Better Auth provider IDs.
+ * Portal auth settings — `password`, `magicLink`, and dynamic OAuth provider toggles.
+ *
+ * The legacy `email` flag (Email OTP) was retired in migration 0049 in
+ * favour of `magicLink`. Existing portal_config blobs may still carry
+ * `email: false` after the migration; the index signature accepts it so
+ * we don't trip TypeScript when reading legacy data.
  */
 export interface PortalAuthMethods {
   /** Whether password authentication is enabled (defaults to true) */
   password?: boolean
-  /** Whether email OTP authentication is enabled (defaults to false for new installs) */
-  email?: boolean
+  /** Whether one-click magic-link sign-in is enabled. The magicLink
+   * better-auth plugin is always wired (used by team invitations);
+   * this toggle controls whether the portal login UI surfaces it as a
+   * sign-in option. Cloud admins always have it on; self-hosted
+   * defaults to off so the only auth surface is what the admin
+   * explicitly chose. */
+  magicLink?: boolean
   /** Dynamic OAuth provider toggles keyed by provider ID (github, google, discord, etc.) */
   [providerId: string]: boolean | undefined
 }

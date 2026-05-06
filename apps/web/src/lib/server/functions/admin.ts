@@ -55,7 +55,6 @@ import {
 import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
-import { getAuth, getMagicLinkToken } from '@/lib/server/auth'
 
 /** Invitation expiry duration — 7 days in milliseconds */
 const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
@@ -843,48 +842,14 @@ async function generateInvitationMagicLink(
   callbackPath: string,
   portalUrl: string
 ): Promise<string> {
-  const authInstance = await getAuth()
-
   console.log(
     `[fn:admin] generateInvitationMagicLink: email=${email}, callbackPath=${callbackPath}, portalUrl=${portalUrl}`
   )
-
-  // Use Better Auth's handler with the workspace domain context
-  // We pass a relative callbackURL - Better Auth will use the request's origin for redirects
-  const response = await authInstance.handler(
-    new Request(`${portalUrl}/api/auth/sign-in/magic-link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: portalUrl,
-        Host: new URL(portalUrl).host,
-      },
-      body: JSON.stringify({
-        email,
-        callbackURL: callbackPath, // Relative path - Better Auth appends to origin
-      }),
-    })
-  )
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error(`[fn:admin] generateInvitationMagicLink: handler failed - ${errorText}`)
-    throw new Error(`Magic link generation failed: ${errorText}`)
-  }
-
-  // Retrieve the token that was stored by our callback
-  const token = getMagicLinkToken(email)
-  if (!token) {
-    throw new Error('Magic link token not found — sendMagicLink callback may not have fired')
-  }
-
-  // Construct the magic link URL with the workspace domain
-  const absoluteCallbackURL = `${portalUrl}${callbackPath}`
-  const verifyUrl = new URL('/verify-magic-link', portalUrl)
-  verifyUrl.searchParams.set('token', token)
-  verifyUrl.searchParams.set('callbackURL', absoluteCallbackURL)
-  verifyUrl.searchParams.set('errorCallbackURL', absoluteCallbackURL)
-  return verifyUrl.toString()
+  const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
+  // Invitations reuse the same path for success + error so an
+  // expired/consumed link sends the recipient back to the same
+  // invitation page (with its own expired-state copy).
+  return mintMagicLinkUrl({ email, callbackPath, portalUrl })
 }
 
 /**
