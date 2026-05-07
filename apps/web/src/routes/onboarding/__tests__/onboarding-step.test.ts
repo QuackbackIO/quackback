@@ -15,25 +15,6 @@ describe('pickOnboardingStep', () => {
     ).toBe('/auth/login')
   })
 
-  it('routes cloud-bootstrapped admins straight to /admin (skip wizard)', () => {
-    // setupState.source==='cloud' means the workspace was provisioned and
-    // bootstrapped by Quackback Cloud — the admin principal already
-    // exists and the wizard would be a confusing dead-end.
-    expect(
-      pickOnboardingStep({
-        session: { userId: 'u1' },
-        state: {
-          setupState: {
-            version: 1,
-            steps: { core: true, workspace: true, boards: true },
-            source: 'cloud',
-          },
-          principalRecord: { id: 'p1', role: 'admin' },
-        },
-      })
-    ).toBe('/admin')
-  })
-
   it('routes mid-wizard users to /onboarding/boards when workspace step is done', () => {
     expect(
       pickOnboardingStep({

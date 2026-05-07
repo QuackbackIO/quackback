@@ -27,11 +27,6 @@ export function pickOnboardingStep({ session, state }: PickStepInput): Onboardin
 
   if (state.needsInvitation) return '/auth/login'
 
-  // Cloud-provisioned admins skip the wizard; setup_state is pre-stamped.
-  if (state.setupState?.source === 'cloud' && state.principalRecord) {
-    return '/admin'
-  }
-
   if (state.setupState?.steps?.workspace) return '/onboarding/boards'
   if (state.setupState?.useCase) return '/onboarding/workspace'
   return '/onboarding/usecase'

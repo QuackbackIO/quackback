@@ -61,12 +61,13 @@ export const Route = createFileRoute('/admin/login')({
 })
 
 /**
- * Build the auth config rendered on /admin/login. Team sign-in is
- * always passwordless: magic-link forced on (cloud customers never
- * have a password set), password-form forced off. OAuth providers
- * pass through whatever the tenant configured under auth_config.
+ * /admin/login is the team sign-in page. Magic-link is forced on and
+ * the password-form is forced off — admins arrive without a password
+ * set (workspace owner is created via a magic-link claim, not a
+ * password registration), and team members invite-link in the same
+ * way. OAuth providers pass through whatever the tenant configured.
  */
-function adminLoginAuthConfig(tenantAuthConfig: Record<string, unknown>) {
+function teamSignInAuthConfig(tenantAuthConfig: Record<string, unknown>) {
   return { ...tenantAuthConfig, magicLink: true, password: false }
 }
 
@@ -89,7 +90,7 @@ function AdminLoginPage() {
         <PortalAuthForm
           mode="login"
           callbackUrl={safeCallbackUrl}
-          authConfig={adminLoginAuthConfig(authConfig)}
+          authConfig={teamSignInAuthConfig(authConfig)}
           customProviderNames={customProviderNames}
         />
       </div>
