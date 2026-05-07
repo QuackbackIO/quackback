@@ -44,10 +44,11 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
       })
     }
 
-    const existingBoards = await listBoardsForOnboarding()
+    const { boards: existingBoards, maxBoards } = await listBoardsForOnboarding()
 
     return {
       existingBoards,
+      maxBoards,
       useCase: state.setupState?.useCase as UseCaseType | undefined,
     }
   },
@@ -56,7 +57,13 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
 
 function BoardsStep() {
   const navigate = useNavigate()
-  const { existingBoards, useCase } = Route.useLoaderData()
+  const { existingBoards, maxBoards, useCase } = Route.useLoaderData()
+
+  // When the tier allows exactly one board, the selector is single-select
+  // (radio-style) so users can't pre-pick a list that won't fit. Tier
+  // enforcement still happens server-side (createBoardsBatchFn partitions
+  // input against maxBoards) — this is a UX preventive measure.
+  const singleSelect = maxBoards === 1
 
   // Get board options filtered by use case
   const boardOptions = getBoardOptionsForUseCase(useCase)
@@ -64,13 +71,22 @@ function BoardsStep() {
     existingBoards.map((b: { name: string }) => b.name.toLowerCase())
   )
 
-  // Initialize selection: pre-select all boards for the use case that don't already exist
-  const initialSelection =
-    existingBoards.length > 0
-      ? new Set(
-          boardOptions.filter((b) => existingBoardNames.has(b.name.toLowerCase())).map((b) => b.id)
-        )
-      : getBoardsForUseCase(useCase)
+  // Initialize selection. With a 1-board tier the user can only have one
+  // selection at a time — pick just the first default for their use case
+  // (or the first existing board if any).
+  const initialSelection: Set<string> = (() => {
+    if (existingBoards.length > 0) {
+      return new Set(
+        boardOptions.filter((b) => existingBoardNames.has(b.name.toLowerCase())).map((b) => b.id)
+      )
+    }
+    const defaults = getBoardsForUseCase(useCase)
+    if (singleSelect) {
+      const first = [...defaults][0]
+      return new Set(first ? [first] : [])
+    }
+    return defaults
+  })()
 
   const [selectedBoards, setSelectedBoards] = useState<Set<string>>(initialSelection)
   const [customBoards, setCustomBoards] = useState<Array<{ name: string; description: string }>>([])
@@ -81,6 +97,13 @@ function BoardsStep() {
 
   function toggleBoard(boardId: string) {
     setSelectedBoards((prev) => {
+      // Radio-style: clicking a non-selected option replaces the selection;
+      // clicking the currently-selected one deselects it. (Empty selection
+      // is allowed — Skip button handles the no-board case.)
+      if (singleSelect) {
+        if (prev.has(boardId)) return new Set()
+        return new Set([boardId])
+      }
       const next = new Set(prev)
       if (next.has(boardId)) {
         next.delete(boardId)
@@ -188,13 +211,16 @@ function BoardsStep() {
             >
               <div
                 className={`
-                  h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors
+                  h-5 w-5 ${singleSelect ? 'rounded-full' : 'rounded'} border-2 flex items-center justify-center shrink-0 transition-colors
                   ${isSelected || alreadyExists ? 'bg-primary border-primary' : 'border-muted-foreground/40'}
                 `}
               >
-                {(isSelected || alreadyExists) && (
-                  <CheckIcon className="h-3 w-3 text-primary-foreground" />
-                )}
+                {(isSelected || alreadyExists) &&
+                  (singleSelect ? (
+                    <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                  ) : (
+                    <CheckIcon className="h-3 w-3 text-primary-foreground" />
+                  ))}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm">{board.name}</div>
@@ -230,62 +256,66 @@ function BoardsStep() {
           </div>
         ))}
 
-        {/* Add custom board */}
-        {showCustomForm ? (
-          <div className="p-4 rounded-xl border border-dashed border-border space-y-3">
-            <Input
-              type="text"
-              value={newCustomBoard.name}
-              onChange={(e) => setNewCustomBoard((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Board name"
-              autoFocus
-              disabled={isLoading}
-              className="h-10"
-            />
-            <Input
-              type="text"
-              value={newCustomBoard.description}
-              onChange={(e) =>
-                setNewCustomBoard((prev) => ({ ...prev, description: e.target.value }))
-              }
-              placeholder="Description (optional)"
-              disabled={isLoading}
-              className="h-10"
-            />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowCustomForm(false)
-                  setNewCustomBoard({ name: '', description: '' })
-                }}
+        {/* Add custom board — hidden when the tier only allows one
+            board, since adding a custom would conflict with the
+            already-selected default and the partition would silently
+            drop one. Single-select tiers stick to the curated list. */}
+        {!singleSelect &&
+          (showCustomForm ? (
+            <div className="p-4 rounded-xl border border-dashed border-border space-y-3">
+              <Input
+                type="text"
+                value={newCustomBoard.name}
+                onChange={(e) => setNewCustomBoard((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Board name"
+                autoFocus
                 disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={addCustomBoard}
-                disabled={isLoading || !newCustomBoard.name.trim()}
-              >
-                Add
-              </Button>
+                className="h-10"
+              />
+              <Input
+                type="text"
+                value={newCustomBoard.description}
+                onChange={(e) =>
+                  setNewCustomBoard((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Description (optional)"
+                disabled={isLoading}
+                className="h-10"
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowCustomForm(false)
+                    setNewCustomBoard({ name: '', description: '' })
+                  }}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addCustomBoard}
+                  disabled={isLoading || !newCustomBoard.name.trim()}
+                >
+                  Add
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowCustomForm(true)}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-all disabled:opacity-50"
-          >
-            <PlusIcon className="h-4 w-4" />
-            <span className="text-sm">Add custom board</span>
-          </button>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCustomForm(true)}
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-all disabled:opacity-50"
+            >
+              <PlusIcon className="h-4 w-4" />
+              <span className="text-sm">Add custom board</span>
+            </button>
+          ))}
       </div>
 
       {/* Actions */}

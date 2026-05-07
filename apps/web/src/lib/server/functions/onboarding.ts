@@ -421,20 +421,26 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * List existing boards during onboarding.
- * This is a simpler version that doesn't require full auth context.
+ * List existing boards during onboarding plus the tenant's maxBoards
+ * tier limit. The wizard's boards step uses both — the first to
+ * display existing boards as completed, the second to render the
+ * selector as radio-style (single-select) when only one board fits.
  */
 export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:onboarding] listBoardsForOnboarding`)
   try {
-    const boardList = await listBoards()
-    return boardList.map((b) => ({
-      id: b.id,
-      name: b.name,
-      description: b.description,
-    }))
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+    const [boardList, limits] = await Promise.all([listBoards(), getTierLimits()])
+    return {
+      boards: boardList.map((b) => ({
+        id: b.id,
+        name: b.name,
+        description: b.description,
+      })),
+      maxBoards: limits.maxBoards,
+    }
   } catch (error) {
     console.error(`[fn:onboarding] ❌ listBoardsForOnboarding failed:`, error)
-    return []
+    return { boards: [], maxBoards: null }
   }
 })
