@@ -51,9 +51,13 @@ export async function upsertInternalApiKey(): Promise<void> {
     })
     if (existing) return
 
-    // Create the service principal that owns this key. Role=admin
-    // because the cloud orchestrator is the trusted writer of
-    // tier_limits + (post-Stage 3B) bootstrap-claim flow.
+    // Create the service principal that owns this key. Row content
+    // intentionally MATCHES the duckpond seed-internal-api-key.sh
+    // INSERT (role='member', displayName='Quackback Cloud Control Plane',
+    // api_keys.name='cp-internal') so that during the Stage 1A→1E
+    // transition window — both writers active — whichever wins, the
+    // resulting row is identical.
+    //
     // serviceMetadata.apiKeyId is filled in after the api_keys row
     // is INSERTed below — same chicken-and-egg pattern as
     // createApiKey() in api-key.service.ts.
@@ -62,8 +66,8 @@ export async function upsertInternalApiKey(): Promise<void> {
       .values({
         userId: null,
         type: 'service',
-        role: 'admin',
-        displayName: 'Cloud orchestrator',
+        role: 'member',
+        displayName: 'Quackback Cloud Control Plane',
         serviceMetadata: { kind: 'api_key', apiKeyId: '' },
         createdAt: new Date(),
       })
@@ -79,7 +83,7 @@ export async function upsertInternalApiKey(): Promise<void> {
     const [createdKey] = await db
       .insert(apiKeys)
       .values({
-        name: 'Cloud orchestrator',
+        name: 'cp-internal',
         keyHash,
         keyPrefix,
         createdById: null,

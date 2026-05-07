@@ -16,16 +16,21 @@ if (process.env.SECRET_KEY) {
     import('@/lib/server/domains/settings/settings.service'),
     import('@/lib/server/config'),
     import('@tanstack/react-start/server'),
-  ])
-    .then(() =>
-      // Stage 1C: boot lifecycle handlers run after the DB pool is warm.
-      // Fire-and-forget — individual handlers swallow their own errors so
-      // a bad handler never blocks pod readiness.
-      import('@/lib/server/boot/run-boot-handlers').then(({ runBootHandlers }) => runBootHandlers())
-    )
+  ]).catch(() => {
+    // Pool initialization happens inside getDatabase()/getRedis(); if the
+    // first probe fails the next real query will retry from cold.
+  })
+
+  // Stage 1C: boot lifecycle handlers. INTENTIONALLY NOT chained off the
+  // warmup Promise.all — a transient warmup failure (e.g. Redis blip)
+  // must not skip the api_keys upsert, otherwise (post Stage 1E) CP would
+  // hit persistent 403s on tier-sync until the pod restarts. Boot
+  // handlers do their own DB access and have their own error handling.
+  import('@/lib/server/boot/run-boot-handlers')
+    .then(({ runBootHandlers }) => runBootHandlers())
     .catch(() => {
-      // Pool initialization happens inside getDatabase()/getRedis(); if the
-      // first probe fails the next real query will retry from cold.
+      // Module load failure is the only thing this catch sees; the
+      // handlers themselves swallow runtime errors per-handler.
     })
 }
 
