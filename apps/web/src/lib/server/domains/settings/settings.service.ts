@@ -117,6 +117,21 @@ const STANDARD_OAUTH_PROVIDERS = new Set(['google', 'github', 'microsoft', 'disc
 export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
   console.log(`[domain:settings] updateAuthConfig`)
   try {
+    // Managed-fields gate: refuse touching OAuth providers / openSignup
+    // that the cluster operator has declared in /etc/quackback/config.yaml.
+    // Per-key so the file can lock one provider while leaving others
+    // UI-editable. Runs BEFORE the tier gate so a 403 FIELD_MANAGED
+    // error shows up cleanly even when the user is on a tier that
+    // would otherwise also block the change.
+    if (input.oauth) {
+      for (const key of Object.keys(input.oauth)) {
+        await assertNotManaged(`auth.oauth.${key}`)
+      }
+    }
+    if (input.openSignup !== undefined) {
+      await assertNotManaged('auth.openSignup')
+    }
+
     // Tier gate: refuse non-standard OAuth providers when customOidcProvider is off.
     // No-op in OSS (feature is true).
     if (input.oauth) {
