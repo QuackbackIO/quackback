@@ -13,9 +13,7 @@ export async function assertNotManaged(path: string): Promise<void> {
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
   await _internalAssertNotManaged(path, async () => {
     const s = await getTenantSettings()
-    const raw = s?.settings as { managedFieldPaths?: unknown } | undefined
-    const paths = raw?.managedFieldPaths
-    return Array.isArray(paths) ? (paths as string[]) : []
+    return s?.managedFieldPaths ?? []
   })
 }
 

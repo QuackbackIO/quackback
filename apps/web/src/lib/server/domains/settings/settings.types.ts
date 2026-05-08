@@ -421,6 +421,10 @@ export interface TenantSettings {
   featureFlags: FeatureFlags
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
+  /** Dot-paths managed by /etc/quackback/config.yaml. Matching in-app
+   *  form controls render disabled when the path appears here. Empty
+   *  list = nothing locked (self-host default). */
+  managedFieldPaths: string[]
 }
 
 // =============================================================================

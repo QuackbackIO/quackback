@@ -10,6 +10,10 @@ export interface BootstrapData {
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
   themeCookie: Theme
+  /** Dot-paths managed by /etc/quackback/config.yaml. The matching
+   *  in-app form controls render disabled when the path appears here.
+   *  Empty list = nothing locked (self-host default). */
+  managedFieldPaths: string[]
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -127,7 +131,14 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
 
-  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
+  return {
+    baseUrl: config.baseUrl,
+    session,
+    settings,
+    userRole,
+    themeCookie,
+    managedFieldPaths: settings?.managedFieldPaths ?? [],
+  }
 })
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
