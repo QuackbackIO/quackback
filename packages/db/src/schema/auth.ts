@@ -214,6 +214,20 @@ export const settings = pgTable('settings', {
    * on).
    */
   tierLimits: text('tier_limits'),
+  /**
+   * JSON array of dot-paths whose values are managed by the
+   * declarative config file (`/etc/quackback/config.yaml`). When a
+   * path is in this list, the in-app UI mutator for that field
+   * returns 403 and the form control is rendered disabled. The list
+   * is rebuilt from scratch on every file reconcile, so removing a
+   * key from the file unlocks the UI on the next reconcile tick.
+   *
+   * Example: ["workspace.name", "tierLimits", "features.helpCenter"].
+   *
+   * Whole-block lock: a managed path with no dots locks the entire
+   * subtree (e.g. "tierLimits" locks "tierLimits.maxBoards" too).
+   */
+  managedFieldPaths: jsonb('managed_field_paths').$type<string[]>().notNull().default([]),
 })
 
 /**

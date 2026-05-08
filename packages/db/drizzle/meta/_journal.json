@@ -372,6 +372,13 @@
       "when": 1777655280134,
       "tag": "0052_otp_to_magic_link",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1778457600000,
+      "tag": "0053_settings_managed_field_paths",
+      "breakpoints": true
     }
   ]
 }
