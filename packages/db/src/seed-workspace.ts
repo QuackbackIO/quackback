@@ -18,6 +18,7 @@
  *     the in-app onboarding wizard get the same result as today.
  */
 import postgres from 'postgres'
+import { generateId } from '@quackback/ids'
 
 interface TierLimits {
   [key: string]: unknown
@@ -135,7 +136,11 @@ async function main(): Promise<void> {
       await setSql
       console.log(`[seed-workspace] updated settings: ${keys.join(', ')}`)
     } else {
-      const id = `ws_${Math.random().toString(36).slice(2, 14)}`
+      // settings.id is a TypeID-on-write UUID column; use the
+      // canonical generator so postgres accepts the inserted UUID
+      // form (a plain random string fails with 'invalid input
+      // syntax for type uuid').
+      const id = generateId('workspace')
       await sql`
         INSERT INTO settings (id, name, slug, created_at, setup_state, tier_limits)
         VALUES (
