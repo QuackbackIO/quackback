@@ -105,6 +105,21 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   }
   steps.push({ ok: true, stage: 'state-validation', label: 'State validated' })
 
+  // SSRF-check the discoveryUrl itself BEFORE fetching it. Defense-in-depth:
+  // even though admins configure this URL, a misconfiguration (or compromised
+  // settings store) could point it at a private/loopback IP and turn the
+  // handshake into an internal-network probe.
+  const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
+  const discoverySafety = await checkUrlSafety(input.discoveryUrl)
+  if (!discoverySafety.safe) {
+    return {
+      ok: false,
+      stage: 'discovery-fetch',
+      hint: `Discovery URL (${input.discoveryUrl}) is not safe to fetch (private/loopback IP or invalid scheme). Use a public IdP URL.`,
+      steps,
+    }
+  }
+
   const discoveryRes = await fetch(input.discoveryUrl, {
     redirect: 'manual',
     signal: AbortSignal.timeout(5000),
@@ -117,11 +132,21 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       steps,
     }
   }
-  const discovery = (await discoveryRes.json()) as {
+  let discovery: {
     issuer: string
     token_endpoint: string
     jwks_uri: string
     userinfo_endpoint?: string
+  }
+  try {
+    discovery = (await discoveryRes.json()) as typeof discovery
+  } catch (err) {
+    return {
+      ok: false,
+      stage: 'discovery-fetch',
+      hint: `Discovery URL returned non-JSON response: ${err instanceof Error ? err.message : 'parse error'}. Check that the URL points at a valid OIDC discovery document.`,
+      steps,
+    }
   }
 
   // SSRF-check every sub-endpoint the discovery doc names. A malicious
@@ -129,7 +154,6 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   // IPs and use the handshake to probe our internal network. Mirrors
   // testSsoConnectionFn's existing pattern (apps/web/src/lib/server/
   // functions/sso.ts:172-187).
-  const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
   const subEndpoints = [
     { name: 'token_endpoint', url: discovery.token_endpoint },
     { name: 'jwks_uri', url: discovery.jwks_uri },
@@ -186,12 +210,22 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       steps,
     }
   }
-  const tokens = (await tokenRes.json()) as {
+  let tokens: {
     id_token?: string
     access_token?: string
     refresh_token?: string
     expires_in?: number
     token_type?: string
+  }
+  try {
+    tokens = (await tokenRes.json()) as typeof tokens
+  } catch (err) {
+    return {
+      ok: false,
+      stage: 'token-exchange',
+      hint: `Token endpoint returned non-JSON success response: ${err instanceof Error ? err.message : 'parse error'}. The IdP responded 2xx but the body could not be parsed as JSON.`,
+      steps,
+    }
   }
   if (!tokens.id_token) {
     return {
@@ -203,7 +237,17 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   }
   steps.push({ ok: true, stage: 'token-exchange', label: 'Token exchange succeeded' })
 
-  const header = decodeProtectedHeader(tokens.id_token)
+  let header: ReturnType<typeof decodeProtectedHeader>
+  try {
+    header = decodeProtectedHeader(tokens.id_token)
+  } catch (err) {
+    return {
+      ok: false,
+      stage: 'id-token-decode',
+      hint: `ID token is not a well-formed JWT (cannot decode header): ${err instanceof Error ? err.message : 'decode error'}. The IdP returned an id_token that is not a valid compact JWS.`,
+      steps,
+    }
+  }
   steps.push({
     ok: true,
     stage: 'id-token-decode',
@@ -238,6 +282,15 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     }
   }
   steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
+
+  if (!verifiedPayload.sub) {
+    return {
+      ok: false,
+      stage: 'claim-check',
+      hint: "ID token missing required 'sub' claim. The IdP must include a stable subject identifier on every ID token (OIDC core requirement).",
+      steps,
+    }
+  }
 
   if (!verifiedPayload.email) {
     return {

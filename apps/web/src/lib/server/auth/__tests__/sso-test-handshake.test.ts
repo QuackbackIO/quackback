@@ -44,6 +44,20 @@ describe('runHandshake', () => {
     expect(result.errorCode).toBe('access_denied')
   })
 
+  it('rejects when the discoveryUrl itself fails SSRF check', async () => {
+    // Override the mock for just this test to return unsafe for the discovery URL.
+    const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
+    vi.mocked(checkUrlSafety).mockResolvedValueOnce({ safe: false, reason: 'ssrf-rejected' })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+    const result = await runHandshake(baseInput)
+
+    if (result.ok) throw new Error('expected failure')
+    expect(result.stage).toBe('discovery-fetch')
+    expect(result.hint).toMatch(/not safe to fetch/i)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('surfaces token-exchange error with human hint', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
