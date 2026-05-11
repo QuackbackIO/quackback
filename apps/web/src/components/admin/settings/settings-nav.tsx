@@ -35,10 +35,15 @@ interface NavSection {
 export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[] {
   const sections: NavSection[] = [
     {
-      label: 'General',
+      label: 'Administration',
       items: [
-        { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
+        { label: 'Members', to: '/admin/settings/team', icon: UsersIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        {
+          label: 'Security',
+          to: '/admin/settings/security/authentication',
+          icon: ShieldCheckIcon,
+        },
       ],
     },
     {
@@ -46,16 +51,6 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
       items: [
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
         { label: 'Widget', to: '/admin/settings/portal-widget', icon: ChatBubbleLeftRightIcon },
-      ],
-    },
-    {
-      label: 'Security',
-      items: [
-        {
-          label: 'Authentication',
-          to: '/admin/settings/security/authentication',
-          icon: ShieldCheckIcon,
-        },
       ],
     },
     {

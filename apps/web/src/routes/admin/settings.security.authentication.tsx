@@ -60,7 +60,7 @@ function AuthenticationPage() {
       </div>
       <PageHeader
         icon={ShieldCheckIcon}
-        title="Authentication"
+        title="Security"
         description="Choose how your team and end users sign in."
       />
       <AuthSettings

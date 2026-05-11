@@ -70,13 +70,24 @@ describe('buildNavSections', () => {
     expect(labels).not.toContain('Portal')
   })
 
+  it('has no separate Security section (rolled into Administration)', () => {
+    const sections = buildNavSections({ helpCenter: true })
+    const labels = sections.map((s) => s.label)
+    expect(labels).not.toContain('Security')
+  })
+
+  it('has no separate General section (replaced by Administration)', () => {
+    const sections = buildNavSections({ helpCenter: true })
+    const labels = sections.map((s) => s.label)
+    expect(labels).not.toContain('General')
+  })
+
   it('has the expected section order with helpCenter flag on', () => {
     const sections = buildNavSections({ helpCenter: true })
     const labels = sections.map((s) => s.label)
     expect(labels).toEqual([
-      'General',
+      'Administration',
       'Customization',
-      'Security',
       'Feedback',
       'Help Center',
       'End Users',
@@ -88,29 +99,52 @@ describe('buildNavSections', () => {
     const sections = buildNavSections()
     const labels = sections.map((s) => s.label)
     expect(labels).toEqual([
-      'General',
+      'Administration',
       'Customization',
-      'Security',
       'Feedback',
       'End Users',
       'Developers',
     ])
   })
 
-  it('places Authentication item under Security', () => {
+  it('Administration contains Members, Integrations, Security in that order', () => {
     const sections = buildNavSections()
-    const security = sections.find((s) => s.label === 'Security')!
-    expect(security.items).toHaveLength(1)
-    expect(security.items[0].label).toBe('Authentication')
-    expect(security.items[0].to).toBe('/admin/settings/security/authentication')
+    const administration = sections.find((s) => s.label === 'Administration')!
+    expect(administration.items.map((i) => i.label)).toEqual([
+      'Members',
+      'Integrations',
+      'Security',
+    ])
   })
 
-  it('does NOT duplicate Authentication under End Users (single canonical entry under Security)', () => {
+  it('Members points at the existing team URL', () => {
+    const sections = buildNavSections()
+    const administration = sections.find((s) => s.label === 'Administration')!
+    const members = administration.items.find((i) => i.label === 'Members')!
+    expect(members.to).toBe('/admin/settings/team')
+  })
+
+  it('Security points at the authentication URL', () => {
+    const sections = buildNavSections()
+    const administration = sections.find((s) => s.label === 'Administration')!
+    const security = administration.items.find((i) => i.label === 'Security')!
+    expect(security.to).toBe('/admin/settings/security/authentication')
+  })
+
+  it('Integrations points at the integrations URL', () => {
+    const sections = buildNavSections()
+    const administration = sections.find((s) => s.label === 'Administration')!
+    const integrations = administration.items.find((i) => i.label === 'Integrations')!
+    expect(integrations.to).toBe('/admin/settings/integrations')
+  })
+
+  it('does NOT duplicate Security/Authentication under End Users', () => {
     const sections = buildNavSections()
     const endUsers = sections.find((s) => s.label === 'End Users')!
-    const authEntries = endUsers.items.filter((i) => i.label === 'Authentication')
-    expect(authEntries).toHaveLength(0)
-    // User Attributes is the only End Users entry left
+    const dupes = endUsers.items.filter(
+      (i) => i.label === 'Authentication' || i.label === 'Security'
+    )
+    expect(dupes).toHaveLength(0)
     expect(endUsers.items.map((i) => i.label)).toEqual(['User Attributes'])
   })
 })
