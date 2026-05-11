@@ -240,6 +240,7 @@ function TeamPage() {
             <div className="flex justify-end">
               <MemberActions
                 principalId={r.principalId}
+                userId={r.userId}
                 memberName={r.name || r.email || 'Unnamed'}
                 memberRole={r.role as 'admin' | 'member'}
                 isLastAdmin={isLastAdmin && isAdmin(r.role)}

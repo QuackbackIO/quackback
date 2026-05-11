@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   EllipsisVerticalIcon,
   ShieldCheckIcon,
+  ShieldExclamationIcon,
   UserIcon,
   UserMinusIcon,
 } from '@heroicons/react/24/solid'
@@ -18,9 +19,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { updateMemberRoleFn, removeTeamMemberFn } from '@/lib/server/functions/admin'
+import { adminResetTwoFactorFn } from '@/lib/server/functions/admin-reset-two-factor'
 
 interface MemberActionsProps {
   principalId: string
+  userId: string | null
   memberName: string
   memberRole: 'admin' | 'member'
   isLastAdmin: boolean
@@ -28,6 +31,7 @@ interface MemberActionsProps {
 
 export function MemberActions({
   principalId,
+  userId,
   memberName,
   memberRole,
   isLastAdmin,
@@ -36,6 +40,7 @@ export function MemberActions({
   const [isLoading, setIsLoading] = useState(false)
   const [roleDialogOpen, setRoleDialogOpen] = useState(false)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [resetTfaDialogOpen, setResetTfaDialogOpen] = useState(false)
 
   const newRole = memberRole === 'admin' ? 'member' : 'admin'
   const canChangeRole = !(memberRole === 'admin' && isLastAdmin)
@@ -69,6 +74,21 @@ export function MemberActions({
     }
   }
 
+  const handleResetTfa = async () => {
+    if (!userId) return
+    setIsLoading(true)
+    try {
+      await adminResetTwoFactorFn({ data: { userId } })
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'team'] })
+    } catch (error) {
+      console.error('Failed to reset 2FA:', error)
+      alert(error instanceof Error ? error.message : 'Failed to reset two-factor')
+    } finally {
+      setIsLoading(false)
+      setResetTfaDialogOpen(false)
+    }
+  }
+
   return (
     <>
       <DropdownMenu>
@@ -96,6 +116,12 @@ export function MemberActions({
               </>
             )}
           </DropdownMenuItem>
+          {userId ? (
+            <DropdownMenuItem onClick={() => setResetTfaDialogOpen(true)} className="gap-2">
+              <ShieldExclamationIcon className="h-4 w-4" />
+              Reset two-factor
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setRemoveDialogOpen(true)}
@@ -148,6 +174,24 @@ export function MemberActions({
         confirmLabel={isLoading ? 'Removing...' : 'Remove from team'}
         isPending={isLoading}
         onConfirm={handleRemove}
+      />
+
+      <ConfirmDialog
+        open={resetTfaDialogOpen}
+        onOpenChange={setResetTfaDialogOpen}
+        title="Reset two-factor authentication?"
+        description={
+          <>
+            <strong>{memberName}</strong>&apos;s two-factor enrollment will be cleared and any
+            trusted devices revoked. They&apos;ll be able to sign in with just their password until
+            they re-enroll. Use this only when they&apos;ve lost their authenticator and backup
+            codes.
+          </>
+        }
+        variant="destructive"
+        confirmLabel={isLoading ? 'Resetting...' : 'Reset two-factor'}
+        isPending={isLoading}
+        onConfirm={handleResetTfa}
       />
     </>
   )
