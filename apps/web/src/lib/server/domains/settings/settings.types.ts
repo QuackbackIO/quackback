@@ -38,6 +38,12 @@ export interface AuthConfig {
     discoveryUrl: string
     clientId: string
     autoCreateUsers: boolean
+    /**
+     * Role assigned to a brand-new user on their first SSO sign-in.
+     * Only consulted when `autoCreateUsers` is true. Default 'member'.
+     * 'user' means "do not promote" (portal user only).
+     */
+    autoProvisionRole?: 'admin' | 'member' | 'user'
   }
 }
 
