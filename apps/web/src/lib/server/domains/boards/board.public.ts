@@ -3,6 +3,7 @@ import { getTableColumns } from 'drizzle-orm'
 import type { BoardId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'
+import { boardViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 export async function getPublicBoardById(boardId: BoardId): Promise<Board> {
   try {
@@ -25,7 +26,21 @@ export async function getPublicBoardById(boardId: BoardId): Promise<Board> {
   }
 }
 
-export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
+/**
+ * List boards the actor is allowed to see, with post counts.
+ *
+ * Composes `policy.boards.boardViewFilter` so the result honours per-board
+ * audience (public / authenticated / team / segments). The legacy
+ * `isPublic = true` filter is gone — it's now derived from audience.
+ *
+ * Defaults to ANONYMOUS_ACTOR for callers that don't yet pass one
+ * (portal anonymous, unauthenticated API). Caller-supplied actors must
+ * be built from the request's auth context (see policy.actorFromAuth
+ * once Task 13 lands).
+ */
+export async function listPublicBoardsWithStats(
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<BoardWithStats[]> {
   try {
     const rows = await db
       .select({
@@ -34,7 +49,7 @@ export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
       })
       .from(boards)
       .leftJoin(posts, and(eq(posts.boardId, boards.id), isNull(posts.deletedAt)))
-      .where(and(eq(boards.isPublic, true), isNull(boards.deletedAt)))
+      .where(and(boardViewFilter(actor), isNull(boards.deletedAt)))
       .groupBy(boards.id)
       .orderBy(boards.name)
 
