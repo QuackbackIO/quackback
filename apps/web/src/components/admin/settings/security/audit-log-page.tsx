@@ -53,10 +53,21 @@ const TIME_RANGES = [
 
 type TimeRange = (typeof TIME_RANGES)[number]['value']
 
-function rangeToFromIso(range: TimeRange): string | undefined {
+/**
+ * Convert the time-range pick to a stable ISO timestamp. Stable in
+ * two senses: (1) rounded to the start of the current minute so two
+ * calls within 60s produce the same string, which keeps the loader
+ * prefetch and the component's mount call landing on the same React
+ * Query cache entry; (2) idempotent for repeated calls with the same
+ * range in the same minute.
+ */
+export function rangeToFromIso(range: TimeRange): string | undefined {
   if (range === 'all') return undefined
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  // Floor to the minute so SSR + hydrate land on the same query key.
+  const minuteMs = 60 * 1000
+  const now = Math.floor(Date.now() / minuteMs) * minuteMs
+  return new Date(now - days * 24 * 60 * 60 * 1000).toISOString()
 }
 
 function formatTimestamp(iso: string): string {

@@ -47,6 +47,10 @@ export const previewSsoRequiredImpactFn = createServerFn({ method: 'GET' })
     // Team members without an `account.provider_id='sso'` row. Same
     // shape as the predicate revokeNonSsoTeamSessions uses so the
     // preview and the actual revoke stay aligned.
+    //
+    // postgres-js's drizzle driver returns the row array directly —
+    // NOT a `{ rows: [...] }` wrapper. Treat the result as an array.
+    type CountRow = { count: number }
     const teamWithoutSso = (await db.execute(sql`
       SELECT COUNT(*)::int AS count
       FROM "principal" p
@@ -56,8 +60,8 @@ export const previewSsoRequiredImpactFn = createServerFn({ method: 'GET' })
           SELECT 1 FROM "account" a
           WHERE a."user_id" = p."user_id" AND a."provider_id" = 'sso'
         )
-    `)) as unknown as { rows?: Array<{ count?: number }> }
-    const teamMembersWithoutSso = teamWithoutSso.rows?.[0]?.count ?? 0
+    `)) as unknown as CountRow[]
+    const teamMembersWithoutSso = teamWithoutSso[0]?.count ?? 0
 
     const nonSsoSessions = (await db.execute(sql`
       SELECT COUNT(*)::int AS count
@@ -71,8 +75,8 @@ export const previewSsoRequiredImpactFn = createServerFn({ method: 'GET' })
             WHERE a."user_id" = p."user_id" AND a."provider_id" = 'sso'
           )
       )
-    `)) as unknown as { rows?: Array<{ count?: number }> }
-    const activeNonSsoSessions = nonSsoSessions.rows?.[0]?.count ?? 0
+    `)) as unknown as CountRow[]
+    const activeNonSsoSessions = nonSsoSessions[0]?.count ?? 0
 
     const authConfig = await getAuthConfig()
     const magicLinkEnabled = authConfig?.oauth?.magicLink !== false

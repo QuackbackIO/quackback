@@ -150,23 +150,25 @@ export function SsoEnforcementMode({ authConfig, hasEnforcedDomain }: SsoEnforce
         </Alert>
       ) : null}
 
-      <ConfirmRequiredDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        onConfirm={() => setRequired.mutate({ required: true })}
-        submitting={setRequired.isPending}
-      />
+      {/* Only mount the dialog when the user has chosen to open it —
+       *  the dialog's preview query suspends, and rendering it
+       *  unconditionally would block the section from ever appearing. */}
+      {confirmOpen ? (
+        <ConfirmRequiredDialog
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => setRequired.mutate({ required: true })}
+          submitting={setRequired.isPending}
+        />
+      ) : null}
     </section>
   )
 }
 
 function ConfirmRequiredDialog({
-  open,
   onOpenChange,
   onConfirm,
   submitting,
 }: {
-  open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   submitting: boolean
@@ -174,7 +176,10 @@ function ConfirmRequiredDialog({
   const [ackTeam, setAckTeam] = useState(false)
   const [ackCodes, setAckCodes] = useState(false)
 
-  // Lazy preview: fetch only when the modal opens.
+  // Lazy preview: only loaded when the dialog is mounted (which the
+  // parent gates on `confirmOpen`). Wrapping in Suspense at the parent
+  // would also work, but mount-gating keeps the section's
+  // initial-render path Suspense-free.
   const { data: impact } = useSuspenseQuery({
     queryKey: ['admin', 'ssoRequiredPreview'],
     queryFn: () => previewSsoRequiredImpactFn({ data: {} }),
@@ -182,7 +187,7 @@ function ConfirmRequiredDialog({
   })
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Require SSO for the whole workspace?</DialogTitle>

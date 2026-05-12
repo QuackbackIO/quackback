@@ -30,8 +30,10 @@ beforeEach(() => {
 })
 
 describe('revokeNonSsoTeamSessions', () => {
-  it('returns the rowCount from the DELETE query', async () => {
-    hoisted.executeFn.mockResolvedValue({ rowCount: 7 })
+  it('returns the affected-row count from the DELETE query', async () => {
+    // postgres-js's drizzle driver exposes the count as `.count` on the
+    // result array — NOT a `{ rowCount }` wrapper like node-postgres.
+    hoisted.executeFn.mockResolvedValue(Object.assign([], { count: 7 }))
 
     const result = await revokeNonSsoTeamSessions()
 
@@ -40,13 +42,13 @@ describe('revokeNonSsoTeamSessions', () => {
   })
 
   it('returns 0 when no non-SSO team sessions exist', async () => {
-    hoisted.executeFn.mockResolvedValue({ rowCount: 0 })
+    hoisted.executeFn.mockResolvedValue(Object.assign([], { count: 0 }))
 
     expect(await revokeNonSsoTeamSessions()).toBe(0)
   })
 
-  it('treats null/undefined rowCount as 0', async () => {
-    hoisted.executeFn.mockResolvedValue({ rowCount: null })
+  it('falls back to 0 when count is missing', async () => {
+    hoisted.executeFn.mockResolvedValue([])
     expect(await revokeNonSsoTeamSessions()).toBe(0)
   })
 })

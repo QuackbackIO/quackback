@@ -3,7 +3,7 @@ import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { AuditLogPage } from '@/components/admin/settings/security/audit-log-page'
+import { AuditLogPage, rangeToFromIso } from '@/components/admin/settings/security/audit-log-page'
 
 export const Route = createFileRoute('/admin/settings/security/audit-log')({
   loader: async ({ context }) => {
@@ -12,9 +12,11 @@ export const Route = createFileRoute('/admin/settings/security/audit-log')({
 
     // Prefetch the default-filter view so the table renders without a
     // suspended flash. Match the default in <AuditLogPage>: last 30
-    // days, all event types, limit 200.
+    // days, all event types, limit 200. The shared rangeToFromIso
+    // helper floors `from` to the current minute so the loader and the
+    // mount call agree on the same React Query cache key.
     const defaultFilters = {
-      from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      from: rangeToFromIso('30d'),
       limit: 200,
     }
     await context.queryClient.ensureQueryData(adminQueries.auditEvents(defaultFilters))

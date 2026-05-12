@@ -18,7 +18,11 @@ import { db } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 
 export async function revokeNonSsoTeamSessions(): Promise<number> {
-  const result = await db.execute(sql`
+  // postgres-js's drizzle driver returns the row array directly with a
+  // `.count` property for non-SELECT statements — not a `{ rowCount }`
+  // object like node-postgres. Read `.count` (the affected-row count)
+  // and fall back to the array length / 0 if the shape ever changes.
+  const result = (await db.execute(sql`
     DELETE FROM "session"
     WHERE "user_id" IN (
       SELECT p."user_id"
@@ -32,6 +36,6 @@ export async function revokeNonSsoTeamSessions(): Promise<number> {
             AND a."provider_id" = 'sso'
         )
     )
-  `)
-  return (result as { rowCount?: number | null }).rowCount ?? 0
+  `)) as unknown as { count?: number; length?: number }
+  return result.count ?? result.length ?? 0
 }

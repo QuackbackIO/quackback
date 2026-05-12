@@ -14,6 +14,7 @@ import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { SuspendedView } from '@/components/shared/suspended-view'
@@ -226,6 +227,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
         <Scripts />
       </body>
