@@ -48,6 +48,14 @@ interface PortalAuthFormInlineProps {
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
 }
 
+/**
+ * Named cases for `loadingAction` plus any provider id at runtime. The
+ * `(string & {})` trick keeps autocomplete on the four literal cases
+ * while still allowing arbitrary provider ids; a typo at a setter site
+ * narrows to the literal union and surfaces as a type error.
+ */
+type LoadingAction = 'password' | 'email' | 'sso' | 'forgot' | (string & {})
+
 interface OAuthButtonProps {
   icon: React.ReactNode | null
   label: string
@@ -105,7 +113,7 @@ export function PortalAuthFormInline({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [loadingAction, setLoadingAction] = useState<string | null>(null)
+  const [loadingAction, setLoadingAction] = useState<LoadingAction | null>(null)
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null)
   const [loadingInvitation, setLoadingInvitation] = useState(!!invitationId)
   const [popupBlocked, setPopupBlocked] = useState(false)
