@@ -23,6 +23,7 @@ import {
 } from '@/lib/server/functions/auth-provider-credentials'
 import { getSsoStatusFn } from '@/lib/server/functions/sso'
 import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
+import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
@@ -436,6 +437,17 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'ssoStatus'],
       queryFn: () => getSsoStatusFn(),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * Recovery codes for the calling admin — metadata only. Generation
+   * is via a mutation, not this query.
+   */
+  recoveryCodes: () =>
+    queryOptions({
+      queryKey: ['admin', 'recoveryCodes'],
+      queryFn: () => listRecoveryCodesFn({ data: {} }),
       staleTime: 30 * 1000,
     }),
 
