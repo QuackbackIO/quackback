@@ -7,6 +7,7 @@ vi.mock('@/lib/client/auth-client', () => ({
     signIn: {
       email: vi.fn(),
       emailOtp: vi.fn(),
+      oauth2: vi.fn(),
     },
     signUp: { email: vi.fn() },
     requestPasswordReset: vi.fn(),
@@ -17,14 +18,39 @@ vi.mock('@/lib/client/auth-client', () => ({
 // to the email-only auth flows we're testing — stub the whole module
 // so the form renders without those side effects.
 vi.mock('../oauth-buttons', () => ({
-  OAuthButtons: () => null,
-  getEnabledOAuthProviders: () => [],
+  OAuthButtons: ({ providers }: { providers: Array<{ id: string; name: string }> }) => (
+    <div data-testid="oauth-buttons">
+      {providers.map((p) => (
+        <button key={p.id} type="button">
+          Continue with {p.name}
+        </button>
+      ))}
+    </div>
+  ),
+  getEnabledOAuthProviders: vi.fn(() => []),
+}))
+
+// `useServerFn(lookupAuthMethodsFn)` returns a callable that hits the
+// server function. We swap it for a controllable mock so each test can
+// dictate what the classifier returns.
+const lookupMock = vi.fn()
+vi.mock('@tanstack/react-start', () => ({
+  useServerFn: () => lookupMock,
+}))
+
+// The auth functions module imports server-only deps when its handler
+// runs; we only need the constants + type at test time.
+vi.mock('@/lib/server/functions/auth', () => ({
+  lookupAuthMethodsFn: vi.fn(),
+  SSO_UNAVAILABLE_MESSAGE:
+    'Single sign-on is configured for your domain but is not currently available. Contact your administrator.',
 }))
 
 import { PortalAuthForm } from '../portal-auth-form'
 import { authClient } from '@/lib/client/auth-client'
 
 const signInEmailOtpMock = authClient.signIn.emailOtp as ReturnType<typeof vi.fn>
+const signInOauth2Mock = authClient.signIn.oauth2 as ReturnType<typeof vi.fn>
 
 // Mock fetch globally; per-test override the response.
 const fetchMock = vi.fn()
@@ -33,6 +59,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   fetchMock.mockReset()
+  lookupMock.mockReset()
 })
 
 function okResponse(body: object = { ok: true }) {
@@ -49,7 +76,7 @@ function errorResponse(status: number, body: object = {}) {
   })
 }
 
-describe('PortalAuthForm — admin login (magicLink only, password disabled)', () => {
+describe('PortalAuthForm — Stage 1 email entry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     signInEmailOtpMock.mockResolvedValue({ data: {}, error: null })
@@ -57,20 +84,192 @@ describe('PortalAuthForm — admin login (magicLink only, password disabled)', (
   })
   afterEach(() => cleanup())
 
-  // Mirrors what `apps/web/src/routes/admin.login.tsx` passes today:
-  // magicLink the only email-based auth, password explicitly off,
-  // OAuth providers empty.
-  const adminAuthConfig = { magicLink: true, password: false }
-
-  it('starts on the email step with the Continue with email button', () => {
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
+  it('renders email field and Continue button on Stage 1', () => {
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument()
+    // No password field at Stage 1
+    expect(screen.queryByLabelText(/^password$/i)).not.toBeInTheDocument()
   })
 
-  it('submitting email POSTs to /api/auth/portal-signin and flips to the code step', async () => {
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
+  it('renders OAuth tiles at Stage 1 when providers are configured', async () => {
+    const oauth = await import('../oauth-buttons')
+    vi.mocked(oauth.getEnabledOAuthProviders).mockReturnValueOnce([
+      { id: 'google', name: 'Google', type: 'social' },
+    ])
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false, google: true }} />)
+    expect(screen.getByTestId('oauth-buttons')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument()
+  })
+
+  it('rejects empty-email submit without calling lookup', async () => {
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    // HTML5 required keeps lookup from firing; nothing else to assert
+    expect(lookupMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('PortalAuthForm — Stage 1 → Stage 2 dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInEmailOtpMock.mockResolvedValue({ data: {}, error: null })
+    fetchMock.mockResolvedValue(okResponse())
+  })
+  afterEach(() => cleanup())
+
+  it('routes unknown-domain emails into the methods stage', async () => {
+    lookupMock.mockResolvedValue({
+      kind: 'methods',
+      authConfig: { password: true, magicLink: false },
+      ssoEnabled: false,
+    })
+    render(
+      <PortalAuthForm authConfig={{ password: true, magicLink: false }} workspaceName="Acme" />
+    )
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'user@gmail.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await waitFor(() => expect(lookupMock).toHaveBeenCalledOnce())
+    expect(lookupMock).toHaveBeenCalledWith({
+      data: { email: 'user@gmail.com', surface: 'portal' },
+    })
+    // Methods header
+    await screen.findByText(/welcome back/i)
+    // Read-only email shown
+    expect(screen.getByText('user@gmail.com')).toBeInTheDocument()
+    // Password field appears in methods step
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+  })
+
+  it('redirects to SSO when the lookup returns sso-redirect', async () => {
+    lookupMock.mockResolvedValue({ kind: 'sso-redirect' })
+    signInOauth2Mock.mockResolvedValue({ data: { url: 'https://idp.example/' }, error: null })
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'jane@acme.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await waitFor(() =>
+      expect(signInOauth2Mock).toHaveBeenCalledWith({ providerId: 'sso', callbackURL: '/' })
+    )
+    // Transient spinner shown while bouncing
+    await screen.findByText(/signing you in/i)
+  })
+
+  it('shows the sso-default branch when the lookup returns sso-default', async () => {
+    lookupMock.mockResolvedValue({
+      kind: 'sso-default',
+      authConfig: { password: true, magicLink: false },
+    })
+    render(
+      <PortalAuthForm authConfig={{ password: true, magicLink: false }} workspaceName="Acme" />
+    )
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'jane@acme.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByText(/Acme/i)
+    expect(screen.getByRole('button', { name: /continue with sso/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign in another way/i })).toBeInTheDocument()
+  })
+
+  it('shows sso-unavailable copy when the lookup returns sso-unavailable', async () => {
+    lookupMock.mockResolvedValue({ kind: 'sso-unavailable', reason: 'not-registered' })
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'jane@acme.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByText(/single sign-on is configured for your domain/i)
+  })
+
+  it('blocks signup when openSignup=false and the email is unknown', async () => {
+    lookupMock.mockResolvedValue({
+      kind: 'methods',
+      authConfig: { password: true, magicLink: false },
+      ssoEnabled: false,
+    })
+    render(
+      <PortalAuthForm
+        mode="signup"
+        authConfig={{ password: true, magicLink: false }}
+        openSignup={false}
+      />
+    )
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'stranger@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByText(/no account found/i)
+    expect(screen.getByText(/new sign-ups are off/i)).toBeInTheDocument()
+    // No password field shown in blocked state
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
+  })
+
+  it('back link from Stage 2 returns to Stage 1 and clears the password', async () => {
+    lookupMock.mockResolvedValue({
+      kind: 'methods',
+      authConfig: { password: true, magicLink: false },
+      ssoEnabled: false,
+    })
+    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'user@gmail.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByLabelText(/password/i)
+    // Type something so we can verify it gets cleared
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'hunter22' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /use a different email/i }))
+
+    // Back at Stage 1
+    await screen.findByRole('button', { name: /continue/i })
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('PortalAuthForm — initialEmail skips Stage 1', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signInEmailOtpMock.mockResolvedValue({ data: {}, error: null })
+    fetchMock.mockResolvedValue(okResponse())
+  })
+  afterEach(() => cleanup())
+
+  // Mirrors the team-login handoff: the dispatcher classifies and
+  // hands off to the methods form with the email pre-filled.
+  const adminAuthConfig = { magicLink: true, password: false }
+
+  it('lands on the magic-link send step when initialEmail is supplied', () => {
+    render(
+      <PortalAuthForm
+        authConfig={adminAuthConfig}
+        callbackUrl="/admin/feedback"
+        initialEmail="founder@acme.com"
+      />
+    )
+    // No Stage 1 — we're at Stage 2 magic-link send
+    expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument()
+    expect(screen.getByText('founder@acme.com')).toBeInTheDocument()
+  })
+
+  it('submits the magic-link request and flips to the code step', async () => {
+    render(
+      <PortalAuthForm
+        authConfig={adminAuthConfig}
+        callbackUrl="/admin/feedback"
+        initialEmail="founder@acme.com"
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -82,21 +281,22 @@ describe('PortalAuthForm — admin login (magicLink only, password disabled)', (
       })
     )
 
-    // The form flips to the code step
     await screen.findByText(/we sent a 6-digit code to/i)
     expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument()
-    expect(screen.getByText('founder@acme.com')).toBeInTheDocument()
     expect(screen.getByText(/sign-in link in your email also works/i)).toBeInTheDocument()
   })
 
   it('auto-submits when 6 digits are entered (no manual button click needed)', async () => {
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
+    render(
+      <PortalAuthForm
+        authConfig={adminAuthConfig}
+        callbackUrl="/admin/feedback"
+        initialEmail="founder@acme.com"
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
     await screen.findByLabelText(/verification code/i)
 
-    // Typing 6 digits should trigger onComplete → verifyCode without
-    // needing to click the Verify button.
     fireEvent.change(screen.getByLabelText(/verification code/i), { target: { value: '123456' } })
 
     await waitFor(() => expect(signInEmailOtpMock).toHaveBeenCalledOnce())
@@ -108,12 +308,16 @@ describe('PortalAuthForm — admin login (magicLink only, password disabled)', (
 
   it('surfaces the server error message when portal-signin fails', async () => {
     fetchMock.mockResolvedValueOnce(errorResponse(500, { error: 'Email not configured' }))
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
+    render(
+      <PortalAuthForm
+        authConfig={adminAuthConfig}
+        callbackUrl="/admin/feedback"
+        initialEmail="founder@acme.com"
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
 
     await screen.findByText(/email not configured/i)
-    // Stay on the email step
     expect(screen.queryByLabelText(/verification code/i)).not.toBeInTheDocument()
   })
 
@@ -122,36 +326,37 @@ describe('PortalAuthForm — admin login (magicLink only, password disabled)', (
       data: null,
       error: { message: 'Invalid or expired code' },
     })
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'founder@acme.com' } })
+    render(
+      <PortalAuthForm
+        authConfig={adminAuthConfig}
+        callbackUrl="/admin/feedback"
+        initialEmail="founder@acme.com"
+      />
+    )
     fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
     await screen.findByLabelText(/verification code/i)
 
-    // Auto-submit fires on 6th digit; error message bubbles up
     fireEvent.change(screen.getByLabelText(/verification code/i), { target: { value: '999999' } })
 
     await screen.findByText(/invalid or expired code/i)
   })
-
-  it('rejects empty-email submit without calling the signin endpoint', async () => {
-    render(<PortalAuthForm authConfig={adminAuthConfig} callbackUrl="/admin/feedback" />)
-    fireEvent.click(screen.getByRole('button', { name: /continue with email/i }))
-
-    await screen.findByText(/email is required/i)
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
 })
 
-describe('PortalAuthForm — portal login (password + OAuth, magicLink off)', () => {
+describe('PortalAuthForm — methods step variants', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
   afterEach(() => cleanup())
 
-  it('does not render the "Sign in with email instead" link when magicLink is off', () => {
-    render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
+  it('does not render the magic-link cross-link when magicLink is off', () => {
+    render(
+      <PortalAuthForm
+        authConfig={{ password: true, magicLink: false }}
+        initialEmail="user@example.com"
+      />
+    )
     expect(
-      screen.queryByRole('button', { name: /sign in with email instead/i })
+      screen.queryByRole('button', { name: /email me a sign-in link/i })
     ).not.toBeInTheDocument()
   })
 })

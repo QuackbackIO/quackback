@@ -61,6 +61,7 @@ function SignupPage() {
         callbackUrl="/"
         authConfig={authConfig}
         customProviderNames={portalConfig.customProviderNames}
+        workspaceName={workspaceName}
       />
     </PortalAuthShell>
   )

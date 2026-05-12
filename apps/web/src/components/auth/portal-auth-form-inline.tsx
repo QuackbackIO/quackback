@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import {
   InformationCircleIcon,
   EnvelopeIcon,
   ArrowLeftIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/solid'
 import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
 import {
@@ -19,7 +20,11 @@ import {
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
 import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
-import { lookupAuthMethodsFn, SSO_UNAVAILABLE_MESSAGE } from '@/lib/server/functions/auth'
+import {
+  lookupAuthMethodsFn,
+  SSO_UNAVAILABLE_MESSAGE,
+  type LookupAuthMethodsResult,
+} from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
 import type { AuthFormStep } from './email-signin-types'
@@ -43,6 +48,8 @@ interface PortalAuthFormInlineProps {
   mode: 'login' | 'signup'
   authConfig?: OrgAuthConfig | null
   invitationId?: string | null
+  /** Workspace display name shown in Stage 1 / Stage 2 copy. */
+  workspaceName?: string
   onModeSwitch?: (mode: 'login' | 'signup') => void
   /** Lets the surrounding dialog adapt its header to the form's step. */
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
@@ -50,11 +57,11 @@ interface PortalAuthFormInlineProps {
 
 /**
  * Named cases for `loadingAction` plus any provider id at runtime. The
- * `(string & {})` trick keeps autocomplete on the four literal cases
- * while still allowing arbitrary provider ids; a typo at a setter site
- * narrows to the literal union and surfaces as a type error.
+ * `(string & {})` trick keeps autocomplete on the literal cases while
+ * still allowing arbitrary provider ids; a typo at a setter site narrows
+ * to the literal union and surfaces as a type error.
  */
-type LoadingAction = 'password' | 'email' | 'sso' | 'forgot' | (string & {})
+type LoadingAction = 'password' | 'email' | 'sso' | 'forgot' | 'continue' | (string & {})
 
 interface OAuthButtonProps {
   icon: React.ReactNode | null
@@ -88,27 +95,56 @@ function OAuthButton({
 }
 
 /**
- * Inline Portal Auth Form for use in dialogs/popovers
+ * Inline Portal Auth Form for use in dialogs/popovers.
  *
- * Supports password, email OTP, and OAuth authentication.
+ * Email-first two-stage flow matching `<PortalAuthForm>`:
  *
- * Unlike the full-page PortalAuthForm, this version:
- * - Opens OAuth in popup windows instead of redirecting
- * - Signals success via BroadcastChannel to parent
- * - Better-auth automatically creates users if they don't exist
+ *  Stage 1 (`email`): OAuth tiles + email field + Continue. OAuth tiles
+ *    bypass Stage 2 entirely (popup-driven, not redirect-driven, since
+ *    the form lives inside a dialog).
+ *
+ *  Stage 2: routed by `lookupAuthMethodsFn` —
+ *    - `sso-redirect`     → `authClient.signIn.oauth2(...)` same-tab
+ *      (the dialog is closing anyway since the page navigates).
+ *    - `sso-default`      → "Workspace uses SSO" card + escape hatch.
+ *    - `methods`          → password + magic-link form, email locked.
+ *    - `sso-unavailable`  → `SSO_UNAVAILABLE_MESSAGE`.
+ *    - Special: signup-mode + unknown email + openSignup=false →
+ *      "no account / signups closed" block.
+ *
+ *  Every Stage 2 sub-screen has a `← Use a different email` link that
+ *  returns to Stage 1, clearing the cached lookup + error state.
  */
 export function PortalAuthFormInline({
   mode,
   authConfig,
   invitationId,
+  workspaceName,
   onModeSwitch,
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
-  const defaultStep: AuthFormStep = !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
+  const openSignup = authConfig?.openSignup
+  const methodsDefaultStep: AuthFormStep =
+    !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
 
-  const [step, setStep] = useState<AuthFormStep>(defaultStep)
+  // Stage 2 sub-screens. `methods-step` carries the inner step (the
+  // existing `AuthFormStep` union — credentials | email | code | forgot
+  // | reset). The other branches are stage-level only.
+  type View =
+    | { stage: 'email' }
+    | { stage: 'methods-step'; step: AuthFormStep }
+    | { stage: 'sso-default' }
+    | { stage: 'sso-unavailable' }
+    | { stage: 'closed-signup' }
+    | { stage: 'sso-redirecting' }
+
+  // Invitation flow: the email is server-known, so Stage 1 is moot.
+  const [view, setView] = useState<View>(
+    invitationId ? { stage: 'methods-step', step: methodsDefaultStep } : { stage: 'email' }
+  )
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -127,91 +163,6 @@ export function PortalAuthFormInline({
       postAuthSuccess()
     },
   })
-
-  // Verified-domain hard-binding gate. The debounced effect classifies
-  // the email after 300ms of typing and stashes both the result and the
-  // email it applies to. `lastCheckedEmail` makes the submit-time
-  // short-circuit race-free: if the user edits the email and submits
-  // within the debounce window, the short-circuit refuses to fire on
-  // the stale classification and falls through to a fresh lookup.
-  type SsoLookupKind = 'sso-redirect' | 'sso-unavailable' | null
-  const [ssoKind, setSsoKind] = useState<SsoLookupKind>(null)
-  const gatedBySso = ssoKind === 'sso-redirect'
-  const ssoUnavailable = ssoKind === 'sso-unavailable'
-  const [lastCheckedEmail, setLastCheckedEmail] = useState('')
-  // Generation counter to discard stale `lookupAuthMethods` responses.
-  // Two requests can be in flight simultaneously when the user pauses
-  // briefly (first lookup fires) then resumes typing (second timer
-  // scheduled, then fires). Without this counter the late-arriving
-  // earlier response would clobber the newer classification.
-  const lookupGen = useRef(0)
-  useEffect(() => {
-    const trimmed = email.trim()
-    if (!trimmed.includes('@') || trimmed.length < 4) {
-      lookupGen.current++
-      setSsoKind(null)
-      setLastCheckedEmail('')
-      return
-    }
-    const gen = ++lookupGen.current
-    const handle = setTimeout(async () => {
-      try {
-        const result = await lookupAuthMethods({
-          data: { email: trimmed, surface: 'portal' },
-        })
-        if (gen !== lookupGen.current) return
-        setSsoKind(
-          result.kind === 'sso-redirect' || result.kind === 'sso-unavailable' ? result.kind : null
-        )
-        setLastCheckedEmail(trimmed)
-      } catch {
-        if (gen !== lookupGen.current) return
-        setSsoKind(null)
-        setLastCheckedEmail('')
-      }
-    }, 300)
-    return () => clearTimeout(handle)
-  }, [email, lookupAuthMethods])
-
-  /** Redirects to SSO if `emailValue` is on the verified domain.
-   *  Returns true when a redirect is in flight (caller should bail).
-   *  Flips `loadingAction` to `'sso'` before the bounce so the button
-   *  label reflects what's actually happening (a sign-in redirect, not
-   *  a magic-link email send) — end users on the portal don't know
-   *  what an IdP is. */
-  const maybeRedirectToSso = async (emailValue: string): Promise<boolean> => {
-    const trimmed = emailValue.trim()
-    if (!trimmed) return false
-    // Short-circuit only when the debounce already classified THIS
-    // email — avoids both a redundant lookup and a wrong-redirect race
-    // if the email changed since the last classification.
-    if (gatedBySso && trimmed === lastCheckedEmail) {
-      setLoadingAction('sso')
-      await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
-      return true
-    }
-    if (ssoUnavailable && trimmed === lastCheckedEmail) {
-      setError(SSO_UNAVAILABLE_MESSAGE)
-      return true
-    }
-    try {
-      const result = await lookupAuthMethods({
-        data: { email: trimmed, surface: 'portal' },
-      })
-      if (result.kind === 'sso-redirect') {
-        setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
-        return true
-      }
-      if (result.kind === 'sso-unavailable') {
-        setError(SSO_UNAVAILABLE_MESSAGE)
-        return true
-      }
-    } catch {
-      // Fall through to the normal path on transient server failure.
-    }
-    return false
-  }
 
   // Track popup windows
   const { trackPopup, clearPopup, hasPopup, focusPopup } = usePopupTracker({
@@ -235,6 +186,7 @@ export function PortalAuthFormInline({
           const data = (await response.json()) as InvitationInfo
           setInvitation(data)
           setEmail(data.email)
+          setView({ stage: 'methods-step', step: methodsDefaultStep })
         } else {
           const data = (await response.json()) as { error?: string }
           setError(data.error || 'Invalid or expired invitation')
@@ -247,17 +199,65 @@ export function PortalAuthFormInline({
     }
 
     fetchInvitation()
-  }, [invitationId])
+  }, [invitationId, methodsDefaultStep])
 
   useEffect(() => {
     return () => clearPopup()
   }, [clearPopup])
 
+  // Surface the form's current "step" to the surrounding dialog so it
+  // can adapt its header. We map stage-level sub-screens onto the
+  // existing `AuthFormStep` union (the dialog header already knows
+  // `code` / `forgot` / `reset`); the other stages fall back to
+  // `credentials` so the dialog renders the default Welcome / Create
+  // header until the user lands inside the methods form.
   useEffect(() => {
+    const step: AuthFormStep = view.stage === 'methods-step' ? view.step : 'credentials'
     onContextChange?.({ step, email })
-  }, [step, email, onContextChange])
+  }, [view, email, onContextChange])
 
-  // --- Password auth handlers ---
+  // --- Stage 1 → Stage 2 transition ---
+  const continueFromEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setError('Email is required')
+      return
+    }
+
+    setLoadingAction('continue')
+    try {
+      const result: LookupAuthMethodsResult = await lookupAuthMethods({
+        data: { email: trimmed, surface: 'portal' },
+      })
+      if (result.kind === 'sso-redirect') {
+        setView({ stage: 'sso-redirecting' })
+        setLoadingAction('sso')
+        await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+        return
+      }
+      if (result.kind === 'sso-default') {
+        setView({ stage: 'sso-default' })
+        return
+      }
+      if (result.kind === 'sso-unavailable') {
+        setView({ stage: 'sso-unavailable' })
+        return
+      }
+      if (mode === 'signup' && openSignup === false) {
+        setView({ stage: 'closed-signup' })
+        return
+      }
+      setView({ stage: 'methods-step', step: methodsDefaultStep })
+    } catch (err) {
+      setError((err as Error).message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoadingAction((prev) => (prev === 'continue' ? null : prev))
+    }
+  }
+
+  // --- Password auth handler ---
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -266,23 +266,16 @@ export function PortalAuthFormInline({
       setError('Email is required')
       return
     }
-
-    // Verified-domain hard-binding: short-circuit before validating the
-    // password (the password field is hidden in this state anyway, so a
-    // "Password is required" error would be confusing).
-    setLoadingAction('password')
-    if (await maybeRedirectToSso(email)) return
-
     if (!password) {
-      setLoadingAction(null)
       setError('Password is required')
       return
     }
     if (mode === 'signup' && password.length < 8) {
-      setLoadingAction(null)
       setError('Password must be at least 8 characters')
       return
     }
+
+    setLoadingAction('password')
     try {
       if (mode === 'signup') {
         const result = await authClient.signUp.email({
@@ -318,15 +311,10 @@ export function PortalAuthFormInline({
 
   const requestSigninEmail = async () => {
     setError('')
-    // Tentatively show the email-sending label. If the email belongs
-    // to a verified SSO domain `maybeRedirectToSso` swaps it for
-    // `'sso'` (button label flips to "Signing you in…") before the
-    // browser bounces.
     setLoadingAction('email')
-    if (await maybeRedirectToSso(email)) return
     const res = await emailSignin.requestEmail(email)
     setLoadingAction(null)
-    if (res.ok) setStep('code')
+    if (res.ok) setView({ stage: 'methods-step', step: 'code' })
     else if (res.error) setError(res.error)
   }
 
@@ -349,7 +337,7 @@ export function PortalAuthFormInline({
       if (result.error) {
         throw new Error(result.error.message || 'Failed to send reset link')
       }
-      setStep('reset')
+      setView({ stage: 'methods-step', step: 'reset' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send reset link')
     } finally {
@@ -374,14 +362,25 @@ export function PortalAuthFormInline({
 
   const handleResend = () => emailSignin.resend(email)
 
-  const handleBack = () => {
+  /** Stage 2 → Stage 1 escape hatch. */
+  const backToEmail = () => {
+    setError('')
+    setPassword('')
+    emailSignin.reset()
+    setView({ stage: 'email' })
+  }
+
+  /** Inside the methods sub-form, drop back to the methods default step. */
+  const backToMethods = () => {
     setError('')
     emailSignin.reset()
-    setStep(defaultStep)
+    setView({ stage: 'methods-step', step: methodsDefaultStep })
   }
 
   /**
-   * Initiate OAuth login using Better Auth's socialProviders or genericOAuth plugin.
+   * Initiate OAuth login using Better Auth's socialProviders or
+   * genericOAuth plugin. Only available at Stage 1 — once the user has
+   * committed to an email, the tile UX is moot.
    */
   const initiateOAuth = async (provider: OAuthProviderEntry) => {
     setError('')
@@ -390,13 +389,6 @@ export function PortalAuthFormInline({
       focusPopup()
       return
     }
-
-    // Verified-domain gate: if the typed email is on the SSO-bound
-    // domain, the social OAuth callback would be revoked at Layer C
-    // anyway. Skip the popup + bounce by redirecting to SSO directly.
-    // Covers the race where a user types a gated email and clicks a
-    // social button before the debounced gate UI hides it.
-    if (await maybeRedirectToSso(email)) return
 
     setLoadingAction(provider.id)
     setPopupBlocked(false)
@@ -468,72 +460,266 @@ export function PortalAuthFormInline({
     )
   }
 
-  // When the typed email is on the tenant's verified SSO domain, every
-  // non-SSO path will be bounced server-side at Layer C. Hide them.
-  // `ssoUnavailable` gates identically but routes to an error since
-  // SSO itself isn't a working fallback either.
-  const ssoBlocked = gatedBySso || ssoUnavailable
-  const showOAuthOnDefault =
-    !ssoBlocked && showOAuth && (step === 'credentials' || step === 'email') && !invitation
-  const hasCredentialForm = step === 'credentials' && (passwordEnabled || ssoBlocked)
-  const hasEmailForm = step === 'email' && magicLinkEnabled
-
-  return (
-    <div className="space-y-6">
-      {/* Invitation Banner */}
-      {invitation && (
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-          <div className="flex items-start gap-3">
-            <EnvelopeIcon className="h-5 w-5 text-primary mt-0.5" />
-            <div>
-              <p className="font-medium text-foreground">You&apos;ve been invited!</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Create your account to join{' '}
-                <span className="font-medium text-foreground">{invitation.workspaceName}</span>
-                {invitation.inviterName && <> (invited by {invitation.inviterName})</>}
-              </p>
-            </div>
-          </div>
+  const invitationBanner = invitation && (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-start gap-3">
+        <EnvelopeIcon className="h-5 w-5 text-primary mt-0.5" />
+        <div>
+          <p className="font-medium text-foreground">You&apos;ve been invited!</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create your account to join{' '}
+            <span className="font-medium text-foreground">{invitation.workspaceName}</span>
+            {invitation.inviterName && <> (invited by {invitation.inviterName})</>}
+          </p>
         </div>
-      )}
+      </div>
+    </div>
+  )
 
-      {/* OAuth Buttons - only show on default step for non-invitation flow */}
-      {showOAuthOnDefault && (
-        <>
-          <div className="space-y-3">
-            {enabledProviders.map((provider) => {
-              const IconComp = AUTH_PROVIDER_ICON_MAP[provider.id]
-              return (
-                <OAuthButton
-                  key={provider.id}
-                  icon={IconComp ? <IconComp className="h-5 w-5" /> : null}
-                  label={provider.name}
-                  mode={mode}
-                  loading={loadingAction === provider.id}
-                  disabled={loadingAction !== null}
-                  onClick={() => initiateOAuth(provider)}
-                />
-              )
-            })}
-          </div>
-          {/* Divider - only show when another method is also enabled */}
-          {(passwordEnabled || magicLinkEnabled) && (
+  // ============================================================
+  // Stage 1 — email entry
+  // ============================================================
+  if (view.stage === 'email') {
+    return (
+      <div className="space-y-6">
+        {showOAuth && (
+          <>
+            <div className="space-y-3">
+              {enabledProviders.map((provider) => {
+                const IconComp = AUTH_PROVIDER_ICON_MAP[provider.id]
+                return (
+                  <OAuthButton
+                    key={provider.id}
+                    icon={IconComp ? <IconComp className="h-5 w-5" /> : null}
+                    label={provider.name}
+                    mode={mode}
+                    loading={loadingAction === provider.id}
+                    disabled={loadingAction !== null}
+                    onClick={() => initiateOAuth(provider)}
+                  />
+                )
+              })}
+            </div>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
+                <span className="bg-background px-2 text-muted-foreground">or</span>
               </div>
             </div>
+          </>
+        )}
+
+        <form onSubmit={continueFromEmail} className="space-y-4">
+          {error && <FormError message={error} />}
+          <div className="space-y-2">
+            <label htmlFor="inline-email" className="text-sm font-medium">
+              Email
+            </label>
+            <Input
+              id="inline-email"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loadingAction !== null}
+              required
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={loadingAction !== null || !email.trim()}
+            className="w-full"
+          >
+            {loadingAction === 'continue' ? (
+              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            ) : (
+              <>Continue &rarr;</>
+            )}
+          </Button>
+        </form>
+
+        {onModeSwitch && (
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === 'login' ? (
+              <>
+                New here?{' '}
+                <button
+                  type="button"
+                  onClick={() => onModeSwitch('signup')}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Create an account
+                </button>
+              </>
+            ) : (
+              <>
+                Have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => onModeSwitch('login')}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — transient SSO redirect spinner
+  // ============================================================
+  if (view.stage === 'sso-redirecting') {
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center">
+        <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Signing you in&hellip;</p>
+      </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — sso-default branch
+  // ============================================================
+  if (view.stage === 'sso-default') {
+    return (
+      <div className="space-y-4">
+        <BackToEmailLink onClick={backToEmail} />
+        <div className="space-y-2 text-center">
+          <ShieldCheckIcon className="mx-auto h-8 w-8 text-primary" />
+          <p className="text-sm text-muted-foreground">
+            {workspaceName ? (
+              <>
+                <span className="font-medium text-foreground">{workspaceName}</span> uses single
+                sign-on for your team domain.
+              </>
+            ) : (
+              <>Your team domain uses single sign-on.</>
+            )}
+          </p>
+        </div>
+        {error && <FormError message={error} />}
+        <Button
+          type="button"
+          className="w-full"
+          onClick={async () => {
+            setError('')
+            setLoadingAction('sso')
+            try {
+              setView({ stage: 'sso-redirecting' })
+              await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+            } catch (err) {
+              setError((err as Error).message || 'Could not start SSO sign-in.')
+              setView({ stage: 'sso-default' })
+              setLoadingAction(null)
+            }
+          }}
+          disabled={loadingAction !== null}
+        >
+          {loadingAction === 'sso' ? (
+            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <ShieldCheckIcon className="mr-2 h-4 w-4" />
+              Continue with SSO
+            </>
           )}
+        </Button>
+        <button
+          type="button"
+          onClick={() => {
+            setError('')
+            setView({ stage: 'methods-step', step: methodsDefaultStep })
+          }}
+          className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+          disabled={loadingAction !== null}
+        >
+          Sign in another way
+        </button>
+      </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — sso-unavailable branch
+  // ============================================================
+  if (view.stage === 'sso-unavailable') {
+    return (
+      <div className="space-y-4">
+        <BackToEmailLink onClick={backToEmail} />
+        <Alert variant="destructive">
+          <InformationCircleIcon className="h-4 w-4" />
+          <AlertDescription>{SSO_UNAVAILABLE_MESSAGE}</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — closed-signup branch
+  // ============================================================
+  if (view.stage === 'closed-signup') {
+    return (
+      <div className="space-y-4">
+        <BackToEmailLink onClick={backToEmail} />
+        <div className="space-y-2 text-center">
+          <h2 className="text-lg font-semibold">No account found</h2>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{email}</span> doesn&apos;t have an
+            account on this workspace, and new sign-ups are off. Ask your workspace admin to invite
+            you.
+          </p>
+        </div>
+        {onModeSwitch && (
+          <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={() => {
+                onModeSwitch('login')
+                setView({ stage: 'email' })
+              }}
+              className="text-primary hover:underline font-medium"
+            >
+              Sign in
+            </button>
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — methods (password / magic link / forgot / reset / code)
+  // ============================================================
+  const step = view.step
+  const showBack = !invitation
+
+  return (
+    <div className="space-y-6">
+      {invitationBanner}
+
+      {(step === 'credentials' || step === 'email') && (
+        <>
+          {showBack && <BackToEmailLink onClick={backToEmail} />}
+          <div className="space-y-1 text-center">
+            <h2 className="text-lg font-semibold">
+              {mode === 'login' ? 'Welcome back' : 'Create your account'}
+            </h2>
+            {email && <p className="text-sm text-muted-foreground break-all">{email}</p>}
+          </div>
         </>
       )}
 
       {/* Password credentials form */}
-      {hasCredentialForm && (
+      {step === 'credentials' && passwordEnabled && (
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           {error && <FormError message={error} />}
 
@@ -554,49 +740,32 @@ export function PortalAuthFormInline({
             </div>
           )}
 
+          {/* Hidden email keeps password managers happy at the methods step. */}
+          <input type="hidden" name="email" value={email} autoComplete="email" readOnly />
+
           <div className="space-y-2">
-            <label htmlFor="inline-email" className="text-sm font-medium">
-              Email
+            <label htmlFor="inline-password" className="text-sm font-medium">
+              Password
             </label>
             <Input
-              id="inline-email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={!!invitation || loadingAction !== null}
-              className={invitation ? 'bg-muted' : ''}
-              autoComplete="email"
+              id="inline-password"
+              type="password"
+              placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loadingAction !== null}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              autoFocus
             />
-            {invitation && (
-              <p className="text-xs text-muted-foreground">Email is set from your invitation</p>
-            )}
           </div>
 
-          {!ssoBlocked && passwordEnabled && (
-            <div className="space-y-2">
-              <label htmlFor="inline-password" className="text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id="inline-password"
-                type="password"
-                placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loadingAction !== null}
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              />
-            </div>
-          )}
-
-          {!ssoBlocked && mode === 'login' && passwordEnabled && (
+          {mode === 'login' && (
             <div className="text-right">
               <button
                 type="button"
                 onClick={() => {
                   setError('')
-                  setStep('forgot')
+                  setView({ stage: 'methods-step', step: 'forgot' })
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
@@ -605,99 +774,42 @@ export function PortalAuthFormInline({
             </div>
           )}
 
-          {gatedBySso && (
-            <p className="text-xs text-muted-foreground">
-              This email signs in via your organization&apos;s identity provider.
-            </p>
-          )}
+          <Button type="submit" disabled={loadingAction !== null} className="w-full">
+            {loadingAction === 'password' && (
+              <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            {loadingAction === 'password'
+              ? mode === 'signup'
+                ? 'Creating account...'
+                : 'Signing in...'
+              : mode === 'signup'
+                ? 'Create account'
+                : 'Sign in'}
+          </Button>
 
-          {!ssoUnavailable && (
-            <Button type="submit" disabled={loadingAction !== null} className="w-full">
-              {loadingAction === 'password' && (
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {gatedBySso
-                ? 'Continue with SSO'
-                : loadingAction === 'password'
-                  ? mode === 'signup'
-                    ? 'Creating account...'
-                    : 'Signing in...'
-                  : mode === 'signup'
-                    ? 'Create account'
-                    : 'Sign in'}
-            </Button>
-          )}
-
-          {/* Link to email sign-in if also enabled */}
           {magicLinkEnabled && (
             <div className="text-center">
               <button
                 type="button"
                 onClick={() => {
                   setError('')
-                  setStep('email')
+                  setView({ stage: 'methods-step', step: 'email' })
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Sign in with email instead
+                Email me a sign-in link instead
               </button>
             </div>
-          )}
-
-          {/* Mode switch */}
-          {onModeSwitch && (
-            <p className="text-center text-sm text-muted-foreground">
-              {mode === 'login' ? (
-                <>
-                  Don&apos;t have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => onModeSwitch('signup')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign up
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => onModeSwitch('login')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign in
-                  </button>
-                </>
-              )}
-            </p>
           )}
         </form>
       )}
 
-      {/* Email OTP: email input step */}
-      {hasEmailForm && (
+      {/* Magic-link send (password disabled OR user clicked "email me a link") */}
+      {step === 'email' && magicLinkEnabled && (
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           {error && <FormError message={error} />}
 
-          <div className="space-y-2">
-            <label htmlFor="inline-otp-email" className="text-sm font-medium">
-              Email
-            </label>
-            <Input
-              id="inline-otp-email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={!!invitation || loadingAction !== null}
-              className={invitation ? 'bg-muted' : ''}
-              autoComplete="email"
-            />
-            {invitation && (
-              <p className="text-xs text-muted-foreground">Email is set from your invitation</p>
-            )}
-          </div>
+          <input type="hidden" name="email" value={email} autoComplete="email" readOnly />
 
           <Button type="submit" disabled={loadingAction !== null} className="w-full">
             {loadingAction === 'email' ? (
@@ -705,59 +817,24 @@ export function PortalAuthFormInline({
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
                 Sending email…
               </>
-            ) : loadingAction === 'sso' ? (
-              <>
-                <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Signing you in…
-              </>
             ) : (
               'Continue with email'
             )}
           </Button>
 
-          {/* Link back to password if also enabled */}
           {passwordEnabled && (
             <div className="text-center">
               <button
                 type="button"
                 onClick={() => {
                   setError('')
-                  setStep('credentials')
+                  setView({ stage: 'methods-step', step: 'credentials' })
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Use password instead
               </button>
             </div>
-          )}
-
-          {/* Mode switch */}
-          {onModeSwitch && (
-            <p className="text-center text-sm text-muted-foreground">
-              {mode === 'login' ? (
-                <>
-                  Don&apos;t have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => onModeSwitch('signup')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign up
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => onModeSwitch('login')}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign in
-                  </button>
-                </>
-              )}
-            </p>
           )}
         </form>
       )}
@@ -770,7 +847,7 @@ export function PortalAuthFormInline({
           onComplete={(otp) => emailSignin.verify(email, otp)}
           onSubmit={handleCodeSubmit}
           onResend={handleResend}
-          onBack={handleBack}
+          onBack={backToMethods}
           loading={emailSignin.loading}
           error={emailSignin.error}
           resendCooldown={emailSignin.resendCooldown}
@@ -782,7 +859,7 @@ export function PortalAuthFormInline({
         <form onSubmit={handleForgotSubmit} className="space-y-4">
           <button
             type="button"
-            onClick={handleBack}
+            onClick={backToMethods}
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
@@ -830,12 +907,11 @@ export function PortalAuthFormInline({
         </form>
       )}
 
-      {/* Reset password: check email confirmation */}
       {step === 'reset' && (
         <div className="space-y-4">
           <button
             type="button"
-            onClick={handleBack}
+            onClick={backToMethods}
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
@@ -854,5 +930,20 @@ export function PortalAuthFormInline({
         </div>
       )}
     </div>
+  )
+}
+
+/** Stage 2 → Stage 1 escape hatch. Kept on every Stage 2 sub-screen so
+ *  the user is never trapped by a typo. */
+function BackToEmailLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center text-sm text-muted-foreground hover:text-foreground"
+    >
+      <ArrowLeftIcon className="mr-1 h-4 w-4" />
+      Use a different email
+    </button>
   )
 }

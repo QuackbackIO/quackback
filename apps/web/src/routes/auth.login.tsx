@@ -2,7 +2,7 @@ import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { PortalLoginForm } from '@/components/auth/portal-login-form'
+import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 
@@ -54,10 +54,12 @@ function LoginPage() {
         </p>
       }
     >
-      <PortalLoginForm
+      <PortalAuthForm
+        mode="login"
         callbackUrl="/"
         authConfig={authConfig}
         customProviderNames={portalConfig.customProviderNames}
+        workspaceName={workspaceName}
       />
     </PortalAuthShell>
   )
