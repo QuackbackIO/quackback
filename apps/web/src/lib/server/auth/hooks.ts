@@ -319,28 +319,80 @@ export async function handleAutoProvisionAfter(
   type UserId = `user_${string}`
   const userIdTyped = userId as UserId
 
-  // Read-then-write without a tx: the only concurrent writer is admin-
-  // initiated role mutation, which doesn't race first sign-in. The
-  // role==='user' guard keeps the operation idempotent on retries.
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
     columns: { role: true },
   })
-  if (p?.role !== 'user') return
 
-  // Default to 'member' to preserve today's behaviour for tenants that
-  // haven't set the field. `'user'` is the explicit no-promote choice
-  // (the principal already has role='user' so we'd be a no-op anyway).
-  const targetRole = sso.autoProvisionRole ?? 'member'
-  if (targetRole === 'user') return
+  // Resolve target role: attribute mapping takes precedence over the
+  // legacy autoProvisionRole field. When mapping returns null, fall
+  // back to the legacy field.
+  let targetRole: 'admin' | 'member' | 'user'
+  if (sso.attributeMapping) {
+    const claims = await readSsoClaims(userIdTyped)
+    const { resolveSsoRole } = await import('./resolve-sso-role')
+    targetRole = resolveSsoRole(claims, sso.attributeMapping) ?? sso.autoProvisionRole ?? 'member'
+  } else {
+    targetRole = sso.autoProvisionRole ?? 'member'
+  }
+
+  // Sync mode: re-apply on every sign-in, including for existing
+  // admin/member users. Without sync, JIT semantics — only first
+  // sign-in (role='user') gets touched.
+  const syncOnEverySignIn = sso.attributeMapping?.syncOnEverySignIn === true
+  if (!syncOnEverySignIn && p?.role !== 'user') return
+
+  // 'user' as the target is the explicit no-promote choice — only
+  // demote an existing team-role user to 'user' under sync mode.
+  if (targetRole === 'user' && !syncOnEverySignIn) return
+
+  if (p?.role === targetRole) return // no-op, save the update
 
   await db
     .update(principalTable)
     .set({ role: targetRole })
     .where(eq(principalTable.userId, userIdTyped))
+
+  if (p?.role && p.role !== targetRole) {
+    const { recordAuditEvent } = await import('@/lib/server/audit/log')
+    await recordAuditEvent({
+      event: 'user.role.changed',
+      outcome: 'success',
+      actor: { email: email ?? null }, // SSO callback — no authenticated admin actor
+      target: { type: 'user', id: userIdTyped },
+      before: { role: p.role },
+      after: { role: targetRole },
+      metadata: { source: sso.attributeMapping ? 'attribute_mapping' : 'auto_provision' },
+    })
+  }
+
   console.log(
     `[auth-hooks.after] auto-provisioned verified-domain user as ${targetRole} via sso: userId=${userId}`
   )
+}
+
+/**
+ * Read the latest stored ID-token claims for a user's SSO account.
+ * Returns an empty object when no token is stored or the token is
+ * malformed — caller should fall back to the legacy auto-provision
+ * field in that case.
+ */
+async function readSsoClaims(userId: `user_${string}`): Promise<Record<string, unknown>> {
+  const { db, account, and, eq } = await import('@/lib/server/db')
+  const row = await db.query.account.findFirst({
+    where: and(eq(account.userId, userId), eq(account.providerId, 'sso')),
+    columns: { idToken: true },
+  })
+  if (!row?.idToken) return {}
+
+  const parts = row.idToken.split('.')
+  if (parts.length !== 3) return {}
+  try {
+    const payload = Buffer.from(parts[1], 'base64url').toString('utf-8')
+    return JSON.parse(payload) as Record<string, unknown>
+  } catch {
+    return {}
+  }
 }
 
 /**
