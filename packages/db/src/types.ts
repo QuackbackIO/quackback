@@ -31,6 +31,31 @@ export interface BoardSettings {
   roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
+// Board audience — discriminated union stored in boards.audience jsonb column.
+// 'public'         — anyone, including anonymous (today's isPublic=true)
+// 'authenticated'  — any signed-in portal user (new tier, signed-in portal users only)
+// 'team'           — admin + member only (today's isPublic=false)
+// 'segments'       — explicit list of segments may view; team always has access
+export type BoardAudience =
+  | { kind: 'public' }
+  | { kind: 'authenticated' }
+  | { kind: 'team' }
+  | { kind: 'segments'; segmentIds: string[] }
+
+// Per-board moderation policy stored in boards.moderation jsonb column.
+// requireApproval gates which submissions land in 'pending' moderationState.
+// trustedSegmentIds bypass the gate even when their tier would normally be moderated.
+export interface BoardModeration {
+  requireApproval: 'none' | 'anonymous' | 'authenticated' | 'all'
+  trustedSegmentIds: string[]
+}
+
+export const DEFAULT_BOARD_AUDIENCE: BoardAudience = { kind: 'public' }
+export const DEFAULT_BOARD_MODERATION: BoardModeration = {
+  requireApproval: 'none',
+  trustedSegmentIds: [],
+}
+
 // Integration config (stored in integrations.config JSONB column)
 // Each integration defines its own typed config at the integration layer.
 export type IntegrationConfig = Record<string, unknown>

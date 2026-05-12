@@ -41,6 +41,8 @@ export function useCreateBoard() {
         slug: slugify(input.name),
         description: input.description ?? null,
         isPublic: input.isPublic ?? true,
+        audience: { kind: 'public' },
+        moderation: { requireApproval: 'none', trustedSegmentIds: [] },
         settings: {},
         createdAt: new Date(),
         updatedAt: new Date(),

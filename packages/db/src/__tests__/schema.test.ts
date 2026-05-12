@@ -20,6 +20,8 @@ describe('Schema definitions', () => {
       expect(columns).toContain('name')
       expect(columns).toContain('description')
       expect(columns).toContain('isPublic')
+      expect(columns).toContain('audience')
+      expect(columns).toContain('moderation')
       expect(columns).toContain('settings')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
@@ -28,7 +30,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(boards))
-      expect(columns.length).toBe(9)
+      expect(columns.length).toBe(11)
     })
   })
 
