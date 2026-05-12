@@ -251,3 +251,81 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
 
     return { boards: createdBoards, limited }
   })
+
+// ============================================
+// v1 access controls — board audience + moderation
+// ============================================
+
+import { boards } from '@/lib/server/db'
+import { isAdmin } from '@/lib/shared/roles'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
+
+const audienceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('public') }),
+  z.object({ kind: z.literal('authenticated') }),
+  z.object({ kind: z.literal('team') }),
+  z.object({ kind: z.literal('segments'), segmentIds: z.array(z.string()).max(50) }),
+])
+
+const moderationSchema = z.object({
+  requireApproval: z.enum(['none', 'anonymous', 'authenticated', 'all']),
+  trustedSegmentIds: z.array(z.string()).max(50),
+})
+
+const updateBoardAccessSchema = z.object({
+  boardId: z.string(),
+  audience: audienceSchema.optional(),
+  moderation: moderationSchema.optional(),
+})
+
+/**
+ * Update board.audience and/or board.moderation.
+ *
+ * isAdmin-gated — granting/revoking access is policy-level work. Members can
+ * moderate posts (approve/reject) but not change who sees the board. Mirrors
+ * the Canny/Featurebase/Linear split.
+ */
+export const updateBoardAccessFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateBoardAccessSchema.parse)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth()
+    if (!isAdmin(auth.principal.role)) {
+      throw new ForbiddenError('FORBIDDEN', 'Admin only')
+    }
+    const before = await db.query.boards.findFirst({
+      where: eq(boards.id, data.boardId as BoardId),
+    })
+    if (!before) throw new NotFoundError('BOARD_NOT_FOUND', `Board ${data.boardId} not found`)
+
+    const updates: Record<string, unknown> = {}
+    if (data.audience) updates.audience = data.audience
+    if (data.moderation) updates.moderation = data.moderation
+    if (Object.keys(updates).length === 0) return { ok: true }
+
+    await db
+      .update(boards)
+      .set(updates)
+      .where(eq(boards.id, data.boardId as BoardId))
+
+    if (data.audience) {
+      await recordAuditEvent({
+        event: 'board.audience.changed',
+        actor: actorFromAuth(auth),
+        target: { type: 'board', id: data.boardId },
+        before: { audience: before.audience },
+        after: { audience: data.audience },
+      })
+    }
+    if (data.moderation) {
+      await recordAuditEvent({
+        event: 'board.moderation.changed',
+        actor: actorFromAuth(auth),
+        target: { type: 'board', id: data.boardId },
+        before: { moderation: before.moderation },
+        after: { moderation: data.moderation },
+      })
+    }
+
+    return { ok: true }
+  })
