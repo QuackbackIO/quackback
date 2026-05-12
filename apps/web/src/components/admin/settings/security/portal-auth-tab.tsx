@@ -13,10 +13,11 @@ import { Switch } from '@/components/ui/switch'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
-import { AUTH_PROVIDERS, getAuthProvider } from '@/lib/shared/auth-providers'
+import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 import { useRouteContext } from '@tanstack/react-router'
+import { cn } from '@/lib/shared/utils'
 import type { PortalAuthMethods } from '@/lib/shared/types'
 
 interface PortalAuthTabProps {
@@ -189,7 +190,10 @@ export function PortalAuthTab({
         saving={saving || isPending}
         onToggle={(v) => handleToggle('custom-oidc', v)}
         onConfigure={() => {
-          const provider = getAuthProvider('custom-oidc')
+          // Look up by provider id (not credentialType — that's what
+          // `getAuthProvider(...)` takes). Inline lookup avoids the wrong
+          // helper.
+          const provider = AUTH_PROVIDERS.find((p) => p.id === 'custom-oidc')
           if (provider) openConfigDialog(provider)
         }}
       />
@@ -228,10 +232,18 @@ interface CustomOidcCardProps {
 }
 
 /**
- * Dedicated card for custom OIDC — separated from the alphabetical social
- * grid because it's a meaningfully different setup (bring-your-own IdP for
- * end users) and the industry convention (Linear, Notion, Auth0, Clerk,
- * WorkOS) is to break Social vs Enterprise SSO into distinct sections.
+ * Dedicated card for custom OIDC. Separated from the alphabetical social
+ * grid because bring-your-own-IdP is a different shape of setup than a
+ * social tile — there's a discovery URL, a client secret, and tier gating
+ * to surface. Industry convention (Linear, Notion, Auth0, Clerk, WorkOS,
+ * Stytch) splits Social vs Enterprise SSO into distinct sections.
+ *
+ * Three states drive the layout, in priority order:
+ *  - `!tierEnabled`: tier-locked. Lock badge + upgrade hint; Configure is
+ *    disabled, no toggle (nothing to toggle into).
+ *  - `!configured`: no credentials yet. Primary "Set up" CTA, no toggle.
+ *  - `configured`: outlined Edit button + the enable switch, mirroring
+ *    the "configured" half of the social grid tiles.
  */
 function CustomOidcCard({
   configured,
@@ -243,67 +255,97 @@ function CustomOidcCard({
   onToggle,
   onConfigure,
 }: CustomOidcCardProps) {
-  const toggleDisabled = saving || managed || lastMethod || !configured || !tierEnabled
+  const headerBadge = (() => {
+    if (!tierEnabled) {
+      return (
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+          <LockClosedIcon className="mr-1 h-2.5 w-2.5" />
+          Higher tier
+        </Badge>
+      )
+    }
+    if (!configured) return null
+    if (enabled) {
+      return (
+        <Badge
+          variant="outline"
+          className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+        >
+          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-green-600" />
+          Active
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+        Configured
+      </Badge>
+    )
+  })()
+
   return (
     <div className="rounded-xl border border-border/50 bg-card shadow-sm">
       <div className="flex items-start gap-4 p-6">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-600/10">
-          <ShieldCheckIcon className="h-5 w-5 text-violet-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-semibold">Bring your own identity provider</h2>
-            {!tierEnabled && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                <LockClosedIcon className="mr-1 h-2.5 w-2.5" />
-                Higher tier
-              </Badge>
-            )}
-            {configured && enabled && tierEnabled && (
-              <Badge
-                variant="outline"
-                className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
-              >
-                Enabled
-              </Badge>
-            )}
-            {configured && !enabled && tierEnabled && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                Configured
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connect a custom OpenID Connect provider so your portal users sign in via their own IdP
-            (Okta, Auth0, Azure AD, Keycloak, ...). One discovery URL + client credentials and
-            you&apos;re done.
-          </p>
-          <div className="mt-4 flex items-center gap-3">
-            <Button
-              type="button"
-              variant={configured ? 'outline' : 'default'}
-              size="sm"
-              onClick={onConfigure}
-              disabled={managed || !tierEnabled}
-            >
-              {configured ? 'Update credentials' : 'Configure'}
-            </Button>
-            {!tierEnabled && (
-              <span className="text-xs text-muted-foreground">
-                Available on plans with the custom OIDC feature.
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="shrink-0">
-          <Switch
-            id="custom-oidc-toggle"
-            checked={enabled}
-            onCheckedChange={onToggle}
-            disabled={toggleDisabled}
-            aria-label="Enable custom OIDC for the portal"
+        <div
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+            tierEnabled ? 'bg-violet-600/10' : 'bg-muted'
+          )}
+        >
+          <ShieldCheckIcon
+            className={cn('h-5 w-5', tierEnabled ? 'text-violet-600' : 'text-muted-foreground/60')}
           />
         </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold">Custom identity provider</h2>
+            {headerBadge}
+          </div>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            Let portal users sign in via your own IdP. Works with any OpenID Connect provider —
+            Okta, Azure AD, Auth0, Keycloak, and more.
+          </p>
+
+          {!tierEnabled ? (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Available on plans with the custom OIDC feature.
+            </p>
+          ) : !configured ? (
+            <div className="mt-4">
+              <Button type="button" size="sm" onClick={onConfigure} disabled={managed}>
+                Set up custom OIDC
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onConfigure}
+                disabled={managed}
+              >
+                Edit configuration
+              </Button>
+              {managed && (
+                <span className="text-xs text-muted-foreground">
+                  Managed by your configuration file.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        {tierEnabled && configured && (
+          <div className="shrink-0">
+            <Switch
+              id="custom-oidc-toggle"
+              checked={enabled}
+              onCheckedChange={onToggle}
+              disabled={saving || managed || lastMethod}
+              aria-label="Enable custom OIDC for the portal"
+            />
+          </div>
+        )}
       </div>
     </div>
   )
