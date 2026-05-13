@@ -456,3 +456,35 @@ describe('lookupAuthMethodsFn — SSO deliberately disabled with stale verified-
     expect(result).toMatchObject({ kind: 'methods', ssoEnabled: false })
   })
 })
+
+describe('lookupAuthMethodsFn — team magic-link toggle', () => {
+  it('returns publicAuthConfig.oauth.magicLink=false when admin disabled the toggle', async () => {
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: { oauth: { password: true, magicLink: false } },
+      verifiedDomains: [],
+      publicAuthConfig: { oauth: { password: true, magicLink: false } },
+    })
+
+    const result = await lookupAuthMethods({
+      data: { email: 'a@external.com', surface: 'team' },
+    })
+    expect(result).toEqual({
+      kind: 'methods',
+      authConfig: { password: true, magicLink: false },
+      ssoEnabled: false,
+    })
+  })
+
+  it('defaults publicAuthConfig.oauth.magicLink=true when key is absent (pre-0.12 tenants)', async () => {
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: { oauth: { password: true } },
+      verifiedDomains: [],
+      publicAuthConfig: { oauth: { password: true, magicLink: true } },
+    })
+
+    const result = await lookupAuthMethods({
+      data: { email: 'a@external.com', surface: 'team' },
+    })
+    expect(result).toMatchObject({ authConfig: { magicLink: true } })
+  })
+})

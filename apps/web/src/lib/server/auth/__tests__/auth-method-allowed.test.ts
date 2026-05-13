@@ -65,14 +65,24 @@ describe('isAuthMethodAllowed — team role', () => {
     expect(r).toEqual({ allowed: false, error: 'password_method_not_allowed' })
   })
 
-  it('always allows magic-link for team (invites + break-glass)', async () => {
-    const r = await isAuthMethodAllowed('magic-link', 'admin', tenant({ magicLink: false }))
+  it('allows magic-link for team when oauth.magicLink is true', async () => {
+    const r = await isAuthMethodAllowed('magic-link', 'admin', tenant({ magicLink: true }))
     expect(r).toEqual({ allowed: true })
   })
 
-  it('treats legacy "email" provider id as magic-link (OTP folded in)', async () => {
-    const r = await isAuthMethodAllowed('email', 'admin', tenant({}))
+  it('allows magic-link for team when oauth.magicLink is undefined (default true)', async () => {
+    const r = await isAuthMethodAllowed('magic-link', 'admin', tenant({}))
     expect(r).toEqual({ allowed: true })
+  })
+
+  it('blocks magic-link for team when oauth.magicLink is explicitly false', async () => {
+    const r = await isAuthMethodAllowed('magic-link', 'admin', tenant({ magicLink: false }))
+    expect(r).toEqual({ allowed: false, error: 'magic_link_method_not_allowed' })
+  })
+
+  it('treats legacy "email" provider id as magic-link (gated the same way)', async () => {
+    const r = await isAuthMethodAllowed('email', 'admin', tenant({ magicLink: false }))
+    expect(r).toEqual({ allowed: false, error: 'magic_link_method_not_allowed' })
   })
 
   it('always allows sso for team', async () => {

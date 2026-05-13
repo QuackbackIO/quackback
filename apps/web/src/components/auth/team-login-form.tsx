@@ -47,12 +47,15 @@ export function TeamLoginForm({ callbackUrl, authConfig }: TeamLoginFormProps) {
 
   function applyMethodsConfig(serverAuthConfig: Record<string, boolean | undefined>) {
     // Bring forward the live config from the server in case it diverged
-    // since the loader ran (admin toggling methods mid-session). Magic-link
-    // is unconditionally enabled for team sign-in (invitations + SSO
-    // break-glass).
+    // since the loader ran (admin toggling methods mid-session). Honour
+    // the team `oauth.magicLink` toggle — defaults to true when the key
+    // is absent (pre-0.12 tenants), explicit false hides the magic-link
+    // button. Internal flows (invitations, recovery-mint) bypass the
+    // toggle by writing the verification row directly via mintMagicLinkUrl,
+    // so this only affects the user-facing login form.
     setMethodsAuthConfig({
       ...serverAuthConfig,
-      magicLink: true,
+      magicLink: serverAuthConfig.magicLink !== false,
       password: serverAuthConfig.password === true,
     })
   }

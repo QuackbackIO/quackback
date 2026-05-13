@@ -62,14 +62,21 @@ export async function isAuthMethodAllowed(
   const tenant = tenantSettings ?? (await getTenantSettings())
   const authConfig = tenant?.authConfig
 
-  // Magic-link is unconditionally allowed for team — invitations and
-  // break-glass both rely on it. Verified-domain hard-binding can still
-  // block magic-link for a specific email; that check runs in hooks
-  // before this function is reached.
-  if (provider === 'magic-link') return { allowed: true }
-  // Compatibility: callers that still pass 'email' (legacy provider id)
-  // are treated as magic-link, since email-OTP is now part of magic-link.
-  if (provider === 'email') return { allowed: true }
+  // Magic-link is gated by the team-side `authConfig.oauth.magicLink`
+  // toggle, mirroring the password toggle. Defaults to enabled — pre-
+  // 0.12 tenants had no `magicLink` key and we keep their team sign-in
+  // working post-upgrade. Verified-domain hard-binding can still block
+  // magic-link for a specific email; that check runs in hooks before
+  // this function is reached.
+  //
+  // Internal token-mint paths (invitations, recovery-code-mint,
+  // password-reset) bypass this gate entirely because they write the
+  // verification row directly via `mintMagicLinkUrl` rather than going
+  // through `auth.api.signInMagicLink`.
+  if (provider === 'magic-link' || provider === 'email') {
+    const enabled = authConfig?.oauth?.magicLink !== false
+    return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
+  }
 
   if (provider === 'sso') return { allowed: true }
 
