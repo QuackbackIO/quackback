@@ -180,3 +180,32 @@ describe('isHardBound — master switch (ssoOidc.enabled)', () => {
     ).toBe(false)
   })
 })
+
+describe('isHardBound — ignores legacy ssoOidc.required flag (regression guard)', () => {
+  // Workspace-wide enforcement was removed in favour of per-verified-domain
+  // enforcement only. The `required` flag on the stored authConfig is inert
+  // — if a stale row still has it, the predicate must NOT block on it.
+  it('returns false for credential when required=true and no enforced domain matches', () => {
+    expect(
+      callIsHardBound(
+        'credential',
+        'foo@example.com',
+        'admin',
+        configWithSso({ required: true }),
+        []
+      )
+    ).toBe(false)
+  })
+
+  it('returns false for magic-link when required=true and no enforced domain matches', () => {
+    expect(
+      callIsHardBound(
+        'magic-link',
+        'foo@example.com',
+        'member',
+        configWithSso({ required: true }),
+        []
+      )
+    ).toBe(false)
+  })
+})
