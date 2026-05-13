@@ -267,9 +267,9 @@ describe('canCreatePost — happy-path moderation matrix', () => {
     { ra: 'anonymous' as RequireApproval, actor: portal, want: false },
     { ra: 'authenticated' as RequireApproval, actor: portal, want: true },
     { ra: 'all' as RequireApproval, actor: portal, want: true },
-    // service principal (non-team API key)
+    // service principal (non-team API key) — see DESIGN PIN below
     { ra: 'none' as RequireApproval, actor: service, want: false },
-    { ra: 'anonymous' as RequireApproval, actor: service, want: true }, // service !== 'user' so counts as non-user
+    { ra: 'anonymous' as RequireApproval, actor: service, want: true },
     { ra: 'authenticated' as RequireApproval, actor: service, want: false },
     { ra: 'all' as RequireApproval, actor: service, want: true },
   ])(
@@ -283,6 +283,43 @@ describe('canCreatePost — happy-path moderation matrix', () => {
       if (decision.allowed) expect(decision.requiresApproval).toBe(want)
     }
   )
+
+  // ────────────────────────────────────────────────────────────────────
+  // DESIGN PIN — service principalType on requireApproval='anonymous'
+  //
+  // The matrix above pins a current behaviour worth surfacing:
+  //
+  //   requireApproval='anonymous' + actor.principalType='service'
+  //     → requiresApproval=true
+  //
+  // Why this happens: canCreatePost checks `principalType !== 'user'`,
+  // which is true for both 'anonymous' AND 'service'. An authenticated
+  // service principal (API key integration) therefore gets gated by
+  // the same flag intended for unsigned portal sessions.
+  //
+  // Why this may be wrong: a service principal IS authenticated — it
+  // just isn't a portal user. Treating it as anonymous-class for
+  // moderation purposes is unintuitive; customers wiring up API-driven
+  // post creation will hit moderation queues unexpectedly.
+  //
+  // Why we kept it: the alternative is a deliberate design decision
+  // (extend requireApproval to a four-value enum that distinguishes
+  // service from anonymous, or add a separate gateService flag). The
+  // current behaviour fails *closed* (over-moderates rather than
+  // under-moderates) so it ships safely; a v2 design call should be
+  // driven by real customer feedback rather than guessed.
+  //
+  // TODO(v2): revisit when an integrator complains. Either treat
+  // service as 'authenticated' for moderation, or add a separate
+  // `boards.moderation.gateService: boolean` knob.
+  // ────────────────────────────────────────────────────────────────────
+  it('DESIGN PIN: service principalType is gated by requireApproval=anonymous (over-moderates)', () => {
+    const decision = canCreatePost(service, {
+      audience: { kind: 'public' },
+      moderation: moderation('anonymous'),
+    })
+    expect(decision).toEqual({ allowed: true, requiresApproval: true })
+  })
 })
 
 describe('canCreatePost — team always bypasses approval', () => {

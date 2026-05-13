@@ -163,6 +163,21 @@ beforeEach(() => {
   mockRequireAuth.mockReset()
 })
 
+describe('updateBoardAccessFn — auth propagation', () => {
+  it('propagates requireAuth rejection (no swallowing 401 into 500)', async () => {
+    const authError = new Error('UNAUTHORIZED')
+    mockRequireAuth.mockRejectedValue(authError)
+    await expect(
+      getUpdateBoardAccessFn()({
+        data: { boardId: 'board_1', audience: { kind: 'public' } },
+      })
+    ).rejects.toBe(authError)
+    // Nothing happens at the data layer.
+    expect(state.updates).toEqual([])
+    expect(state.auditEvents).toEqual([])
+  })
+})
+
 describe('updateBoardAccessFn — isAdmin gate (codex P1)', () => {
   it('rejects role=user with ForbiddenError', async () => {
     mockRequireAuth.mockResolvedValue(AUTH_USER)

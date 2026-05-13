@@ -152,6 +152,16 @@ beforeEach(() => {
 // ----------------------------------------------------------------------
 
 describe('listPendingPostsFn — role gating', () => {
+  it('propagates requireAuth rejection (unauthenticated → 401-shaped error)', async () => {
+    // requireAuth is the gate that turns missing/expired sessions into a
+    // typed error. The handler must not swallow that — if it did, the
+    // role-check below would see undefined and crash, exposing a stack
+    // trace instead of a structured 401.
+    const authError = new Error('UNAUTHORIZED: session expired')
+    mockRequireAuth.mockRejectedValue(authError)
+    await expect(listPending()({ data: {} })).rejects.toBe(authError)
+  })
+
   it('rejects role=user with ForbiddenError', async () => {
     mockRequireAuth.mockResolvedValue(AUTH_USER)
     await expect(listPending()({ data: {} })).rejects.toBeInstanceOf(ForbiddenError)
@@ -188,6 +198,12 @@ describe('listPendingPostsFn — role gating', () => {
 // ----------------------------------------------------------------------
 
 describe('approvePostFn', () => {
+  it('propagates requireAuth rejection', async () => {
+    const authError = new Error('UNAUTHORIZED')
+    mockRequireAuth.mockRejectedValue(authError)
+    await expect(approve()({ data: { postId: 'p1' } })).rejects.toBe(authError)
+  })
+
   it('rejects role=user', async () => {
     mockRequireAuth.mockResolvedValue(AUTH_USER)
     await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ForbiddenError)
@@ -240,6 +256,12 @@ describe('approvePostFn', () => {
 // ----------------------------------------------------------------------
 
 describe('rejectPostFn', () => {
+  it('propagates requireAuth rejection', async () => {
+    const authError = new Error('UNAUTHORIZED')
+    mockRequireAuth.mockRejectedValue(authError)
+    await expect(reject()({ data: { postId: 'p1' } })).rejects.toBe(authError)
+  })
+
   it('rejects role=user', async () => {
     mockRequireAuth.mockResolvedValue(AUTH_USER)
     await expect(reject()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ForbiddenError)
