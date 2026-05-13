@@ -216,11 +216,11 @@ export async function handleSignInPreCheck(ctx: {
 
   const { isHardBound, isAuthMethodAllowed } = await import('./auth-restrictions')
 
-  // Look up the principal early — `isHardBound` needs the role to
-  // evaluate the workspace-wide `ssoOidc.required` branch. Brand-new
-  // sign-ups (no user row yet) get role='user' so the per-domain
-  // branch still gates them, but the workspace-wide branch skips them
-  // (portal sign-ups at non-verified domains are allowed).
+  // Look up the principal early — `isAuthMethodAllowed` below needs the
+  // role to pick the right per-audience method gate. Brand-new sign-ups
+  // (no user row yet) get role='user' so the per-domain branch still
+  // gates them via email lookup — `isHardBound` does not depend on
+  // role anymore.
   const { db, user: userTable, principal: principalTable, eq } = await import('@/lib/server/db')
   type UserId = `user_${string}`
   const userRow = await db.query.user.findFirst({

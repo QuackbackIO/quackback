@@ -1,10 +1,9 @@
 /**
  * `isAuthMethodAllowed` — the per-method enablement predicate.
  *
- * Independent of the hard-binding branch (which gates by verified
- * domain / workspace-wide required). This predicate answers a single
- * question: given the workspace toggles, is provider X turned on for
- * role Y?
+ * Independent of the hard-binding branch (which gates by enforced
+ * verified domain). This predicate answers a single question: given
+ * the workspace toggles, is provider X turned on for role Y?
  *
  * Team-role (admin / member) and portal-role (user) take different
  * paths — team reads `tenant.authConfig.oauth`, portal reads
