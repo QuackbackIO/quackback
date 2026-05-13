@@ -194,20 +194,33 @@ export function SsoConnectionSection({
         onConfirm={async () => {
           setSwitchProviderPending(true)
           setSwitchProviderError(null)
+          let result: { success: boolean; defangedDomains: string[] }
           try {
-            // switchSsoProviderFn clears BOTH the encrypted secret and
-            // the authConfig.ssoOidc block in one transaction, so the
-            // route's authConfig query refetches a "no SSO configured"
-            // payload and the form snaps back to the provider picker.
-            // Refuses only when an enforced domain exists (hard-bound
-            // users would lose their sign-in path).
-            await switchSsoProviderFn({})
+            // switchSsoProviderFn clears the encrypted secret, the
+            // authConfig.ssoOidc block, and any per-domain `enforced`
+            // flags in one transaction. The route's authConfig query
+            // refetches "no SSO configured" payload and the form snaps
+            // back to the provider picker.
+            result = await switchSsoProviderFn({})
           } catch (err) {
-            setSwitchProviderError(
+            const message =
               err instanceof Error ? err.message : 'Could not switch identity provider.'
-            )
+            setSwitchProviderError(message)
             setSwitchProviderPending(false)
+            // Toast in addition to the inline dialog error — radix
+            // AlertDialogAction auto-closes the dialog on click, so the
+            // inline message may not be visible if the close lands first.
+            toast.error(message)
             return
+          }
+          if (result.defangedDomains.length > 0) {
+            toast.success(
+              result.defangedDomains.length === 1
+                ? `Disabled SSO enforcement on ${result.defangedDomains[0]} — re-enable after configuring the new provider.`
+                : `Disabled SSO enforcement on ${result.defangedDomains.length} domains — re-enable after configuring the new provider.`
+            )
+          } else {
+            toast.success('Identity provider cleared. Pick a new provider to continue.')
           }
           // Local optimistic clear so the empty-state picker renders
           // immediately. The route-loader refetch (via
@@ -221,6 +234,7 @@ export function SsoConnectionSection({
           })
           void queryClient.invalidateQueries({ queryKey: ['admin', 'ssoStatus'] })
           void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
+          void queryClient.invalidateQueries({ queryKey: ['settings', 'verifiedDomains'] })
           router.invalidate()
         }}
       />

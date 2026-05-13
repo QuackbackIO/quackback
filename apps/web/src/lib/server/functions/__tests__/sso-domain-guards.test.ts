@@ -62,10 +62,12 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.mockRequireAuth,
 }))
 
+const mockSetVerifiedDomainEnforced = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getTenantSettings: hoisted.mockGetTenantSettings,
   updateAuthConfig: hoisted.mockUpdateAuthConfig,
   setSsoDomainSubtree: hoisted.mockSetSsoDomainSubtree,
+  setVerifiedDomainEnforced: mockSetVerifiedDomainEnforced,
 }))
 
 vi.mock('@/lib/server/auth/sso-secret', () => ({
@@ -249,40 +251,48 @@ describe('clearSsoClientSecretFn refusals', () => {
 })
 
 describe('switchSsoProviderFn', () => {
-  // The "Change provider" flow needs to wipe BOTH the encrypted secret
-  // AND the authConfig.ssoOidc block in one transaction so the settings
-  // page snaps back to the empty-state provider picker. Distinct from
-  // clearSsoClientSecretFn — see the docstring on switchSsoProviderFn.
+  // The "Change provider" flow wipes the encrypted secret, the
+  // authConfig.ssoOidc block, AND any per-domain `enforced` flags in
+  // one transaction. The enforced flags get auto-disabled (not refused)
+  // so admins can switch providers without manually defanging each
+  // domain first — those users still have password/magic-link until
+  // the new IdP is set up.
   beforeEach(() => {
     hoisted.mockRequireSettings.mockResolvedValue({
       id: 'settings_id',
       authConfig: JSON.stringify({ ssoOidc: ssoConfig, oauth: { password: true } }),
     })
+    mockSetVerifiedDomainEnforced.mockResolvedValue(undefined)
   })
 
-  it('refuses when any verified domain has enforcement on (hard-bound users)', async () => {
+  it('auto-disables enforcement on rows that have it on, then clears SSO', async () => {
     hoisted.mockGetTenantSettings.mockResolvedValue({
       authConfig: { ssoOidc: ssoConfig },
       verifiedDomains: [enforcedDomainRow],
     })
 
-    await expect(switchSsoProvider({ data: {} })).rejects.toThrow(/enforcement/i)
-    expect(hoisted.mockDeletePlatformCredentials).not.toHaveBeenCalled()
-    expect(hoisted.mockDbTransaction).not.toHaveBeenCalled()
-  })
+    const result = await switchSsoProvider({ data: {} })
 
-  it('allows switching when domains are verified but NOT enforced (softer than clearSsoClientSecretFn)', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [verifiedDomainRow],
-    })
-
-    await expect(switchSsoProvider({ data: {} })).resolves.toEqual({ success: true })
+    expect(result).toEqual({ success: true, defangedDomains: ['acme.com'] })
+    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith('domain_acme', false)
     expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
     expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
     expect(hoisted.mockBumpAuthConfigVersionInTx).toHaveBeenCalledTimes(1)
     expect(hoisted.mockResetAuth).toHaveBeenCalledTimes(1)
     expect(hoisted.mockInvalidateSettingsCache).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the defang step when no domain is enforced', async () => {
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: { ssoOidc: ssoConfig },
+      verifiedDomains: [verifiedDomainRow],
+    })
+
+    const result = await switchSsoProvider({ data: {} })
+
+    expect(result).toEqual({ success: true, defangedDomains: [] })
+    expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
+    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
   })
 
   it('allows switching when no domains exist', async () => {
@@ -291,8 +301,28 @@ describe('switchSsoProviderFn', () => {
       verifiedDomains: [],
     })
 
-    await expect(switchSsoProvider({ data: {} })).resolves.toEqual({ success: true })
+    const result = await switchSsoProvider({ data: {} })
+
+    expect(result).toEqual({ success: true, defangedDomains: [] })
     expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
+  })
+
+  it('defangs multiple enforced domains in one call', async () => {
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: { ssoOidc: ssoConfig },
+      verifiedDomains: [
+        enforcedDomainRow,
+        { ...enforcedDomainRow, id: 'domain_beta', name: 'beta.com' },
+      ],
+    })
+
+    const result = await switchSsoProvider({ data: {} })
+
+    expect(result).toEqual({
+      success: true,
+      defangedDomains: ['acme.com', 'beta.com'],
+    })
+    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledTimes(2)
   })
 })
 

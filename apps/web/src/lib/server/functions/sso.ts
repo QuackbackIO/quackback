@@ -426,11 +426,13 @@ export const setSsoClientSecretFn = createServerFn({ method: 'POST' })
  * Verified-domain rows are preserved — they apply to whichever provider
  * the admin sets up next.
  *
- * Refuses ONLY when an enforced verified-domain row exists, because
- * those users have no fallback sign-in path during the gap. A merely
- * verified (non-enforced) domain is fine: those users can still use
- * password/magic-link until the admin finishes setup with the new
- * provider, at which point SSO sign-in resumes for that domain.
+ * Auto-disables `enforced` on any verified-domain rows that have it
+ * on. Enforced-domain users would otherwise be hard-bound to an
+ * unregistered IdP and locked out during the gap between providers;
+ * the verified rows themselves stay (domain ownership is unchanged),
+ * but hard-binding drops to false. Re-enforcing post-setup is one
+ * toggle in the Verified domains card. Returns the affected domain
+ * names so the UI can surface a toast.
  *
  * Distinct from `clearSsoClientSecretFn` (a rotation primitive that
  * deletes only the secret) — switching providers needs to drop the
@@ -448,16 +450,13 @@ export const switchSsoProviderFn = createServerFn({ method: 'POST' }).handler(as
       headers: getRequestHeaders(),
     },
     async () => {
-      const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+      const { getTenantSettings, setVerifiedDomainEnforced } =
+        await import('@/lib/server/domains/settings/settings.service')
       const tenant = await getTenantSettings()
 
-      const enforcedRow = tenant?.verifiedDomains.find((d) => d.enforced)
-      if (enforcedRow) {
-        const { ValidationError } = await import('@/lib/shared/errors')
-        throw new ValidationError(
-          'SSO_ENFORCEMENT_ACTIVE',
-          `Disable SSO enforcement on ${enforcedRow.name} before switching providers.`
-        )
+      const enforcedRows = tenant?.verifiedDomains.filter((d) => d.enforced) ?? []
+      for (const row of enforcedRows) {
+        await setVerifiedDomainEnforced(row.id, false)
       }
 
       const { deletePlatformCredentials } =
@@ -489,7 +488,10 @@ export const switchSsoProviderFn = createServerFn({ method: 'POST' }).handler(as
       resetAuth()
       await invalidateSettingsCache()
 
-      return { success: true }
+      return {
+        success: true,
+        defangedDomains: enforcedRows.map((r) => r.name),
+      }
     }
   )
 })
