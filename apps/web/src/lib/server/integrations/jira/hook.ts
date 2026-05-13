@@ -49,8 +49,19 @@ async function jiraApi(
 
 export const jiraHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
-    const { channelId: projectId } = target as JiraTarget
-    const { accessToken, cloudId, siteUrl, issueTypeId, rootUrl } = config as JiraConfig
+    const { channelId } = target as JiraTarget
+    const {
+      accessToken,
+      cloudId,
+      siteUrl,
+      issueTypeId: configIssueTypeId,
+      rootUrl,
+    } = config as JiraConfig
+    const [projectId, parsedIssueTypeId] = (channelId ?? '').split(':')
+    const issueTypeId = configIssueTypeId || parsedIssueTypeId
+    if (!projectId) {
+      return { success: false, error: 'No project configured', shouldRetry: false }
+    }
 
     // Only create issues for new feedback
     if (event.type !== 'post.created') {

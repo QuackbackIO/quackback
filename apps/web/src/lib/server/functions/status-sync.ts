@@ -94,7 +94,24 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
                 await import('@/lib/server/integrations/jira/webhook-registration')
               const cloudId = config.cloudId as string
               if (!cloudId) throw new Error('No Jira Cloud ID configured')
-              const result = await registerJiraWebhook(accessToken, cloudId, callbackUrl, secret)
+              const channelId = config.channelId as string | undefined
+              const projectId = channelId?.split(':')[0]
+              if (!projectId) throw new Error('No Jira project configured')
+              const projectRes = await fetch(
+                `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/project/${projectId}`,
+                { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } }
+              )
+              if (!projectRes.ok)
+                throw new Error(`Failed to fetch Jira project: HTTP ${projectRes.status}`)
+              const projectInfo = (await projectRes.json()) as { key?: string }
+              if (!projectInfo.key) throw new Error('Jira project has no key')
+              const result = await registerJiraWebhook(
+                accessToken,
+                cloudId,
+                callbackUrl,
+                secret,
+                projectInfo.key
+              )
               externalWebhookId = result.webhookId
               break
             }

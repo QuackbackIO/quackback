@@ -16,7 +16,8 @@ export async function registerJiraWebhook(
   accessToken: string,
   cloudId: string,
   callbackUrl: string,
-  _secret: string
+  _secret: string,
+  projectKey: string
 ): Promise<JiraWebhookResult> {
   const response = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/webhook`, {
     method: 'POST',
@@ -29,7 +30,7 @@ export async function registerJiraWebhook(
       url: callbackUrl,
       webhooks: [
         {
-          jqlFilter: 'project is not EMPTY',
+          jqlFilter: `project = "${projectKey}"`,
           events: ['jira:issue_updated'],
         },
       ],
