@@ -41,6 +41,7 @@
     "setup": "./scripts/setup.sh",
     "dev": "bun run --filter @quackback/web dev",
     "build": "bun run --filter @quackback/web build",
+    "deploy": "bun run --filter @quackback/web build && fly secrets import < .env && fly deploy",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest",
     "test:api": "vitest apps/web/src/lib/api/__tests__/api-integration.test.ts",
