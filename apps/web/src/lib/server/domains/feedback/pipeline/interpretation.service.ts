@@ -22,7 +22,7 @@ import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
 import type { SuggestionGenerationResult } from '../types'
 import type { FeedbackSignalId, RawFeedbackItemId, BoardId, PostId } from '@quackback/ids'
 
-const SUGGESTION_MODEL = 'google/gemini-3.1-flash-lite-preview'
+const SUGGESTION_MODEL = 'gpt-4o-mini'
 
 /** Above this threshold, the primary suggestion is vote_on_post. */
 const VOTE_SUGGESTION_THRESHOLD = 0.8

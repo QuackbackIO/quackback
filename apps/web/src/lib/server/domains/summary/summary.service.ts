@@ -11,7 +11,7 @@ import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 
-const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
+const SUMMARY_MODEL = 'gpt-4o-mini'
 
 const SYSTEM_PROMPT = `You are a product feedback analyst writing post briefs for a PM's triage queue.
 Your job is to surface what matters for prioritization, not restate the obvious.

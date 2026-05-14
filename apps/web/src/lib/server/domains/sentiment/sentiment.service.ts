@@ -2,7 +2,7 @@
  * Sentiment analysis service.
  *
  * Analyzes customer feedback to classify sentiment as positive, neutral, or negative.
- * Uses OpenAI google/gemini-3.1-flash-lite-preview via Cloudflare AI Gateway.
+ * Uses OpenAI gpt-4o-mini.
  */
 
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
@@ -12,7 +12,7 @@ import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 
-const SENTIMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
+const SENTIMENT_MODEL = 'gpt-4o-mini'
 
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
