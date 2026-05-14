@@ -159,6 +159,11 @@ async function getS3Client(): Promise<S3ClientInstance> {
       accessKeyId: s3Config.accessKeyId,
       secretAccessKey: s3Config.secretAccessKey,
     },
+    // AWS SDK v3 auto-injects an `x-amz-checksum-crc32` header (of empty bytes)
+    // into presigned PUTs. R2 validates that checksum against the uploaded body
+    // and rejects with 403 when it doesn't match. Opt out for presigned uploads.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   })
 
   return _s3Client
