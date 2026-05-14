@@ -30,20 +30,22 @@ export function PageHeader({
     >
       <div className="flex items-center gap-3">
         {Icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
+          <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
           </div>
         )}
         <div>
           <h1
             className={cn(
               'text-foreground',
-              size === 'large' ? 'text-3xl font-bold' : 'text-xl font-semibold'
+              size === 'large'
+                ? 'text-2xl sm:text-3xl font-bold'
+                : 'text-lg sm:text-xl font-semibold'
             )}
           >
             {title}
           </h1>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          {description && <p className="text-xs sm:text-sm text-muted-foreground">{description}</p>}
         </div>
       </div>
       {action}

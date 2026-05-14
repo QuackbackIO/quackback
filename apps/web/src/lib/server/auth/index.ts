@@ -8,6 +8,7 @@ import {
   jwt,
   genericOAuth,
   bearer,
+  twoFactor,
 } from 'better-auth/plugins'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
@@ -51,29 +52,13 @@ export const getOTP = (email: string) => otpStash.take(email)
 
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
-type AuthInstance = Awaited<ReturnType<typeof createAuth>>
+type AuthInstance = Awaited<ReturnType<typeof createAuth>>['instance']
 let _auth: AuthInstance | null = null
-
-import {
-  scheduleSsoSecretRetry as scheduleSsoSecretRetryHelper,
-  _cancelSsoSecretRetry,
-} from './sso-secret-retry'
-
-const ssoRetryDeps = {
-  getSecret: () => process.env.SSO_OIDC_CLIENT_SECRET,
-  resetAuth: () => resetAuth(),
-  schedule: (fn: () => void, ms: number) => setTimeout(fn, ms),
-  cancel: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>),
-  log: (msg: string) => console.log(msg),
-}
-function scheduleSsoSecretRetry(): void {
-  scheduleSsoSecretRetryHelper(ssoRetryDeps)
-}
-
-/** Test-only: cancel any pending retry so vitest can exit cleanly. */
-export function _cancelSsoSecretRetryForTests(): void {
-  _cancelSsoSecretRetry(ssoRetryDeps)
-}
+// Cross-pod invalidation: the version of `settings.auth_config_version`
+// at the time the cached _auth was built. Compared per-request against
+// the current value (via the existing settings cache, no extra DB
+// round-trip). Mismatch → resetAuth(), other pods' writes propagate.
+let _authConfigVersion: number | null = null
 
 async function createAuth() {
   // Dynamic imports to prevent client bundling
@@ -92,6 +77,7 @@ async function createAuth() {
     oauthAccessToken: oauthAccessTokenTable,
     oauthRefreshToken: oauthRefreshTokenTable,
     oauthConsent: oauthConsentTable,
+    twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
   const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
@@ -108,10 +94,28 @@ async function createAuth() {
     providerId: string
     clientId: string
     clientSecret: string
+    disableSignUp?: boolean
     discoveryUrl?: string
     authorizationUrl?: string
     tokenUrl?: string
     scopes?: string[]
+    // SSO-only: force the IdP account picker so admins notice when
+    // they're already signed in as a different identity.
+    prompt?:
+      | 'none'
+      | 'login'
+      | 'create'
+      | 'consent'
+      | 'select_account'
+      | 'select_account consent'
+      | 'login consent'
+    // SSO-only: emit `login_hint` to pre-select the typed email in
+    // the IdP picker. The ctx shape comes from Better-Auth's endpoint
+    // builder; we only read `body.additionalData.loginHint` so we
+    // accept a loose ctx type and narrow inside the function.
+    authorizationUrlParams?: (ctx: {
+      body?: { additionalData?: { loginHint?: string } }
+    }) => Record<string, string>
   }> = []
 
   // Defense-in-depth: a workspace that configured SSO on a higher tier
@@ -119,61 +123,113 @@ async function createAuth() {
   // generic-oauth providers when the tier flag is off so the login
   // button never renders and the /sign-in/oauth2 callback path 404s
   // on that providerId.
-  const tierLimits = await getTierLimits()
-
-  // Optional SSO provider. DB-first (settings.authConfig.ssoOidc, set
-  // by the declarative config-file reconciler) with env-var fallback
-  // (SSO_OIDC_* trio). The client *secret* always comes from env; the
-  // file and DB never hold secrets, so a config-file dump or DB read
-  // can't leak it.
-  const tenantSettings = await getTenantSettings()
+  //
+  // Tier limits + tenant settings are independent reads — fire them
+  // together to avoid stacking Redis round-trips on every auth-instance
+  // rebuild. SSO config (non-secret fields on settings.authConfig.ssoOidc)
+  // lives in DB; the client secret lives in platform_credentials with
+  // type='auth_sso'. No env-var fallback — the platform vendor never
+  // has the customer's IdP secret, so env-driven SSO never made sense
+  // for managed-cloud and was a self-hosted-only quirk that's now gone.
+  const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
   const ssoFromDb = tenantSettings?.authConfig?.ssoOidc
-  const ssoEnabled =
-    ssoFromDb?.enabled ??
-    Boolean(
-      process.env.SSO_OIDC_DISCOVERY_URL &&
-      process.env.SSO_OIDC_CLIENT_ID &&
-      process.env.SSO_OIDC_CLIENT_SECRET
-    )
 
-  if (ssoEnabled) {
-    const cfg = ssoFromDb ?? {
-      providerName: process.env.SSO_OIDC_PROVIDER_NAME ?? 'SSO',
-      discoveryUrl: process.env.SSO_OIDC_DISCOVERY_URL!,
-      clientId: process.env.SSO_OIDC_CLIENT_ID!,
-      isDefault: true,
-      autoCreateUsers: true,
+  // Registration condition is centralised in `isSsoActuallyRegistered`
+  // so the email-first login dispatcher (lookupAuthMethodsFn) can
+  // consult the same predicate — keeps registration and lookup from
+  // disagreeing on whether SSO is live.
+  const { getSsoClientSecret, isSsoActuallyRegistered } = await import('./sso-secret')
+  const ssoRegistered = await isSsoActuallyRegistered(ssoFromDb, tierLimits)
+
+  if (ssoFromDb?.enabled && tierLimits.features.customOidcProvider && !ssoRegistered) {
+    // SSO is enabled and tier-allowed in DB but the secret is missing
+    // (or got cleared). Skip registration; the rest of Better-Auth
+    // (password + magic-link + other OAuth) keeps working. UI shows a
+    // status banner asking the admin to paste the secret. Also warn
+    // explicitly when the legacy env-var is set so self-hosters
+    // upgrading from the env-fallback era have a breadcrumb.
+    console.error(
+      '[auth] ssoOidc enabled but no client secret in platform_credentials. ' +
+        'Set the secret via Admin → Settings → Security → Authentication → Single Sign-On.'
+    )
+    if (process.env.SSO_OIDC_CLIENT_SECRET) {
+      console.error(
+        '[auth] SSO_OIDC_CLIENT_SECRET is set in the environment but is no longer ' +
+          'read at runtime. Re-enter the secret via the admin UI to restore SSO.'
+      )
     }
-    const clientSecret = process.env.SSO_OIDC_CLIENT_SECRET
-    if (!clientSecret) {
-      // DB says "enabled" but SSO_OIDC_CLIENT_SECRET hasn't been
-      // populated yet. Logging without registering keeps the rest of
-      // Better-Auth functional and lets the password / magic-link /
-      // other-OAuth fallbacks carry the sign-in load.
-      console.error('[auth] ssoOidc enabled but SSO_OIDC_CLIENT_SECRET not set')
-      // Schedule a one-shot re-init. Without this, the cached _auth
-      // instance is missing the SSO provider until pod restart — a
-      // hard outage for workspaces whose admins only have OIDC login.
-      // Idempotent under multiple ticks: any later createAuth() call
-      // re-reads env, so resetAuth() is the only side effect needed
-      // here. If the secret never arrives, the timer fires once, sees
-      // env still empty, and quietly no-ops.
-      scheduleSsoSecretRetry()
-    } else {
+  }
+
+  if (ssoRegistered) {
+    const cfg = ssoFromDb!
+    const clientSecret = await getSsoClientSecret()
+    // `isSsoActuallyRegistered` already confirmed the secret exists, but
+    // narrow the type for the push below.
+    if (clientSecret) {
       genericOAuthConfigs.push({
         providerId: 'sso',
         clientId: cfg.clientId,
         clientSecret,
         discoveryUrl: cfg.discoveryUrl,
         scopes: ['openid', 'email', 'profile'],
+        // Force the IdP to show the account-picker. Without this, an
+        // admin typing demo@example.com at the login form gets
+        // silently signed in as whoever the IdP already has a
+        // session for (e.g. james.morton@quackback.io) — the IdP
+        // re-uses its existing session because it has no reason to
+        // re-prompt. With select_account, the IdP always asks the
+        // user which account they want to sign in with so the
+        // identity is explicit.
+        prompt: 'select_account',
+        // login_hint pre-selects the typed email in the IdP picker.
+        // Read from the `additionalData.loginHint` body field that
+        // the team-login / portal-auth forms pass when initiating
+        // SSO. When the field is absent (e.g. a direct hit on
+        // /sign-in/oauth2 with no email context) we omit the hint
+        // and the IdP just shows its default account list.
+        authorizationUrlParams: (ctx) => {
+          const hint = ctx.body?.additionalData?.loginHint
+          const params: Record<string, string> = {}
+          if (hint) params.login_hint = hint
+          return params
+        },
+        // Better-Auth's built-in JIT block. When false, the upstream
+        // callback aborts in handleOAuthUserInfo BEFORE any user/
+        // session is created, then redirects with `?error=signup_disabled`.
+        // Existing users link via accountLinking.trustedProviders even
+        // with this on. Picked up by createAuth() rebuilds via
+        // resetAuth() / cross-pod invalidation when admins toggle it.
+        disableSignUp: cfg.autoCreateUsers === false,
       })
       trustedProviders.push('sso')
     }
   }
 
+  // Layer A registration filter: an OAuth provider is registered on
+  // the Better-Auth instance only if creds exist AND at least one
+  // surface (admin or portal) has it enabled. If both surfaces have
+  // turned it off, skip registration so the button stops rendering on
+  // every login page. Per-surface gating (admin vs portal) happens in
+  // hooks.before/after — Better-Auth's provider list is a global
+  // concept and can't be partitioned per-role at the auth-instance
+  // level. Password and magic-link aren't covered here (they're
+  // global Better-Auth features, not entries in AUTH_PROVIDERS).
+  const teamOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+    string,
+    boolean | undefined
+  >
+  const portalOAuthConfig = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
+    string,
+    boolean | undefined
+  >
+  const isOAuthProviderEnabledForAnySurface = (id: string): boolean => {
+    return teamOAuthConfig[id] === true || portalOAuthConfig[id] === true
+  }
+
   for (const provider of getAllAuthProviders()) {
     const creds = await getPlatformCredentials(provider.credentialType)
     if (!creds?.clientId || !creds?.clientSecret) continue
+    if (!isOAuthProviderEnabledForAnySurface(provider.id)) continue
 
     if (provider.type === 'generic-oauth') {
       if (!tierLimits.features.customOidcProvider) continue
@@ -209,7 +265,15 @@ async function createAuth() {
   // BASE_URL is required for auth callbacks and redirects
   const baseURL = config.baseUrl
 
-  return betterAuth({
+  // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
+  // to keep the createAuth() module-loading dependency graph clean.
+  const { hooksBefore, hooksAfter } = await import('./hooks')
+
+  const instance = betterAuth({
+    hooks: {
+      before: hooksBefore,
+      after: hooksAfter,
+    },
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: config.secretKey,
 
@@ -236,6 +300,11 @@ async function createAuth() {
         oauthAccessToken: oauthAccessTokenTable,
         oauthRefreshToken: oauthRefreshTokenTable,
         oauthConsent: oauthConsentTable,
+        // The twoFactor plugin uses model name "twoFactor"; our Drizzle
+        // table is `two_factor` (snake-case). The column→field mapping
+        // (camelCase plugin field → snake_case column) is handled by
+        // matching column names in the table definition itself.
+        twoFactor: twoFactorTable,
       },
     }),
 
@@ -344,30 +413,6 @@ async function createAuth() {
               })
               console.log(
                 `[auth] Created principal record: userId=${user.id}, role=user, type=${isAnonymous ? 'anonymous' : 'user'}`
-              )
-            }
-          },
-        },
-      },
-      account: {
-        create: {
-          after: async (account) => {
-            // First user signing in via the env-baked SSO provider
-            // owns the workspace as admin. The user.create.after hook
-            // above already wrote role=user; upgrade to admin here so
-            // the very first SSO sign-in lands on the dashboard with
-            // full permissions instead of a member view. Subsequent
-            // SSO sign-ins keep role=admin (no-op update). Operators
-            // who don't set SSO_OIDC_* never see this branch fire.
-            if (account.providerId === 'sso') {
-              await db
-                .update(principalTable)
-                .set({ role: 'admin' })
-                .where(
-                  eq(principalTable.userId, account.userId as ReturnType<typeof generateId<'user'>>)
-                )
-              console.log(
-                `[auth] Upgraded principal to admin via SSO OAuth: userId=${account.userId}`
               )
             }
           },
@@ -570,19 +615,52 @@ async function createAuth() {
       // Used by the widget iframe which can't set cookies in cross-origin contexts.
       bearer(),
 
+      // TOTP-based 2FA. Adds /two-factor/enable, /two-factor/verify, etc.
+      // No UI yet — surfaced in user profile + sign-in challenge in
+      // subsequent tasks.
+      twoFactor({
+        issuer: 'Quackback',
+        totpOptions: {
+          period: 30,
+          digits: 6,
+        },
+      }),
+
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),
     ],
   })
+
+  return { instance, authConfigVersion: tenantSettings?.settings?.authConfigVersion ?? 0 }
 }
 
 /**
  * Get the auth instance (lazy-initialized).
- * This allows dynamic imports of database code to prevent client bundling.
+ *
+ * Cross-pod invalidation: every call reads the cached settings row's
+ * `authConfigVersion` (one Redis hit, already happens for everything
+ * else). If the cached _auth was built against an older version, drop
+ * it and rebuild. This guarantees that a write on pod A propagates to
+ * pod B no later than its next request after pod A's commit. The
+ * version is bumped by `bumpAuthConfigVersionInTx` from every
+ * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
+  // Skip the version check when no instance is cached yet — the build
+  // path below records the version after creation.
+  if (_auth && _authConfigVersion !== null) {
+    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const t = await getTenantSettings()
+    const current = t?.settings?.authConfigVersion
+    if (typeof current === 'number' && current !== _authConfigVersion) {
+      _auth = null
+      _authConfigVersion = null
+    }
+  }
   if (!_auth) {
-    _auth = await createAuth()
+    const built = await createAuth()
+    _auth = built.instance
+    _authConfigVersion = built.authConfigVersion
   }
   return _auth
 }
@@ -593,6 +671,7 @@ export async function getAuth(): Promise<AuthInstance> {
  */
 export function resetAuth(): void {
   _auth = null
+  _authConfigVersion = null
 }
 
 // Export a proxy object that lazily initializes auth on first access

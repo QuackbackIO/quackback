@@ -205,10 +205,8 @@ describe('reconcileFileIntoDb', () => {
         auth: {
           ssoOidc: {
             enabled: true,
-            providerName: 'Acme SSO',
             discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
             clientId: 'workspace-x',
-            isDefault: true,
             autoCreateUsers: true,
           },
         },
@@ -219,13 +217,10 @@ describe('reconcileFileIntoDb', () => {
     const merged = JSON.parse(arg.authConfig as string)
     expect(merged.ssoOidc.clientId).toBe('workspace-x')
     expect(merged.ssoOidc.enabled).toBe(true)
-    expect(merged.ssoOidc.isDefault).toBe(true)
     expect(arg.managedFieldPaths).toEqual([
       'auth.ssoOidc.enabled',
-      'auth.ssoOidc.providerName',
       'auth.ssoOidc.discoveryUrl',
       'auth.ssoOidc.clientId',
-      'auth.ssoOidc.isDefault',
       'auth.ssoOidc.autoCreateUsers',
     ])
     expect(deps.resetAuth).toHaveBeenCalled()
@@ -245,10 +240,8 @@ describe('reconcileFileIntoDb', () => {
         openSignup: false,
         ssoOidc: {
           enabled: false,
-          providerName: 'Old Name',
           discoveryUrl: 'https://old.example.com/.well-known/openid-configuration',
           clientId: 'old-id',
-          isDefault: false,
           autoCreateUsers: false,
         },
       }),
@@ -256,18 +249,16 @@ describe('reconcileFileIntoDb', () => {
       state: 'active' as const,
     }))
     // File flips enabled=true and bumps the clientId; everything else
-    // in the existing block (providerName, discoveryUrl, isDefault, ...)
-    // is unchanged — per-key merges let the file lock individual fields
+    // in the existing block (discoveryUrl, autoCreateUsers, ...) is
+    // unchanged — per-key merges let the file lock individual fields
     // without nuking siblings.
     await reconcileFileIntoDb(
       {
         auth: {
           ssoOidc: {
             enabled: true,
-            providerName: 'Old Name',
             discoveryUrl: 'https://old.example.com/.well-known/openid-configuration',
             clientId: 'new-id',
-            isDefault: false,
             autoCreateUsers: false,
           },
         },
@@ -278,7 +269,7 @@ describe('reconcileFileIntoDb', () => {
     const merged = JSON.parse(arg.authConfig as string)
     expect(merged.ssoOidc.enabled).toBe(true)
     expect(merged.ssoOidc.clientId).toBe('new-id')
-    expect(merged.ssoOidc.providerName).toBe('Old Name')
+    expect(merged.ssoOidc.autoCreateUsers).toBe(false)
     // oauth block stays intact when only ssoOidc is in the spec
     expect(merged.oauth).toEqual({ google: true })
   })

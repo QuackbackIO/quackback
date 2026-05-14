@@ -75,7 +75,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
                         <GlobeAltIcon className="h-4 w-4" />
                         <span className="font-medium">Public</span>
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Anyone can view this board on your portal. Signed-in users can vote,
                         comment, and submit feedback.
                       </p>
@@ -91,7 +91,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
                         <LockClosedIcon className="h-4 w-4" />
                         <span className="font-medium">Private</span>
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Only team members can view this board
                       </p>
                     </div>

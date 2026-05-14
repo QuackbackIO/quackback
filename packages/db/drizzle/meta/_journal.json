@@ -393,6 +393,55 @@
       "when": 1778457600002,
       "tag": "0055_hook_deliveries",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1778457600003,
+      "tag": "0056_admin_auth_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1778457600004,
+      "tag": "0057_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1778457600005,
+      "tag": "0058_sso_recovery_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1778457600006,
+      "tag": "0059_sso_required_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1778457600007,
+      "tag": "0060_session_user_created_at_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1778457600008,
+      "tag": "0061_normalize_2fa_password_dependency",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1778457600009,
+      "tag": "0062_drop_sso_required_flag",
+      "breakpoints": true
     }
   ]
 }

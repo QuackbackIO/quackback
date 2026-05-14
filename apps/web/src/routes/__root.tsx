@@ -14,10 +14,11 @@ import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/shared/types/settings'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { SuspendedView } from '@/components/shared/suspended-view'
-import { isSuspensionExempt } from '@/lib/server/middleware/suspension-guard'
+import { isSuspensionExempt } from '@/lib/server/middleware/suspension-paths'
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -192,8 +193,11 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
   }
 }
 
-// Non-portal routes that should never have a forced theme
-const NON_PORTAL_PREFIXES = ['/admin', '/auth', '/onboarding', '/api', '/complete-signup']
+// Non-portal routes that should never have a forced theme. `/auth/*`
+// is intentionally treated as portal-adjacent — its login / signup /
+// reset pages match the public portal's branding so visitors don't
+// feel like they crossed into a different product.
+const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { settings, themeCookie } = Route.useRouteContext()
@@ -223,6 +227,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
         <Scripts />
       </body>

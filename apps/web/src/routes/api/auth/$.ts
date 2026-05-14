@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { SSO_OAUTH_CALLBACK_PATH } from '@/lib/shared/sso-test-keys'
 
 /**
  * Simple rate limiter for OAuth client registration.
@@ -30,10 +31,31 @@ export const Route = createFileRoute('/api/auth/$')({
   server: {
     handlers: {
       /**
-       * GET /api/auth/*
-       * Better-auth catch-all route handler
+       * GET /api/auth/* — Better-Auth catch-all. Intercepts the SSO
+       * callback for admin Test sign-in (state-keyed dispatch in
+       * `handleSsoTestCallback`); everything else delegates.
        */
       GET: async ({ request }) => {
+        const url = new URL(request.url)
+        if (url.pathname === SSO_OAUTH_CALLBACK_PATH) {
+          const { handleSsoTestCallback, renderSsoTestCallbackHtml } =
+            await import('@/lib/server/auth/sso-test-callback')
+          const handled = await handleSsoTestCallback({
+            state: url.searchParams.get('state'),
+            code: url.searchParams.get('code'),
+            error: url.searchParams.get('error'),
+            errorDescription: url.searchParams.get('error_description'),
+          })
+          if (handled) {
+            return renderSsoTestCallbackHtml({
+              testId: handled.testId,
+              result: handled.result,
+              origin: url.origin,
+              identityMatched: handled.identityMatched,
+            })
+          }
+        }
+
         const { auth } = await import('@/lib/server/auth/index')
         return await auth.handler(request)
       },

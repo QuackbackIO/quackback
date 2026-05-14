@@ -21,7 +21,7 @@ export function ComingSoonIntegration({ catalog }: ComingSoonIntegrationProps) {
                 <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/40" />
                 <div>
                   <span className="text-sm font-medium text-foreground">{cap.label}</span>
-                  <p className="text-sm text-muted-foreground">{cap.description}</p>
+                  <p className="text-xs text-muted-foreground">{cap.description}</p>
                 </div>
               </li>
             ))}

@@ -151,6 +151,26 @@ export function logStartupBanner(): void {
     })
     .catch((err) => console.error('[Startup] Failed to init feedback maintenance:', err))
 
+  // Audit-log retention sweep. Once a day deletes rows older than
+  // the configured retention window (default 365d, SOC2-aligned).
+  // First sweep runs 30s after boot so it doesn't compete with
+  // migrations + worker init on the startup hot path.
+  import('@/lib/server/audit/log')
+    .then(({ pruneAuditLog }) => {
+      setTimeout(() => {
+        pruneAuditLog().catch((err) =>
+          console.error('[Startup] Initial audit-log prune failed:', err)
+        )
+      }, 30_000)
+      setInterval(
+        () => {
+          pruneAuditLog().catch((err) => console.error('[Startup] Audit-log prune failed:', err))
+        },
+        24 * 60 * 60 * 1000
+      )
+    })
+    .catch((err) => console.error('[Startup] Failed to init audit-log prune:', err))
+
   // Start periodic summary sweep (refreshes stale/missing post summaries)
   // Runs once at startup (after a short delay) then every 30 minutes
   import('./domains/summary/summary.service')

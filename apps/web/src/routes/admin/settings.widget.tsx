@@ -67,7 +67,7 @@ function WidgetContentSettings({ config }: { config: { imageUploadsInWidget?: bo
           <Label htmlFor="image-uploads-in-widget" className="text-sm font-medium cursor-pointer">
             Image Uploads
           </Label>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Allow signed-in users to attach images when submitting feedback through the widget.
           </p>
         </div>
@@ -621,7 +621,9 @@ function WidgetInstallation({
   const [activeTab, setActiveTab] = useState('snippet')
 
   // Persisted state
-  const [verifiedIdentityOnly, setVerifiedIdentityOnly] = useState(config.identifyVerification ?? false)
+  const [verifiedIdentityOnly, setVerifiedIdentityOnly] = useState(
+    config.identifyVerification ?? false
+  )
   const [currentSecret, setCurrentSecret] = useState(secret)
   const [secretVisible, setSecretVisible] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)

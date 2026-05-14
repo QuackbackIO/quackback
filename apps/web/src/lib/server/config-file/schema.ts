@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { httpsUrl } from '@/lib/shared/schemas/auth'
 
 /**
  * Declarative Quackback config file schema.
@@ -71,36 +72,34 @@ const featuresSchema = z.record(z.string(), z.boolean())
 const stateSchema = z.enum(['active', 'suspended', 'deleting'])
 
 // Auth surface: OAuth provider toggles + openSignup + optional OIDC SSO.
-// Provider secrets are never declared here — OAuth credentials live in
-// the platform_credentials table, and the SSO client secret rides on
-// the SSO_OIDC_CLIENT_SECRET env var.
+// Provider secrets are never declared here — both OAuth client secrets
+// (Google/GitHub/etc.) and the SSO OIDC client secret live encrypted
+// in the platform_credentials table.
 const oauthProvidersSchema = z
   .object({
     google: z.boolean().optional(),
     github: z.boolean().optional(),
+    password: z.boolean().optional(),
   })
   .strict()
 
 // OIDC SSO provider config. The file declares the non-secret config —
-// discoveryUrl + clientId + UX flags — while the client *secret* keeps
-// riding on SSO_OIDC_CLIENT_SECRET. When enabled + isDefault, the admin
-// login UI promotes "Sign in with {providerName}" as the prominent CTA
-// and demotes password / magic-link / other-OAuth to a "More sign-in
-// options" disclosure.
+// discoveryUrl + clientId + UX flags — while the client *secret* lives
+// in platform_credentials (auth_sso, encrypted). The admin login page
+// is email-first: typing an email at a verified domain auto-redirects
+// to the IdP, so there's no "default CTA" knob.
 const ssoOidcSchema = z
   .object({
     enabled: z.boolean(),
-    providerName: z.string().min(1).max(100).default('SSO'),
-    discoveryUrl: z.string().url(),
+    discoveryUrl: httpsUrl,
     clientId: z.string().min(1),
-    /** Show as the prominent default CTA on the admin login page.
-     *  When true + enabled, password sign-in is hidden behind a
-     *  "more options" disclosure (still available; just demoted). */
-    isDefault: z.boolean().default(true),
     /** Auto-create user records on first SSO sign-in. */
     autoCreateUsers: z.boolean().default(true),
   })
   .strict()
+
+// SSO enforcement is per-domain (sso_verified_domain.enforced), not
+// declared here. A config-file shape for that can be added later.
 
 const authSchema = z
   .object({

@@ -127,7 +127,7 @@ export function LinearConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Linear issue syncing
           </p>
         </div>
@@ -192,7 +192,7 @@ export function LinearConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">Choose which events trigger issue creation</p>
+        <p className="text-xs text-muted-foreground">Choose which events trigger issue creation</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

@@ -32,7 +32,7 @@ export function ExperimentalSettings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Experimental Features</h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           These features are in development and may change or be removed.
         </p>
       </div>

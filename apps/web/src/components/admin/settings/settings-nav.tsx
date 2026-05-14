@@ -4,17 +4,15 @@ import {
   Cog6ToothIcon,
   UsersIcon,
   Squares2X2Icon,
-  LockClosedIcon,
   PaintBrushIcon,
   PuzzlePieceIcon,
   ChevronUpIcon,
   ChevronDownIcon,
   KeyIcon,
-  BoltIcon,
-  CommandLineIcon,
   ChatBubbleLeftRightIcon,
   AdjustmentsHorizontalIcon,
   ShieldCheckIcon,
+  DocumentTextIcon,
   BeakerIcon,
   BookOpenIcon,
   TagIcon,
@@ -36,10 +34,22 @@ interface NavSection {
 export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[] {
   const sections: NavSection[] = [
     {
-      label: 'General',
+      label: 'Administration',
       items: [
-        { label: 'Team Members', to: '/admin/settings/team', icon: UsersIcon },
+        { label: 'Members', to: '/admin/settings/team', icon: UsersIcon },
         { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        {
+          label: 'Security',
+          to: '/admin/settings/security/authentication',
+          icon: ShieldCheckIcon,
+        },
+        {
+          label: 'Audit log',
+          to: '/admin/settings/security/audit-log',
+          icon: DocumentTextIcon,
+        },
+        { label: 'API', to: '/admin/settings/api', icon: KeyIcon },
+        { label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon },
       ],
     },
     {
@@ -67,28 +77,16 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
     })
   }
 
-  sections.push(
-    {
-      label: 'End Users',
-      items: [
-        { label: 'Authentication', to: '/admin/settings/portal-auth', icon: LockClosedIcon },
-        {
-          label: 'User Attributes',
-          to: '/admin/settings/user-attributes',
-          icon: AdjustmentsHorizontalIcon,
-        },
-      ],
-    },
-    {
-      label: 'Developers',
-      items: [
-        { label: 'API Keys', to: '/admin/settings/api-keys', icon: KeyIcon },
-        { label: 'Webhooks', to: '/admin/settings/webhooks', icon: BoltIcon },
-        { label: 'MCP Server', to: '/admin/settings/mcp', icon: CommandLineIcon },
-        { label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon },
-      ],
-    }
-  )
+  sections.push({
+    label: 'End Users',
+    items: [
+      {
+        label: 'User Attributes',
+        to: '/admin/settings/user-attributes',
+        icon: AdjustmentsHorizontalIcon,
+      },
+    ],
+  })
 
   return sections
 }

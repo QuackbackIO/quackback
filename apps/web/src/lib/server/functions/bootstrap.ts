@@ -20,8 +20,8 @@ export interface BootstrapData {
   /** Provider IDs that Better-Auth would register at boot — used by
    *  the admin login UI to gate CTAs on actually-usable providers, not
    *  just DB intent. A stale `ssoOidc.enabled=true` with no
-   *  SSO_OIDC_CLIENT_SECRET will NOT include 'sso' here, so the UI
-   *  never renders an SSO button that would 404 on click. */
+   *  `auth_sso` row in `platform_credentials` will NOT include 'sso'
+   *  here, so the UI never renders an SSO button that would 404. */
   registeredAuthProviders: string[]
 }
 

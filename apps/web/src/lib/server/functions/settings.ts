@@ -29,9 +29,10 @@ import {
   updateCustomCss,
 } from '@/lib/server/domains/settings/settings.media'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
-import { db, principal, user, invitation, eq, ne } from '@/lib/server/db'
+import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
 
 // ============================================
 // Read Operations
@@ -78,6 +79,30 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
   }
 })
 
+/**
+ * Full team-side auth config including ssoOidc. Admin-only — surfaces
+ * to the admin auth settings page editor. clientSecret is never in
+ * authConfig (it lives on the env), so this is safe to ship to the
+ * admin form even though it's broader than `fetchPublicAuthConfig`.
+ */
+export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  console.log(`[fn:settings] fetchAuthConfigFn`)
+  try {
+    await requireAuth({ roles: ['admin'] })
+    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const tenant = await getTenantSettings()
+    return (
+      tenant?.authConfig ?? {
+        oauth: { google: true, github: true, password: false },
+        openSignup: false,
+      }
+    )
+  } catch (error) {
+    console.error(`[fn:settings] fetchAuthConfigFn failed:`, error)
+    throw error
+  }
+})
+
 export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:settings] fetchDeveloperConfig`)
   try {
@@ -102,7 +127,20 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
-      const members = await db
+      // Subquery: latest session timestamp per user. Left-joined so
+      // a team member with no sessions still appears (lastSignInAt
+      // = null) — useful for spotting stale accounts.
+      const { session, max, sql: sqlOp } = await import('@/lib/server/db')
+      const lastSession = db
+        .select({
+          userId: session.userId,
+          lastSignInAt: max(session.createdAt).as('last_sign_in_at'),
+        })
+        .from(session)
+        .groupBy(session.userId)
+        .as('last_session')
+
+      const membersRaw = await db
         .select({
           id: principal.id,
           role: principal.role,
@@ -111,10 +149,23 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
           avatarUrl: principal.avatarUrl,
           userName: user.name,
           userEmail: user.email,
+          lastSignInAt: sqlOp<Date | null>`${lastSession.lastSignInAt}`,
         })
         .from(principal)
         .innerJoin(user, eq(principal.userId, user.id))
+        .leftJoin(lastSession, eq(lastSession.userId, user.id))
         .where(ne(principal.role, 'user'))
+
+      // Serialise to ISO string on the boundary so the client type
+      // stays narrow (`string | null`). `toIsoStringOrNull` handles
+      // both the Date and string shapes — postgres-js returns the
+      // `max()` aggregate as a string, plain timestamp selects come
+      // back as Date.
+      const { toIsoStringOrNull } = await import('@/lib/shared/utils/date')
+      const members = membersRaw.map((m) => ({
+        ...m,
+        lastSignInAt: toIsoStringOrNull(m.lastSignInAt),
+      }))
 
       const pendingInvitations = await db.query.invitation.findMany({
         where: eq(invitation.status, 'pending'),
@@ -163,10 +214,51 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
         throw new Error("Access denied: Cannot view other users' profiles")
       }
 
-      const userRecord = await db.query.user.findFirst({
-        where: eq(user.id, userId),
-        columns: { imageKey: true, image: true },
-      })
+      // Profile-page sections (Password, 2FA) depend on the user's auth
+      // posture: do they actually use a password? Is their email
+      // SSO-bound (so password and 2FA are both managed by the IdP)?
+      // Resolve once server-side so the page doesn't fan out to
+      // listAccounts on the client + so we can hide sections that aren't
+      // meaningful for this user.
+      const [userRecord, credentialAccount, principalRow, { getTenantSettings }] =
+        await Promise.all([
+          db.query.user.findFirst({
+            where: eq(user.id, userId),
+            columns: { imageKey: true, image: true, twoFactorEnabled: true, email: true },
+          }),
+          db.query.account.findFirst({
+            where: and(eq(account.userId, userId), eq(account.providerId, 'credential')),
+            columns: { id: true },
+          }),
+          db.query.principal.findFirst({
+            where: eq(principal.userId, userId),
+            columns: { role: true },
+          }),
+          import('@/lib/server/domains/settings/settings.service'),
+        ])
+
+      const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
+      const { isSsoActuallyRegistered } = await import('@/lib/server/auth/sso-secret')
+      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+      const tenant = await getTenantSettings()
+      const ssoRegistered = await isSsoActuallyRegistered(
+        tenant?.authConfig?.ssoOidc,
+        await getTierLimits()
+      )
+      const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+      // Use the full predicate so the profile page hides the password
+      // section for users at an enforced verified domain. When SSO isn't
+      // actually viable (tier downgrade, missing secret) the predicate
+      // fails open — the UI then surfaces the password section as a
+      // fallback, mirroring the sign-in flow.
+      const ssoEnforced = isHardBound(
+        'credential',
+        userRecord?.email ?? null,
+        role,
+        tenant?.authConfig,
+        tenant?.verifiedDomains,
+        ssoRegistered
+      )
 
       const hasCustomAvatar = !!userRecord?.imageKey
       const oauthAvatarUrl = userRecord?.image ?? null
@@ -175,7 +267,14 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
         avatarUrl: oauthAvatarUrl,
       })
 
-      return { avatarUrl, oauthAvatarUrl, hasCustomAvatar }
+      return {
+        avatarUrl,
+        oauthAvatarUrl,
+        hasCustomAvatar,
+        twoFactorEnabled: userRecord?.twoFactorEnabled === true,
+        hasPassword: !!credentialAccount,
+        ssoEnforced,
+      }
     } catch (error) {
       console.error(`[fn:settings] fetchUserProfile failed:`, error)
       throw error
@@ -245,6 +344,183 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
       return await updatePortalConfig(data as UpdatePortalConfigInput)
     } catch (error) {
       console.error(`[fn:settings] updatePortalConfigFn failed:`, error)
+      throw error
+    }
+  })
+
+export const updateAuthConfigSchema = z.object({
+  oauth: z.record(z.string(), z.boolean().optional()).optional(),
+  openSignup: z.boolean().optional(),
+  ssoOidc: z
+    .object({
+      enabled: z.boolean().optional(),
+      discoveryUrl: z.string().url().optional(),
+      clientId: z.string().min(1).optional(),
+      autoCreateUsers: z.boolean().optional(),
+      autoProvisionRole: z.enum(['admin', 'member', 'user']).optional(),
+      // Server-owned timestamps. `updateAuthConfig` stamps
+      // `detailsChangedAt` itself when discoveryUrl/clientId change and
+      // the SSO test callback stamps `lastSuccessfulTestAt`. They stay
+      // in the schema (rather than `.strict()` rejecting them) so reads
+      // that round-trip the whole config back through updateAuthConfig
+      // — the config-file reconciler, the admin UI's draft save — don't
+      // strip the values. UI callers never set them directly.
+      detailsChangedAt: z.string().optional(),
+      lastSuccessfulTestAt: z.string().optional(),
+      attributeMapping: z
+        .object({
+          claimPath: z.string().min(1),
+          rules: z.array(
+            z.object({
+              whenContains: z.string().min(1),
+              role: z.enum(['admin', 'member', 'user']),
+            })
+          ),
+          defaultRole: z.enum(['admin', 'member', 'user']),
+          syncOnEverySignIn: z.boolean().optional(),
+        })
+        .optional(),
+      // Per-domain SSO enforcement is server-owned via
+      // setVerifiedDomainEnforcedFn (writes sso_verified_domain.enforced).
+      // The legacy workspace-wide `ssoOidc.enforced` and `ssoOidc.domain`
+      // keys are no longer part of the auth-config shape.
+    })
+    .strict()
+    .optional(),
+  twoFactor: z
+    .object({
+      required: z.boolean().optional(),
+    })
+    .strict()
+    .optional(),
+  security: z
+    .object({
+      notifyOnNewSignIn: z.boolean().optional(),
+    })
+    .strict()
+    .optional(),
+})
+
+export type UpdateAuthConfigActionInput = z.infer<typeof updateAuthConfigSchema>
+
+/**
+ * OAuth toggles that get their own audit event when flipped. Other
+ * provider toggles (google, github, etc.) are routine OAuth IdP
+ * changes — useful but not security-critical enough to warrant a
+ * named event-type slot. Password and magic-link are different
+ * because flipping either one changes the workspace's break-glass
+ * surface.
+ */
+const AUDIT_TRACKED_OAUTH_KEYS: Array<{
+  key: 'password' | 'magicLink'
+  enabled: AuditEventType
+  disabled: AuditEventType
+}> = [
+  { key: 'password', enabled: 'auth.password.enabled', disabled: 'auth.password.disabled' },
+  {
+    key: 'magicLink',
+    enabled: 'auth.magic_link.enabled',
+    disabled: 'auth.magic_link.disabled',
+  },
+]
+
+export const updateAuthConfigFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateAuthConfigSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:settings] updateAuthConfigFn`)
+    try {
+      const { getRequestHeaders } = await import('@tanstack/react-start/server')
+      const auth = await requireAuth({ roles: ['admin'] })
+      const actor = actorFromAuth(auth)
+      const headers = getRequestHeaders()
+
+      const { updateAuthConfig, getAuthConfig } =
+        await import('@/lib/server/domains/settings/settings.service')
+
+      // Snapshot when the payload touches an audit-tracked key OR the
+      // ssoOidc subtree. Both audits compare prior/new state to decide
+      // whether to emit. Routine non-tracked saves skip the read.
+      const tracksAnyToggle = Boolean(
+        data.oauth && AUDIT_TRACKED_OAUTH_KEYS.some(({ key }) => key in (data.oauth ?? {}))
+      )
+      const tracksSso = Boolean(data.ssoOidc)
+      const before = tracksAnyToggle || tracksSso ? await getAuthConfig() : null
+
+      try {
+        const result = await updateAuthConfig(data as Parameters<typeof updateAuthConfig>[0])
+
+        if (tracksAnyToggle && before && data.oauth) {
+          for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
+            if (!(key in data.oauth)) continue
+            const next = data.oauth[key]
+            const prior = (before.oauth as Record<string, boolean | undefined>)?.[key]
+            if (typeof next !== 'boolean' || next === prior) continue
+            await recordAuditEvent({
+              event: next ? enabled : disabled,
+              outcome: 'success',
+              actor,
+              headers,
+              before: { [key]: prior ?? null },
+              after: { [key]: next },
+            })
+          }
+        }
+
+        if (tracksSso && before && data.ssoOidc) {
+          const priorSso = (before.ssoOidc ?? {}) as Record<string, unknown>
+          const changedFields: string[] = []
+          for (const key of Object.keys(data.ssoOidc)) {
+            if (priorSso[key] !== (data.ssoOidc as Record<string, unknown>)[key]) {
+              changedFields.push(key)
+            }
+          }
+          if (changedFields.length > 0) {
+            await recordAuditEvent({
+              event: 'sso.config.changed',
+              outcome: 'success',
+              actor,
+              headers,
+              metadata: { fields: changedFields },
+            })
+          }
+        }
+
+        return result
+      } catch (error) {
+        // Symmetric failure audit so blocked attempts (tier gate,
+        // managed-fields, secret-presence) show up in the log.
+        if (tracksAnyToggle && data.oauth) {
+          for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
+            if (!(key in data.oauth)) continue
+            const next = data.oauth[key]
+            if (typeof next !== 'boolean') continue
+            await recordAuditEvent({
+              event: next ? enabled : disabled,
+              outcome: 'failure',
+              actor,
+              headers,
+              metadata: {
+                reason: error instanceof Error ? error.message.slice(0, 200) : 'UNEXPECTED',
+              },
+            })
+          }
+        }
+        if (tracksSso) {
+          await recordAuditEvent({
+            event: 'sso.config.changed',
+            outcome: 'failure',
+            actor,
+            headers,
+            metadata: {
+              fields: Object.keys(data.ssoOidc ?? {}),
+              reason: error instanceof Error ? error.message.slice(0, 200) : 'UNEXPECTED',
+            },
+          })
+        }
+        throw error
+      }
+    } catch (error) {
+      console.error(`[fn:settings] updateAuthConfigFn failed:`, error)
       throw error
     }
   })

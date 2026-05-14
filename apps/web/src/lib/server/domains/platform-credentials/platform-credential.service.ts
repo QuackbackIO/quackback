@@ -32,25 +32,37 @@ export async function savePlatformCredentials({
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
 
-  await db
-    .insert(integrationPlatformCredentials)
-    .values({
-      id: generateId('platform_cred'),
-      integrationType,
-      secrets: encrypted,
-      configuredByPrincipalId: principalId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [integrationPlatformCredentials.integrationType],
-      set: {
+  // Bump auth_config_version atomically with the credential write —
+  // platform_credentials is an input to createAuth() (OAuth provider
+  // registration consults it), so other pods must see "auth instance
+  // is stale" on their next request.
+  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+  const { resetAuth } = await import('@/lib/server/auth')
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(integrationPlatformCredentials)
+      .values({
+        id: generateId('platform_cred'),
+        integrationType,
         secrets: encrypted,
         configuredByPrincipalId: principalId,
+        createdAt: now,
         updatedAt: now,
-      },
-    })
-
+      })
+      .onConflictDoUpdate({
+        target: [integrationPlatformCredentials.integrationType],
+        set: {
+          secrets: encrypted,
+          configuredByPrincipalId: principalId,
+          updatedAt: now,
+        },
+      })
+    await bumpAuthConfigVersionInTx(tx)
+  })
+  resetAuth()
+  // One Redis round-trip drops both keys (TENANT_SETTINGS for the
+  // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
+  // configured-types Set hit by getRegisteredAuthProviders).
   await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }
 
@@ -117,9 +129,14 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
  * Delete platform credentials for an integration type.
  */
 export async function deletePlatformCredentials(integrationType: string): Promise<void> {
-  await db
-    .delete(integrationPlatformCredentials)
-    .where(eq(integrationPlatformCredentials.integrationType, integrationType))
-
+  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+  const { resetAuth } = await import('@/lib/server/auth')
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(integrationPlatformCredentials)
+      .where(eq(integrationPlatformCredentials.integrationType, integrationType))
+    await bumpAuthConfigVersionInTx(tx)
+  })
+  resetAuth()
   await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }

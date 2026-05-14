@@ -43,9 +43,16 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
     update: (...args: unknown[]) => mockUpdate(...args),
+    select: () => ({
+      from: () => ({
+        limit: () => Promise.resolve([]),
+        orderBy: () => Promise.resolve([]),
+      }),
+    }),
   },
   eq: vi.fn(),
   settings: { id: 'id' },
+  ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
 }))
 
 // --- S3 mock ---

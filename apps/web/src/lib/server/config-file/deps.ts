@@ -2,6 +2,7 @@ import { db, settings, eq } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
 import { resetAuth } from '@/lib/server/auth/index'
+import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { generateId } from '@quackback/ids'
 import type { ReconcileDeps, SettingsInsert, SettingsRow, SettingsUpdate } from './reconciler'
 import { makeReportStatus } from './report-status'
@@ -29,7 +30,14 @@ export function makeReconcileDeps(): ReconcileDeps {
     updateSettings: async (update: SettingsUpdate) => {
       const row = await db.query.settings.findFirst({ columns: { id: true } })
       if (!row) return
-      await db.update(settings).set(update).where(eq(settings.id, row.id))
+      // Bump auth_config_version atomically with the settings write so
+      // other pods drop their stale Better-Auth instance on next
+      // request. invalidateSettingsCache (called by the reconciler
+      // after this returns) handles the Redis cross-pod broadcast.
+      await db.transaction(async (tx) => {
+        await tx.update(settings).set(update).where(eq(settings.id, row.id))
+        await bumpAuthConfigVersionInTx(tx)
+      })
     },
     createSettings: async (insert: SettingsInsert) => {
       // Pass a TypeID string for the id; the typeIdColumn driver
@@ -41,6 +49,13 @@ export function makeReconcileDeps(): ReconcileDeps {
       // first INSERT on a fresh install. If we lose the race, the next
       // watcher tick reads the now-existing row and updates it via the
       // normal reconcile path.
+      //
+      // authConfigVersion starts at 1 (not the column default of 0) so
+      // any pod that built its Better-Auth instance BEFORE this row
+      // existed — the proxy records `_authConfigVersion = 0` from the
+      // missing-row case — sees a mismatch on its next request and
+      // rebuilds. Without this, the cached "no settings row" and the
+      // freshly-created "version 0" tie and the stale instance sticks.
       await db
         .insert(settings)
         .values({
@@ -54,6 +69,7 @@ export function makeReconcileDeps(): ReconcileDeps {
           authConfig: insert.authConfig,
           managedFieldPaths: insert.managedFieldPaths,
           state: insert.state,
+          authConfigVersion: 1,
         })
         .onConflictDoNothing({ target: settings.slug })
     },

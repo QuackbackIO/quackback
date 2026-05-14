@@ -53,7 +53,7 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
         </div>
         <CreateBoardDialog />
       </div>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Configure your feedback board settings and preferences
       </p>
     </div>

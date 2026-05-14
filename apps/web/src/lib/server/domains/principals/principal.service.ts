@@ -4,7 +4,20 @@
  * Provides principal lookup operations.
  */
 
-import { db, eq, ne, and, or, sql, ilike, principal, user, type Principal } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  ne,
+  and,
+  or,
+  sql,
+  ilike,
+  max,
+  principal,
+  session,
+  user,
+  type Principal,
+} from '@/lib/server/db'
 import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
@@ -88,10 +101,26 @@ export async function syncPrincipalProfile(
 
 /**
  * List all team members with user details
+ *
+ * `lastSignInAt` is computed as `max(session.created_at)` per user
+ * via a left-join subquery so the admin team list can show a
+ * "last sign-in" column without a second round-trip. Users with no
+ * sessions show `null` (never signed in or all sessions pruned).
  */
 export async function listTeamMembers(): Promise<TeamMember[]> {
   try {
-    const teamMembers = await db
+    // Subquery: latest session timestamp per user. Left-joined so
+    // users without sessions still appear in the result with null.
+    const lastSession = db
+      .select({
+        userId: session.userId,
+        lastSignInAt: max(session.createdAt).as('last_sign_in_at'),
+      })
+      .from(session)
+      .groupBy(session.userId)
+      .as('last_session')
+
+    const rawMembers = await db
       .select({
         id: principal.id,
         userId: user.id,
@@ -100,12 +129,22 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
         image: user.image,
         role: principal.role,
         createdAt: principal.createdAt,
+        lastSignInAt: sql<Date | string | null>`${lastSession.lastSignInAt}`,
       })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
+      .leftJoin(lastSession, eq(lastSession.userId, user.id))
       .where(eq(principal.type, 'user'))
 
-    return teamMembers
+    // The `max()` aggregate comes back as a string from postgres-js
+    // (Date mapping only fires on plain timestamp column selects);
+    // normalise to Date for the TeamMember type. Different shape from
+    // the server-fn boundary (which wants string), so we use a Date
+    // constructor directly rather than going through toIsoStringOrNull.
+    return rawMembers.map((m) => ({
+      ...m,
+      lastSignInAt: m.lastSignInAt == null ? null : new Date(m.lastSignInAt),
+    }))
   } catch (error) {
     console.error('Error listing team members:', error)
     throw new InternalError('DATABASE_ERROR', 'Failed to list team members', error)
@@ -137,6 +176,10 @@ export async function searchMembers(params: {
       image: user.image,
       role: principal.role,
       createdAt: principal.createdAt,
+      // searchMembers is the typeahead path — never displays
+      // last-sign-in, so a null literal is cheaper than the
+      // group-by needed in listTeamMembers.
+      lastSignInAt: sql<Date | null>`NULL::timestamptz`,
     })
     .from(principal)
     .innerJoin(user, eq(principal.userId, user.id))

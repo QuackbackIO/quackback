@@ -5,6 +5,7 @@ import {
   fetchPortalConfig,
   fetchPublicPortalConfig,
   fetchPublicAuthConfig,
+  fetchAuthConfigFn,
   fetchTeamMembersAndInvitations,
   fetchUserProfile,
   fetchCustomCssFn,
@@ -13,6 +14,7 @@ import {
   fetchWidgetSecret,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
+import { getVerifiedDomainsFn } from '@/lib/server/functions/sso'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
@@ -70,6 +72,20 @@ export const settingsQueries = {
       queryKey: ['settings', 'publicAuthConfig'],
       queryFn: fetchPublicAuthConfig,
       staleTime: STALE_TIME_LONG,
+    }),
+
+  authConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'authConfig'],
+      queryFn: fetchAuthConfigFn,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  verifiedDomains: () =>
+    queryOptions({
+      queryKey: ['settings', 'verifiedDomains'],
+      queryFn: () => getVerifiedDomainsFn(),
+      staleTime: STALE_TIME_MEDIUM,
     }),
 
   developerConfig: () =>

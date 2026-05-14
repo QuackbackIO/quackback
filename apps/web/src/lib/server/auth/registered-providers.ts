@@ -3,57 +3,55 @@
  * admin login UI decisions (e.g. "show SSO as the default CTA only if
  * it's actually wired up at the auth layer").
  *
- * The registration-truth source is `createAuth()` in `index.ts`. Two
- * places decide whether a provider can sign anyone in:
- * 1. The env-baked / DB-baked SSO_OIDC trio (provider id `sso`)
- * 2. The platform_credentials table for the providers in
- *    AUTH_PROVIDERS — gated by tier-limits.features.customOidcProvider
- *    for the generic-oauth ones.
+ * Mirrors `createAuth()` in `index.ts`. A provider is reported iff:
+ *   - SSO: `settings.authConfig.ssoOidc.enabled` AND `auth_sso` row in
+ *     platform_credentials AND the `customOidcProvider` tier flag.
+ *   - OAuth (Google/GitHub/etc.): credentials in platform_credentials
+ *     AND at least one surface (team or portal) has it enabled (the
+ *     Layer A registration filter), AND — for generic-oauth providers —
+ *     the `customOidcProvider` tier flag is on.
  *
- * This helper duplicates that logic just enough to answer "which
- * providers would Better-Auth register if it booted right now?"
- * Critically, it returns the actually-usable set rather than the DB
- * intent: a stale `settings.authConfig.ssoOidc.enabled=true` with no
- * SSO_OIDC_CLIENT_SECRET in env is NOT reported as registered, because
- * Better-Auth would reject it at boot.
+ * The "at least one surface" filter must mirror auth/index.ts exactly,
+ * otherwise BootstrapData would report a provider as registered that
+ * the runtime declined to register, and the admin login UI would render
+ * a button that 404s on click.
  */
 
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
+import { isSsoActuallyRegistered } from './sso-secret'
 import { getAllAuthProviders } from './auth-providers'
 
 export async function getRegisteredAuthProviders(): Promise<string[]> {
   const ids: string[] = []
 
-  // SSO is registered when EITHER (a) DB says enabled AND env has the
-  // client secret, or (b) the env trio is fully set on its own.
   const [tenantSettings, tierLimits, configuredTypes] = await Promise.all([
     getTenantSettings(),
     getTierLimits(),
     getConfiguredIntegrationTypes(),
   ])
-  const ssoFromDb = tenantSettings?.authConfig?.ssoOidc
-  const hasClientSecret = Boolean(process.env.SSO_OIDC_CLIENT_SECRET)
-  const dbWantsSso = Boolean(ssoFromDb?.enabled)
-  const envHasSso = Boolean(
-    process.env.SSO_OIDC_DISCOVERY_URL &&
-    process.env.SSO_OIDC_CLIENT_ID &&
-    process.env.SSO_OIDC_CLIENT_SECRET
-  )
-  if ((dbWantsSso && hasClientSecret) || envHasSso) {
+  // Shared predicate with `auth/index.ts createAuth()` — keeps this
+  // mirror's registration condition lockstep with what the runtime
+  // actually registers. The Set lookup inside is cache-hot.
+  if (await isSsoActuallyRegistered(tenantSettings?.authConfig?.ssoOidc, tierLimits)) {
     ids.push('sso')
   }
 
-  // Built-in social + custom generic-oauth providers gated by having
-  // platform credentials configured. The auth layer also gates
-  // generic-oauth on the customOidcProvider tier flag, so mirror that
-  // here. `configuredTypes` is the cached Set returned by
-  // getConfiguredIntegrationTypes — a single Redis read replaces
-  // per-provider DB lookups.
+  // Layer A registration filter: a provider is registered globally on
+  // the Better-Auth instance only when at least one surface enables it.
+  // Default-false on both: if neither surface opted in, the runtime
+  // skips registration even if creds exist, and we mirror that here.
+  const teamOAuth = (tenantSettings?.authConfig?.oauth ?? {}) as Record<string, boolean | undefined>
+  const portalOAuth = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
+    string,
+    boolean | undefined
+  >
+
   for (const provider of getAllAuthProviders()) {
     if (!configuredTypes.has(provider.credentialType)) continue
     if (provider.type === 'generic-oauth' && !tierLimits.features.customOidcProvider) continue
+    if (teamOAuth[provider.id] !== true && portalOAuth[provider.id] !== true) continue
     ids.push(provider.id)
   }
 

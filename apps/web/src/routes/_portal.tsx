@@ -141,7 +141,7 @@ function PortalLayout() {
           <main className="flex-1 w-full flex flex-col">
             <Outlet />
           </main>
-          <AuthDialog authConfig={authConfig} />
+          <AuthDialog authConfig={authConfig} workspaceName={org.name} />
         </div>
       </AuthPopoverProvider>
     </PortalIntlProvider>

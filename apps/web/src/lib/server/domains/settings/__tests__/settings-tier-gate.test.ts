@@ -12,10 +12,24 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', () => ({
-  db: { update: hoisted.mockDbUpdate },
-  settings: { id: 'id' },
-  eq: vi.fn(),
+vi.mock('@/lib/server/db', () => {
+  const tx = { update: hoisted.mockDbUpdate }
+  return {
+    db: {
+      update: hoisted.mockDbUpdate,
+      transaction: async (fn: (tx: { update: typeof hoisted.mockDbUpdate }) => unknown) => fn(tx),
+    },
+    settings: { id: 'id', authConfigVersion: 'auth_config_version' },
+    eq: vi.fn(),
+  }
+})
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: vi.fn(),
+}))
+
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: vi.fn(),
 }))
 
 vi.mock('@/lib/server/redis', () => ({

@@ -113,6 +113,8 @@ export type {
   VerificationId,
   DomainId,
   TransferTokenId,
+  AuditLogId,
+  SsoRecoveryCodeId,
   ApiKeyId,
   WebhookId,
   // Billing

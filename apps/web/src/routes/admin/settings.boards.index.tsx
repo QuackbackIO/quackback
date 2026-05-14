@@ -120,7 +120,7 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
         <div className="space-y-4">
           <div>
             <h2 className="text-base font-semibold">Import Data</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Import posts from a CSV file into this board
             </p>
           </div>
@@ -133,7 +133,7 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
         <div className="space-y-4">
           <div>
             <h2 className="text-base font-semibold">Export Data</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Download all posts from this board as CSV
             </p>
           </div>

@@ -1,11 +1,10 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
-import { PortalAuthForm } from '@/components/auth/portal-auth-form'
-import { SsoSignInButton } from '@/components/auth/sso-sign-in-button'
+import { TeamLoginForm } from '@/components/auth/team-login-form'
+import { AdminAuthShell } from '@/components/auth/admin-auth-shell'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDownIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid'
-import { useState } from 'react'
+import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
 // Error messages for login failures
 const errorMessages: Record<string, string> = {
@@ -15,7 +14,31 @@ const errorMessages: Record<string, string> = {
     "This account doesn't have team access. Team membership is by invitation only. Please contact your administrator.",
   oauth_method_not_allowed: 'This sign-in method is not enabled for team members.',
   password_method_not_allowed: 'Password sign-in is not enabled. Please use another method.',
+  // Better-Auth genericOAuth surfaces this when disableSignUp blocks a
+  // brand-new SSO user (`autoCreateUsers === false` on the SSO config).
+  // Existing users still link via accountLinking and don't see this.
+  signup_disabled:
+    "Your account isn't pre-provisioned for SSO. Ask an administrator to invite you first.",
+  auth_method_blocked:
+    "This sign-in method isn't allowed for your account right now. Try another option or contact your administrator.",
+  // Verified-domain hard-binding (Section 3 of design): emails at the
+  // tenant's verified SSO domain must use SSO — password / sign-up /
+  // social / generic-OAuth callbacks are rejected. Magic-link / OTP
+  // remain available as documented break-glass.
+  verified_domain_requires_sso:
+    'Your email domain is configured for SSO. Sign in with your single sign-on provider.',
+  // Better-Auth's genericOAuth plugin surfaces these when the upstream
+  // OIDC callback fails — IdP returned an error, token exchange
+  // rejected, scope mismatch, etc.
+  OAUTH_CALLBACK_ERROR:
+    'Sign-in failed. Your identity provider rejected the request — check the app configuration in your IdP and try again.',
+  oauth_signin_error:
+    'Sign-in failed. Your identity provider rejected the request — check the app configuration in your IdP and try again.',
+  rate_limited: 'Too many sign-in attempts. Please wait a few minutes and try again.',
 }
+
+const GENERIC_ERROR_MESSAGE =
+  'Sign-in failed. Try again or contact your administrator if the problem persists.'
 
 const searchSchema = z.object({
   callbackUrl: z.string().optional(),
@@ -23,129 +46,73 @@ const searchSchema = z.object({
 })
 
 /**
- * Admin Login Page
- *
- * For team members (admin, member) to sign in to the admin dashboard.
- * Supports email OTP and any configured OAuth providers.
- *
- * When OIDC SSO is enabled (settings.authConfig.ssoOidc) AND the `sso`
- * provider is actually registered by Better-Auth (per
- * BootstrapData.registeredAuthProviders — covers the case where the
- * client secret hasn't materialized in env yet), "Sign in with
- * {providerName}" becomes the prominent CTA. Password / magic-link /
- * other-OAuth options stay rendered behind a "More sign-in options"
- * disclosure so admins keep a working fallback.
+ * Admin Login Page — email-first dispatcher for team members.
+ * `<TeamLoginForm>` reads the email, calls `lookupAuthMethodsFn`, and
+ * either redirects to the configured SSO IdP (verified-domain match)
+ * or renders the methods form (password / magic-link / other-OAuth).
  */
 export const Route = createFileRoute('/admin/login')({
   validateSearch: searchSchema,
   loaderDeps: ({ search }) => ({ callbackUrl: search.callbackUrl, error: search.error }),
   loader: async ({ deps, context }) => {
-    // Settings already available from root context
-    const { settings, registeredAuthProviders } = context
+    const { settings } = context
     if (!settings) {
       throw redirect({ to: '/onboarding' })
     }
 
     const { callbackUrl, error } = deps
 
-    // Get error message if present
-    const errorMessage = error && errorMessages[error]
+    // Map a query-param error code to a user-visible message. Unknown
+    // codes (e.g. an IdP error we haven't catalogued, a future hook)
+    // fall back to a generic line so the alert never renders blank.
+    const errorMessage = error ? (errorMessages[error] ?? GENERIC_ERROR_MESSAGE) : null
 
     // Validate callbackUrl is a relative path to prevent open redirects
-    const safeCallbackUrl =
-      callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')
-        ? callbackUrl
-        : '/admin'
+    const safeCallbackUrl = isSafeCallbackUrl(callbackUrl) ? callbackUrl : '/admin'
 
-    // Auth config is already computed in TenantSettings (filtered by configured credentials)
     const authConfig = settings.publicAuthConfig.oauth
-    const customProviderNames = settings.publicAuthConfig.customProviderNames
-
-    const ssoOidc = settings.authConfig?.ssoOidc
-    const ssoIsRegistered = registeredAuthProviders?.includes('sso') ?? false
-    // Both the DB intent AND actual registration must be true. A stale
-    // `ssoOidc.enabled=true` whose client secret hasn't arrived in env
-    // would otherwise produce a CTA that 404s on click.
-    const ssoIsDefault = Boolean(ssoOidc?.enabled) && Boolean(ssoOidc?.isDefault) && ssoIsRegistered
-    const ssoProviderName = ssoOidc?.providerName ?? 'SSO'
 
     return {
       errorMessage,
       safeCallbackUrl,
       authConfig,
-      customProviderNames,
-      ssoIsDefault,
-      ssoProviderName,
     }
   },
   component: AdminLoginPage,
 })
 
 /**
- * /admin/login is the team sign-in page. Magic-link is forced on and
- * the password-form is forced off — admins arrive without a password
- * set (workspace owner is created via a magic-link claim, not a
- * password registration), and team members invite-link in the same
- * way. OAuth providers pass through whatever the tenant configured.
+ * /admin/login is the team sign-in page. Email-first dispatch:
+ * `<TeamLoginForm>` asks for an email, calls `lookupAuthMethodsFn`,
+ * and either redirects to the configured SSO IdP (verified-domain
+ * match) or hands off to `<PortalAuthForm>` with the email pre-filled.
+ *
+ * Magic-link is unconditionally enabled for team sign-in inside
+ * `<TeamLoginForm>` (invitation-claim mechanism + SSO break-glass).
+ * Password and other-OAuth pass through whatever the tenant configured;
+ * Layer A registration filter skips disabled providers.
  */
-function teamSignInAuthConfig(tenantAuthConfig: Record<string, unknown>) {
-  return { ...tenantAuthConfig, magicLink: true, password: false }
-}
-
 function AdminLoginPage() {
-  const {
-    errorMessage,
-    safeCallbackUrl,
-    authConfig,
-    customProviderNames,
-    ssoIsDefault,
-    ssoProviderName,
-  } = Route.useLoaderData()
-
-  // Open the "more options" disclosure by default when SSO is NOT the
-  // primary CTA, so the admin sees the existing form unchanged.
-  const [moreOpen, setMoreOpen] = useState(!ssoIsDefault)
+  const { errorMessage, safeCallbackUrl, authConfig } = Route.useLoaderData()
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-8 px-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Team Sign In</h1>
-          <p className="mt-2 text-muted-foreground">Sign in to access the admin dashboard</p>
-        </div>
-        {errorMessage && (
-          <Alert variant="destructive">
-            <ExclamationCircleIcon className="h-4 w-4" />
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        )}
-        {ssoIsDefault && (
-          <SsoSignInButton providerName={ssoProviderName} callbackUrl={safeCallbackUrl} />
-        )}
-        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
-          {ssoIsDefault && (
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <span>More sign-in options</span>
-                <ChevronDownIcon
-                  className={`size-4 transition-transform ${moreOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-            </CollapsibleTrigger>
-          )}
-          <CollapsibleContent className="pt-4">
-            <PortalAuthForm
-              mode="login"
-              callbackUrl={safeCallbackUrl}
-              authConfig={teamSignInAuthConfig(authConfig)}
-              customProviderNames={customProviderNames}
-            />
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
-    </div>
+    <AdminAuthShell heading="Sign in to your workspace">
+      {errorMessage && (
+        <Alert variant="destructive">
+          <ExclamationCircleIcon className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      )}
+      <TeamLoginForm callbackUrl={safeCallbackUrl} authConfig={authConfig} />
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        SSO unavailable?{' '}
+        <Link
+          to="/auth/recovery"
+          className="font-medium text-foreground hover:underline underline-offset-4"
+        >
+          Use a recovery code
+        </Link>
+      </p>
+    </AdminAuthShell>
   )
 }

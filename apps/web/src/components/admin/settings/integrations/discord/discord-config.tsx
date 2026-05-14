@@ -123,7 +123,7 @@ export function DiscordConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Notifications enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Discord notifications
           </p>
         </div>
@@ -140,7 +140,7 @@ export function DiscordConfig({
       <div className="space-y-3">
         <div>
           <Label className="text-base font-medium">Notification routing</Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Choose which events reach each Discord channel
           </p>
         </div>

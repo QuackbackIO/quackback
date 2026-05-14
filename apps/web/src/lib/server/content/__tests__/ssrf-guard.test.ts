@@ -1,13 +1,67 @@
+import { EventEmitter } from 'node:events'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { isSafeScheme, isPrivateAddress, checkUrlSafety } from '../ssrf-guard'
+import { isSafeScheme, isPrivateAddress, checkUrlSafety, safeFetch, SsrfError } from '../ssrf-guard'
 
 vi.mock('node:dns/promises', () => ({
   default: {},
   lookup: vi.fn(),
 }))
 
+const httpsRequestMock = vi.fn()
+const httpRequestMock = vi.fn()
+vi.mock('node:https', () => ({ default: {}, request: (...a: unknown[]) => httpsRequestMock(...a) }))
+vi.mock('node:http', () => ({ default: {}, request: (...a: unknown[]) => httpRequestMock(...a) }))
+
 import { lookup } from 'node:dns/promises'
 const lookupMock = lookup as unknown as ReturnType<typeof vi.fn>
+
+/**
+ * Build a fake `node:https`/`node:http` `request` implementation that
+ * replays a canned response. The returned `req` exposes `write` / `end`
+ * / `destroy` spies; `end()` invokes the response callback, then emits
+ * the body chunks (respecting `res.destroy()` so the body-cap path can
+ * stop the stream).
+ */
+function requestImpl(spec: {
+  status?: number
+  statusMessage?: string
+  headers?: Record<string, string | string[]>
+  chunks?: Array<string | Buffer>
+}) {
+  return (_options: unknown, cb: (res: unknown) => void) => {
+    const req = new EventEmitter() as EventEmitter & {
+      write: ReturnType<typeof vi.fn>
+      end: ReturnType<typeof vi.fn>
+      destroy: ReturnType<typeof vi.fn>
+    }
+    req.write = vi.fn()
+    req.destroy = vi.fn()
+    req.end = vi.fn(() => {
+      let destroyed = false
+      const res = new EventEmitter() as EventEmitter & {
+        statusCode?: number
+        statusMessage?: string
+        headers: Record<string, string | string[]>
+        destroy: ReturnType<typeof vi.fn>
+      }
+      res.statusCode = spec.status ?? 200
+      res.statusMessage = spec.statusMessage ?? 'OK'
+      res.headers = spec.headers ?? {}
+      res.destroy = vi.fn(() => {
+        destroyed = true
+      })
+      cb(res)
+      queueMicrotask(() => {
+        for (const c of spec.chunks ?? []) {
+          if (destroyed) break
+          res.emit('data', Buffer.isBuffer(c) ? c : Buffer.from(c))
+        }
+        if (!destroyed) res.emit('end')
+      })
+    })
+    return req
+  }
+}
 
 describe('isSafeScheme', () => {
   it('accepts https and http', () => {
@@ -149,5 +203,133 @@ describe('checkUrlSafety', () => {
     lookupMock.mockResolvedValueOnce([])
     const result = await checkUrlSafety('https://empty.example/')
     expect(result).toEqual({ safe: false, reason: 'dns-error' })
+  })
+})
+
+describe('safeFetch', () => {
+  beforeEach(() => {
+    lookupMock.mockReset()
+    httpsRequestMock.mockReset()
+    httpRequestMock.mockReset()
+  })
+
+  it('pins the connection to the validated IP and carries the original host for Host + SNI', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    httpsRequestMock.mockImplementation(requestImpl({ status: 200, chunks: ['ok'] }))
+
+    const res = await safeFetch('https://idp.example.com/.well-known/openid-configuration?x=1')
+
+    expect(httpsRequestMock).toHaveBeenCalledTimes(1)
+    expect(httpRequestMock).not.toHaveBeenCalled()
+    const opts = httpsRequestMock.mock.calls[0][0] as Record<string, unknown>
+    // Connection target is the validated IP — no second DNS resolution.
+    expect(opts.hostname).toBe('93.184.216.34')
+    expect(opts.family).toBe(4)
+    expect(opts.port).toBe(443)
+    expect(opts.path).toBe('/.well-known/openid-configuration?x=1')
+    // SNI + HTTP Host carry the original hostname so vhosted IdPs route
+    // correctly and the cert is validated against the real name.
+    expect(opts.servername).toBe('idp.example.com')
+    expect((opts.headers as Record<string, string>).host).toBe('idp.example.com')
+    expect(typeof opts.checkServerIdentity).toBe('function')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('ok')
+  })
+
+  it('throws SsrfError and never dials when the host resolves to a private address', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '169.254.169.254', family: 4 }])
+
+    await expect(safeFetch('https://metadata.evil.test/latest/meta-data/')).rejects.toMatchObject({
+      name: 'SsrfError',
+      reason: 'ssrf-rejected',
+    })
+    expect(httpsRequestMock).not.toHaveBeenCalled()
+  })
+
+  it('throws SsrfError for a disallowed scheme without resolving DNS', async () => {
+    await expect(safeFetch('file:///etc/passwd')).rejects.toBeInstanceOf(SsrfError)
+    expect(lookupMock).not.toHaveBeenCalled()
+    expect(httpsRequestMock).not.toHaveBeenCalled()
+  })
+
+  it('returns a 3xx response verbatim without following the redirect', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    httpsRequestMock.mockImplementation(
+      requestImpl({ status: 302, headers: { location: 'https://internal.evil.test/' } })
+    )
+
+    const res = await safeFetch('https://idp.example.com/authorize')
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('https://internal.evil.test/')
+    // One dial only — the redirect target was not fetched.
+    expect(httpsRequestMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('caps the response body at maxResponseBytes and destroys the socket', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    let capturedRes: { destroy: ReturnType<typeof vi.fn> } | undefined
+    httpsRequestMock.mockImplementation((_o: unknown, cb: (res: unknown) => void) => {
+      const impl = requestImpl({ status: 200, chunks: ['AAAAAAAA', 'BBBBBBBB'] })
+      return impl(_o, (res) => {
+        capturedRes = res as { destroy: ReturnType<typeof vi.fn> }
+        cb(res)
+      })
+    })
+
+    const res = await safeFetch('https://idp.example.com/huge', { maxResponseBytes: 10 })
+
+    // First 8-byte chunk fits; the second pushes total past 10, so the
+    // stream is cut and only what arrived before the cap is kept.
+    expect(await res.text()).toBe('AAAAAAAA')
+    expect(capturedRes?.destroy).toHaveBeenCalled()
+  })
+
+  it('uses node:http with no TLS options for an http:// URL', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    httpRequestMock.mockImplementation(requestImpl({ status: 200, chunks: ['ok'] }))
+
+    await safeFetch('http://idp.example.com/x')
+
+    expect(httpRequestMock).toHaveBeenCalledTimes(1)
+    expect(httpsRequestMock).not.toHaveBeenCalled()
+    const opts = httpRequestMock.mock.calls[0][0] as Record<string, unknown>
+    expect(opts.port).toBe(80)
+    expect(opts.servername).toBeUndefined()
+    expect(opts.checkServerIdentity).toBeUndefined()
+  })
+
+  it('returns a null-body Response for a 304 without throwing', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    httpsRequestMock.mockImplementation(requestImpl({ status: 304 }))
+
+    const res = await safeFetch('https://idp.example.com/jwks')
+    expect(res.status).toBe(304)
+    expect(await res.text()).toBe('')
+  })
+
+  it('writes the request body for a POST', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    let req: { write: ReturnType<typeof vi.fn> } | undefined
+    httpsRequestMock.mockImplementation((o: unknown, cb: (res: unknown) => void) => {
+      req = requestImpl({ status: 200, chunks: ['ok'] })(o, cb) as {
+        write: ReturnType<typeof vi.fn>
+      }
+      return req
+    })
+
+    await safeFetch('https://idp.example.com/token', {
+      method: 'POST',
+      body: 'grant_type=authorization_code',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+
+    const opts = httpsRequestMock.mock.calls[0][0] as Record<string, unknown>
+    expect(opts.method).toBe('POST')
+    expect((opts.headers as Record<string, string>)['content-type']).toBe(
+      'application/x-www-form-urlencoded'
+    )
+    expect(req?.write).toHaveBeenCalledWith('grant_type=authorization_code')
   })
 })

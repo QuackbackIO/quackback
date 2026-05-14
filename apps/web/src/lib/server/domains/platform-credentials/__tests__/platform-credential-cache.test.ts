@@ -29,20 +29,43 @@ const mockInsert = vi.fn()
 const mockDelete = vi.fn()
 const mockFindMany = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
-  db: {
+type CredTx = {
+  insert: (...args: unknown[]) => unknown
+  delete: (...args: unknown[]) => unknown
+  update: (...args: unknown[]) => unknown
+}
+
+vi.mock('@/lib/server/db', () => {
+  const tx: CredTx = {
     insert: (...args: unknown[]) => mockInsert(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
-    query: {
-      integrationPlatformCredentials: {
-        findMany: (...args: unknown[]) => mockFindMany(...args),
+    update: vi.fn(() => ({ set: () => ({ where: () => Promise.resolve() }) })),
+  }
+  return {
+    db: {
+      insert: (...args: unknown[]) => mockInsert(...args),
+      delete: (...args: unknown[]) => mockDelete(...args),
+      query: {
+        integrationPlatformCredentials: {
+          findMany: (...args: unknown[]) => mockFindMany(...args),
+        },
       },
+      transaction: async (fn: (tx: CredTx) => unknown) => fn(tx),
     },
-  },
-  integrationPlatformCredentials: {
-    integrationType: 'integrationType',
-  },
-  eq: vi.fn(),
+    integrationPlatformCredentials: {
+      integrationType: 'integrationType',
+    },
+    settings: { authConfigVersion: 'auth_config_version' },
+    eq: vi.fn(),
+  }
+})
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: vi.fn(),
+}))
+
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: vi.fn(),
 }))
 
 vi.mock('@/lib/server/integrations/encryption', () => ({

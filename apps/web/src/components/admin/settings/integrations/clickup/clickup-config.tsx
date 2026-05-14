@@ -161,7 +161,7 @@ export function ClickUpConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all ClickUp task syncing
           </p>
         </div>
@@ -260,7 +260,7 @@ export function ClickUpConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">Choose which events trigger task creation</p>
+        <p className="text-xs text-muted-foreground">Choose which events trigger task creation</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

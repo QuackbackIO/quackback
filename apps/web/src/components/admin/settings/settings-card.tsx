@@ -24,16 +24,16 @@ export function SettingsCard({
         variant === 'danger' ? 'border-destructive/20' : 'border-border/50'
       )}
     >
-      <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
+      <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50 flex items-center justify-between">
         <div>
           <h2 className={cn('text-base font-semibold', variant === 'danger' && 'text-destructive')}>
             {title}
           </h2>
-          {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
         </div>
         {action}
       </div>
-      <div className={cn('p-6', contentClassName)}>{children}</div>
+      <div className={cn('p-4 sm:p-6', contentClassName)}>{children}</div>
     </section>
   )
 }

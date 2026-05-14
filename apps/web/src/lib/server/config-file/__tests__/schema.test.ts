@@ -98,10 +98,8 @@ describe('parseQuackbackConfig', () => {
         auth: {
           ssoOidc: {
             enabled: true,
-            providerName: 'Acme SSO',
             discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
             clientId: 'workspace-x',
-            isDefault: true,
             autoCreateUsers: true,
           },
         },
@@ -111,7 +109,7 @@ describe('parseQuackbackConfig', () => {
     if (result.success) {
       expect(result.data.spec.auth?.ssoOidc?.enabled).toBe(true)
       expect(result.data.spec.auth?.ssoOidc?.clientId).toBe('workspace-x')
-      expect(result.data.spec.auth?.ssoOidc?.isDefault).toBe(true)
+      expect(result.data.spec.auth?.ssoOidc?.autoCreateUsers).toBe(true)
     }
   })
 

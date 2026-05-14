@@ -104,7 +104,7 @@ export function MondayConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Monday.com synchronization
           </p>
         </div>
@@ -164,7 +164,7 @@ export function MondayConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Choose which events trigger Monday.com actions
         </p>
         <div className="space-y-3 pt-2">

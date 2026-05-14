@@ -67,7 +67,7 @@ export function StripeConfig({ integrationId, initialEventMappings, enabled }: S
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Stripe payment synchronization
           </p>
         </div>
@@ -81,7 +81,7 @@ export function StripeConfig({ integrationId, initialEventMappings, enabled }: S
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">Choose which events trigger Stripe actions</p>
+        <p className="text-xs text-muted-foreground">Choose which events trigger Stripe actions</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

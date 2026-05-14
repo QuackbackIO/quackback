@@ -94,21 +94,27 @@ export async function checkRateLimit(
 /**
  * Extract client IP from request headers.
  * Checks common proxy headers for the real client IP.
+ *
+ * Accepts a full `Request` or just `Headers` — server functions only
+ * have `Headers` via `getRequestHeaders()`, so the Headers overload
+ * lets them call this without forging a synthetic Request.
  */
-export function getClientIp(request: Request): string {
+export function getClientIp(source: Request | Headers): string {
+  const headers = source instanceof Headers ? source : source.headers
+
   // Check Cloudflare header first
-  const cfIp = request.headers.get('cf-connecting-ip')
+  const cfIp = headers.get('cf-connecting-ip')
   if (cfIp) return cfIp
 
   // Check X-Forwarded-For (may contain comma-separated list)
-  const forwarded = request.headers.get('x-forwarded-for')
+  const forwarded = headers.get('x-forwarded-for')
   if (forwarded) {
     const firstIp = forwarded.split(',')[0].trim()
     if (firstIp) return firstIp
   }
 
   // Check X-Real-IP
-  const realIp = request.headers.get('x-real-ip')
+  const realIp = headers.get('x-real-ip')
   if (realIp) return realIp
 
   // Fallback to unknown

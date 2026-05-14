@@ -192,7 +192,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                   </div>
                 ) : (
                   <div className="flex items-center justify-between rounded-lg border p-3">
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Rotate to generate a new signing secret
                     </p>
                     <Button

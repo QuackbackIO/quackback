@@ -48,9 +48,14 @@ export function AuthProviderCredentialsDialog({
   onOpenChange,
 }: AuthProviderCredentialsDialogProps) {
   return (
+    // DialogContent's default `grid gap-4 p-6` is overridden so the
+    // body scrolls independently of the header — Custom OIDC's seven
+    // fields plus the redirect-URI callout overflow short viewports
+    // otherwise, with the Save button stranded off-screen. Header
+    // stays pinned at the top; body scrolls.
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
           <DialogTitle>Configure {providerName}</DialogTitle>
           <DialogDescription>
             Enter your {providerName} OAuth app credentials to enable sign-in.
@@ -69,15 +74,17 @@ export function AuthProviderCredentialsDialog({
             )}
           </DialogDescription>
         </DialogHeader>
-        <Suspense fallback={<FormSkeleton fieldCount={fields.length || 2} />}>
-          <AuthProviderCredentialsForm
-            credentialType={credentialType}
-            providerId={providerId}
-            providerName={providerName}
-            fields={fields}
-            onSaved={() => onOpenChange(false)}
-          />
-        </Suspense>
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <Suspense fallback={<FormSkeleton fieldCount={fields.length || 2} />}>
+            <AuthProviderCredentialsForm
+              credentialType={credentialType}
+              providerId={providerId}
+              providerName={providerName}
+              fields={fields}
+              onSaved={() => onOpenChange(false)}
+            />
+          </Suspense>
+        </div>
       </DialogContent>
     </Dialog>
   )

@@ -33,18 +33,44 @@ const mockSet = vi.fn()
 const mockWhere = vi.fn()
 const mockReturning = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    query: {
-      settings: {
-        findFirst: (...args: unknown[]) => mockFindFirst(...args),
-      },
-    },
+type SettingsTx = {
+  query: { settings: { findFirst: (...args: unknown[]) => unknown } }
+  update: (...args: unknown[]) => unknown
+}
+
+vi.mock('@/lib/server/db', () => {
+  const tx: SettingsTx = {
+    query: { settings: { findFirst: (...args: unknown[]) => mockFindFirst(...args) } },
     update: (...args: unknown[]) => mockUpdate(...args),
-    select: () => ({ from: () => ({ limit: () => Promise.resolve([]) }) }),
-  },
-  eq: vi.fn(),
-  settings: { id: 'id', tierLimits: 'tier_limits' },
+  }
+  return {
+    db: {
+      query: {
+        settings: {
+          findFirst: (...args: unknown[]) => mockFindFirst(...args),
+        },
+      },
+      update: (...args: unknown[]) => mockUpdate(...args),
+      select: () => ({
+        from: () => ({
+          limit: () => Promise.resolve([]),
+          orderBy: () => Promise.resolve([]),
+        }),
+      }),
+      transaction: async (fn: (tx: SettingsTx) => unknown) => fn(tx),
+    },
+    eq: vi.fn(),
+    settings: { id: 'id', tierLimits: 'tier_limits', authConfigVersion: 'auth_config_version' },
+    ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
+  }
+})
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: vi.fn(),
+}))
+
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: vi.fn(),
 }))
 
 // --- S3 mock ---

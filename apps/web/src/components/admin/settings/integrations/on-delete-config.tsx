@@ -40,7 +40,7 @@ export function OnDeleteConfig({
           <Label htmlFor="on-delete-toggle" className="text-base font-medium">
             On post delete
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {action} linked issues when a post is deleted
           </p>
         </div>

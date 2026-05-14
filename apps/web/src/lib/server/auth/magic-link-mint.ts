@@ -1,24 +1,22 @@
-import { getAuth, getMagicLinkToken } from './index'
+import { generateRandomString } from 'better-auth/crypto'
+import { getAuth } from './index'
 
 interface MintOptions {
   email: string
   /** Path the user lands on after a successful verify. */
   callbackPath: string
-  /** Path on a failed verify (token consumed by an email scanner, expired, etc.).
-   * Defaults to `callbackPath`. New callers should point at `/admin/login`
-   * so failed clicks don't double-bounce through a deep route guard. */
+  /** Path on a failed verify. Defaults to `callbackPath`. */
   errorCallbackPath?: string
   /** Workspace's public origin, e.g. `https://acme.quackback.io`. */
   portalUrl: string
-  /** Override the default 10-minute expiry on the underlying
-   *  verification row. Used by long-lived "claim this workspace"
-   *  invitations that need a multi-day window. Sign-in callers
-   *  (portal/admin) must NOT set this — the global plugin expiry is
-   *  intentionally short. */
+  /** Override the default 10-minute expiry. Used by long-lived
+   *  "claim this workspace" invitations. */
   expiresInSeconds?: number
 }
 
-/** Build the `/verify-magic-link?token=…&callbackURL=…&errorCallbackURL=…` URL. */
+const DEFAULT_EXPIRES_IN_SECONDS = 10 * 60
+
+/** Build the `/verify-magic-link?token=…` URL. */
 export function buildVerifyMagicLinkUrl(opts: {
   origin: string
   token: string
@@ -36,31 +34,30 @@ export function buildVerifyMagicLinkUrl(opts: {
 }
 
 /**
- * Mints a verify URL that signs the recipient in on click. Used by team
- * invitations and Cloud bootstrap; callers email their own template.
- * Portal sign-in (combined magic-link + OTP) goes through `email-signin.ts`.
+ * Mint a verify URL that signs the recipient in on click. Used by
+ * team invitations, recovery-code consumption, the Cloud bootstrap
+ * claim flow, and portal email-OTP fallback.
+ *
+ * Writes the verification row directly via BA's internal adapter
+ * instead of going through `auth.api.signInMagicLink` — that endpoint
+ * fires our `hooksBefore` chain (rate-limit, team magic-link toggle,
+ * hard-binding) which is correct for user-initiated sign-in but wrong
+ * for internal token-mint. Token format mirrors BA's magic-link
+ * plugin so its `/magic-link/verify` endpoint reads our row.
  */
 export async function mintMagicLinkUrl(opts: MintOptions): Promise<string> {
   const auth = await getAuth()
+  const token = generateRandomString(32, 'a-z', 'A-Z')
+  const expiresInSeconds = opts.expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS
 
-  // auth.api.signInMagicLink fires the magicLink plugin callback, which
-  // stashes the token; we drain it via getMagicLinkToken.
-  await auth.api.signInMagicLink({
-    body: { email: opts.email, callbackURL: opts.callbackPath },
-    headers: new Headers({
-      Origin: opts.portalUrl,
-      Host: new URL(opts.portalUrl).host,
-    }),
+  // `$context` is a PromiseLike on the real BA instance; the test mock
+  // is a plain object. `await` handles both.
+  const ctx = await auth.$context
+  await ctx.internalAdapter.createVerificationValue({
+    identifier: token,
+    value: JSON.stringify({ email: opts.email, attempt: 0 }),
+    expiresAt: new Date(Date.now() + expiresInSeconds * 1000),
   })
-
-  const token = getMagicLinkToken(opts.email)
-  if (!token) {
-    throw new Error('Magic link token not captured — sendMagicLink callback may not have fired')
-  }
-
-  if (opts.expiresInSeconds && opts.expiresInSeconds > 60 * 10) {
-    await extendVerificationExpiry(token, opts.expiresInSeconds)
-  }
 
   return buildVerifyMagicLinkUrl({
     origin: opts.portalUrl,
@@ -68,23 +65,4 @@ export async function mintMagicLinkUrl(opts: MintOptions): Promise<string> {
     callbackPath: opts.callbackPath,
     errorCallbackPath: opts.errorCallbackPath,
   })
-}
-
-/**
- * Better-Auth's magicLink plugin has a single global expiresIn (10 min,
- * sized for sign-in safety). Bootstrap's claim URL needs a longer window;
- * push the verification row's expires_at out to the requested TTL after
- * the token is minted. The verify endpoint reads expires_at from this
- * row directly, so this is sufficient — no token re-signing required.
- */
-async function extendVerificationExpiry(token: string, expiresInSeconds: number): Promise<void> {
-  const { db } = await import('@/lib/server/db')
-  const { verification } = await import('@/lib/server/db')
-  const { eq } = await import('drizzle-orm')
-  const newExpiresAt = new Date(Date.now() + expiresInSeconds * 1000)
-  // Better-Auth stores the magic-link record keyed on `value=token`.
-  await db
-    .update(verification)
-    .set({ expiresAt: newExpiresAt })
-    .where(eq(verification.value, token))
 }

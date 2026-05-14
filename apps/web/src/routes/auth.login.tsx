@@ -1,25 +1,23 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
+import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 
 /**
- * Portal Login Page
- *
- * For portal users (visitors) to sign in using email OTP or OAuth.
+ * Portal Login Page — email-first dispatcher. Mirrors `/admin/login`:
+ * verified-domain emails get routed to SSO (same hard-binding rule),
+ * everything else falls through to the portal's configured methods.
  */
 export const Route = createFileRoute('/auth/login')({
   loader: async ({ context }) => {
-    // Settings already available from root context
     const { settings, queryClient } = context
     if (!settings) {
       throw redirect({ to: '/onboarding' })
     }
-
-    // Pre-fetch portal config using React Query
     await queryClient.ensureQueryData(settingsQueries.publicPortalConfig())
-
     return {}
   },
   component: LoginPage,
@@ -27,32 +25,42 @@ export const Route = createFileRoute('/auth/login')({
 
 function LoginPage() {
   Route.useLoaderData()
-
-  // Read pre-fetched data from React Query cache
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const portalConfig = portalConfigQuery.data
   const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
 
+  const ctx = useRouteContext({ from: '__root__' }) as {
+    settings?: { brandingData?: { name?: string } }
+  }
+  const workspaceName = ctx.settings?.brandingData?.name
+
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-8 px-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Welcome back</h1>
-          <p className="mt-2 text-muted-foreground">Sign in to your account</p>
-        </div>
-        <PortalAuthForm
-          mode="login"
-          callbackUrl="/"
-          authConfig={authConfig}
-          customProviderNames={portalConfig.customProviderNames}
-        />
+    <PortalAuthShell
+      heading="Welcome back"
+      subheading={
+        workspaceName
+          ? `Sign in to keep voting and tracking what ${workspaceName} ships.`
+          : 'Sign in to vote and comment on feedback.'
+      }
+      footer={
         <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <Link to="/auth/signup" className="font-medium text-primary hover:underline">
-            Sign up
+          New here?{' '}
+          <Link
+            to="/auth/signup"
+            className="font-medium text-primary hover:underline underline-offset-4"
+          >
+            Create an account
           </Link>
         </p>
-      </div>
-    </div>
+      }
+    >
+      <PortalAuthForm
+        mode="login"
+        callbackUrl="/"
+        authConfig={authConfig}
+        customProviderNames={portalConfig.customProviderNames}
+        workspaceName={workspaceName}
+      />
+    </PortalAuthShell>
   )
 }

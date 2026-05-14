@@ -1,5 +1,5 @@
 /**
- * SSRF-guard helpers for the content rehoster.
+ * SSRF-guard helpers for server-side outbound fetches.
  *
  * Validates that a URL is safe to fetch from the server:
  * - scheme allow-list (http/https only)
@@ -7,9 +7,18 @@
  *   private / link-local blocklist
  * - returns the resolved IP so the caller can pin it across the fetch
  *   and close DNS-rebinding TOCTOU windows
+ *
+ * `safeFetch` is the pinned-fetch primitive: validate, then connect to
+ * the *validated IP* — never re-resolving the hostname — so a DNS
+ * rebind between the check and the connect cannot redirect the request
+ * at a private address. Prefer it over `checkUrlSafety` + `fetch`.
  */
 
 import { lookup } from 'node:dns/promises'
+import { request as httpsRequest } from 'node:https'
+import { request as httpRequest } from 'node:http'
+import { checkServerIdentity } from 'node:tls'
+import type { IncomingMessage } from 'node:http'
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:'])
 
@@ -171,4 +180,124 @@ export async function checkUrlSafety(url: string): Promise<UrlSafetyResult> {
     address: pinned.address,
     family: pinned.family === 6 ? 6 : 4,
   }
+}
+
+/** Thrown by `safeFetch` when the target URL fails SSRF validation. */
+export class SsrfError extends Error {
+  constructor(public readonly reason: 'scheme-rejected' | 'ssrf-rejected' | 'dns-error') {
+    super(`URL rejected by SSRF guard: ${reason}`)
+    this.name = 'SsrfError'
+  }
+}
+
+export interface SafeFetchInit {
+  method?: string
+  headers?: Record<string, string>
+  /** Request body for POST/PUT. */
+  body?: string
+  /** Per-request timeout in ms. Default 5000. */
+  timeoutMs?: number
+  /** Hard cap on the buffered response body. Default 64 KiB. */
+  maxResponseBytes?: number
+}
+
+const DEFAULT_TIMEOUT_MS = 5000
+const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024
+
+/**
+ * SSRF-safe HTTP(S) fetch.
+ *
+ * Validates the host via `checkUrlSafety`, then connects to the
+ * *validated IP literal* — never re-resolving the hostname — closing
+ * the DNS-rebinding TOCTOU window that `checkUrlSafety` + `fetch`
+ * leaves open (the bare `fetch` does its own second resolution).
+ *
+ * - The connection target is pinned to the validated IP; TLS SNI and
+ *   certificate identity are validated against the *original*
+ *   hostname, so vhosted IdPs route correctly and the cert still has
+ *   to match the real name.
+ * - Redirects are never followed — a 3xx is returned verbatim.
+ *   Following it would re-resolve an unvalidated host.
+ * - The body is buffered with a hard `maxResponseBytes` cap and
+ *   returned as a standard `Response`, so a hostile peer cannot
+ *   stream an unbounded body.
+ *
+ * Throws `SsrfError` on validation failure; rejects with the
+ * underlying error on network failure / timeout.
+ */
+export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<Response> {
+  const safety = await checkUrlSafety(url)
+  if (!safety.safe) throw new SsrfError(safety.reason)
+
+  const parsed = new URL(url)
+  const isHttps = parsed.protocol === 'https:'
+  const requestFn = isHttps ? httpsRequest : httpRequest
+  const {
+    method = 'GET',
+    headers = {},
+    body,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
+  } = init
+
+  return new Promise<Response>((resolve, reject) => {
+    const req = requestFn(
+      {
+        // Connection target: the validated IP. No second DNS lookup
+        // happens because this is an address literal, so the TOCTOU
+        // window between validation and connect is closed.
+        hostname: safety.address,
+        family: safety.family,
+        port: Number(parsed.port || (isHttps ? 443 : 80)),
+        path: `${parsed.pathname}${parsed.search}`,
+        method,
+        // SNI + HTTP Host carry the original hostname; the cert is
+        // validated against it, not the IP we dialled.
+        servername: isHttps ? parsed.hostname : undefined,
+        headers: { ...headers, host: parsed.host },
+        timeout: timeoutMs,
+        checkServerIdentity: isHttps
+          ? (_host: string, cert: Parameters<typeof checkServerIdentity>[1]) =>
+              checkServerIdentity(parsed.hostname, cert)
+          : undefined,
+      },
+      (res: IncomingMessage) => {
+        const chunks: Buffer[] = []
+        let total = 0
+        const finish = () => {
+          const status = res.statusCode ?? 502
+          const nullBody = status < 200 || status === 204 || status === 304
+          const headerEntries: [string, string][] = []
+          for (const [k, v] of Object.entries(res.headers)) {
+            if (typeof v === 'string') headerEntries.push([k, v])
+            else if (Array.isArray(v)) headerEntries.push([k, v.join(', ')])
+          }
+          resolve(
+            new Response(nullBody ? null : Buffer.concat(chunks), {
+              status,
+              statusText: res.statusMessage ?? '',
+              headers: headerEntries,
+            })
+          )
+        }
+        res.on('data', (chunk: Buffer) => {
+          total += chunk.length
+          if (total > maxResponseBytes) {
+            // Soft cap: keep whatever arrived before the over-cap
+            // chunk, cut the stream, resolve with what we have.
+            res.destroy()
+            finish()
+            return
+          }
+          chunks.push(chunk)
+        })
+        res.on('end', finish)
+        res.on('error', reject)
+      }
+    )
+    req.on('timeout', () => req.destroy(new Error('safeFetch: request timed out')))
+    req.on('error', reject)
+    if (body) req.write(body)
+    req.end()
+  })
 }

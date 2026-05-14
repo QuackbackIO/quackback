@@ -19,6 +19,7 @@ interface OrgAuthConfig {
 
 interface AuthDialogProps {
   authConfig?: OrgAuthConfig | null
+  workspaceName?: string
 }
 
 import type { AuthFormStep } from './email-signin-types'
@@ -31,7 +32,7 @@ interface FormContext {
 /** Wraps the inline auth form in a Radix dialog with a header that
  * adapts to the form's current step (e.g. flips to "Check your email"
  * after the user submits their email). */
-export function AuthDialog({ authConfig }: AuthDialogProps) {
+export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
   const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
   const [formContext, setFormContext] = useState<FormContext>({ step: 'credentials', email: '' })
 
@@ -62,6 +63,7 @@ export function AuthDialog({ authConfig }: AuthDialogProps) {
         <PortalAuthFormInline
           mode={mode}
           authConfig={authConfig}
+          workspaceName={workspaceName}
           onModeSwitch={setMode}
           onContextChange={setFormContext}
         />

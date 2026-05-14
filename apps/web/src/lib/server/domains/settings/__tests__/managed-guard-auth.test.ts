@@ -17,10 +17,28 @@ const hoisted = vi.hoisted(() => ({
   mockGetTierLimits: vi.fn(),
 }))
 
-vi.mock('@/lib/server/db', () => ({
-  db: { update: hoisted.mockDbUpdate },
-  settings: { id: 'id' },
-  eq: vi.fn(),
+vi.mock('@/lib/server/db', () => {
+  const tx = { update: hoisted.mockDbUpdate }
+  return {
+    db: {
+      update: hoisted.mockDbUpdate,
+      // The settings.service / platform-credentials write paths now
+      // wrap their writes in a transaction so the auth_config_version
+      // bump is atomic. Pass a tx-shaped object that mirrors the db
+      // mock so the inner write calls hit the same hoisted mock.
+      transaction: async (fn: (tx: { update: typeof hoisted.mockDbUpdate }) => unknown) => fn(tx),
+    },
+    settings: { id: 'id', authConfigVersion: 'auth_config_version' },
+    eq: vi.fn(),
+  }
+})
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: vi.fn(),
+}))
+
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: vi.fn(),
 }))
 
 vi.mock('@/lib/server/redis', () => ({

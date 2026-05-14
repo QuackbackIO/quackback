@@ -1,23 +1,24 @@
 /**
- * Suspension guard — chokepoint helper for declarative workspace
- * suspension.
+ * Suspension guard — server-only chokepoint helper for declarative
+ * workspace suspension.
  *
  * `settings.state` carries the trinary 'active' | 'suspended' |
  * 'deleting' and is written by the config-file reconciler. With no
  * config file present, the column stays at its 'active' DB default and
  * this guard is a no-op for every request.
  *
- * This module exposes:
- * - `ensureNotSuspended()` — call from a request chokepoint to throw
- *   402 / 410 for non-active workspaces.
- * - `isSuspensionExempt(path)` — for HTML page-load guards (used by
- *   `__root.tsx`'s `beforeLoad`) so login/auth/health endpoints stay
- *   reachable on a suspended workspace.
+ * The pure half (`isSuspensionExempt` + `SUSPENSION_EXEMPT_PATHS`)
+ * lives in `./suspension-paths.ts` so `__root.tsx` can import the
+ * exempt-path check without dragging Redis/settings.service into the
+ * client bundle. Re-exported here as a convenience for server-side
+ * callers that want one import surface.
  *
  * The `_internal` form takes an injected `readState` so unit tests
  * stay free of DB / cache imports.
  */
 import { DomainException } from '@/lib/shared/errors'
+
+export { SUSPENSION_EXEMPT_PATHS, isSuspensionExempt } from './suspension-paths'
 
 /** HTTP 402 — Payment Required. The workspace stays read-blocked
  *  until something clears the suspended state. */
@@ -35,33 +36,6 @@ export class DeletingError extends DomainException {
   constructor() {
     super('WORKSPACE_DELETING', 'Workspace is being deleted.')
   }
-}
-
-/**
- * Path prefixes that stay reachable while the workspace is suspended
- * or deleting. The list is intentionally small: only what users need
- * to get back in (login, OAuth completion) and what health checks need
- * (`/api/health`, `/.well-known/`).
- *
- * Whole-path equality OR prefix-match. `/api/auth/` matches itself
- * and any descendant such as `/api/auth/sign-in/email`.
- */
-export const SUSPENSION_EXEMPT_PATHS = [
-  '/admin/login',
-  '/admin/signup',
-  '/auth/',
-  '/api/auth/',
-  '/api/health',
-  '/oauth/',
-  '/.well-known/',
-  '/complete-signup/',
-  // Magic-link landing — without this, a suspended workspace's owner
-  // can't click an email link back into the portal.
-  '/verify-magic-link',
-] as const
-
-export function isSuspensionExempt(p: string): boolean {
-  return SUSPENSION_EXEMPT_PATHS.some((prefix) => p === prefix || p.startsWith(prefix))
 }
 
 /**

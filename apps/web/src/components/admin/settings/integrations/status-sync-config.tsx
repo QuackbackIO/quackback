@@ -97,7 +97,7 @@ export function StatusSyncConfig({
           <Label htmlFor="status-sync-toggle" className="text-base font-medium">
             Status sync
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Automatically update post statuses when issues change in{' '}
             {integrationType.charAt(0).toUpperCase() + integrationType.slice(1).replace('_', ' ')}
           </p>
@@ -135,7 +135,7 @@ export function StatusSyncConfig({
         <div className="space-y-3">
           <div>
             <Label className="text-base font-medium">Status mapping</Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Map external statuses to Quackback statuses. Unmapped statuses are ignored.
             </p>
           </div>

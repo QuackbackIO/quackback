@@ -116,6 +116,7 @@ export function InvitationActions({
         onClick={handleResend}
         disabled={resendDisabled}
         title={resendTitle}
+        className="h-9"
       >
         {loading === 'resend' ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : 'Resend'}
       </Button>
@@ -128,7 +129,7 @@ export function InvitationActions({
               size="icon"
               onClick={handleCancel}
               disabled={loading !== null}
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              className="h-9 w-9 text-muted-foreground hover:text-destructive"
             >
               <XMarkIcon className="h-4 w-4" />
             </Button>
