@@ -303,6 +303,7 @@ function SsoTestSignInModal({
             phase={phase}
             applying={applying}
             hasResultOrError={!!(result || error)}
+            applied={appliedMessage !== null}
             onStart={onStart}
             onClose={onClose}
           />
@@ -357,12 +358,16 @@ function ModalFooter({
   phase,
   applying,
   hasResultOrError,
+  applied,
   onStart,
   onClose,
 }: {
   phase: SsoTestState['phase']
   applying: boolean
   hasResultOrError: boolean
+  /** A gate action was applied — the test passed AND its action ran, so
+   *  there's nothing left to retry. Close is the only move. */
+  applied: boolean
   onStart: () => void
   onClose: () => void
 }) {
@@ -390,7 +395,7 @@ function ModalFooter({
       <Button variant="outline" size="sm" onClick={onClose} disabled={applying}>
         Close
       </Button>
-      {hasResultOrError && !applying && (
+      {hasResultOrError && !applying && !applied && (
         <Button size="sm" onClick={onStart}>
           Try again
         </Button>

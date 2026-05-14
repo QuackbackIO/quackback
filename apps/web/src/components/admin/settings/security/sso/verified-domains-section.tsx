@@ -378,7 +378,7 @@ function DomainRow({
         open={enforceConfirmOpen}
         onOpenChange={setEnforceConfirmOpen}
         title={`Require SSO for ${domain.name}?`}
-        description={`*@${domain.name} will only be able to sign in via SSO. Keep one admin at a different domain so you can recover if your IdP goes down.`}
+        description={`*@${domain.name} can then only sign in via SSO. If your IdP goes down, recover with your recovery codes — or with an admin at a different domain.`}
         warning={{
           title: 'This takes effect immediately.',
         }}
@@ -534,7 +534,7 @@ function DomainCard({
         open={enforceConfirmOpen}
         onOpenChange={setEnforceConfirmOpen}
         title={`Require SSO for ${domain.name}?`}
-        description={`*@${domain.name} will only be able to sign in via SSO. Keep one admin at a different domain so you can recover if your IdP goes down.`}
+        description={`*@${domain.name} can then only sign in via SSO. If your IdP goes down, recover with your recovery codes — or with an admin at a different domain.`}
         warning={{
           title: 'This takes effect immediately.',
         }}
