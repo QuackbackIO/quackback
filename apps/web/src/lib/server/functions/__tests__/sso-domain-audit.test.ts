@@ -33,11 +33,12 @@ const hoisted = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
   mockRecordAuditEvent: vi.fn(),
   mockSetVerifiedDomainEnforced: vi.fn(),
-  mockListVerifiedDomains: vi.fn(),
   mockHasSsoClientSecret: vi.fn(),
   mockGetTierLimits: vi.fn(),
   mockIsEmailConfigured: vi.fn().mockReturnValue(true),
-  mockGetAuthConfig: vi.fn(),
+  // One cached read backs both the audit `before` snapshot (verifiedDomains)
+  // and the enforce gate (authConfig.ssoOidc).
+  mockGetTenantSettings: vi.fn(),
   // Resolves to the `[maxRow]` array from the max-team-SSO-sign-in query.
   mockMaxSignInRow: vi.fn(),
 }))
@@ -80,9 +81,7 @@ vi.mock('@/lib/server/audit/log', () => ({
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   setVerifiedDomainEnforced: hoisted.mockSetVerifiedDomainEnforced,
-  listVerifiedDomains: hoisted.mockListVerifiedDomains,
-  getTenantSettings: vi.fn(),
-  getAuthConfig: hoisted.mockGetAuthConfig,
+  getTenantSettings: hoisted.mockGetTenantSettings,
   updateAuthConfig: vi.fn(),
   setSsoDomainSubtree: vi.fn(),
 }))
@@ -136,22 +135,19 @@ beforeEach(() => {
     principal: { id: 'principal_admin1', role: 'admin' },
   })
   // Default: the enforce gate passes via a fresh test sign-in — a
-  // lastSuccessfulTestAt that postdates the last detailsChangedAt.
-  hoisted.mockGetAuthConfig.mockResolvedValue({
-    ssoOidc: {
-      detailsChangedAt: '2026-05-10T00:00:00.000Z',
-      lastSuccessfulTestAt: '2026-05-12T00:00:00.000Z',
+  // lastSuccessfulTestAt that postdates the last detailsChangedAt. The
+  // verifiedDomains list backs the audit `before` snapshot.
+  hoisted.mockGetTenantSettings.mockResolvedValue({
+    authConfig: {
+      ssoOidc: {
+        detailsChangedAt: '2026-05-10T00:00:00.000Z',
+        lastSuccessfulTestAt: '2026-05-12T00:00:00.000Z',
+      },
     },
+    verifiedDomains: [{ id: 'domain_acme', name: 'acme.com', enforced: false }],
   })
   // No real team SSO sign-in by default — the test sign-in carries it.
   hoisted.mockMaxSignInRow.mockResolvedValue([{ ts: null }])
-  hoisted.mockListVerifiedDomains.mockResolvedValue([
-    {
-      id: 'domain_acme',
-      name: 'acme.com',
-      enforced: false,
-    },
-  ])
   hoisted.mockSetVerifiedDomainEnforced.mockResolvedValue({
     id: 'domain_acme',
     name: 'acme.com',
@@ -187,9 +183,10 @@ describe('setVerifiedDomainEnforcedFn audit-log wiring', () => {
   })
 
   it('records sso.enforcement.domain.disabled on disable', async () => {
-    hoisted.mockListVerifiedDomains.mockResolvedValue([
-      { id: 'domain_acme', name: 'acme.com', enforced: true },
-    ])
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: { ssoOidc: {} },
+      verifiedDomains: [{ id: 'domain_acme', name: 'acme.com', enforced: true }],
+    })
     hoisted.mockSetVerifiedDomainEnforced.mockResolvedValue({
       id: 'domain_acme',
       name: 'acme.com',
@@ -207,11 +204,14 @@ describe('setVerifiedDomainEnforcedFn audit-log wiring', () => {
   it('records a failure event when the test-sign-in gate rejects the enable', async () => {
     // No valid test sign-in (test predates the last details change) and
     // no real team SSO sign-in — the enforce gate is locked.
-    hoisted.mockGetAuthConfig.mockResolvedValue({
-      ssoOidc: {
-        detailsChangedAt: '2026-05-12T00:00:00.000Z',
-        lastSuccessfulTestAt: '2026-05-10T00:00:00.000Z',
+    hoisted.mockGetTenantSettings.mockResolvedValue({
+      authConfig: {
+        ssoOidc: {
+          detailsChangedAt: '2026-05-12T00:00:00.000Z',
+          lastSuccessfulTestAt: '2026-05-10T00:00:00.000Z',
+        },
       },
+      verifiedDomains: [{ id: 'domain_acme', name: 'acme.com', enforced: false }],
     })
     hoisted.mockMaxSignInRow.mockResolvedValue([{ ts: null }])
 

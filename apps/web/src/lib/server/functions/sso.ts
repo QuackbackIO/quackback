@@ -218,14 +218,27 @@ export const setVerifiedDomainEnforcedFn = createServerFn({ method: 'POST' })
       ? 'sso.enforcement.domain.enabled'
       : 'sso.enforcement.domain.disabled'
 
-    const { setVerifiedDomainEnforced, listVerifiedDomains } =
+    const { setVerifiedDomainEnforced, getTenantSettings } =
       await import('@/lib/server/domains/settings/settings.service')
+    const { db, principal: principalTable, sql, inArray } = await import('@/lib/server/db')
 
-    // Snapshot the prior `enforced` value for the audit row. The full
-    // list is small (≤ MAX_VERIFIED_DOMAINS) and the values are cached
-    // upstream, so a list read is cheaper than a second targeted query.
-    const priorRows = await listVerifiedDomains()
-    const prior = priorRows.find((row) => row.id === data.id)
+    // One cached `getTenantSettings()` covers both the prior `enforced`
+    // snapshot (for the audit row) and the `ssoOidc` config (for the
+    // enforce gate). When enabling, the max-team-SSO-sign-in query —
+    // the alternative gate proof to a test sign-in — runs in parallel.
+    const [tenant, maxRow] = await Promise.all([
+      getTenantSettings(),
+      data.enforced
+        ? db
+            .select({ ts: principalTable.lastSsoSignInAt })
+            .from(principalTable)
+            .where(inArray(principalTable.role, ['admin', 'member']))
+            .orderBy(sql`${principalTable.lastSsoSignInAt} DESC NULLS LAST`)
+            .limit(1)
+            .then((rows) => rows[0] ?? null)
+        : Promise.resolve(null),
+    ])
+    const prior = tenant?.verifiedDomains.find((row) => row.id === data.id)
     const before = prior ? { enforced: prior.enforced } : null
 
     return withAuditEvent(
@@ -239,22 +252,8 @@ export const setVerifiedDomainEnforcedFn = createServerFn({ method: 'POST' })
       },
       async () => {
         if (data.enforced) {
-          const { db, principal: principalTable, sql, inArray } = await import('@/lib/server/db')
-          const { getAuthConfig } = await import('@/lib/server/domains/settings/settings.service')
           const { isSsoEnforcementUnlocked } = await import('@/lib/server/auth/sso-gates')
-
-          // Most recent real team SSO sign-in — an alternative proof to
-          // a test sign-in that the IdP works for production logins.
-          const [maxRow] = await db
-            .select({ ts: principalTable.lastSsoSignInAt })
-            .from(principalTable)
-            .where(inArray(principalTable.role, ['admin', 'member']))
-            .orderBy(sql`${principalTable.lastSsoSignInAt} DESC NULLS LAST`)
-            .limit(1)
-          const lastRealSignInAt = maxRow?.ts ?? null
-
-          const authConfig = await getAuthConfig()
-          if (!isSsoEnforcementUnlocked(authConfig?.ssoOidc, lastRealSignInAt)) {
+          if (!isSsoEnforcementUnlocked(tenant?.authConfig?.ssoOidc, maxRow?.ts ?? null)) {
             throw new ForbiddenError(
               'SSO_TEST_REQUIRED',
               'Run a successful test sign-in before enabling enforcement.'

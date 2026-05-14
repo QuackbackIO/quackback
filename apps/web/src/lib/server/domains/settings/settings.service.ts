@@ -290,11 +290,11 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
         }
       }
       // Block private/loopback/link-local discovery URLs at write time
-      // so the auth runtime never gets handed an SSRF target. The runtime
-      // fetches `discoveryUrl` (and the metadata's JWKS / token URLs)
-      // on every login; checking once here is cheaper and catches the
-      // bad value before it's persisted.
-      if (isHttps && updated.ssoOidc.discoveryUrl) {
+      // so the auth runtime never gets handed an SSRF target. Only when
+      // the URL actually changed — `checkUrlSafety` is a DNS round-trip,
+      // and an unchanged URL was already validated when it was written.
+      const discoveryUrlChanged = !prevSso || updated.ssoOidc.discoveryUrl !== prevSso.discoveryUrl
+      if (discoveryUrlChanged && isHttps && updated.ssoOidc.discoveryUrl) {
         const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
         const safety = await checkUrlSafety(updated.ssoOidc.discoveryUrl)
         if (!safety.safe) {
@@ -333,9 +333,15 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
 }
 
 /**
- * Shallow-merge a patch into the stored `ssoOidc` block + bump the
- * auth-config version + invalidate caches. Shared by the two
- * timestamp-stamping helpers below. No-op when no ssoOidc block exists.
+ * Shallow-merge a patch into the stored `ssoOidc` block + invalidate the
+ * settings cache. Shared by the two timestamp-stamping helpers below.
+ * No-op when no ssoOidc block exists.
+ *
+ * Deliberately skips the `auth_config_version` bump + `resetAuth()` that
+ * `updateAuthConfig` does: `detailsChangedAt` / `lastSuccessfulTestAt`
+ * are gate metadata read by server fns, not by the Better-Auth runtime,
+ * so there's nothing for it to rebuild. Dropping the version bump avoids
+ * a cross-pod Better-Auth rebuild on every test sign-in.
  */
 async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>): Promise<void> {
   const org = await requireSettings()
@@ -345,16 +351,10 @@ async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>):
     ...existing,
     ssoOidc: { ...existing.ssoOidc, ...patch },
   }
-  const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
-  const { resetAuth } = await import('@/lib/server/auth')
-  await db.transaction(async (tx) => {
-    await tx
-      .update(settings)
-      .set({ authConfig: JSON.stringify(updated) })
-      .where(eq(settings.id, org.id))
-    await bumpAuthConfigVersionInTx(tx)
-  })
-  resetAuth()
+  await db
+    .update(settings)
+    .set({ authConfig: JSON.stringify(updated) })
+    .where(eq(settings.id, org.id))
   await invalidateSettingsCache()
 }
 
