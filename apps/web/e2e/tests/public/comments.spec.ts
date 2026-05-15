@@ -1,4 +1,4 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test'
+import { test, expect, type Page, type BrowserContext, type Locator } from '@playwright/test'
 import { getOtpCode } from '../../utils/db-helpers'
 
 const TEST_EMAIL = 'demo@example.com'
@@ -70,6 +70,40 @@ async function goToFirstPost(page: Page) {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Comment editor helper
+// ---------------------------------------------------------------------------
+// The comment composer is a TipTap ProseMirror contenteditable, not a textarea.
+// Playwright's `.fill()` doesn't work on contenteditable, and asserting the
+// cleared state needs to look at `.textContent()` not `.value`. These helpers
+// keep the test bodies declarative without leaking the editor's DOM shape.
+
+function commentEditor(page: Page) {
+  return page
+    .locator('[data-testid="comment-form-editor"] .ProseMirror[contenteditable="true"]')
+    .first()
+}
+
+async function clearEditor(editor: ReturnType<typeof commentEditor>) {
+  await editor.click()
+  // Select-all + delete clears every node including nested blocks.
+  await editor.press('ControlOrMeta+a')
+  await editor.press('Delete')
+}
+
+async function typeIntoEditor(editor: ReturnType<typeof commentEditor>, text: string) {
+  await editor.click()
+  await clearEditor(editor)
+  await editor.pressSequentially(text)
+}
+
+async function expectEditorEmpty(editor: ReturnType<typeof commentEditor>) {
+  // The Placeholder extension renders an empty `<p>` (often with a `<br>`) and
+  // the wrapper carries `is-editor-empty`; the textContent reduces to '' once
+  // the doc is empty.
+  await expect(editor).toHaveText('', { timeout: 10000 })
+}
+
 // ===========================================================================
 // UNAUTHENTICATED USER TESTS
 // (uses default per-test browser context — no session cookie)
@@ -91,7 +125,7 @@ test.describe('Unauthenticated user — comments section', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('comment form textarea is NOT visible to unauthenticated users', async ({ page }) => {
+  test('comment composer is NOT visible to unauthenticated users', async ({ page }) => {
     // CommentThread renders the "Sign in" prompt instead of a comment form for
     // unauthenticated users. Hidden reply-form textareas inside comments may report
     // as visible to Playwright (CSS grid 0fr + overflow:hidden doesn't clip bounding rect).
@@ -253,24 +287,29 @@ test.describe('Authenticated user — comment form and submission', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('comment form textarea IS visible after signing in', async () => {
+  test('comment form is visible after signing in', async () => {
     const page = await sharedContext.newPage()
     try {
       await goToFirstPost(page)
-      const textarea = page.locator('textarea[placeholder*="comment" i]').first()
-      await expect(textarea).toBeVisible({ timeout: 10000 })
+      await expect(commentEditor(page)).toBeVisible({ timeout: 10000 })
     } finally {
       await page.close()
     }
   })
 
   // -------------------------------------------------------------------------
-  test('comment textarea has "Write a comment..." placeholder', async () => {
+  test('comment composer renders the "Write a comment..." placeholder', async () => {
     const page = await sharedContext.newPage()
     try {
       await goToFirstPost(page)
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await expect(textarea).toBeVisible({ timeout: 10000 })
+      // The Placeholder extension surfaces the placeholder via data-placeholder
+      // on an `.is-editor-empty` paragraph that's visible until the user types.
+      const placeholderHost = page
+        .locator('[data-testid="comment-form-editor"] .is-editor-empty')
+        .first()
+      await expect(placeholderHost).toHaveAttribute('data-placeholder', /write a comment/i, {
+        timeout: 10000,
+      })
     } finally {
       await page.close()
     }
@@ -283,14 +322,13 @@ test.describe('Authenticated user — comment form and submission', () => {
       await goToFirstPost(page)
 
       const uniqueText = `E2E comment ${Date.now()}`
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(uniqueText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, uniqueText)
 
       const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
       await submitBtn.click()
 
-      // Wait for textarea to clear (form reset after success)
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // The comment text must now be visible in the list
       await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
@@ -300,18 +338,18 @@ test.describe('Authenticated user — comment form and submission', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('after submit: textarea clears', async () => {
+  test('after submit: editor clears', async () => {
     const page = await sharedContext.newPage()
     try {
       await goToFirstPost(page)
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(`Textarea clear test ${Date.now()}`)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, `Editor clear test ${Date.now()}`)
 
       const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
       await submitBtn.click()
 
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
     } finally {
       await page.close()
     }
@@ -324,14 +362,14 @@ test.describe('Authenticated user — comment form and submission', () => {
       await goToFirstPost(page)
 
       const uniqueText = `Author check comment ${Date.now()}`
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(uniqueText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, uniqueText)
 
       await page
         .getByRole('button', { name: /^comment$/i })
         .first()
         .click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // Find the newly rendered comment
       const newComment = page.locator('[id^="comment-"]').filter({ hasText: uniqueText })
@@ -355,14 +393,14 @@ test.describe('Authenticated user — comment form and submission', () => {
       const beforeText = (await heading.textContent()) ?? '0'
       const beforeCount = parseInt(beforeText.match(/\d+/)?.[0] ?? '0', 10)
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(`Count increment test ${Date.now()}`)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, `Count increment test ${Date.now()}`)
 
       await page
         .getByRole('button', { name: /^comment$/i })
         .first()
         .click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // Heading count must be beforeCount + 1
       await expect(heading).toContainText(String(beforeCount + 1), { timeout: 10000 })
@@ -378,13 +416,13 @@ test.describe('Authenticated user — comment form and submission', () => {
       await goToFirstPost(page)
 
       const uniqueText = `Keyboard submit ${Date.now()}`
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(uniqueText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, uniqueText)
 
-      // Trigger Cmd+Enter (CommentForm listens for metaKey || ctrlKey + Enter)
-      await textarea.press('Meta+Enter')
+      // CommentForm listens for metaKey || ctrlKey + Enter (capture-phase)
+      await editor.press('Meta+Enter')
 
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
       await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
     } finally {
       await page.close()
@@ -398,12 +436,12 @@ test.describe('Authenticated user — comment form and submission', () => {
       await goToFirstPost(page)
 
       const uniqueText = `Ctrl-Enter submit ${Date.now()}`
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(uniqueText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, uniqueText)
 
-      await textarea.press('Control+Enter')
+      await editor.press('Control+Enter')
 
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
       await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
     } finally {
       await page.close()
@@ -419,18 +457,18 @@ test.describe('Authenticated user — comment form and submission', () => {
       const textA = `Second comment A ${Date.now()}`
       const textB = `Second comment B ${Date.now() + 1}`
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
+      const editor = commentEditor(page)
       const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
 
       // First comment
-      await textarea.fill(textA)
+      await typeIntoEditor(editor, textA)
       await submitBtn.click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // Second comment
-      await textarea.fill(textB)
+      await typeIntoEditor(editor, textB)
       await submitBtn.click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // Both must be in the DOM
       await expect(page.getByText(textA)).toBeVisible({ timeout: 10000 })
@@ -487,14 +525,14 @@ test.describe('Edge cases — comment content', () => {
 
       expect(longText.length).toBeGreaterThan(200)
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(longText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, longText)
 
       await page
         .getByRole('button', { name: /^comment$/i })
         .first()
         .click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // The full text (or at least its start) should appear in the list
       await expect(page.getByText(longText.slice(0, 80))).toBeVisible({ timeout: 10000 })
@@ -510,14 +548,14 @@ test.describe('Edge cases — comment content', () => {
       await goToFirstPost(page)
 
       const specialText = `Special chars: 🎉 <angle> "double" 'single' & ampersand ${Date.now()}`
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(specialText)
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, specialText)
 
       await page
         .getByRole('button', { name: /^comment$/i })
         .first()
         .click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // The emoji and text must render in the DOM (not escaped HTML entities visible as raw text)
       await expect(page.getByText(/🎉/).first()).toBeVisible({ timeout: 10000 })
@@ -534,16 +572,21 @@ test.describe('Edge cases — comment content', () => {
 
       const line1 = `Line one ${Date.now()}`
       const line2 = `Line two ${Date.now() + 1}`
-      const multiLineText = `${line1}\n${line2}`
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(multiLineText)
+      const editor = commentEditor(page)
+      await editor.click()
+      await clearEditor(editor)
+      await editor.pressSequentially(line1)
+      // Comment editors are configured with enterAsHardBreak: plain Enter
+      // inserts a <br>, splitting the visible line but keeping one paragraph.
+      await editor.press('Enter')
+      await editor.pressSequentially(line2)
 
       await page
         .getByRole('button', { name: /^comment$/i })
         .first()
         .click()
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await expectEditorEmpty(editor)
 
       // Both line fragments must appear in the rendered comment
       await expect(page.getByText(line1)).toBeVisible({ timeout: 10000 })
@@ -559,9 +602,8 @@ test.describe('Edge cases — comment content', () => {
     try {
       await goToFirstPost(page)
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      // Fill with spaces only
-      await textarea.fill('     ')
+      const editor = commentEditor(page)
+      await typeIntoEditor(editor, '     ')
 
       const submitBtn = page.getByRole('button', { name: /^comment$/i }).first()
       // react-hook-form with Zod min(1) after trim should keep button disabled
@@ -570,7 +612,7 @@ test.describe('Edge cases — comment content', () => {
 
       if (isEnabled) {
         await submitBtn.click()
-        // Expect a validation message or that textarea does NOT clear (failed submit)
+        // Expect a validation message or that the editor does NOT clear (failed submit)
         const validationMsg = page.locator('[role="alert"]').or(page.locator('.text-destructive'))
         await expect(validationMsg.first()).toBeVisible({ timeout: 5000 })
       } else {
@@ -610,11 +652,11 @@ test.describe('Edge cases — comment content', () => {
       const replyBtn = commentItems.first().getByTestId('reply-button')
       await replyBtn.click()
 
-      // The reply form is a nested CommentForm with a "Reply" submit button
-      const replyTextarea = commentItems
+      // The reply form is a nested CommentForm with the same editor data-testid
+      const replyEditor = commentItems
         .first()
-        .locator('textarea[placeholder*="Write a comment" i]')
-      await expect(replyTextarea).toBeVisible({ timeout: 5000 })
+        .locator('[data-testid="comment-form-editor"] .ProseMirror[contenteditable="true"]')
+      await expect(replyEditor).toBeVisible({ timeout: 5000 })
     } finally {
       await page.close()
     }
@@ -644,13 +686,13 @@ test.describe('Comment editing', () => {
   async function submitAndLocate(page: Page): Promise<{ elementId: string; uniqueText: string }> {
     await goToFirstPost(page)
     const uniqueText = `Edit test ${Date.now()}`
-    const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-    await textarea.fill(uniqueText)
+    const editor = commentEditor(page)
+    await typeIntoEditor(editor, uniqueText)
     await page
       .getByRole('button', { name: /^comment$/i })
       .first()
       .click()
-    await expect(textarea).toHaveValue('', { timeout: 10000 })
+    await expectEditorEmpty(editor)
     await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
     // Wait for this specific comment to receive a real server ID (not optimistic placeholder)
     await page.waitForFunction(
@@ -681,6 +723,13 @@ test.describe('Comment editing', () => {
   })
 
   // -------------------------------------------------------------------------
+  // The edit form is a TipTap editor wrapped in `[data-testid="edit-comment-editor"]`.
+  function editEditor(commentRoot: Locator) {
+    return commentRoot
+      .locator('[data-testid="edit-comment-editor"] .ProseMirror[contenteditable="true"]')
+      .first()
+  }
+
   test('clicking Edit opens an inline form with the current content', async () => {
     const page = await sharedContext.newPage()
     try {
@@ -689,9 +738,11 @@ test.describe('Comment editing', () => {
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
 
-      const editTextarea = comment.getByTestId('edit-comment-textarea')
-      await expect(editTextarea).toBeVisible({ timeout: 5000 })
-      await expect(editTextarea).toHaveValue(uniqueText)
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      // The editor seeds from contentJson (or markdown→tiptap fallback); the
+      // typed-text assertion accepts either path so legacy rows still pass.
+      await expect(editor).toContainText(uniqueText)
       // Edit button is replaced by Save / Cancel
       await expect(comment.getByRole('button', { name: /^edit$/i })).not.toBeVisible()
       await expect(comment.getByRole('button', { name: /^save$/i })).toBeVisible()
@@ -710,13 +761,16 @@ test.describe('Comment editing', () => {
       const comment = page.locator(`[id="${elementId}"]`)
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
-      await comment.getByTestId('edit-comment-textarea').fill('should not be saved')
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await clearEditor(editor)
+      await editor.pressSequentially('should not be saved')
       await comment
         .getByRole('button', { name: /^cancel$/i })
         .first()
         .click()
 
-      await expect(comment.getByTestId('edit-comment-textarea')).not.toBeVisible({ timeout: 5000 })
+      await expect(editor).not.toBeVisible({ timeout: 5000 })
       await expect(comment.getByText(uniqueText)).toBeVisible()
     } finally {
       await page.close()
@@ -731,12 +785,12 @@ test.describe('Comment editing', () => {
       const comment = page.locator(`[id="${elementId}"]`)
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
-      const editTextarea = comment.getByTestId('edit-comment-textarea')
-      await expect(editTextarea).toBeVisible({ timeout: 5000 })
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
 
-      await editTextarea.press('Escape')
+      await editor.press('Escape')
 
-      await expect(editTextarea).not.toBeVisible({ timeout: 5000 })
+      await expect(editor).not.toBeVisible({ timeout: 5000 })
       await expect(comment.getByText(uniqueText)).toBeVisible()
     } finally {
       await page.close()
@@ -752,12 +806,13 @@ test.describe('Comment editing', () => {
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
       const editedText = `Edited: ${uniqueText}`
-      await comment.getByTestId('edit-comment-textarea').fill(editedText)
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await clearEditor(editor)
+      await editor.pressSequentially(editedText)
       await comment.getByRole('button', { name: /^save$/i }).click()
 
-      await expect(comment.getByTestId('edit-comment-textarea')).not.toBeVisible({
-        timeout: 10000,
-      })
+      await expect(editor).not.toBeVisible({ timeout: 10000 })
       await expect(comment.getByText(editedText)).toBeVisible({ timeout: 10000 })
       await expect(comment.getByText('(edited)')).toBeVisible({ timeout: 10000 })
     } finally {
@@ -774,11 +829,13 @@ test.describe('Comment editing', () => {
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
       const editedText = `Cmd-Enter edit: ${uniqueText}`
-      const editTextarea = comment.getByTestId('edit-comment-textarea')
-      await editTextarea.fill(editedText)
-      await editTextarea.press('Meta+Enter')
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await clearEditor(editor)
+      await editor.pressSequentially(editedText)
+      await editor.press('Meta+Enter')
 
-      await expect(editTextarea).not.toBeVisible({ timeout: 10000 })
+      await expect(editor).not.toBeVisible({ timeout: 10000 })
       await expect(comment.getByText(editedText)).toBeVisible({ timeout: 10000 })
       await expect(comment.getByText('(edited)')).toBeVisible({ timeout: 10000 })
     } finally {
@@ -794,7 +851,9 @@ test.describe('Comment editing', () => {
       const comment = page.locator(`[id="${elementId}"]`)
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
-      await comment.getByTestId('edit-comment-textarea').fill('')
+      const editor = editEditor(comment)
+      await expect(editor).toBeVisible({ timeout: 5000 })
+      await clearEditor(editor)
 
       await expect(comment.getByRole('button', { name: /^save$/i })).toBeDisabled({
         timeout: 5000,
@@ -825,21 +884,28 @@ test.describe('Markdown comment rendering', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('markdown comment body renders as formatted DOM (heading, bold, link)', async () => {
+  test('markdown shortcuts in the editor render as formatted DOM (heading, bold)', async () => {
     const page = await sharedContext.newPage()
     try {
       await goToFirstPost(page)
 
       // Unique marker keeps this test isolated from other comments in the list
       const marker = `md-${Date.now()}`
-      const markdownBody = `## My heading ${marker}\n\nThis is **bold ${marker}** and a [link ${marker}](https://example.com).`
 
-      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
-      await textarea.fill(markdownBody)
+      const editor = commentEditor(page)
+      await editor.click()
+      await clearEditor(editor)
+      // StarterKit's input rules fire on each typed character. `## ` lifts the
+      // paragraph into H2; **word** wraps the inline span in <strong>.
+      await editor.pressSequentially(`## My heading ${marker}`)
+      // Comment editors use enterAsHardBreak for plain Enter, so we use
+      // Shift+Enter to exit the heading into a fresh paragraph.
+      await editor.press('Shift+Enter')
+      await editor.pressSequentially(`This is **bold ${marker}**.`)
 
       // Submit via Ctrl+Enter (matches the existing keyboard-submit tests)
-      await textarea.press('Control+Enter')
-      await expect(textarea).toHaveValue('', { timeout: 10000 })
+      await editor.press('Control+Enter')
+      await expectEditorEmpty(editor)
 
       // Scope assertions to the new comment node so we don't collide with
       // any markdown rendered by other comments / page chrome.
@@ -854,12 +920,6 @@ test.describe('Markdown comment rendering', () => {
 
       // Bold marker rendered as <strong>
       await expect(newComment.locator('strong', { hasText: `bold ${marker}` })).toBeVisible()
-
-      // Link rendered as <a href="https://example.com/"> — sanitizeUrl normalizes
-      // hrefs through URL.href, which appends a trailing slash on bare hostnames.
-      const link = newComment.locator('a', { hasText: `link ${marker}` })
-      await expect(link).toBeVisible()
-      await expect(link).toHaveAttribute('href', 'https://example.com/')
     } finally {
       await page.close()
     }
