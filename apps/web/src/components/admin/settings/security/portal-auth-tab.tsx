@@ -14,7 +14,6 @@ import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
 import { WarningBox } from '@/components/shared/warning-box'
-import { hasAnyPortalAuthMethod } from '@/components/auth/oauth-buttons'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
@@ -74,12 +73,21 @@ export function PortalAuthTab({
   ).length
   const isLastMethod = (id: string) => !!oauthState[id] && enabledMethodCount === 1
 
-  // The toggles enforce a last-method guard, but the state is still
-  // reachable through the config file, direct DB writes, or a legacy
-  // tenant whose only enabled flag is the retired `email` key. In any
-  // of those, surface the consequence so admins aren't surprised by a
-  // portal with no sign-in surface.
-  const noPortalAuthEnabled = !hasAnyPortalAuthMethod(oauthState)
+  // True when nothing on the portal can actually sign a user in. Looks
+  // past the raw intent flags to what's *usable* today: password works
+  // standalone, magic link needs email delivery, and OAuth providers
+  // need their credentials saved. A flag like `google: true` with no
+  // platform credential still produces a "Not configured" tile, so it
+  // shouldn't count as a working sign-in surface for this warning.
+  const noPortalAuthEnabled = (() => {
+    if (oauthState.password) return false
+    if (oauthState.magicLink && emailConfigured) return false
+    return !Object.entries(oauthState).some(([id, enabled]) => {
+      if (!enabled) return false
+      if (id === 'password' || id === 'magicLink' || id === 'email') return false
+      return !!credentialStatus[id]
+    })
+  })()
 
   const save = async (patch: Record<string, boolean | undefined>) => {
     setSaving(true)
