@@ -5,6 +5,7 @@ import {
   postStatuses,
   eq,
   and,
+  isNull,
   isNotNull,
   lt,
   lte,
@@ -18,6 +19,19 @@ import { computeStatus } from './changelog.service'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 
 /**
+ * Predicates that make a changelog entry publicly visible: not soft-deleted
+ * and published at or before `now`. Shared by every public read path so the
+ * filter stays consistent.
+ */
+export function publicChangelogConditions(now: Date) {
+  return [
+    isNull(changelogEntries.deletedAt),
+    isNotNull(changelogEntries.publishedAt),
+    lte(changelogEntries.publishedAt, now),
+  ]
+}
+
+/**
  * Get a published changelog entry by ID for public view
  *
  * @param id - Changelog entry ID
@@ -27,11 +41,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
   const now = new Date()
 
   const entry = await db.query.changelogEntries.findFirst({
-    where: and(
-      eq(changelogEntries.id, id),
-      isNotNull(changelogEntries.publishedAt),
-      lte(changelogEntries.publishedAt, now)
-    ),
+    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
   })
 
   if (!entry || !entry.publishedAt) {
@@ -112,16 +122,15 @@ export async function listPublicChangelogs(params: {
   const { cursor, limit = 20 } = params
   const now = new Date()
 
-  // Build where conditions - only published entries
-  const conditions = [
-    isNotNull(changelogEntries.publishedAt),
-    lte(changelogEntries.publishedAt, now),
-  ]
+  const conditions = publicChangelogConditions(now)
 
   // Cursor-based pagination
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
-      where: eq(changelogEntries.id, cursor as ChangelogId),
+      where: and(
+        eq(changelogEntries.id, cursor as ChangelogId),
+        isNull(changelogEntries.deletedAt)
+      ),
       columns: { publishedAt: true },
     })
     if (cursorEntry?.publishedAt) {

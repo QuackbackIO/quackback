@@ -229,16 +229,15 @@ export async function updateChangelog(
 // ============================================================================
 
 /**
- * Soft delete a changelog entry
- *
- * Sets deletedAt timestamp instead of removing the row.
+ * Soft delete a changelog entry. Clears publishedAt so a public query that
+ * forgets to filter on deletedAt still cannot serve the entry.
  *
  * @param id - Changelog entry ID
  */
 export async function deleteChangelog(id: ChangelogId): Promise<void> {
   const result = await db
     .update(changelogEntries)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: new Date(), publishedAt: null })
     .where(and(eq(changelogEntries.id, id), isNull(changelogEntries.deletedAt)))
     .returning()
 
