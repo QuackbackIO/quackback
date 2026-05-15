@@ -36,6 +36,7 @@ const ALLOWED_NODE_TYPES = new Set([
   'tableHeader',
   'tableCell',
   'emoji',
+  'mention',
 ])
 
 // Mark types that match the TipTap editor extensions
@@ -147,6 +148,17 @@ function sanitizeAttrs(
       return attrs.start !== undefined
         ? { start: safePositiveInt(attrs.start, 1, 999999) }
         : undefined
+
+    case 'mention': {
+      // Mention nodes carry the target principal's TypeID (`id`) plus the
+      // displayName the user saw when picking them (`label`). Anything else
+      // (e.g. avatar URLs the client might send) is dropped — labels are
+      // re-resolved against the live principal at render time.
+      const id = typeof attrs.id === 'string' ? attrs.id.slice(0, 64) : ''
+      const label = typeof attrs.label === 'string' ? attrs.label.slice(0, 200) : ''
+      if (!id) return undefined
+      return { id, label }
+    }
 
     // Nodes with no meaningful attrs to sanitize
     case 'doc':
