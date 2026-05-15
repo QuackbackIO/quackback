@@ -146,6 +146,8 @@ export {
   commentsRelations,
   postEditHistory,
   postEditHistoryRelations,
+  postMentions,
+  postMentionsRelations,
   postNotes,
   postNotesRelations,
   postRoadmaps,

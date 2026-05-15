@@ -449,6 +449,13 @@
       "when": 1778457600010,
       "tag": "0063_comment_content_json",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1778457600011,
+      "tag": "0064_post_mentions",
+      "breakpoints": true
     }
   ]
 }
