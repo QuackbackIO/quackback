@@ -26,6 +26,7 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { hasAnyPortalAuthMethod } from '@/components/auth/oauth-buttons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
@@ -62,6 +63,11 @@ export function PortalHeader({
     !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
   const navItems = buildNavItems({ helpCenterEnabled })
+
+  // Hide Log in / Sign up when the admin has disabled every portal auth
+  // method — the dialog they'd open has no usable path forward. Team
+  // members and SSO users can still reach /admin/login directly.
+  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {})
 
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
@@ -240,7 +246,7 @@ export function PortalHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : openAuthPopover ? (
+      ) : openAuthPopover && portalAuthEnabled ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>

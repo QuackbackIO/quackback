@@ -138,6 +138,17 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
 }
 
 /**
+ * True when the portal exposes at least one user-facing sign-in method
+ * (password, magic link, or any registered OAuth provider). Used to hide
+ * the header's Log in / Sign up buttons in fully-anonymous deployments
+ * where clicking them would open a dialog with no usable path forward.
+ */
+export function hasAnyPortalAuthMethod(authConfig: Record<string, boolean | undefined>): boolean {
+  if (authConfig.password || authConfig.magicLink) return true
+  return getEnabledOAuthProviders(authConfig).length > 0
+}
+
+/**
  * Build provider list from PortalAuthMethods config.
  * Filters to only enabled OAuth providers (excludes 'email').
  */
