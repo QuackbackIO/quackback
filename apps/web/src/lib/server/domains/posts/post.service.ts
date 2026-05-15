@@ -471,6 +471,22 @@ export async function updatePost(
     )
   }
 
+  // Reconcile @-mentions whenever the body was touched. We call this even when
+  // the new mention set is empty so that mentions removed during an edit get
+  // deleted from post_mentions. Skipped when neither content nor contentJson
+  // was part of the update — a title-only edit must not clobber existing rows.
+  if (input.contentJson !== undefined || input.content !== undefined) {
+    const contentJson = updatedPost.contentJson
+    await syncPostMentions({
+      postId: updatedPost.id,
+      postTitle: updatedPost.title,
+      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+      actor: buildEventActor(actor),
+    })
+  }
+
   return updatedPost
 }
 

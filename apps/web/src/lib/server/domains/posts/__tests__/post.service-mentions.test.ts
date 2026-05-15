@@ -14,6 +14,21 @@ const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags
 const subscribeToPost = vi.fn()
 const syncPostMentions = vi.fn().mockResolvedValue(undefined)
 
+// Holds the contentJson used by the updatePost test path so the db.update().returning()
+// stub can echo it back as the "updated row".
+let updatePostsFindFirstResult: {
+  id: string
+  title: string
+  content: string
+  contentJson: JSONContent | null
+  boardId: string
+  statusId: string
+  principalId: string
+  ownerPrincipalId: string | null
+} | null = null
+let updateReturningContentJson: JSONContent | null = null
+let updateReturningTitle = 'Updated title'
+
 vi.mock('@/lib/server/db', async () => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
@@ -62,6 +77,12 @@ vi.mock('@/lib/server/db', async () => {
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
         },
+        posts: {
+          findFirst: vi.fn(async () => updatePostsFindFirstResult),
+        },
+        principal: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
         const tx = {
@@ -76,11 +97,38 @@ vi.mock('@/lib/server/db', async () => {
         return fn(tx)
       }),
       select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+      // Used by updatePost. Echoes back a fake "updated post" using the contentJson
+      // captured from the call site via updateReturningContentJson.
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => [
+              {
+                id: 'post_update' as unknown,
+                boardId: 'board_b' as unknown,
+                statusId: 'status_open' as unknown,
+                title: updateReturningTitle,
+                content: 'Body',
+                contentJson: updateReturningContentJson,
+                principalId: 'principal_author' as unknown,
+                ownerPrincipalId: null,
+                voteCount: 1,
+                commentCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            ]),
+          })),
+        })),
+      })),
+      delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
+      insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })),
     },
     boards: { id: 'board_id' },
     posts: { __name: 'posts', id: 'post_id' },
     postStatuses: { id: 'status_id' },
     postTags: { __name: 'postTags' },
+    tags: { __name: 'tags', id: 'tag_id' },
     votes: { __name: 'votes' },
     principal: { id: 'principal_id' },
     eq: vi.fn(),
@@ -96,6 +144,8 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
 
 vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchPostCreated: vi.fn(),
+  dispatchPostUpdated: vi.fn(),
+  dispatchPostStatusChanged: vi.fn(),
   buildEventActor: vi.fn((actor: { principalId: string }) => ({
     type: 'user',
     principalId: actor.principalId,
@@ -206,6 +256,93 @@ describe('createPost mention dispatch', () => {
         statusId: 'status_open' as unknown as StatusId,
       },
       { principalId: authorPrincipal }
+    )
+
+    expect(syncPostMentions).not.toHaveBeenCalled()
+  })
+})
+
+describe('updatePost mention dispatch', () => {
+  beforeEach(() => {
+    syncPostMentions.mockClear()
+    updatePostsFindFirstResult = {
+      id: 'post_update',
+      title: 'Original title',
+      content: 'Original body',
+      contentJson: null,
+      boardId: 'board_b',
+      statusId: 'status_open',
+      principalId: 'principal_author',
+      ownerPrincipalId: null,
+    }
+    updateReturningContentJson = null
+    updateReturningTitle = 'Updated title'
+  })
+
+  it('calls syncPostMentions once with the mentioned id when a new mention is added on edit', async () => {
+    const newContent = docWithMention()
+    updateReturningContentJson = newContent
+    updateReturningTitle = 'Edited with mention'
+
+    const { updatePost } = await import('../post.service')
+
+    const actorPrincipal = 'principal_actor' as unknown as PrincipalId
+    await updatePost(
+      'post_update' as unknown as import('@quackback/ids').PostId,
+      {
+        contentJson: newContent as unknown as import('@/lib/server/db').TiptapContent,
+      },
+      { principalId: actorPrincipal }
+    )
+
+    expect(syncPostMentions).toHaveBeenCalledTimes(1)
+    const call = syncPostMentions.mock.calls[0][0]
+    expect(call.postId).toBe('post_update')
+    expect(call.postTitle).toBe('Edited with mention')
+    expect(call.postUrl).toContain('post_update')
+    expect(call.mentionedIds).toBeInstanceOf(Set)
+    expect(Array.from(call.mentionedIds)).toEqual([MENTIONED])
+    expect(call.actor).toMatchObject({ principalId: actorPrincipal })
+  })
+
+  it('calls syncPostMentions with an empty set when an edit clears all mentions', async () => {
+    // The new body has no mention nodes — sync should still run so the
+    // previously-recorded mentions get deleted from post_mentions.
+    const newContent = docWithoutMention()
+    updateReturningContentJson = newContent
+    updateReturningTitle = 'Mentions removed'
+
+    const { updatePost } = await import('../post.service')
+
+    const actorPrincipal = 'principal_actor' as unknown as PrincipalId
+    await updatePost(
+      'post_update' as unknown as import('@quackback/ids').PostId,
+      {
+        contentJson: newContent as unknown as import('@/lib/server/db').TiptapContent,
+      },
+      { principalId: actorPrincipal }
+    )
+
+    expect(syncPostMentions).toHaveBeenCalledTimes(1)
+    const call = syncPostMentions.mock.calls[0][0]
+    expect(call.postId).toBe('post_update')
+    expect(call.mentionedIds).toBeInstanceOf(Set)
+    expect(call.mentionedIds.size).toBe(0)
+    expect(call.excerptByPrincipalId).toBeInstanceOf(Map)
+    expect(call.excerptByPrincipalId.size).toBe(0)
+  })
+
+  it('does NOT call syncPostMentions when only the title is updated (contentJson untouched)', async () => {
+    // Title-only update — must not clobber existing post_mentions rows.
+    updateReturningTitle = 'New title only'
+
+    const { updatePost } = await import('../post.service')
+
+    const actorPrincipal = 'principal_actor' as unknown as PrincipalId
+    await updatePost(
+      'post_update' as unknown as import('@quackback/ids').PostId,
+      { title: 'New title only' },
+      { principalId: actorPrincipal }
     )
 
     expect(syncPostMentions).not.toHaveBeenCalled()
