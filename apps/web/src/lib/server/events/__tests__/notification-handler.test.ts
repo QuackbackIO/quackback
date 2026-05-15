@@ -9,7 +9,7 @@ vi.mock('@/lib/server/domains/notifications/notification.service', () => ({
 }))
 
 import { notificationHook } from '../handlers/notification'
-import type { NotificationTarget, NotificationConfig } from '../handlers/notification'
+import type { NotificationTarget } from '../handlers/notification'
 import type { EventData } from '../types'
 
 beforeEach(() => batchSpy.mockClear())
@@ -36,9 +36,8 @@ describe('notificationHook — post.mentioned', () => {
     } as EventData
 
     const target: NotificationTarget = { principalIds: ['principal_target' as never] }
-    const config: NotificationConfig = {}
 
-    const result = await notificationHook.run(event, target, config)
+    const result = await notificationHook.run(event, target, {})
     expect(result.success).toBe(true)
     expect(batchSpy).toHaveBeenCalledTimes(1)
     expect(batchSpy).toHaveBeenCalledWith(
