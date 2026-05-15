@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { getInitials } from '@/lib/shared/utils/string'
+import { CommentContent } from '@/components/public/comment-content'
 import type { PinnedCommentView } from '@/lib/client/queries/portal-detail'
 
 interface PinnedCommentProps {
@@ -35,9 +36,10 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
             <span className="text-muted-foreground">·</span>
             <TimeAgo date={comment.createdAt} className="text-xs text-muted-foreground" />
           </div>
-          <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-            {comment.content}
-          </p>
+          <CommentContent
+            content={comment.content}
+            className="text-sm text-foreground/90 leading-relaxed"
+          />
         </div>
       </div>
     </div>

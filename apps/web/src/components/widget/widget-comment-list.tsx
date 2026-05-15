@@ -14,6 +14,7 @@ import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getInitials, cn } from '@/lib/shared/utils'
+import { CommentContent } from '@/components/public/comment-content'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { CommentReactionCount } from '@/lib/shared'
 
@@ -253,9 +254,10 @@ function WidgetCommentItem({
         </div>
 
         {/* Content */}
-        <p className="text-xs text-foreground/90 whitespace-pre-wrap mt-1 ms-7 leading-relaxed">
-          {comment.content}
-        </p>
+        <CommentContent
+          content={comment.content}
+          className="text-xs text-foreground/90 mt-1 ms-7 leading-relaxed"
+        />
 
         {/* Actions row: collapse, reactions, emoji picker, reply */}
         <div className="flex items-center gap-1 mt-1.5 ms-7">

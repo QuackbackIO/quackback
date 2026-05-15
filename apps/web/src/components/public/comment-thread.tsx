@@ -24,6 +24,7 @@ import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { CommentContent } from '@/components/public/comment-content'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
@@ -659,9 +660,10 @@ function CommentItem({
               </div>
             </div>
           ) : (
-            <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
-              {comment.content}
-            </p>
+            <CommentContent
+              content={comment.content}
+              className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+            />
           )}
 
           {/* Status change indicator */}
