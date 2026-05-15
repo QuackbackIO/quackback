@@ -203,8 +203,29 @@ export function buildExtensions(
       : []),
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
+    ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
     Markdown,
   ]
+}
+
+// Single line break on Enter instead of TipTap's default paragraph split.
+// Shift+Enter still splits the block via StarterKit's own binding so power
+// users keep both affordances.
+function createEnterAsHardBreak() {
+  return Extension.create({
+    name: 'enterAsHardBreak',
+    addKeyboardShortcuts() {
+      return {
+        Enter: () =>
+          this.editor.commands.first(({ commands }) => [
+            () => commands.newlineInCode(),
+            () => commands.splitListItem('listItem'),
+            () => commands.splitListItem('taskItem'),
+            () => commands.setHardBreak(),
+          ]),
+      }
+    },
+  })
 }
 
 // ============================================================================
@@ -240,6 +261,12 @@ export interface EditorFeatures {
    * set; emojis are inserted as nodes and serialize to native Unicode
    * characters in markdown. */
   emojiPicker?: boolean
+  /** Make plain Enter insert a hardBreak instead of splitting the block.
+   * Shift+Enter still splits the paragraph via StarterKit's default
+   * binding. Use this for chat-shaped editors (comments) and leave off
+   * for document-shaped ones (posts, changelog) where paragraph-per-Enter
+   * is the expected affordance. */
+  enterAsHardBreak?: boolean
 }
 
 // ============================================================================
@@ -1009,6 +1036,7 @@ function RichTextEditorBase({
       features.embeds,
       features.slashMenu,
       features.emojiPicker,
+      features.enterAsHardBreak,
       onImageUpload,
       placeholder,
     ]
@@ -1342,6 +1370,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.embeds === nf.embeds &&
     pf.slashMenu === nf.slashMenu &&
     pf.emojiPicker === nf.emojiPicker &&
+    pf.enterAsHardBreak === nf.enterAsHardBreak &&
     pf.bubbleMenu === nf.bubbleMenu
   )
 })

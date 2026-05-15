@@ -15,6 +15,9 @@ export const COMMENT_EDITOR_FEATURES: EditorFeatures = {
   bubbleMenu: true,
   slashMenu: true,
   emojiPicker: true,
+  // Chat-style behaviour: Enter is a single line break; Shift+Enter
+  // splits the paragraph for the rare case it's wanted.
+  enterAsHardBreak: true,
   images: false,
   tables: false,
   codeBlocks: false,
