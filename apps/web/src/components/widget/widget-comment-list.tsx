@@ -371,7 +371,7 @@ function WidgetCommentItem({
             <div className="mt-2 ms-7 p-2 bg-muted/30 rounded-md border border-border/30">
               <div
                 data-testid="widget-reply-editor"
-                className="rounded-md border border-border/50 bg-background"
+                className="rounded-md border border-border/50 bg-background px-2.5 py-1.5"
                 onKeyDownCapture={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault()

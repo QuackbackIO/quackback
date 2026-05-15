@@ -96,7 +96,7 @@ export function WidgetCommentForm({
     <div className="mb-3">
       <div
         data-testid="widget-comment-form-editor"
-        className="rounded-md border border-border/50 bg-muted/20"
+        className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-1.5"
         onKeyDownCapture={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault()

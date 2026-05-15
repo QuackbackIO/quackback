@@ -207,6 +207,7 @@ export function CommentForm({
                   <FormControl>
                     <div
                       data-testid="comment-form-editor"
+                      className="px-3 py-2"
                       onKeyDownCapture={(e) => {
                         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                           e.preventDefault()
