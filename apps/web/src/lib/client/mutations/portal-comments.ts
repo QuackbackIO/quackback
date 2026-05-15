@@ -20,6 +20,7 @@ import type { PostId, CommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { commentKeys } from '@/lib/client/hooks/use-comments-query'
 import { addReplyToTree, replaceOptimisticInTree } from '@/lib/client/utils/comment-tree-helpers'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 // ============================================================================
 // Types
@@ -40,6 +41,7 @@ interface OptimisticComment {
 
 interface CreateCommentInput {
   content: string
+  contentJson?: TiptapContent | null
   parentId?: string | null
   postId: string
   authorName?: string | null
@@ -109,6 +111,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
         data: {
           postId,
           content: input.content,
+          contentJson: input.contentJson ?? undefined,
           parentId: (input.parentId || undefined) as CommentId | undefined,
           statusId: input.statusId || undefined,
           isPrivate: input.isPrivate,
@@ -184,7 +187,10 @@ export function useEditComment({ commentId, postId, onSuccess, onError }: UseEdi
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (content: string) => userEditCommentFn({ data: { commentId, content } }),
+    mutationFn: (input: { content: string; contentJson?: TiptapContent | null }) =>
+      userEditCommentFn({
+        data: { commentId, content: input.content, contentJson: input.contentJson ?? undefined },
+      }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })

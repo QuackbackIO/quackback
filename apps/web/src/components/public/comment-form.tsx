@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { useForm } from 'react-hook-form'
 import type { UseMutationResult } from '@tanstack/react-query'
@@ -21,7 +21,9 @@ import { signOut } from '@/lib/client/auth-client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
-import { MarkdownSupportedHint } from './markdown-supported-hint'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId, CommentId } from '@quackback/ids'
 
 export type CreateCommentMutation = UseMutationResult<
@@ -29,6 +31,7 @@ export type CreateCommentMutation = UseMutationResult<
   Error,
   {
     content: string
+    contentJson?: TiptapContent | null
     parentId?: string | null
     postId: string
     authorName?: string | null
@@ -98,6 +101,14 @@ export function CommentForm({
     },
   })
 
+  // RichTextEditor produces TipTap JSON natively; we stash it here and send
+  // alongside the markdown string so the server can store both without
+  // re-parsing on the write path.
+  const editorJsonRef = useRef<TiptapContent | null>(null)
+  // Reset key bumps to force the editor to remount with empty content after
+  // a successful submit (RichTextEditor only resets when `value` flips to '').
+  const [editorResetKey, setEditorResetKey] = useState(0)
+
   const isSubmitting = createComment?.isPending ?? false
   const selectedStatus = statuses?.find((s) => s.id === selectedStatusId) ?? null
   const currentStatus = statuses?.find((s) => s.id === currentStatusId) ?? null
@@ -138,6 +149,7 @@ export function CommentForm({
     createComment.mutate(
       {
         content: data.content.trim(),
+        contentJson: editorJsonRef.current,
         parentId: parentId || null,
         postId,
         authorName: effectiveUser?.name || null,
@@ -149,6 +161,8 @@ export function CommentForm({
       {
         onSuccess: () => {
           form.reset()
+          editorJsonRef.current = null
+          setEditorResetKey((k) => k + 1)
           setSelectedStatusId(null)
           onSuccess?.()
         },
@@ -191,25 +205,33 @@ export function CommentForm({
                     })}
                   </FormLabel>
                   <FormControl>
-                    <textarea
-                      placeholder={intl.formatMessage({
-                        id: 'portal.commentForm.placeholder',
-                        defaultMessage: 'Write a comment...',
-                      })}
-                      rows={3}
-                      disabled={isSubmitting}
-                      className="w-full resize-none border-0 bg-transparent px-3 pt-3 pb-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                      onKeyDown={(e) => {
+                    <div
+                      data-testid="comment-form-editor"
+                      onKeyDownCapture={(e) => {
                         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                          e.preventDefault()
                           void form.handleSubmit(onSubmit)()
                         }
                       }}
-                      {...field}
-                    />
+                    >
+                      <RichTextEditor
+                        key={editorResetKey}
+                        value={field.value}
+                        borderless
+                        minHeight="72px"
+                        disabled={isSubmitting}
+                        features={COMMENT_EDITOR_FEATURES}
+                        placeholder={intl.formatMessage({
+                          id: 'portal.commentForm.placeholder',
+                          defaultMessage: 'Write a comment...',
+                        })}
+                        onChange={(json, _html, markdown) => {
+                          editorJsonRef.current = json as TiptapContent
+                          field.onChange(markdown ?? '')
+                        }}
+                      />
+                    </div>
                   </FormControl>
-                  <div className="px-3 pt-1 pb-0.5">
-                    <MarkdownSupportedHint />
-                  </div>
                   <FormMessage className="px-3" />
                 </FormItem>
               )}
@@ -417,25 +439,32 @@ export function CommentForm({
                 })}
               </FormLabel>
               <FormControl>
-                <textarea
-                  placeholder={intl.formatMessage({
-                    id: 'portal.commentForm.placeholder',
-                    defaultMessage: 'Write a comment...',
-                  })}
-                  rows={3}
-                  disabled={isSubmitting}
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  onKeyDown={(e) => {
+                <div
+                  data-testid="comment-form-editor"
+                  onKeyDownCapture={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault()
                       void form.handleSubmit(onSubmit)()
                     }
                   }}
-                  {...field}
-                />
+                >
+                  <RichTextEditor
+                    key={editorResetKey}
+                    value={field.value}
+                    minHeight="80px"
+                    disabled={isSubmitting}
+                    features={COMMENT_EDITOR_FEATURES}
+                    placeholder={intl.formatMessage({
+                      id: 'portal.commentForm.placeholder',
+                      defaultMessage: 'Write a comment...',
+                    })}
+                    onChange={(json, _html, markdown) => {
+                      editorJsonRef.current = json as TiptapContent
+                      field.onChange(markdown ?? '')
+                    }}
+                  />
+                </div>
               </FormControl>
-              <div className="px-3 pt-1 pb-0.5">
-                <MarkdownSupportedHint />
-              </div>
               <FormMessage />
             </FormItem>
           )}

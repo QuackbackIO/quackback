@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
-import { MarkdownSupportedHint } from '@/components/public/markdown-supported-hint'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 interface WidgetUser {
   id: string
@@ -13,7 +15,7 @@ interface WidgetUser {
 interface WidgetCommentFormProps {
   isIdentified: boolean
   user: WidgetUser | null
-  onSubmit: (content: string) => Promise<void>
+  onSubmit: (content: string, contentJson: TiptapContent | null) => Promise<void>
   identifyWithEmail: (email: string, name?: string) => Promise<boolean>
 }
 
@@ -30,6 +32,8 @@ export function WidgetCommentForm({
   const [name, setName] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const editorJsonRef = useRef<TiptapContent | null>(null)
+  const [editorResetKey, setEditorResetKey] = useState(0)
 
   const canSubmit = isIdentified
     ? commentText.trim().length > 0
@@ -59,8 +63,10 @@ export function WidgetCommentForm({
       }
 
       await ensureSessionThen(async () => {
-        await onSubmit(content)
+        await onSubmit(content, editorJsonRef.current)
         setCommentText('')
+        editorJsonRef.current = null
+        setEditorResetKey((k) => k + 1)
       })
     } catch (err) {
       setError(
@@ -88,25 +94,32 @@ export function WidgetCommentForm({
 
   return (
     <div className="mb-3">
-      <textarea
-        value={commentText}
-        onChange={(e) => setCommentText(e.target.value)}
-        placeholder={intl.formatMessage({
-          id: 'widget.commentForm.placeholder',
-          defaultMessage: 'Write a comment...',
-        })}
-        rows={2}
-        disabled={isSubmitting}
-        className="w-full min-h-[52px] max-h-[120px] resize-none rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 transition-colors"
-        onKeyDown={(e) => {
+      <div
+        data-testid="widget-comment-form-editor"
+        className="rounded-md border border-border/50 bg-muted/20"
+        onKeyDownCapture={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault()
-            handleSubmit()
+            void handleSubmit()
           }
         }}
-      />
-      <div className="mt-1 ms-0.5">
-        <MarkdownSupportedHint />
+      >
+        <RichTextEditor
+          key={editorResetKey}
+          value={commentText}
+          borderless
+          minHeight="52px"
+          features={COMMENT_EDITOR_FEATURES}
+          disabled={isSubmitting}
+          placeholder={intl.formatMessage({
+            id: 'widget.commentForm.placeholder',
+            defaultMessage: 'Write a comment...',
+          })}
+          onChange={(json, _html, markdown) => {
+            editorJsonRef.current = json as TiptapContent
+            setCommentText(markdown ?? '')
+          }}
+        />
       </div>
 
       {!isIdentified ? (

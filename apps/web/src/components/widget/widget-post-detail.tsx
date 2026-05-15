@@ -17,6 +17,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetCommentForm } from './widget-comment-form'
 import { WidgetPortalTitle } from './widget-portal-title'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { PostId } from '@quackback/ids'
 
 interface StatusInfo {
@@ -87,10 +88,10 @@ export function WidgetPostDetail({
 
   /** Submit a comment (root or reply). */
   const submitComment = useCallback(
-    async (content: string, parentId?: string) => {
+    async (content: string, contentJson: TiptapContent | null, parentId?: string) => {
       await ensureSessionThen(async () => {
         const result = await createCommentFn({
-          data: { postId, content, parentId },
+          data: { postId, content, contentJson: contentJson ?? undefined, parentId },
           headers: getWidgetAuthHeaders(),
         })
         emitEvent('comment:created', {
@@ -105,8 +106,8 @@ export function WidgetPostDetail({
   )
 
   const handleSubmitReply = useCallback(
-    async (content: string, parentId: string) => {
-      await submitComment(content, parentId)
+    async (content: string, contentJson: TiptapContent | null, parentId: string) => {
+      await submitComment(content, contentJson, parentId)
     },
     [submitComment]
   )
