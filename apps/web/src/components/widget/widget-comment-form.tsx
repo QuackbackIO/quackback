@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
+import { MarkdownSupportedHint } from '@/components/public/markdown-supported-hint'
 
 interface WidgetUser {
   id: string
@@ -104,6 +105,9 @@ export function WidgetCommentForm({
           }
         }}
       />
+      <div className="mt-1 ms-0.5">
+        <MarkdownSupportedHint />
+      </div>
 
       {!isIdentified ? (
         <div className="flex items-center gap-1.5 mt-1.5">

@@ -21,6 +21,7 @@ import { signOut } from '@/lib/client/auth-client'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { cn } from '@/lib/shared/utils'
+import { MarkdownSupportedHint } from './markdown-supported-hint'
 import type { PostId, CommentId } from '@quackback/ids'
 
 export type CreateCommentMutation = UseMutationResult<
@@ -206,6 +207,9 @@ export function CommentForm({
                       {...field}
                     />
                   </FormControl>
+                  <div className="px-3 pt-1 pb-0.5">
+                    <MarkdownSupportedHint />
+                  </div>
                   <FormMessage className="px-3" />
                 </FormItem>
               )}
@@ -429,6 +433,9 @@ export function CommentForm({
                   {...field}
                 />
               </FormControl>
+              <div className="px-3 pt-1 pb-0.5">
+                <MarkdownSupportedHint />
+              </div>
               <FormMessage />
             </FormItem>
           )}

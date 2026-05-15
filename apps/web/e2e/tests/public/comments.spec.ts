@@ -188,9 +188,7 @@ test.describe('Unauthenticated user — comments section', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('comments are sorted most-recent-first (newest comment appears first)', async ({
-    page,
-  }) => {
+  test('comments are sorted most-recent-first (newest comment appears first)', async ({ page }) => {
     const commentItems = page.locator('[id^="comment-"]')
     const count = await commentItems.count()
     if (count < 2) return // need at least two comments to test ordering
@@ -218,7 +216,8 @@ test.describe('Unauthenticated user — comments section', () => {
     // Navigate through posts until we find one with exactly 1 comment,
     // or accept that the seed data may not have exactly 1.  We verify the
     // grammar rule by checking whatever post we land on.
-    const headingText = (await page.getByRole('heading', { name: /\d+ comments?/i }).textContent()) ?? ''
+    const headingText =
+      (await page.getByRole('heading', { name: /\d+ comments?/i }).textContent()) ?? ''
     const match = headingText.match(/^(\d+)\s+(.+)$/)
     if (!match) return
 
@@ -319,7 +318,7 @@ test.describe('Authenticated user — comment form and submission', () => {
   })
 
   // -------------------------------------------------------------------------
-  test('after submit: new comment shows current user\'s name', async () => {
+  test("after submit: new comment shows current user's name", async () => {
     const page = await sharedContext.newPage()
     try {
       await goToFirstPost(page)
@@ -328,7 +327,10 @@ test.describe('Authenticated user — comment form and submission', () => {
       const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
       await textarea.fill(uniqueText)
 
-      await page.getByRole('button', { name: /^comment$/i }).first().click()
+      await page
+        .getByRole('button', { name: /^comment$/i })
+        .first()
+        .click()
       await expect(textarea).toHaveValue('', { timeout: 10000 })
 
       // Find the newly rendered comment
@@ -356,7 +358,10 @@ test.describe('Authenticated user — comment form and submission', () => {
       const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
       await textarea.fill(`Count increment test ${Date.now()}`)
 
-      await page.getByRole('button', { name: /^comment$/i }).first().click()
+      await page
+        .getByRole('button', { name: /^comment$/i })
+        .first()
+        .click()
       await expect(textarea).toHaveValue('', { timeout: 10000 })
 
       // Heading count must be beforeCount + 1
@@ -485,7 +490,10 @@ test.describe('Edge cases — comment content', () => {
       const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
       await textarea.fill(longText)
 
-      await page.getByRole('button', { name: /^comment$/i }).first().click()
+      await page
+        .getByRole('button', { name: /^comment$/i })
+        .first()
+        .click()
       await expect(textarea).toHaveValue('', { timeout: 10000 })
 
       // The full text (or at least its start) should appear in the list
@@ -505,7 +513,10 @@ test.describe('Edge cases — comment content', () => {
       const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
       await textarea.fill(specialText)
 
-      await page.getByRole('button', { name: /^comment$/i }).first().click()
+      await page
+        .getByRole('button', { name: /^comment$/i })
+        .first()
+        .click()
       await expect(textarea).toHaveValue('', { timeout: 10000 })
 
       // The emoji and text must render in the DOM (not escaped HTML entities visible as raw text)
@@ -528,7 +539,10 @@ test.describe('Edge cases — comment content', () => {
       const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
       await textarea.fill(multiLineText)
 
-      await page.getByRole('button', { name: /^comment$/i }).first().click()
+      await page
+        .getByRole('button', { name: /^comment$/i })
+        .first()
+        .click()
       await expect(textarea).toHaveValue('', { timeout: 10000 })
 
       // Both line fragments must appear in the rendered comment
@@ -632,7 +646,10 @@ test.describe('Comment editing', () => {
     const uniqueText = `Edit test ${Date.now()}`
     const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
     await textarea.fill(uniqueText)
-    await page.getByRole('button', { name: /^comment$/i }).first().click()
+    await page
+      .getByRole('button', { name: /^comment$/i })
+      .first()
+      .click()
     await expect(textarea).toHaveValue('', { timeout: 10000 })
     await expect(page.getByText(uniqueText)).toBeVisible({ timeout: 10000 })
     // Wait for this specific comment to receive a real server ID (not optimistic placeholder)
@@ -694,7 +711,10 @@ test.describe('Comment editing', () => {
 
       await comment.getByRole('button', { name: /^edit$/i }).click()
       await comment.getByTestId('edit-comment-textarea').fill('should not be saved')
-      await comment.getByRole('button', { name: /^cancel$/i }).first().click()
+      await comment
+        .getByRole('button', { name: /^cancel$/i })
+        .first()
+        .click()
 
       await expect(comment.getByTestId('edit-comment-textarea')).not.toBeVisible({ timeout: 5000 })
       await expect(comment.getByText(uniqueText)).toBeVisible()
@@ -779,6 +799,67 @@ test.describe('Comment editing', () => {
       await expect(comment.getByRole('button', { name: /^save$/i })).toBeDisabled({
         timeout: 5000,
       })
+    } finally {
+      await page.close()
+    }
+  })
+})
+
+// ===========================================================================
+// MARKDOWN RENDERING (authenticated)
+// ===========================================================================
+test.describe('Markdown comment rendering', () => {
+  test.setTimeout(90000)
+
+  let sharedContext: BrowserContext
+
+  test.beforeAll(async ({ browser }) => {
+    sharedContext = await browser.newContext()
+    const page = await sharedContext.newPage()
+    await authenticateViaOTP(page)
+    await page.close()
+  })
+
+  test.afterAll(async () => {
+    if (sharedContext) await sharedContext.close()
+  })
+
+  // -------------------------------------------------------------------------
+  test('markdown comment body renders as formatted DOM (heading, bold, link)', async () => {
+    const page = await sharedContext.newPage()
+    try {
+      await goToFirstPost(page)
+
+      // Unique marker keeps this test isolated from other comments in the list
+      const marker = `md-${Date.now()}`
+      const markdownBody = `## My heading ${marker}\n\nThis is **bold ${marker}** and a [link ${marker}](https://example.com).`
+
+      const textarea = page.locator('textarea[placeholder*="Write a comment" i]').first()
+      await textarea.fill(markdownBody)
+
+      // Submit via Ctrl+Enter (matches the existing keyboard-submit tests)
+      await textarea.press('Control+Enter')
+      await expect(textarea).toHaveValue('', { timeout: 10000 })
+
+      // Scope assertions to the new comment node so we don't collide with
+      // any markdown rendered by other comments / page chrome.
+      const newComment = page
+        .locator('[id^="comment-"]')
+        .filter({ hasText: `My heading ${marker}` })
+        .first()
+      await expect(newComment).toBeVisible({ timeout: 10000 })
+
+      // Heading rendered as <h2>
+      await expect(newComment.locator('h2', { hasText: `My heading ${marker}` })).toBeVisible()
+
+      // Bold marker rendered as <strong>
+      await expect(newComment.locator('strong', { hasText: `bold ${marker}` })).toBeVisible()
+
+      // Link rendered as <a href="https://example.com/"> — sanitizeUrl normalizes
+      // hrefs through URL.href, which appends a trailing slash on bare hostnames.
+      const link = newComment.locator('a', { hasText: `link ${marker}` })
+      await expect(link).toBeVisible()
+      await expect(link).toHaveAttribute('href', 'https://example.com/')
     } finally {
       await page.close()
     }
