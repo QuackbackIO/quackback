@@ -788,12 +788,41 @@ interface EmojiSuggestionListProps {
 
 const MAX_EMOJI_RESULTS = 12
 
+// Curated shortcodes shown the moment the user types `:`. Picked for the
+// long tail of comment reactions (joy, agreement, celebration). Ordering
+// here is the ordering in the dropdown.
+const DEFAULT_EMOJI_SHORTCODES = [
+  'smile',
+  'joy',
+  'heart_eyes',
+  'thinking',
+  'rolling_on_the_floor_laughing',
+  'face_with_tears_of_joy',
+  'thumbsup',
+  'thumbsdown',
+  'heart',
+  'fire',
+  'tada',
+  'rocket',
+] as const
+
+function lookupEmoji(shortcode: string): EmojiItem | undefined {
+  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(shortcode))
+}
+
 function filterEmojiItems(query: string): EmojiItem[] {
-  // Empty query → nothing (we don't want to spam a 1500-row dropdown the
-  // moment the user types `:`). Once they start typing a shortcode we
-  // surface matches.
   const lower = query.trim().toLowerCase()
-  if (!lower) return []
+  if (!lower) {
+    // Bare `:` opens the picker with a small curated set so users can pick
+    // without typing a shortcode. Falls back to defaultEmojis order if a
+    // curated shortcode isn't in the bundled set.
+    const defaults: EmojiItem[] = []
+    for (const shortcode of DEFAULT_EMOJI_SHORTCODES) {
+      const found = lookupEmoji(shortcode)
+      if (found) defaults.push(found)
+    }
+    return defaults
+  }
   const matches: EmojiItem[] = []
   for (const item of defaultEmojis) {
     if (!item.emoji) continue
