@@ -20,6 +20,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 
 /**
  * Server-safe extensions for markdown conversion.
@@ -91,32 +92,10 @@ const commentManager = new MarkdownManager({
   markedOptions: { gfm: true, breaks: true },
 })
 
-const DANGEROUS_HREF = /^\s*(javascript|data|vbscript):/i
-
-// TipTap's Link extension does not sanitize hrefs on the markdown parse path,
-// so walk the JSON and blank any href matching a dangerous scheme.
-function stripDangerousLinkHrefs(node: JSONContent): void {
-  if (Array.isArray(node.marks)) {
-    for (const mark of node.marks) {
-      if (
-        mark.type === 'link' &&
-        typeof mark.attrs?.href === 'string' &&
-        DANGEROUS_HREF.test(mark.attrs.href)
-      ) {
-        mark.attrs.href = ''
-      }
-    }
-  }
-  if (Array.isArray(node.content)) {
-    for (const child of node.content) stripDangerousLinkHrefs(child)
-  }
-}
-
 /**
  * Parse a comment-style markdown string into TipTap JSON.
  */
 export function commentMarkdownToTiptapJson(markdown: string): TiptapContent {
   const json = commentManager.parse(markdown) as TiptapContent
-  stripDangerousLinkHrefs(json as JSONContent)
-  return json
+  return sanitizeTiptapContent(json) as TiptapContent
 }
