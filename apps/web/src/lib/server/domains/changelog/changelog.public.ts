@@ -124,13 +124,15 @@ export async function listPublicChangelogs(params: {
 
   const conditions = publicChangelogConditions(now)
 
-  // Cursor-based pagination
+  // Cursor-based pagination. The lookup does NOT filter on deletedAt:
+  // if an admin deleted the cursor row between page load and "Load
+  // more", we still want its prior publishedAt to anchor the next page
+  // so the user doesn't get duplicates / a stuck list. The main
+  // results query below applies the full visibility filter, so the
+  // deleted row itself stays out of the returned items.
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
-      where: and(
-        eq(changelogEntries.id, cursor as ChangelogId),
-        isNull(changelogEntries.deletedAt)
-      ),
+      where: eq(changelogEntries.id, cursor as ChangelogId),
       columns: { publishedAt: true },
     })
     if (cursorEntry?.publishedAt) {

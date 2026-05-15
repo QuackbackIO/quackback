@@ -93,10 +93,12 @@ describe('listPublicChangelogs', () => {
     expect(isNull).toHaveBeenCalledWith(changelogEntriesTable.deletedAt)
   })
 
-  it('filters the cursor lookup to exclude soft-deleted entries', async () => {
+  it('keeps cursor pagination working when the anchor row was soft-deleted', async () => {
     const { listPublicChangelogs } = await import('../changelog.public')
-    const { isNull } = await import('@/lib/server/db')
+    const { eq, lt } = await import('@/lib/server/db')
 
+    // Cursor row still has its publishedAt because deleteChangelog
+    // preserves it precisely so pagination has an anchor.
     mockEntryFindFirst.mockResolvedValueOnce({
       publishedAt: new Date('2026-01-01'),
     })
@@ -104,22 +106,33 @@ describe('listPublicChangelogs', () => {
 
     await listPublicChangelogs({ cursor: 'cl_cursor' })
 
-    const deletedAtCalls = vi
-      .mocked(isNull)
-      .mock.calls.filter((args) => (args[0] as unknown) === changelogEntriesTable.deletedAt)
-    expect(deletedAtCalls.length).toBeGreaterThanOrEqual(2)
+    // The cursor lookup itself does NOT filter on deletedAt — it must
+    // find the row even if deleted, so we keep paginating past it.
+    const cursorEqCalls = vi
+      .mocked(eq)
+      .mock.calls.filter(
+        (args) => (args[0] as unknown) === changelogEntriesTable.id && args[1] === 'cl_cursor'
+      )
+    expect(cursorEqCalls.length).toBe(1)
+
+    // The pagination filter (lt publishedAt) was applied, so the user
+    // doesn't fall back to the first page.
+    const ltPublishedAtCalls = vi
+      .mocked(lt)
+      .mock.calls.filter((args) => (args[0] as unknown) === changelogEntriesTable.publishedAt)
+    expect(ltPublishedAtCalls.length).toBeGreaterThanOrEqual(1)
   })
 })
 
 describe('deleteChangelog', () => {
-  it('clears publishedAt when soft-deleting (defense-in-depth)', async () => {
+  it('sets deletedAt but preserves publishedAt so cursors stay valid', async () => {
     mockUpdateReturning.mockResolvedValueOnce([{ id: 'cl_1' }])
 
     const { deleteChangelog } = await import('../changelog.service')
     await deleteChangelog('cl_1' as ChangelogId)
 
-    expect(mockUpdateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ deletedAt: expect.any(Date), publishedAt: null })
-    )
+    const setArgs = mockUpdateSet.mock.calls[0][0] as Record<string, unknown>
+    expect(setArgs.deletedAt).toBeInstanceOf(Date)
+    expect('publishedAt' in setArgs).toBe(false)
   })
 })

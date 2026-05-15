@@ -229,15 +229,18 @@ export async function updateChangelog(
 // ============================================================================
 
 /**
- * Soft delete a changelog entry. Clears publishedAt so a public query that
- * forgets to filter on deletedAt still cannot serve the entry.
+ * Soft delete a changelog entry. publishedAt is preserved so cursor
+ * pagination in public read paths still has a valid anchor when the
+ * cursor row gets deleted mid-session. Visibility is enforced by the
+ * shared `publicChangelogConditions` helper, which every public read
+ * uses to filter out `deletedAt IS NOT NULL` rows.
  *
  * @param id - Changelog entry ID
  */
 export async function deleteChangelog(id: ChangelogId): Promise<void> {
   const result = await db
     .update(changelogEntries)
-    .set({ deletedAt: new Date(), publishedAt: null })
+    .set({ deletedAt: new Date() })
     .where(and(eq(changelogEntries.id, id), isNull(changelogEntries.deletedAt)))
     .returning()
 
