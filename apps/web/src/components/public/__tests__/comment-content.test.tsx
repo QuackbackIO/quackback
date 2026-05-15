@@ -1,6 +1,19 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
+
+// CommentContent wraps rendered content in MentionHoverCardOverlay, which
+// reads branding from the root route context. Stub the hook so the test
+// component tree doesn't need a real router.
+vi.mock('@tanstack/react-router', () => ({
+  useRouteContext: () => ({
+    settings: {
+      brandingData: { logoUrl: null, name: 'Acme' },
+      name: 'Acme',
+    },
+  }),
+}))
+
 import { CommentContent, hasMarkdownTokens } from '../comment-content'
 
 describe('hasMarkdownTokens', () => {
