@@ -7,9 +7,10 @@ import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
   sendChangelogPublishedEmail,
+  sendPostMentionEmail,
 } from '@quackback/email'
 import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
-import type { EventData } from '../types'
+import type { EventData, EventPostMentionedData } from '../types'
 import { isRetryableError } from '../hook-utils'
 export const emailHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
@@ -40,6 +41,18 @@ export const emailHook: HookHandler = {
           commenterName: cfg.commenterName!,
           commentPreview: cfg.commentPreview!,
           isTeamMember: cfg.isTeamMember ?? false,
+          workspaceName: cfg.workspaceName,
+          unsubscribeUrl,
+          logoUrl: cfg.logoUrl,
+        })
+      } else if (event.type === 'post.mentioned') {
+        const data = event.data as EventPostMentionedData
+        result = await sendPostMentionEmail({
+          to: email,
+          mentionerName: event.actor.displayName ?? '',
+          postTitle: data.postTitle,
+          excerpt: data.excerpt,
+          postUrl: data.postUrl,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
           logoUrl: cfg.logoUrl,
