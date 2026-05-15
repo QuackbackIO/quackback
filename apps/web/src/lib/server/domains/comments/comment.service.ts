@@ -20,7 +20,22 @@ import {
   dispatchPostStatusChanged,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
+import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
+
+/**
+ * Resolve the TipTap doc to store. UI clients send `contentJson` directly
+ * (the editor produces it natively); REST/API callers post only markdown,
+ * so we parse + sanitise on their behalf. Markdown stays the API source of
+ * truth; the JSON column is a render-time cache.
+ */
+function resolveContentJson(
+  content: string,
+  provided: TiptapContent | null | undefined
+): TiptapContent {
+  return provided ?? commentMarkdownToTiptapJson(content)
+}
 
 export async function createComment(
   input: CreateCommentInput,
@@ -100,6 +115,9 @@ export async function createComment(
   // Only for team members, root-level comments, with a valid statusId
   const shouldChangeStatus = !!(input.statusId && authorIsTeamMember && !input.parentId)
 
+  const trimmedContent = input.content.trim()
+  const contentJson = resolveContentJson(trimmedContent, input.contentJson)
+
   let comment: Comment
   let previousStatusName: string | null = null
   let newStatusName: string | null = null
@@ -126,7 +144,8 @@ export async function createComment(
         .insert(comments)
         .values({
           postId: input.postId,
-          content: input.content.trim(),
+          content: trimmedContent,
+          contentJson,
           parentId: input.parentId || null,
           principalId: author.principalId,
           isTeamMember: authorIsTeamMember,
@@ -157,7 +176,8 @@ export async function createComment(
         .insert(comments)
         .values({
           postId: input.postId,
-          content: input.content.trim(),
+          content: trimmedContent,
+          contentJson,
           parentId: input.parentId || null,
           principalId: author.principalId,
           isTeamMember: authorIsTeamMember,
@@ -265,7 +285,13 @@ export async function updateComment(
 
   // Build update data
   const updateData: Partial<Comment> = {}
-  if (input.content !== undefined) updateData.content = input.content.trim()
+  if (input.content !== undefined) {
+    const trimmed = input.content.trim()
+    updateData.content = trimmed
+    updateData.contentJson = resolveContentJson(trimmed, input.contentJson)
+  } else if (input.contentJson !== undefined) {
+    updateData.contentJson = input.contentJson
+  }
 
   // Update the comment
   const [updatedComment] = await db

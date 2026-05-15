@@ -4,6 +4,7 @@
 
 import type { PostId, CommentId, BoardId, PrincipalId, StatusId } from '@quackback/ids'
 import type { CommentStatusChange } from '@/lib/shared'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 /**
  * Input for creating a new comment
@@ -11,6 +12,10 @@ import type { CommentStatusChange } from '@/lib/shared'
 export interface CreateCommentInput {
   postId: PostId
   content: string
+  /** Pre-computed TipTap doc from the rich editor. Server derives one from
+   * `content` when omitted so API clients posting raw markdown still get the
+   * fast read path. */
+  contentJson?: TiptapContent | null
   parentId?: CommentId | null
   /** Optional status change to apply atomically with the comment */
   statusId?: StatusId | null
@@ -25,6 +30,7 @@ export interface CreateCommentInput {
  */
 export interface UpdateCommentInput {
   content?: string
+  contentJson?: TiptapContent | null
 }
 
 /**

@@ -442,6 +442,13 @@
       "when": 1778457600009,
       "tag": "0062_drop_sso_required_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1778457600010,
+      "tag": "0063_comment_content_json",
+      "breakpoints": true
     }
   ]
 }
