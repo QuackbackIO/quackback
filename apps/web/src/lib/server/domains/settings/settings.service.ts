@@ -36,6 +36,8 @@ import {
   wrapDbError,
   invalidateSettingsCache,
   normalizeWelcomeCardInput,
+  mergeWelcomeCard,
+  publicWelcomeCard,
 } from './settings.helpers'
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
@@ -601,13 +603,16 @@ export async function getPortalConfig(): Promise<PortalConfig> {
 export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
   console.log(`[domain:settings] updatePortalConfig`)
   try {
-    const normalized: UpdatePortalConfigInput = {
-      ...input,
-      welcomeCard: normalizeWelcomeCardInput(input.welcomeCard),
-    }
+    const normalizedWelcome = normalizeWelcomeCardInput(input.welcomeCard)
+    const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
+    delete inputWithoutWelcome.welcomeCard
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-    const updated = deepMerge(existing, normalized as Partial<PortalConfig>)
+    const updated = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
+    // welcomeCard.body must replace, not deep-merge — see mergeWelcomeCard.
+    if (normalizedWelcome) {
+      updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
+    }
 
     const hasAuthMethod = Object.values(updated.oauth).some(Boolean)
     if (!hasAuthMethod) {
@@ -753,11 +758,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       passthroughKeys
     )
     const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
       oauth: filteredOAuth,
       features: portalConfig.features,
       ...(customProviderNames && { customProviderNames }),
-      ...(portalConfig.welcomeCard && { welcomeCard: portalConfig.welcomeCard }),
+      ...(welcome && { welcomeCard: welcome }),
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicPortalConfig failed:`, error)
@@ -834,12 +840,15 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         oauth: filteredAuthOAuth,
         openSignup: authConfig.openSignup,
       },
-      publicPortalConfig: {
-        oauth: filteredPortalOAuth,
-        features: portalConfig.features,
-        ...(portalCustomNames && { customProviderNames: portalCustomNames }),
-        ...(portalConfig.welcomeCard && { welcomeCard: portalConfig.welcomeCard }),
-      },
+      publicPortalConfig: (() => {
+        const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+        return {
+          oauth: filteredPortalOAuth,
+          features: portalConfig.features,
+          ...(portalCustomNames && { customProviderNames: portalCustomNames }),
+          ...(welcome && { welcomeCard: welcome }),
+        }
+      })(),
       publicWidgetConfig: {
         enabled: widgetConfig.enabled,
         defaultBoard: widgetConfig.defaultBoard,

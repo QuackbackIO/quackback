@@ -61,25 +61,24 @@ function PortalSettingsPage() {
   const [isPending, startTransition] = useTransition()
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
 
-  const titleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const bodyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
   // Tracks whether the user has unflushed edits. While true, we skip
   // remote re-sync so a background refetch doesn't clobber the typed-but-
   // not-yet-saved value with the older server copy.
   const hasPendingEditsRef = useRef(false)
+  // Each save bumps this; only the latest save's resolution clears the
+  // pending flag, so an in-flight save returning while the user is still
+  // typing doesn't reopen the door to a stale background re-sync.
+  const saveSeqRef = useRef(0)
 
-  function clearPendingTimers() {
-    if (titleTimeoutRef.current) {
-      clearTimeout(titleTimeoutRef.current)
-      titleTimeoutRef.current = null
-    }
-    if (bodyTimeoutRef.current) {
-      clearTimeout(bodyTimeoutRef.current)
-      bodyTimeoutRef.current = null
+  function clearPendingTimer() {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
     }
   }
 
-  useEffect(() => clearPendingTimers, [])
+  useEffect(() => clearPendingTimer, [])
 
   // Re-sync local form state when the server-side config changes (background
   // refetch, another admin's edit, router invalidate) — but only if the user
@@ -93,44 +92,45 @@ function PortalSettingsPage() {
 
   const isBusy = saving || isPending
 
-  async function saveField(welcomeCard: Partial<PortalWelcomeCardData>) {
+  async function saveSnapshot(card: PortalWelcomeCardData) {
+    const seq = ++saveSeqRef.current
     setSaving(true)
     try {
-      await updatePortalConfigFn({ data: { welcomeCard } })
-      hasPendingEditsRef.current = false
-      startTransition(() => router.invalidate())
+      await updatePortalConfigFn({ data: { welcomeCard: card } })
+      if (seq === saveSeqRef.current) {
+        hasPendingEditsRef.current = false
+        startTransition(() => router.invalidate())
+      }
     } finally {
-      setSaving(false)
+      if (seq === saveSeqRef.current) setSaving(false)
     }
   }
 
+  function scheduleSave(card: PortalWelcomeCardData) {
+    hasPendingEditsRef.current = true
+    clearPendingTimer()
+    saveTimerRef.current = setTimeout(() => {
+      saveSnapshot(card)
+    }, DEBOUNCE_MS)
+  }
+
   function handleEnabledToggle(checked: boolean) {
-    // Toggling enabled is an immediate save — flush any in-flight title/body
-    // edits first so the debounce can't fire afterwards and silently
-    // overwrite the toggle's new state.
-    clearPendingTimers()
+    clearPendingTimer()
     setEnabled(checked)
-    hasPendingEditsRef.current = false
-    saveField({ enabled: checked, title, body })
+    // Toggling is immediate so admins see the public-portal state flip
+    // without waiting on a debounce.
+    saveSnapshot({ enabled: checked, title, body })
   }
 
   function handleTitleChange(value: string) {
     setTitle(value)
-    hasPendingEditsRef.current = true
-    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-    titleTimeoutRef.current = setTimeout(() => {
-      saveField({ title: value })
-    }, DEBOUNCE_MS)
+    scheduleSave({ enabled, title: value, body })
   }
 
   function handleBodyChange(json: JSONContent) {
     const next = json as TiptapContent
     setBody(next)
-    hasPendingEditsRef.current = true
-    if (bodyTimeoutRef.current) clearTimeout(bodyTimeoutRef.current)
-    bodyTimeoutRef.current = setTimeout(() => {
-      saveField({ body: next })
-    }, DEBOUNCE_MS)
+    scheduleSave({ enabled, title, body: next })
   }
 
   const previewCard: PortalWelcomeCardData = { enabled: true, title, body }

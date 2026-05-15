@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ValidationError } from '@/lib/shared/errors'
-import { normalizeWelcomeCardInput } from '../settings.helpers'
+import { mergeWelcomeCard, normalizeWelcomeCardInput, publicWelcomeCard } from '../settings.helpers'
+import { DEFAULT_PORTAL_CONFIG } from '../settings.types'
 
 describe('normalizeWelcomeCardInput', () => {
   it('returns the input unchanged when undefined', () => {
@@ -51,5 +52,64 @@ describe('normalizeWelcomeCardInput', () => {
       body: { type: 'notDoc' } as any,
     })
     expect(out?.body).toEqual({ type: 'doc' })
+  })
+})
+
+describe('mergeWelcomeCard', () => {
+  const seed = DEFAULT_PORTAL_CONFIG.welcomeCard!
+
+  it('returns existing when partial is undefined', () => {
+    expect(mergeWelcomeCard(seed, undefined)).toBe(seed)
+  })
+
+  it('overrides scalar fields shallowly', () => {
+    const out = mergeWelcomeCard(seed, { enabled: true, title: 'Hi' })
+    expect(out.enabled).toBe(true)
+    expect(out.title).toBe('Hi')
+    expect(out.body).toEqual(seed.body)
+  })
+
+  it('replaces the body wholesale rather than deep-merging it', () => {
+    const existing = {
+      enabled: true,
+      title: 'Old',
+      body: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'old text' }],
+          },
+        ],
+      },
+    }
+    const out = mergeWelcomeCard(existing, { body: { type: 'doc' } })
+    expect(out.body).toEqual({ type: 'doc' })
+    expect(out.body.content).toBeUndefined()
+    expect(out.title).toBe('Old')
+  })
+
+  it('falls back to defaults when there is no existing card', () => {
+    const out = mergeWelcomeCard(undefined, { enabled: true })
+    expect(out.enabled).toBe(true)
+    expect(out.title).toBe(seed.title)
+    expect(out.body).toEqual(seed.body)
+  })
+})
+
+describe('publicWelcomeCard', () => {
+  it('returns undefined when the card is undefined', () => {
+    expect(publicWelcomeCard(undefined)).toBeUndefined()
+  })
+
+  it('returns undefined when the card is disabled — never expose drafts', () => {
+    expect(
+      publicWelcomeCard({ enabled: false, title: 'draft', body: { type: 'doc' } })
+    ).toBeUndefined()
+  })
+
+  it('returns the card verbatim when enabled', () => {
+    const card = { enabled: true, title: 'Hi', body: { type: 'doc' } }
+    expect(publicWelcomeCard(card)).toEqual(card)
   })
 })
