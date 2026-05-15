@@ -13,6 +13,8 @@ import { Switch } from '@/components/ui/switch'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
+import { WarningBox } from '@/components/shared/warning-box'
+import { hasAnyPortalAuthMethod } from '@/components/auth/oauth-buttons'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
@@ -72,6 +74,13 @@ export function PortalAuthTab({
   ).length
   const isLastMethod = (id: string) => !!oauthState[id] && enabledMethodCount === 1
 
+  // The toggles enforce a last-method guard, but the state is still
+  // reachable through the config file, direct DB writes, or a legacy
+  // tenant whose only enabled flag is the retired `email` key. In any
+  // of those, surface the consequence so admins aren't surprised by a
+  // portal with no sign-in surface.
+  const noPortalAuthEnabled = !hasAnyPortalAuthMethod(oauthState)
+
   const save = async (patch: Record<string, boolean | undefined>) => {
     setSaving(true)
     try {
@@ -108,6 +117,19 @@ export function PortalAuthTab({
 
   return (
     <div className="space-y-6">
+      {noPortalAuthEnabled && (
+        <WarningBox
+          variant="warning"
+          title="No portal sign-in enabled"
+          description={
+            <>
+              Visitors can&apos;t sign in or sign up on your portal. Your team can still sign in at{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-[0.85em]">/admin</code>.
+            </>
+          }
+        />
+      )}
+
       {/* Card — Sign-in Methods */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm">
         <div className="px-6 py-4 border-b border-border/50">
