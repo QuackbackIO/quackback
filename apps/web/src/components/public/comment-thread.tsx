@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -28,6 +28,7 @@ import { CommentContent } from '@/components/public/comment-content'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
+import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
@@ -317,6 +318,15 @@ function CommentItem({
     (comment.contentJson as TiptapContent | null | undefined) ?? null
   )
   const [editError, setEditError] = useState<string | null>(null)
+
+  // Seed the edit editor from the comment's stored TipTap doc when present,
+  // falling back to a fresh parse of the markdown for legacy rows. Stable
+  // for the lifetime of one edit session so the value-sync effect doesn't
+  // fight the user's keystrokes.
+  const editInitialJson = useMemo<TiptapContent>(() => {
+    if (comment.contentJson) return comment.contentJson as TiptapContent
+    return commentMarkdownToTiptapJson(comment.content)
+  }, [comment.contentJson, comment.content])
 
   const editMutation = useEditComment({
     commentId: comment.id as CommentId,
@@ -613,7 +623,7 @@ function CommentItem({
             <div className="mt-1.5 ms-10">
               <div
                 data-testid="edit-comment-editor"
-                className="w-full max-w-lg"
+                className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors px-3 py-2"
                 onKeyDownCapture={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault()
@@ -628,8 +638,10 @@ function CommentItem({
                 }}
               >
                 <RichTextEditor
-                  value={editContent}
+                  value={editInitialJson}
+                  borderless
                   minHeight="64px"
+                  autofocus="end"
                   features={COMMENT_EDITOR_FEATURES}
                   disabled={editMutation.isPending}
                   onChange={(json, _html, markdown) => {

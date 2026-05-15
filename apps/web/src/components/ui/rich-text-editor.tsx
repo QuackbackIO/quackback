@@ -749,6 +749,9 @@ interface RichTextEditorProps {
   minHeight?: string
   borderless?: boolean
   toolbarPosition?: 'top' | 'none'
+  /** Where to place the cursor when the editor mounts ('end' is the common
+   * choice for edit forms; default is no autofocus). */
+  autofocus?: boolean | 'start' | 'end' | number
   /** Feature flags for enabling advanced features */
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
@@ -768,6 +771,7 @@ function RichTextEditorBase({
   minHeight = '120px',
   borderless = false,
   toolbarPosition = borderless ? 'none' : 'top',
+  autofocus = false,
   features = {},
   onImageUpload,
 }: RichTextEditorProps) {
@@ -840,6 +844,7 @@ function RichTextEditorBase({
     shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
     extensions,
     content: initialContentRef.current,
+    autofocus,
     editable: !disabled,
     onUpdate: ({ editor }) => {
       if (!onChange) return
