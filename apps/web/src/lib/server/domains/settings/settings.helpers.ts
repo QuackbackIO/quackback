@@ -5,6 +5,8 @@
 import { db } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { PORTAL_WELCOME_CARD_TITLE_MAX, type PortalWelcomeCard } from './settings.types'
 
 export type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
@@ -71,4 +73,32 @@ export function wrapDbError(operation: string, error: unknown): never {
 export async function invalidateSettingsCache(): Promise<void> {
   console.log(`[domain:settings] Invalidating settings cache`)
   await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
+}
+
+/**
+ * Normalize a partial `welcomeCard` update before it's merged into stored
+ * portalConfig. Trims the title, enforces the length cap, and runs the
+ * TipTap body through the standard sanitizer.
+ *
+ * @internal
+ */
+export function normalizeWelcomeCardInput(
+  input: Partial<PortalWelcomeCard> | undefined
+): Partial<PortalWelcomeCard> | undefined {
+  if (!input) return input
+  const normalized: Partial<PortalWelcomeCard> = { ...input }
+  if (typeof input.title === 'string') {
+    const trimmed = input.title.trim()
+    if (trimmed.length > PORTAL_WELCOME_CARD_TITLE_MAX) {
+      throw new ValidationError(
+        'WELCOME_CARD_TITLE_TOO_LONG',
+        `Welcome card title must be ${PORTAL_WELCOME_CARD_TITLE_MAX} characters or fewer`
+      )
+    }
+    normalized.title = trimmed
+  }
+  if (input.body !== undefined) {
+    normalized.body = sanitizeTiptapContent(input.body)
+  }
+  return normalized
 }

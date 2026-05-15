@@ -35,6 +35,7 @@ import {
   requireSettings,
   wrapDbError,
   invalidateSettingsCache,
+  normalizeWelcomeCardInput,
 } from './settings.helpers'
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
@@ -600,9 +601,13 @@ export async function getPortalConfig(): Promise<PortalConfig> {
 export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
   console.log(`[domain:settings] updatePortalConfig`)
   try {
+    const normalized: UpdatePortalConfigInput = {
+      ...input,
+      welcomeCard: normalizeWelcomeCardInput(input.welcomeCard),
+    }
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-    const updated = deepMerge(existing, input as Partial<PortalConfig>)
+    const updated = deepMerge(existing, normalized as Partial<PortalConfig>)
 
     const hasAuthMethod = Object.values(updated.oauth).some(Boolean)
     if (!hasAuthMethod) {
