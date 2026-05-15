@@ -819,6 +819,12 @@ function RichTextEditorBase({
   // edge case where a batched external reset (e.g. collapseForm → null) would
   // be incorrectly skipped by a stale boolean flag.
   const lastEmittedJsonRef = useRef<unknown>(null)
+  // Parallel guard for string-shaped callers (markdown). When the form's
+  // `value` is the markdown we just serialized, skip the sync so we don't
+  // bulldoze the user's typing — e.g. `# ` produces an empty heading whose
+  // markdown serialization is "", which without this guard would round-trip
+  // back through clearContent() and erase the heading they just created.
+  const lastEmittedMarkdownRef = useRef<string | null>(null)
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -844,13 +850,14 @@ function RichTextEditorBase({
       // Callers that only need json+html (widget, portal) skip the expensive
       // recursive tree-walk that @tiptap/markdown does on every keystroke.
       const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
+      lastEmittedMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,
   })
 
   // Sync external value changes into the editor.
-  // Skipped when the value is the exact object we just emitted via onUpdate.
+  // Skipped when the value is the exact object/string we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
 
@@ -860,9 +867,29 @@ function RichTextEditorBase({
     }
     lastEmittedJsonRef.current = null
 
-    if (value === '' || value === undefined) {
-      editor.commands.clearContent()
-    } else if (typeof value === 'object') {
+    if (typeof value === 'string') {
+      // The string path is for markdown-shaped callers (react-hook-form
+      // tracking a markdown field). If the form's value matches the markdown
+      // we just emitted, the user is the source of truth - don't bulldoze
+      // their doc. This matters for transient states like an empty heading
+      // (`# ` then nothing typed yet) where the markdown serializes to "".
+      if (value === lastEmittedMarkdownRef.current) {
+        lastEmittedMarkdownRef.current = null
+        return
+      }
+      lastEmittedMarkdownRef.current = null
+      if (value === '' && !editor.isEmpty) {
+        editor.commands.clearContent()
+      }
+      return
+    }
+
+    if (value === undefined) {
+      if (!editor.isEmpty) editor.commands.clearContent()
+      return
+    }
+
+    if (typeof value === 'object') {
       const currentContent = JSON.stringify(editor.getJSON())
       const newContent = JSON.stringify(value)
       if (currentContent !== newContent) {
