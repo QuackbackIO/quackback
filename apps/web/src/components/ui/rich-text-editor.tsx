@@ -20,6 +20,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
+import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
@@ -201,6 +202,7 @@ export function buildExtensions(
         ]
       : []),
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+    ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
     Markdown,
   ]
 }
@@ -234,6 +236,10 @@ export interface EditorFeatures {
   dividers?: boolean
   /** Enable YouTube/Figma/Loom embeds */
   embeds?: boolean
+  /** Enable `:` emoji picker (default: true). Uses TipTap's Unicode emoji
+   * set; emojis are inserted as nodes and serialize to native Unicode
+   * characters in markdown. */
+  emojiPicker?: boolean
 }
 
 // ============================================================================
@@ -740,6 +746,215 @@ function createSlashCommands(
   })
 }
 
+// ============================================================================
+// Emoji Picker (`:` trigger)
+// ============================================================================
+
+interface EmojiSuggestionListRef {
+  onKeyDown: (props: { event: KeyboardEvent }) => boolean
+}
+
+interface EmojiSuggestionListProps {
+  items: EmojiItem[]
+  command: (item: EmojiItem) => void
+}
+
+const MAX_EMOJI_RESULTS = 12
+
+function filterEmojiItems(query: string): EmojiItem[] {
+  // Empty query → nothing (we don't want to spam a 1500-row dropdown the
+  // moment the user types `:`). Once they start typing a shortcode we
+  // surface matches.
+  const lower = query.trim().toLowerCase()
+  if (!lower) return []
+  const matches: EmojiItem[] = []
+  for (const item of defaultEmojis) {
+    if (!item.emoji) continue
+    const hitsShortcode = item.shortcodes.some((s) => s.toLowerCase().includes(lower))
+    const hitsTag = item.tags?.some((t) => t.toLowerCase().includes(lower)) ?? false
+    if (hitsShortcode || hitsTag) {
+      matches.push(item)
+      if (matches.length >= MAX_EMOJI_RESULTS) break
+    }
+  }
+  return matches
+}
+
+const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
+  ({ items, command }, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0)
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    const selectItem = (index: number) => {
+      const item = items[index]
+      if (item) command(item)
+    }
+
+    const scrollToSelected = useCallback((index: number) => {
+      const container = containerRef.current
+      if (!container) return
+      const buttons = container.querySelectorAll('button')
+      const selectedButton = buttons[index]
+      if (selectedButton) {
+        selectedButton.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [])
+
+    useEffect(() => {
+      setSelectedIndex(0)
+    }, [items])
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: ({ event }) => {
+        if (event.key === 'ArrowUp') {
+          const next = (selectedIndex - 1 + items.length) % items.length
+          setSelectedIndex(next)
+          scrollToSelected(next)
+          return true
+        }
+        if (event.key === 'ArrowDown') {
+          const next = (selectedIndex + 1) % items.length
+          setSelectedIndex(next)
+          scrollToSelected(next)
+          return true
+        }
+        if (event.key === 'Enter') {
+          selectItem(selectedIndex)
+          return true
+        }
+        return false
+      },
+    }))
+
+    if (items.length === 0) return null
+
+    return (
+      <div
+        className="z-50 w-56 rounded-lg border bg-popover shadow-lg"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div ref={containerRef} className="p-0.5">
+          {items.map((item, index) => (
+            <button
+              key={item.name}
+              type="button"
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
+                'hover:bg-accent focus:bg-accent focus:outline-none',
+                index === selectedIndex && 'bg-accent'
+              )}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                selectItem(index)
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <span className="text-base leading-none">{item.emoji}</span>
+              <span className="truncate text-muted-foreground">:{item.shortcodes[0]}:</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+)
+EmojiSuggestionList.displayName = 'EmojiSuggestionList'
+
+function createEmojiExtension() {
+  return Emoji.configure({
+    enableEmoticons: true,
+    suggestion: {
+      items: ({ query }) => filterEmojiItems(query),
+      allow: ({ editor }) => !editor.isActive('codeBlock'),
+      render: () => {
+        let component: ReactRenderer<EmojiSuggestionListRef> | null = null
+        let floatingEl: HTMLDivElement | null = null
+
+        const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
+          if (!floatingEl || !clientRect) return
+          const rect = clientRect()
+          if (!rect) return
+          const virtualEl = { getBoundingClientRect: () => rect }
+          const { x, y } = await computePosition(virtualEl, floatingEl, {
+            strategy: 'fixed',
+            placement: 'bottom-start',
+            middleware: [offset(8), flip(), shift({ padding: 8 })],
+          })
+          Object.assign(floatingEl.style, { left: `${x}px`, top: `${y}px` })
+        }
+
+        return {
+          onStart: (props: SuggestionProps<EmojiItem>) => {
+            if (props.items.length === 0) return
+            component = new ReactRenderer(EmojiSuggestionList, {
+              props: {
+                items: props.items,
+                command: (item: EmojiItem) => props.command(item),
+              },
+              editor: props.editor,
+            })
+            floatingEl = document.createElement('div')
+            floatingEl.style.position = 'fixed'
+            floatingEl.style.zIndex = '50'
+            floatingEl.style.pointerEvents = 'auto'
+            floatingEl.appendChild(component.element)
+            document.body.appendChild(floatingEl)
+            updatePosition(props.clientRect ?? null)
+          },
+          onUpdate: (props: SuggestionProps<EmojiItem>) => {
+            // No matches → tear down so a bare `:` doesn't leave a stale
+            // dropdown floating.
+            if (props.items.length === 0) {
+              if (floatingEl) {
+                floatingEl.remove()
+                floatingEl = null
+              }
+              component?.destroy()
+              component = null
+              return
+            }
+            if (!component) {
+              component = new ReactRenderer(EmojiSuggestionList, {
+                props: {
+                  items: props.items,
+                  command: (item: EmojiItem) => props.command(item),
+                },
+                editor: props.editor,
+              })
+              floatingEl = document.createElement('div')
+              floatingEl.style.position = 'fixed'
+              floatingEl.style.zIndex = '50'
+              floatingEl.style.pointerEvents = 'auto'
+              floatingEl.appendChild(component.element)
+              document.body.appendChild(floatingEl)
+            } else {
+              component.updateProps({
+                items: props.items,
+                command: (item: EmojiItem) => props.command(item),
+              })
+            }
+            updatePosition(props.clientRect ?? null)
+          },
+          onKeyDown: (props: { event: KeyboardEvent }) => {
+            if (props.event.key === 'Escape') return true
+            return component?.ref?.onKeyDown(props) ?? false
+          },
+          onExit: () => {
+            if (floatingEl) {
+              floatingEl.remove()
+              floatingEl = null
+            }
+            component?.destroy()
+            component = null
+          },
+        }
+      },
+    },
+  })
+}
+
 interface RichTextEditorProps {
   value?: string | JSONContent
   onChange?: (json: JSONContent, html: string, markdown: string) => void
@@ -793,6 +1008,7 @@ function RichTextEditorBase({
       features.tables,
       features.embeds,
       features.slashMenu,
+      features.emojiPicker,
       onImageUpload,
       placeholder,
     ]
@@ -1125,6 +1341,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.tables === nf.tables &&
     pf.embeds === nf.embeds &&
     pf.slashMenu === nf.slashMenu &&
+    pf.emojiPicker === nf.emojiPicker &&
     pf.bubbleMenu === nf.bubbleMenu
   )
 })

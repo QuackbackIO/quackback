@@ -35,6 +35,7 @@ const ALLOWED_NODE_TYPES = new Set([
   'tableRow',
   'tableHeader',
   'tableCell',
+  'emoji',
 ])
 
 // Mark types that match the TipTap editor extensions
@@ -129,6 +130,18 @@ function sanitizeAttrs(
 
     case 'taskItem':
       return { checked: Boolean(attrs.checked) }
+
+    case 'emoji': {
+      // Emoji nodes ship the shortcode (`name`) and the Unicode character.
+      // Keep both as plain strings - everything else (HTML attrs, custom
+      // payloads from gitHubCustomEmojis-style overrides) is dropped.
+      const name = typeof attrs.name === 'string' ? attrs.name.slice(0, 64) : ''
+      const emoji = typeof attrs.emoji === 'string' ? attrs.emoji.slice(0, 16) : ''
+      const out: Record<string, unknown> = {}
+      if (name) out.name = name
+      if (emoji) out.emoji = emoji
+      return Object.keys(out).length > 0 ? out : undefined
+    }
 
     case 'orderedList':
       return attrs.start !== undefined

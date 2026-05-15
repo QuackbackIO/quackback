@@ -230,4 +230,15 @@ describe('commentMarkdownToTiptapJson', () => {
     const json = JSON.stringify(result)
     expect(json).toContain('"type":"hardBreak"')
   })
+
+  test('Unicode emoji characters in markdown survive as plain text', () => {
+    // The composer inserts emojis as native Unicode chars. When the
+    // markdown round-trips through the server parser (used by API clients
+    // that POST `content` only), the emoji must survive in the resulting
+    // doc — otherwise React renders empty paragraphs where users typed
+    // smileys.
+    const result = commentMarkdownToTiptapJson('Hello 😀 world!')
+    const json = JSON.stringify(result)
+    expect(json).toContain('😀')
+  })
 })

@@ -14,6 +14,7 @@ export const COMMENT_EDITOR_FEATURES: EditorFeatures = {
   blockquotes: true,
   bubbleMenu: true,
   slashMenu: true,
+  emojiPicker: true,
   images: false,
   tables: false,
   codeBlocks: false,

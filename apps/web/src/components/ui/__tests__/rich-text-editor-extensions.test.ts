@@ -94,6 +94,18 @@ describe('buildExtensions', () => {
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).not.toContain('slashCommands')
   })
+
+  it('includes emoji extension by default', () => {
+    const exts = buildExtensions({}, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).toContain('emoji')
+  })
+
+  it('omits emoji extension when emojiPicker is false', () => {
+    const exts = buildExtensions({ emojiPicker: false }, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('emoji')
+  })
 })
 
 describe('markdown serialization optimization', () => {

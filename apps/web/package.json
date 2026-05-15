@@ -62,6 +62,7 @@
     "@tiptap/core": "^3.22.3",
     "@tiptap/extension-bubble-menu": "^3.22.3",
     "@tiptap/extension-code-block-lowlight": "^3.22.3",
+    "@tiptap/extension-emoji": "3.22.3",
     "@tiptap/extension-image": "^3.22.3",
     "@tiptap/extension-link": "^3.22.3",
     "@tiptap/extension-placeholder": "^3.22.3",
