@@ -140,17 +140,10 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
 /**
  * True when the portal exposes at least one user-facing sign-in method
  * (password, magic link, any registered OAuth provider, or workspace
- * SSO via a verified domain). Used to hide the header's Log in / Sign
- * up buttons in fully-anonymous deployments where clicking them would
- * open a dialog with no usable path forward.
- *
- * `opts.ssoEnabled` is the auth-runtime view ('sso' present in
- * `registeredAuthProviders`), not just admin intent — a stale
- * `ssoOidc.enabled=true` with no platform credential should NOT keep
- * the buttons visible. `opts.hasVerifiedDomain` gates the SSO path on
- * actually having a domain match available, since the portal
- * dispatcher only routes to SSO when the typed email matches a
- * verified domain.
+ * SSO via a verified domain). Pass `ssoEnabled` from the auth-runtime
+ * view (e.g. `registeredAuthProviders.includes('sso')`), not raw
+ * `ssoOidc.enabled`, so a stale flag with no platform credential
+ * doesn't keep the buttons visible.
  */
 export function hasAnyPortalAuthMethod(
   authConfig: Record<string, boolean | undefined>,

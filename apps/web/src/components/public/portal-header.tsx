@@ -64,11 +64,8 @@ export function PortalHeader({
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
   const navItems = buildNavItems({ helpCenterEnabled })
 
-  // Hide Log in / Sign up when the admin has disabled every portal auth
-  // method — the dialog they'd open has no usable path forward. Team
-  // members can still reach /admin/login directly. Workspace SSO via a
-  // verified domain keeps the buttons visible because the portal email
-  // dispatcher will route those emails into the SSO flow.
+  // Hide Log in / Sign up when no portal sign-in surface is usable.
+  // Team members can still reach /admin/login directly.
   const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
     ssoEnabled: registeredAuthProviders?.includes('sso') ?? false,
     hasVerifiedDomain: (settings?.verifiedDomains ?? []).some((d) => d.verifiedAt !== null),

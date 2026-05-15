@@ -73,12 +73,9 @@ export function PortalAuthTab({
   ).length
   const isLastMethod = (id: string) => !!oauthState[id] && enabledMethodCount === 1
 
-  // True when nothing on the portal can actually sign a user in. Looks
-  // past the raw intent flags to what's *usable* today: password works
-  // standalone, magic link needs email delivery, and OAuth providers
-  // need their credentials saved. A flag like `google: true` with no
-  // platform credential still produces a "Not configured" tile, so it
-  // shouldn't count as a working sign-in surface for this warning.
+  // Gates on what's *usable* (intent flag AND credentials), not on raw
+  // intent — a `google: true` flag with no saved credential renders as
+  // a "Not configured" tile and isn't a working sign-in surface.
   const noPortalAuthEnabled = (() => {
     if (oauthState.password) return false
     if (oauthState.magicLink && emailConfigured) return false
