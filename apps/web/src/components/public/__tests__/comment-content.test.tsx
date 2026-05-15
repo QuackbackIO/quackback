@@ -31,10 +31,21 @@ describe('hasMarkdownTokens', () => {
     expect(hasMarkdownTokens('use `npm i` first')).toBe(true)
   })
 
-  it('detects bold and italic markers', () => {
+  it('detects bold and strikethrough markers', () => {
     expect(hasMarkdownTokens('this is **bold**')).toBe(true)
     expect(hasMarkdownTokens('this is __bold__')).toBe(true)
     expect(hasMarkdownTokens('this is ~~strike~~')).toBe(true)
+  })
+
+  it('detects single-delimiter italic', () => {
+    expect(hasMarkdownTokens('this is *italic*')).toBe(true)
+    expect(hasMarkdownTokens('this is _italic_')).toBe(true)
+  })
+
+  it('does not flag bare asterisks or underscores inside words', () => {
+    expect(hasMarkdownTokens('a*b*c')).toBe(false)
+    expect(hasMarkdownTokens('snake_case_variable')).toBe(false)
+    expect(hasMarkdownTokens('3 * 4 = 12')).toBe(false)
   })
 
   it('detects link syntax', () => {
@@ -62,6 +73,11 @@ describe('<CommentContent>', () => {
   it('renders bold via markdown syntax', () => {
     const { container } = render(<CommentContent content="this is **bold** here" />)
     expect(container.querySelector('strong')).not.toBeNull()
+  })
+
+  it('renders italic via single-asterisk markdown syntax', () => {
+    const { container } = render(<CommentContent content="this is *italic* here" />)
+    expect(container.querySelector('em')).not.toBeNull()
   })
 
   it('does not render an <img> for image markdown', () => {
