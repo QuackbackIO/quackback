@@ -855,10 +855,11 @@ test.describe('Markdown comment rendering', () => {
       // Bold marker rendered as <strong>
       await expect(newComment.locator('strong', { hasText: `bold ${marker}` })).toBeVisible()
 
-      // Link rendered as <a href="https://example.com">
+      // Link rendered as <a href="https://example.com/"> — sanitizeUrl normalizes
+      // hrefs through URL.href, which appends a trailing slash on bare hostnames.
       const link = newComment.locator('a', { hasText: `link ${marker}` })
       await expect(link).toBeVisible()
-      await expect(link).toHaveAttribute('href', 'https://example.com')
+      await expect(link).toHaveAttribute('href', 'https://example.com/')
     } finally {
       await page.close()
     }
