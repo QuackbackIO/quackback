@@ -93,6 +93,8 @@ const commentManager = new MarkdownManager({
 
 const DANGEROUS_HREF = /^\s*(javascript|data|vbscript):/i
 
+// TipTap's Link extension does not sanitize hrefs on the markdown parse path,
+// so walk the JSON and blank any href matching a dangerous scheme.
 function stripDangerousLinkHrefs(node: JSONContent): void {
   if (Array.isArray(node.marks)) {
     for (const mark of node.marks) {

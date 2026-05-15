@@ -213,6 +213,12 @@ describe('commentMarkdownToTiptapJson', () => {
     expect(json.toLowerCase()).not.toContain('javascript:')
   })
 
+  test('data: links are stripped', () => {
+    const result = commentMarkdownToTiptapJson('[click](data:text/html,<h1>x</h1>)')
+    const json = JSON.stringify(result)
+    expect(json.toLowerCase()).not.toContain('data:')
+  })
+
   test('script tags in markdown do not produce script nodes', () => {
     const result = commentMarkdownToTiptapJson('<script>alert(1)</script>\n\nHello')
     const json = JSON.stringify(result)
