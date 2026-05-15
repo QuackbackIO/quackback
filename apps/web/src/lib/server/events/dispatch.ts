@@ -125,6 +125,33 @@ export async function dispatchCommentCreated(
   })
 }
 
+export interface PostMentionedInput {
+  postId: PostId
+  postTitle: string
+  postUrl: string
+  mentionedPrincipalId: PrincipalId
+  mentioningPrincipalId: PrincipalId
+  excerpt: string
+}
+
+export async function dispatchPostMentioned(
+  actor: EventActor,
+  input: PostMentionedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.mentioned',
+    data: {
+      postId: input.postId,
+      postTitle: input.postTitle,
+      postUrl: input.postUrl,
+      mentionedPrincipalId: input.mentionedPrincipalId,
+      mentioningPrincipalId: input.mentioningPrincipalId,
+      excerpt: input.excerpt,
+    },
+  })
+}
+
 export async function dispatchPostUpdated(
   actor: EventActor,
   post: EventPostRef,
