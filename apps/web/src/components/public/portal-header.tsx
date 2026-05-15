@@ -57,7 +57,7 @@ export function PortalHeader({
   const router = useRouter()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const { session, settings, registeredAuthProviders } = useRouteContext({ from: '__root__' })
 
   const helpCenterEnabled =
     !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
@@ -66,8 +66,13 @@ export function PortalHeader({
 
   // Hide Log in / Sign up when the admin has disabled every portal auth
   // method — the dialog they'd open has no usable path forward. Team
-  // members and SSO users can still reach /admin/login directly.
-  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {})
+  // members can still reach /admin/login directly. Workspace SSO via a
+  // verified domain keeps the buttons visible because the portal email
+  // dispatcher will route those emails into the SSO flow.
+  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
+    ssoEnabled: registeredAuthProviders?.includes('sso') ?? false,
+    hasVerifiedDomain: (settings?.verifiedDomains ?? []).some((d) => d.verifiedAt !== null),
+  })
 
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover

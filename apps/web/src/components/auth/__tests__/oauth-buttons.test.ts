@@ -42,4 +42,31 @@ describe('hasAnyPortalAuthMethod', () => {
   it('ignores unknown provider keys that are not in the registry', () => {
     expect(hasAnyPortalAuthMethod({ password: false, magicLink: false, mystery: true })).toBe(false)
   })
+
+  it('returns true when SSO is registered and a verified domain exists', () => {
+    expect(
+      hasAnyPortalAuthMethod(
+        { password: false, magicLink: false },
+        { ssoEnabled: true, hasVerifiedDomain: true }
+      )
+    ).toBe(true)
+  })
+
+  it('returns false when SSO is registered but no verified domain is set', () => {
+    expect(
+      hasAnyPortalAuthMethod(
+        { password: false, magicLink: false },
+        { ssoEnabled: true, hasVerifiedDomain: false }
+      )
+    ).toBe(false)
+  })
+
+  it('returns false when a verified domain exists but SSO is not registered', () => {
+    expect(
+      hasAnyPortalAuthMethod(
+        { password: false, magicLink: false },
+        { ssoEnabled: false, hasVerifiedDomain: true }
+      )
+    ).toBe(false)
+  })
 })
