@@ -750,6 +750,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       oauth: filteredOAuth,
       features: portalConfig.features,
       ...(customProviderNames && { customProviderNames }),
+      ...(portalConfig.welcomeCard && { welcomeCard: portalConfig.welcomeCard }),
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicPortalConfig failed:`, error)
@@ -830,6 +831,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         oauth: filteredPortalOAuth,
         features: portalConfig.features,
         ...(portalCustomNames && { customProviderNames: portalCustomNames }),
+        ...(portalConfig.welcomeCard && { welcomeCard: portalConfig.welcomeCard }),
       },
       publicWidgetConfig: {
         enabled: widgetConfig.enabled,
