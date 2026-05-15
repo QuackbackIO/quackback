@@ -15,6 +15,7 @@ import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getInitials, cn } from '@/lib/shared/utils'
 import { CommentContent } from '@/components/public/comment-content'
+import { MarkdownSupportedHint } from '@/components/public/markdown-supported-hint'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { CommentReactionCount } from '@/lib/shared'
 
@@ -366,6 +367,9 @@ function WidgetCommentItem({
                     }
                   }}
                 />
+                <div className="mt-1 ms-0.5">
+                  <MarkdownSupportedHint />
+                </div>
                 <button
                   type="button"
                   onClick={handleSubmitReply}

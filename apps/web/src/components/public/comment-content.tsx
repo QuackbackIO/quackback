@@ -34,8 +34,10 @@ export function hasMarkdownTokens(text: string): boolean {
 export function CommentContent({ content, className }: CommentContentProps) {
   const isMarkdown = hasMarkdownTokens(content)
   const json = useMemo(
+    // isMarkdown is derived synchronously from content
+
     () => (isMarkdown ? commentMarkdownToTiptapJson(content) : null),
-    [content, isMarkdown]
+    [content]
   )
   if (!isMarkdown || !json) {
     return <p className={cn('whitespace-pre-wrap', className)}>{content}</p>
