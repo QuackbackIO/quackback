@@ -20,6 +20,9 @@ import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
+import { hydrateMentions } from './hydrate-mentions'
+import type { TiptapContent } from '@/lib/shared/db-types'
+import type { JSONContent } from '@tiptap/core'
 
 export async function getPublicPostDetail(
   postId: PostId,
@@ -257,6 +260,18 @@ export async function getPublicPostDetail(
 
   const rootComments = commentTree.map(mapToPublicComment)
 
+  // Re-resolve mention chips against the current principal.displayName so
+  // renamed users show up-to-date names. List views skip this; only the
+  // detail read paths pay the extra round-trip.
+  const hydratePublicCommentTree = async (node: PublicComment): Promise<PublicComment> => {
+    const hydratedContentJson = node.contentJson
+      ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
+      : node.contentJson
+    const hydratedReplies = await Promise.all(node.replies.map(hydratePublicCommentTree))
+    return { ...node, contentJson: hydratedContentJson, replies: hydratedReplies }
+  }
+  const hydratedRootComments = await Promise.all(rootComments.map(hydratePublicCommentTree))
+
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
     // Look up against the normalized list — `postResult.pinnedCommentId`
@@ -268,12 +283,15 @@ export async function getPublicPostDetail(
       // resolveAvatarUrl(avatarKey, avatarUrl) behavior the public API
       // expects. The mapped node only carries the resolved URL.
       const rawRow = commentsRaw.find((c) => c.id === toUuid(postResult.pinnedCommentId!))
+      const pinnedRaw =
+        (pinnedCommentData.contentJson as PinnedComment['contentJson'] | null | undefined) ?? null
+      const pinnedHydrated = pinnedRaw
+        ? ((await hydrateMentions(pinnedRaw as JSONContent)) as PinnedComment['contentJson'])
+        : null
       pinnedComment = {
         id: pinnedCommentData.id,
         content: pinnedCommentData.content,
-        contentJson:
-          (pinnedCommentData.contentJson as PinnedComment['contentJson'] | null | undefined) ??
-          null,
+        contentJson: pinnedHydrated,
         authorName: pinnedCommentData.authorName,
         principalId: pinnedCommentData.principalId,
         avatarUrl: rawRow
@@ -285,11 +303,15 @@ export async function getPublicPostDetail(
     }
   }
 
+  const hydratedPostContentJson = postResult.contentJson
+    ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
+    : postResult.contentJson
+
   return {
     id: postResult.id,
     title: postResult.title,
     content: postResult.content,
-    contentJson: postResult.contentJson,
+    contentJson: hydratedPostContentJson,
     statusId: postResult.statusId,
     voteCount: postResult.voteCount,
     authorName: postResult.authorName,
@@ -299,7 +321,7 @@ export async function getPublicPostDetail(
     board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
     tags: tagsResult,
     roadmaps: roadmapsResult,
-    comments: rootComments,
+    comments: hydratedRootComments,
     pinnedComment,
     pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as CommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,

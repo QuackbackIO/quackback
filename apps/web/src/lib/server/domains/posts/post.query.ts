@@ -25,6 +25,9 @@ import { type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
 import type { PostWithDetails, PinnedComment } from './post.types'
+import { hydrateMentions } from './hydrate-mentions'
+import type { JSONContent } from '@tiptap/core'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 /**
  * Get a post with full details including board, tags, and comment count
@@ -118,10 +121,14 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       }
     }
 
+    const pinnedRawContentJson = pinnedCommentData.contentJson ?? null
+    const pinnedHydratedContentJson = pinnedRawContentJson
+      ? ((await hydrateMentions(pinnedRawContentJson as JSONContent)) as TiptapContent | null)
+      : null
     pinnedComment = {
       id: pinnedCommentData.id,
       content: pinnedCommentData.content,
-      contentJson: pinnedCommentData.contentJson ?? null,
+      contentJson: pinnedHydratedContentJson,
       authorName: pinnedCommentData.author?.displayName ?? null,
       principalId: pinnedCommentData.principalId,
       avatarUrl,
@@ -130,10 +137,16 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     }
   }
 
+  // Hydrate mention labels on the post body so renamed users render correctly.
+  const hydratedPostContentJson = post.contentJson
+    ? ((await hydrateMentions(post.contentJson as JSONContent)) as TiptapContent | null)
+    : post.contentJson
+
   // Cast needed: columns selection omits heavy internal fields (embedding, searchVector,
   // etc.) that no caller reads, but PostWithDetails extends the full Post type.
   const postWithDetails = {
     ...post,
+    contentJson: hydratedPostContentJson,
     board: {
       id: board.id,
       name: board.name,
