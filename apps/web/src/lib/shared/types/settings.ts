@@ -11,6 +11,7 @@
 
 export type {
   PortalAuthMethods,
+  PortalConfig,
   PortalWelcomeCard,
   TenantSettings,
   HelpCenterConfig,

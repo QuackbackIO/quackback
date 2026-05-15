@@ -14,7 +14,7 @@ const richBody = {
       content: [{ type: 'text', text: 'Tell us what you would like to see next.' }],
     },
   ],
-} as const
+}
 
 describe('<PortalWelcomeCard>', () => {
   it('renders nothing when welcomeCard is undefined', () => {
