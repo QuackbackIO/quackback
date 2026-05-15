@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { cn } from '@/lib/shared/utils'
@@ -7,7 +8,7 @@ interface PortalWelcomeCardProps {
   welcomeCard: PortalWelcomeCardData | undefined
 }
 
-export function PortalWelcomeCard({ welcomeCard }: PortalWelcomeCardProps) {
+function PortalWelcomeCardImpl({ welcomeCard }: PortalWelcomeCardProps) {
   if (!welcomeCard?.enabled) return null
   const trimmedTitle = welcomeCard.title.trim()
   const hasTitle = trimmedTitle.length > 0
@@ -33,3 +34,8 @@ export function PortalWelcomeCard({ welcomeCard }: PortalWelcomeCardProps) {
     </section>
   )
 }
+
+// Body rendering goes through DOMPurify.sanitize and TipTap's
+// generateContentHTML, so memoize on the welcomeCard reference to keep
+// the admin live-preview cheap on title-only keystrokes.
+export const PortalWelcomeCard = memo(PortalWelcomeCardImpl)

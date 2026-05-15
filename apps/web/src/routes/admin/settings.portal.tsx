@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { MegaphoneIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { MegaphoneIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -35,11 +36,6 @@ export const Route = createFileRoute('/admin/settings/portal')({
   },
   component: PortalSettingsPage,
 })
-
-function InlineSpinner({ visible }: { visible: boolean }) {
-  if (!visible) return null
-  return <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-}
 
 function getInitialWelcomeCard(config: PortalConfig): PortalWelcomeCardData {
   return {
@@ -92,8 +88,8 @@ function PortalSettingsPage() {
 
   const isBusy = saving || isPending
 
-  async function saveSnapshot(card: PortalWelcomeCardData) {
-    const seq = ++saveSeqRef.current
+  async function saveSnapshot(card: PortalWelcomeCardData, claimedSeq?: number) {
+    const seq = claimedSeq ?? ++saveSeqRef.current
     setSaving(true)
     try {
       await updatePortalConfigFn({ data: { welcomeCard: card } })
@@ -109,8 +105,13 @@ function PortalSettingsPage() {
   function scheduleSave(card: PortalWelcomeCardData) {
     hasPendingEditsRef.current = true
     clearPendingTimer()
+    // Reserve the seq slot now so an in-flight earlier save (e.g. a toggle
+    // fired immediately before this debounce armed) can't resolve with a
+    // matching seq and prematurely clear `hasPendingEditsRef` while the
+    // typed-but-not-yet-saved value is still queued.
+    const claimedSeq = ++saveSeqRef.current
     saveTimerRef.current = setTimeout(() => {
-      saveSnapshot(card)
+      saveSnapshot(card, claimedSeq)
     }, DEBOUNCE_MS)
   }
 
@@ -133,7 +134,10 @@ function PortalSettingsPage() {
     scheduleSave({ enabled, title, body: next })
   }
 
-  const previewCard: PortalWelcomeCardData = { enabled: true, title, body }
+  const previewCard = useMemo<PortalWelcomeCardData>(
+    () => ({ enabled: true, title, body }),
+    [title, body]
+  )
   const isPreviewEmpty = !title.trim() && isEmptyTiptapDoc(body)
 
   return (
