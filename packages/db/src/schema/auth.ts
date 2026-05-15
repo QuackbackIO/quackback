@@ -219,16 +219,8 @@ export const settings = pgTable('settings', {
    */
   headerDisplayName: text('header_display_name'),
   /**
-   * Setup/onboarding state tracking (JSON)
-   * Structure: {
-   *   version: number,           // Schema version for migrations
-   *   steps: {
-   *     core: boolean,           // Core schema setup complete
-   *     statuses: boolean,       // Default statuses created
-   *     boards: boolean,         // At least one board created or skipped
-   *   },
-   *   completedAt?: string,      // ISO timestamp when onboarding was fully completed
-   * }
+   * Setup/onboarding state tracking (JSON). See {@link SetupState} in
+   * packages/db/src/types.ts for the source-of-truth shape.
    */
   setupState: text('setup_state'),
   /**

@@ -9,9 +9,9 @@ import {
 } from '@quackback/ids'
 import type { BoardId, TagId } from '@quackback/ids'
 import {
+  getSetupState,
   isOnboardingComplete as checkComplete,
   type BoardSettings,
-  type SetupState,
 } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
@@ -616,11 +616,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
 
       // Get settings to check setup state
       const currentSettings = await getSettings()
-      const setupState: SetupState | null = currentSettings?.setupState
-        ? JSON.parse(currentSettings.setupState)
-        : null
-
-      // Check if onboarding is complete based on setup state
+      const setupState = getSetupState(currentSettings?.setupState ?? null)
       const isOnboardingComplete = checkComplete(setupState)
 
       console.log(

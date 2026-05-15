@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
-import { visibleSteps } from './onboarding-steps'
+import { ALL_ONBOARDING_STEPS } from './onboarding-steps'
 
 /**
  * Shared layout for all onboarding steps.
@@ -28,14 +28,11 @@ export const Route = createFileRoute('/onboarding/_layout')({
 
 function OnboardingHeader() {
   const location = useLocation()
-  const context = Route.useRouteContext()
   const currentPath = location.pathname
 
-  const setupState = getSetupState(context.settings?.settings?.setupState ?? null)
-  const hasSession = !!context.session?.user
-  const steps = visibleSteps({ hasSession, setupState })
+  const steps = ALL_ONBOARDING_STEPS
   const currentStepIndex = steps.findIndex((s) => s.path === currentPath)
-  const showSteps = currentStepIndex !== -1 && steps.length > 0
+  const showSteps = currentStepIndex !== -1
 
   return (
     <div className="flex flex-col items-center">

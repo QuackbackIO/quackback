@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { setupWorkspaceFn } from '@/lib/server/functions/onboarding'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
-import { getSettings } from '@/lib/server/functions/workspace'
 import { pickOnboardingStep } from './onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
@@ -39,10 +38,8 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       })
     }
 
-    const settings = await getSettings()
-
     return {
-      existingWorkspaceName: settings?.name ?? '',
+      existingWorkspaceName: context.settings?.settings?.name ?? '',
       useCase: state.setupState.useCase,
     }
   },
