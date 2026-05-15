@@ -13,15 +13,20 @@ export function isEmptyTiptapDoc(doc: TiptapContent | undefined): boolean {
   if (!doc) return true
   const content = doc.content
   if (!content || content.length === 0) return true
-  return content.every(isEmptyNode)
+  return content.every((child) => isEmptyNode(child, 0))
 }
 
-function isEmptyNode(node: TiptapContent): boolean {
+// Stack-safety guard for pathological inputs reaching this helper before
+// server-side sanitization (e.g. cached SSR payloads, third-party clients).
+const MAX_DEPTH = 50
+
+function isEmptyNode(node: TiptapContent, depth: number): boolean {
+  if (depth > MAX_DEPTH) return false
   // Text-bearing block: empty if all text descendants are whitespace.
   if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'blockquote') {
     const children = node.content
     if (!children || children.length === 0) return true
-    return children.every(isEmptyNode)
+    return children.every((child) => isEmptyNode(child, depth + 1))
   }
   if (node.type === 'text') {
     return (node.text ?? '').trim().length === 0

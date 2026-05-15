@@ -617,21 +617,28 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
       )
     }
 
-    // Provider registration in `auth/index.ts` reads
-    // portalConfig.oauth at build time — toggling a portal OAuth
-    // provider must invalidate other pods' Better-Auth instances or
-    // they'll keep serving the stale provider list until cache TTL.
-    // Mirrors the bump+resetAuth pattern in updateAuthConfig.
-    const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
-    const { resetAuth } = await import('@/lib/server/auth')
-    await db.transaction(async (tx) => {
-      await tx
+    // Provider registration in `auth/index.ts` reads portalConfig.oauth at
+    // build time — toggling a portal OAuth provider must invalidate other
+    // pods' Better-Auth instances or they'll keep serving the stale provider
+    // list until cache TTL. Skip the bump for non-oauth edits (e.g. the
+    // welcome card debounce-saves) to avoid an auth rebuild per keystroke.
+    if (input.oauth !== undefined) {
+      const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+      const { resetAuth } = await import('@/lib/server/auth')
+      await db.transaction(async (tx) => {
+        await tx
+          .update(settings)
+          .set({ portalConfig: JSON.stringify(updated) })
+          .where(eq(settings.id, org.id))
+        await bumpAuthConfigVersionInTx(tx)
+      })
+      resetAuth()
+    } else {
+      await db
         .update(settings)
         .set({ portalConfig: JSON.stringify(updated) })
         .where(eq(settings.id, org.id))
-      await bumpAuthConfigVersionInTx(tx)
-    })
-    resetAuth()
+    }
     await invalidateSettingsCache()
     return updated
   } catch (error) {

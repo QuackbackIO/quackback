@@ -20,6 +20,7 @@ import type {
   PortalWelcomeCard as PortalWelcomeCardData,
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 
 const DEBOUNCE_MS = 800
 
@@ -62,13 +63,33 @@ function PortalSettingsPage() {
 
   const titleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const bodyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Tracks whether the user has unflushed edits. While true, we skip
+  // remote re-sync so a background refetch doesn't clobber the typed-but-
+  // not-yet-saved value with the older server copy.
+  const hasPendingEditsRef = useRef(false)
 
-  useEffect(() => {
-    return () => {
-      if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-      if (bodyTimeoutRef.current) clearTimeout(bodyTimeoutRef.current)
+  function clearPendingTimers() {
+    if (titleTimeoutRef.current) {
+      clearTimeout(titleTimeoutRef.current)
+      titleTimeoutRef.current = null
     }
-  }, [])
+    if (bodyTimeoutRef.current) {
+      clearTimeout(bodyTimeoutRef.current)
+      bodyTimeoutRef.current = null
+    }
+  }
+
+  useEffect(() => clearPendingTimers, [])
+
+  // Re-sync local form state when the server-side config changes (background
+  // refetch, another admin's edit, router invalidate) — but only if the user
+  // has nothing in-flight, so we never overwrite their unsaved input.
+  useEffect(() => {
+    if (hasPendingEditsRef.current) return
+    setEnabled(initial.enabled)
+    setTitle(initial.title)
+    setBody(initial.body)
+  }, [initial])
 
   const isBusy = saving || isPending
 
@@ -76,6 +97,7 @@ function PortalSettingsPage() {
     setSaving(true)
     try {
       await updatePortalConfigFn({ data: { welcomeCard } })
+      hasPendingEditsRef.current = false
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)
@@ -83,12 +105,18 @@ function PortalSettingsPage() {
   }
 
   function handleEnabledToggle(checked: boolean) {
+    // Toggling enabled is an immediate save — flush any in-flight title/body
+    // edits first so the debounce can't fire afterwards and silently
+    // overwrite the toggle's new state.
+    clearPendingTimers()
     setEnabled(checked)
-    saveField({ enabled: checked })
+    hasPendingEditsRef.current = false
+    saveField({ enabled: checked, title, body })
   }
 
   function handleTitleChange(value: string) {
     setTitle(value)
+    hasPendingEditsRef.current = true
     if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
     titleTimeoutRef.current = setTimeout(() => {
       saveField({ title: value })
@@ -98,6 +126,7 @@ function PortalSettingsPage() {
   function handleBodyChange(json: JSONContent) {
     const next = json as TiptapContent
     setBody(next)
+    hasPendingEditsRef.current = true
     if (bodyTimeoutRef.current) clearTimeout(bodyTimeoutRef.current)
     bodyTimeoutRef.current = setTimeout(() => {
       saveField({ body: next })
@@ -105,6 +134,7 @@ function PortalSettingsPage() {
   }
 
   const previewCard: PortalWelcomeCardData = { enabled: true, title, body }
+  const isPreviewEmpty = !title.trim() && isEmptyTiptapDoc(body)
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -184,11 +214,12 @@ function PortalSettingsPage() {
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Preview</p>
             <div className="rounded-lg border border-dashed border-border/60 bg-background/50 p-4">
-              <PortalWelcomeCard welcomeCard={previewCard} />
-              {!title.trim() && !previewCard.body?.content?.length && (
+              {isPreviewEmpty ? (
                 <p className="text-xs text-muted-foreground italic">
                   Add a title or message to see the welcome card preview
                 </p>
+              ) : (
+                <PortalWelcomeCard welcomeCard={previewCard} />
               )}
             </div>
           </div>
