@@ -7,6 +7,7 @@ import {
 } from '@/lib/server/functions/portal'
 import { getVoteSidebarDataFn, getVotedPostsFn } from '@/lib/server/functions/public-posts'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 /**
  * Comment type for client components (Date fields may be strings after serialization)
@@ -14,7 +15,7 @@ import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 export interface PublicCommentView {
   id: CommentId
   content: string
-  contentJson?: unknown
+  contentJson?: TiptapContent | null
   authorName: string | null
   principalId: string | null
   createdAt: Date | string
@@ -36,7 +37,7 @@ export interface PublicCommentView {
 export interface PinnedCommentView {
   id: CommentId
   content: string
-  contentJson?: unknown
+  contentJson?: TiptapContent | null
   authorName: string | null
   principalId: PrincipalId | null
   avatarUrl: string | null

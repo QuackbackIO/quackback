@@ -21,6 +21,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { dispatchCommentUpdated, buildEventActor } from '@/lib/server/events/dispatch'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentPermissionCheckResult } from './comment.types'
 
@@ -197,7 +198,12 @@ export async function userEditComment(
   }
 
   const trimmed = content.trim()
-  const nextContentJson = options?.contentJson ?? commentMarkdownToTiptapJson(trimmed)
+  // Sanitize caller-supplied JSON before storage so the render fast-path
+  // can trust it. See resolveContentJson in comment.service.ts for the
+  // same policy on creates.
+  const nextContentJson = options?.contentJson
+    ? sanitizeTiptapContent(options.contentJson)
+    : commentMarkdownToTiptapJson(trimmed)
 
   const updatedComment = await db.transaction(async (tx) => {
     if (actor.principalId) {

@@ -127,14 +127,15 @@ describe('PATCH /api/v1/comments/:commentId', () => {
     expect(json.data.authorName).toBe('Test User')
   })
 
-  it('calls userEditComment with commentId, content, and actor role', async () => {
+  it('calls userEditComment with commentId, content, actor, and contentJson options', async () => {
     const request = makeRequest('PATCH', { content: 'Hello world' })
     await handlers.PATCH({ request, params: { commentId: COMMENT_ID_STR } })
 
     expect(mockUserEditComment).toHaveBeenCalledWith(
       COMMENT_ID_STR,
       'Hello world',
-      expect.objectContaining({ principalId: PRINCIPAL_ID })
+      expect.objectContaining({ principalId: PRINCIPAL_ID }),
+      expect.objectContaining({ contentJson: undefined })
     )
   })
 

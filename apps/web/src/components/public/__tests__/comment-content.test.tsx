@@ -119,4 +119,23 @@ describe('<CommentContent>', () => {
     const { container } = render(<CommentContent content="**bold**" contentJson={null} />)
     expect(container.querySelector('strong')).not.toBeNull()
   })
+
+  it('renders emoji nodes inside contentJson (Unicode char survives the JSON fast-path)', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Looks good ' },
+            { type: 'emoji', attrs: { name: 'thumbsup', emoji: '👍' } },
+          ],
+        },
+      ],
+    }
+    const { container } = render(<CommentContent content="Looks good 👍" contentJson={json} />)
+    // The emoji char must appear in the rendered output - regression test for
+    // RichTextContent's default branch dropping unrecognised leaf nodes.
+    expect(container.textContent).toContain('👍')
+  })
 })

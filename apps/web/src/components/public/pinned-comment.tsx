@@ -38,12 +38,7 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
           </div>
           <CommentContent
             content={comment.content}
-            contentJson={
-              (comment.contentJson as
-                | import('@/lib/shared/db-types').TiptapContent
-                | null
-                | undefined) ?? null
-            }
+            contentJson={comment.contentJson ?? null}
             className="text-sm text-foreground/90 leading-relaxed"
           />
         </div>

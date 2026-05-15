@@ -275,12 +275,7 @@ function WidgetCommentItem({
         {/* Content */}
         <CommentContent
           content={comment.content}
-          contentJson={
-            (comment.contentJson as
-              | import('@/lib/shared/db-types').TiptapContent
-              | null
-              | undefined) ?? null
-          }
+          contentJson={comment.contentJson ?? null}
           className="text-xs text-foreground/90 mt-1 ms-7 leading-relaxed"
         />
 

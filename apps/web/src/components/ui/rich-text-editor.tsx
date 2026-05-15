@@ -2283,6 +2283,18 @@ function generateContentHTML(content: JSONContent): string {
       case 'hardBreak':
         return '<br>'
 
+      case 'emoji': {
+        // Emoji is a leaf node — the Unicode char lives on attrs.emoji.
+        // Sanitize-tiptap caps the field at 16 chars and the picker only
+        // inserts items from the bundled Unicode set, but we still HTML-
+        // escape here for defence-in-depth.
+        const ch = String(node.attrs?.emoji ?? '')
+        const escaped = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const name = escapeHtmlAttr(String(node.attrs?.name ?? ''))
+        const dataNameAttr = name ? ` data-name="${name}"` : ''
+        return `<span data-type="emoji"${dataNameAttr}>${escaped}</span>`
+      }
+
       default:
         // For unknown nodes, try to render their content
         return node.content?.map(renderNode).join('') ?? ''
@@ -2342,6 +2354,8 @@ const DOMPURIFY_CONFIG = {
     'type',
     'checked',
     'disabled',
+    'data-type',
+    'data-name',
   ],
   ALLOW_DATA_ATTR: false,
   ADD_TAGS: ['iframe'],

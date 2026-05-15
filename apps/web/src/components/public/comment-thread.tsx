@@ -314,17 +314,12 @@ function CommentItem({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(comment.content)
-  const editJsonRef = useRef<TiptapContent | null>(
-    (comment.contentJson as TiptapContent | null | undefined) ?? null
-  )
+  const editJsonRef = useRef<TiptapContent | null>(comment.contentJson ?? null)
   const [editError, setEditError] = useState<string | null>(null)
 
-  // Seed the edit editor from the comment's stored TipTap doc when present,
-  // falling back to a fresh parse of the markdown for legacy rows. Stable
-  // for the lifetime of one edit session so the value-sync effect doesn't
-  // fight the user's keystrokes.
+  // Stored doc preferred; legacy rows fall back to a markdown parse.
   const editInitialJson = useMemo<TiptapContent>(() => {
-    if (comment.contentJson) return comment.contentJson as TiptapContent
+    if (comment.contentJson) return comment.contentJson
     return commentMarkdownToTiptapJson(comment.content)
   }, [comment.contentJson, comment.content])
 
@@ -336,14 +331,6 @@ function CommentItem({
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
-
-  useEffect(() => {
-    if (isEditing) {
-      // Seed the JSON ref from the comment's stored doc so a save without
-      // further edits doesn't accidentally clear contentJson on the server.
-      editJsonRef.current = (comment.contentJson as TiptapContent | null | undefined) ?? null
-    }
-  }, [isEditing, comment.contentJson])
 
   const isDeleted = !!comment.deletedAt
   const canNest = depth < MAX_NESTING_DEPTH
@@ -631,8 +618,7 @@ function CommentItem({
                   } else if (e.key === 'Escape') {
                     setIsEditing(false)
                     setEditContent(comment.content)
-                    editJsonRef.current =
-                      (comment.contentJson as TiptapContent | null | undefined) ?? null
+                    editJsonRef.current = comment.contentJson ?? null
                     setEditError(null)
                   }
                 }}
@@ -676,8 +662,7 @@ function CommentItem({
                   onClick={() => {
                     setIsEditing(false)
                     setEditContent(comment.content)
-                    editJsonRef.current =
-                      (comment.contentJson as TiptapContent | null | undefined) ?? null
+                    editJsonRef.current = comment.contentJson ?? null
                     setEditError(null)
                   }}
                   disabled={editMutation.isPending}
@@ -693,12 +678,7 @@ function CommentItem({
           ) : (
             <CommentContent
               content={comment.content}
-              contentJson={
-                (comment.contentJson as
-                  | import('@/lib/shared/db-types').TiptapContent
-                  | null
-                  | undefined) ?? null
-              }
+              contentJson={comment.contentJson ?? null}
               className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
             />
           )}

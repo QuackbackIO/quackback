@@ -21,6 +21,7 @@ import {
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
 
@@ -29,12 +30,18 @@ import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from
  * (the editor produces it natively); REST/API callers post only markdown,
  * so we parse + sanitise on their behalf. Markdown stays the API source of
  * truth; the JSON column is a render-time cache.
+ *
+ * Provided JSON is sanitised before storage: the read path prefers
+ * contentJson, so a caller who supplied innocuous `content` and a wholly
+ * different JSON shape would otherwise be able to render arbitrary nodes
+ * regardless of the 5,000-char content cap.
  */
 function resolveContentJson(
   content: string,
   provided: TiptapContent | null | undefined
 ): TiptapContent {
-  return provided ?? commentMarkdownToTiptapJson(content)
+  if (provided) return sanitizeTiptapContent(provided)
+  return commentMarkdownToTiptapJson(content)
 }
 
 export async function createComment(

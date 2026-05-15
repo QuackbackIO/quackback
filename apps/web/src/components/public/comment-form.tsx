@@ -101,12 +101,11 @@ export function CommentForm({
     },
   })
 
-  // RichTextEditor produces TipTap JSON natively; we stash it here and send
-  // alongside the markdown string so the server can store both without
-  // re-parsing on the write path.
   const editorJsonRef = useRef<TiptapContent | null>(null)
-  // Reset key bumps to force the editor to remount with empty content after
-  // a successful submit (RichTextEditor only resets when `value` flips to '').
+  // Bumping the key on submit force-remounts the editor with a fresh doc.
+  // `form.reset()` flips field.value to '' which would clear via value-sync,
+  // but TipTap's empty-doc model leaves a stale `<p></p>` node that traps
+  // the cursor mid-edit; remount is the cleanest reset.
   const [editorResetKey, setEditorResetKey] = useState(0)
 
   const isSubmitting = createComment?.isPending ?? false
