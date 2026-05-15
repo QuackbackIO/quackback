@@ -42,6 +42,10 @@ import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { extractMentions, extractMentionExcerpts } from './extract-mentions'
+import { syncPostMentions } from './sync-post-mentions'
+import { buildPostUrl } from '@/lib/server/integrations/message-utils'
+import { getBaseUrl } from '@/lib/server/config'
 
 /**
  * Create a new post
@@ -197,6 +201,21 @@ export async function createPost(
       type: 'post.created',
       metadata: { boardName: board.name },
     })
+
+    // Record + dispatch @-mentions extracted from the rich-text body.
+    if (post.contentJson) {
+      const mentionedIds = extractMentions(post.contentJson)
+      if (mentionedIds.size > 0) {
+        await syncPostMentions({
+          postId: post.id,
+          postTitle: post.title,
+          postUrl: buildPostUrl(getBaseUrl(), board.slug, post.id),
+          mentionedIds,
+          excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
+          actor: buildEventActor(author),
+        })
+      }
+    }
   }
 
   return { ...post, boardSlug: board.slug }
