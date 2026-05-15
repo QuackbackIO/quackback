@@ -14,6 +14,7 @@ import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 export interface PublicCommentView {
   id: CommentId
   content: string
+  contentJson?: unknown
   authorName: string | null
   principalId: string | null
   createdAt: Date | string
@@ -35,6 +36,7 @@ export interface PublicCommentView {
 export interface PinnedCommentView {
   id: CommentId
   content: string
+  contentJson?: unknown
   authorName: string | null
   principalId: PrincipalId | null
   avatarUrl: string | null

@@ -121,6 +121,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     pinnedComment = {
       id: pinnedCommentData.id,
       content: pinnedCommentData.content,
+      contentJson: pinnedCommentData.contentJson ?? null,
       authorName: pinnedCommentData.author?.displayName ?? null,
       principalId: pinnedCommentData.principalId,
       avatarUrl,

@@ -2,9 +2,14 @@ import { useMemo } from 'react'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 interface CommentContentProps {
   content: string
+  /** Precomputed TipTap doc; when present we skip the markdown parse.
+   * Legacy rows and optimistic-update cache entries omit this and fall
+   * back to the markdown path. */
+  contentJson?: TiptapContent | null
   className?: string
 }
 
@@ -31,16 +36,18 @@ export function hasMarkdownTokens(text: string): boolean {
   )
 }
 
-export function CommentContent({ content, className }: CommentContentProps) {
+export function CommentContent({ content, contentJson, className }: CommentContentProps) {
   const isMarkdown = hasMarkdownTokens(content)
-  const json = useMemo(
-    // isMarkdown is derived synchronously from content
-
-    () => (isMarkdown ? commentMarkdownToTiptapJson(content) : null),
-    [content]
+  // Only parse markdown when there's no precomputed JSON to fall back on.
+  const fallbackJson = useMemo(
+    () => (!contentJson && isMarkdown ? commentMarkdownToTiptapJson(content) : null),
+    [content, contentJson, isMarkdown]
   )
-  if (!isMarkdown || !json) {
+  if (contentJson) {
+    return <RichTextContent content={contentJson} className={className} />
+  }
+  if (!isMarkdown || !fallbackJson) {
     return <p className={cn('whitespace-pre-wrap', className)}>{content}</p>
   }
-  return <RichTextContent content={json} className={className} />
+  return <RichTextContent content={fallbackJson} className={className} />
 }

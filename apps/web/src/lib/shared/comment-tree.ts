@@ -5,6 +5,8 @@
  * Used by both PostService and CommentService.
  */
 
+import type { TiptapContent } from '@/lib/shared/db-types'
+
 /**
  * Reaction count with user status
  */
@@ -51,6 +53,7 @@ export interface CommentWithReactions {
   principalId: string
   authorName: string | null
   content: string
+  contentJson?: TiptapContent | null
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
@@ -75,6 +78,7 @@ export interface CommentTreeNode {
   principalId: string
   authorName: string | null
   content: string
+  contentJson?: TiptapContent | null
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date
@@ -153,6 +157,7 @@ export function buildCommentTree<T extends CommentWithReactions>(
       principalId: comment.principalId,
       authorName: comment.authorName,
       content: comment.content,
+      contentJson: comment.contentJson ?? null,
       isTeamMember: comment.isTeamMember,
       isPrivate: comment.isPrivate,
       createdAt: comment.createdAt,

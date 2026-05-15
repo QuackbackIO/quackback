@@ -662,6 +662,12 @@ function CommentItem({
           ) : (
             <CommentContent
               content={comment.content}
+              contentJson={
+                (comment.contentJson as
+                  | import('@/lib/shared/db-types').TiptapContent
+                  | null
+                  | undefined) ?? null
+              }
               className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
             />
           )}

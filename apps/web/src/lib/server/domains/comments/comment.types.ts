@@ -75,6 +75,7 @@ export interface CommentThread {
   principalId: PrincipalId
   authorName: string | null
   content: string
+  contentJson?: TiptapContent | null
   isTeamMember: boolean
   isPrivate: boolean
   createdAt: Date

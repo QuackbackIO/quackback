@@ -89,6 +89,7 @@ export async function getPublicPostDetail(
       principal_id: string
       author_name: string | null
       content: string
+      content_json: unknown
       is_team_member: boolean
       is_private: boolean
       created_at: Date | string
@@ -110,6 +111,7 @@ export async function getPublicPostDetail(
         c.principal_id,
         m.display_name as author_name,
         c.content,
+        c.content_json,
         c.is_team_member,
         c.is_private,
         c.created_at,
@@ -165,6 +167,7 @@ export async function getPublicPostDetail(
     principal_id: string
     author_name: string | null
     content: string
+    content_json: unknown
     is_team_member: boolean
     is_private: boolean
     created_at: Date | string
@@ -199,6 +202,9 @@ export async function getPublicPostDetail(
     principalId: fromUuid('principal', comment.principal_id) as PrincipalId,
     authorName: comment.author_name,
     content: comment.content,
+    contentJson:
+      (comment.content_json as import('@/lib/shared/db-types').TiptapContent | null | undefined) ??
+      null,
     isTeamMember: comment.is_team_member,
     isPrivate: comment.is_private,
     createdAt: ensureDate(comment.created_at),
@@ -229,6 +235,9 @@ export async function getPublicPostDetail(
     return {
       id: node.id as CommentId,
       content: deleted ? '' : node.content,
+      contentJson: deleted
+        ? null
+        : ((node.contentJson as PublicComment['contentJson'] | null | undefined) ?? null),
       authorName: deleted ? null : node.authorName,
       principalId: deleted ? null : node.principalId,
       createdAt: node.createdAt,
@@ -262,6 +271,9 @@ export async function getPublicPostDetail(
       pinnedComment = {
         id: pinnedCommentData.id,
         content: pinnedCommentData.content,
+        contentJson:
+          (pinnedCommentData.contentJson as PinnedComment['contentJson'] | null | undefined) ??
+          null,
         authorName: pinnedCommentData.authorName,
         principalId: pinnedCommentData.principalId,
         avatarUrl: rawRow

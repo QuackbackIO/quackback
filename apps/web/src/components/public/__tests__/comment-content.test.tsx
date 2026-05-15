@@ -99,4 +99,24 @@ describe('<CommentContent>', () => {
     const { container } = render(<CommentContent content="plain" className="my-extra" />)
     expect(container.querySelector('.my-extra')).not.toBeNull()
   })
+
+  it('renders from contentJson when present, skipping the markdown parse', () => {
+    const json = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'precomputed', marks: [{ type: 'bold' }] }],
+        },
+      ],
+    }
+    // content deliberately differs to prove contentJson takes precedence
+    const { container } = render(<CommentContent content="ignored markdown" contentJson={json} />)
+    expect(container.querySelector('strong')?.textContent).toBe('precomputed')
+  })
+
+  it('falls back to markdown when contentJson is null (optimistic cache case)', () => {
+    const { container } = render(<CommentContent content="**bold**" contentJson={null} />)
+    expect(container.querySelector('strong')).not.toBeNull()
+  })
 })
