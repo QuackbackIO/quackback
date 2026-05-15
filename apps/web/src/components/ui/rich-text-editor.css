@@ -29,6 +29,23 @@
   pointer-events: none;
 }
 
+/* Force emoji-style rendering for inserted emoji nodes.
+   @tiptap/extension-emoji stores some codepoints (e.g. U+2764 ❤) without
+   the U+FE0F variation selector, so by default the OS renders them in
+   text-style (foreground color → white-on-dark, black-on-light) instead
+   of as colored emoji. font-variant-emoji forces emoji presentation on
+   modern browsers; the emoji font stack covers older fallbacks. */
+.tiptap [data-type='emoji'],
+[data-emoji-picker] {
+  font-variant-emoji: emoji;
+  font-family:
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Noto Color Emoji',
+    'Twemoji Mozilla',
+    sans-serif;
+}
+
 /* Code block syntax highlighting */
 .tiptap pre {
   background: var(--muted);

@@ -886,6 +886,7 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
 
     return (
       <div
+        data-emoji-picker
         className="z-50 w-56 rounded-lg border bg-popover shadow-lg"
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
