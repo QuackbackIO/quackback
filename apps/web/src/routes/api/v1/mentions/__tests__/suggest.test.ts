@@ -91,7 +91,9 @@ function makeChain(rows: unknown[], capture: QueryChainCapture) {
       where: vi.fn((arg: unknown) => {
         capture.whereArg = arg
         return {
-          limit: vi.fn().mockResolvedValue(rows),
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(rows),
+          }),
         }
       }),
     }),
@@ -175,13 +177,54 @@ describe('GET /api/v1/mentions/suggest', () => {
     expect(mockSelect).not.toHaveBeenCalled()
   })
 
-  it('returns [] for an empty query without hitting the DB', async () => {
+  it('returns the first page of eligible users when the query is empty', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(userPrincipal)
+    const capture: QueryChainCapture = {}
+    const rows = [
+      {
+        id: 'principal_alice',
+        displayName: 'Alice',
+        avatarUrl: null,
+        avatarKey: null,
+        role: 'admin',
+      },
+      {
+        id: 'principal_bob',
+        displayName: 'Bob',
+        avatarUrl: null,
+        avatarKey: null,
+        role: 'user',
+      },
+    ]
+    mockSelect.mockReturnValueOnce(makeChain(rows, capture))
+
     const res = await handleMentionSuggest({ request: makeRequest('   ') })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual([])
-    expect(mockSelect).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual([
+      { principalId: 'principal_alice', displayName: 'Alice', avatarUrl: null, role: 'admin' },
+      { principalId: 'principal_bob', displayName: 'Bob', avatarUrl: null, role: 'user' },
+    ])
+
+    // The LIKE predicate must NOT be present when q is empty — otherwise we'd
+    // pass `%` to the index and either match everything or nothing depending
+    // on collation. We pass `undefined` to `and()` instead.
+    function* walk(node: unknown): Generator<unknown> {
+      if (node == null || typeof node !== 'object') return
+      yield node
+      for (const v of Object.values(node as Record<string, unknown>)) {
+        if (Array.isArray(v)) for (const item of v) yield* walk(item)
+        else yield* walk(v)
+      }
+    }
+    for (const node of walk(capture.whereArg)) {
+      const sqlNode = (node as { _sql?: { strings: ArrayLike<string>; values: unknown[] } })._sql
+      if (!sqlNode) continue
+      const text = Array.from(sqlNode.strings).join(' ')
+      if (text.toUpperCase().includes('LIKE')) {
+        throw new Error('empty query should not include a LIKE predicate')
+      }
+    }
   })
 
   it('queries displayName with a prefix LIKE (not substring) and never queries email', async () => {

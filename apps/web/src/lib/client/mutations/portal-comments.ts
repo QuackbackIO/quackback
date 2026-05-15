@@ -29,6 +29,11 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 interface OptimisticComment {
   id: CommentId
   content: string
+  /** TipTap JSON when the form supplied it. Needed for the optimistic render
+   * to show mention chips (and other rich nodes) before the server response
+   * arrives — without it CommentContent falls through to a plain-text path
+   * that prints raw markdown like `[@ id="..." label="..."]`. */
+  contentJson?: TiptapContent | null
   authorName: string | null
   principalId: string | null
   createdAt: string
@@ -128,6 +133,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
         const optimisticComment: OptimisticComment = {
           id: `comment_optimistic_${Date.now()}` as CommentId,
           content: input.content,
+          contentJson: input.contentJson ?? null,
           authorName,
           principalId,
           createdAt: new Date().toISOString(),

@@ -4,13 +4,18 @@
  * are rejected). Matches `lower(displayName)` with a prefix LIKE — never
  * queries email — and uses the functional index from migration 0065.
  *
+ * An empty `q` returns the first page of eligible users in the workspace so
+ * the picker has something to show the moment the user types `@`.
+ *
  * Rate-limited per session: 60 requests / 60s on a single Redis bucket.
  * Fails open on Redis errors (the limiter returns `null` count then).
  */
 import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
+import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
 import { db, principal, eq, and, inArray, sql } from '@/lib/server/db'
+import type { Role } from '@/lib/shared/roles'
 import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
@@ -23,7 +28,7 @@ interface SuggestRow {
   principalId: string
   displayName: string | null
   avatarUrl: string | null
-  role: string
+  role: Role
 }
 
 function resolveAvatar(avatarKey: string | null, avatarUrl: string | null): string | null {
@@ -63,14 +68,18 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
 
   const url = new URL(request.url)
   const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
-  if (q.length === 0) {
-    return Response.json([], { status: 200 })
-  }
 
-  // Prefix LIKE against the lower(display_name) functional index (migration
-  // 0065). No substring search — escalates from typeahead to user-directory
-  // dump. Email is intentionally not selected.
-  const prefix = `${q}%`
+  // Non-empty `q` uses a prefix LIKE against the lower(display_name)
+  // functional index (migration 0065). No substring search — that would
+  // escalate typeahead to a directory dump via wildcard probing. Empty `q`
+  // returns the first page of eligible users. Email is never selected.
+  const predicates: SQL[] = [
+    eq(principal.type, 'user'),
+    inArray(principal.role, [...MENTION_ELIGIBLE_ROLES]),
+  ]
+  if (q.length > 0) {
+    predicates.push(sql`lower(${principal.displayName}) LIKE ${`${q}%`}`)
+  }
   const rows = await db
     .select({
       id: principal.id,
@@ -80,20 +89,15 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
       role: principal.role,
     })
     .from(principal)
-    .where(
-      and(
-        eq(principal.type, 'user'),
-        inArray(principal.role, [...MENTION_ELIGIBLE_ROLES]),
-        sql`lower(${principal.displayName}) LIKE ${prefix}`
-      )
-    )
+    .where(and(...predicates))
+    .orderBy(sql`lower(${principal.displayName})`)
     .limit(SUGGEST_LIMIT)
 
   const result: SuggestRow[] = rows.map((r) => ({
     principalId: r.id,
     displayName: r.displayName,
     avatarUrl: resolveAvatar(r.avatarKey, r.avatarUrl),
-    role: r.role,
+    role: r.role as Role,
   }))
 
   return Response.json(result, { status: 200 })

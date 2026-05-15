@@ -21,14 +21,18 @@
  *     instead of relying on react-query.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouteContext } from '@tanstack/react-router'
+import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Avatar } from '@/components/ui/avatar'
+import { isTeamMember, type Role } from '@/lib/shared/roles'
+import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 
 interface PrincipalCard {
   principalId: string
   displayName: string
   avatarUrl: string | null
-  role: 'admin' | 'member' | 'user'
+  role: Role
   joinedAt: string
 }
 
@@ -36,12 +40,6 @@ type CacheEntry =
   | { state: 'pending'; promise: Promise<PrincipalCard | null>; fetchedAt: number }
   | { state: 'ok'; card: PrincipalCard; fetchedAt: number }
   | { state: 'missing'; fetchedAt: number }
-
-const roleLabel: Record<PrincipalCard['role'], string> = {
-  admin: 'Admin',
-  member: 'Member',
-  user: 'Customer',
-}
 
 const HOVER_OPEN_DELAY_MS = 150
 const HOVER_CLOSE_DELAY_MS = 200
@@ -106,6 +104,12 @@ interface MentionHoverCardOverlayProps {
 export function MentionHoverCardOverlay({ children, className }: MentionHoverCardOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<{ rect: DOMRect; principalId: string } | null>(null)
+  const ctx = useRouteContext({ from: '__root__' }) as {
+    settings?: { brandingData?: SettingsBrandingData; name?: string | null }
+  }
+  const branding = ctx.settings?.brandingData
+  const teamBadgeLogoUrl = branding?.logoUrl ?? null
+  const teamBadgeLabel = branding?.name ?? ctx.settings?.name ?? 'Team'
   const [card, setCard] = useState<PrincipalCard | null>(null)
   const [isMissing, setIsMissing] = useState(false)
 
@@ -255,10 +259,28 @@ export function MentionHoverCardOverlay({ children, className }: MentionHoverCar
             <div className="flex items-start gap-3">
               <Avatar src={card.avatarUrl} name={card.displayName} className="size-10" />
               <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground truncate">
-                  {card.displayName}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {card.displayName}
+                  </span>
+                  {isTeamMember(card.role) && (
+                    <span
+                      className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary shrink-0"
+                      aria-label={`${teamBadgeLabel} Member`}
+                      title={`${teamBadgeLabel} Member`}
+                    >
+                      {teamBadgeLogoUrl ? (
+                        <img
+                          src={teamBadgeLogoUrl}
+                          alt=""
+                          className="h-4 w-4 rounded-sm object-contain"
+                        />
+                      ) : (
+                        <CheckBadgeIcon className="h-4 w-4" />
+                      )}
+                    </span>
+                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">{roleLabel[card.role]}</div>
                 <div className="text-xs text-muted-foreground/70 mt-1">
                   Joined{' '}
                   {new Date(card.joinedAt).toLocaleDateString(undefined, {
