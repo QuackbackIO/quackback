@@ -926,7 +926,31 @@ function RichTextEditorBase({
   }, [])
 
   if (!editor) {
-    return null
+    // Reserve the editor's eventual height + placeholder so the surrounding
+    // layout (toolbar footer, card border) doesn't jump when TipTap finishes
+    // mounting. Keeping immediatelyRender=false preserves SSR safety.
+    return (
+      <div
+        className={cn(
+          !borderless && 'overflow-hidden rounded-md border border-input bg-background',
+          disabled && 'opacity-50 cursor-not-allowed',
+          className
+        )}
+        aria-hidden="true"
+      >
+        <div
+          className={cn(
+            'prose prose-sm prose-neutral dark:prose-invert max-w-none',
+            'min-h-[var(--editor-min-height)]',
+            borderless ? 'py-0' : 'px-3 py-2',
+            'text-muted-foreground'
+          )}
+          style={{ '--editor-min-height': minHeight } as React.CSSProperties}
+        >
+          {placeholder ?? ' '}
+        </div>
+      </div>
+    )
   }
 
   const showToolbar = toolbarPosition !== 'none'
