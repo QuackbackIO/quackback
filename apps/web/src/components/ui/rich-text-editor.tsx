@@ -21,6 +21,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
 import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
+import { MentionExtension } from './mention-extension'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
@@ -204,6 +205,7 @@ export function buildExtensions(
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
     ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
+    MentionExtension,
     Markdown,
   ]
 }
