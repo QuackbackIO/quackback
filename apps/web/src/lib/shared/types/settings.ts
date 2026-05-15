@@ -11,6 +11,7 @@
 
 export type {
   PortalAuthMethods,
+  PortalWelcomeCard,
   TenantSettings,
   HelpCenterConfig,
   AuthConfig,
@@ -24,4 +25,5 @@ export type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 export {
   FEATURE_FLAG_REGISTRY,
   DEFAULT_PORTAL_CONFIG,
+  PORTAL_WELCOME_CARD_TITLE_MAX,
 } from '@/lib/server/domains/settings/settings.types'
