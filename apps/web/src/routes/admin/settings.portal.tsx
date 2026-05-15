@@ -177,6 +177,9 @@ function PortalSettingsPage() {
             </div>
           </div>
 
+          {/* Title and message stay editable when the card is disabled so
+              admins can draft the next announcement without it going live
+              the moment they flip the switch on. */}
           <div className="space-y-1.5">
             <Label htmlFor="welcome-title" className="text-sm font-medium">
               Title
@@ -187,7 +190,7 @@ function PortalSettingsPage() {
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Share your product feedback!"
               maxLength={PORTAL_WELCOME_CARD_TITLE_MAX}
-              disabled={!enabled || isBusy}
+              disabled={isBusy}
             />
           </div>
 
@@ -198,7 +201,7 @@ function PortalSettingsPage() {
               onChange={(json) => handleBodyChange(json)}
               placeholder="Tell visitors what kind of feedback you'd love to hear…"
               minHeight="160px"
-              disabled={!enabled || isBusy}
+              disabled={isBusy}
               features={{
                 headings: true,
                 images: true,
