@@ -57,3 +57,27 @@ export function ensureTestUserHasRole(email: string, role: string = 'admin'): vo
     throw new Error(`Failed to ensure user role: ${err.stderr || err.message}`, { cause: error })
   }
 }
+
+/**
+ * Pick a mention-eligible principal from the seed dataset to use as a target
+ * in @-mention e2e flows. Seed names are randomised per run, so we resolve
+ * the displayName + principalId at test time and excludes the demo user
+ * (who is normally the one doing the mentioning).
+ */
+export function getMentionTarget(excludeEmail: string = 'demo@example.com'): {
+  principalId: string
+  displayName: string
+} {
+  const scriptPath = resolve(__dirname, '../scripts/get-mention-target.ts')
+
+  try {
+    const result = execSync(`dotenv -e ../../.env -- bun "${scriptPath}" "${excludeEmail}"`, {
+      encoding: 'utf-8',
+      cwd: resolve(__dirname, '../..'), // apps/web directory
+    })
+    return JSON.parse(result.trim()) as { principalId: string; displayName: string }
+  } catch (error) {
+    const err = error as { stderr?: string; message: string }
+    throw new Error(`Failed to get mention target: ${err.stderr || err.message}`, { cause: error })
+  }
+}
