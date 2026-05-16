@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { MegaphoneIcon } from '@heroicons/react/24/solid'
@@ -10,6 +10,7 @@ import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -22,8 +23,6 @@ import type {
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
-
-const DEBOUNCE_MS = 800
 
 export const Route = createFileRoute('/admin/settings/portal')({
   loader: async ({ context }) => {
@@ -42,12 +41,10 @@ function PortalSettingsPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const config = portalConfigQuery.data as PortalConfig
 
-  // Same pattern as settings.help-center.tsx / settings.portal-widget.tsx:
-  // initialize local state once from the loader-warmed query, then treat
-  // local state as the source of truth post-mount. router.invalidate after
-  // each save refreshes the cache for the next visit, but we never re-sync
-  // the live form fields from it — that would race the server-side
-  // sanitizer's normalisation back into the editor and reopen a save loop.
+  // Initialise once from the loader-warmed query and treat local state as
+  // authoritative until the user explicitly clicks Save. router.invalidate
+  // after a successful save refreshes the cache for the next visit, but the
+  // live form fields never get re-synced from it.
   const [enabled, setEnabled] = useState(config.welcomeCard?.enabled ?? false)
   const [title, setTitle] = useState(
     config.welcomeCard?.title ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.title
@@ -59,53 +56,18 @@ function PortalSettingsPage() {
   const [isPending, startTransition] = useTransition()
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
 
-  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  function clearPendingTimer() {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-  }
-
-  useEffect(() => clearPendingTimer, [])
-
   const isBusy = saving || isPending
 
-  async function saveSnapshot(card: PortalWelcomeCardData) {
+  async function handleSave() {
     setSaving(true)
     try {
-      await updatePortalConfigFn({ data: { welcomeCard: card } })
+      await updatePortalConfigFn({
+        data: { welcomeCard: { enabled, title, body } },
+      })
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)
     }
-  }
-
-  function scheduleSave(card: PortalWelcomeCardData) {
-    clearPendingTimer()
-    saveTimerRef.current = setTimeout(() => {
-      saveSnapshot(card)
-    }, DEBOUNCE_MS)
-  }
-
-  function handleEnabledToggle(checked: boolean) {
-    clearPendingTimer()
-    setEnabled(checked)
-    // Toggling is immediate so admins see the public-portal state flip
-    // without waiting on a debounce.
-    saveSnapshot({ enabled: checked, title, body })
-  }
-
-  function handleTitleChange(value: string) {
-    setTitle(value)
-    scheduleSave({ enabled, title: value, body })
-  }
-
-  function handleBodyChange(json: JSONContent) {
-    const next = json as TiptapContent
-    setBody(next)
-    scheduleSave({ enabled, title, body: next })
   }
 
   const previewCard = useMemo<PortalWelcomeCardData>(
@@ -139,16 +101,12 @@ function PortalSettingsPage() {
                 Shown at the top of the portal home page above the post list
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <InlineSpinner visible={isBusy} />
-              <Switch
-                id="welcome-enabled"
-                checked={enabled}
-                onCheckedChange={handleEnabledToggle}
-                disabled={isBusy}
-                aria-label="Enable welcome card"
-              />
-            </div>
+            <Switch
+              id="welcome-enabled"
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              aria-label="Enable welcome card"
+            />
           </div>
 
           {/* Title and message stay editable when the card is disabled so
@@ -161,10 +119,9 @@ function PortalSettingsPage() {
             <Input
               id="welcome-title"
               value={title}
-              onChange={(e) => handleTitleChange(e.target.value)}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder="Share your product feedback!"
               maxLength={PORTAL_WELCOME_CARD_TITLE_MAX}
-              disabled={isBusy}
             />
           </div>
 
@@ -172,10 +129,9 @@ function PortalSettingsPage() {
             <Label className="text-sm font-medium">Message</Label>
             <RichTextEditor
               value={body}
-              onChange={(json) => handleBodyChange(json)}
+              onChange={(json: JSONContent) => setBody(json as TiptapContent)}
               placeholder="Tell visitors what kind of feedback you'd love to hear…"
               minHeight="160px"
-              disabled={isBusy}
               features={{
                 headings: true,
                 images: true,
@@ -203,6 +159,13 @@ function PortalSettingsPage() {
                 <PortalWelcomeCard welcomeCard={previewCard} />
               )}
             </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <InlineSpinner visible={isBusy} />
+            <Button onClick={handleSave} disabled={isBusy}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
           </div>
         </div>
       </SettingsCard>
