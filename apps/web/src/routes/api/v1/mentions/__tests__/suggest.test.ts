@@ -39,6 +39,11 @@ vi.mock('@/lib/server/db', () => ({
     avatarUrl: 'avatar_url',
     avatarKey: 'avatar_key',
   },
+  user: {
+    id: 'id',
+    image: 'image',
+    imageKey: 'image_key',
+  },
   eq: vi.fn((col, val) => ({ _eq: [col, val] })),
   and: vi.fn((...args) => ({ _and: args })),
   inArray: vi.fn((col, vals) => ({ _inArray: [col, vals] })),
@@ -88,13 +93,15 @@ interface QueryChainCapture {
 function makeChain(rows: unknown[], capture: QueryChainCapture) {
   return {
     from: vi.fn().mockReturnValue({
-      where: vi.fn((arg: unknown) => {
-        capture.whereArg = arg
-        return {
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue(rows),
-          }),
-        }
+      leftJoin: vi.fn().mockReturnValue({
+        where: vi.fn((arg: unknown) => {
+          capture.whereArg = arg
+          return {
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue(rows),
+            }),
+          }
+        }),
       }),
     }),
   }
@@ -118,6 +125,8 @@ describe('GET /api/v1/mentions/suggest', () => {
         avatarUrl: 'https://avatars/jane.png',
         avatarKey: null,
         role: 'admin',
+        userImage: null,
+        userImageKey: null,
       },
       {
         id: 'principal_jake',
@@ -125,6 +134,8 @@ describe('GET /api/v1/mentions/suggest', () => {
         avatarUrl: null,
         avatarKey: 'avatars/jake.png',
         role: 'member',
+        userImage: null,
+        userImageKey: null,
       },
     ]
     mockSelect.mockReturnValueOnce(makeChain(rows, capture))
@@ -152,6 +163,40 @@ describe('GET /api/v1/mentions/suggest', () => {
         role: 'member',
       },
     ])
+  })
+
+  it('falls back to user.imageKey / user.image when principal avatar columns are null', async () => {
+    // Same fallback chain the hover-card endpoint uses, so the picker and
+    // the card agree on which avatar to show for stale principal rows.
+    vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
+    vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(userPrincipal)
+    const capture: QueryChainCapture = {}
+    const rows = [
+      {
+        id: 'principal_stale',
+        displayName: 'Stale Principal',
+        avatarUrl: null,
+        avatarKey: null,
+        role: 'user',
+        userImage: null,
+        userImageKey: 'avatars/2026/03/stale-key.png',
+      },
+      {
+        id: 'principal_oauth',
+        displayName: 'OAuth Only',
+        avatarUrl: null,
+        avatarKey: null,
+        role: 'user',
+        userImage: 'https://lh3.googleusercontent.com/a/abc',
+        userImageKey: null,
+      },
+    ]
+    mockSelect.mockReturnValueOnce(makeChain(rows, capture))
+
+    const res = await handleMentionSuggest({ request: makeRequest('s') })
+    const body = (await res.json()) as Array<{ principalId: string; avatarUrl: string | null }>
+    expect(body[0].avatarUrl).toBe('https://cdn.example.com/avatars/2026/03/stale-key.png')
+    expect(body[1].avatarUrl).toBe('https://lh3.googleusercontent.com/a/abc')
   })
 
   it('returns 403 for an anonymous session', async () => {
@@ -188,6 +233,8 @@ describe('GET /api/v1/mentions/suggest', () => {
         avatarUrl: null,
         avatarKey: null,
         role: 'admin',
+        userImage: null,
+        userImageKey: null,
       },
       {
         id: 'principal_bob',
@@ -195,6 +242,8 @@ describe('GET /api/v1/mentions/suggest', () => {
         avatarUrl: null,
         avatarKey: null,
         role: 'user',
+        userImage: null,
+        userImageKey: null,
       },
     ]
     mockSelect.mockReturnValueOnce(makeChain(rows, capture))
@@ -235,10 +284,19 @@ describe('GET /api/v1/mentions/suggest', () => {
 
     await handleMentionSuggest({ request: makeRequest('JaNe') })
 
-    // The selected columns must not include email.
+    // The selected columns must not include email. user.image / user.imageKey
+    // are joined in for the avatar fallback chain, but email never is.
     const selectArg = mockSelect.mock.calls[0][0] as Record<string, unknown>
     expect(Object.keys(selectArg)).toEqual(
-      expect.arrayContaining(['id', 'displayName', 'avatarUrl', 'avatarKey', 'role'])
+      expect.arrayContaining([
+        'id',
+        'displayName',
+        'avatarUrl',
+        'avatarKey',
+        'role',
+        'userImage',
+        'userImageKey',
+      ])
     )
     expect(Object.keys(selectArg)).not.toContain('email')
 

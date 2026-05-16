@@ -14,7 +14,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { UserId } from '@quackback/ids'
 import type { SQL } from 'drizzle-orm'
 import { auth } from '@/lib/server/auth'
-import { db, principal, eq, and, inArray, sql } from '@/lib/server/db'
+import { db, principal, user, eq, and, inArray, sql } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
 import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -31,12 +31,25 @@ interface SuggestRow {
   role: Role
 }
 
-function resolveAvatar(avatarKey: string | null, avatarUrl: string | null): string | null {
-  if (avatarKey) {
-    const s3Url = getPublicUrlOrNull(avatarKey)
+// Same fallback chain as /api/v1/users/:id/card so the picker and the
+// hover card agree on what avatar to show for stale principal rows
+// whose `avatar_*` columns drifted from the linked user record.
+function resolveSuggestAvatar(opts: {
+  principalAvatarKey: string | null
+  principalAvatarUrl: string | null
+  userImageKey: string | null | undefined
+  userImage: string | null | undefined
+}): string | null {
+  if (opts.principalAvatarKey) {
+    const s3Url = getPublicUrlOrNull(opts.principalAvatarKey)
     if (s3Url) return s3Url
   }
-  return avatarUrl ?? null
+  if (opts.principalAvatarUrl) return opts.principalAvatarUrl
+  if (opts.userImageKey) {
+    const s3Url = getPublicUrlOrNull(opts.userImageKey)
+    if (s3Url) return s3Url
+  }
+  return opts.userImage ?? null
 }
 
 export async function handleMentionSuggest({ request }: { request: Request }): Promise<Response> {
@@ -87,8 +100,11 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
       avatarUrl: principal.avatarUrl,
       avatarKey: principal.avatarKey,
       role: principal.role,
+      userImage: user.image,
+      userImageKey: user.imageKey,
     })
     .from(principal)
+    .leftJoin(user, eq(user.id, principal.userId))
     .where(and(...predicates))
     .orderBy(sql`lower(${principal.displayName})`)
     .limit(SUGGEST_LIMIT)
@@ -96,7 +112,12 @@ export async function handleMentionSuggest({ request }: { request: Request }): P
   const result: SuggestRow[] = rows.map((r) => ({
     principalId: r.id,
     displayName: r.displayName,
-    avatarUrl: resolveAvatar(r.avatarKey, r.avatarUrl),
+    avatarUrl: resolveSuggestAvatar({
+      principalAvatarKey: r.avatarKey,
+      principalAvatarUrl: r.avatarUrl,
+      userImageKey: r.userImageKey,
+      userImage: r.userImage,
+    }),
     role: r.role as Role,
   }))
 

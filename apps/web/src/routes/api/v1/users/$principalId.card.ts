@@ -13,7 +13,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
-import { db, principal, eq } from '@/lib/server/db'
+import { db, principal, user, eq } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
 interface PrincipalCardBody {
@@ -24,12 +24,26 @@ interface PrincipalCardBody {
   joinedAt: string
 }
 
-function resolveAvatar(avatarKey: string | null, avatarUrl: string | null): string | null {
-  if (avatarKey) {
-    const s3Url = getPublicUrlOrNull(avatarKey)
+// Resolve in the order: principal own avatar → linked user image. The
+// user fallback covers principal rows that pre-date syncPrincipalProfile
+// being wired into every avatar-upload path, or any other gap where the
+// principal mirror drifted from the source-of-truth user record.
+function resolveCardAvatar(opts: {
+  principalAvatarKey: string | null
+  principalAvatarUrl: string | null
+  userImageKey: string | null | undefined
+  userImage: string | null | undefined
+}): string | null {
+  if (opts.principalAvatarKey) {
+    const s3Url = getPublicUrlOrNull(opts.principalAvatarKey)
     if (s3Url) return s3Url
   }
-  return avatarUrl ?? null
+  if (opts.principalAvatarUrl) return opts.principalAvatarUrl
+  if (opts.userImageKey) {
+    const s3Url = getPublicUrlOrNull(opts.userImageKey)
+    if (s3Url) return s3Url
+  }
+  return opts.userImage ?? null
 }
 
 export async function handlePrincipalCard({
@@ -55,17 +69,21 @@ export async function handlePrincipalCard({
   }
 
   const targetId = params.principalId as PrincipalId
-  const row = await db.query.principal.findFirst({
-    where: eq(principal.id, targetId),
-    columns: {
-      id: true,
-      displayName: true,
-      avatarUrl: true,
-      avatarKey: true,
-      role: true,
-      createdAt: true,
-    },
-  })
+  const [row] = await db
+    .select({
+      id: principal.id,
+      displayName: principal.displayName,
+      avatarUrl: principal.avatarUrl,
+      avatarKey: principal.avatarKey,
+      role: principal.role,
+      createdAt: principal.createdAt,
+      userImage: user.image,
+      userImageKey: user.imageKey,
+    })
+    .from(principal)
+    .leftJoin(user, eq(user.id, principal.userId))
+    .where(eq(principal.id, targetId))
+    .limit(1)
 
   if (!row) {
     return Response.json({ error: 'Not Found' }, { status: 404 })
@@ -74,7 +92,12 @@ export async function handlePrincipalCard({
   const body: PrincipalCardBody = {
     principalId: row.id,
     displayName: row.displayName ?? '',
-    avatarUrl: resolveAvatar(row.avatarKey, row.avatarUrl),
+    avatarUrl: resolveCardAvatar({
+      principalAvatarKey: row.avatarKey,
+      principalAvatarUrl: row.avatarUrl,
+      userImageKey: row.userImageKey,
+      userImage: row.userImage,
+    }),
     role: row.role,
     joinedAt: row.createdAt.toISOString(),
   }
