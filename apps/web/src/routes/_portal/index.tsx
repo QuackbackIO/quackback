@@ -66,12 +66,15 @@ export const Route = createFileRoute('/_portal/')({
       org.publicPortalConfig?.features?.anonymousVoting ??
       DEFAULT_PORTAL_CONFIG.features.anonymousVoting
 
+    const welcomeCard = org.publicPortalConfig?.welcomeCard
+
     return {
       org,
       baseUrl: context.baseUrl ?? '',
       isEmpty: portalData.boards.length === 0,
       session,
       anonymousVotingEnabled,
+      welcomeCard,
     }
   },
   head: ({ loaderData }) => {
@@ -100,7 +103,7 @@ function PublicPortalPage() {
   const intl = useIntl()
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session, anonymousVotingEnabled } = loaderData
+  const { org, session, anonymousVotingEnabled, welcomeCard } = loaderData
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board
@@ -180,6 +183,7 @@ function PublicPortalPage() {
         defaultBoardId={portalData.boards[0]?.id}
         user={user}
         anonymousVotingEnabled={anonymousVotingEnabled}
+        welcomeCard={welcomeCard}
       />
     </div>
   )

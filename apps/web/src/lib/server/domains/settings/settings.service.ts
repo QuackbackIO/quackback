@@ -35,6 +35,9 @@ import {
   requireSettings,
   wrapDbError,
   invalidateSettingsCache,
+  normalizeWelcomeCardInput,
+  mergeWelcomeCard,
+  publicWelcomeCard,
 } from './settings.helpers'
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
@@ -600,9 +603,16 @@ export async function getPortalConfig(): Promise<PortalConfig> {
 export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
   console.log(`[domain:settings] updatePortalConfig`)
   try {
+    const normalizedWelcome = normalizeWelcomeCardInput(input.welcomeCard)
+    const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
+    delete inputWithoutWelcome.welcomeCard
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
-    const updated = deepMerge(existing, input as Partial<PortalConfig>)
+    const updated = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
+    // welcomeCard.body must replace, not deep-merge — see mergeWelcomeCard.
+    if (normalizedWelcome) {
+      updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
+    }
 
     const hasAuthMethod = Object.values(updated.oauth).some(Boolean)
     if (!hasAuthMethod) {
@@ -612,21 +622,28 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
       )
     }
 
-    // Provider registration in `auth/index.ts` reads
-    // portalConfig.oauth at build time — toggling a portal OAuth
-    // provider must invalidate other pods' Better-Auth instances or
-    // they'll keep serving the stale provider list until cache TTL.
-    // Mirrors the bump+resetAuth pattern in updateAuthConfig.
-    const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
-    const { resetAuth } = await import('@/lib/server/auth')
-    await db.transaction(async (tx) => {
-      await tx
+    // Provider registration in `auth/index.ts` reads portalConfig.oauth at
+    // build time — toggling a portal OAuth provider must invalidate other
+    // pods' Better-Auth instances or they'll keep serving the stale provider
+    // list until cache TTL. Skip the bump for non-oauth edits (e.g. the
+    // welcome card debounce-saves) to avoid an auth rebuild per keystroke.
+    if (input.oauth !== undefined) {
+      const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
+      const { resetAuth } = await import('@/lib/server/auth')
+      await db.transaction(async (tx) => {
+        await tx
+          .update(settings)
+          .set({ portalConfig: JSON.stringify(updated) })
+          .where(eq(settings.id, org.id))
+        await bumpAuthConfigVersionInTx(tx)
+      })
+      resetAuth()
+    } else {
+      await db
         .update(settings)
         .set({ portalConfig: JSON.stringify(updated) })
         .where(eq(settings.id, org.id))
-      await bumpAuthConfigVersionInTx(tx)
-    })
-    resetAuth()
+    }
     await invalidateSettingsCache()
     return updated
   } catch (error) {
@@ -741,10 +758,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       passthroughKeys
     )
     const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
       oauth: filteredOAuth,
       features: portalConfig.features,
       ...(customProviderNames && { customProviderNames }),
+      ...(welcome && { welcomeCard: welcome }),
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicPortalConfig failed:`, error)
@@ -821,11 +840,15 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         oauth: filteredAuthOAuth,
         openSignup: authConfig.openSignup,
       },
-      publicPortalConfig: {
-        oauth: filteredPortalOAuth,
-        features: portalConfig.features,
-        ...(portalCustomNames && { customProviderNames: portalCustomNames }),
-      },
+      publicPortalConfig: (() => {
+        const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+        return {
+          oauth: filteredPortalOAuth,
+          features: portalConfig.features,
+          ...(portalCustomNames && { customProviderNames: portalCustomNames }),
+          ...(welcome && { welcomeCard: welcome }),
+        }
+      })(),
       publicWidgetConfig: {
         enabled: widgetConfig.enabled,
         defaultBoard: widgetConfig.defaultBoard,

@@ -5,6 +5,8 @@
  * This allows adding new settings without migrations.
  */
 
+import type { TiptapContent } from '@/lib/shared/db-types'
+
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
 // =============================================================================
@@ -202,6 +204,26 @@ export interface PortalFeatures {
 }
 
 /**
+ * Welcome card shown above the post list on the portal index.
+ * Title is plain text (server trims + caps at 120 chars). Body is
+ * sanitized TipTap JSON — same shape as post / help-center content,
+ * sanitized via `sanitizeTiptapContent` on every write.
+ *
+ * Default off. Renders only when `enabled` and at least one of
+ * `title` / `body` has content.
+ */
+export interface PortalWelcomeCard {
+  enabled: boolean
+  /** Plain text. Server trims and rejects > 120 chars. */
+  title: string
+  /** Sanitized TipTap JSON doc. */
+  body: TiptapContent
+}
+
+/** Max length of {@link PortalWelcomeCard.title} after trimming. */
+export const PORTAL_WELCOME_CARD_TITLE_MAX = 120
+
+/**
  * Portal configuration
  * Controls the public feedback portal behavior
  */
@@ -210,6 +232,8 @@ export interface PortalConfig {
   oauth: PortalAuthMethods
   /** Feature toggles */
   features: PortalFeatures
+  /** Welcome card on the portal index. Optional — absent = disabled. */
+  welcomeCard?: PortalWelcomeCard
 }
 
 /**
@@ -233,6 +257,11 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     anonymousVoting: true,
     anonymousCommenting: false,
     anonymousPosting: false,
+  },
+  welcomeCard: {
+    enabled: false,
+    title: '',
+    body: { type: 'doc', content: [{ type: 'paragraph' }] },
   },
 }
 
@@ -462,6 +491,7 @@ export interface UpdateAuthConfigInput {
 export interface UpdatePortalConfigInput {
   oauth?: Partial<PortalAuthMethods>
   features?: Partial<PortalFeatures>
+  welcomeCard?: Partial<PortalWelcomeCard>
 }
 
 // =============================================================================
@@ -484,6 +514,8 @@ export interface PublicPortalConfig {
   features: PortalFeatures
   /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
   customProviderNames?: Record<string, string>
+  /** Welcome card on the portal index. Absent / disabled = nothing rendered. */
+  welcomeCard?: PortalWelcomeCard
 }
 
 // =============================================================================
