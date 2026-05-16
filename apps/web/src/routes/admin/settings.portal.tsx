@@ -37,35 +37,29 @@ export const Route = createFileRoute('/admin/settings/portal')({
   component: PortalSettingsPage,
 })
 
-function getInitialWelcomeCard(config: PortalConfig): PortalWelcomeCardData {
-  return {
-    ...DEFAULT_PORTAL_CONFIG.welcomeCard!,
-    ...config.welcomeCard,
-  }
-}
-
 function PortalSettingsPage() {
   const router = useRouter()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const config = portalConfigQuery.data as PortalConfig
-  const initial = useMemo(() => getInitialWelcomeCard(config), [config])
 
-  const [enabled, setEnabled] = useState(initial.enabled)
-  const [title, setTitle] = useState(initial.title)
-  const [body, setBody] = useState<TiptapContent>(initial.body)
+  // Same pattern as settings.help-center.tsx / settings.portal-widget.tsx:
+  // initialize local state once from the loader-warmed query, then treat
+  // local state as the source of truth post-mount. router.invalidate after
+  // each save refreshes the cache for the next visit, but we never re-sync
+  // the live form fields from it — that would race the server-side
+  // sanitizer's normalisation back into the editor and reopen a save loop.
+  const [enabled, setEnabled] = useState(config.welcomeCard?.enabled ?? false)
+  const [title, setTitle] = useState(
+    config.welcomeCard?.title ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.title
+  )
+  const [body, setBody] = useState<TiptapContent>(
+    config.welcomeCard?.body ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.body
+  )
   const [saving, setSaving] = useState(false)
   const [isPending, startTransition] = useTransition()
   const { upload: uploadImage } = useImageUpload({ prefix: 'portal-welcome' })
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
-  // Tracks whether the user has unflushed edits. While true, we skip
-  // remote re-sync so a background refetch doesn't clobber the typed-but-
-  // not-yet-saved value with the older server copy.
-  const hasPendingEditsRef = useRef(false)
-  // Each save bumps this; only the latest save's resolution clears the
-  // pending flag, so an in-flight save returning while the user is still
-  // typing doesn't reopen the door to a stale background re-sync.
-  const saveSeqRef = useRef(0)
 
   function clearPendingTimer() {
     if (saveTimerRef.current) {
@@ -76,42 +70,22 @@ function PortalSettingsPage() {
 
   useEffect(() => clearPendingTimer, [])
 
-  // Re-sync local form state when the server-side config changes (background
-  // refetch, another admin's edit, router invalidate) — but only if the user
-  // has nothing in-flight, so we never overwrite their unsaved input.
-  useEffect(() => {
-    if (hasPendingEditsRef.current) return
-    setEnabled(initial.enabled)
-    setTitle(initial.title)
-    setBody(initial.body)
-  }, [initial])
-
   const isBusy = saving || isPending
 
-  async function saveSnapshot(card: PortalWelcomeCardData, claimedSeq?: number) {
-    const seq = claimedSeq ?? ++saveSeqRef.current
+  async function saveSnapshot(card: PortalWelcomeCardData) {
     setSaving(true)
     try {
       await updatePortalConfigFn({ data: { welcomeCard: card } })
-      if (seq === saveSeqRef.current) {
-        hasPendingEditsRef.current = false
-        startTransition(() => router.invalidate())
-      }
+      startTransition(() => router.invalidate())
     } finally {
-      if (seq === saveSeqRef.current) setSaving(false)
+      setSaving(false)
     }
   }
 
   function scheduleSave(card: PortalWelcomeCardData) {
-    hasPendingEditsRef.current = true
     clearPendingTimer()
-    // Reserve the seq slot now so an in-flight earlier save (e.g. a toggle
-    // fired immediately before this debounce armed) can't resolve with a
-    // matching seq and prematurely clear `hasPendingEditsRef` while the
-    // typed-but-not-yet-saved value is still queued.
-    const claimedSeq = ++saveSeqRef.current
     saveTimerRef.current = setTimeout(() => {
-      saveSnapshot(card, claimedSeq)
+      saveSnapshot(card)
     }, DEBOUNCE_MS)
   }
 
