@@ -94,6 +94,30 @@ describe('buildExtensions', () => {
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).not.toContain('slashCommands')
   })
+
+  it('includes emoji extension by default', () => {
+    const exts = buildExtensions({}, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).toContain('emoji')
+  })
+
+  it('omits emoji extension when emojiPicker is false', () => {
+    const exts = buildExtensions({ emojiPicker: false }, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('emoji')
+  })
+
+  it('omits enterAsHardBreak by default (document-style Enter)', () => {
+    const exts = buildExtensions({}, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('enterAsHardBreak')
+  })
+
+  it('includes enterAsHardBreak when enabled (comment-style Enter)', () => {
+    const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).toContain('enterAsHardBreak')
+  })
 })
 
 describe('markdown serialization optimization', () => {

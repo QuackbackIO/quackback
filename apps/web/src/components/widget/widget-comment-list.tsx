@@ -14,8 +14,12 @@ import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { addReactionFn, removeReactionFn } from '@/lib/server/functions/comments'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getInitials, cn } from '@/lib/shared/utils'
+import { CommentContent } from '@/components/public/comment-content'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from '@/components/public/comment-editor-features'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { CommentReactionCount } from '@/lib/shared'
+import type { TiptapContent } from '@/lib/shared/db-types'
 
 const MAX_WIDGET_DEPTH = 2
 
@@ -23,7 +27,11 @@ interface WidgetCommentListProps {
   comments: PublicCommentView[]
   pinnedCommentId: string | null
   canComment?: boolean
-  onSubmitComment?: (content: string, parentId: string) => Promise<void>
+  onSubmitComment?: (
+    content: string,
+    contentJson: TiptapContent | null,
+    parentId: string
+  ) => Promise<void>
 }
 
 export function WidgetCommentList({
@@ -72,7 +80,11 @@ interface WidgetCommentItemProps {
   pinnedCommentId: string | null
   depth: number
   canComment: boolean
-  onSubmitComment?: (content: string, parentId: string) => Promise<void>
+  onSubmitComment?: (
+    content: string,
+    contentJson: TiptapContent | null,
+    parentId: string
+  ) => Promise<void>
 }
 
 function WidgetCommentItem({
@@ -86,7 +98,8 @@ function WidgetCommentItem({
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showReplyForm, setShowReplyForm] = useState(false)
   const [replyText, setReplyText] = useState('')
-  const replyTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const replyJsonRef = useRef<TiptapContent | null>(null)
+  const [replyResetKey, setReplyResetKey] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [reactions, setReactions] = useState<CommentReactionCount[]>(comment.reactions)
   const [reactionPending, setReactionPending] = useState(false)
@@ -97,7 +110,12 @@ function WidgetCommentItem({
   }, [comment.reactions])
 
   useEffect(() => {
-    if (showReplyForm) replyTextareaRef.current?.focus()
+    if (!showReplyForm) return
+    // Reset the editor each time the reply form opens so a previously
+    // typed-but-cancelled draft doesn't leak into the next reply.
+    setReplyText('')
+    replyJsonRef.current = null
+    setReplyResetKey((k) => k + 1)
   }, [showReplyForm])
 
   const isDeleted = !!comment.deletedAt
@@ -128,8 +146,10 @@ function WidgetCommentItem({
     if (!content || isSubmitting || !onSubmitComment) return
     setIsSubmitting(true)
     try {
-      await onSubmitComment(content, comment.id)
+      await onSubmitComment(content, replyJsonRef.current, comment.id)
       setReplyText('')
+      replyJsonRef.current = null
+      setReplyResetKey((k) => k + 1)
       setShowReplyForm(false)
     } catch {
       // Error handled by parent
@@ -253,9 +273,11 @@ function WidgetCommentItem({
         </div>
 
         {/* Content */}
-        <p className="text-xs text-foreground/90 whitespace-pre-wrap mt-1 ms-7 leading-relaxed">
-          {comment.content}
-        </p>
+        <CommentContent
+          content={comment.content}
+          contentJson={comment.contentJson ?? null}
+          className="text-xs text-foreground/90 mt-1 ms-7 leading-relaxed"
+        />
 
         {/* Actions row: collapse, reactions, emoji picker, reply */}
         <div className="flex items-center gap-1 mt-1.5 ms-7">
@@ -342,10 +364,23 @@ function WidgetCommentItem({
         >
           <div className="overflow-hidden">
             <div className="mt-2 ms-7 p-2 bg-muted/30 rounded-md border border-border/30">
-              <div className="flex gap-2">
-                <textarea
+              <div
+                data-testid="widget-reply-editor"
+                className="rounded-md border border-border/50 bg-background px-2.5 py-1.5"
+                onKeyDownCapture={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    void handleSubmitReply()
+                  }
+                }}
+              >
+                <RichTextEditor
+                  key={replyResetKey}
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
+                  borderless
+                  minHeight="44px"
+                  features={COMMENT_EDITOR_FEATURES}
+                  disabled={isSubmitting}
                   placeholder={intl.formatMessage(
                     {
                       id: 'widget.commentList.replyPlaceholder',
@@ -353,22 +388,29 @@ function WidgetCommentItem({
                     },
                     { name: authorName }
                   )}
-                  rows={2}
-                  ref={replyTextareaRef}
-                  disabled={isSubmitting}
-                  className="flex-1 min-h-[44px] max-h-[100px] resize-none rounded-md border border-border/50 bg-background px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/50 disabled:opacity-50 transition-colors"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault()
-                      handleSubmitReply()
-                    }
+                  onChange={(json, _html, markdown) => {
+                    replyJsonRef.current = json as TiptapContent
+                    setReplyText(markdown ?? '')
                   }}
                 />
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReplyForm(false)
+                    setReplyText('')
+                    replyJsonRef.current = null
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <FormattedMessage id="widget.commentList.cancel" defaultMessage="Cancel" />
+                </button>
                 <button
                   type="button"
                   onClick={handleSubmitReply}
                   disabled={isSubmitting || !replyText.trim()}
-                  className="self-end px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                  className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
                 >
                   {isSubmitting ? (
                     '...'
@@ -377,16 +419,6 @@ function WidgetCommentItem({
                   )}
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReplyForm(false)
-                  setReplyText('')
-                }}
-                className="mt-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <FormattedMessage id="widget.commentList.cancel" defaultMessage="Cancel" />
-              </button>
             </div>
           </div>
         </div>

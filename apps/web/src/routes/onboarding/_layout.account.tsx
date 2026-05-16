@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { authClient } from '@/lib/client/auth-client'
 import { checkOnboardingState, getPublicAuthConfig } from '@/lib/server/functions/admin'
+import { pickOnboardingStep } from './onboarding-step'
 
 export const Route = createFileRoute('/onboarding/_layout/account')({
   loader: async ({ context }) => {
@@ -12,21 +13,16 @@ export const Route = createFileRoute('/onboarding/_layout/account')({
 
     if (session?.user) {
       const state = await checkOnboardingState({ data: session.user.id })
-
-      if (state.needsInvitation) {
-        throw redirect({ to: '/auth/login' })
-      }
-
-      if (state.setupState?.steps?.workspace) {
-        throw redirect({ to: '/onboarding/boards' })
-      }
-
-      // If use case is selected, go to workspace; otherwise go to use case selection
-      if (state.setupState?.useCase) {
-        throw redirect({ to: '/onboarding/workspace' })
-      }
-
-      throw redirect({ to: '/onboarding/usecase' })
+      throw redirect({
+        to: pickOnboardingStep({
+          session: { userId: session.user.id },
+          state: {
+            needsInvitation: state.needsInvitation,
+            setupState: state.setupState,
+            principalRecord: state.principalRecord,
+          },
+        }),
+      })
     }
 
     // When an env-baked SSO provider is configured, hide the manual

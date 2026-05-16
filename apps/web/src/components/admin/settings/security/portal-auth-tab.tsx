@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
+import { WarningBox } from '@/components/shared/warning-box'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { updatePortalConfigFn } from '@/lib/server/functions/settings'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
@@ -72,6 +73,19 @@ export function PortalAuthTab({
   ).length
   const isLastMethod = (id: string) => !!oauthState[id] && enabledMethodCount === 1
 
+  // Gates on what's *usable* (intent flag AND credentials), not on raw
+  // intent — a `google: true` flag with no saved credential renders as
+  // a "Not configured" tile and isn't a working sign-in surface.
+  const noPortalAuthEnabled = (() => {
+    if (oauthState.password) return false
+    if (oauthState.magicLink && emailConfigured) return false
+    return !Object.entries(oauthState).some(([id, enabled]) => {
+      if (!enabled) return false
+      if (id === 'password' || id === 'magicLink' || id === 'email') return false
+      return !!credentialStatus[id]
+    })
+  })()
+
   const save = async (patch: Record<string, boolean | undefined>) => {
     setSaving(true)
     try {
@@ -108,6 +122,19 @@ export function PortalAuthTab({
 
   return (
     <div className="space-y-6">
+      {noPortalAuthEnabled && (
+        <WarningBox
+          variant="warning"
+          title="No portal sign-in enabled"
+          description={
+            <>
+              Visitors can&apos;t sign in or sign up on your portal. Your team can still sign in at{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-[0.85em]">/admin</code>.
+            </>
+          }
+        />
+      )}
+
       {/* Card — Sign-in Methods */}
       <div className="rounded-xl border border-border/50 bg-card shadow-sm">
         <div className="px-6 py-4 border-b border-border/50">

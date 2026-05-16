@@ -507,4 +507,50 @@ describe('sanitizeTiptapContent', () => {
     expect(result.content![3].type).toBe('horizontalRule')
     expect(result.content![4].type).toBe('blockquote')
   })
+
+  it('preserves emoji nodes and their name/emoji attrs', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hi ' },
+            {
+              type: 'emoji',
+              attrs: {
+                name: 'smile',
+                emoji: '😄',
+                // Junk attrs that should be dropped
+                fallbackImage: 'https://evil/x.png',
+                shortcodes: ['smile'],
+              },
+            },
+            { type: 'text', text: '!' },
+          ],
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input)
+    const paragraph = result.content![0]
+    const emojiNode = paragraph.content!.find((n) => n.type === 'emoji')
+    expect(emojiNode).toBeDefined()
+    expect(emojiNode!.attrs).toEqual({ name: 'smile', emoji: '😄' })
+  })
+
+  it('accepts emoji-only nodes when name is missing (Unicode char is enough to render)', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'emoji', attrs: { emoji: '😄' } }],
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input)
+    const paragraph = result.content![0]
+    const emojiNode = paragraph.content!.find((n) => n.type === 'emoji')
+    expect(emojiNode!.attrs).toEqual({ emoji: '😄' })
+  })
 })

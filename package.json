@@ -72,6 +72,7 @@
     "@codemirror/view": "^6.41.0",
     "@lezer/highlight": "^1.2.3",
     "@tiptap/extension-image": "^3.22.3",
+    "@tiptap/extension-mention": "^3.22.3",
     "@tiptap/extension-table": "^3.22.3",
     "@tiptap/extension-table-cell": "^3.22.3",
     "@tiptap/extension-table-header": "^3.22.3",

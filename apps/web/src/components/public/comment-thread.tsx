@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -24,7 +24,12 @@ import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { CommentContent } from '@/components/public/comment-content'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
+import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
 /**
@@ -309,8 +314,14 @@ function CommentItem({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(comment.content)
+  const editJsonRef = useRef<TiptapContent | null>(comment.contentJson ?? null)
   const [editError, setEditError] = useState<string | null>(null)
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Stored doc preferred; legacy rows fall back to a markdown parse.
+  const editInitialJson = useMemo<TiptapContent>(() => {
+    if (comment.contentJson) return comment.contentJson
+    return commentMarkdownToTiptapJson(comment.content)
+  }, [comment.contentJson, comment.content])
 
   const editMutation = useEditComment({
     commentId: comment.id as CommentId,
@@ -320,13 +331,6 @@ function CommentItem({
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
-
-  useEffect(() => {
-    if (isEditing) {
-      editTextareaRef.current?.focus()
-      editTextareaRef.current?.setSelectionRange(comment.content.length, comment.content.length)
-    }
-  }, [isEditing, comment.content])
 
   const isDeleted = !!comment.deletedAt
   const canNest = depth < MAX_NESTING_DEPTH
@@ -372,7 +376,7 @@ function CommentItem({
     if (!trimmed) return
     setEditError(null)
     try {
-      await editMutation.mutateAsync(trimmed)
+      await editMutation.mutateAsync({ content: trimmed, contentJson: editJsonRef.current })
       setIsEditing(false)
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to save edit')
@@ -604,22 +608,34 @@ function CommentItem({
           {/* Comment content — switches to an edit form when isEditing */}
           {isEditing ? (
             <div className="mt-1.5 ms-10">
-              <textarea
-                ref={editTextareaRef}
-                data-testid="edit-comment-textarea"
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSaveEdit()
-                  else if (e.key === 'Escape') {
+              <div
+                data-testid="edit-comment-editor"
+                className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors px-3 py-2"
+                onKeyDownCapture={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleSaveEdit()
+                  } else if (e.key === 'Escape') {
                     setIsEditing(false)
                     setEditContent(comment.content)
+                    editJsonRef.current = comment.contentJson ?? null
                     setEditError(null)
                   }
                 }}
-                rows={3}
-                className="w-full max-w-lg rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              >
+                <RichTextEditor
+                  value={editInitialJson}
+                  borderless
+                  minHeight="64px"
+                  autofocus="end"
+                  features={COMMENT_EDITOR_FEATURES}
+                  disabled={editMutation.isPending}
+                  onChange={(json, _html, markdown) => {
+                    editJsonRef.current = json as TiptapContent
+                    setEditContent(markdown ?? '')
+                  }}
+                />
+              </div>
               {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
               <div className="flex items-center gap-2 mt-2">
                 <Button
@@ -646,6 +662,7 @@ function CommentItem({
                   onClick={() => {
                     setIsEditing(false)
                     setEditContent(comment.content)
+                    editJsonRef.current = comment.contentJson ?? null
                     setEditError(null)
                   }}
                   disabled={editMutation.isPending}
@@ -659,9 +676,11 @@ function CommentItem({
               </div>
             </div>
           ) : (
-            <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
-              {comment.content}
-            </p>
+            <CommentContent
+              content={comment.content}
+              contentJson={comment.contentJson ?? null}
+              className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+            />
           )}
 
           {/* Status change indicator */}

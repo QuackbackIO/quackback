@@ -26,6 +26,7 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
+import { hasAnyPortalAuthMethod } from '@/components/auth/oauth-buttons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { NotificationBell } from '@/components/notifications'
@@ -56,12 +57,19 @@ export function PortalHeader({
   const router = useRouter()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const { session, settings, registeredAuthProviders } = useRouteContext({ from: '__root__' })
 
   const helpCenterEnabled =
     !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
   const navItems = buildNavItems({ helpCenterEnabled })
+
+  // Hide Log in / Sign up when no portal sign-in surface is usable.
+  // Team members can still reach /admin/login directly.
+  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
+    ssoEnabled: registeredAuthProviders?.includes('sso') ?? false,
+    hasVerifiedDomain: (settings?.verifiedDomains ?? []).some((d) => d.verifiedAt !== null),
+  })
 
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
@@ -240,7 +248,7 @@ export function PortalHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : openAuthPopover ? (
+      ) : openAuthPopover && portalAuthEnabled ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>

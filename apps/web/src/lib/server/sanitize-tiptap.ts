@@ -35,6 +35,8 @@ const ALLOWED_NODE_TYPES = new Set([
   'tableRow',
   'tableHeader',
   'tableCell',
+  'emoji',
+  'mention',
 ])
 
 // Mark types that match the TipTap editor extensions
@@ -130,10 +132,33 @@ function sanitizeAttrs(
     case 'taskItem':
       return { checked: Boolean(attrs.checked) }
 
+    case 'emoji': {
+      // Emoji nodes ship the shortcode (`name`) and the Unicode character.
+      // Keep both as plain strings - everything else (HTML attrs, custom
+      // payloads from gitHubCustomEmojis-style overrides) is dropped.
+      const name = typeof attrs.name === 'string' ? attrs.name.slice(0, 64) : ''
+      const emoji = typeof attrs.emoji === 'string' ? attrs.emoji.slice(0, 16) : ''
+      const out: Record<string, unknown> = {}
+      if (name) out.name = name
+      if (emoji) out.emoji = emoji
+      return Object.keys(out).length > 0 ? out : undefined
+    }
+
     case 'orderedList':
       return attrs.start !== undefined
         ? { start: safePositiveInt(attrs.start, 1, 999999) }
         : undefined
+
+    case 'mention': {
+      // Mention nodes carry the target principal's TypeID (`id`) plus the
+      // displayName the user saw when picking them (`label`). Anything else
+      // (e.g. avatar URLs the client might send) is dropped — labels are
+      // re-resolved against the live principal at render time.
+      const id = typeof attrs.id === 'string' ? attrs.id.slice(0, 64) : ''
+      const label = typeof attrs.label === 'string' ? attrs.label.slice(0, 200) : ''
+      if (!id) return undefined
+      return { id, label }
+    }
 
     // Nodes with no meaningful attrs to sanitize
     case 'doc':

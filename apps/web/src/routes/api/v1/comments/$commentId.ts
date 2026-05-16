@@ -13,6 +13,7 @@ import type { CommentId } from '@quackback/ids'
 // Input validation schema
 const updateCommentSchema = z.object({
   content: z.string().min(1).max(5000),
+  contentJson: z.unknown().nullable().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/comments/$commentId')({
@@ -69,9 +70,8 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             })
           }
 
-          const { userEditComment } = await import(
-            '@/lib/server/domains/comments/comment.permissions'
-          )
+          const { userEditComment } =
+            await import('@/lib/server/domains/comments/comment.permissions')
           const { db, principal, eq } = await import('@/lib/server/db')
 
           const principalRecord = await db.query.principal.findFirst({
@@ -79,10 +79,19 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             with: { user: { columns: { name: true } } },
           })
 
-          const result = await userEditComment(commentId, parsed.data.content, {
-            principalId,
-            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
-          })
+          const result = await userEditComment(
+            commentId,
+            parsed.data.content,
+            {
+              principalId,
+              role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+            },
+            {
+              contentJson: (parsed.data.contentJson ?? undefined) as
+                | import('@/lib/shared/db-types').TiptapContent
+                | undefined,
+            }
+          )
 
           const commentMember = await db.query.principal.findFirst({
             where: eq(principal.id, result.principalId),

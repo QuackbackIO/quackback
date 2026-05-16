@@ -16,6 +16,7 @@ import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
+import { PostMentionEmail } from './templates/post-mention'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
@@ -495,6 +496,58 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
 }
 
 // ============================================================================
+// Post Mention Email
+// ============================================================================
+
+export interface SendPostMentionEmailArgs {
+  to: string
+  mentionerName: string
+  postTitle: string
+  /** Paragraph context for the mention. Empty string suppresses the quote block. */
+  excerpt: string
+  postUrl: string
+  workspaceName: string
+  unsubscribeUrl?: string
+  logoUrl?: string
+}
+
+export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
+  const { to, mentionerName, postTitle, excerpt, postUrl, workspaceName, unsubscribeUrl, logoUrl } =
+    args
+
+  const displayName = mentionerName || 'Anonymous user'
+  const subject = `${displayName} mentioned you in "${postTitle}"`
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Post Mention Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Mentioner: ${displayName}`)
+    console.log(`│ Post: ${postTitle}`)
+    console.log(`│ Excerpt: ${excerpt.substring(0, 80)}${excerpt.length > 80 ? '…' : ''}`)
+    console.log(`│ URL: ${postUrl}`)
+    console.log(`│ Unsubscribe: ${unsubscribeUrl ?? '(none)'}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject,
+    react: PostMentionEmail({
+      mentionerName,
+      postTitle,
+      excerpt,
+      postUrl,
+      workspaceName,
+      unsubscribeUrl,
+      logoUrl,
+    }),
+  })
+}
+
+// ============================================================================
 // Changelog Published Email
 // ============================================================================
 
@@ -615,6 +668,7 @@ export { WelcomeEmail } from './templates/welcome'
 export { MagicLinkEmail } from './templates/magic-link'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
+export { PostMentionEmail } from './templates/post-mention'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'

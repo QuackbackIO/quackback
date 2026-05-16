@@ -229,9 +229,11 @@ export async function updateChangelog(
 // ============================================================================
 
 /**
- * Soft delete a changelog entry
- *
- * Sets deletedAt timestamp instead of removing the row.
+ * Soft delete a changelog entry. publishedAt is preserved so cursor
+ * pagination in public read paths still has a valid anchor when the
+ * cursor row gets deleted mid-session. Visibility is enforced by the
+ * shared `publicChangelogConditions` helper, which every public read
+ * uses to filter out `deletedAt IS NOT NULL` rows.
  *
  * @param id - Changelog entry ID
  */

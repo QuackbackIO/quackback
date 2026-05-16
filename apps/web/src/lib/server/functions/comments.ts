@@ -29,6 +29,7 @@ import { getOptionalAuth, requireAuth, hasAuthCredentials } from './auth-helpers
 const createCommentSchema = z.object({
   postId: z.string(),
   content: z.string().min(1).max(5000),
+  contentJson: z.unknown().nullable().optional(),
   parentId: z.string().optional(),
   statusId: z.string().optional(),
   isPrivate: z.boolean().optional(),
@@ -46,6 +47,7 @@ const getCommentPermissionsSchema = z.object({
 const userEditCommentSchema = z.object({
   commentId: z.string(),
   content: z.string(),
+  contentJson: z.unknown().nullable().optional(),
 })
 
 const userDeleteCommentSchema = z.object({
@@ -87,6 +89,9 @@ export const createCommentFn = createServerFn({ method: 'POST' })
         {
           postId: data.postId as PostId,
           content: data.content,
+          contentJson: (data.contentJson ?? undefined) as
+            | import('@/lib/shared/db-types').TiptapContent
+            | undefined,
           parentId: data.parentId as CommentId | undefined,
           statusId: data.statusId as StatusId | undefined,
           isPrivate: data.isPrivate,
@@ -193,7 +198,11 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth()
       const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
 
-      const result = await userEditComment(data.commentId as CommentId, data.content, actor)
+      const result = await userEditComment(data.commentId as CommentId, data.content, actor, {
+        contentJson: (data.contentJson ?? undefined) as
+          | import('@/lib/shared/db-types').TiptapContent
+          | undefined,
+      })
       console.log(`[fn:comments] userEditCommentFn: edited id=${data.commentId}`)
       return result
     } catch (error) {

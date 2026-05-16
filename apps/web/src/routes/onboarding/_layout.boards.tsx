@@ -11,7 +11,6 @@ import {
   getBoardOptionsForUseCase,
   getUseCaseLabel,
 } from '@/components/onboarding/default-boards'
-import type { UseCaseType } from '@/lib/shared/db-types'
 import { pickOnboardingStep } from './onboarding-step'
 
 export const Route = createFileRoute('/onboarding/_layout/boards')({
@@ -49,7 +48,7 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
     return {
       existingBoards,
       maxBoards,
-      useCase: state.setupState?.useCase as UseCaseType | undefined,
+      useCase: state.setupState?.useCase,
     }
   },
   component: BoardsStep,

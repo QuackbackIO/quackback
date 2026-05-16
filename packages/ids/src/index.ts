@@ -74,6 +74,7 @@ export type {
   ReactionId,
   PostEditId,
   CommentEditId,
+  PostMentionId,
   NoteId,
   RoadmapId,
   ChangelogId,

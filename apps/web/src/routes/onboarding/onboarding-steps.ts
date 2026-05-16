@@ -1,12 +1,16 @@
-import type { SetupState } from '@/lib/shared/db-types'
-
 export type OnboardingStepDef = { path: string; label: string }
 
 /**
- * Canonical full list of onboarding steps in the order they appear
- * when a fresh user first signs in. Workspaces whose `setupState` was
- * partially seeded by a provisioner (or by the config-file reconciler)
- * skip the corresponding steps via `visibleSteps`.
+ * Canonical onboarding wizard steps in the order they appear. Rendered
+ * verbatim by the stepper — completed steps stay visible with a check
+ * rather than being filtered out, so the user's sense of forward
+ * progress (Step 2 of 4 → 3 of 4 → 4 of 4) isn't erased as they
+ * advance.
+ *
+ * Pre-stamped tenants (config-file watcher reconciles spec.workspace /
+ * useCase before first sign-in) just skip the matching loaders via
+ * pickOnboardingStep, so the user lands directly on the later step and
+ * the earlier ones appear as completed — accurate, not hidden.
  */
 export const ALL_ONBOARDING_STEPS: readonly OnboardingStepDef[] = [
   { path: '/onboarding/account', label: 'Account' },
@@ -14,35 +18,3 @@ export const ALL_ONBOARDING_STEPS: readonly OnboardingStepDef[] = [
   { path: '/onboarding/workspace', label: 'Workspace' },
   { path: '/onboarding/boards', label: 'Boards' },
 ] as const
-
-/**
- * Pick the steps the wizard should *display* given current state.
- * Steps that were pre-stamped (e.g. by the config-file watcher
- * reconciling spec.workspace) are hidden — the user shouldn't see
- * "Step 4 of 4" with three pre-checked boxes for things they didn't
- * do.
- *
- * Account is always shown when the user has no session: it's the only
- * step that creates the principal record. Other steps are gated on
- * their corresponding `setupState` fields.
- */
-export function visibleSteps(opts: {
-  hasSession: boolean
-  setupState: SetupState | null
-}): OnboardingStepDef[] {
-  const { hasSession, setupState } = opts
-  return ALL_ONBOARDING_STEPS.filter((step) => {
-    switch (step.path) {
-      case '/onboarding/account':
-        return !hasSession
-      case '/onboarding/usecase':
-        return !setupState?.useCase
-      case '/onboarding/workspace':
-        return !setupState?.steps?.workspace
-      case '/onboarding/boards':
-        return !setupState?.steps?.boards
-      default:
-        return true
-    }
-  })
-}
