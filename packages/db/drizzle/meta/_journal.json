@@ -447,7 +447,28 @@
       "idx": 63,
       "version": "7",
       "when": 1778457600010,
-      "tag": "0063_granular_access_controls",
+      "tag": "0063_comment_content_json",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1778457600011,
+      "tag": "0064_post_mentions",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1778457600012,
+      "tag": "0065_principal_displayname_lower_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1778457600013,
+      "tag": "0066_granular_access_controls",
       "breakpoints": true
     }
   ]

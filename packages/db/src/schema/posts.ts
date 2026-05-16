@@ -238,6 +238,7 @@ export const comments = pgTable(
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
     content: text('content').notNull(),
+    contentJson: jsonb('content_json').$type<TiptapContent>(),
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     isPrivate: boolean('is_private').default(false).notNull(),
     // Status change tracking: records which status transition occurred with this comment
@@ -323,6 +324,7 @@ export const commentEditHistory = pgTable(
       .notNull()
       .references(() => principal.id, { onDelete: 'set null' }),
     previousContent: text('previous_content').notNull(),
+    previousContentJson: jsonb('previous_content_json').$type<TiptapContent>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

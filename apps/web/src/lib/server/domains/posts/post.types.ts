@@ -196,6 +196,7 @@ export interface RoadmapPostListResult {
 export interface PinnedComment {
   id: CommentId
   content: string
+  contentJson?: TiptapContent | null
   authorName: string | null
   principalId: PrincipalId | null
   avatarUrl: string | null
@@ -209,6 +210,7 @@ export interface PinnedComment {
 export interface PublicComment {
   id: CommentId
   content: string
+  contentJson?: TiptapContent | null
   authorName: string | null
   principalId: string | null
   createdAt: Date

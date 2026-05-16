@@ -22,6 +22,7 @@ export const ID_PREFIXES = {
   post_edit: 'post_edit',
   comment_edit: 'comment_edit',
   note: 'note', // Internal staff notes on posts
+  post_mention: 'post_mention',
 
   // Planning domain
   roadmap: 'roadmap',

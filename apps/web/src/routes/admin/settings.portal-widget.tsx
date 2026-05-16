@@ -24,6 +24,7 @@ import {
   BrandingPreviewPanel,
 } from '@/components/admin/settings/branding/branding-layout'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -56,11 +57,6 @@ export const Route = createFileRoute('/admin/settings/portal-widget')({
   },
   component: PortalWidgetSettingsPage,
 })
-
-function InlineSpinner({ visible }: { visible: boolean }) {
-  if (!visible) return null
-  return <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-}
 
 function PortalWidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())

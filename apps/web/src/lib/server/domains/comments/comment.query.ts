@@ -100,6 +100,7 @@ export async function getCommentsByPost(
     principalId: comment.principalId,
     authorName: comment.author?.displayName ?? null,
     content: comment.content,
+    contentJson: comment.contentJson ?? null,
     isTeamMember: comment.isTeamMember,
     isPrivate: comment.isPrivate,
     createdAt: comment.createdAt,

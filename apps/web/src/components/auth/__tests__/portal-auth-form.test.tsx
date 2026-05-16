@@ -46,6 +46,49 @@ vi.mock('@/lib/server/functions/auth', () => ({
     'Single sign-on is configured for your domain but is not currently available. Contact your administrator.',
 }))
 
+// input-otp schedules three real setTimeouts (0/10/50 ms) on mount for
+// password-manager detection. Under happy-dom those timers can fire
+// after the test env has torn down `window`, surfacing as an unhandled
+// "window is not defined" error that fails the run. The tests here
+// don't exercise OTP-input behaviour — they just fire `change` on the
+// rendered control — so stub the library with a plain text input.
+vi.mock('@/components/ui/input-otp', () => ({
+  InputOTP: ({
+    children,
+    onChange,
+    onComplete,
+    value,
+    maxLength,
+    ['aria-label']: ariaLabel,
+    ...rest
+  }: {
+    children?: React.ReactNode
+    onChange?: (value: string) => void
+    onComplete?: (value: string) => void
+    value?: string
+    maxLength?: number
+    'aria-label'?: string
+  } & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <>
+      <input
+        aria-label={ariaLabel}
+        value={value ?? ''}
+        maxLength={maxLength}
+        onChange={(e) => {
+          const next = e.target.value
+          onChange?.(next)
+          if (maxLength && next.length === maxLength) onComplete?.(next)
+        }}
+        {...rest}
+      />
+      {children}
+    </>
+  ),
+  InputOTPGroup: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  InputOTPSlot: () => null,
+  InputOTPSeparator: () => null,
+}))
+
 import { PortalAuthForm } from '../portal-auth-form'
 import { authClient } from '@/lib/client/auth-client'
 

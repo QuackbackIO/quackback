@@ -1,5 +1,9 @@
 import { describe, test, expect } from 'vitest'
-import { markdownToTiptapJson, tiptapJsonToMarkdown } from '../markdown-tiptap'
+import {
+  markdownToTiptapJson,
+  tiptapJsonToMarkdown,
+  commentMarkdownToTiptapJson,
+} from '../markdown-tiptap'
 
 describe('markdownToTiptapJson', () => {
   test('converts a simple paragraph', () => {
@@ -170,5 +174,71 @@ describe('tiptapJsonToMarkdown', () => {
     expect(roundTripped).toContain('**bold**')
     expect(roundTripped).toContain('Item 1')
     expect(roundTripped).toContain('Item 2')
+  })
+})
+
+describe('commentMarkdownToTiptapJson', () => {
+  test('plain text becomes a paragraph', () => {
+    const result = commentMarkdownToTiptapJson('Hello world')
+    expect(result.type).toBe('doc')
+    expect(result.content![0].type).toBe('paragraph')
+  })
+
+  test('renders headings, bold, italic, lists, code, links', () => {
+    const md =
+      '## Heading\n\n**bold** and *italic*\n\n- one\n- two\n\n`inline` and [link](https://example.com)'
+    const result = commentMarkdownToTiptapJson(md)
+    const types = new Set(result.content!.map((n) => n.type))
+    expect(types.has('heading')).toBe(true)
+    expect(types.has('bulletList')).toBe(true)
+    expect(types.has('paragraph')).toBe(true)
+  })
+
+  test('image markdown does not produce an image node', () => {
+    const result = commentMarkdownToTiptapJson('![alt](https://example.com/x.png)')
+    const hasImage = JSON.stringify(result).includes('"type":"image"')
+    expect(hasImage).toBe(false)
+  })
+
+  test('table markdown does not produce a table node', () => {
+    const md = '| a | b |\n|---|---|\n| 1 | 2 |'
+    const result = commentMarkdownToTiptapJson(md)
+    const hasTable = JSON.stringify(result).includes('"type":"table"')
+    expect(hasTable).toBe(false)
+  })
+
+  test('javascript: links are stripped or escaped', () => {
+    const result = commentMarkdownToTiptapJson('[click](javascript:alert(1))')
+    const json = JSON.stringify(result)
+    expect(json.toLowerCase()).not.toContain('javascript:')
+  })
+
+  test('data: links are stripped', () => {
+    const result = commentMarkdownToTiptapJson('[click](data:text/html,<h1>x</h1>)')
+    const json = JSON.stringify(result)
+    expect(json.toLowerCase()).not.toContain('data:')
+  })
+
+  test('script tags in markdown do not produce script nodes', () => {
+    const result = commentMarkdownToTiptapJson('<script>alert(1)</script>\n\nHello')
+    const json = JSON.stringify(result)
+    expect(json).not.toContain('"type":"script"')
+  })
+
+  test('single newline becomes a hard break (GFM)', () => {
+    const result = commentMarkdownToTiptapJson('line one\nline two')
+    const json = JSON.stringify(result)
+    expect(json).toContain('"type":"hardBreak"')
+  })
+
+  test('Unicode emoji characters in markdown survive as plain text', () => {
+    // The composer inserts emojis as native Unicode chars. When the
+    // markdown round-trips through the server parser (used by API clients
+    // that POST `content` only), the emoji must survive in the resulting
+    // doc — otherwise React renders empty paragraphs where users typed
+    // smileys.
+    const result = commentMarkdownToTiptapJson('Hello 😀 world!')
+    const json = JSON.stringify(result)
+    expect(json).toContain('😀')
   })
 })

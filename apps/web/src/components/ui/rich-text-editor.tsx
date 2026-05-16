@@ -20,6 +20,8 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
+import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
+import { MentionExtension } from './mention-extension'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
@@ -201,8 +203,31 @@ export function buildExtensions(
         ]
       : []),
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
+    ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
+    ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
+    MentionExtension,
     Markdown,
   ]
+}
+
+// Single line break on Enter instead of TipTap's default paragraph split.
+// Shift+Enter still splits the block via StarterKit's own binding so power
+// users keep both affordances.
+function createEnterAsHardBreak() {
+  return Extension.create({
+    name: 'enterAsHardBreak',
+    addKeyboardShortcuts() {
+      return {
+        Enter: () =>
+          this.editor.commands.first(({ commands }) => [
+            () => commands.newlineInCode(),
+            () => commands.splitListItem('listItem'),
+            () => commands.splitListItem('taskItem'),
+            () => commands.setHardBreak(),
+          ]),
+      }
+    },
+  })
 }
 
 // ============================================================================
@@ -234,6 +259,16 @@ export interface EditorFeatures {
   dividers?: boolean
   /** Enable YouTube/Figma/Loom embeds */
   embeds?: boolean
+  /** Enable `:` emoji picker (default: true). Uses TipTap's Unicode emoji
+   * set; emojis are inserted as nodes and serialize to native Unicode
+   * characters in markdown. */
+  emojiPicker?: boolean
+  /** Make plain Enter insert a hardBreak instead of splitting the block.
+   * Shift+Enter still splits the paragraph via StarterKit's default
+   * binding. Use this for chat-shaped editors (comments) and leave off
+   * for document-shaped ones (posts, changelog) where paragraph-per-Enter
+   * is the expected affordance. */
+  enterAsHardBreak?: boolean
 }
 
 // ============================================================================
@@ -740,6 +775,245 @@ function createSlashCommands(
   })
 }
 
+// ============================================================================
+// Emoji Picker (`:` trigger)
+// ============================================================================
+
+interface EmojiSuggestionListRef {
+  onKeyDown: (props: { event: KeyboardEvent }) => boolean
+}
+
+interface EmojiSuggestionListProps {
+  items: EmojiItem[]
+  command: (item: EmojiItem) => void
+}
+
+const MAX_EMOJI_RESULTS = 12
+
+// Curated shortcodes shown the moment the user types `:`. Picked for the
+// long tail of comment reactions (joy, agreement, celebration). Ordering
+// here is the ordering in the dropdown.
+const DEFAULT_EMOJI_SHORTCODES = [
+  'smile',
+  'joy',
+  'heart_eyes',
+  'thinking',
+  'rolling_on_the_floor_laughing',
+  'face_with_tears_of_joy',
+  'thumbsup',
+  'thumbsdown',
+  'heart',
+  'fire',
+  'tada',
+  'rocket',
+] as const
+
+function lookupEmoji(shortcode: string): EmojiItem | undefined {
+  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(shortcode))
+}
+
+function filterEmojiItems(query: string): EmojiItem[] {
+  const lower = query.trim().toLowerCase()
+  if (!lower) {
+    // Bare `:` opens the picker with a small curated set so users can pick
+    // without typing a shortcode. Falls back to defaultEmojis order if a
+    // curated shortcode isn't in the bundled set.
+    const defaults: EmojiItem[] = []
+    for (const shortcode of DEFAULT_EMOJI_SHORTCODES) {
+      const found = lookupEmoji(shortcode)
+      if (found) defaults.push(found)
+    }
+    return defaults
+  }
+  const matches: EmojiItem[] = []
+  for (const item of defaultEmojis) {
+    if (!item.emoji) continue
+    const hitsShortcode = item.shortcodes.some((s) => s.toLowerCase().includes(lower))
+    const hitsTag = item.tags?.some((t) => t.toLowerCase().includes(lower)) ?? false
+    if (hitsShortcode || hitsTag) {
+      matches.push(item)
+      if (matches.length >= MAX_EMOJI_RESULTS) break
+    }
+  }
+  return matches
+}
+
+const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionListProps>(
+  ({ items, command }, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0)
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    const selectItem = (index: number) => {
+      const item = items[index]
+      if (item) command(item)
+    }
+
+    const scrollToSelected = useCallback((index: number) => {
+      const container = containerRef.current
+      if (!container) return
+      const buttons = container.querySelectorAll('button')
+      const selectedButton = buttons[index]
+      if (selectedButton) {
+        selectedButton.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [])
+
+    useEffect(() => {
+      setSelectedIndex(0)
+    }, [items])
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: ({ event }) => {
+        if (event.key === 'ArrowUp') {
+          const next = (selectedIndex - 1 + items.length) % items.length
+          setSelectedIndex(next)
+          scrollToSelected(next)
+          return true
+        }
+        if (event.key === 'ArrowDown') {
+          const next = (selectedIndex + 1) % items.length
+          setSelectedIndex(next)
+          scrollToSelected(next)
+          return true
+        }
+        if (event.key === 'Enter') {
+          selectItem(selectedIndex)
+          return true
+        }
+        return false
+      },
+    }))
+
+    if (items.length === 0) return null
+
+    return (
+      <div
+        data-emoji-picker
+        className="z-50 w-56 rounded-lg border bg-popover shadow-lg"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div ref={containerRef} className="p-0.5">
+          {items.map((item, index) => (
+            <button
+              key={item.name}
+              type="button"
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs',
+                'hover:bg-accent focus:bg-accent focus:outline-none',
+                index === selectedIndex && 'bg-accent'
+              )}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                selectItem(index)
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <span className="text-base leading-none">{item.emoji}</span>
+              <span className="truncate text-muted-foreground">:{item.shortcodes[0]}:</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+)
+EmojiSuggestionList.displayName = 'EmojiSuggestionList'
+
+function createEmojiExtension() {
+  return Emoji.configure({
+    enableEmoticons: true,
+    suggestion: {
+      items: ({ query }) => filterEmojiItems(query),
+      allow: ({ editor }) => !editor.isActive('codeBlock'),
+      render: () => {
+        let component: ReactRenderer<EmojiSuggestionListRef> | null = null
+        let floatingEl: HTMLDivElement | null = null
+
+        const updatePosition = async (clientRect: (() => DOMRect | null) | null) => {
+          if (!floatingEl || !clientRect) return
+          const rect = clientRect()
+          if (!rect) return
+          const virtualEl = { getBoundingClientRect: () => rect }
+          const { x, y } = await computePosition(virtualEl, floatingEl, {
+            strategy: 'fixed',
+            placement: 'bottom-start',
+            middleware: [offset(8), flip(), shift({ padding: 8 })],
+          })
+          Object.assign(floatingEl.style, { left: `${x}px`, top: `${y}px` })
+        }
+
+        return {
+          onStart: (props: SuggestionProps<EmojiItem>) => {
+            if (props.items.length === 0) return
+            component = new ReactRenderer(EmojiSuggestionList, {
+              props: {
+                items: props.items,
+                command: (item: EmojiItem) => props.command(item),
+              },
+              editor: props.editor,
+            })
+            floatingEl = document.createElement('div')
+            floatingEl.style.position = 'fixed'
+            floatingEl.style.zIndex = '50'
+            floatingEl.style.pointerEvents = 'auto'
+            floatingEl.appendChild(component.element)
+            document.body.appendChild(floatingEl)
+            updatePosition(props.clientRect ?? null)
+          },
+          onUpdate: (props: SuggestionProps<EmojiItem>) => {
+            // No matches → tear down so a bare `:` doesn't leave a stale
+            // dropdown floating.
+            if (props.items.length === 0) {
+              if (floatingEl) {
+                floatingEl.remove()
+                floatingEl = null
+              }
+              component?.destroy()
+              component = null
+              return
+            }
+            if (!component) {
+              component = new ReactRenderer(EmojiSuggestionList, {
+                props: {
+                  items: props.items,
+                  command: (item: EmojiItem) => props.command(item),
+                },
+                editor: props.editor,
+              })
+              floatingEl = document.createElement('div')
+              floatingEl.style.position = 'fixed'
+              floatingEl.style.zIndex = '50'
+              floatingEl.style.pointerEvents = 'auto'
+              floatingEl.appendChild(component.element)
+              document.body.appendChild(floatingEl)
+            } else {
+              component.updateProps({
+                items: props.items,
+                command: (item: EmojiItem) => props.command(item),
+              })
+            }
+            updatePosition(props.clientRect ?? null)
+          },
+          onKeyDown: (props: { event: KeyboardEvent }) => {
+            if (props.event.key === 'Escape') return true
+            return component?.ref?.onKeyDown(props) ?? false
+          },
+          onExit: () => {
+            if (floatingEl) {
+              floatingEl.remove()
+              floatingEl = null
+            }
+            component?.destroy()
+            component = null
+          },
+        }
+      },
+    },
+  })
+}
+
 interface RichTextEditorProps {
   value?: string | JSONContent
   onChange?: (json: JSONContent, html: string, markdown: string) => void
@@ -749,6 +1023,9 @@ interface RichTextEditorProps {
   minHeight?: string
   borderless?: boolean
   toolbarPosition?: 'top' | 'none'
+  /** Where to place the cursor when the editor mounts ('end' is the common
+   * choice for edit forms; default is no autofocus). */
+  autofocus?: boolean | 'start' | 'end' | number
   /** Feature flags for enabling advanced features */
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
@@ -768,6 +1045,7 @@ function RichTextEditorBase({
   minHeight = '120px',
   borderless = false,
   toolbarPosition = borderless ? 'none' : 'top',
+  autofocus = false,
   features = {},
   onImageUpload,
 }: RichTextEditorProps) {
@@ -789,6 +1067,8 @@ function RichTextEditorBase({
       features.tables,
       features.embeds,
       features.slashMenu,
+      features.emojiPicker,
+      features.enterAsHardBreak,
       onImageUpload,
       placeholder,
     ]
@@ -819,6 +1099,12 @@ function RichTextEditorBase({
   // edge case where a batched external reset (e.g. collapseForm → null) would
   // be incorrectly skipped by a stale boolean flag.
   const lastEmittedJsonRef = useRef<unknown>(null)
+  // Parallel guard for string-shaped callers (markdown). When the form's
+  // `value` is the markdown we just serialized, skip the sync so we don't
+  // bulldoze the user's typing — e.g. `# ` produces an empty heading whose
+  // markdown serialization is "", which without this guard would round-trip
+  // back through clearContent() and erase the heading they just created.
+  const lastEmittedMarkdownRef = useRef<string | null>(null)
 
   // Stable initial content reference — passed once to useEditor so TipTap v3's
   // compareOptions never sees a reference change on `content` and never calls
@@ -834,6 +1120,7 @@ function RichTextEditorBase({
     shouldRerenderOnTransaction: toolbarPosition === 'none' ? false : undefined,
     extensions,
     content: initialContentRef.current,
+    autofocus,
     editable: !disabled,
     onUpdate: ({ editor }) => {
       if (!onChange) return
@@ -844,13 +1131,14 @@ function RichTextEditorBase({
       // Callers that only need json+html (widget, portal) skip the expensive
       // recursive tree-walk that @tiptap/markdown does on every keystroke.
       const markdown = onChange.length >= 3 ? (editor.getMarkdown?.() ?? '') : ''
+      lastEmittedMarkdownRef.current = markdown
       onChange(json, html, markdown)
     },
     editorProps,
   })
 
   // Sync external value changes into the editor.
-  // Skipped when the value is the exact object we just emitted via onUpdate.
+  // Skipped when the value is the exact object/string we just emitted via onUpdate.
   useEffect(() => {
     if (!editor) return
 
@@ -860,9 +1148,29 @@ function RichTextEditorBase({
     }
     lastEmittedJsonRef.current = null
 
-    if (value === '' || value === undefined) {
-      editor.commands.clearContent()
-    } else if (typeof value === 'object') {
+    if (typeof value === 'string') {
+      // The string path is for markdown-shaped callers (react-hook-form
+      // tracking a markdown field). If the form's value matches the markdown
+      // we just emitted, the user is the source of truth - don't bulldoze
+      // their doc. This matters for transient states like an empty heading
+      // (`# ` then nothing typed yet) where the markdown serializes to "".
+      if (value === lastEmittedMarkdownRef.current) {
+        lastEmittedMarkdownRef.current = null
+        return
+      }
+      lastEmittedMarkdownRef.current = null
+      if (value === '' && !editor.isEmpty) {
+        editor.commands.clearContent()
+      }
+      return
+    }
+
+    if (value === undefined) {
+      if (!editor.isEmpty) editor.commands.clearContent()
+      return
+    }
+
+    if (typeof value === 'object') {
       const currentContent = JSON.stringify(editor.getJSON())
       const newContent = JSON.stringify(value)
       if (currentContent !== newContent) {
@@ -926,7 +1234,31 @@ function RichTextEditorBase({
   }, [])
 
   if (!editor) {
-    return null
+    // Reserve the editor's eventual height + placeholder so the surrounding
+    // layout (toolbar footer, card border) doesn't jump when TipTap finishes
+    // mounting. Keeping immediatelyRender=false preserves SSR safety.
+    return (
+      <div
+        className={cn(
+          !borderless && 'overflow-hidden rounded-md border border-input bg-background',
+          disabled && 'opacity-50 cursor-not-allowed',
+          className
+        )}
+        aria-hidden="true"
+      >
+        <div
+          className={cn(
+            'prose prose-sm prose-neutral dark:prose-invert max-w-none',
+            'min-h-[var(--editor-min-height)]',
+            borderless ? 'py-0' : 'px-3 py-2',
+            'text-muted-foreground'
+          )}
+          style={{ '--editor-min-height': minHeight } as React.CSSProperties}
+        >
+          {placeholder ?? ' '}
+        </div>
+      </div>
+    )
   }
 
   const showToolbar = toolbarPosition !== 'none'
@@ -1069,6 +1401,8 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.tables === nf.tables &&
     pf.embeds === nf.embeds &&
     pf.slashMenu === nf.slashMenu &&
+    pf.emojiPicker === nf.emojiPicker &&
+    pf.enterAsHardBreak === nf.enterAsHardBreak &&
     pf.bubbleMenu === nf.bubbleMenu
   )
 })
@@ -1796,7 +2130,7 @@ interface RichTextContentProps {
 // safePositiveInt, extractYoutubeId) are imported from @/lib/shared/utils/sanitize
 
 // Generate HTML from TipTap JSON content for SSR
-function generateContentHTML(content: JSONContent): string {
+export function generateContentHTML(content: JSONContent): string {
   function extractPlainText(node: JSONContent): string {
     if (!node) return ''
     if (node.type === 'text') return node.text ?? ''
@@ -1951,6 +2285,29 @@ function generateContentHTML(content: JSONContent): string {
       case 'hardBreak':
         return '<br>'
 
+      case 'mention': {
+        // Inline leaf node. The picker stores {id: principalId, label: displayName}.
+        // We emit a chip span with both attrs so the client overlay can resolve a
+        // hover card by principalId; label is also rendered as the visible "@name".
+        // escapeHtmlAttr escapes &<>"' so it's safe for both attribute and text use.
+        const id = escapeHtmlAttr(String(node.attrs?.id ?? ''))
+        const label = escapeHtmlAttr(String(node.attrs?.label ?? ''))
+        if (!id) return ''
+        return `<span class="mention" data-principal-id="${id}" data-display-name="${label}">@${label}</span>`
+      }
+
+      case 'emoji': {
+        // Emoji is a leaf node — the Unicode char lives on attrs.emoji.
+        // Sanitize-tiptap caps the field at 16 chars and the picker only
+        // inserts items from the bundled Unicode set, but we still HTML-
+        // escape here for defence-in-depth.
+        const ch = String(node.attrs?.emoji ?? '')
+        const escaped = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const name = escapeHtmlAttr(String(node.attrs?.name ?? ''))
+        const dataNameAttr = name ? ` data-name="${name}"` : ''
+        return `<span data-type="emoji"${dataNameAttr}>${escaped}</span>`
+      }
+
       default:
         // For unknown nodes, try to render their content
         return node.content?.map(renderNode).join('') ?? ''
@@ -2010,6 +2367,10 @@ const DOMPURIFY_CONFIG = {
     'type',
     'checked',
     'disabled',
+    'data-type',
+    'data-name',
+    'data-principal-id',
+    'data-display-name',
   ],
   ALLOW_DATA_ATTR: false,
   ADD_TAGS: ['iframe'],

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
@@ -300,6 +301,15 @@ const updatePortalConfigSchema = z.object({
       anonymousVoting: z.boolean().optional(),
       anonymousCommenting: z.boolean().optional(),
       anonymousPosting: z.boolean().optional(),
+    })
+    .optional(),
+  welcomeCard: z
+    .object({
+      enabled: z.boolean().optional(),
+      title: z.string().optional(),
+      // Body is re-sanitized server-side by normalizeWelcomeCardInput;
+      // tiptapContentSchema gates the shape at the boundary.
+      body: tiptapContentSchema.optional(),
     })
     .optional(),
 })

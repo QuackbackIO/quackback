@@ -43,6 +43,10 @@ import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { canCreatePost, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import { extractMentions, extractMentionExcerpts } from './extract-mentions'
+import { syncPostMentions } from './sync-post-mentions'
+import { buildPostUrl } from '@/lib/server/integrations/message-utils'
+import { getBaseUrl } from '@/lib/server/config'
 
 /**
  * Create a new post
@@ -214,6 +218,21 @@ export async function createPost(
       type: 'post.created',
       metadata: { boardName: board.name },
     })
+
+    // Record + dispatch @-mentions extracted from the rich-text body.
+    if (post.contentJson) {
+      const mentionedIds = extractMentions(post.contentJson)
+      if (mentionedIds.size > 0) {
+        await syncPostMentions({
+          postId: post.id,
+          postTitle: post.title,
+          postUrl: buildPostUrl(getBaseUrl(), board.slug, post.id),
+          mentionedIds,
+          excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
+          actor: buildEventActor(author),
+        })
+      }
+    }
   }
 
   return { ...post, boardSlug: board.slug }
@@ -467,6 +486,22 @@ export async function updatePost(
       },
       changedFields
     )
+  }
+
+  // Reconcile @-mentions whenever the body was touched. We call this even when
+  // the new mention set is empty so that mentions removed during an edit get
+  // deleted from post_mentions. Skipped when neither content nor contentJson
+  // was part of the update — a title-only edit must not clobber existing rows.
+  if (input.contentJson !== undefined || input.content !== undefined) {
+    const contentJson = updatedPost.contentJson
+    await syncPostMentions({
+      postId: updatedPost.id,
+      postTitle: updatedPost.title,
+      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+      mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
+      excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
+      actor: buildEventActor(actor),
+    })
   }
 
   return updatedPost

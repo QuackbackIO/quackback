@@ -4,6 +4,7 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
+import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
@@ -13,6 +14,7 @@ import {
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard } from '@/components/public/post-card'
 import type { BoardWithStats } from '@/lib/shared/types'
+import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
@@ -40,6 +42,8 @@ interface FeedbackContainerProps {
   user?: { name: string | null; email: string } | null
   /** Whether anonymous voting is enabled (visitors can vote without signing in) */
   anonymousVotingEnabled?: boolean
+  /** Welcome card to render above the post list. Undefined / disabled = hidden. */
+  welcomeCard?: PortalWelcomeCardData
 }
 
 export function FeedbackContainer({
@@ -57,6 +61,7 @@ export function FeedbackContainer({
   defaultBoardId,
   user,
   anonymousVotingEnabled = false,
+  welcomeCard,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -208,6 +213,8 @@ export function FeedbackContainer({
     <div className="py-6">
       <div className="flex gap-8">
         <div className="flex-1 min-w-0">
+          <PortalWelcomeCard welcomeCard={welcomeCard} />
+
           <FeedbackHeader
             workspaceName={workspaceName}
             boards={boards}

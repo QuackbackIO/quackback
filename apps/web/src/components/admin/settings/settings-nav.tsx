@@ -16,6 +16,7 @@ import {
   BeakerIcon,
   BookOpenIcon,
   TagIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types'
@@ -56,6 +57,7 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
       label: 'Customization',
       items: [
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
+        { label: 'Portal', to: '/admin/settings/portal', icon: MegaphoneIcon },
         { label: 'Widget', to: '/admin/settings/portal-widget', icon: ChatBubbleLeftRightIcon },
       ],
     },

@@ -29,6 +29,23 @@
   pointer-events: none;
 }
 
+/* Force emoji-style rendering for inserted emoji nodes.
+   @tiptap/extension-emoji stores some codepoints (e.g. U+2764 ❤) without
+   the U+FE0F variation selector, so by default the OS renders them in
+   text-style (foreground color → white-on-dark, black-on-light) instead
+   of as colored emoji. font-variant-emoji forces emoji presentation on
+   modern browsers; the emoji font stack covers older fallbacks. */
+.tiptap [data-type='emoji'],
+[data-emoji-picker] {
+  font-variant-emoji: emoji;
+  font-family:
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Noto Color Emoji',
+    'Twemoji Mozilla',
+    sans-serif;
+}
+
 /* Code block syntax highlighting */
 .tiptap pre {
   background: var(--muted);
@@ -199,3 +216,99 @@
 .hljs-template-variable { color: var(--syntax-variable, #f07178); }
 .hljs-type,
 .hljs-class { color: var(--syntax-type, #ffcb6b); }
+
+/* Strip tippy's default chrome so .mention-picker is the only surface. */
+.tippy-box[data-theme~='mention-picker'] {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  border-radius: 0;
+}
+.tippy-box[data-theme~='mention-picker'] > .tippy-content {
+  padding: 0;
+}
+
+/* @-mention picker (typeahead popover) */
+.mention-picker {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  min-width: 240px;
+  max-width: 320px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+}
+/* Radix ScrollArea wrapper. The height cap has to live on the Viewport
+ * (not the Root) because Radix sets the Viewport to height:100% — without
+ * a definite ancestor height it sizes to content and never clips.
+ * overscroll-behavior keeps wheel events inside the picker. */
+.mention-picker__scroll {
+  overflow: hidden;
+  border-radius: 0.375rem;
+}
+.mention-picker__scroll [data-slot='scroll-area-viewport'] {
+  max-height: 18rem;
+  overscroll-behavior: contain;
+}
+.mention-picker__list {
+  display: flex;
+  flex-direction: column;
+}
+.mention-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.mention-picker__row:hover:not(.is-selected) {
+  background: color-mix(in oklch, var(--accent) 50%, transparent);
+}
+/* Selected row uses primary at low opacity so it reads clearly in both
+ * light and dark themes — --accent alone in dark mode is too close in
+ * lightness to --popover to be legible. */
+.mention-picker__row.is-selected {
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  color: var(--popover-foreground);
+}
+.mention-picker__avatar { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
+.mention-picker__name { font-size: 0.875rem; }
+.mention-picker__team-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.375rem;
+  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.mention-picker__team-badge-img {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.125rem;
+  object-fit: contain;
+}
+.mention-picker__team-badge-icon { width: 1rem; height: 1rem; }
+.mention-picker__empty {
+  padding: 0.5rem 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+/* @-mention chip (inline rendered in posts) */
+.mention {
+  background: color-mix(in oklch, var(--accent) 40%, transparent);
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  color: var(--accent-foreground);
+}

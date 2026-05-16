@@ -44,6 +44,8 @@ const tiptapNodeSchema: z.ZodType<DbTiptapContent> = z.lazy(() =>
       'tableRow',
       'tableHeader',
       'tableCell',
+      'emoji',
+      'mention',
     ]),
     content: z.array(tiptapNodeSchema).optional(),
     text: z.string().optional(),

@@ -15,6 +15,7 @@ import type { PostId, CommentId, PrincipalId } from '@quackback/ids'
 // Input validation schema
 const createCommentSchema = z.object({
   content: z.string().min(1, 'Content is required').max(5000),
+  contentJson: z.unknown().nullable().optional(),
   parentId: z.string().optional().nullable(),
   isPrivate: z.boolean().optional(),
   createdAt: z.string().datetime().optional(),
@@ -136,6 +137,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             {
               postId,
               content: parsed.data.content,
+              contentJson: (parsed.data.contentJson ?? undefined) as
+                | import('@/lib/shared/db-types').TiptapContent
+                | undefined,
               parentId,
               isPrivate: parsed.data.isPrivate,
               createdAt,
