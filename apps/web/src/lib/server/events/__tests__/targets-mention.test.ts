@@ -92,10 +92,15 @@ vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
   decryptWebhookSecret: vi.fn((s: string) => s),
 }))
 
+const mockBatchGetNotificationPreferences = vi.fn().mockResolvedValue(new Map())
+const mockBatchGenerateUnsubscribeTokens = vi.fn().mockResolvedValue(new Map())
+
 vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
   getSubscribersForEvent: vi.fn().mockResolvedValue([]),
-  batchGetNotificationPreferences: vi.fn().mockResolvedValue(new Map()),
-  batchGenerateUnsubscribeTokens: vi.fn().mockResolvedValue(new Map()),
+  batchGetNotificationPreferences: (...args: unknown[]) =>
+    mockBatchGetNotificationPreferences(...args),
+  batchGenerateUnsubscribeTokens: (...args: unknown[]) =>
+    mockBatchGenerateUnsubscribeTokens(...args),
 }))
 
 vi.mock('@/lib/server/domains/ai/config', () => ({
@@ -167,6 +172,9 @@ describe('post.mentioned target resolution', () => {
         email: 'alice@example.com',
       },
     ])
+    mockBatchGenerateUnsubscribeTokens.mockResolvedValueOnce(
+      new Map([['principal_mentioned', 'token-abc']])
+    )
 
     const targets = await getHookTargets(makePostMentionedEvent())
 
@@ -181,12 +189,48 @@ describe('post.mentioned target resolution', () => {
     expect(emailTargets).toHaveLength(1)
     expect(emailTargets[0].target).toMatchObject({
       email: 'alice@example.com',
+      unsubscribeUrl: 'https://test.quackback.io/unsubscribe?token=token-abc',
     })
     expect(emailTargets[0].config).toMatchObject({
       postTitle: 'A test post',
       postUrl: 'https://test.quackback.io/b/bugs/posts/post_1',
       workspaceName: 'Test Workspace',
     })
+    // Token was issued with action=unsubscribe_all (global mute) since the
+    // user didn't subscribe to the post — they were tagged.
+    expect(mockBatchGenerateUnsubscribeTokens).toHaveBeenCalledWith([
+      {
+        principalId: 'principal_mentioned',
+        postId: 'post_1',
+        action: 'unsubscribe_all',
+      },
+    ])
+  })
+
+  it('drops the email target when the principal has emailMuted=true', async () => {
+    setupMentionDbChain([
+      {
+        id: 'principal_mentioned',
+        type: 'user',
+        role: 'user',
+        email: 'muted@example.com',
+      },
+    ])
+    mockBatchGetNotificationPreferences.mockResolvedValueOnce(
+      new Map([
+        [
+          'principal_mentioned',
+          { emailMuted: true, emailStatusChange: true, emailNewComment: true },
+        ],
+      ])
+    )
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+
+    // In-app notification still fires — only the email side is muted.
+    expect(targets.filter((t) => t.type === 'notification')).toHaveLength(1)
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+    expect(mockBatchGenerateUnsubscribeTokens).not.toHaveBeenCalled()
   })
 
   it('returns no notification or email targets when the principal does not exist', async () => {

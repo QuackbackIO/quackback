@@ -16,22 +16,31 @@ export type { EventActor } from './types.js'
 /**
  * Build an EventActor from a principal with optional user details.
  * Constructs a 'user' actor when userId is present, otherwise a 'service' actor.
+ *
+ * `displayName` is preserved on user actors too (not just service) so
+ * downstream handlers — notification text, mention email "by X" line —
+ * can render the actor's name instead of falling back to "Anonymous user".
+ * `name` is accepted as a fallback so callers passing a plain `author`
+ * object (which uses `name`, not `displayName`) don't need to remap.
  */
 export function buildEventActor(actor: {
   principalId: PrincipalId
   userId?: UserId
   email?: string
   displayName?: string
+  name?: string
 }): EventActor {
+  const displayName = actor.displayName ?? actor.name
   if (actor.userId) {
     return {
       type: 'user',
       principalId: actor.principalId,
       userId: actor.userId,
       email: actor.email,
+      displayName,
     }
   }
-  return { type: 'service', principalId: actor.principalId, displayName: actor.displayName }
+  return { type: 'service', principalId: actor.principalId, displayName }
 }
 
 export interface PostCreatedInput {

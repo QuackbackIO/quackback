@@ -566,17 +566,36 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
   })
 
   if (row.email) {
-    targets.push({
-      type: 'email',
-      target: { email: row.email, unsubscribeUrl: undefined },
-      config: {
-        postTitle,
-        postUrl,
-        workspaceName: context.workspaceName,
-        logoUrl: context.logoUrl ?? undefined,
-        eventType: 'post.mentioned',
-      },
-    })
+    // Honour the global emailMuted preference. Without this, a user who hit
+    // unsubscribe-all (which sets emailMuted=true) would still get direct
+    // mention emails because the mention path doesn't go through the
+    // subscriber filter that runs shouldSendEmail.
+    const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
+    const prefs = prefsMap.get(row.id as PrincipalId)
+    if (!prefs?.emailMuted) {
+      const tokenMap = await batchGenerateUnsubscribeTokens([
+        {
+          principalId: row.id as PrincipalId,
+          postId: event.data.postId as PostId,
+          action: 'unsubscribe_all',
+        },
+      ])
+      const token = tokenMap.get(row.id as PrincipalId)
+      targets.push({
+        type: 'email',
+        target: {
+          email: row.email,
+          unsubscribeUrl: token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : undefined,
+        },
+        config: {
+          postTitle,
+          postUrl,
+          workspaceName: context.workspaceName,
+          logoUrl: context.logoUrl ?? undefined,
+          eventType: 'post.mentioned',
+        },
+      })
+    }
   }
 
   return targets
