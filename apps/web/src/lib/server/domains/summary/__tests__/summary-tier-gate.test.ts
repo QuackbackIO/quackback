@@ -18,6 +18,10 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   stripCodeFences: vi.fn((s: string) => s),
 }))
 
+vi.mock('@/lib/server/config', () => ({
+  config: { summaryModel: 'gpt-4o-mini' },
+}))
+
 vi.mock('@/lib/server/db', () => ({
   db: {
     query: { posts: { findFirst: (...a: unknown[]) => hoisted.mockedFindFirst(...a) } },

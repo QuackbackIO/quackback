@@ -88,11 +88,36 @@ describe('retry', () => {
       expect(isRetryableError(new Error(msg))).toBe(true)
     })
 
-    it.each(['Invalid JSON', 'Missing required field', 'Unauthorized'])(
-      'should treat "%s" as non-retryable',
-      (msg) => {
-        expect(isRetryableError(new Error(msg))).toBe(false)
-      }
-    )
+    it.each([
+      'Invalid JSON',
+      'Missing required field',
+      'Unauthorized',
+      '400 invalid model ID',
+      '401 incorrect api key provided',
+      '403 forbidden',
+      '404 model not found',
+      '422 unprocessable entity',
+    ])('should treat "%s" as non-retryable', (msg) => {
+      expect(isRetryableError(new Error(msg))).toBe(false)
+    })
+
+    it('should not retry 400 even when message also mentions retryable tokens', () => {
+      // Some providers wrap 400s in noisy strings that brush against the
+      // retryable pattern; the explicit 4xx check must win.
+      expect(isRetryableError(new Error('400 invalid model ID (upstream rate limit hint)'))).toBe(
+        false
+      )
+    })
+  })
+
+  describe('withRetry — 4xx', () => {
+    it('does not retry 400 errors', async () => {
+      const fn = vi.fn().mockRejectedValue(new Error('400 invalid model ID'))
+
+      await expect(withRetry(fn, { maxRetries: 5, baseDelayMs: 1 })).rejects.toThrow(
+        '400 invalid model ID'
+      )
+      expect(fn).toHaveBeenCalledTimes(1)
+    })
   })
 })
