@@ -1,5 +1,9 @@
 # @quackback/widget
 
+## 0.1.5 - 2026-05-18
+
+- Fix: `Quackback("init", { launcher: false, placement: "left" })` from a script-tag install now applies your options instead of silently keeping the default launcher and right-side placement. A repeat `init` call also reconfigures cleanly.
+
 ## 0.1.4 — 2026-04-17
 
 - Launcher fade-in is slower (≈450 ms) and waits ~600 ms after the theme fetch resolves before appearing, for a gentler entrance that doesn't compete with the host page finishing its own render.
