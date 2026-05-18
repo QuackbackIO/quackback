@@ -61,66 +61,47 @@ const envInt = z.preprocess(
 // Schema Definition (camelCase property names)
 // =============================================================================
 
-const configSchema = z
-  .object({
-    // Core
-    nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
-    baseUrl: z.string().url(),
-    port: envInt.default(3000),
+const configSchema = z.object({
+  // Core
+  nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
+  baseUrl: z.string().url(),
+  port: envInt.default(3000),
 
-    // Database
-    databaseUrl: z.string().min(1),
+  // Database
+  databaseUrl: z.string().min(1),
 
-    // Auth
-    secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
+  // Auth
+  secretKey: z.string().min(32, 'SECRET_KEY must be at least 32 characters'),
 
-    // Redis (BullMQ background jobs)
-    redisUrl: z.string().min(1),
+  // Redis (BullMQ background jobs)
+  redisUrl: z.string().min(1),
 
-    // Email (all optional)
-    emailFrom: z.string().optional(),
-    emailSmtpHost: z.string().optional(),
-    emailSmtpPort: envInt.optional(),
-    emailSmtpUser: z.string().optional(),
-    emailSmtpPass: z.string().optional(),
-    emailSmtpSecure: envBoolean,
-    emailResendApiKey: z.string().optional(),
+  // Email (all optional)
+  emailFrom: z.string().optional(),
+  emailSmtpHost: z.string().optional(),
+  emailSmtpPort: envInt.optional(),
+  emailSmtpUser: z.string().optional(),
+  emailSmtpPass: z.string().optional(),
+  emailSmtpSecure: envBoolean,
+  emailResendApiKey: z.string().optional(),
 
-    // S3 (optional)
-    s3Endpoint: z.string().optional(),
-    s3Bucket: z.string().optional(),
-    s3Region: z.string().optional(),
-    s3AccessKeyId: z.string().optional(),
-    s3SecretAccessKey: z.string().optional(),
-    s3ForcePathStyle: envBoolean,
-    s3PublicUrl: z.string().optional(),
-    s3Proxy: envBoolean,
+  // S3 (optional)
+  s3Endpoint: z.string().optional(),
+  s3Bucket: z.string().optional(),
+  s3Region: z.string().optional(),
+  s3AccessKeyId: z.string().optional(),
+  s3SecretAccessKey: z.string().optional(),
+  s3ForcePathStyle: envBoolean,
+  s3PublicUrl: z.string().optional(),
+  s3Proxy: envBoolean,
 
-    // AI (optional)
-    openaiApiKey: z.string().optional(),
-    openaiBaseUrl: z.string().optional(),
-    // OpenAI-compatible model id used for post summaries. Default matches what
-    // the bare OpenAI API will accept; set to an OpenRouter/Gateway slug (e.g.
-    // `google/gemini-3.1-flash-lite-preview`) only when `OPENAI_BASE_URL` points
-    // at a gateway that understands it.
-    summaryModel: z.string().min(1).default('gpt-4o-mini'),
+  // AI (optional)
+  openaiApiKey: z.string().optional(),
+  openaiBaseUrl: z.string().optional(),
 
-    // Telemetry (optional)
-    disableTelemetry: envBoolean,
-  })
-  .superRefine((cfg, ctx) => {
-    // Catch the issue #180 misconfiguration at startup: a slash in the model id
-    // almost always means "this is a gateway slug" (e.g. `google/...`,
-    // `anthropic/...`). Sending it straight to api.openai.com produces a 400 on
-    // every request, which used to soft-lock the summary sweep.
-    if (cfg.openaiApiKey && cfg.summaryModel.includes('/') && !cfg.openaiBaseUrl) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['summaryModel'],
-        message: `SUMMARY_MODEL "${cfg.summaryModel}" looks like a gateway slug (contains "/") but OPENAI_BASE_URL is empty. Either set a plain OpenAI model id (e.g. "gpt-4o-mini") or configure OPENAI_BASE_URL to point at your gateway.`,
-      })
-    }
-  })
+  // Telemetry (optional)
+  disableTelemetry: envBoolean,
+})
 
 type Config = z.infer<typeof configSchema>
 
@@ -169,7 +150,6 @@ function buildConfigFromEnv(): unknown {
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
     openaiBaseUrl: env('OPENAI_BASE_URL'),
-    summaryModel: env('SUMMARY_MODEL'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -298,9 +278,6 @@ export const config = {
   },
   get openaiBaseUrl() {
     return loadConfig().openaiBaseUrl
-  },
-  get summaryModel() {
-    return loadConfig().summaryModel
   },
 
   // Telemetry

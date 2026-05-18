@@ -57,15 +57,13 @@ export async function withRetry<T>(
 const RETRYABLE_ERROR_PATTERN =
   /econnreset|etimedout|enotfound|socket hang up|rate.limit|too many requests|429|5\d\d|internal server error|bad gateway|service unavailable|inferenceupstreamerror/i
 
-// Non-transient client errors that should never be retried. An invalid model
-// ID, a malformed prompt, or a revoked API key will fail identically forever —
-// retrying just amplifies the damage (see issue #180, where a misconfigured
-// model id caused ~318k retries against api.openai.com).
+// Client errors that will fail identically forever (invalid model id, revoked
+// key, malformed request) — retrying them just amplifies the damage. Checked
+// before the retryable pattern so noisy upstream messages can't smuggle a 4xx
+// past the gate. See #180.
 const NON_RETRYABLE_STATUS_PATTERN = /\b(400|401|403|404|422)\b/
 
 export function isRetryableError(error: Error): boolean {
-  // Explicit non-retryable status takes precedence even if other tokens in the
-  // message happen to look retryable.
   if (NON_RETRYABLE_STATUS_PATTERN.test(error.message)) return false
   return RETRYABLE_ERROR_PATTERN.test(error.message)
 }
