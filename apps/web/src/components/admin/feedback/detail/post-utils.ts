@@ -14,6 +14,7 @@ export function toPortalComments(post: PostDetails): PublicCommentView[] {
   const mapComment = (c: PostDetails['comments'][0]): PublicCommentView => ({
     id: c.id as CommentId,
     content: c.content,
+    contentJson: c.contentJson ?? null,
     authorName: c.authorName,
     principalId: c.principalId,
     createdAt: c.createdAt,
