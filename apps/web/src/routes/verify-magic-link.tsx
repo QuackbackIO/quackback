@@ -189,15 +189,32 @@ function GenericVerifyPage({
     return () => window.clearTimeout(t)
   }, [token, callbackURL, errorCallbackURL])
 
-  // Fallback href for the manual-continue affordance. Identical
-  // shape to what the effect builds, just constructed without
-  // window so SSR is happy. Relative URLs work in both contexts.
+  // Manual-recovery affordance only matters once the ~600ms auto-
+  // redirect has visibly failed; painting it from the first render
+  // gives the user a competing CTA most never need. 5s is long
+  // enough for the happy path to leave the page.
+  const [showContinue, setShowContinue] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setShowContinue(true), 5_000)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  // Relative href so it works under SSR without `window` and in
+  // <noscript>. Same shape the verify effect builds at runtime.
   const fallbackHref = (() => {
     const params = new URLSearchParams({ token })
     if (callbackURL) params.set('callbackURL', callbackURL)
     if (errorCallbackURL) params.set('errorCallbackURL', errorCallbackURL)
     return `/api/auth/magic-link/verify?${params.toString()}`
   })()
+
+  const continueLink = (
+    <a href={fallbackHref} className="mt-6 inline-block">
+      <Button variant="outline" className="h-11">
+        Continue
+      </Button>
+    </a>
+  )
 
   return (
     <PageShell>
@@ -207,14 +224,8 @@ function GenericVerifyPage({
           <h1 className="text-2xl font-bold tracking-tight">Signing you in&hellip;</h1>
         </div>
         <p className="mt-2 text-muted-foreground">Hang tight, this only takes a moment.</p>
-        {/* Fallback for users who landed here with JS disabled or saw
-            the auto-redirect blocked. Stays visible the whole time
-            so a stalled redirect has a manual way out. */}
-        <a href={fallbackHref} className="mt-6 inline-block">
-          <Button variant="outline" className="h-11">
-            Continue
-          </Button>
-        </a>
+        {showContinue && continueLink}
+        <noscript>{continueLink}</noscript>
       </Card>
     </PageShell>
   )
