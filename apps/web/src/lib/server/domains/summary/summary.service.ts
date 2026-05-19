@@ -177,6 +177,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_BATCH_DELAY_MS = 500
+const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
 
 let _sweepInProgress = false
 
@@ -261,7 +262,7 @@ async function _doSweep(): Promise<void> {
     // at the top of the order that we need to skip past to reach healthy rows.
     if (batchSucceeded === 0) {
       consecutiveEmptyBatches++
-      if (consecutiveEmptyBatches >= 2) {
+      if (consecutiveEmptyBatches >= SWEEP_ABORT_AFTER_EMPTY_BATCHES) {
         console.error(
           `[Summary] Aborting sweep: ${consecutiveEmptyBatches} consecutive batches with 0 successes (${totalProcessed} processed, ${totalFailed} failed total). Next sweep will retry.`
         )
