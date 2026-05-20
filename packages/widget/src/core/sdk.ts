@@ -200,10 +200,13 @@ export function createSDK(): SDK {
   function dispatch(cmd: Command, a?: unknown, b?: unknown): unknown {
     switch (cmd) {
       case 'init': {
-        config = { ...(a as InitOptions) }
-        if (!config.instanceUrl) throw new Error('Quackback: init requires { instanceUrl }')
-        if (!isSafeHttpUrl(config.instanceUrl))
+        const next = { ...(a as InitOptions) }
+        if (!next.instanceUrl) throw new Error('Quackback: init requires { instanceUrl }')
+        if (!isSafeHttpUrl(next.instanceUrl))
           throw new Error('Quackback: instanceUrl must be an http(s) URL')
+        // Validate before destroy so a bad re-init leaves the working instance intact.
+        if (config) dispatch('destroy')
+        config = next
         createLauncherIfNeeded()
         ensurePanel()
         const initialIdentity: Identity | { anonymous: true } = config.identity ?? {

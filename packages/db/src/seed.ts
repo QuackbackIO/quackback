@@ -288,7 +288,6 @@ async function seed() {
         boards: true,
       },
       completedAt: new Date().toISOString(),
-      source: 'self-hosted' as const,
     }
     await db.insert(settings).values({
       id: settingsId,

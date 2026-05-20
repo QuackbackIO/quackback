@@ -62,20 +62,20 @@ test.describe('Public Post List', () => {
     }
   })
 
-  test('defaults to Top sort with visual indicator', async ({ page }) => {
+  test('defaults to Trending sort with visual indicator', async ({ page }) => {
     // Navigate to page without sort param
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // "Top" button should be active (has font-medium class)
-    const topButton = page.getByRole('button', { name: /^Top$/i })
-    await expect(topButton).toHaveClass(/font-medium/)
+    // "Trending" button should be active (has font-medium class)
+    const trendingButton = page.getByRole('button', { name: /^Trending$/i })
+    await expect(trendingButton).toHaveClass(/font-medium/)
 
     // Other sort buttons should not be active
+    const topButton = page.getByRole('button', { name: /^Top$/i })
     const newButton = page.getByRole('button', { name: /^New$/i })
-    const trendingButton = page.getByRole('button', { name: /^Trending$/i })
+    await expect(topButton).not.toHaveClass(/font-medium/)
     await expect(newButton).not.toHaveClass(/font-medium/)
-    await expect(trendingButton).not.toHaveClass(/font-medium/)
   })
 
   test('can sort posts by clicking New', async ({ page }) => {
@@ -134,26 +134,26 @@ test.describe('Public Post List', () => {
     const newButton = page.getByRole('button', { name: /^New$/i })
     const trendingButton = page.getByRole('button', { name: /^Trending$/i })
 
-    // Start with Top active
-    await expect(topButton).toHaveClass(/font-medium/)
+    // Start with Trending active
+    await expect(trendingButton).toHaveClass(/font-medium/)
 
     // Switch to New
     await newButton.click()
     await expect(page).toHaveURL(/[?&]sort=new/)
     await expect(newButton).toHaveClass(/font-medium/)
-    await expect(topButton).not.toHaveClass(/font-medium/)
+    await expect(trendingButton).not.toHaveClass(/font-medium/)
 
-    // Switch to Trending
-    await trendingButton.click()
-    await expect(page).toHaveURL(/[?&]sort=trending/)
-    await expect(trendingButton).toHaveClass(/font-medium/)
-    await expect(newButton).not.toHaveClass(/font-medium/)
-
-    // Switch back to Top
+    // Switch to Top
     await topButton.click()
     await expect(page).toHaveURL(/[?&]sort=top/)
     await expect(topButton).toHaveClass(/font-medium/)
-    await expect(trendingButton).not.toHaveClass(/font-medium/)
+    await expect(newButton).not.toHaveClass(/font-medium/)
+
+    // Switch back to Trending
+    await trendingButton.click()
+    await expect(page).toHaveURL(/[?&]sort=trending/)
+    await expect(trendingButton).toHaveClass(/font-medium/)
+    await expect(topButton).not.toHaveClass(/font-medium/)
   })
 
   test('sort persists with board filter', async ({ page }) => {
@@ -938,7 +938,9 @@ test.describe('Post List - Filter Result Verification', () => {
     // Collect all visible status badge texts from post cards
     // StatusBadge renders as: <span class="inline-flex items-center gap-1.5 text-xs font-medium">
     // It is a direct child of [data-post-id], not nested under .post-card
-    const statusBadges = page.locator('[data-post-id] span.inline-flex.items-center.text-xs.font-medium')
+    const statusBadges = page.locator(
+      '[data-post-id] span.inline-flex.items-center.text-xs.font-medium'
+    )
     const badgeCount = await statusBadges.count()
 
     // If there are posts with status badges, each should say "Open"
@@ -994,7 +996,9 @@ test.describe('Post List - Filter Result Verification', () => {
     test.skip((await tagsSection.count()) === 0, 'No tags section in filter dropdown')
 
     // Click the first tag button
-    const tagButtons = page.locator('button.rounded-full.text-xs, button[class*="rounded-full"][class*="text-xs"]')
+    const tagButtons = page.locator(
+      'button.rounded-full.text-xs, button[class*="rounded-full"][class*="text-xs"]'
+    )
     const tagCount = await tagButtons.count()
     test.skip(tagCount === 0, 'No tag filter buttons found')
 
@@ -1301,7 +1305,10 @@ test.describe('Post List - Search Accuracy', () => {
     const emptyState = page.getByText('No posts match your filters.')
     const hasEmpty = (await emptyState.count()) > 0
 
-    test.skip(filteredCount === 0 && !hasEmpty, 'Unexpected empty result without empty state message')
+    test.skip(
+      filteredCount === 0 && !hasEmpty,
+      'Unexpected empty result without empty state message'
+    )
 
     if (filteredCount > 0) {
       // Every visible post title should contain the search term (case-insensitive)

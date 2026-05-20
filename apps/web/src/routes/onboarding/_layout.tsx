@@ -1,13 +1,7 @@
 import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
-
-const ONBOARDING_STEPS = [
-  { path: '/onboarding/account', label: 'Account' },
-  { path: '/onboarding/usecase', label: 'Use case' },
-  { path: '/onboarding/workspace', label: 'Workspace' },
-  { path: '/onboarding/boards', label: 'Boards' },
-] as const
+import { ALL_ONBOARDING_STEPS } from './onboarding-steps'
 
 /**
  * Shared layout for all onboarding steps.
@@ -35,8 +29,9 @@ export const Route = createFileRoute('/onboarding/_layout')({
 function OnboardingHeader() {
   const location = useLocation()
   const currentPath = location.pathname
-  const currentStepIndex = ONBOARDING_STEPS.findIndex((s) => s.path === currentPath)
 
+  const steps = ALL_ONBOARDING_STEPS
+  const currentStepIndex = steps.findIndex((s) => s.path === currentPath)
   const showSteps = currentStepIndex !== -1
 
   return (
@@ -54,18 +49,18 @@ function OnboardingHeader() {
           <div className="absolute top-3.5 left-0 right-0 h-px bg-border" />
 
           {/* Progress line (filled portion) */}
-          {currentStepIndex > 0 && (
+          {currentStepIndex > 0 && steps.length > 1 && (
             <div
               className="absolute top-3.5 left-0 h-px bg-primary transition-all duration-500"
               style={{
-                width: `${(currentStepIndex / (ONBOARDING_STEPS.length - 1)) * 100}%`,
+                width: `${(currentStepIndex / (steps.length - 1)) * 100}%`,
               }}
             />
           )}
 
           {/* Step circles + labels */}
           <div className="relative flex w-full justify-between">
-            {ONBOARDING_STEPS.map((step, index) => {
+            {steps.map((step, index) => {
               const isCompleted = index < currentStepIndex
               const isCurrent = index === currentStepIndex
 

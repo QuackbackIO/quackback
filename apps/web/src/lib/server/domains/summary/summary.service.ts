@@ -5,9 +5,22 @@
  * Summaries include a prose overview, urgency level, key quotes, and next steps.
  */
 
-import { db, posts, comments, eq, and, or, isNull, ne, desc, sql } from '@/lib/server/db'
+import {
+  db,
+  posts,
+  comments,
+  eq,
+  and,
+  or,
+  isNull,
+  ne,
+  desc,
+  sql,
+  notInArray,
+} from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
+import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 
 const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
@@ -53,6 +66,8 @@ interface PostSummaryJson {
  * Fetches the post title, content, and comments, then calls the LLM.
  */
 export async function generateAndSavePostSummary(postId: PostId): Promise<void> {
+  await enforceAiTokenBudget()
+
   const openai = getOpenAI()
   if (!openai) return
 
@@ -162,15 +177,29 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_BATCH_DELAY_MS = 500
+const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
+
+let _sweepInProgress = false
 
 /**
  * Refresh stale summaries.
- * Finds all posts where the summary is missing or the live comment count has changed,
- * and processes them in batches until none remain.
+ *
+ * Finds all posts where the summary is missing or the live comment count has
+ * changed, and processes them in batches until none remain. See #180 for why
+ * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
  */
 export async function refreshStaleSummaries(): Promise<void> {
   if (!getOpenAI()) return
+  if (_sweepInProgress) return
+  _sweepInProgress = true
+  try {
+    await _doSweep()
+  } finally {
+    _sweepInProgress = false
+  }
+}
 
+async function _doSweep(): Promise<void> {
   const liveCommentCountSq = db
     .select({
       postId: comments.postId,
@@ -181,10 +210,15 @@ export async function refreshStaleSummaries(): Promise<void> {
     .groupBy(comments.postId)
     .as('live_cc')
 
+  // Failed rows stay stale (summaryJson NULL); without skipping them we'd
+  // re-hit the same top-of-order rows every iteration. Excluding at the DB
+  // level (not client-side after LIMIT) is what lets the sweep peel past a
+  // block of permanent failures and reach healthy rows below them.
+  const attempted = new Set<PostId>()
   let totalProcessed = 0
   let totalFailed = 0
+  let consecutiveEmptyBatches = 0
 
-  // Process in batches until no stale posts remain
   while (true) {
     const stalePosts = await db
       .select({ id: posts.id })
@@ -196,7 +230,8 @@ export async function refreshStaleSummaries(): Promise<void> {
           or(
             isNull(posts.summaryJson),
             ne(posts.summaryCommentCount, sql`coalesce(${liveCommentCountSq.count}, 0)`)
-          )
+          ),
+          attempted.size > 0 ? notInArray(posts.id, [...attempted]) : undefined
         )
       )
       .orderBy(desc(posts.updatedAt))
@@ -204,27 +239,44 @@ export async function refreshStaleSummaries(): Promise<void> {
 
     if (stalePosts.length === 0) break
 
-    if (totalProcessed === 0) {
+    if (totalProcessed === 0 && totalFailed === 0) {
       console.log(`[Summary] Found stale posts, processing...`)
     }
 
+    let batchSucceeded = 0
     for (const { id } of stalePosts) {
+      attempted.add(id)
       try {
         await generateAndSavePostSummary(id)
         totalProcessed++
+        batchSucceeded++
       } catch (err) {
         totalFailed++
         console.error(`[Summary] Failed to refresh post ${id}:`, err)
       }
     }
 
-    console.log(`[Summary] Progress: ${totalProcessed} processed, ${totalFailed} failed`)
+    // Two consecutive zero-success batches almost always means a systemic
+    // problem (bad model id, revoked key, upstream down). One zero-success
+    // batch alone isn't enough — it can just be a block of permanent failures
+    // at the top of the order that we need to skip past to reach healthy rows.
+    if (batchSucceeded === 0) {
+      consecutiveEmptyBatches++
+      if (consecutiveEmptyBatches >= SWEEP_ABORT_AFTER_EMPTY_BATCHES) {
+        console.error(
+          `[Summary] Aborting sweep: ${consecutiveEmptyBatches} consecutive batches with 0 successes (${totalProcessed} processed, ${totalFailed} failed total). Next sweep will retry.`
+        )
+        break
+      }
+    } else {
+      consecutiveEmptyBatches = 0
+      console.log(`[Summary] Progress: ${totalProcessed} processed, ${totalFailed} failed`)
+    }
 
-    // Brief pause between batches to avoid rate limits
     await new Promise((resolve) => setTimeout(resolve, SWEEP_BATCH_DELAY_MS))
   }
 
-  if (totalProcessed > 0) {
+  if (totalProcessed > 0 || totalFailed > 0) {
     console.log(`[Summary] Sweep complete: ${totalProcessed} processed, ${totalFailed} failed`)
   }
 }

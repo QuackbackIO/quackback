@@ -5,21 +5,38 @@
  * Runs on post.created events to analyze and index content.
  */
 
-import type { HookHandler, HookResult } from '../hook-types'
+import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment/sentiment.service'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { PostId } from '@quackback/ids'
 import { db, postTags, tags, eq } from '@/lib/server/db'
+import { claimHookDelivery } from '../hook-idempotency'
 
 /**
  * AI hook handler - processes sentiment and embeddings for new posts.
  * Event type filtering is handled by targets.ts, so we only receive post.created events.
  */
 export const aiHook: HookHandler = {
-  async run(event: EventData, _target: unknown, _config: unknown): Promise<HookResult> {
+  async run(
+    event: EventData,
+    _target: unknown,
+    _config: unknown,
+    ctx?: HookRunContext
+  ): Promise<HookResult> {
     const { post } = event.data as { post: { id: string; title: string; content: string } }
     const postId = post.id as PostId
+
+    // Idempotency: if BullMQ is re-running this job after a worker crash,
+    // skip the analysis — the previous attempt already paid OpenAI for
+    // sentiment + embedding work. Without this, every rolling restart
+    // that interrupts the AI worker double-bills.
+    const claimed = await claimHookDelivery(ctx?.jobId, 'ai')
+    if (!claimed) {
+      console.log(`[AI] Skipping duplicate processing for job ${ctx?.jobId} (post ${postId})`)
+      return { success: true }
+    }
+
     console.log(`[AI] Processing post: ${postId}`)
 
     // Run sentiment and embedding in parallel

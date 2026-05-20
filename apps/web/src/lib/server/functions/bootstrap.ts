@@ -10,6 +10,19 @@ export interface BootstrapData {
   settings: TenantSettings | null
   userRole: 'admin' | 'member' | 'user' | null
   themeCookie: Theme
+  /** Dot-paths managed by `/etc/quackback/config.yaml`. The matching
+   *  in-app form controls render disabled when the path appears here.
+   *  Empty list = nothing locked. */
+  managedFieldPaths: string[]
+  /** Workspace state, written by the config-file reconciler. Defaults
+   *  to 'active' when no config file is present. */
+  state: 'active' | 'suspended' | 'deleting'
+  /** Provider IDs that Better-Auth would register at boot — used by
+   *  the admin login UI to gate CTAs on actually-usable providers, not
+   *  just DB intent. A stale `ssoOidc.enabled=true` with no
+   *  `auth_sso` row in `platform_credentials` will NOT include 'sso'
+   *  here, so the UI never renders an SSO button that would 404. */
+  registeredAuthProviders: string[]
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -96,17 +109,20 @@ async function getSessionAndRole(): Promise<{
 let _initialized = false
 
 const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapData> => {
-  const [{ getTenantSettings }, { config }, { getRequestHeaders }] = await Promise.all([
-    import('@/lib/server/domains/settings/settings.service'),
-    import('@/lib/server/config'),
-    import('@tanstack/react-start/server'),
-  ])
+  const [{ getTenantSettings }, { getRegisteredAuthProviders }, { config }, { getRequestHeaders }] =
+    await Promise.all([
+      import('@/lib/server/domains/settings/settings.service'),
+      import('@/lib/server/auth/registered-providers'),
+      import('@/lib/server/config'),
+      import('@tanstack/react-start/server'),
+    ])
 
   // Single principal read returns both session.principalType + userRole;
   // run in parallel with the settings fetch.
-  const [{ session, role: userRole }, settings] = await Promise.all([
+  const [{ session, role: userRole }, settings, registeredAuthProviders] = await Promise.all([
     getSessionAndRole(),
     getTenantSettings(),
+    getRegisteredAuthProviders(),
   ])
 
   // One-time initialization on first request
@@ -127,7 +143,16 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   const headers = getRequestHeaders()
   const themeCookie = getThemeCookie(headers.get('cookie') ?? null)
 
-  return { baseUrl: config.baseUrl, session, settings, userRole, themeCookie }
+  return {
+    baseUrl: config.baseUrl,
+    session,
+    settings,
+    userRole,
+    themeCookie,
+    managedFieldPaths: settings?.managedFieldPaths ?? [],
+    state: settings?.state ?? 'active',
+    registeredAuthProviders,
+  }
 })
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(

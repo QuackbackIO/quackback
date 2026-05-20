@@ -167,11 +167,9 @@ export interface SetupState {
     boards: boolean // At least one board created or explicitly skipped
   }
   completedAt?: string // ISO timestamp when onboarding was fully completed
-  source: 'cloud' | 'self-hosted' // How this instance was provisioned
   useCase?: UseCaseType // Product type for personalized board recommendations
 }
 
-// Default setup state for new instances (self-hosted starts with workspace incomplete)
 export const DEFAULT_SETUP_STATE: SetupState = {
   version: 1,
   steps: {
@@ -179,7 +177,6 @@ export const DEFAULT_SETUP_STATE: SetupState = {
     workspace: false,
     boards: false,
   },
-  source: 'self-hosted',
 }
 
 // Helper to parse setup state from settings

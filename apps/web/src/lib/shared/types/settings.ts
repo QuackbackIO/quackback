@@ -11,8 +11,12 @@
 
 export type {
   PortalAuthMethods,
+  PortalConfig,
+  PortalWelcomeCard,
   TenantSettings,
   HelpCenterConfig,
+  AuthConfig,
+  VerifiedDomain,
 } from '@/lib/server/domains/settings'
 
 // FeatureFlags and FEATURE_FLAG_REGISTRY live only in settings.types (not barrel-exported)
@@ -22,4 +26,5 @@ export type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 export {
   FEATURE_FLAG_REGISTRY,
   DEFAULT_PORTAL_CONFIG,
+  PORTAL_WELCOME_CARD_TITLE_MAX,
 } from '@/lib/server/domains/settings/settings.types'

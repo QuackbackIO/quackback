@@ -351,7 +351,7 @@ export function StatusList({ initialStatuses }: StatusListProps) {
     <div className="space-y-8">
       {/* Roadmap info */}
       <div className="flex items-center justify-end gap-3">
-        <p className="text-sm text-muted-foreground">Toggle statuses to show on your roadmap</p>
+        <p className="text-xs text-muted-foreground">Toggle statuses to show on your roadmap</p>
         <Badge variant="outline">{roadmapCount} selected</Badge>
       </div>
 

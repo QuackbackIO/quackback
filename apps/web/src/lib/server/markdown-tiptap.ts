@@ -20,6 +20,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 
 /**
  * Server-safe extensions for markdown conversion.
@@ -69,4 +70,32 @@ export function markdownToTiptapJson(markdown: string): TiptapContent {
  */
 export function tiptapJsonToMarkdown(json: TiptapContent | JSONContent): string {
   return manager.serialize(json as JSONContent)
+}
+
+/**
+ * Slim extension set for comments — no images, no tables, no YouTube.
+ * Comments are short, dense, and inline; we want the safe subset only.
+ */
+const COMMENT_EXTENSIONS = [
+  StarterKit.configure({
+    heading: { levels: [1, 2, 3] },
+    hardBreak: { keepMarks: true },
+  }),
+  Link.configure({ openOnClick: false, autolink: true }),
+  Underline,
+  TaskList,
+  TaskItem.configure({ nested: true }),
+]
+
+const commentManager = new MarkdownManager({
+  extensions: COMMENT_EXTENSIONS,
+  markedOptions: { gfm: true, breaks: true },
+})
+
+/**
+ * Parse a comment-style markdown string into TipTap JSON.
+ */
+export function commentMarkdownToTiptapJson(markdown: string): TiptapContent {
+  const json = commentManager.parse(markdown) as TiptapContent
+  return sanitizeTiptapContent(json) as TiptapContent
 }

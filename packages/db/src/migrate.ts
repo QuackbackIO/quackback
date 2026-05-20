@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,6 +34,17 @@ async function runMigrations() {
     await sql`CREATE EXTENSION IF NOT EXISTS vector`
     await migrate(db, { migrationsFolder })
     console.log('✅ Migrations completed successfully!')
+
+    // Seed default post statuses if none exist. Cloud-provisioned tenants
+    // boot empty: the post.service requires an `open` default status to
+    // create posts, and without it the very first post submission throws
+    // "Default 'open' status not found." Idempotent — re-running on a
+    // pod with statuses already configured is a no-op.
+    const existing = await db.select({ id: postStatuses.id }).from(postStatuses).limit(1)
+    if (existing.length === 0) {
+      await db.insert(postStatuses).values(DEFAULT_STATUSES)
+      console.log(`✅ Seeded ${DEFAULT_STATUSES.length} default post statuses`)
+    }
   } catch (error) {
     console.error('❌ Migration failed:', error)
     process.exit(1)

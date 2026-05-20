@@ -24,6 +24,7 @@ import {
   BrandingPreviewPanel,
 } from '@/components/admin/settings/branding/branding-layout'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -67,7 +68,7 @@ function WidgetContentSettings({ config }: { config: { imageUploadsInWidget?: bo
           <Label htmlFor="image-uploads-in-widget" className="text-sm font-medium cursor-pointer">
             Image Uploads
           </Label>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Allow signed-in users to attach images when submitting feedback through the widget.
           </p>
         </div>
@@ -101,11 +102,6 @@ export const Route = createFileRoute('/admin/settings/widget')({
   },
   component: WidgetSettingsPage,
 })
-
-function InlineSpinner({ visible }: { visible: boolean }) {
-  if (!visible) return null
-  return <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-}
 
 function WidgetSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
@@ -621,7 +617,9 @@ function WidgetInstallation({
   const [activeTab, setActiveTab] = useState('snippet')
 
   // Persisted state
-  const [verifiedIdentityOnly, setVerifiedIdentityOnly] = useState(config.identifyVerification ?? false)
+  const [verifiedIdentityOnly, setVerifiedIdentityOnly] = useState(
+    config.identifyVerification ?? false
+  )
   const [currentSecret, setCurrentSecret] = useState(secret)
   const [secretVisible, setSecretVisible] = useState(false)
   const [copiedSecret, setCopiedSecret] = useState(false)

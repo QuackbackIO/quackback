@@ -1242,7 +1242,7 @@ export const Route = createFileRoute('/api/v1/docs')({
         <span class="logo-context">API</span>
       </a>
       <div class="header-actions">
-        <a href="/admin/settings/api-keys" class="header-link header-link--primary">
+        <a href="/admin/settings/api?tab=keys" class="header-link header-link--primary">
           <span>Get API Key</span>
         </a>
       </div>

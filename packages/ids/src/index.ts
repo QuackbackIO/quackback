@@ -74,6 +74,7 @@ export type {
   ReactionId,
   PostEditId,
   CommentEditId,
+  PostMentionId,
   NoteId,
   RoadmapId,
   ChangelogId,
@@ -113,6 +114,8 @@ export type {
   VerificationId,
   DomainId,
   TransferTokenId,
+  AuditLogId,
+  SsoRecoveryCodeId,
   ApiKeyId,
   WebhookId,
   // Billing

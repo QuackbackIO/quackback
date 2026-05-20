@@ -10,7 +10,32 @@ import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import { DEFAULT_AUTH_CONFIG, DEFAULT_PORTAL_CONFIG } from '@/lib/server/domains/settings'
+import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
+import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { slugify } from '@/lib/shared/utils'
+import { getSetupState } from '@/lib/shared/db-types'
+
+/** Onboarding promotes the acting user to admin in two server fns
+ *  (saveUseCaseFn, setupWorkspaceFn). Same DB shape, same intent —
+ *  insert when missing, upgrade when present-but-not-admin. */
+async function ensureAdminPrincipal(userId: UserId, logLabel: string): Promise<void> {
+  const existing = await db.query.principal.findFirst({
+    where: eq(principal.userId, userId),
+  })
+  if (!existing) {
+    console.log(`[fn:onboarding] ${logLabel}: creating admin member for user`)
+    await db.insert(principal).values({
+      id: generateId('principal'),
+      userId,
+      role: 'admin',
+      createdAt: new Date(),
+    })
+  } else if (!isAdmin(existing.role)) {
+    console.log(`[fn:onboarding] ${logLabel}: upgrading user to admin`)
+    await db.update(principal).set({ role: 'admin' }).where(eq(principal.userId, userId))
+  }
+}
 
 /**
  * Server functions for onboarding workflow.
@@ -68,86 +93,52 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
         throw new Error('Authentication required')
       }
 
+      // Block in-app writes when the config-file owns these fields.
+      // The reconciler applies the file's value separately; this gate
+      // refuses to let the UI clobber it. Pre-onboarding the gate is a
+      // no-op because settings (and managedFieldPaths) don't exist yet
+      // — by the time managedFieldPaths is populated the reconciler
+      // has already written the file's name/slug.
+      //
+      // Slug-only lock: when the file owns slug but not name, the name
+      // input still accepts user submission (the wizard auto-derives
+      // slug client-side, but the server skips the slug column write
+      // below). This avoids locking the user out of onboarding when
+      // only one of the two fields is managed.
+      await assertNotManaged('workspace.name')
+      if (data.useCase !== undefined) {
+        await assertNotManaged('workspace.useCase')
+      }
+
       const { workspaceName, userName, useCase } = data
 
       // Check if settings already exist
       const existingSettings = await getSettings()
 
-      // Fresh install (no settings): first authenticated user becomes admin
-      // Settings exist: require existing admin role
+      let setupState: SetupState | null = getSetupState(existingSettings?.setupState ?? null)
+
+      // Fresh install (no settings): first authenticated user becomes admin.
+      // Settings exist + workspace step done: require existing admin.
+      // Settings exist + workspace step not done: ensure user becomes admin.
       if (!existingSettings) {
-        // Fresh install - ensure user has admin member record
+        await ensureAdminPrincipal(session.user.id as UserId, 'setupWorkspaceFn')
+      } else if (setupState?.steps?.workspace) {
         const principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, session.user.id as UserId),
         })
-
-        if (!principalRecord) {
-          // Create admin member for first user
-          console.log(`[fn:onboarding] setupWorkspaceFn: creating admin member for first user`)
-          await db.insert(principal).values({
-            id: generateId('principal'),
-            userId: session.user.id as UserId,
-            role: 'admin',
-            createdAt: new Date(),
-          })
-        } else if (!isAdmin(principalRecord.role)) {
-          // User exists but not admin - upgrade to admin (fresh install, they're first)
-          console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
-          await db
-            .update(principal)
-            .set({ role: 'admin' })
-            .where(eq(principal.userId, session.user.id as UserId))
+        if (!principalRecord || !isAdmin(principalRecord.role)) {
+          throw new Error('Only admin can complete setup')
         }
       } else {
-        // Settings exist - check setup state
-        const currentSetupState: SetupState | null = existingSettings.setupState
-          ? JSON.parse(existingSettings.setupState)
-          : null
-
-        // If workspace step is already complete, require admin role
-        // If workspace step is NOT complete (mid-onboarding), ensure user becomes admin
-        const principalRecord = await db.query.principal.findFirst({
-          where: eq(principal.userId, session.user.id as UserId),
-        })
-
-        if (currentSetupState?.steps?.workspace) {
-          // Workspace already set up - require existing admin
-          if (!principalRecord || !isAdmin(principalRecord.role)) {
-            throw new Error('Only admin can complete setup')
-          }
-        } else {
-          // Mid-onboarding - ensure user is admin
-          if (!principalRecord) {
-            console.log(
-              `[fn:onboarding] setupWorkspaceFn: creating admin member for onboarding user`
-            )
-            await db.insert(principal).values({
-              id: generateId('principal'),
-              userId: session.user.id as UserId,
-              role: 'admin',
-              createdAt: new Date(),
-            })
-          } else if (!isAdmin(principalRecord.role)) {
-            console.log(`[fn:onboarding] setupWorkspaceFn: upgrading user to admin`)
-            await db
-              .update(principal)
-              .set({ role: 'admin' })
-              .where(eq(principal.userId, session.user.id as UserId))
-          }
-        }
+        await ensureAdminPrincipal(session.user.id as UserId, 'setupWorkspaceFn')
       }
-
-      // Parse existing setupState if present
-      let setupState: SetupState | null = existingSettings?.setupState
-        ? JSON.parse(existingSettings.setupState)
-        : null
 
       // Check if onboarding is already complete
       if (setupState?.steps?.core && setupState?.steps?.workspace && setupState?.steps?.boards) {
         throw new Error('Workspace already initialized')
       }
 
-      // Update user's name if provided (for users created via emailOTP without a name)
+      // Update user's name if provided (for users created via magic link without a name)
       if (userName) {
         await db
           .update(user)
@@ -165,10 +156,14 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       if (existingSettings) {
         console.log(`[fn:onboarding] setupWorkspaceFn: updating existing settings`)
 
-        // Generate slug from workspace name
+        // Slug is auto-derived from name client-side, but if the
+        // config file owns workspace.slug we skip the column write and
+        // let the file's slug stand. The reconciler will overwrite it
+        // on its next tick anyway.
+        const slugManaged = isPathManaged('workspace.slug', existingSettings.managedFieldPaths)
         const slug = slugify(workspaceName)
 
-        if (slug.length < 2) {
+        if (!slugManaged && slug.length < 2) {
           throw new Error('Invalid workspace name - cannot generate valid slug')
         }
 
@@ -182,33 +177,34 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             },
             useCase: useCase ?? setupState.useCase,
           }
-          await db
+          const updatePayload: Record<string, unknown> = {
+            name: workspaceName.trim(),
+            setupState: JSON.stringify(updatedState),
+            // Seed defaults only when the column is still null — never
+            // clobber values the admin (or config-file reconciler) has
+            // already written. openSignup is forced true here so the
+            // first admin doesn't lock the team surface immediately
+            // after creating the workspace; DEFAULT_AUTH_CONFIG ships
+            // false because steady-state tenants don't want anyone to
+            // self-serve sign-up.
+            portalConfig: existingSettings.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
+            authConfig:
+              existingSettings.authConfig ??
+              JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+          }
+          if (!slugManaged) updatePayload.slug = slug
+          const [updated] = await db
             .update(settings)
-            .set({
-              name: workspaceName.trim(),
-              slug,
-              setupState: JSON.stringify(updatedState),
-              // Set default configs if not already set
-              portalConfig:
-                existingSettings.portalConfig ??
-                JSON.stringify({
-                  oauth: { password: true, google: true, github: true },
-                  features: { publicView: true, submissions: true, comments: true, voting: true },
-                }),
-              authConfig:
-                existingSettings.authConfig ??
-                JSON.stringify({
-                  oauth: { google: true, github: true },
-                  openSignup: true,
-                }),
-            })
+            .set(updatePayload)
             .where(eq(settings.id, existingSettings.id))
+            .returning()
+          finalSettings = updated
           console.log(
-            `[fn:onboarding] setupWorkspaceFn: updated name=${workspaceName}, slug=${slug}, workspace=true`
+            `[fn:onboarding] setupWorkspaceFn: updated name=${workspaceName}, slug=${
+              slugManaged ? '<managed:skipped>' : slug
+            }, workspace=true`
           )
         }
-
-        finalSettings = await getSettings()
       } else {
         // Self-hosted: create settings from scratch
         // Generate slug from workspace name
@@ -218,7 +214,8 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           throw new Error('Invalid workspace name - cannot generate valid slug')
         }
 
-        // Initial setupState for self-hosted (workspace step done after this fn completes)
+        // Workspace step is done by the time this fn returns; boards
+        // step still pending until the user creates / skips one.
         setupState = {
           version: 1,
           steps: {
@@ -226,12 +223,18 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             workspace: true,
             boards: false,
           },
-          source: 'self-hosted',
           useCase,
         }
 
         // Create settings
         // Note: Not using transaction because neon-http driver doesn't support interactive transactions.
+        //
+        // Fresh-insert intentionally bypasses the managed-paths gate:
+        // there's no settings row yet to read managedFieldPaths from,
+        // so assertNotManaged would have nothing to assert against. If
+        // a config file is present, the reconciler will overwrite
+        // name/slug/etc on its next tick and populate managedFieldPaths
+        // — subsequent UI mutators are gated normally.
         const [createdSettings] = await db
           .insert(settings)
           .values({
@@ -239,16 +242,11 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             name: workspaceName.trim(),
             slug,
             createdAt: new Date(),
-            // Default portal config - all features enabled
-            portalConfig: JSON.stringify({
-              oauth: { password: true, google: true, github: true },
-              features: { publicView: true, submissions: true, comments: true, voting: true },
-            }),
-            // Default auth config
-            authConfig: JSON.stringify({
-              oauth: { google: true, github: true },
-              openSignup: true,
-            }),
+            portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+            // openSignup forced true at first-install so the bootstrap
+            // admin doesn't lock the team surface immediately; the
+            // shipped default is false (settings.types.ts).
+            authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
             setupState: JSON.stringify(setupState),
           })
           .returning()
@@ -335,54 +333,42 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
         throw new Error('Authentication required')
       }
 
+      // Same rationale as setupWorkspaceFn: don't let the UI overwrite
+      // a file-managed useCase. Pre-onboarding the gate is a no-op.
+      await assertNotManaged('workspace.useCase')
+
       const existingSettings = await getSettings()
 
       if (existingSettings) {
-        // Update existing settings with useCase
-        const setupState: SetupState = existingSettings.setupState
-          ? JSON.parse(existingSettings.setupState)
-          : { version: 1, steps: { core: true, workspace: false, boards: false }, source: 'cloud' }
-
-        const updatedState: SetupState = {
-          ...setupState,
-          useCase: data.useCase,
+        const setupState: SetupState = getSetupState(existingSettings.setupState) ?? {
+          version: 1,
+          steps: { core: true, workspace: false, boards: false },
         }
+
+        const updatedState: SetupState = { ...setupState, useCase: data.useCase }
 
         await db
           .update(settings)
           .set({ setupState: JSON.stringify(updatedState) })
           .where(eq(settings.id, existingSettings.id))
 
-        // Ensure user has admin member record (for cases where settings exist but member doesn't)
         if (!setupState.steps.workspace) {
-          const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.userId, session.user.id as UserId),
-          })
-
-          if (!principalRecord) {
-            await db.insert(principal).values({
-              id: generateId('principal'),
-              userId: session.user.id as UserId,
-              role: 'admin',
-              createdAt: new Date(),
-            })
-            console.log(`[fn:onboarding] saveUseCaseFn: created admin member for user`)
-          }
+          await ensureAdminPrincipal(session.user.id as UserId, 'saveUseCaseFn')
         }
 
         await invalidateSettingsCache()
         console.log(`[fn:onboarding] saveUseCaseFn: saved useCase=${data.useCase}`)
       } else {
-        // Fresh self-hosted install: create minimal settings to store useCase
-        // The workspace step will update name/slug later
+        // Fresh install: create minimal settings to store useCase. The
+        // workspace step will update name/slug later.
+        //
+        // Fresh-insert intentionally bypasses the managed-paths gate
+        // (same rationale as setupWorkspaceFn): no settings row yet to
+        // read managedFieldPaths from. The reconciler will overwrite on
+        // its next tick if the file owns these fields.
         const setupState: SetupState = {
           version: 1,
-          steps: {
-            core: true,
-            workspace: false,
-            boards: false,
-          },
-          source: 'self-hosted',
+          steps: { core: true, workspace: false, boards: false },
           useCase: data.useCase,
         }
 
@@ -394,20 +380,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
           setupState: JSON.stringify(setupState),
         })
 
-        // Ensure user has admin member record for fresh install
-        const principalRecord = await db.query.principal.findFirst({
-          where: eq(principal.userId, session.user.id as UserId),
-        })
-
-        if (!principalRecord) {
-          await db.insert(principal).values({
-            id: generateId('principal'),
-            userId: session.user.id as UserId,
-            role: 'admin',
-            createdAt: new Date(),
-          })
-          console.log(`[fn:onboarding] saveUseCaseFn: created admin member for first user`)
-        }
+        await ensureAdminPrincipal(session.user.id as UserId, 'saveUseCaseFn')
 
         await invalidateSettingsCache()
         console.log(
@@ -421,20 +394,26 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * List existing boards during onboarding.
- * This is a simpler version that doesn't require full auth context.
+ * List existing boards during onboarding plus the tenant's maxBoards
+ * tier limit. The wizard's boards step uses both — the first to
+ * display existing boards as completed, the second to render the
+ * selector as radio-style (single-select) when only one board fits.
  */
 export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:onboarding] listBoardsForOnboarding`)
   try {
-    const boardList = await listBoards()
-    return boardList.map((b) => ({
-      id: b.id,
-      name: b.name,
-      description: b.description,
-    }))
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+    const [boardList, limits] = await Promise.all([listBoards(), getTierLimits()])
+    return {
+      boards: boardList.map((b) => ({
+        id: b.id,
+        name: b.name,
+        description: b.description,
+      })),
+      maxBoards: limits.maxBoards,
+    }
   } catch (error) {
     console.error(`[fn:onboarding] ❌ listBoardsForOnboarding failed:`, error)
-    return []
+    return { boards: [], maxBoards: null }
   }
 })

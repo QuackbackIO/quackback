@@ -175,6 +175,14 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
  * Create multiple boards at once (for onboarding).
  * Allows empty array for skip functionality.
  * Updates setupState to mark boards step as complete.
+ *
+ * Tier-limit handling: if the request would exceed the tenant's
+ * `maxBoards`, the call creates as many as fit (in input order) and
+ * returns a `limited` flag — rather than throwing partway through and
+ * leaving orphan boards behind. The wizard's boards step is treated
+ * as "done" once the user has clicked Continue, regardless of how many
+ * we ended up creating; otherwise a tenant on a 1-board plan who tries
+ * to seed two would get stuck on /onboarding/boards forever.
  */
 export const createBoardsBatchFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardsBatchSchema)
@@ -182,9 +190,22 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
     console.log(`[fn:boards] createBoardsBatchFn: count=${data.boards.length}`)
     await requireAuth({ roles: ['admin', 'member'] })
 
-    // Create boards (or skip if none selected)
+    // Pre-flight against the tier limit so we never call createBoard
+    // (which throws on overage) past capacity. This means the loop is
+    // exception-free under the maxBoards gate, and any boards the user
+    // selected beyond the cap are silently dropped — the UI already
+    // surfaces the limit warning above the list, so a partial create is
+    // the expected outcome.
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+    const { listBoards } = await import('@/lib/server/domains/boards/board.service')
+    const [limits, existingBoards] = await Promise.all([getTierLimits(), listBoards()])
+    const remainingCapacity =
+      limits.maxBoards == null ? Infinity : Math.max(0, limits.maxBoards - existingBoards.length)
+    const toCreate = data.boards.slice(0, remainingCapacity)
+    const limited = toCreate.length < data.boards.length
+
     const createdBoards = []
-    for (const boardInput of data.boards) {
+    for (const boardInput of toCreate) {
       const board = await createBoard({
         name: boardInput.name,
         description: boardInput.description,
@@ -195,16 +216,21 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
 
     if (data.boards.length === 0) {
       console.log(`[fn:boards] createBoardsBatchFn: skipped (no boards selected)`)
+    } else if (limited) {
+      console.log(
+        `[fn:boards] createBoardsBatchFn: created ${createdBoards.length}/${data.boards.length} boards (tier limit)`
+      )
     } else {
       console.log(`[fn:boards] createBoardsBatchFn: created ${createdBoards.length} boards`)
     }
 
-    // Update setupState to mark boards step as complete (and onboarding as finished)
+    // Update setupState to mark boards step as complete (and onboarding as finished).
+    // Always runs after the create loop — partial creates are still a successful
+    // pass through the boards step from the wizard's perspective.
     const currentSettings = await getSettings()
     if (currentSettings?.setupState) {
       const setupState: SetupState = JSON.parse(currentSettings.setupState)
 
-      // Only update if boards step is not yet complete
       if (!setupState.steps.boards) {
         const updatedState: SetupState = {
           ...setupState,
@@ -223,5 +249,5 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
       }
     }
 
-    return createdBoards
+    return { boards: createdBoards, limited }
   })

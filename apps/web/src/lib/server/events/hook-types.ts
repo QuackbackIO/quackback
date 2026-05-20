@@ -34,6 +34,17 @@ export interface TestResult {
 }
 
 /**
+ * Per-invocation context passed to handlers by the BullMQ worker.
+ * Lets idempotency-sensitive handlers (webhook, AI) dedupe on the job
+ * ID before doing any side-effect.
+ */
+export interface HookRunContext {
+  /** BullMQ job ID for the dispatch. May be undefined for ad-hoc test
+   *  callers; handlers must treat that case as "no dedup, just run". */
+  jobId?: string
+}
+
+/**
  * Hook handler interface.
  *
  * Each hook type (Slack, Discord, Email, Webhook, etc.) implements this interface.
@@ -58,8 +69,18 @@ export interface HookHandler {
    * @param event - The event that triggered the hook
    * @param target - Where to send (channel, email, webhook URL, etc.)
    * @param config - Hook-specific configuration (tokens, settings, etc.)
+   * @param ctx - Per-invocation runtime context. `jobId` is the BullMQ
+   *   job ID, used for idempotency dedup so worker crashes don't
+   *   re-fire side-effects (webhook deliveries, OpenAI calls, etc.).
+   *   Optional so existing handlers and unit tests can keep their
+   *   old call signature; new handlers should opt in.
    */
-  run(event: EventData, target: unknown, config: Record<string, unknown>): Promise<HookResult>
+  run(
+    event: EventData,
+    target: unknown,
+    config: Record<string, unknown>,
+    ctx?: HookRunContext
+  ): Promise<HookResult>
 
   /**
    * Test the connection to the external service.

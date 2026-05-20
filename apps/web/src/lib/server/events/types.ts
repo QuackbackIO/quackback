@@ -14,6 +14,7 @@ export const EVENT_TYPES = [
   'post.restored',
   'post.merged',
   'post.unmerged',
+  'post.mentioned',
   'comment.created',
   'comment.updated',
   'comment.deleted',
@@ -128,6 +129,20 @@ export interface CommentCreatedPayload {
   post: EventPostRef
 }
 
+/**
+ * Payload for post.mentioned events — fired once per newly-mentioned principal
+ * when a post is created or edited.
+ */
+export interface EventPostMentionedData {
+  postId: string
+  postTitle: string
+  postUrl: string
+  mentionedPrincipalId: string
+  mentioningPrincipalId: string
+  /** Text of the paragraph containing the mention (≤200 chars), used as email body context. */
+  excerpt: string
+}
+
 export interface PostUpdatedPayload {
   post: EventPostRef
   changedFields: string[]
@@ -233,6 +248,10 @@ export interface ChangelogPublishedEvent extends EventBase<'changelog.published'
   data: ChangelogPublishedPayload
 }
 
+export interface PostMentionedEvent extends EventBase<'post.mentioned'> {
+  data: EventPostMentionedData
+}
+
 /**
  * Event data - discriminated union of all event types.
  *
@@ -250,6 +269,7 @@ export type EventData =
   | PostRestoredEvent
   | PostMergedEvent
   | PostUnmergedEvent
+  | PostMentionedEvent
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent

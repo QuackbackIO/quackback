@@ -18,4 +18,11 @@ export interface TeamMember {
   image: string | null
   role: string
   createdAt: Date
+  /**
+   * Most recent successful sign-in (max of session.created_at for the
+   * user). Null when the user has never signed in or all their
+   * sessions have been pruned. Surfaced in the admin team list so
+   * operators can spot stale accounts at a glance.
+   */
+  lastSignInAt: Date | null
 }

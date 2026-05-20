@@ -8,11 +8,12 @@
 
 import crypto from 'crypto'
 import dns from 'dns/promises'
-import type { HookHandler, HookResult } from '../hook-types'
+import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
+import { claimHookDelivery } from '../hook-idempotency'
 
 export type { WebhookTarget, WebhookConfig }
 
@@ -83,12 +84,27 @@ async function resolveAndValidateIP(
 }
 
 export const webhookHook: HookHandler = {
-  async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
+  async run(
+    event: EventData,
+    target: unknown,
+    config: unknown,
+    ctx?: HookRunContext
+  ): Promise<HookResult> {
     const { url } = target as WebhookTarget
     const { secret, webhookId, attemptNumber } = config as WebhookConfig & {
       attemptNumber?: number
     }
     const attempt = attemptNumber ?? 1
+
+    // Idempotency: if BullMQ is re-running this job after a worker crash,
+    // skip the delivery — the previous attempt already POSTed (and the
+    // remote saw it). Without this, customers see duplicate webhook
+    // deliveries on every rolling restart that interrupts a worker.
+    const claimed = await claimHookDelivery(ctx?.jobId, 'webhook')
+    if (!claimed) {
+      console.log(`[Webhook] Skipping duplicate delivery for job ${ctx?.jobId} → ${url}`)
+      return { success: true }
+    }
 
     console.log(`[Webhook] Processing ${event.type} → ${url}`)
 

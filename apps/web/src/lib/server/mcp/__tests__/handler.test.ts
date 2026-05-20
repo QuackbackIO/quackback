@@ -67,15 +67,18 @@ vi.mock('@quackback/ids', async (importOriginal) => {
 
 // Mock rate limiting to always allow
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({
-  checkRateLimit: vi.fn(() => ({ allowed: true })),
+  checkRateLimit: vi.fn(async () => ({ allowed: true, remaining: 100 })),
   getClientIp: vi.fn(() => '127.0.0.1'),
 }))
 
-// Mock settings service so getDeveloperConfig doesn't hit the real DB
+// Mock settings service so getDeveloperConfig doesn't hit the real DB.
+// `getTenantSettings` is consumed lazily by the suspension guard (which the
+// API auth chokepoint invokes); returning `null` keeps the workspace 'active'.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getDeveloperConfig: vi
     .fn()
     .mockResolvedValue({ mcpEnabled: true, mcpPortalAccessEnabled: false }),
+  getTenantSettings: vi.fn().mockResolvedValue(null),
 }))
 
 // Mock config so baseUrl is available (used in WWW-Authenticate header)
@@ -693,7 +696,7 @@ describe('MCP HTTP Handler', () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(MOCK_API_KEY)
       const { checkRateLimit } = await import('@/lib/server/domains/api/rate-limit')
-      vi.mocked(checkRateLimit).mockReturnValueOnce({
+      vi.mocked(checkRateLimit).mockResolvedValueOnce({
         allowed: false,
         remaining: 0,
         retryAfter: 30,

@@ -22,7 +22,7 @@ export function TeamHeader({ workspaceName }: TeamHeaderProps) {
     <>
       <PageHeader
         icon={UsersIcon}
-        title="Team Members"
+        title="Members"
         description={`Manage who has access to ${workspaceName}`}
         action={
           <Button onClick={() => setShowInviteDialog(true)}>

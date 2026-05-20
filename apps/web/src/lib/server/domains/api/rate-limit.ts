@@ -18,8 +18,8 @@ const rateLimitStore = new Map<string, RateLimitEntry>()
 
 // Configuration
 const WINDOW_MS = 60_000 // 1 minute
-const MAX_REQUESTS = 100 // 100 requests per minute per IP
-const MAX_REQUESTS_IMPORT = 2000 // 2000 requests per minute per IP in import mode
+const MAX_REQUESTS = 100 // 100 requests per minute per IP — used when tier limit is null (OSS)
+const IMPORT_MIN = 2000 // Floor for import-mode caps so a tight per-minute tier doesn't choke bulk imports
 const MAX_STORE_SIZE = 50_000 // Cap store size to prevent memory exhaustion
 const CLEANUP_INTERVAL_MS = 60_000 // Cleanup every minute
 
@@ -48,17 +48,26 @@ startCleanup()
  * @param ip - The client IP address
  * @param importMode - Whether the request is in import mode (higher limit)
  * @returns Object with allowed flag and remaining requests
+ *
+ * Tier-aware: when settings.tier_limits has a non-null apiRequestsPerMinute,
+ * that value overrides the default cap. Import mode multiplies the per-minute
+ * cap by 20 (matching the historical 100 -> 2000 ratio).
+ *
+ * Self-hosters with no tier_limits row get null and fall back to MAX_REQUESTS.
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   ip: string,
   importMode?: boolean
-): {
+): Promise<{
   allowed: boolean
   remaining: number
   retryAfter?: number
-} {
+}> {
   const now = Date.now()
-  const maxRequests = importMode ? MAX_REQUESTS_IMPORT : MAX_REQUESTS
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const limits = await getTierLimits()
+  const baseLimit = limits.apiRequestsPerMinute ?? MAX_REQUESTS
+  const maxRequests = importMode ? Math.max(baseLimit * 20, IMPORT_MIN) : baseLimit
   const entry = rateLimitStore.get(ip)
 
   // New IP or window expired - reset
@@ -85,21 +94,27 @@ export function checkRateLimit(
 /**
  * Extract client IP from request headers.
  * Checks common proxy headers for the real client IP.
+ *
+ * Accepts a full `Request` or just `Headers` — server functions only
+ * have `Headers` via `getRequestHeaders()`, so the Headers overload
+ * lets them call this without forging a synthetic Request.
  */
-export function getClientIp(request: Request): string {
+export function getClientIp(source: Request | Headers): string {
+  const headers = source instanceof Headers ? source : source.headers
+
   // Check Cloudflare header first
-  const cfIp = request.headers.get('cf-connecting-ip')
+  const cfIp = headers.get('cf-connecting-ip')
   if (cfIp) return cfIp
 
   // Check X-Forwarded-For (may contain comma-separated list)
-  const forwarded = request.headers.get('x-forwarded-for')
+  const forwarded = headers.get('x-forwarded-for')
   if (forwarded) {
     const firstIp = forwarded.split(',')[0].trim()
     if (firstIp) return firstIp
   }
 
   // Check X-Real-IP
-  const realIp = request.headers.get('x-real-ip')
+  const realIp = headers.get('x-real-ip')
   if (realIp) return realIp
 
   // Fallback to unknown

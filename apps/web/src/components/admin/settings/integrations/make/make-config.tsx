@@ -72,7 +72,7 @@ export function MakeConfig({ integrationId, initialEventMappings, enabled }: Mak
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Webhook enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Make webhook notifications
           </p>
         </div>
@@ -86,7 +86,7 @@ export function MakeConfig({ integrationId, initialEventMappings, enabled }: Mak
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Choose which events trigger your Make scenario
         </p>
         <div className="space-y-3 pt-2">

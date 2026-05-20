@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { setupWorkspaceFn } from '@/lib/server/functions/onboarding'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
-import { getSettings } from '@/lib/server/functions/workspace'
+import { pickOnboardingStep } from './onboarding-step'
+import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
 export const Route = createFileRoute('/onboarding/_layout/workspace')({
   loader: async ({ context }) => {
@@ -21,15 +22,24 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
       throw redirect({ to: '/auth/login' })
     }
 
-    // If use case not selected yet, redirect to use case step
-    if (!state.setupState?.useCase) {
-      throw redirect({ to: '/onboarding/usecase' })
+    // Delegate to pickOnboardingStep when this step doesn't apply: useCase
+    // not chosen yet (skip backwards) OR workspace already configured (skip
+    // forwards). One source of truth for wizard order.
+    if (!state.setupState?.useCase || state.setupState?.steps?.workspace) {
+      throw redirect({
+        to: pickOnboardingStep({
+          session: { userId: session.user.id },
+          state: {
+            needsInvitation: state.needsInvitation,
+            setupState: state.setupState,
+            principalRecord: state.principalRecord,
+          },
+        }),
+      })
     }
 
-    const settings = await getSettings()
-
     return {
-      existingWorkspaceName: settings?.name ?? '',
+      existingWorkspaceName: context.settings?.settings?.name ?? '',
       useCase: state.setupState.useCase,
     }
   },
@@ -39,6 +49,15 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
 function WorkspaceStep() {
   const navigate = useNavigate()
   const { existingWorkspaceName, useCase } = Route.useLoaderData()
+  const { managedFieldPaths } = Route.useRouteContext()
+  // workspace.name and workspace.slug are written together by this
+  // mutator; if either is locked we disable the field and surface a
+  // single hint. The slug is auto-derived from the name post-onboarding,
+  // so a slug-only lock still implies the name field is effectively
+  // locked too.
+  const workspaceLocked =
+    isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_NAME, managedFieldPaths ?? []) ||
+    isPathManagedFromBootstrap(MANAGED_PATHS.WORKSPACE_SLUG, managedFieldPaths ?? [])
 
   const [workspaceName, setWorkspaceName] = useState(existingWorkspaceName)
   const [isLoading, setIsLoading] = useState(false)
@@ -103,9 +122,14 @@ function WorkspaceStep() {
               onChange={(e) => setWorkspaceName(e.target.value)}
               placeholder="Acme Corp"
               autoFocus
-              disabled={isLoading}
+              disabled={isLoading || workspaceLocked}
               className="h-11"
             />
+            {workspaceLocked && (
+              <p className="text-xs text-muted-foreground">
+                Managed by your administrator&apos;s config — edit there.
+              </p>
+            )}
           </div>
 
           <Button

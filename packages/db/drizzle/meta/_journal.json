@@ -421,6 +421,132 @@
       "when": 1777836610355,
       "tag": "0059_old_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1777620521131,
+      "tag": "0060_consolidate_chat_target_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1777668617288,
+      "tag": "0061_settings_tier_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1777669821603,
+      "tag": "0062_api_keys_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1777669821604,
+      "tag": "0063_ai_usage_log_month_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1777655280134,
+      "tag": "0064_otp_to_magic_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1778457600000,
+      "tag": "0065_settings_managed_field_paths",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1778457600001,
+      "tag": "0066_settings_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1778457600002,
+      "tag": "0067_hook_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1778457600003,
+      "tag": "0068_admin_auth_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1778457600004,
+      "tag": "0069_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1778457600005,
+      "tag": "0070_sso_recovery_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1778457600006,
+      "tag": "0071_sso_required_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1778457600007,
+      "tag": "0072_session_user_created_at_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1778457600008,
+      "tag": "0073_normalize_2fa_password_dependency",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1778457600009,
+      "tag": "0074_drop_sso_required_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1778457600010,
+      "tag": "0075_comment_content_json",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1778457600011,
+      "tag": "0076_post_mentions",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1778457600012,
+      "tag": "0077_principal_displayname_lower_idx",
+      "breakpoints": true
     }
   ]
 }

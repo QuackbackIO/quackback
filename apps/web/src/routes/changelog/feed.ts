@@ -11,11 +11,13 @@ export const Route = createFileRoute('/changelog/feed')({
       GET: async () => {
         const [
           { config },
-          { db, changelogEntries, desc, isNotNull, lte },
+          { db, changelogEntries, and, desc },
+          { publicChangelogConditions },
           { getSettingsBrandingData },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/db'),
+          import('@/lib/server/domains/changelog/changelog.public'),
           import('@/lib/server/settings-utils'),
         ])
 
@@ -25,10 +27,8 @@ export const Route = createFileRoute('/changelog/feed')({
         const branding = await getSettingsBrandingData()
         const siteName = branding?.name || 'Changelog'
 
-        // Fetch published changelog entries (limit to last 50)
         const entries = await db.query.changelogEntries.findMany({
-          where: (table, { and }) =>
-            and(isNotNull(table.publishedAt), lte(table.publishedAt, new Date())),
+          where: and(...publicChangelogConditions(new Date())),
           orderBy: [desc(changelogEntries.publishedAt)],
           limit: 50,
         })

@@ -26,9 +26,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const router = useRouter()
   const userId = user.id as UserId
 
-  // Avatar state from React Query
+  // Avatar + auth-posture state from React Query. `hasPassword` is the
+  // server's read of whether the user has a `credential` account row;
+  // drives the Set-vs-Change shape of the password section without a
+  // second client-side round-trip.
   const { data: profileData } = useSuspenseQuery(settingsQueries.userProfile(userId))
-  const { avatarUrl, hasCustomAvatar } = profileData
+  const { avatarUrl, hasCustomAvatar, hasPassword, ssoEnforced } = profileData
 
   // Avatar mutations
   const uploadMutation = useUploadAvatar(userId)
@@ -268,8 +271,11 @@ export function ProfileForm({ user }: ProfileFormProps) {
         </div>
       </form>
 
-      {/* Password */}
-      <PasswordForm />
+      {/* Password — hidden for SSO-enforced users (the IdP manages the
+       *  credential; surfacing a password form would be misleading). */}
+      {!ssoEnforced && (
+        <PasswordForm hasPassword={hasPassword} onSaved={() => router.invalidate()} />
+      )}
 
       {/* Image Cropper Modal */}
       {cropImageSrc && (

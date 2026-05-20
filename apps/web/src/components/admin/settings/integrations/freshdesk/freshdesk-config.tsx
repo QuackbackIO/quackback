@@ -71,7 +71,7 @@ export function FreshdeskConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Turn off to pause all Freshdesk ticket synchronization
           </p>
         </div>
@@ -85,7 +85,7 @@ export function FreshdeskConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Choose which events trigger Freshdesk actions
         </p>
         <div className="space-y-3 pt-2">

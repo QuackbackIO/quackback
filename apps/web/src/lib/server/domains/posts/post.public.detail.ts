@@ -15,11 +15,14 @@ import {
   roadmaps,
   principal as principalTable,
 } from '@/lib/server/db'
-import { toUuid, type PostId, type CommentId, type PrincipalId } from '@quackback/ids'
+import { toUuid, fromUuid, type PostId, type CommentId, type PrincipalId } from '@quackback/ids'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
+import { hydrateMentions } from './hydrate-mentions'
+import type { TiptapContent } from '@/lib/shared/db-types'
+import type { JSONContent } from '@tiptap/core'
 
 export async function getPublicPostDetail(
   postId: PostId,
@@ -89,6 +92,7 @@ export async function getPublicPostDetail(
       principal_id: string
       author_name: string | null
       content: string
+      content_json: unknown
       is_team_member: boolean
       is_private: boolean
       created_at: Date | string
@@ -110,6 +114,7 @@ export async function getPublicPostDetail(
         c.principal_id,
         m.display_name as author_name,
         c.content,
+        c.content_json,
         c.is_team_member,
         c.is_private,
         c.created_at,
@@ -165,6 +170,7 @@ export async function getPublicPostDetail(
     principal_id: string
     author_name: string | null
     content: string
+    content_json: unknown
     is_team_member: boolean
     is_private: boolean
     created_at: Date | string
@@ -184,20 +190,32 @@ export async function getPublicPostDetail(
   const ensureDate = (value: Date | string): Date =>
     typeof value === 'string' ? new Date(value) : value
 
-  // Map to expected format
+  // Raw SQL returns id columns as UUIDs (no TypeID encoder in the path),
+  // but the rest of the pipeline — public API contract, the post's
+  // pinnedCommentId, the client mutations — speaks TypeIDs. Normalize
+  // UUIDs → TypeIDs here so:
+  //   1. the pinnedCommentId === c.id lookup below actually matches
+  //      (regression that hid every pinned comment from the public API)
+  //   2. clients receive the documented `comment_…` / `principal_…`
+  //      shape and can round-trip it back into pin/react/reply mutations
   const commentsResult = commentsRaw.map((comment) => ({
-    id: comment.id,
-    postId: comment.post_id,
-    parentId: comment.parent_id,
-    principalId: comment.principal_id,
+    id: fromUuid('comment', comment.id) as CommentId,
+    postId: fromUuid('post', comment.post_id) as PostId,
+    parentId: comment.parent_id ? (fromUuid('comment', comment.parent_id) as CommentId) : null,
+    principalId: fromUuid('principal', comment.principal_id) as PrincipalId,
     authorName: comment.author_name,
     content: comment.content,
+    contentJson:
+      (comment.content_json as import('@/lib/shared/db-types').TiptapContent | null | undefined) ??
+      null,
     isTeamMember: comment.is_team_member,
     isPrivate: comment.is_private,
     createdAt: ensureDate(comment.created_at),
     updatedAt: comment.updated_at ? ensureDate(comment.updated_at) : null,
     deletedAt: comment.deleted_at ? ensureDate(comment.deleted_at) : null,
-    deletedByPrincipalId: comment.deleted_by_principal_id,
+    deletedByPrincipalId: comment.deleted_by_principal_id
+      ? (fromUuid('principal', comment.deleted_by_principal_id) as PrincipalId)
+      : null,
     avatarUrl: resolveAvatarUrl({
       avatarKey: comment.avatar_key,
       avatarUrl: comment.avatar_url,
@@ -206,13 +224,12 @@ export async function getPublicPostDetail(
       comment.sc_from_name ? { name: comment.sc_from_name, color: comment.sc_from_color! } : null,
       comment.sc_to_name ? { name: comment.sc_to_name, color: comment.sc_to_color! } : null
     ),
-    reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json),
+    reactions: parseJson<Array<{ emoji: string; principalId: string }>>(comment.reactions_json).map(
+      (r) => ({ emoji: r.emoji, principalId: fromUuid('principal', r.principalId) as PrincipalId })
+    ),
   }))
 
-  // Raw SQL returns principal_id as UUIDs, but principalId from auth is a TypeID.
-  // Convert to UUID so aggregateReactions can match the current user's reactions.
-  const principalUuid = principalId ? toUuid(principalId) : undefined
-  const commentTree = buildCommentTree(commentsResult, principalUuid, {
+  const commentTree = buildCommentTree(commentsResult, principalId, {
     pruneDeleted: !options?.includePrivateComments,
   })
 
@@ -221,6 +238,9 @@ export async function getPublicPostDetail(
     return {
       id: node.id as CommentId,
       content: deleted ? '' : node.content,
+      contentJson: deleted
+        ? null
+        : ((node.contentJson as PublicComment['contentJson'] | null | undefined) ?? null),
       authorName: deleted ? null : node.authorName,
       principalId: deleted ? null : node.principalId,
       createdAt: node.createdAt,
@@ -240,30 +260,58 @@ export async function getPublicPostDetail(
 
   const rootComments = commentTree.map(mapToPublicComment)
 
+  // Re-resolve mention chips against the current principal.displayName so
+  // renamed users show up-to-date names. List views skip this; only the
+  // detail read paths pay the extra round-trip.
+  const hydratePublicCommentTree = async (node: PublicComment): Promise<PublicComment> => {
+    const hydratedContentJson = node.contentJson
+      ? ((await hydrateMentions(node.contentJson as JSONContent)) as PublicComment['contentJson'])
+      : node.contentJson
+    const hydratedReplies = await Promise.all(node.replies.map(hydratePublicCommentTree))
+    return { ...node, contentJson: hydratedContentJson, replies: hydratedReplies }
+  }
+  const hydratedRootComments = await Promise.all(rootComments.map(hydratePublicCommentTree))
+
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
-    const pinnedCommentData = commentsRaw.find((c) => c.id === postResult.pinnedCommentId)
-    if (pinnedCommentData && !pinnedCommentData.deleted_at) {
+    // Look up against the normalized list — `postResult.pinnedCommentId`
+    // is a TypeID and `commentsResult[].id` is now also a TypeID, so the
+    // strict-equals comparison finally matches.
+    const pinnedCommentData = commentsResult.find((c) => c.id === postResult.pinnedCommentId)
+    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
+      // Re-derive avatar from the original raw row so we keep the same
+      // resolveAvatarUrl(avatarKey, avatarUrl) behavior the public API
+      // expects. The mapped node only carries the resolved URL.
+      const rawRow = commentsRaw.find((c) => c.id === toUuid(postResult.pinnedCommentId!))
+      const pinnedRaw =
+        (pinnedCommentData.contentJson as PinnedComment['contentJson'] | null | undefined) ?? null
+      const pinnedHydrated = pinnedRaw
+        ? ((await hydrateMentions(pinnedRaw as JSONContent)) as PinnedComment['contentJson'])
+        : null
       pinnedComment = {
-        id: pinnedCommentData.id as CommentId,
+        id: pinnedCommentData.id,
         content: pinnedCommentData.content,
-        authorName: pinnedCommentData.author_name,
-        principalId: pinnedCommentData.principal_id as PrincipalId,
-        avatarUrl: resolveAvatarUrl({
-          avatarKey: pinnedCommentData.avatar_key,
-          avatarUrl: pinnedCommentData.avatar_url,
-        }),
-        createdAt: ensureDate(pinnedCommentData.created_at),
-        isTeamMember: pinnedCommentData.is_team_member,
+        contentJson: pinnedHydrated,
+        authorName: pinnedCommentData.authorName,
+        principalId: pinnedCommentData.principalId,
+        avatarUrl: rawRow
+          ? resolveAvatarUrl({ avatarKey: rawRow.avatar_key, avatarUrl: rawRow.avatar_url })
+          : (pinnedCommentData.avatarUrl ?? null),
+        createdAt: pinnedCommentData.createdAt,
+        isTeamMember: pinnedCommentData.isTeamMember,
       }
     }
   }
+
+  const hydratedPostContentJson = postResult.contentJson
+    ? ((await hydrateMentions(postResult.contentJson as JSONContent)) as TiptapContent | null)
+    : postResult.contentJson
 
   return {
     id: postResult.id,
     title: postResult.title,
     content: postResult.content,
-    contentJson: postResult.contentJson,
+    contentJson: hydratedPostContentJson,
     statusId: postResult.statusId,
     voteCount: postResult.voteCount,
     authorName: postResult.authorName,
@@ -273,7 +321,7 @@ export async function getPublicPostDetail(
     board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
     tags: tagsResult,
     roadmaps: roadmapsResult,
-    comments: rootComments,
+    comments: hydratedRootComments,
     pinnedComment,
     pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as CommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,

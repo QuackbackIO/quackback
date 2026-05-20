@@ -57,7 +57,7 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
         </div>
         <div>
           <h2 className="font-semibold text-foreground">Export to CSV</h2>
-          <p className="text-sm text-muted-foreground">Download all posts from this board</p>
+          <p className="text-xs text-muted-foreground">Download all posts from this board</p>
         </div>
       </div>
 

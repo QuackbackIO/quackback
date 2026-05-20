@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type { EditorFeatures } from '../rich-text-editor'
-import { buildExtensions } from '../rich-text-editor'
+import { buildExtensions, hasActiveSuggestion } from '../rich-text-editor'
 
 // Full widget feature set (worst-case for duplicates)
 const WIDGET_FEATURES: EditorFeatures = {
@@ -93,6 +93,62 @@ describe('buildExtensions', () => {
     const exts = buildExtensions({ slashMenu: false }, { placeholder: '' })
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).not.toContain('slashCommands')
+  })
+
+  it('includes emoji extension by default', () => {
+    const exts = buildExtensions({}, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).toContain('emoji')
+  })
+
+  it('omits emoji extension when emojiPicker is false', () => {
+    const exts = buildExtensions({ emojiPicker: false }, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('emoji')
+  })
+
+  it('omits enterAsHardBreak by default (document-style Enter)', () => {
+    const exts = buildExtensions({}, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('enterAsHardBreak')
+  })
+
+  it('includes enterAsHardBreak when enabled (comment-style Enter)', () => {
+    const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '' })
+    const names = exts.map((e) => (e as { name: string }).name)
+    expect(names).toContain('enterAsHardBreak')
+  })
+})
+
+describe('hasActiveSuggestion', () => {
+  // Suggestion-style plugins (emoji picker, slash menu, mention) all keep
+  // `{ active, range, query, ... }` on their plugin state. The Enter handler
+  // checks this to yield Enter to the open popover instead of inserting a
+  // hardBreak underneath it.
+  function makeEditor(pluginStates: Array<unknown>) {
+    const plugins = pluginStates.map((state) => ({
+      getState: () => state,
+    }))
+    return { state: { plugins } } as unknown as Parameters<typeof hasActiveSuggestion>[0]
+  }
+
+  it('returns false when no plugin state is active', () => {
+    const editor = makeEditor([null, { active: false, range: null }, { unrelated: true }])
+    expect(hasActiveSuggestion(editor)).toBe(false)
+  })
+
+  it('returns true when any plugin state has active: true', () => {
+    const editor = makeEditor([
+      null,
+      { active: false },
+      { active: true, range: { from: 1, to: 2 }, query: 'sli' },
+    ])
+    expect(hasActiveSuggestion(editor)).toBe(true)
+  })
+
+  it('tolerates plugins whose getState returns undefined or non-object', () => {
+    const editor = makeEditor([undefined, 'not-a-state', 42])
+    expect(hasActiveSuggestion(editor)).toBe(false)
   })
 })
 

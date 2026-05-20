@@ -4,6 +4,71 @@
  */
 
 let _logged = false
+let _shutdownWired = false
+
+/**
+ * Wire SIGTERM/SIGINT to gracefully drain BullMQ queues + workers and
+ * close the shared Redis connection. BullMQ's stalled-job checker
+ * recovers any in-flight jobs on the next startup, but shutting down
+ * cleanly avoids spurious "stalled" reports and double-billing on
+ * AI/webhook handlers that are mid-flight.
+ *
+ * 30s overall budget — if any worker hangs (e.g. a 60s OpenAI call),
+ * we force-exit so k8s/systemd doesn't SIGKILL us mid-cleanup.
+ */
+function wireGracefulShutdown(): void {
+  if (_shutdownWired) return
+  _shutdownWired = true
+
+  let inProgress = false
+  const shutdown = (signal: string) => {
+    if (inProgress) return
+    inProgress = true
+    console.log(`[Shutdown] ${signal} received — draining queues`)
+
+    // Hard timeout: if any close hangs, force-exit. The deadline starts
+    // ticking the moment we receive the signal, not after closes resolve.
+    const forceExit = setTimeout(() => {
+      console.error('[Shutdown] 30s timeout exceeded — force-exiting')
+      process.exit(1)
+    }, 30_000)
+    forceExit.unref?.()
+
+    void (async () => {
+      try {
+        const closes = await Promise.allSettled([
+          import('./events/process').then(({ closeQueue }) => closeQueue()),
+          import('./events/segment-scheduler').then(({ closeSegmentScheduler }) =>
+            closeSegmentScheduler()
+          ),
+          import('./domains/feedback/queues/feedback-ai-queue').then(({ closeFeedbackAiQueue }) =>
+            closeFeedbackAiQueue()
+          ),
+          import('./domains/feedback/queues/feedback-ingest-queue').then(
+            ({ closeFeedbackIngestQueue }) => closeFeedbackIngestQueue()
+          ),
+        ])
+        for (const r of closes) {
+          if (r.status === 'rejected') console.error('[Shutdown] close error:', r.reason)
+        }
+
+        // After all queues + workers have closed, quit the shared
+        // IORedis client so we don't leave a half-open socket behind.
+        await import('./queue/redis-config').then(({ closeQueueRedis }) => closeQueueRedis())
+
+        clearTimeout(forceExit)
+        console.log('[Shutdown] complete')
+        process.exit(0)
+      } catch (err) {
+        console.error('[Shutdown] fatal:', err)
+        process.exit(1)
+      }
+    })()
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+}
 
 export function logStartupBanner(): void {
   // During Nitro's initial build evaluation, SECRET_KEY isn't available yet.
@@ -33,6 +98,11 @@ export function logStartupBanner(): void {
   ]
 
   console.log(lines.join('\n'))
+
+  // Wire SIGTERM/SIGINT once — the rest of this function spawns
+  // long-lived workers + sweepers, so register the drain handler before
+  // any of them start so a fast Ctrl-C in dev still gets a clean exit.
+  wireGracefulShutdown()
 
   // Restore any dynamic segment evaluation schedules that were persisted in the
   // DB but may be absent from Redis (e.g. after a Redis wipe in dev). BullMQ
@@ -81,6 +151,26 @@ export function logStartupBanner(): void {
     })
     .catch((err) => console.error('[Startup] Failed to init feedback maintenance:', err))
 
+  // Audit-log retention sweep. Once a day deletes rows older than
+  // the configured retention window (default 365d, SOC2-aligned).
+  // First sweep runs 30s after boot so it doesn't compete with
+  // migrations + worker init on the startup hot path.
+  import('@/lib/server/audit/log')
+    .then(({ pruneAuditLog }) => {
+      setTimeout(() => {
+        pruneAuditLog().catch((err) =>
+          console.error('[Startup] Initial audit-log prune failed:', err)
+        )
+      }, 30_000)
+      setInterval(
+        () => {
+          pruneAuditLog().catch((err) => console.error('[Startup] Audit-log prune failed:', err))
+        },
+        24 * 60 * 60 * 1000
+      )
+    })
+    .catch((err) => console.error('[Startup] Failed to init audit-log prune:', err))
+
   // Start periodic summary sweep (refreshes stale/missing post summaries)
   // Runs once at startup (after a short delay) then every 30 minutes
   import('./domains/summary/summary.service')
@@ -125,4 +215,11 @@ export function logStartupBanner(): void {
   import('./domains/feedback/sources/quackback.source')
     .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())
     .catch((err) => console.error('[Startup] Failed to ensure quackback feedback source:', err))
+
+  // Quackback config file watcher — reconciles managed fields from
+  // /etc/quackback/config.yaml on every change. No-op when the file
+  // is absent (self-host default).
+  import('@/lib/server/config-file')
+    .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
+    .catch((err) => console.error('[Startup] Failed to start config-file watcher:', err))
 }

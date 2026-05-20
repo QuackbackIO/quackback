@@ -24,6 +24,12 @@ vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
   getWidgetConfig: vi.fn(),
 }))
 
+// `ensureNotSuspended()` lazy-imports `getTenantSettings`; stub it as `null`
+// so the suspension guard treats the workspace as 'active' (the default).
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getTenantSettings: vi.fn().mockResolvedValue(null),
+}))
+
 import { db } from '@/lib/server/db'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
 import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'

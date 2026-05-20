@@ -16,6 +16,7 @@ export type {
   PortalAuthMethods,
   PortalFeatures,
   PortalConfig,
+  PortalWelcomeCard,
   HeaderDisplayMode,
   ThemeColors,
   BrandingConfig,
@@ -32,6 +33,9 @@ export type {
   HelpCenterSeoConfig,
 } from './settings.types'
 
+// Welcome card constants (no DB dependency)
+export { PORTAL_WELCOME_CARD_TITLE_MAX } from './settings.types'
+
 // Default config values (no DB dependency)
 export {
   DEFAULT_AUTH_CONFIG,
@@ -44,3 +48,12 @@ export {
 
 // Consolidated tenant settings type (in types.ts to avoid server dep leak via barrel)
 export type { TenantSettings, SettingsBrandingData } from './settings.types'
+
+// Verified-domain type — no DB dependency, safe for client-side consumption
+export type { VerifiedDomain } from './settings.types'
+
+// Tier limits — type + OSS defaults are barrel-safe (no DB dep).
+// The resolver service (tier-limits.service.ts) must NOT be exported here;
+// import it directly in server-only code to avoid leaking DB into the client bundle.
+export type { TierLimits, TierLimit, TierFeatureFlags } from './tier-limits.types'
+export { OSS_TIER_LIMITS } from './tier-limits.types'

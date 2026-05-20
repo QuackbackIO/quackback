@@ -22,6 +22,7 @@ export const ID_PREFIXES = {
   post_edit: 'post_edit',
   comment_edit: 'comment_edit',
   note: 'note', // Internal staff notes on posts
+  post_mention: 'post_mention',
 
   // Planning domain
   roadmap: 'roadmap',
@@ -119,6 +120,9 @@ export const ID_PREFIXES = {
   verification: 'verification',
   domain: 'domain',
   transfer_token: 'transfer_token',
+  two_factor: 'two_factor',
+  audit_log: 'audit',
+  sso_recovery_code: 'rcode',
 
   // ============================================
   // Billing

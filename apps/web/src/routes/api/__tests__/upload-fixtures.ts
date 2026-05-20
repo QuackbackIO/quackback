@@ -55,6 +55,7 @@ export function mockPrincipal(
     avatarKey: null,
     serviceMetadata: null,
     createdAt: new Date(),
+    lastSsoSignInAt: null,
     ...overrides,
   } as PrincipalRecord
 }

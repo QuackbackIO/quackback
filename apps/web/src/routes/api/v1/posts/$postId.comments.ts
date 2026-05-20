@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { InternalError } from '@/lib/shared/errors'
+import { InternalError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import {
   successResponse,
   createdResponse,
@@ -9,14 +9,17 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
-import type { PostId, CommentId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
+import type { PostId, CommentId, PrincipalId } from '@quackback/ids'
 
 // Input validation schema
 const createCommentSchema = z.object({
   content: z.string().min(1, 'Content is required').max(5000),
+  contentJson: z.unknown().nullable().optional(),
   parentId: z.string().optional().nullable(),
   isPrivate: z.boolean().optional(),
   createdAt: z.string().datetime().optional(),
+  authorPrincipalId: z.string().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
@@ -66,7 +69,6 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
       POST: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { role: 'team' })
-          const { principalId } = auth
 
           const postId = parseTypeId<PostId>(params.postId, 'post', 'post ID')
 
@@ -79,19 +81,50 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             })
           }
 
-          const parentId = parseOptionalTypeId<CommentId>(parsed.data.parentId, 'comment', 'parent ID')
+          const parentId = parseOptionalTypeId<CommentId>(
+            parsed.data.parentId,
+            'comment',
+            'parent ID'
+          )
+
+          // Admin-only override; mirrors the createdAt gate further down.
+          const overridePrincipalId =
+            auth.role === 'admin'
+              ? parseOptionalTypeId<PrincipalId>(
+                  parsed.data.authorPrincipalId,
+                  'principal',
+                  'authorPrincipalId'
+                )
+              : undefined
+          const targetPrincipalId = overridePrincipalId ?? auth.principalId
 
           const { createComment } = await import('@/lib/server/domains/comments/comment.service')
           const { db, principal, eq } = await import('@/lib/server/db')
 
           const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.id, principalId),
+            where: eq(principal.id, targetPrincipalId),
             columns: { id: true, displayName: true, role: true, type: true },
             with: { user: { columns: { id: true, name: true, email: true } } },
           })
 
           if (!principalRecord) {
-            throw new InternalError('PRINCIPAL_NOT_FOUND', 'Principal record missing for verified API key')
+            if (overridePrincipalId) {
+              throw new NotFoundError(
+                'PRINCIPAL_NOT_FOUND',
+                `Principal ${targetPrincipalId} not found`
+              )
+            }
+            throw new InternalError(
+              'PRINCIPAL_NOT_FOUND',
+              'Principal record missing for verified API key'
+            )
+          }
+
+          if (overridePrincipalId && principalRecord.type === 'service') {
+            throw new ValidationError(
+              'INVALID_AUTHOR',
+              'authorPrincipalId may not reference a service principal'
+            )
           }
 
           // Only admins can set createdAt (for imports)
@@ -104,17 +137,20 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             {
               postId,
               content: parsed.data.content,
+              contentJson: (parsed.data.contentJson ?? undefined) as
+                | import('@/lib/shared/db-types').TiptapContent
+                | undefined,
               parentId,
               isPrivate: parsed.data.isPrivate,
               createdAt,
             },
             {
-              principalId,
+              principalId: targetPrincipalId,
               userId: principalRecord.user?.id,
               displayName: principalRecord.displayName ?? undefined,
               name: principalRecord.user?.name,
               email: principalRecord.user?.email ?? undefined,
-              role: principalRecord.role as 'admin' | 'member' | 'user',
+              role: principalRecord.role as Role,
             },
             { skipDispatch: auth.importMode }
           )

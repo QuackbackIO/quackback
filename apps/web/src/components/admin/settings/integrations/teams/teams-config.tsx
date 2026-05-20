@@ -154,7 +154,7 @@ export function TeamsConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Notifications enabled
           </Label>
-          <p className="text-sm text-muted-foreground">Turn off to pause all Teams notifications</p>
+          <p className="text-xs text-muted-foreground">Turn off to pause all Teams notifications</p>
         </div>
         <Switch
           id="enabled-toggle"
@@ -266,7 +266,7 @@ export function TeamsConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">Choose which events trigger notifications</p>
+        <p className="text-xs text-muted-foreground">Choose which events trigger notifications</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useIntl } from 'react-intl'
 import {
   ArrowRightIcon,
@@ -10,8 +10,10 @@ import {
   MapPinIcon,
 } from '@heroicons/react/24/solid'
 import { PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { CheckBadgeIcon } from '@heroicons/react/24/solid'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -22,7 +24,12 @@ import type { CommentReactionCount } from '@/lib/shared'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { CommentContent } from '@/components/public/comment-content'
 import { CommentForm, type CreateCommentMutation } from './comment-form'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
+import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
 
 /**
@@ -98,6 +105,8 @@ interface CommentThreadProps {
   user?: { name: string | null; email: string; principalId?: PrincipalId }
   /** Logo URL for the team badge (from branding settings) */
   teamBadgeLogoUrl?: string
+  /** Workspace name shown in the team-badge tooltip ("{name} Member") */
+  teamBadgeLabel?: string
   /** Message to show when comments are locked (overrides "Sign in to comment") */
   lockedMessage?: string
   /** Called when unauthenticated user tries to comment */
@@ -140,6 +149,7 @@ export function CommentThread({
   allowCommenting = true,
   user,
   teamBadgeLogoUrl,
+  teamBadgeLabel,
   lockedMessage,
   onAuthRequired,
   createComment,
@@ -225,6 +235,7 @@ export function CommentThread({
             allowCommenting,
             user,
             teamBadgeLogoUrl,
+            teamBadgeLabel,
             createComment,
             pinnedCommentId,
             canPinComments,
@@ -250,6 +261,7 @@ interface CommentItemProps {
   depth?: number
   user?: { name: string | null; email: string; principalId?: PrincipalId }
   teamBadgeLogoUrl?: string
+  teamBadgeLabel?: string
   createComment?: CreateCommentMutation
   pinnedCommentId?: string | null
   // Admin mode props
@@ -280,6 +292,7 @@ function CommentItem({
   depth = 0,
   user,
   teamBadgeLogoUrl,
+  teamBadgeLabel,
   createComment,
   pinnedCommentId,
   canPinComments = false,
@@ -301,8 +314,14 @@ function CommentItem({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(comment.content)
+  const editJsonRef = useRef<TiptapContent | null>(comment.contentJson ?? null)
   const [editError, setEditError] = useState<string | null>(null)
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Stored doc preferred; legacy rows fall back to a markdown parse.
+  const editInitialJson = useMemo<TiptapContent>(() => {
+    if (comment.contentJson) return comment.contentJson
+    return commentMarkdownToTiptapJson(comment.content)
+  }, [comment.contentJson, comment.content])
 
   const editMutation = useEditComment({
     commentId: comment.id as CommentId,
@@ -312,13 +331,6 @@ function CommentItem({
   useEffect(() => {
     setReactions(comment.reactions)
   }, [comment.reactions])
-
-  useEffect(() => {
-    if (isEditing) {
-      editTextareaRef.current?.focus()
-      editTextareaRef.current?.setSelectionRange(comment.content.length, comment.content.length)
-    }
-  }, [isEditing, comment.content])
 
   const isDeleted = !!comment.deletedAt
   const canNest = depth < MAX_NESTING_DEPTH
@@ -336,10 +348,7 @@ function CommentItem({
   // Server re-checks; client heuristic avoids showing the button to unrelated users
   const isAuthor = !!user?.principalId && comment.principalId === user.principalId
   const canEdit = !isDeleted && (isTeamMember || isAuthor)
-  const canDelete =
-    !isDeleted &&
-    !!onDeleteComment &&
-    (isTeamMember || isAuthor)
+  const canDelete = !isDeleted && !!onDeleteComment && (isTeamMember || isAuthor)
   const isBeingDeleted = deletingCommentId === comment.id
   // Can restore: deleted, team member, and restore handler provided
   const canRestore = isDeleted && isTeamMember && !!onRestoreComment
@@ -367,7 +376,7 @@ function CommentItem({
     if (!trimmed) return
     setEditError(null)
     try {
-      await editMutation.mutateAsync(trimmed)
+      await editMutation.mutateAsync({ content: trimmed, contentJson: editJsonRef.current })
       setIsEditing(false)
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to save edit')
@@ -451,6 +460,7 @@ function CommentItem({
                     depth={depth + 1}
                     user={user}
                     teamBadgeLogoUrl={teamBadgeLogoUrl}
+                    teamBadgeLabel={teamBadgeLabel}
                     createComment={createComment}
                     pinnedCommentId={pinnedCommentId}
                     canPinComments={canPinComments}
@@ -517,19 +527,53 @@ function CommentItem({
                 })}
             </span>
             {comment.isTeamMember && (
-              <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
-                {teamBadgeLogoUrl ? (
-                  <img
-                    src={teamBadgeLogoUrl}
-                    alt=""
-                    className="h-2.5 w-2.5 me-0.5 rounded-sm object-contain"
-                  />
-                ) : null}
-                {intl.formatMessage({
-                  id: 'portal.commentThread.teamBadge',
-                  defaultMessage: 'Team',
-                })}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary/15 text-primary cursor-default"
+                    aria-label={intl.formatMessage(
+                      {
+                        id: 'portal.commentThread.teamBadgeAria',
+                        defaultMessage: '{name} Member',
+                      },
+                      {
+                        name:
+                          teamBadgeLabel ??
+                          intl.formatMessage({
+                            id: 'portal.commentThread.teamBadgeFallbackName',
+                            defaultMessage: 'Team',
+                          }),
+                      }
+                    )}
+                  >
+                    {teamBadgeLogoUrl ? (
+                      <img
+                        src={teamBadgeLogoUrl}
+                        alt=""
+                        className="h-4 w-4 rounded-sm object-contain"
+                      />
+                    ) : (
+                      <CheckBadgeIcon className="h-4 w-4" />
+                    )}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {intl.formatMessage(
+                    {
+                      id: 'portal.commentThread.teamBadge',
+                      defaultMessage: '{name} Member',
+                    },
+                    {
+                      name:
+                        teamBadgeLabel ??
+                        intl.formatMessage({
+                          id: 'portal.commentThread.teamBadgeFallbackName',
+                          defaultMessage: 'Team',
+                        }),
+                    }
+                  )}
+                </TooltipContent>
+              </Tooltip>
             )}
             {comment.isPrivate && !insidePrivateCard && (
               <Badge className="text-[10px] px-1.5 py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0">
@@ -564,18 +608,34 @@ function CommentItem({
           {/* Comment content — switches to an edit form when isEditing */}
           {isEditing ? (
             <div className="mt-1.5 ms-10">
-              <textarea
-                ref={editTextareaRef}
-                data-testid="edit-comment-textarea"
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSaveEdit()
-                  else if (e.key === 'Escape') { setIsEditing(false); setEditContent(comment.content); setEditError(null) }
+              <div
+                data-testid="edit-comment-editor"
+                className="rounded-lg border border-border/50 bg-background overflow-hidden focus-within:border-border focus-within:ring-1 focus-within:ring-ring/20 transition-colors px-3 py-2"
+                onKeyDownCapture={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleSaveEdit()
+                  } else if (e.key === 'Escape') {
+                    setIsEditing(false)
+                    setEditContent(comment.content)
+                    editJsonRef.current = comment.contentJson ?? null
+                    setEditError(null)
+                  }
                 }}
-                rows={3}
-                className="w-full max-w-lg rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              >
+                <RichTextEditor
+                  value={editInitialJson}
+                  borderless
+                  minHeight="64px"
+                  autofocus="end"
+                  features={COMMENT_EDITOR_FEATURES}
+                  disabled={editMutation.isPending}
+                  onChange={(json, _html, markdown) => {
+                    editJsonRef.current = json as TiptapContent
+                    setEditContent(markdown ?? '')
+                  }}
+                />
+              </div>
               {editError && <p className="text-xs text-destructive mt-1">{editError}</p>}
               <div className="flex items-center gap-2 mt-2">
                 <Button
@@ -586,25 +646,41 @@ function CommentItem({
                 >
                   <CheckIcon className="h-3 w-3 me-1" />
                   {editMutation.isPending
-                    ? intl.formatMessage({ id: 'portal.commentThread.saving', defaultMessage: 'Saving…' })
-                    : intl.formatMessage({ id: 'portal.commentThread.save', defaultMessage: 'Save' })}
+                    ? intl.formatMessage({
+                        id: 'portal.commentThread.saving',
+                        defaultMessage: 'Saving…',
+                      })
+                    : intl.formatMessage({
+                        id: 'portal.commentThread.save',
+                        defaultMessage: 'Save',
+                      })}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 px-3 text-xs"
-                  onClick={() => { setIsEditing(false); setEditContent(comment.content); setEditError(null) }}
+                  onClick={() => {
+                    setIsEditing(false)
+                    setEditContent(comment.content)
+                    editJsonRef.current = comment.contentJson ?? null
+                    setEditError(null)
+                  }}
                   disabled={editMutation.isPending}
                 >
                   <XMarkIcon className="h-3 w-3 me-1" />
-                  {intl.formatMessage({ id: 'portal.commentThread.cancel', defaultMessage: 'Cancel' })}
+                  {intl.formatMessage({
+                    id: 'portal.commentThread.cancel',
+                    defaultMessage: 'Cancel',
+                  })}
                 </Button>
               </div>
             </div>
           ) : (
-            <p className="text-sm whitespace-pre-wrap mt-1.5 ms-10 text-foreground/90 leading-relaxed">
-              {comment.content}
-            </p>
+            <CommentContent
+              content={comment.content}
+              contentJson={comment.contentJson ?? null}
+              className="text-sm mt-1.5 ms-10 text-foreground/90 leading-relaxed"
+            />
           )}
 
           {/* Status change indicator */}
@@ -756,7 +832,10 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => { setIsEditing(true); setEditContent(comment.content) }}
+                onClick={() => {
+                  setIsEditing(true)
+                  setEditContent(comment.content)
+                }}
               >
                 <PencilSquareIcon className="h-3 w-3 me-1" />
                 {intl.formatMessage({ id: 'portal.commentThread.edit', defaultMessage: 'Edit' })}

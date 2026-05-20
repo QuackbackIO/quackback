@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  ForbiddenError,
-  ValidationError,
-  ConflictError,
-  NotFoundError,
-} from '@/lib/shared/errors'
+import { ForbiddenError, ValidationError, ConflictError, NotFoundError } from '@/lib/shared/errors'
 
 // Type for error response body
 type ErrorBody = { error: { code: string; message: string; details?: unknown } }
@@ -308,6 +303,26 @@ describe('API Responses', () => {
       const response = handleDomainError({ code: 'API_UNAUTHORIZED', message: 'Invalid key' })
       expect(response.status).toBe(401)
       expect(response.headers.get('www-authenticate')).not.toBeNull()
+    })
+
+    it('should map SuspendedError to 402 with code/message JSON', async () => {
+      const { SuspendedError } = await import('@/lib/server/middleware/suspension-guard')
+      const err = new SuspendedError()
+      const response = handleDomainError(err)
+      expect(response.status).toBe(402)
+      const body = (await response.json()) as { code: string; message: string }
+      expect(body.code).toBe('WORKSPACE_SUSPENDED')
+      expect(body.message).toMatch(/unavailable/i)
+    })
+
+    it('should map DeletingError to 410 with code/message JSON', async () => {
+      const { DeletingError } = await import('@/lib/server/middleware/suspension-guard')
+      const err = new DeletingError()
+      const response = handleDomainError(err)
+      expect(response.status).toBe(410)
+      const body = (await response.json()) as { code: string; message: string }
+      expect(body.code).toBe('WORKSPACE_DELETING')
+      expect(body.message).toMatch(/deleted/i)
     })
 
     it('should return 500 for unknown errors', async () => {

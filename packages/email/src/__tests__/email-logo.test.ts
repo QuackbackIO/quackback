@@ -3,7 +3,7 @@ import { render } from '@react-email/components'
 import { DEFAULT_LOGO_URL } from '../templates/shared-styles'
 import { WelcomeEmail } from '../templates/welcome'
 import { InvitationEmail } from '../templates/invitation'
-import { SigninCodeEmail } from '../templates/signin-code'
+import { MagicLinkEmail } from '../templates/magic-link'
 import { PasswordResetEmail } from '../templates/password-reset'
 import { StatusChangeEmail } from '../templates/status-change'
 import { NewCommentEmail } from '../templates/new-comment'
@@ -41,8 +41,14 @@ describe('email templates use brand logo when provided', () => {
     expect(html).toContain('alt="Acme"')
   })
 
-  it('SigninCodeEmail renders brand logo', async () => {
-    const html = await render(SigninCodeEmail({ code: '123456', logoUrl: BRAND_LOGO }))
+  it('MagicLinkEmail renders brand logo', async () => {
+    const html = await render(
+      MagicLinkEmail({
+        signInUrl: 'https://example.com/verify-magic-link?token=abc',
+        code: '123456',
+        logoUrl: BRAND_LOGO,
+      })
+    )
     expect(html).toContain(BRAND_LOGO)
     expect(html).not.toContain(DEFAULT_LOGO_URL)
   })
@@ -145,8 +151,13 @@ describe('email templates fall back to default logo when logoUrl not provided', 
     expect(html).toContain(DEFAULT_LOGO_URL)
   })
 
-  it('SigninCodeEmail renders default logo', async () => {
-    const html = await render(SigninCodeEmail({ code: '123456' }))
+  it('MagicLinkEmail renders default logo', async () => {
+    const html = await render(
+      MagicLinkEmail({
+        signInUrl: 'https://example.com/verify-magic-link?token=abc',
+        code: '123456',
+      })
+    )
     expect(html).toContain(DEFAULT_LOGO_URL)
   })
 

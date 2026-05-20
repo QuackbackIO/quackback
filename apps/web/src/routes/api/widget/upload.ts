@@ -2,8 +2,20 @@ import { createFileRoute } from '@tanstack/react-router'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
 import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
+import { handleDomainError } from '@/lib/server/domains/api/responses'
+import { DomainException } from '@/lib/shared/errors'
 
 export async function handleWidgetUpload({ request }: { request: Request }): Promise<Response> {
+  // Block writes from suspended/deleting workspaces. Read-only widget
+  // routes (config, search, kb-search) stay open so end-users see a
+  // working portal even while the workspace is past-due.
+  try {
+    const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
+    await ensureNotSuspended()
+  } catch (e) {
+    if (e instanceof DomainException) return handleDomainError(e)
+    throw e
+  }
   const authHeader = request.headers.get('authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })

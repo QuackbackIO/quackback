@@ -213,6 +213,9 @@
     /* Collapsible animations */
     --animate-collapsible-down: collapsible-down 150ms ease-out;
     --animate-collapsible-up: collapsible-up 150ms ease-out;
+
+    /* OTP input caret blink */
+    --animate-caret-blink: caret-blink 1.25s ease-out infinite;
   }
 
 /* Collapsible keyframes */
@@ -234,6 +237,18 @@
   }
   to {
     height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
     opacity: 0;
   }
 }

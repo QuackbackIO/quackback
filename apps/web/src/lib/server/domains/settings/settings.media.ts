@@ -1,6 +1,7 @@
 import { db, eq, settings } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
+import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import type { BrandingConfig } from './settings.types'
 import {
   requireSettings,
@@ -26,6 +27,15 @@ export async function getBrandingConfig(): Promise<BrandingConfig> {
 export async function updateBrandingConfig(config: BrandingConfig): Promise<BrandingConfig> {
   console.log(`[domain:settings] updateBrandingConfig`)
   try {
+    // Setting custom theme colors (light/dark overrides) is gated.
+    // Preset and themeMode swaps don't count as colour customisation —
+    // they pick from the curated set the workspace already has access to.
+    const isCustomisingColors = config.light !== undefined || config.dark !== undefined
+    if (isCustomisingColors) {
+      const { assertTierFeature } = await import('./tier-enforce')
+      await assertTierFeature('customColors', 'Custom colours')
+    }
+
     const org = await requireSettings()
     await db
       .update(settings)
@@ -56,6 +66,14 @@ export async function getCustomCss(): Promise<string> {
 export async function updateCustomCss(css: string): Promise<string> {
   console.log(`[domain:settings] updateCustomCss`)
   try {
+    // Clearing CSS (empty string) is always allowed so a workspace whose
+    // tier just stopped including custom CSS can wipe it without being
+    // blocked. Anything non-empty hits the feature gate.
+    if (css.trim().length > 0) {
+      const { assertTierFeature } = await import('./tier-enforce')
+      await assertTierFeature('customCss', 'Custom CSS')
+    }
+
     const org = await requireSettings()
     await db.update(settings).set({ customCss: css }).where(eq(settings.id, org.id))
     await invalidateSettingsCache()
@@ -287,6 +305,7 @@ export async function updateHeaderDisplayName(name: string | null): Promise<stri
 export async function updateWorkspaceName(name: string): Promise<string> {
   console.log(`[domain:settings] updateWorkspaceName`)
   try {
+    await assertNotManaged('workspace.name')
     const org = await requireSettings()
     const sanitizedName = name.trim()
     if (!sanitizedName) throw new ValidationError('INVALID_NAME', 'Workspace name cannot be empty')

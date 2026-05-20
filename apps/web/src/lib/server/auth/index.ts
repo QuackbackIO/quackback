@@ -8,41 +8,57 @@ import {
   jwt,
   genericOAuth,
   bearer,
+  twoFactor,
 } from 'better-auth/plugins'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 
-/** Temporary storage for magic link tokens during invitation flow */
-const pendingMagicLinkTokens = new Map<string, { token: string; timestamp: number }>()
+// Plugin callbacks (magicLink, emailOTP) stash tokens here instead of
+// emailing — callers that own the email template (invitations,
+// combined sign-in email) drain the stash and email themselves.
+const STASH_TTL_MS = 30_000
 
-export function storeMagicLinkToken(email: string, token: string): void {
-  const normalizedEmail = email.toLowerCase()
-  pendingMagicLinkTokens.set(normalizedEmail, { token, timestamp: Date.now() })
-
-  // Clean up after 30 seconds (invitation flow should retrieve immediately)
-  setTimeout(() => {
-    const stored = pendingMagicLinkTokens.get(normalizedEmail)
-    if (stored && Date.now() - stored.timestamp >= 30000) {
-      pendingMagicLinkTokens.delete(normalizedEmail)
-    }
-  }, 30000)
+function makeStash<T>() {
+  const m = new Map<string, { value: T; ts: number }>()
+  return {
+    set(key: string, value: T) {
+      const k = key.toLowerCase()
+      m.set(k, { value, ts: Date.now() })
+      setTimeout(() => {
+        const s = m.get(k)
+        if (s && Date.now() - s.ts >= STASH_TTL_MS) m.delete(k)
+      }, STASH_TTL_MS)
+    },
+    take(key: string): T | undefined {
+      const k = key.toLowerCase()
+      const s = m.get(k)
+      if (!s) return undefined
+      m.delete(k)
+      return s.value
+    },
+  }
 }
 
-export function getMagicLinkToken(email: string): string | undefined {
-  const normalizedEmail = email.toLowerCase()
-  const stored = pendingMagicLinkTokens.get(normalizedEmail)
-  if (!stored) return undefined
+const magicLinkStash = makeStash<string>()
+const otpStash = makeStash<string>()
 
-  pendingMagicLinkTokens.delete(normalizedEmail)
-  return stored.token
-}
+export const storeMagicLinkToken = (email: string, token: string) =>
+  magicLinkStash.set(email, token)
+export const getMagicLinkToken = (email: string) => magicLinkStash.take(email)
+export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
+export const getOTP = (email: string) => otpStash.take(email)
 
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
-type AuthInstance = Awaited<ReturnType<typeof createAuth>>
+type AuthInstance = Awaited<ReturnType<typeof createAuth>>['instance']
 let _auth: AuthInstance | null = null
+// Cross-pod invalidation: the version of `settings.auth_config_version`
+// at the time the cached _auth was built. Compared per-request against
+// the current value (via the existing settings cache, no extra DB
+// round-trip). Mismatch → resetAuth(), other pods' writes propagate.
+let _authConfigVersion: number | null = null
 
 async function createAuth() {
   // Dynamic imports to prevent client bundling
@@ -61,13 +77,15 @@ async function createAuth() {
     oauthAccessToken: oauthAccessTokenTable,
     oauthRefreshToken: oauthRefreshTokenTable,
     oauthConsent: oauthConsentTable,
+    twoFactor: twoFactorTable,
     eq,
   } = await import('@/lib/server/db')
-  const { sendSigninCodeEmail, sendPasswordResetEmail, isEmailConfigured } =
-    await import('@quackback/email')
+  const { sendPasswordResetEmail, isEmailConfigured } = await import('@quackback/email')
   const { getPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
   const { getAllAuthProviders } = await import('./auth-providers')
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
 
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, string>> = {}
@@ -76,17 +94,145 @@ async function createAuth() {
     providerId: string
     clientId: string
     clientSecret: string
+    disableSignUp?: boolean
     discoveryUrl?: string
     authorizationUrl?: string
     tokenUrl?: string
     scopes?: string[]
+    // SSO-only: force the IdP account picker so admins notice when
+    // they're already signed in as a different identity.
+    prompt?:
+      | 'none'
+      | 'login'
+      | 'create'
+      | 'consent'
+      | 'select_account'
+      | 'select_account consent'
+      | 'login consent'
+    // SSO-only: emit `login_hint` to pre-select the typed email in
+    // the IdP picker. The ctx shape comes from Better-Auth's endpoint
+    // builder; we only read `body.additionalData.loginHint` so we
+    // accept a loose ctx type and narrow inside the function.
+    authorizationUrlParams?: (ctx: {
+      body?: { additionalData?: { loginHint?: string } }
+    }) => Record<string, string>
   }> = []
+
+  // Defense-in-depth: a workspace that configured SSO on a higher tier
+  // would still have OIDC creds in the DB after a downgrade. Skip
+  // generic-oauth providers when the tier flag is off so the login
+  // button never renders and the /sign-in/oauth2 callback path 404s
+  // on that providerId.
+  //
+  // Tier limits + tenant settings are independent reads — fire them
+  // together to avoid stacking Redis round-trips on every auth-instance
+  // rebuild. SSO config (non-secret fields on settings.authConfig.ssoOidc)
+  // lives in DB; the client secret lives in platform_credentials with
+  // type='auth_sso'. No env-var fallback — the platform vendor never
+  // has the customer's IdP secret, so env-driven SSO never made sense
+  // for managed-cloud and was a self-hosted-only quirk that's now gone.
+  const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
+  const ssoFromDb = tenantSettings?.authConfig?.ssoOidc
+
+  // Registration condition is centralised in `isSsoActuallyRegistered`
+  // so the email-first login dispatcher (lookupAuthMethodsFn) can
+  // consult the same predicate — keeps registration and lookup from
+  // disagreeing on whether SSO is live.
+  const { getSsoClientSecret, isSsoActuallyRegistered } = await import('./sso-secret')
+  const ssoRegistered = await isSsoActuallyRegistered(ssoFromDb, tierLimits)
+
+  if (ssoFromDb?.enabled && tierLimits.features.customOidcProvider && !ssoRegistered) {
+    // SSO is enabled and tier-allowed in DB but the secret is missing
+    // (or got cleared). Skip registration; the rest of Better-Auth
+    // (password + magic-link + other OAuth) keeps working. UI shows a
+    // status banner asking the admin to paste the secret. Also warn
+    // explicitly when the legacy env-var is set so self-hosters
+    // upgrading from the env-fallback era have a breadcrumb.
+    console.error(
+      '[auth] ssoOidc enabled but no client secret in platform_credentials. ' +
+        'Set the secret via Admin → Settings → Security → Authentication → Single Sign-On.'
+    )
+    if (process.env.SSO_OIDC_CLIENT_SECRET) {
+      console.error(
+        '[auth] SSO_OIDC_CLIENT_SECRET is set in the environment but is no longer ' +
+          'read at runtime. Re-enter the secret via the admin UI to restore SSO.'
+      )
+    }
+  }
+
+  if (ssoRegistered) {
+    const cfg = ssoFromDb!
+    const clientSecret = await getSsoClientSecret()
+    // `isSsoActuallyRegistered` already confirmed the secret exists, but
+    // narrow the type for the push below.
+    if (clientSecret) {
+      genericOAuthConfigs.push({
+        providerId: 'sso',
+        clientId: cfg.clientId,
+        clientSecret,
+        discoveryUrl: cfg.discoveryUrl,
+        scopes: ['openid', 'email', 'profile'],
+        // Force the IdP to show the account-picker. Without this, an
+        // admin typing demo@example.com at the login form gets
+        // silently signed in as whoever the IdP already has a
+        // session for (e.g. james.morton@quackback.io) — the IdP
+        // re-uses its existing session because it has no reason to
+        // re-prompt. With select_account, the IdP always asks the
+        // user which account they want to sign in with so the
+        // identity is explicit.
+        prompt: 'select_account',
+        // login_hint pre-selects the typed email in the IdP picker.
+        // Read from the `additionalData.loginHint` body field that
+        // the team-login / portal-auth forms pass when initiating
+        // SSO. When the field is absent (e.g. a direct hit on
+        // /sign-in/oauth2 with no email context) we omit the hint
+        // and the IdP just shows its default account list.
+        authorizationUrlParams: (ctx) => {
+          const hint = ctx.body?.additionalData?.loginHint
+          const params: Record<string, string> = {}
+          if (hint) params.login_hint = hint
+          return params
+        },
+        // Better-Auth's built-in JIT block. When false, the upstream
+        // callback aborts in handleOAuthUserInfo BEFORE any user/
+        // session is created, then redirects with `?error=signup_disabled`.
+        // Existing users link via accountLinking.trustedProviders even
+        // with this on. Picked up by createAuth() rebuilds via
+        // resetAuth() / cross-pod invalidation when admins toggle it.
+        disableSignUp: cfg.autoCreateUsers === false,
+      })
+      trustedProviders.push('sso')
+    }
+  }
+
+  // Layer A registration filter: an OAuth provider is registered on
+  // the Better-Auth instance only if creds exist AND at least one
+  // surface (admin or portal) has it enabled. If both surfaces have
+  // turned it off, skip registration so the button stops rendering on
+  // every login page. Per-surface gating (admin vs portal) happens in
+  // hooks.before/after — Better-Auth's provider list is a global
+  // concept and can't be partitioned per-role at the auth-instance
+  // level. Password and magic-link aren't covered here (they're
+  // global Better-Auth features, not entries in AUTH_PROVIDERS).
+  const teamOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+    string,
+    boolean | undefined
+  >
+  const portalOAuthConfig = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
+    string,
+    boolean | undefined
+  >
+  const isOAuthProviderEnabledForAnySurface = (id: string): boolean => {
+    return teamOAuthConfig[id] === true || portalOAuthConfig[id] === true
+  }
 
   for (const provider of getAllAuthProviders()) {
     const creds = await getPlatformCredentials(provider.credentialType)
     if (!creds?.clientId || !creds?.clientSecret) continue
+    if (!isOAuthProviderEnabledForAnySurface(provider.id)) continue
 
     if (provider.type === 'generic-oauth') {
+      if (!tierLimits.features.customOidcProvider) continue
       // Generic OAuth providers use the genericOAuth plugin
       const scopeStr = creds.scopes || 'openid email profile'
       genericOAuthConfigs.push({
@@ -119,12 +265,20 @@ async function createAuth() {
   // BASE_URL is required for auth callbacks and redirects
   const baseURL = config.baseUrl
 
-  return betterAuth({
+  // Per-endpoint hooks for Layer B/C enforcement. Imported lazily here
+  // to keep the createAuth() module-loading dependency graph clean.
+  const { hooksBefore, hooksAfter } = await import('./hooks')
+
+  const instance = betterAuth({
+    hooks: {
+      before: hooksBefore,
+      after: hooksAfter,
+    },
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: config.secretKey,
 
     // Disable the JWT plugin's /token endpoint — conflicts with OAuth's /oauth2/token
-    // Does NOT affect emailOTP, magicLink, or session management
+    // Does NOT affect magicLink or session management
     disabledPaths: ['/token'],
 
     database: drizzleAdapter(db, {
@@ -146,6 +300,11 @@ async function createAuth() {
         oauthAccessToken: oauthAccessTokenTable,
         oauthRefreshToken: oauthRefreshTokenTable,
         oauthConsent: oauthConsentTable,
+        // The twoFactor plugin uses model name "twoFactor"; our Drizzle
+        // table is `two_factor` (snake-case). The column→field mapping
+        // (camelCase plugin field → snake_case column) is handled by
+        // matching column names in the table definition itself.
+        twoFactor: twoFactorTable,
       },
     }),
 
@@ -288,34 +447,29 @@ async function createAuth() {
     },
 
     plugins: [
-      // Email OTP plugin for passwordless authentication (used by portal users)
-      emailOTP({
-        async sendVerificationOTP({ email, otp }) {
-          if (!isEmailConfigured()) {
-            console.warn(
-              `[auth] Email OTP requested for ${email} but email is not configured. OTP will not be delivered.`
-            )
-          }
-          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-          const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
-          const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-          await sendSigninCodeEmail({ to: email, code: otp, logoUrl })
-        },
-        otpLength: 6,
-        expiresIn: 600, // 10 minutes
-      }),
-
-      // Magic link plugin for team member invitations
-      // When invitations are sent, the sendMagicLink callback stores the token
-      // which is then retrieved by sendInvitationFn to build the URL with correct workspace domain
+      // magicLink + emailOTP plugins stash tokens; callers in
+      // auth/email-signin.ts and auth/magic-link-mint.ts drain the
+      // stashes and ship their own email templates.
       magicLink({
         async sendMagicLink({ email, token }) {
-          // Store only the token - we'll construct the URL with the workspace domain
           storeMagicLinkToken(email, token)
         },
-        expiresIn: 60 * 60 * 24 * 7, // 7 days - match invitation expiry
-        disableSignUp: false, // Allow new users to sign up via invitation
-        allowedAttempts: 3, // Allow multiple attempts (Outlook Safe Links consumes tokens)
+        // 10 min matches the OTP expiry + the user-facing claim in the
+        // sign-in email. Bootstrap claim URLs need a longer window —
+        // see `extendMagicLinkExpiry` in `magic-link-mint.ts` which
+        // pushes their verification row out to 7 days post-mint.
+        expiresIn: 60 * 10,
+        disableSignUp: false,
+        // Outlook Safe Links / Slack unfurl can consume tokens before the user clicks.
+        allowedAttempts: 3,
+      }),
+
+      emailOTP({
+        async sendVerificationOTP({ email, otp }) {
+          storeOTP(email, otp)
+        },
+        otpLength: 6,
+        expiresIn: 600,
       }),
 
       // One-time token plugin for cross-domain session transfer (used by /get-started)
@@ -497,19 +651,52 @@ async function createAuth() {
       // Used by the widget iframe which can't set cookies in cross-origin contexts.
       bearer(),
 
+      // TOTP-based 2FA. Adds /two-factor/enable, /two-factor/verify, etc.
+      // No UI yet — surfaced in user profile + sign-in challenge in
+      // subsequent tasks.
+      twoFactor({
+        issuer: 'Quackback',
+        totpOptions: {
+          period: 30,
+          digits: 6,
+        },
+      }),
+
       // TanStack Start cookie management plugin (must be last)
       tanstackStartCookies(),
     ],
   })
+
+  return { instance, authConfigVersion: tenantSettings?.settings?.authConfigVersion ?? 0 }
 }
 
 /**
  * Get the auth instance (lazy-initialized).
- * This allows dynamic imports of database code to prevent client bundling.
+ *
+ * Cross-pod invalidation: every call reads the cached settings row's
+ * `authConfigVersion` (one Redis hit, already happens for everything
+ * else). If the cached _auth was built against an older version, drop
+ * it and rebuild. This guarantees that a write on pod A propagates to
+ * pod B no later than its next request after pod A's commit. The
+ * version is bumped by `bumpAuthConfigVersionInTx` from every
+ * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
+  // Skip the version check when no instance is cached yet — the build
+  // path below records the version after creation.
+  if (_auth && _authConfigVersion !== null) {
+    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+    const t = await getTenantSettings()
+    const current = t?.settings?.authConfigVersion
+    if (typeof current === 'number' && current !== _authConfigVersion) {
+      _auth = null
+      _authConfigVersion = null
+    }
+  }
   if (!_auth) {
-    _auth = await createAuth()
+    const built = await createAuth()
+    _auth = built.instance
+    _authConfigVersion = built.authConfigVersion
   }
   return _auth
 }
@@ -520,6 +707,7 @@ export async function getAuth(): Promise<AuthInstance> {
  */
 export function resetAuth(): void {
   _auth = null
+  _authConfigVersion = null
 }
 
 // Export a proxy object that lazily initializes auth on first access

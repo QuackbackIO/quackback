@@ -5,15 +5,17 @@ vi.mock('@quackback/email', () => ({
   sendStatusChangeEmail: vi.fn(),
   sendNewCommentEmail: vi.fn(),
   sendChangelogPublishedEmail: vi.fn(),
+  sendPostMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
 import { emailHook } from '../handlers/email'
-import { sendStatusChangeEmail, sendNewCommentEmail } from '@quackback/email'
+import { sendStatusChangeEmail, sendNewCommentEmail, sendPostMentionEmail } from '@quackback/email'
 import type { EmailTarget, EmailConfig } from '../hook-types'
 import type { EventData } from '../types'
 
 const mockStatusChangeEmail = vi.mocked(sendStatusChangeEmail)
 const mockNewCommentEmail = vi.mocked(sendNewCommentEmail)
+const mockPostMentionEmail = vi.mocked(sendPostMentionEmail)
 
 // The email handler only reads event.type, so data is irrelevant for these tests
 const statusChangedEvent = {
@@ -162,5 +164,66 @@ describe('emailHook', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('Unsupported event type')
+  })
+})
+
+describe('emailHook — post.mentioned', () => {
+  const mentionData = {
+    postId: 'post_123',
+    postTitle: 'Why we should add dark mode',
+    postUrl: 'https://example.com/p/123',
+    mentionedPrincipalId: 'principal_target',
+    mentioningPrincipalId: 'principal_actor',
+    excerpt: 'Hey @alice, what do you think?',
+  }
+
+  it('calls sendPostMentionEmail with the actor displayName when present', async () => {
+    mockPostMentionEmail.mockClear()
+    mockPostMentionEmail.mockResolvedValue({ sent: true })
+
+    const event = {
+      id: 'evt-mention-1',
+      type: 'post.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', displayName: 'Alex' },
+      data: mentionData,
+    } as unknown as EventData
+
+    const result = await emailHook.run(event, baseTarget, baseConfig)
+
+    expect(result).toEqual({ success: true })
+    expect(mockPostMentionEmail).toHaveBeenCalledWith({
+      to: 'user@example.com',
+      mentionerName: 'Alex',
+      postTitle: 'Why we should add dark mode',
+      excerpt: 'Hey @alice, what do you think?',
+      postUrl: 'https://example.com/p/123',
+      workspaceName: 'TestWorkspace',
+      unsubscribeUrl: 'https://example.com/unsubscribe',
+      logoUrl: 'https://example.com/logo.png',
+    })
+  })
+
+  it('falls back to empty mentionerName when actor has no displayName', async () => {
+    mockPostMentionEmail.mockClear()
+    mockPostMentionEmail.mockResolvedValue({ sent: true })
+
+    const event = {
+      id: 'evt-mention-2',
+      type: 'post.mentioned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'anonymous' },
+      data: mentionData,
+    } as unknown as EventData
+
+    const result = await emailHook.run(event, baseTarget, baseConfig)
+
+    expect(result).toEqual({ success: true })
+    expect(mockPostMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mentionerName: '',
+        excerpt: 'Hey @alice, what do you think?',
+      })
+    )
   })
 })

@@ -62,7 +62,7 @@ export class QuackbackClient {
     let cursor: string | undefined
 
     while (true) {
-      const queryParams = { ...params, limit: '100' }
+      const queryParams: Record<string, string> = { ...params, limit: '100' }
       if (cursor) queryParams.cursor = cursor
 
       const response = await this.get<ApiResponse<T[]>>(path, queryParams)
@@ -73,7 +73,9 @@ export class QuackbackClient {
         items.push(...data)
       }
 
-      const pagination = raw.pagination
+      // Quackback returns pagination under `meta.pagination`; some endpoints
+      // (or older shapes) put it at the top level. Check both.
+      const pagination = raw.meta?.pagination ?? raw.pagination
       if (!pagination?.hasMore || !pagination?.cursor) break
       cursor = pagination.cursor
     }

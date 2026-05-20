@@ -11,14 +11,17 @@ import { render } from '@react-email/components'
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
-import { SigninCodeEmail } from './templates/signin-code'
+import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
+import { PostMentionEmail } from './templates/post-mention'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
+import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+import { NewSignInEmail } from './templates/new-sign-in'
 import { TicketEventEmail } from './templates/tickets/ticket-event'
 
 /**
@@ -228,33 +231,35 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 }
 
 // ============================================================================
-// Sign-in Code Email
+// Sign-in Email (magic link + 6-digit code combined)
 // ============================================================================
 
-interface SendSigninCodeParams {
+interface SendMagicLinkParams {
   to: string
+  signInUrl: string
   code: string
   logoUrl?: string
 }
 
-export async function sendSigninCodeEmail(params: SendSigninCodeParams): Promise<EmailResult> {
-  const { to, code, logoUrl } = params
+export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
+  const { to, signInUrl, code, logoUrl } = params
 
   if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Sign-in Code Email')
+    console.log('│ [DEV] Sign-in Email (magic link + OTP)')
     console.log('├────────────────────────────────────────────────────────────')
     console.log(`│ To: ${to}`)
+    console.log(`│ Link: ${signInUrl}`)
     console.log(`│ Code: ${code}`)
     console.log('└────────────────────────────────────────────────────────────\n')
     return { sent: false }
   }
 
-  console.log(`[Email] Sending sign-in code to ${to}`)
+  console.log(`[Email] Sending sign-in email to ${to}`)
   return sendEmail({
     to,
-    subject: `Your Quackback sign-in code is ${code}`,
-    react: SigninCodeEmail({ code, logoUrl }),
+    subject: 'Your Quackback sign-in link',
+    react: MagicLinkEmail({ signInUrl, code, logoUrl }),
   })
 }
 
@@ -288,6 +293,90 @@ export async function sendPasswordResetEmail(
     to,
     subject: 'Reset your Quackback password',
     react: PasswordResetEmail({ resetLink, logoUrl }),
+  })
+}
+
+// ============================================================================
+// Recovery code used (security alert)
+// ============================================================================
+
+interface SendRecoveryCodeUsedParams {
+  to: string
+  workspaceName?: string
+  ipAddress?: string | null
+  userAgent?: string | null
+  occurredAt: string
+  logoUrl?: string
+}
+
+/**
+ * Security alert sent after a recovery code is consumed. The recipient
+ * is the user whose code was used — this is their canary against an
+ * attacker who managed to obtain a code.
+ */
+export async function sendRecoveryCodeUsedEmail(
+  params: SendRecoveryCodeUsedParams
+): Promise<EmailResult> {
+  const { to, workspaceName, ipAddress, userAgent, occurredAt, logoUrl } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Recovery Code Used (security alert)')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Workspace: ${workspaceName ?? '<unknown>'}`)
+    console.log(`│ When: ${occurredAt}`)
+    console.log(`│ IP: ${ipAddress ?? '<unknown>'}`)
+    console.log(`│ User agent: ${userAgent ?? '<unknown>'}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  console.log(`[Email] Sending recovery-code-used alert to ${to}`)
+  return sendEmail({
+    to,
+    subject: 'A recovery code on your account was just used',
+    react: RecoveryCodeUsedEmail({ workspaceName, ipAddress, userAgent, occurredAt, logoUrl }),
+  })
+}
+
+// ============================================================================
+// New-device sign-in notification
+// ============================================================================
+
+interface SendNewSignInParams {
+  to: string
+  workspaceName?: string
+  occurredAt: string
+  ipAddress?: string | null
+  userAgent?: string | null
+  logoUrl?: string
+}
+
+/** First-sight new-device sign-in alert. Triggered by
+ * `handleNewDeviceNotification` after a successful sign-in lands on
+ * an unseen (UA, /24 IP) combination. */
+export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
+  const { to, workspaceName, occurredAt, ipAddress, userAgent, logoUrl } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] New-device sign-in alert')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Workspace: ${workspaceName ?? '<unknown>'}`)
+    console.log(`│ When: ${occurredAt}`)
+    console.log(`│ IP: ${ipAddress ?? '<unknown>'}`)
+    console.log(`│ Device: ${userAgent ?? '<unknown>'}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  console.log(`[Email] Sending new-sign-in alert to ${to}`)
+  return sendEmail({
+    to,
+    subject: 'New sign-in to your account',
+    react: NewSignInEmail({ workspaceName, occurredAt, ipAddress, userAgent, logoUrl }),
   })
 }
 
@@ -401,6 +490,58 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       commentPreview,
       isTeamMember,
       organizationName: workspaceName,
+      unsubscribeUrl,
+      logoUrl,
+    }),
+  })
+}
+
+// ============================================================================
+// Post Mention Email
+// ============================================================================
+
+export interface SendPostMentionEmailArgs {
+  to: string
+  mentionerName: string
+  postTitle: string
+  /** Paragraph context for the mention. Empty string suppresses the quote block. */
+  excerpt: string
+  postUrl: string
+  workspaceName: string
+  unsubscribeUrl?: string
+  logoUrl?: string
+}
+
+export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
+  const { to, mentionerName, postTitle, excerpt, postUrl, workspaceName, unsubscribeUrl, logoUrl } =
+    args
+
+  const displayName = mentionerName || 'Anonymous user'
+  const subject = `${displayName} mentioned you in "${postTitle}"`
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Post Mention Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Mentioner: ${displayName}`)
+    console.log(`│ Post: ${postTitle}`)
+    console.log(`│ Excerpt: ${excerpt.substring(0, 80)}${excerpt.length > 80 ? '…' : ''}`)
+    console.log(`│ URL: ${postUrl}`)
+    console.log(`│ Unsubscribe: ${unsubscribeUrl ?? '(none)'}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject,
+    react: PostMentionEmail({
+      mentionerName,
+      postTitle,
+      excerpt,
+      postUrl,
+      workspaceName,
       unsubscribeUrl,
       logoUrl,
     }),
@@ -525,12 +666,15 @@ export async function sendFeedbackLinkedEmail(
 
 export { InvitationEmail } from './templates/invitation'
 export { WelcomeEmail } from './templates/welcome'
-export { SigninCodeEmail } from './templates/signin-code'
+export { MagicLinkEmail } from './templates/magic-link'
 export { StatusChangeEmail } from './templates/status-change'
 export { NewCommentEmail } from './templates/new-comment'
+export { PostMentionEmail } from './templates/post-mention'
 export { ChangelogPublishedEmail } from './templates/changelog-published'
 export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
+export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
+export { NewSignInEmail } from './templates/new-sign-in'
 export { TicketEventEmail } from './templates/tickets/ticket-event'
 
 // ============================================================================

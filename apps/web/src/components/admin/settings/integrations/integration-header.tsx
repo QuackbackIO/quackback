@@ -57,7 +57,7 @@ export function IntegrationHeader({
                 </Badge>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">{catalog.description}</p>
+            <p className="text-xs text-muted-foreground">{catalog.description}</p>
             {catalog.docsUrl && (
               <DocsLink href={catalog.docsUrl} className="mt-1 text-xs">
                 Learn how to set up {catalog.name}

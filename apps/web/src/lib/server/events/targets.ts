@@ -13,6 +13,7 @@ import {
   inArray,
   isNull,
   principal,
+  user,
   webhooks,
 } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
@@ -54,6 +55,8 @@ const SUBSCRIBER_EVENT_TYPES = [
   'comment.created',
   'changelog.published',
 ] as const
+/** Events that resolve a single mentioned principal as the notification target */
+const MENTION_EVENT_TYPES = ['post.mentioned'] as const
 const AI_EVENT_TYPES = ['post.created'] as const
 const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
 /**
@@ -84,6 +87,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
         const subscriberTargets = await getSubscriberTargets(event, context)
         targets.push(...subscriberTargets)
       }
+    }
+
+    // Direct-mention targets (single principal whose id is in the payload)
+    if (MENTION_EVENT_TYPES.includes(event.type as (typeof MENTION_EVENT_TYPES)[number])) {
+      const mentionTargets = await getMentionTargets(event, context)
+      targets.push(...mentionTargets)
     }
 
     // AI targets (sentiment, embeddings) - only when AI is configured
@@ -514,6 +523,99 @@ async function buildNotificationConfig(
   }
 
   return null
+}
+
+// ============================================================================
+// Mention Targets
+// ============================================================================
+
+/** Principal roles that are eligible to receive mention notifications */
+const MENTION_ELIGIBLE_ROLES = new Set(['admin', 'member', 'user'])
+
+/**
+ * Resolve hook targets for a `post.mentioned` event.
+ *
+ * The event payload carries a single `mentionedPrincipalId`. We look up that
+ * principal (left-joined to user for email), apply defensive type/role
+ * filtering so anonymous and service principals never get notified, and
+ * return:
+ *  - one notification target (always, when the principal exists and is eligible)
+ *  - one email target (only when the joined user has a non-null email)
+ */
+async function getMentionTargets(event: EventData, context: HookContext): Promise<HookTarget[]> {
+  if (event.type !== 'post.mentioned') return []
+
+  const { mentionedPrincipalId, postTitle, postUrl } = event.data
+  if (!mentionedPrincipalId) return []
+
+  const rows = await db
+    .select({
+      id: principal.id,
+      type: principal.type,
+      role: principal.role,
+      email: user.email,
+    })
+    .from(principal)
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(eq(principal.id, mentionedPrincipalId as PrincipalId))
+    .limit(1)
+
+  const row = rows[0]
+  if (!row) return []
+
+  // Defensive: only human-user principals with an eligible role get mention notifications.
+  // Anonymous principals don't have a stable inbox to deliver to; service principals
+  // are integrations/API keys, not humans. The role check is belt-and-suspenders for
+  // the same reason.
+  if (row.type !== 'user' || !MENTION_ELIGIBLE_ROLES.has(row.role)) return []
+
+  const targets: HookTarget[] = []
+
+  targets.push({
+    type: 'notification',
+    target: { principalIds: [row.id as PrincipalId] },
+    config: {
+      postId: event.data.postId,
+      postTitle,
+      postUrl,
+      eventType: 'post.mentioned',
+    },
+  })
+
+  if (row.email) {
+    // Honour the global emailMuted preference. Without this, a user who hit
+    // unsubscribe-all (which sets emailMuted=true) would still get direct
+    // mention emails because the mention path doesn't go through the
+    // subscriber filter that runs shouldSendEmail.
+    const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
+    const prefs = prefsMap.get(row.id as PrincipalId)
+    if (!prefs?.emailMuted) {
+      const tokenMap = await batchGenerateUnsubscribeTokens([
+        {
+          principalId: row.id as PrincipalId,
+          postId: event.data.postId as PostId,
+          action: 'unsubscribe_all',
+        },
+      ])
+      const token = tokenMap.get(row.id as PrincipalId)
+      targets.push({
+        type: 'email',
+        target: {
+          email: row.email,
+          unsubscribeUrl: token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : undefined,
+        },
+        config: {
+          postTitle,
+          postUrl,
+          workspaceName: context.workspaceName,
+          logoUrl: context.logoUrl ?? undefined,
+          eventType: 'post.mentioned',
+        },
+      })
+    }
+  }
+
+  return targets
 }
 
 // ============================================================================

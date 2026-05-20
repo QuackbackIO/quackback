@@ -5,6 +5,8 @@
  * This allows adding new settings without migrations.
  */
 
+import type { TiptapContent } from '@/lib/shared/db-types'
+
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
 // =============================================================================
@@ -26,15 +28,122 @@ export interface AuthConfig {
   oauth: OAuthProviders
   /** Allow public signup vs invitation-only */
   openSignup: boolean
+  /**
+   * Optional OIDC SSO admin sign-in. Populated from the declarative
+   * config file via the reconciler or by the admin auth settings UI.
+   * The client *secret* is **not** in this JSON — it lives encrypted
+   * in `platform_credentials` with `integrationType='auth_sso'` so a
+   * settings-row dump can't leak it.
+   */
+  ssoOidc?: {
+    enabled: boolean
+    discoveryUrl: string
+    clientId: string
+    autoCreateUsers: boolean
+    /**
+     * Role assigned to a brand-new user on their first SSO sign-in.
+     * Only consulted when `autoCreateUsers` is true. Default 'member'.
+     * 'user' means "do not promote" (portal user only).
+     */
+    autoProvisionRole?: 'admin' | 'member' | 'user'
+    /**
+     * ISO-8601 UTC. Server-stamped whenever a *connection-affecting*
+     * field changes — `discoveryUrl`, `clientId`, or the client secret.
+     * It is the freshness baseline for {@link lastSuccessfulTestAt}: a
+     * successful test only counts if it happened after the most recent
+     * details change. Not stamped for `autoCreateUsers` /
+     * `autoProvisionRole` / `attributeMapping` — those don't affect
+     * whether the IdP handshake works.
+     */
+    detailsChangedAt?: string
+    /**
+     * ISO-8601 UTC. Server-stamped by the SSO test callback when a test
+     * sign-in succeeds AND the IdP-returned email matches the admin who
+     * ran it. Compared against {@link detailsChangedAt} to gate two
+     * actions: enabling SSO (`enabled=true`) and per-domain
+     * `enforced=true`. Workspace-level — any admin's identity-matched
+     * test unlocks the gate for the whole workspace.
+     */
+    lastSuccessfulTestAt?: string
+    /**
+     * Optional IdP-attribute → role mapping. When set, the SSO callback
+     * resolves the user's role from a claim on the ID token instead of
+     * falling back to `autoProvisionRole`. The mapping is first-match-
+     * wins against `rules`; nothing matches → `defaultRole`.
+     *
+     * Resolved on every sign-in when `syncOnEverySignIn=true` so role
+     * changes in the IdP propagate down. Default `false` keeps JIT
+     * semantics (only first sign-in sets the role).
+     */
+    attributeMapping?: {
+      /** Dotted path or URL-shaped namespaced claim path on the ID token. */
+      claimPath: string
+      /** First-match-wins. `whenContains` matches when the resolved claim's
+       *  array contains the literal (case-insensitive) or its scalar value
+       *  equals it. */
+      rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+      /** Used when no rule matches. */
+      defaultRole: 'admin' | 'member' | 'user'
+      /** When true, every sign-in re-resolves and may demote/promote. */
+      syncOnEverySignIn?: boolean
+    }
+  }
+  /**
+   * Workspace-wide two-factor policy for team-role users.
+   *
+   * When `required` is true, the password sign-in hook redirects any
+   * team-role user (`admin` / `member`) without 2FA enrolled to
+   * `/auth/two-factor-setup-required`. Portal users (`role='user'`)
+   * are never gated. Magic-link remains open as the break-glass for
+   * an admin who lost their authenticator — they can get back in,
+   * re-enroll, then sign in via password again.
+   *
+   * Default `undefined` is treated as `required=false` (off) so
+   * existing tenants pre-migration aren't suddenly locked out.
+   */
+  twoFactor?: { required: boolean }
 }
 
 /**
- * Default auth config for new organizations
+ * A workspace's verified SSO domain. Routing semantics:
+ *  - `verifiedAt: null` — pending DNS verification, no behaviour change.
+ *  - `verifiedAt: <ISO>` — emails at this domain are routed to SSO by
+ *    default on the login form.
+ *  - `enforced: true` (with `verifiedAt: <ISO>`) — emails at this domain
+ *    are hard-bound to SSO; password / magic-link / non-SSO OAuth are
+ *    blocked. Toggling `enforced=true` requires the calling admin to
+ *    have signed in via SSO within the bootstrap window (lockout guard)
+ *    AND email-delivery configured (break-glass precondition).
+ */
+export interface VerifiedDomain {
+  id: `domain_${string}`
+  /** Canonical lowercase ASCII FQDN — `normalizeDomain` output. */
+  name: string
+  /** Random token, intentionally public via DNS TXT. */
+  verificationToken: string
+  /** ISO-8601 UTC. Null = pending verification. */
+  verifiedAt: string | null
+  /** Per-domain hard-binding switch. Default false. */
+  enforced: boolean
+  /** ISO-8601 UTC. */
+  createdAt: string
+}
+
+/**
+ * Default auth config for new organizations.
+ *
+ * `password: true` matches the prior hardcoded behaviour in v0.9.9 and
+ * earlier, where team password sign-in was always allowed regardless
+ * of any stored config. Pre-upgrade tenants whose `authConfig.oauth`
+ * has no `password` key also fall back to this default via the
+ * `?? true` check in `isAuthMethodAllowed`, so upgrading from v0.9.9
+ * doesn't lock admins out of their team surface.
  */
 export const DEFAULT_AUTH_CONFIG: AuthConfig = {
   oauth: {
     google: true,
     github: true,
+    password: true,
   },
   openSignup: false,
 }
@@ -44,14 +153,22 @@ export const DEFAULT_AUTH_CONFIG: AuthConfig = {
 // =============================================================================
 
 /**
- * Portal OAuth settings — dynamic provider support.
- * 'email' controls email OTP; all other keys are Better Auth provider IDs.
+ * Portal auth settings — `password`, `magicLink`, and dynamic OAuth provider toggles.
+ *
+ * The legacy `email` flag (Email OTP) was retired in migration 0049 in
+ * favour of `magicLink`. Existing portal_config blobs may still carry
+ * `email: false` after the migration; the index signature accepts it so
+ * we don't trip TypeScript when reading legacy data.
  */
 export interface PortalAuthMethods {
   /** Whether password authentication is enabled (defaults to true) */
   password?: boolean
-  /** Whether email OTP authentication is enabled (defaults to false for new installs) */
-  email?: boolean
+  /** Whether one-click magic-link sign-in is enabled. The magicLink
+   * better-auth plugin is always wired (used by team invitations);
+   * this toggle controls whether the portal login UI surfaces it as a
+   * sign-in option. Defaults to off so the only auth surface is what
+   * the admin has explicitly chosen. */
+  magicLink?: boolean
   /** Dynamic OAuth provider toggles keyed by provider ID (github, google, discord, etc.) */
   [providerId: string]: boolean | undefined
 }
@@ -87,6 +204,26 @@ export interface PortalFeatures {
 }
 
 /**
+ * Welcome card shown above the post list on the portal index.
+ * Title is plain text (server trims + caps at 120 chars). Body is
+ * sanitized TipTap JSON — same shape as post / help-center content,
+ * sanitized via `sanitizeTiptapContent` on every write.
+ *
+ * Default off. Renders only when `enabled` and at least one of
+ * `title` / `body` has content.
+ */
+export interface PortalWelcomeCard {
+  enabled: boolean
+  /** Plain text. Server trims and rejects > 120 chars. */
+  title: string
+  /** Sanitized TipTap JSON doc. */
+  body: TiptapContent
+}
+
+/** Max length of {@link PortalWelcomeCard.title} after trimming. */
+export const PORTAL_WELCOME_CARD_TITLE_MAX = 120
+
+/**
  * Portal configuration
  * Controls the public feedback portal behavior
  */
@@ -95,6 +232,8 @@ export interface PortalConfig {
   oauth: PortalAuthMethods
   /** Feature toggles */
   features: PortalFeatures
+  /** Welcome card on the portal index. Optional — absent = disabled. */
+  welcomeCard?: PortalWelcomeCard
 }
 
 /**
@@ -118,6 +257,11 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     anonymousVoting: true,
     anonymousCommenting: false,
     anonymousPosting: false,
+  },
+  welcomeCard: {
+    enabled: false,
+    title: '',
+    body: { type: 'doc', content: [{ type: 'paragraph' }] },
   },
 }
 
@@ -338,11 +482,17 @@ export const DEFAULT_HELP_CENTER_CONFIG: HelpCenterConfig = {
 // =============================================================================
 
 /**
- * Input for updating auth config (partial update)
+ * Input for updating auth config (partial update). Each top-level key
+ * is optional; nested ssoOidc is per-key partial too. The mutator
+ * deep-merges over the stored value and re-validates the merged
+ * result, so a partial like `{ ssoOidc: { enforced: true } }` works
+ * provided the stored ssoOidc already has the required fields.
  */
 export interface UpdateAuthConfigInput {
   oauth?: OAuthProviders
   openSignup?: boolean
+  ssoOidc?: Partial<NonNullable<AuthConfig['ssoOidc']>>
+  twoFactor?: Partial<NonNullable<AuthConfig['twoFactor']>>
 }
 
 /**
@@ -351,6 +501,7 @@ export interface UpdateAuthConfigInput {
 export interface UpdatePortalConfigInput {
   oauth?: Partial<PortalAuthMethods>
   features?: Partial<PortalFeatures>
+  welcomeCard?: Partial<PortalWelcomeCard>
 }
 
 // =============================================================================
@@ -363,8 +514,6 @@ export interface UpdatePortalConfigInput {
 export interface PublicAuthConfig {
   oauth: OAuthProviders
   openSignup: boolean
-  /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
-  customProviderNames?: Record<string, string>
 }
 
 /**
@@ -375,6 +524,8 @@ export interface PublicPortalConfig {
   features: PortalFeatures
   /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
   customProviderNames?: Record<string, string>
+  /** Welcome card on the portal index. Absent / disabled = nothing rendered. */
+  welcomeCard?: PortalWelcomeCard
 }
 
 // =============================================================================
@@ -422,6 +573,18 @@ export interface TenantSettings {
   featureFlags: FeatureFlags
   brandingData: SettingsBrandingData
   faviconData: { url: string } | null
+  /** Dot-paths managed by `/etc/quackback/config.yaml`. Matching in-app
+   *  form controls render disabled when the path appears here. Empty
+   *  list = nothing locked. */
+  managedFieldPaths: string[]
+  /** Verified SSO domains ordered by creation. Empty when no domains
+   *  have been added. The auth runtime reads this to decide routing
+   *  (sso-default vs methods) and hard-binding (per-row `enforced`). */
+  verifiedDomains: VerifiedDomain[]
+  /** Workspace state, written by the config-file reconciler when
+   *  spec.state is set. Defaults to 'active' when the column has never
+   *  been written. */
+  state: 'active' | 'suspended' | 'deleting'
 }
 
 // =============================================================================

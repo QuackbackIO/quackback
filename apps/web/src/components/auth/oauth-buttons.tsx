@@ -138,6 +138,24 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
 }
 
 /**
+ * True when the portal exposes at least one user-facing sign-in method
+ * (password, magic link, any registered OAuth provider, or workspace
+ * SSO via a verified domain). Pass `ssoEnabled` from the auth-runtime
+ * view (e.g. `registeredAuthProviders.includes('sso')`), not raw
+ * `ssoOidc.enabled`, so a stale flag with no platform credential
+ * doesn't keep the buttons visible.
+ */
+export function hasAnyPortalAuthMethod(
+  authConfig: Record<string, boolean | undefined>,
+  opts?: { ssoEnabled?: boolean; hasVerifiedDomain?: boolean }
+): boolean {
+  if (authConfig.password || authConfig.magicLink) return true
+  if (getEnabledOAuthProviders(authConfig).length > 0) return true
+  if (opts?.ssoEnabled && opts.hasVerifiedDomain) return true
+  return false
+}
+
+/**
  * Build provider list from PortalAuthMethods config.
  * Filters to only enabled OAuth providers (excludes 'email').
  */

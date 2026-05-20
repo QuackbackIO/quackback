@@ -13,7 +13,7 @@ import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 const searchSchema = z.object({
   board: z.string().optional(),
   search: z.string().optional(),
-  sort: z.enum(['top', 'new', 'trending']).optional().default('top'),
+  sort: z.enum(['top', 'new', 'trending']).optional().default('trending'),
   status: z.array(z.string()).optional(),
   tagIds: z.array(z.string()).optional(),
   minVotes: z.coerce.number().int().min(1).optional(),
@@ -48,7 +48,7 @@ export const Route = createFileRoute('/_portal/')({
       portalQueries.portalData({
         boardSlug: searchParams.board,
         search: searchParams.search,
-        sort: searchParams.sort ?? 'top',
+        sort: searchParams.sort ?? 'trending',
         statusSlugs: searchParams.status?.length ? searchParams.status : undefined,
         tagIds: searchParams.tagIds?.length ? searchParams.tagIds : undefined,
         userId: session?.user?.id,
@@ -66,12 +66,15 @@ export const Route = createFileRoute('/_portal/')({
       org.publicPortalConfig?.features?.anonymousVoting ??
       DEFAULT_PORTAL_CONFIG.features.anonymousVoting
 
+    const welcomeCard = org.publicPortalConfig?.welcomeCard
+
     return {
       org,
       baseUrl: context.baseUrl ?? '',
       isEmpty: portalData.boards.length === 0,
       session,
       anonymousVotingEnabled,
+      welcomeCard,
     }
   },
   head: ({ loaderData }) => {
@@ -100,12 +103,12 @@ function PublicPortalPage() {
   const intl = useIntl()
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session, anonymousVotingEnabled } = loaderData
+  const { org, session, anonymousVotingEnabled, welcomeCard } = loaderData
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board
   const currentSearch = search.search
-  const currentSort = search.sort ?? 'top'
+  const currentSort = search.sort ?? 'trending'
 
   // Fetch portal data - uses cached data from loader on initial load,
   // refetches with new filters on client-side navigation.
@@ -180,6 +183,7 @@ function PublicPortalPage() {
         defaultBoardId={portalData.boards[0]?.id}
         user={user}
         anonymousVotingEnabled={anonymousVotingEnabled}
+        welcomeCard={welcomeCard}
       />
     </div>
   )

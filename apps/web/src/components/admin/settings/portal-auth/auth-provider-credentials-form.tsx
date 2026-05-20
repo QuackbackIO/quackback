@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -20,6 +20,12 @@ interface AuthProviderCredentialsFormProps {
   fields: PlatformCredentialField[]
   onSaved?: () => void
 }
+
+// Fields that only matter when Discovery URL is empty (manual endpoint
+// override) or that have a sensible default (scopes). Collapsing these
+// keeps Custom OIDC's default form to four fields instead of seven —
+// most admins paste a discovery URL and never touch the manual paths.
+const ADVANCED_FIELD_KEYS = new Set(['authorizationUrl', 'tokenUrl', 'scopes'])
 
 function CopyableField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
@@ -111,6 +117,28 @@ export function AuthProviderCredentialsForm({
   // Required fields: clientId and clientSecret
   const requiredFilled = values['clientId']?.trim() && values['clientSecret']?.trim()
 
+  // Partition fields into core vs Advanced and pre-compute whether the
+  // disclosure should default to open. defaultOpen flips when the user
+  // has typed into an advanced field (e.g. came back to edit after
+  // partial entry) OR when no Discovery URL is configured — in which
+  // case manual endpoints are required and shouldn't hide.
+  const { coreFields, advancedFields, defaultOpen } = useMemo(() => {
+    const core: PlatformCredentialField[] = []
+    const advanced: PlatformCredentialField[] = []
+    for (const f of fields) {
+      if (ADVANCED_FIELD_KEYS.has(f.key)) advanced.push(f)
+      else core.push(f)
+    }
+    const hasValue = advanced.some((f) => values[f.key]?.trim())
+    const discoveryKey = fields.find((f) => f.key === 'discoveryUrl') ? 'discoveryUrl' : null
+    const discoveryMissing =
+      !!discoveryKey && !values[discoveryKey]?.trim() && !maskedFields?.[discoveryKey]
+    return { coreFields: core, advancedFields: advanced, defaultOpen: hasValue || discoveryMissing }
+  }, [fields, values, maskedFields])
+
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const shouldExpandAdvanced = advancedOpen || defaultOpen
+
   // Guidance section shown in both configured and editing states
   const guidanceSection = (
     <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-2">
@@ -155,30 +183,40 @@ export function AuthProviderCredentialsForm({
     )
   }
 
+  const renderField = (field: PlatformCredentialField) => (
+    <div key={field.key}>
+      <Label htmlFor={`auth-cred-${field.key}`} className="text-sm font-medium">
+        {field.label}
+      </Label>
+      <Input
+        id={`auth-cred-${field.key}`}
+        type={field.sensitive ? 'password' : 'text'}
+        placeholder={field.placeholder ?? ''}
+        value={values[field.key] ?? ''}
+        onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+        className="mt-1"
+      />
+      {field.helpText && <p className="mt-1 text-xs text-muted-foreground">{field.helpText}</p>}
+    </div>
+  )
+
   // Show input form when not configured or editing
   return (
     <div className="space-y-4">
       {guidanceSection}
-      <div className="space-y-3">
-        {fields.map((field) => (
-          <div key={field.key}>
-            <Label htmlFor={`auth-cred-${field.key}`} className="text-sm font-medium">
-              {field.label}
-            </Label>
-            <Input
-              id={`auth-cred-${field.key}`}
-              type={field.sensitive ? 'password' : 'text'}
-              placeholder={field.placeholder ?? ''}
-              value={values[field.key] ?? ''}
-              onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-              className="mt-1"
-            />
-            {field.helpText && (
-              <p className="mt-1 text-xs text-muted-foreground">{field.helpText}</p>
-            )}
-          </div>
-        ))}
-      </div>
+      <div className="space-y-3">{coreFields.map(renderField)}</div>
+      {advancedFields.length > 0 && (
+        <details
+          open={shouldExpandAdvanced}
+          onToggle={(e) => setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)}
+          className="rounded-md border border-border/40 bg-muted/10"
+        >
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+            Advanced — manual endpoints &amp; scopes
+          </summary>
+          <div className="space-y-3 px-3 pt-1 pb-3">{advancedFields.map(renderField)}</div>
+        </details>
+      )}
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave} disabled={!requiredFilled || saveMutation.isPending}>
           {saveMutation.isPending ? 'Saving...' : 'Save'}

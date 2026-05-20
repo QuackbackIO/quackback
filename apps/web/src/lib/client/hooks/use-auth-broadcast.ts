@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 const CHANNEL_NAME = 'quackback-auth'
 
@@ -122,7 +122,10 @@ export function usePopupTracker({ onPopupClosed }: UsePopupTrackerOptions) {
     }
   }, [])
 
-  function trackPopup(popup: Window | null): void {
+  // Internal refs are stable across renders, so empty deps are safe.
+  // Memoizing these keeps consumers' useEffect dep arrays stable, preventing
+  // re-running effects (or cleanups) on every render.
+  const trackPopup = useCallback((popup: Window | null): void => {
     popupRef.current = popup
 
     if (intervalRef.current) {
@@ -142,23 +145,23 @@ export function usePopupTracker({ onPopupClosed }: UsePopupTrackerOptions) {
         onPopupClosedRef.current?.()
       }
     }, 500)
-  }
+  }, [])
 
-  function clearPopup(): void {
+  const clearPopup = useCallback((): void => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
     popupRef.current = null
-  }
+  }, [])
 
-  function focusPopup(): void {
+  const focusPopup = useCallback((): void => {
     popupRef.current?.focus()
-  }
+  }, [])
 
-  function hasPopup(): boolean {
+  const hasPopup = useCallback((): boolean => {
     return popupRef.current !== null && !popupRef.current.closed
-  }
+  }, [])
 
   return { trackPopup, clearPopup, focusPopup, hasPopup }
 }

@@ -46,7 +46,7 @@ function PermissionToggle({
         <label htmlFor={id} className="text-sm font-medium cursor-pointer">
           {label}
         </label>
-        <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="flex items-center gap-2">
         {saving && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}

@@ -6,7 +6,7 @@
  */
 
 import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq'
-import { getRedisConnectionOpts, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
 import { getHook } from './registry'
 import { getHookTargets } from './targets'
 import { isRetryableError } from './hook-utils'
@@ -33,7 +33,12 @@ const CONCURRENCY = 5
 const DEFAULT_JOB_OPTS = {
   attempts: 3,
   backoff: { type: 'exponential' as const, delay: 1000 },
-  removeOnComplete: true, // no dashboard yet — remove immediately
+  // Keep last 1000 completed jobs (or 24h, whichever first) for
+  // operational visibility. `true` (immediate purge) makes Bull Board
+  // / `redis-cli LRANGE` useless for diagnosing "did this webhook
+  // actually fire?" questions and gives us nothing on disk to inspect
+  // when a customer reports a missed delivery.
+  removeOnComplete: { count: 1000, age: 86400 },
   removeOnFail: { age: 30 * 86400 }, // keep failed jobs 30 days
 }
 
@@ -58,12 +63,13 @@ function ensureQueue(): Promise<Queue<HookJobData>> {
 }
 
 async function initializeQueue() {
-  const connOpts = getRedisConnectionOpts()
+  const connection = getQueueRedis()
 
-  // Separate connections: BullMQ Workers use blocking commands (BLMOVE)
-  // that conflict with Queue commands on a shared connection.
+  // BullMQ duplicates this client internally for the Worker's blocking
+  // commands (BLMOVE), so a single shared connection is safe and avoids
+  // opening N TCP sockets per queue.
   const queue = new Queue<HookJobData>(QUEUE_NAME, {
-    connection: connOpts,
+    connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
@@ -96,7 +102,9 @@ async function initializeQueue() {
           ...hookConfig,
           attemptNumber: (job.attemptsMade ?? 0) + 1,
         }
-        result = await hook.run(event, target, configWithAttempt)
+        // Pass job.id so idempotency-sensitive handlers (webhook, AI)
+        // can dedupe re-runs after worker crashes.
+        result = await hook.run(event, target, configWithAttempt, { jobId: job.id })
       } catch (error) {
         if (isRetryableError(error)) throw error
         throw new UnrecoverableError(error instanceof Error ? error.message : 'Unknown error')
@@ -116,7 +124,7 @@ async function initializeQueue() {
       }
       throw new UnrecoverableError(result.error ?? 'Hook failed (non-retryable)')
     },
-    { connection: connOpts, concurrency: CONCURRENCY }
+    { connection, concurrency: CONCURRENCY }
   )
 
   // Verify Redis is reachable before returning. Without this, a missing
@@ -291,8 +299,11 @@ export async function addDelayedJob(
   const queue = await ensureQueue()
   await queue.add(name, data, {
     ...opts,
-    removeOnComplete: true,
-    removeOnFail: true,
+    // Bounded retention rather than immediate purge, matching the
+    // queue's defaultJobOptions. Delayed jobs are rare but worth
+    // surfacing in `redis-cli LRANGE` when one mis-fires.
+    removeOnComplete: { count: 1000, age: 86400 },
+    removeOnFail: { age: 30 * 86400 },
   })
 }
 

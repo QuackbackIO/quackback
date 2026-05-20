@@ -137,6 +137,8 @@ export const branding = {
   logo: {
     width: 48,
     height: 48,
+    display: 'block' as const,
+    margin: '0 auto',
   },
   appName: {
     color: colors.heading,

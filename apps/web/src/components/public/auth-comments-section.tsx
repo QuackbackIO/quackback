@@ -150,6 +150,7 @@ export function AuthCommentsSection({
       allowCommenting={allowCommenting}
       user={userData}
       teamBadgeLogoUrl={settings?.brandingData?.logoUrl ?? undefined}
+      teamBadgeLabel={settings?.brandingData?.name ?? settings?.name ?? undefined}
       lockedMessage={lockedMessage}
       onAuthRequired={() => authPopover?.openAuthPopover({ mode: 'login' })}
       createComment={createComment}

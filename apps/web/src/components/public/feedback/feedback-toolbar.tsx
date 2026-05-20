@@ -24,6 +24,12 @@ interface FeedbackToolbarProps {
 
 const SORT_OPTIONS = [
   {
+    value: 'trending',
+    messageId: 'portal.feedback.toolbar.sortTrending',
+    defaultMessage: 'Trending',
+    icon: FireIcon,
+  },
+  {
     value: 'top',
     messageId: 'portal.feedback.toolbar.sortTop',
     defaultMessage: 'Top',
@@ -34,12 +40,6 @@ const SORT_OPTIONS = [
     messageId: 'portal.feedback.toolbar.sortNew',
     defaultMessage: 'New',
     icon: ClockIcon,
-  },
-  {
-    value: 'trending',
-    messageId: 'portal.feedback.toolbar.sortTrending',
-    defaultMessage: 'Trending',
-    icon: FireIcon,
   },
 ] as const
 

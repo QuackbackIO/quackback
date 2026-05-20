@@ -144,7 +144,7 @@ export function TrelloConfig({
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Integration enabled
           </Label>
-          <p className="text-sm text-muted-foreground">Turn off to pause card creation in Trello</p>
+          <p className="text-xs text-muted-foreground">Turn off to pause card creation in Trello</p>
         </div>
         <Switch
           id="enabled-toggle"
@@ -238,7 +238,7 @@ export function TrelloConfig({
 
       <div className="space-y-3">
         <Label className="text-base font-medium">Events</Label>
-        <p className="text-sm text-muted-foreground">Choose which events trigger card creation</p>
+        <p className="text-xs text-muted-foreground">Choose which events trigger card creation</p>
         <div className="space-y-3 pt-2">
           {EVENT_CONFIG.map((event) => (
             <div

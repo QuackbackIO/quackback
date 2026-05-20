@@ -38,6 +38,7 @@ interface CliArgs {
   board?: string
   dryRun: boolean
   verbose: boolean
+  incremental: boolean
   // Intermediate format files
   posts?: string
   comments?: string
@@ -75,6 +76,11 @@ Required Options (all commands):
 Common Options:
   --dry-run           Validate and show summary, don't insert data
   --verbose           Show detailed progress
+  --incremental       Skip rows that already exist on the target instance.
+                      Dedup posts by normalised title + createdAt date,
+                      comments by normalised content + createdAt minute.
+                      Use when topping up an instance that has been imported
+                      before — votes and user identify are already idempotent.
 
 Canny Options:
   --api-key <key>         Canny API key (or set CANNY_API_KEY env var)
@@ -124,6 +130,16 @@ Examples:
     --quackback-key qb_xxx \\
     --dry-run --verbose
 
+  # Incremental top-up of a previously-imported UserVoice export
+  bun scripts/import/cli.ts uservoice \\
+    --suggestions ~/uv/suggestions.csv \\
+    --comments ~/uv/comments.csv \\
+    --notes ~/uv/notes.csv \\
+    --users ~/uv/users.csv \\
+    --quackback-url https://feedback.yourapp.com \\
+    --quackback-key qb_xxx \\
+    --incremental --verbose
+
 Environment Variables:
   QUACKBACK_URL         Quackback instance URL (alternative to --quackback-url)
   QUACKBACK_API_KEY     Quackback admin API key (alternative to --quackback-key)
@@ -136,6 +152,7 @@ function parseArgs(args: string[]): CliArgs {
     command: 'help',
     dryRun: false,
     verbose: false,
+    incremental: false,
   }
 
   if (args.length === 0) {
@@ -175,6 +192,9 @@ function parseArgs(args: string[]): CliArgs {
         break
       case '--dry-run':
         result.dryRun = true
+        break
+      case '--incremental':
+        result.incremental = true
         break
       case '--verbose':
       case '-v':
@@ -403,6 +423,7 @@ async function executeImport(
       data,
       dryRun: args.dryRun,
       verbose: args.verbose,
+      incremental: args.incremental,
     })
 
     const totalErrors =

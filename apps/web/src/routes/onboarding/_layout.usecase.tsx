@@ -6,6 +6,8 @@ import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { saveUseCaseFn } from '@/lib/server/functions/onboarding'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import type { UseCaseType } from '@/lib/shared/db-types'
+import { pickOnboardingStep } from './onboarding-step'
+import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
 export const Route = createFileRoute('/onboarding/_layout/usecase')({
   loader: async ({ context }) => {
@@ -21,9 +23,20 @@ export const Route = createFileRoute('/onboarding/_layout/usecase')({
       throw redirect({ to: '/auth/login' })
     }
 
-    // If workspace is already set up, go to boards
-    if (state.setupState?.steps?.workspace) {
-      throw redirect({ to: '/onboarding/boards' })
+    // If this step is no longer needed (useCase already chosen),
+    // delegate to pickOnboardingStep so the user lands on the next
+    // incomplete step in wizard order — not a hardcoded sibling.
+    if (state.setupState?.useCase) {
+      throw redirect({
+        to: pickOnboardingStep({
+          session: { userId: session.user.id },
+          state: {
+            needsInvitation: state.needsInvitation,
+            setupState: state.setupState,
+            principalRecord: state.principalRecord,
+          },
+        }),
+      })
     }
 
     return {
@@ -36,6 +49,11 @@ export const Route = createFileRoute('/onboarding/_layout/usecase')({
 function UseCaseStep() {
   const navigate = useNavigate()
   const { existingUseCase } = Route.useLoaderData()
+  const { managedFieldPaths } = Route.useRouteContext()
+  const useCaseManaged = isPathManagedFromBootstrap(
+    MANAGED_PATHS.WORKSPACE_USE_CASE,
+    managedFieldPaths ?? []
+  )
 
   const [useCase, setUseCase] = useState<UseCaseType | undefined>(existingUseCase)
   const [isLoading, setIsLoading] = useState(false)
@@ -76,7 +94,16 @@ function UseCaseStep() {
 
       {/* Use case selector */}
       <div className="mb-8">
-        <UseCaseSelector value={useCase} onChange={setUseCase} disabled={isLoading} />
+        <UseCaseSelector
+          value={useCase}
+          onChange={setUseCase}
+          disabled={isLoading || useCaseManaged}
+        />
+        {useCaseManaged && (
+          <p className="text-xs text-muted-foreground mt-3 text-center">
+            Managed by your administrator&apos;s config — edit there.
+          </p>
+        )}
       </div>
 
       {/* Continue button */}

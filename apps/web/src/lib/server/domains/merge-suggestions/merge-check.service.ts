@@ -4,7 +4,7 @@
  * Mirrors the AI summary pattern: event-driven + periodic sweep.
  */
 
-import { db, posts, and, isNull, isNotNull, desc, eq } from '@/lib/server/db'
+import { db, posts, and, isNull, isNotNull, desc, eq, notInArray } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
@@ -13,6 +13,7 @@ import type { PostId } from '@quackback/ids'
 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_POST_DELAY_MS = 500
+const SWEEP_ABORT_AFTER_EMPTY_BATCHES = 2
 
 /**
  * Check a single post for merge candidates.
@@ -121,10 +122,15 @@ export async function sweepMergeSuggestions(): Promise<void> {
 }
 
 async function _doSweep(): Promise<void> {
+  // Failed rows stay stale (mergeCheckedAt is only stamped on success), so
+  // without an attempted-set the DB query keeps returning the same top-of-
+  // order batch every iteration. See #180 for the runaway-loop story this
+  // mirrors from the summary sweep.
+  const attempted = new Set<PostId>()
   let totalProcessed = 0
   let totalFailed = 0
+  let consecutiveEmptyBatches = 0
 
-  // Process in batches
   while (true) {
     const stalePosts = await db
       .select({ id: posts.id })
@@ -134,7 +140,8 @@ async function _doSweep(): Promise<void> {
           isNull(posts.deletedAt),
           isNull(posts.canonicalPostId),
           isNotNull(posts.embedding),
-          isNull(posts.mergeCheckedAt)
+          isNull(posts.mergeCheckedAt),
+          attempted.size > 0 ? notInArray(posts.id, [...attempted]) : undefined
         )
       )
       .orderBy(desc(posts.updatedAt))
@@ -142,26 +149,47 @@ async function _doSweep(): Promise<void> {
 
     if (stalePosts.length === 0) break
 
-    if (totalProcessed === 0) {
+    if (totalProcessed === 0 && totalFailed === 0) {
       console.log(`[MergeSuggestion] Sweep: found stale posts, processing...`)
     }
 
+    let batchSucceeded = 0
     for (const { id } of stalePosts) {
+      attempted.add(id)
       try {
         await checkPostForMergeCandidates(id)
         totalProcessed++
+        batchSucceeded++
+        // Rate-limit pacing only matters when a call actually consumed quota.
+        // A failed call (e.g. 400 invalid-model from #180) didn't, and pacing
+        // it would make the circuit-break path block for batchSize * delayMs
+        // before the abort check can fire. withRetry already handles 429
+        // backoff before surfacing the error here.
+        await new Promise((resolve) => setTimeout(resolve, SWEEP_POST_DELAY_MS))
       } catch (err) {
         totalFailed++
         console.error(`[MergeSuggestion] Failed to check post ${id}:`, err)
       }
-
-      // Delay between posts to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, SWEEP_POST_DELAY_MS))
     }
 
-    console.log(
-      `[MergeSuggestion] Sweep progress: ${totalProcessed} processed, ${totalFailed} failed`
-    )
+    // Two consecutive zero-success batches almost always means a systemic
+    // problem (bad model id, revoked key, upstream down). One alone can just
+    // be a block of permanent failures we need to skip past via the attempted
+    // exclusion to reach healthy rows below them.
+    if (batchSucceeded === 0) {
+      consecutiveEmptyBatches++
+      if (consecutiveEmptyBatches >= SWEEP_ABORT_AFTER_EMPTY_BATCHES) {
+        console.error(
+          `[MergeSuggestion] Aborting sweep: ${consecutiveEmptyBatches} consecutive batches with 0 successes (${totalProcessed} processed, ${totalFailed} failed total). Next sweep will retry.`
+        )
+        break
+      }
+    } else {
+      consecutiveEmptyBatches = 0
+      console.log(
+        `[MergeSuggestion] Sweep progress: ${totalProcessed} processed, ${totalFailed} failed`
+      )
+    }
   }
 
   // Expire old suggestions

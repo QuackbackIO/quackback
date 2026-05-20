@@ -46,6 +46,14 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
         throw new Error(`Unknown auth provider: ${data.credentialType}`)
       }
 
+      // Built-in social providers (Google/GitHub/etc.) are operator-level
+      // infrastructure for self-hosters and not gated. Only generic-oauth
+      // (the customer's own IdP via custom OIDC) hits the Scale paywall.
+      if (provider.type === 'generic-oauth') {
+        const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+        await assertTierFeature('customOidcProvider', 'Single sign-on (custom OIDC)')
+      }
+
       // Validate required base fields (clientId + clientSecret are always required)
       const requiredKeys = ['clientId', 'clientSecret']
       for (const key of requiredKeys) {

@@ -7,7 +7,16 @@
  * @see https://www.better-auth.com/docs/adapters/drizzle
  */
 import { relations } from 'drizzle-orm'
-import { pgTable, text, timestamp, boolean, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  index,
+  uniqueIndex,
+  jsonb,
+  integer,
+} from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { apiKeys } from './api-keys'
@@ -36,6 +45,10 @@ export const user = pgTable(
     metadata: text('metadata'),
     // Anonymous user flag (Better Auth anonymous plugin)
     isAnonymous: boolean('is_anonymous').default(false).notNull(),
+    // Better-Auth twoFactor plugin — flips true once the user verifies
+    // their TOTP secret. Read by the sign-in flow to decide whether to
+    // emit the 2FA challenge response (`twoFactorRedirect: true`).
+    twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
   },
   (table) => [
     // Email is unique when present (partial index — nulls are allowed)
@@ -44,6 +57,27 @@ export const user = pgTable(
       .where(sql`email IS NOT NULL`),
   ]
 )
+
+/**
+ * Two-factor enrolments managed by Better-Auth's twoFactor plugin.
+ *
+ * One row per user once TOTP is enabled. `secret` is the symmetric-
+ * encrypted TOTP shared secret; `backupCodes` is a packed string of
+ * one-time recovery codes (also encrypted). `verified` flips false
+ * during the brief window between `/two-factor/enable` and the
+ * subsequent `/two-factor/verify-totp`; the default `true` matches
+ * Better-Auth's expectation for newly-inserted rows.
+ */
+export const twoFactor = pgTable('two_factor', {
+  id: typeIdWithDefault('two_factor')('id').primaryKey(),
+  userId: typeIdColumn('user')('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  secret: text('secret').notNull(),
+  backupCodes: text('backup_codes').notNull(),
+  verified: boolean('verified').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
 export const session = pgTable(
   'session',
@@ -62,7 +96,15 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
   },
-  (table) => [index('session_userId_idx').on(table.userId)]
+  (table) => [
+    index('session_userId_idx').on(table.userId),
+    // Composite index drives the `max(session.created_at) GROUP BY
+    // user_id` aggregate used by the team-list "last sign-in" column
+    // — without it, the planner does an index scan on `session_userId_idx`
+    // but still reads every row's created_at. With this, the planner
+    // can do an index-only scan and stop at the first row per group.
+    index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+  ]
 )
 
 export const account = pgTable(
@@ -177,17 +219,8 @@ export const settings = pgTable('settings', {
    */
   headerDisplayName: text('header_display_name'),
   /**
-   * Setup/onboarding state tracking (JSON)
-   * Structure: {
-   *   version: number,           // Schema version for migrations
-   *   steps: {
-   *     core: boolean,           // Core schema setup complete
-   *     statuses: boolean,       // Default statuses created
-   *     boards: boolean,         // At least one board created or skipped
-   *   },
-   *   completedAt?: string,      // ISO timestamp when onboarding was fully completed
-   *   source: 'cloud' | 'self-hosted'  // How this instance was provisioned
-   * }
+   * Setup/onboarding state tracking (JSON). See {@link SetupState} in
+   * packages/db/src/types.ts for the source-of-truth shape.
    */
   setupState: text('setup_state'),
   /**
@@ -207,7 +240,82 @@ export const settings = pgTable('settings', {
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
    */
   helpCenterConfig: text('help_center_config'),
+  /**
+   * Optional per-workspace tier limits (JSON-encoded TierLimits).
+   * Written via /api/v1/admin/tier-limits (capability scope
+   * `internal:tier-limits`) by operators who want to impose caps.
+   * Null/absent means defaults (everything unlimited, all features
+   * on).
+   */
+  tierLimits: text('tier_limits'),
+  /**
+   * JSON array of dot-paths whose values are managed by the
+   * declarative config file (`/etc/quackback/config.yaml`). When a
+   * path is in this list, the in-app UI mutator for that field
+   * returns 403 and the form control is rendered disabled. The list
+   * is rebuilt from scratch on every file reconcile, so removing a
+   * key from the file unlocks the UI on the next reconcile tick.
+   *
+   * Example: ["workspace.name", "tierLimits", "features.helpCenter"].
+   *
+   * Whole-block lock: a managed path with no dots locks the entire
+   * subtree (e.g. "tierLimits" locks "tierLimits.maxBoards" too).
+   */
+  managedFieldPaths: jsonb('managed_field_paths').$type<string[]>().notNull().default([]),
+  /**
+   * Workspace state — written by the config-file reconciler when
+   * spec.state is set. With no config file present, the column keeps
+   * its `'active'` default. The middleware in
+   * `lib/server/middleware/suspension-guard.ts` returns 402 / 410 for
+   * non-`active` workspaces, and the root route redirects HTML hits to
+   * `/suspended`.
+   */
+  state: text('state').$type<'active' | 'suspended' | 'deleting'>().notNull().default('active'),
+  /**
+   * Monotonic version bumped on every auth-instance-affecting write
+   * (authConfig, ssoOidc, oauth toggles, platform credentials, tier
+   * limits, config-file reconciler). Pods compare their cached auth
+   * instance's recorded version against this value on each request and
+   * call resetAuth() on mismatch — defense-in-depth backstop for the
+   * Redis pub/sub invalidation channel `auth:config-invalidate`.
+   *
+   * Mutated only via atomic SQL `auth_config_version + 1` to avoid
+   * lost-update on concurrent writes.
+   */
+  authConfigVersion: integer('auth_config_version').notNull().default(0),
 })
+
+/**
+ * Verified SSO domains for the workspace.
+ *
+ * Each row pairs an email domain with the workspace's OIDC IdP:
+ *  - `verified_at` null = pending DNS verification.
+ *  - `verified_at` non-null = routes emails at this domain to SSO.
+ *  - `enforced=true` = hard-binds emails at this domain to SSO (blocks
+ *    password / magic-link / non-SSO OAuth).
+ *
+ * Single-tenant per deployment so no settings_id FK is needed. The
+ * UNIQUE constraint on `name` keeps each domain on one row regardless
+ * of pending/verified state.
+ */
+export const ssoVerifiedDomain = pgTable(
+  'sso_verified_domain',
+  {
+    id: typeIdWithDefault('domain')('id').primaryKey(),
+    /** Canonical lowercase ASCII FQDN — `normalizeDomain` output. */
+    name: text('name').notNull(),
+    /** Random base32-ish token; intentionally public via DNS TXT. */
+    verificationToken: text('verification_token').notNull(),
+    /** Null until DNS lookup confirms the TXT record. */
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    /** When true: emails at this domain are hard-bound to SSO. */
+    enforced: boolean('enforced').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    nameUnique: uniqueIndex('sso_verified_domain_name_unique').on(t.name),
+  })
+)
 
 /**
  * Metadata for service principals (discriminated union by kind)
@@ -253,6 +361,16 @@ export const principal = pgTable(
     // Metadata for service principals (discriminated union by kind)
     serviceMetadata: jsonb('service_metadata').$type<ServiceMetadata | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    /**
+     * Last time this principal completed an SSO sign-in (Better-Auth
+     * generic-OAuth callback with providerId='sso' creating a new
+     * session). Read by the SSO-enforcement bootstrap guard to refuse
+     * enabling enforcement without a recent SSO sign-in window — stops
+     * an admin who only signed in via magic-link from locking themselves
+     * out. Null = never signed in via SSO. Written by the
+     * /oauth2/callback/:providerId hooks.after middleware.
+     */
+    lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
   },
   (table) => [
     // Ensure one principal record per human user (partial index excludes service principals)

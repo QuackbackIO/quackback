@@ -21,8 +21,10 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-      # Trusted publishing requires npm >= 11.5.1; Node 22 ships with npm 10.x
-      - run: npm install -g npm@latest
+      # Trusted publishing requires npm >= 11.5.1; Node 22 ships with npm 10.x.
+      # Pinned because `npm install -g npm@latest` has hit broken self-upgrade
+      # chains (missing transitive deps like promise-retry).
+      - run: npm install -g npm@11.5.1
       # No NODE_AUTH_TOKEN — OIDC replaces the token; npmjs.com must have a
       # trusted publisher configured for this repo + workflow.
       - run: cd packages/widget && npm publish --provenance --access public

@@ -20,6 +20,9 @@ import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/err
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { dispatchCommentUpdated, buildEventActor } from '@/lib/server/events/dispatch'
+import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentPermissionCheckResult } from './comment.types'
 
 // ============================================================================
@@ -165,7 +168,8 @@ export async function canDeleteComment(
 export async function userEditComment(
   commentId: CommentId,
   content: string,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  options?: { contentJson?: TiptapContent | null }
 ): Promise<Comment> {
   console.log(`[domain:comments] userEditComment: commentId=${commentId}`)
   // Check permission first
@@ -193,18 +197,27 @@ export async function userEditComment(
     throw new ValidationError('VALIDATION_ERROR', 'Content must be 5,000 characters or less')
   }
 
+  const trimmed = content.trim()
+  // Sanitize caller-supplied JSON before storage so the render fast-path
+  // can trust it. See resolveContentJson in comment.service.ts for the
+  // same policy on creates.
+  const nextContentJson = options?.contentJson
+    ? sanitizeTiptapContent(options.contentJson)
+    : commentMarkdownToTiptapJson(trimmed)
+
   const updatedComment = await db.transaction(async (tx) => {
     if (actor.principalId) {
       await tx.insert(commentEditHistory).values({
         commentId,
         editorPrincipalId: actor.principalId,
         previousContent: existingComment.content,
+        previousContentJson: existingComment.contentJson ?? null,
       })
     }
 
     const [result] = await tx
       .update(comments)
-      .set({ content: content.trim(), updatedAt: new Date() })
+      .set({ content: trimmed, contentJson: nextContentJson, updatedAt: new Date() })
       .where(eq(comments.id, commentId))
       .returning()
 

@@ -173,16 +173,17 @@ export async function createApiKey(
 }
 
 /**
- * Verify an API key and return the key record if valid
+ * Verify an API key and return the key record if valid.
  *
  * Uses prefix-based DB lookup + timing-safe hash comparison to prevent
  * timing oracle attacks. Returns null if the key is invalid, expired, or revoked.
+ *
+ * If `scope` is provided, the key must carry that capability scope or the
+ * call returns null. Used by /api/v1/internal/* endpoints which require
+ * the `internal:tier-limits` scope.
  */
-export async function verifyApiKey(key: string): Promise<ApiKey | null> {
-  // Basic format validation
-  if (!key || !key.startsWith(API_KEY_PREFIX)) {
-    return null
-  }
+export async function verifyApiKey(key: string, scope?: string): Promise<ApiKey | null> {
+  if (!key || !key.startsWith(API_KEY_PREFIX)) return null
 
   const keyPrefix = getKeyPrefix(key)
   const keyHash = hashApiKey(key)
@@ -196,14 +197,10 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
   const storedHash = apiKey?.keyHash ?? '0'.repeat(64)
   const hashesMatch = timingSafeEqual(Buffer.from(keyHash, 'hex'), Buffer.from(storedHash, 'hex'))
 
-  if (!apiKey || !hashesMatch) {
-    return null
-  }
+  if (!apiKey || !hashesMatch) return null
+  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return null
 
-  // Check expiration
-  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-    return null
-  }
+  if (scope && !hasScope(apiKey.scopes, scope)) return null
 
   // Update last used timestamp (fire and forget)
   db.update(apiKeys)
@@ -215,6 +212,16 @@ export async function verifyApiKey(key: string): Promise<ApiKey | null> {
     })
 
   return toApiKey(apiKey)
+}
+
+function hasScope(scopesRaw: string | null, scope: string): boolean {
+  if (!scopesRaw) return false
+  try {
+    const parsed = JSON.parse(scopesRaw)
+    return Array.isArray(parsed) && parsed.includes(scope)
+  } catch {
+    return false
+  }
 }
 
 /**

@@ -7,7 +7,7 @@
  */
 
 import type { HookHandler, HookResult } from '../hook-types'
-import type { EventData } from '../types'
+import type { EventData, EventPostMentionedData } from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
 import type { PrincipalId, PostId, CommentId } from '@quackback/ids'
@@ -136,6 +136,20 @@ function buildNotifications(
         changelogUrl: changelogConfig.changelogUrl,
         contentPreview: changelogConfig.contentPreview,
       },
+    }))
+  }
+
+  if (event.type === 'post.mentioned') {
+    const data = event.data as EventPostMentionedData
+    const actorName = event.actor.displayName?.trim() || 'Anonymous user'
+    // principalIds is always a single-element array for post.mentioned (target resolver builds it that way).
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'post_mentioned' as NotificationType,
+      title: `${actorName} mentioned you in a post`,
+      body: truncate(data.postTitle, 150),
+      postId: data.postId as PostId,
+      metadata: { postUrl: data.postUrl, excerpt: data.excerpt },
     }))
   }
 

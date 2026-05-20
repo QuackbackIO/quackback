@@ -47,6 +47,7 @@ export function EmailLayout({
                 alt={logoAlt}
                 width={branding.logo.width}
                 height={branding.logo.height}
+                style={branding.logo}
               />
             </Section>
 

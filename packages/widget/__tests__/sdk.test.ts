@@ -45,6 +45,36 @@ describe('sdk', () => {
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
   })
 
+  it('a repeat init re-applies launcher: false', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, launcher: false })
+    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+  })
+
+  it('a repeat init moves an existing launcher to the new placement', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'left' })
+    const btn = document.querySelector(
+      'button[aria-label="Open feedback widget"]'
+    ) as HTMLButtonElement
+    expect(btn.style.left).toBe('24px')
+    expect(btn.style.right).toBe('')
+  })
+
+  it('a repeat init that throws leaves the existing instance intact', () => {
+    stubIframe()
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    expect(() => sdk.dispatch('init', { instanceUrl: 'not a url' })).toThrow()
+    // The good first instance is untouched.
+    expect(document.querySelector('iframe[title="Feedback Widget"]')).not.toBeNull()
+  })
+
   it('init defaults identity to anonymous once iframe is ready', () => {
     const { postMessage, spy } = stubIframe()
     const sdk = createSDK()

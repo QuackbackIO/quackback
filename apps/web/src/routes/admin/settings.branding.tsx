@@ -49,6 +49,7 @@ import { primaryPresetIds, themePresets, type ThemeConfig } from '@/lib/shared/t
 import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
+import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
 // ==============================================
 // Custom CodeMirror theme using admin portal CSS variables
@@ -134,7 +135,11 @@ export const Route = createFileRoute('/admin/settings/branding')({
 })
 
 function BrandingPage() {
-  const { settings } = Route.useRouteContext()
+  const { settings, managedFieldPaths } = Route.useRouteContext()
+  const workspaceNameManaged = isPathManagedFromBootstrap(
+    MANAGED_PATHS.WORKSPACE_NAME,
+    managedFieldPaths ?? []
+  )
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
   const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
@@ -218,11 +223,17 @@ function BrandingPage() {
                       value={workspaceName}
                       onChange={(e) => handleNameChange(e.target.value)}
                       placeholder="My Workspace"
+                      disabled={workspaceNameManaged}
                     />
                     {isSavingName && (
                       <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
                     )}
                   </div>
+                  {workspaceNameManaged && (
+                    <p className="text-xs text-muted-foreground">
+                      Managed by your administrator&apos;s config — edit there.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

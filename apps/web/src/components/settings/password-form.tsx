@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Input } from '@/components/ui/input'
@@ -7,24 +7,23 @@ import { FormError } from '@/components/shared/form-error'
 import { authClient } from '@/lib/client/auth-client'
 import { setPasswordFn } from '@/lib/server/functions/invitations'
 
-export function PasswordForm() {
-  const [hasPassword, setHasPassword] = useState<boolean | null>(null)
+interface PasswordFormProps {
+  /** Whether the user already has a `credential` account row. Drives
+   *  the Set vs Change shape. Resolved server-side via fetchUserProfile
+   *  so we don't fan out to authClient.listAccounts() on the client. */
+  hasPassword: boolean
+  /** Called after a successful set/change so the parent page can
+   *  re-query (e.g. so the 2FA section appears immediately once a
+   *  freshly-set password makes it meaningful). */
+  onSaved?: () => void
+}
+
+export function PasswordForm({ hasPassword, onSaved }: PasswordFormProps) {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    authClient.listAccounts().then((result) => {
-      if (result.data) {
-        const hasCredential = result.data.some(
-          (acc: { providerId: string }) => acc.providerId === 'credential'
-        )
-        setHasPassword(hasCredential)
-      }
-    })
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,27 +57,17 @@ export function PasswordForm() {
         toast.success('Password changed')
       } else {
         await setPasswordFn({ data: { newPassword } })
-        setHasPassword(true)
         toast.success('Password set')
       }
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
+      onSaved?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update password')
     } finally {
       setLoading(false)
     }
-  }
-
-  // Loading accounts
-  if (hasPassword === null) {
-    return (
-      <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-        <h2 className="font-medium mb-1">Password</h2>
-        <p className="text-sm text-muted-foreground mb-4">Loading...</p>
-      </div>
-    )
   }
 
   return (

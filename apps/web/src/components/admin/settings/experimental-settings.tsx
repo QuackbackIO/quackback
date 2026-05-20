@@ -6,9 +6,10 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { FEATURE_FLAG_REGISTRY, type FeatureFlags } from '@/lib/shared/types'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
+import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 
 export function ExperimentalSettings() {
-  const { settings } = useRouteContext({ from: '__root__' })
+  const { settings, managedFieldPaths } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags ?? { analytics: false, helpCenter: false }
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(flags as FeatureFlags)
   const queryClient = useQueryClient()
@@ -31,7 +32,7 @@ export function ExperimentalSettings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Experimental Features</h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           These features are in development and may change or be removed.
         </p>
       </div>
@@ -39,6 +40,7 @@ export function ExperimentalSettings() {
       <div className="space-y-4">
         {(Object.keys(FEATURE_FLAG_REGISTRY) as Array<keyof FeatureFlags>).map((key) => {
           const meta = FEATURE_FLAG_REGISTRY[key]
+          const flagManaged = isPathManagedFromBootstrap(`features.${key}`, managedFieldPaths ?? [])
           return (
             <Card key={key}>
               <CardContent className="flex items-center justify-between py-4">
@@ -47,12 +49,17 @@ export function ExperimentalSettings() {
                     {meta.label}
                   </Label>
                   <p className="text-xs text-muted-foreground">{meta.description}</p>
+                  {flagManaged && (
+                    <p className="text-xs text-muted-foreground italic">
+                      Managed by your administrator&apos;s config — edit there.
+                    </p>
+                  )}
                 </div>
                 <Switch
                   id={`flag-${key}`}
                   checked={localFlags[key]}
                   onCheckedChange={(checked) => handleToggle(key, checked)}
-                  disabled={mutation.isPending}
+                  disabled={mutation.isPending || flagManaged}
                 />
               </CardContent>
             </Card>

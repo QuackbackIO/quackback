@@ -163,22 +163,69 @@ function GenericVerifyPage({
   callbackURL: string | undefined
   errorCallbackURL: string | undefined
 }) {
-  function handleContinue() {
-    const verifyUrl = new URL('/api/auth/magic-link/verify', window.location.origin)
-    verifyUrl.searchParams.set('token', token)
-    if (callbackURL) verifyUrl.searchParams.set('callbackURL', callbackURL)
-    if (errorCallbackURL) verifyUrl.searchParams.set('errorCallbackURL', errorCallbackURL)
-    window.location.href = verifyUrl.toString()
-  }
+  // Auto-trigger the verify after a short delay. The delay matters
+  // for two things:
+  //   - Email-prefetch defense: Outlook Safe Links / Slack unfurl
+  //     don't execute JS, so a JS-driven redirect still blocks the
+  //     non-browser GETs that would burn the token before the human
+  //     clicks. A purely server-side auto-verify would NOT be safe.
+  //   - Reassurance: the customer sees "Signing you in..." for ~600ms
+  //     instead of an unexplained jump, so a slow magic-link redirect
+  //     doesn't feel like a broken page.
+  //
+  // URL construction lives inside the effect because `window` is
+  // undefined during SSR; building it at render time would crash the
+  // page before it could ever ship. The fallback <a> is rendered
+  // with a relative href that works without JS at all.
+  useEffect(() => {
+    const u = new URL('/api/auth/magic-link/verify', window.location.origin)
+    u.searchParams.set('token', token)
+    if (callbackURL) u.searchParams.set('callbackURL', callbackURL)
+    if (errorCallbackURL) u.searchParams.set('errorCallbackURL', errorCallbackURL)
+    const verifyHref = u.toString()
+    const t = window.setTimeout(() => {
+      window.location.href = verifyHref
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [token, callbackURL, errorCallbackURL])
+
+  // Manual-recovery affordance only matters once the ~600ms auto-
+  // redirect has visibly failed; painting it from the first render
+  // gives the user a competing CTA most never need. 5s is long
+  // enough for the happy path to leave the page.
+  const [showContinue, setShowContinue] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setShowContinue(true), 5_000)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  // Relative href so it works under SSR without `window` and in
+  // <noscript>. Same shape the verify effect builds at runtime.
+  const fallbackHref = (() => {
+    const params = new URLSearchParams({ token })
+    if (callbackURL) params.set('callbackURL', callbackURL)
+    if (errorCallbackURL) params.set('errorCallbackURL', errorCallbackURL)
+    return `/api/auth/magic-link/verify?${params.toString()}`
+  })()
+
+  const continueLink = (
+    <a href={fallbackHref} className="mt-6 inline-block">
+      <Button variant="outline" className="h-11">
+        Continue
+      </Button>
+    </a>
+  )
 
   return (
     <PageShell>
       <Card>
-        <h1 className="text-2xl font-bold tracking-tight">Confirm sign-in</h1>
-        <p className="mt-2 text-muted-foreground">Click the button below to complete signing in.</p>
-        <Button onClick={handleContinue} className="mt-6 w-full h-11">
-          Continue
-        </Button>
+        <div className="flex items-center justify-center gap-2">
+          <ArrowPathIcon className="h-5 w-5 animate-spin text-primary" aria-hidden />
+          <h1 className="text-2xl font-bold tracking-tight">Signing you in&hellip;</h1>
+        </div>
+        <p className="mt-2 text-muted-foreground">Hang tight, this only takes a moment.</p>
+        {showContinue && continueLink}
+        <noscript>{continueLink}</noscript>
       </Card>
     </PageShell>
   )
