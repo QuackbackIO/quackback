@@ -9,7 +9,7 @@ import type { Board, BoardSettings, BoardAudience } from '@/lib/server/db'
  *
  * Audience defaults to { kind: 'public' } when omitted — the historical
  * isPublic=true default. For non-public boards on create, pass an explicit
- * audience. Granular moderation policy goes through updateBoardAccessFn.
+ * audience.
  */
 export interface CreateBoardInput {
   name: string
