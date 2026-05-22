@@ -285,3 +285,136 @@ describe('deserializeCondition', () => {
     expect(result.metadataKey).toBe('plan')
   })
 })
+
+// ============================================
+// Round-trip tests for new built-in fields (Task B)
+// ============================================
+
+describe('serializeCondition — new built-in fields round-trip', () => {
+  it('serializes name as a plain string (un-prefixed)', () => {
+    const c: RuleCondition = { attribute: 'name', operator: 'eq', value: 'Alice' }
+    const s = serializeCondition(c)
+    expect(s.attribute).toBe('name')
+    expect(s.operator).toBe('eq')
+    expect(s.value).toBe('Alice')
+    expect(s.metadataKey).toBeUndefined()
+  })
+
+  it('serializes display_name as a plain string (un-prefixed)', () => {
+    const c: RuleCondition = { attribute: 'display_name', operator: 'contains', value: 'Corp' }
+    const s = serializeCondition(c)
+    expect(s.attribute).toBe('display_name')
+    expect(s.operator).toBe('contains')
+    expect(s.value).toBe('Corp')
+  })
+
+  it('serializes principal_type as a plain string (un-prefixed)', () => {
+    const c: RuleCondition = { attribute: 'principal_type', operator: 'eq', value: 'anonymous' }
+    const s = serializeCondition(c)
+    expect(s.attribute).toBe('principal_type')
+    expect(s.value).toBe('anonymous')
+  })
+
+  it('name is_set produces undefined value', () => {
+    const c: RuleCondition = { attribute: 'name', operator: 'is_set', value: '' }
+    expect(serializeCondition(c).value).toBeUndefined()
+  })
+})
+
+describe('deserializeCondition — new built-in fields round-trip', () => {
+  it('deserializes name without prefixing', () => {
+    const c: SegmentCondition = { attribute: 'name', operator: 'eq', value: 'Alice' }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('name')
+    expect(d.value).toBe('Alice')
+    expect(d.metadataKey).toBeUndefined()
+  })
+
+  it('deserializes display_name without prefixing', () => {
+    const c: SegmentCondition = { attribute: 'display_name', operator: 'starts_with', value: 'Ac' }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('display_name')
+    expect(d.value).toBe('Ac')
+  })
+
+  it('deserializes principal_type without prefixing', () => {
+    const c: SegmentCondition = { attribute: 'principal_type', operator: 'eq', value: 'user' }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('principal_type')
+    expect(d.value).toBe('user')
+  })
+
+  it('full round-trip: serialize then deserialize preserves name condition', () => {
+    const original: RuleCondition = { attribute: 'name', operator: 'neq', value: 'Bot' }
+    const serialized = serializeCondition(original)
+    // Cast to SegmentCondition shape (value is string here)
+    const deserialized = deserializeCondition(serialized as SegmentCondition)
+    expect(deserialized.attribute).toBe('name')
+    expect(deserialized.operator).toBe('neq')
+    expect(deserialized.value).toBe('Bot')
+  })
+
+  it('full round-trip: serialize then deserialize preserves principal_type condition', () => {
+    const original: RuleCondition = {
+      attribute: 'principal_type',
+      operator: 'eq',
+      value: 'anonymous',
+    }
+    const serialized = serializeCondition(original)
+    const deserialized = deserializeCondition(serialized as SegmentCondition)
+    expect(deserialized.attribute).toBe('principal_type')
+    expect(deserialized.value).toBe('anonymous')
+  })
+})
+
+describe('backward compatibility — legacy attributes still deserialize', () => {
+  it('deserializes a saved email_domain condition without error', () => {
+    const c: SegmentCondition = {
+      attribute: 'email_domain',
+      operator: 'ends_with',
+      value: 'acme.com',
+    }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('email_domain')
+    expect(d.value).toBe('acme.com')
+  })
+
+  it('deserializes a saved created_at_days_ago condition without error', () => {
+    const c: SegmentCondition = { attribute: 'created_at_days_ago', operator: 'lt', value: 30 }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('created_at_days_ago')
+    expect(d.value).toBe('30')
+  })
+
+  it('deserializes a saved plan condition without crashing (attribute passes through)', () => {
+    // plan is no longer in the picker but old saved rules must not crash
+    const c: SegmentCondition = { attribute: 'plan', operator: 'eq', value: 'enterprise' }
+    const d = deserializeCondition(c)
+    expect(d.attribute).toBe('plan')
+    expect(d.value).toBe('enterprise')
+  })
+
+  it('deserializes a metadata_key condition with known custom attr', () => {
+    const c: SegmentCondition = {
+      attribute: 'metadata_key',
+      operator: 'eq',
+      value: 'enterprise',
+      metadataKey: 'plan',
+    }
+    const d = deserializeCondition(c, mockCustomAttributes)
+    expect(d.attribute).toBe(`${CUSTOM_ATTR_PREFIX}plan`)
+    expect(d.metadataKey).toBe('plan')
+  })
+
+  it('deserializes a __custom__* condition attribute correctly', () => {
+    const c: RuleCondition = {
+      attribute: `${CUSTOM_ATTR_PREFIX}mrr`,
+      operator: 'gte',
+      value: '1000',
+    }
+    const s = serializeCondition(c, mockCustomAttributes)
+    expect(s.attribute).toBe('metadata_key')
+    expect(s.metadataKey).toBe('mrr')
+    expect(s.value).toBe(1000)
+  })
+})

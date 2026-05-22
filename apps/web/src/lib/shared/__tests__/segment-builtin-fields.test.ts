@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   BUILTIN_FIELDS,
   BUILTIN_FIELD_MAP,
+  DEFAULT_OPERATORS,
+  getFieldOperators,
   isBuiltinField,
   type BuiltinField,
 } from '../segment-builtin-fields'
@@ -134,5 +136,71 @@ describe('type-level: every registry key is a valid SegmentRuleAttribute', () =>
     }
     // If we reach here the compile-time check passed.
     expect(true).toBe(true)
+  })
+})
+
+describe('DEFAULT_OPERATORS', () => {
+  it('covers all four base types', () => {
+    for (const t of ['string', 'number', 'boolean', 'date'] as const) {
+      expect(DEFAULT_OPERATORS[t].length).toBeGreaterThan(0)
+    }
+  })
+
+  it('string default includes contains, starts_with, ends_with', () => {
+    const ops = DEFAULT_OPERATORS.string.map((o) => o.value)
+    expect(ops).toContain('contains')
+    expect(ops).toContain('starts_with')
+    expect(ops).toContain('ends_with')
+  })
+
+  it('boolean default does NOT include numeric operators', () => {
+    const ops = DEFAULT_OPERATORS.boolean.map((o) => o.value)
+    for (const numOp of ['gt', 'gte', 'lt', 'lte']) {
+      expect(ops).not.toContain(numOp)
+    }
+  })
+})
+
+describe('getFieldOperators', () => {
+  it('returns field.operators when present (email_domain override)', () => {
+    const field = BUILTIN_FIELDS.find((f) => f.key === 'email_domain')!
+    const ops = getFieldOperators(field).map((o) => o.value)
+    // email_domain evaluator does NOT support contains or starts_with
+    expect(ops).not.toContain('contains')
+    expect(ops).not.toContain('starts_with')
+    expect(ops).toContain('ends_with')
+    expect(ops).toContain('eq')
+    expect(ops).toContain('is_set')
+  })
+
+  it('returns field.operators for principal_type (only eq/neq)', () => {
+    const field = BUILTIN_FIELDS.find((f) => f.key === 'principal_type')!
+    const ops = getFieldOperators(field).map((o) => o.value)
+    expect(ops).toEqual(['eq', 'neq'])
+  })
+
+  it('returns field.operators for created_at_days_ago (no is_set/is_not_set)', () => {
+    const field = BUILTIN_FIELDS.find((f) => f.key === 'created_at_days_ago')!
+    const ops = getFieldOperators(field).map((o) => o.value)
+    expect(ops).not.toContain('is_set')
+    expect(ops).not.toContain('is_not_set')
+    expect(ops).toContain('gt')
+    expect(ops).toContain('lte')
+  })
+
+  it('returns type default for name (no operators override)', () => {
+    const field = BUILTIN_FIELDS.find((f) => f.key === 'name') as BuiltinField | undefined
+    expect(field).toBeDefined()
+    expect(field!.operators).toBeUndefined()
+    const ops = getFieldOperators(field!).map((o) => o.value)
+    // Should use string default — has contains
+    expect(ops).toContain('contains')
+  })
+
+  it('post_count operators include is_set/is_not_set', () => {
+    const field = BUILTIN_FIELDS.find((f) => f.key === 'post_count')!
+    const ops = getFieldOperators(field).map((o) => o.value)
+    expect(ops).toContain('is_set')
+    expect(ops).toContain('is_not_set')
   })
 })
