@@ -2,11 +2,17 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { listPendingPostsFn, approvePostFn, rejectPostFn } from '@/lib/server/functions/moderation'
+import { adminQueries } from '@/lib/client/queries/admin'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 
 export const Route = createFileRoute('/admin/moderation')({
+  loader: async () => {
+    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
+    await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
+    return {}
+  },
   component: ModerationPage,
 })
 
@@ -17,13 +23,18 @@ function ModerationPage() {
     queryFn: () => listPendingPostsFn(),
   })
 
+  const invalidateAfterDecision = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] })
+    queryClient.invalidateQueries({ queryKey: adminQueries.moderationStatus().queryKey })
+  }
+
   const approve = useMutation({
     mutationFn: (postId: string) => approvePostFn({ data: { postId } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] }),
+    onSuccess: invalidateAfterDecision,
   })
   const reject = useMutation({
     mutationFn: (postId: string) => rejectPostFn({ data: { postId } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'moderation'] }),
+    onSuccess: invalidateAfterDecision,
   })
 
   if (isLoading) {
@@ -70,6 +81,9 @@ function ModerationPage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{post.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    by {post.authorName ?? 'Anonymous'} in {post.boardName}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{post.content}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
