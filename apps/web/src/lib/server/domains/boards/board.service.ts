@@ -27,6 +27,7 @@ import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/erro
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
 import type { BoardAudience } from '@/lib/server/db'
+import { DEFAULT_BOARD_MODERATION } from '@/lib/server/db'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 
@@ -96,6 +97,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
       slug,
       description: input.description?.trim() || null,
       audience,
+      moderation: DEFAULT_BOARD_MODERATION,
       settings: input.settings || {},
     })
     .returning()

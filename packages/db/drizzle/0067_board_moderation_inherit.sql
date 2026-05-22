@@ -1,7 +1,8 @@
 -- Backfill: boards moderation.requireApproval -> 'inherit'.
--- Pre-Phase-1 boards carry an explicit 'none'; moving them to 'inherit'
--- makes every board follow the workspace default. The default ships as
--- 'none', so effective behavior is unchanged.
+-- Upgraded instances have boards with requireApproval='none' set before
+-- Phase 1; this moves those to 'inherit' so they follow the workspace
+-- default. Boards with any other explicit value are intentional overrides
+-- and are left unchanged.
 UPDATE "boards"
 SET "moderation" = jsonb_set("moderation", '{requireApproval}', '"inherit"', true)
 WHERE "moderation" IS NOT NULL

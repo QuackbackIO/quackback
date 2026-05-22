@@ -112,7 +112,7 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
     case 'access':
       return (
         <SettingsCard title="Access Control">
-          <BoardAccessForm board={board} />
+          <BoardAccessForm key={board.id} board={board} />
         </SettingsCard>
       )
 

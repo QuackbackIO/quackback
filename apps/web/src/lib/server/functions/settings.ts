@@ -774,7 +774,7 @@ export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
       actor: actorFromAuth(auth),
       target: { type: 'settings', id: 'portal-config' },
       before: { moderationDefault: before.moderationDefault },
-      after: { moderationDefault: data },
+      after: { moderationDefault: updated.moderationDefault },
     })
     return { moderationDefault: updated.moderationDefault }
   })

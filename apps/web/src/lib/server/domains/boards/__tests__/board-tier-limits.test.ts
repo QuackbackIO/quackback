@@ -30,12 +30,14 @@ vi.mock('@/lib/server/db', async () => {
     inArray: drizzle.inArray,
     asc: drizzle.asc,
     sql: drizzle.sql,
+    DEFAULT_BOARD_MODERATION: { requireApproval: 'inherit', trustedSegmentIds: [] },
   }
 })
 
 import { createBoard } from '../board.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { OSS_TIER_LIMITS } from '@/lib/server/domains/settings/tier-limits.types'
+import { DEFAULT_BOARD_MODERATION } from '@/lib/server/db'
 
 describe('createBoard — maxBoards enforcement', () => {
   beforeEach(() => {
@@ -63,5 +65,25 @@ describe('createBoard — maxBoards enforcement', () => {
     })
 
     await expect(createBoard({ name: 'allowed' })).resolves.toBeDefined()
+  })
+})
+
+describe('createBoard — default moderation', () => {
+  it('inserts DEFAULT_BOARD_MODERATION so new boards inherit the workspace default', async () => {
+    vi.mocked(getTierLimits).mockResolvedValue(OSS_TIER_LIMITS)
+    hoisted.mockedFindFirstBoards.mockResolvedValue(null)
+
+    let capturedValues: Record<string, unknown> | undefined
+    hoisted.mockedInsert.mockReturnValue({
+      values: (v: Record<string, unknown>) => {
+        capturedValues = v
+        return { returning: () => Promise.resolve([{ id: 'b1', name: 'new board', ...v }]) }
+      },
+    })
+
+    await createBoard({ name: 'new board' })
+
+    expect(capturedValues).toBeDefined()
+    expect(capturedValues!.moderation).toEqual(DEFAULT_BOARD_MODERATION)
   })
 })
