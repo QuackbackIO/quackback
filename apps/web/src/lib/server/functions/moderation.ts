@@ -2,8 +2,9 @@
  * Moderation server functions.
  *
  * - listPendingPostsFn   — team-only feed of posts in moderationState='pending'
- * - approvePostFn        — flip a pending post to 'published'
- * - rejectPostFn         — flip a pending post to 'spam' with optional reason
+ * - approvePostFn        — guarded transition: pending → published (ConflictError if not pending)
+ * - rejectPostFn         — guarded soft-delete: sets deletedAt on a pending post with optional
+ *                          reason in the audit trail; restoring returns it to the queue.
  *
  * Approve and reject are team-level operations (admin OR member): mirrors
  * Canny/Featurebase where moderators are a separate concept from workspace
@@ -12,11 +13,11 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { db, posts, eq } from '@/lib/server/db'
+import { db, posts, eq, and, isNull } from '@/lib/server/db'
 import { requireAuth } from '@/lib/server/functions/auth-helpers'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import { isTeamMember } from '@/lib/shared/roles'
-import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, ConflictError } from '@/lib/shared/errors'
 
 const ApproveInput = z.object({ postId: z.string() })
 const RejectInput = z.object({ postId: z.string(), reason: z.string().max(500).optional() })
@@ -39,10 +40,14 @@ export const approvePostFn = createServerFn({ method: 'POST' })
     }
     const before = await db.query.posts.findFirst({ where: eq(posts.id, data.postId as never) })
     if (!before) throw new NotFoundError('POST_NOT_FOUND', `Post ${data.postId}`)
-    await db
+    const updated = await db
       .update(posts)
       .set({ moderationState: 'published' })
-      .where(eq(posts.id, data.postId as never))
+      .where(and(eq(posts.id, data.postId as never), eq(posts.moderationState, 'pending')))
+      .returning({ id: posts.id })
+    if (updated.length === 0) {
+      throw new ConflictError('POST_NOT_PENDING', 'Post is not awaiting review')
+    }
     await recordAuditEvent({
       event: 'post.moderation.approved',
       actor: actorFromAuth(auth),
@@ -62,16 +67,26 @@ export const rejectPostFn = createServerFn({ method: 'POST' })
     }
     const before = await db.query.posts.findFirst({ where: eq(posts.id, data.postId as never) })
     if (!before) throw new NotFoundError('POST_NOT_FOUND', `Post ${data.postId}`)
-    await db
+    const updated = await db
       .update(posts)
-      .set({ moderationState: 'spam' })
-      .where(eq(posts.id, data.postId as never))
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(posts.id, data.postId as never),
+          eq(posts.moderationState, 'pending'),
+          isNull(posts.deletedAt)
+        )
+      )
+      .returning({ id: posts.id })
+    if (updated.length === 0) {
+      throw new ConflictError('POST_NOT_PENDING', 'Post is not awaiting review')
+    }
     await recordAuditEvent({
       event: 'post.moderation.rejected',
       actor: actorFromAuth(auth),
       target: { type: 'post', id: data.postId },
-      before: { moderationState: before.moderationState },
-      after: { moderationState: 'spam' },
+      before: { moderationState: before.moderationState, deletedAt: null },
+      after: { moderationState: before.moderationState, deletedAt: 'set' },
       metadata: { reason: data.reason ?? null },
     })
     return { ok: true }

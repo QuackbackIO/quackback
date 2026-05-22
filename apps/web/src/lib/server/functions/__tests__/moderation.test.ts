@@ -3,8 +3,8 @@
  *
  * listPendingPostsFn / approvePostFn / rejectPostFn are team-gated:
  * portal users (role='user') get 403, members and admins get through.
- * Both state-mutating fns must emit the corresponding audit event with
- * before/after values intact.
+ * Both state-mutating fns are guarded pending-only transitions that must
+ * emit the corresponding audit event with before/after values intact.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -42,7 +42,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 }))
 
 // In-memory state for the db mock.
-type Post = { id: string; moderationState: string }
+type Post = { id: string; moderationState: string; deletedAt: Date | null }
 const dbState: { posts: Post[]; auditEvents: Array<Record<string, unknown>> } = {
   posts: [],
   auditEvents: [],
@@ -66,10 +66,17 @@ interface PostsColumn {
   __col: keyof Post
 }
 
-type PostCondition = { kind: 'eq'; col: keyof Post; val: string }
+// Conditions supported by the mock query engine.
+type EqCondition = { kind: 'eq'; col: keyof Post; val: string }
+type IsNullCondition = { kind: 'isNull'; col: keyof Post }
+type AndCondition = { kind: 'and'; conditions: PostCondition[] }
+type PostCondition = EqCondition | IsNullCondition | AndCondition
 
 function matchPost(post: Post, c: PostCondition): boolean {
-  return post[c.col] === c.val
+  if (c.kind === 'eq') return post[c.col] === c.val
+  if (c.kind === 'isNull') return post[c.col] === null || post[c.col] === undefined
+  if (c.kind === 'and') return c.conditions.every((sub) => matchPost(post, sub))
+  return false
 }
 
 vi.mock('@/lib/server/db', () => ({
@@ -90,26 +97,33 @@ vi.mock('@/lib/server/db', () => ({
     },
     update: vi.fn(() => ({
       set: vi.fn((patch: Partial<Post>) => ({
-        where: vi.fn(async (cond: PostCondition) => {
-          dbState.posts = dbState.posts.map((p) => (matchPost(p, cond) ? { ...p, ...patch } : p))
-        }),
+        where: vi.fn((cond: PostCondition) => ({
+          returning: vi.fn(() => {
+            const matched = dbState.posts.filter((p) => matchPost(p, cond))
+            dbState.posts = dbState.posts.map((p) => (matchPost(p, cond) ? { ...p, ...patch } : p))
+            return Promise.resolve(matched.map((p) => ({ id: p.id })))
+          }),
+        })),
       })),
     })),
   },
   posts: {
     id: { __col: 'id' } satisfies PostsColumn,
     moderationState: { __col: 'moderationState' } satisfies PostsColumn,
+    deletedAt: { __col: 'deletedAt' } satisfies PostsColumn,
   },
   eq: vi.fn(
-    (col: PostsColumn, val: string): PostCondition => ({
+    (col: PostsColumn, val: string): EqCondition => ({
       kind: 'eq',
       col: col.__col,
       val,
     })
   ),
+  and: vi.fn((...conditions: PostCondition[]): AndCondition => ({ kind: 'and', conditions })),
+  isNull: vi.fn((col: PostsColumn): IsNullCondition => ({ kind: 'isNull', col: col.__col })),
 }))
 
-import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { ForbiddenError, NotFoundError, ConflictError } from '@/lib/shared/errors'
 
 // Indexes correspond to declaration order in moderation.ts:
 // 0=listPending, 1=approve, 2=reject
@@ -169,9 +183,9 @@ describe('listPendingPostsFn — role gating', () => {
 
   it('admin sees all pending', async () => {
     dbState.posts = [
-      { id: 'p1', moderationState: 'pending' },
-      { id: 'p2', moderationState: 'published' },
-      { id: 'p3', moderationState: 'pending' },
+      { id: 'p1', moderationState: 'pending', deletedAt: null },
+      { id: 'p2', moderationState: 'published', deletedAt: null },
+      { id: 'p3', moderationState: 'pending', deletedAt: null },
     ]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     const result = (await listPending()({ data: {} })) as { posts: Post[] }
@@ -180,7 +194,7 @@ describe('listPendingPostsFn — role gating', () => {
   })
 
   it('member also sees pending (moderation is a team activity)', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_MEMBER)
     const result = (await listPending()({ data: {} })) as { posts: Post[] }
     expect(result.posts).toHaveLength(1)
@@ -215,14 +229,14 @@ describe('approvePostFn', () => {
   })
 
   it('flips moderationState pending → published', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     await approve()({ data: { postId: 'p1' } })
     expect(dbState.posts[0].moderationState).toBe('published')
   })
 
   it('records an audit row with before/after state', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     await approve()({ data: { postId: 'p1' } })
     const event = dbState.auditEvents.find((e) => e.event === 'post.moderation.approved')
@@ -232,19 +246,16 @@ describe('approvePostFn', () => {
     expect((event!.target as { id: string }).id).toBe('p1')
   })
 
-  it('approving an already-published post still flips state (idempotent, fires audit)', async () => {
-    // Edge case: race between two moderators clicking Approve. The second
-    // approve is harmless but should still leave the state consistent.
-    dbState.posts = [{ id: 'p1', moderationState: 'published' }]
+  it('throws ConflictError when approving an already-published post', async () => {
+    // Race between two moderators: the second approve must be rejected,
+    // not silently re-applied, so the audit log stays clean.
+    dbState.posts = [{ id: 'p1', moderationState: 'published', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
-    await approve()({ data: { postId: 'p1' } })
-    expect(dbState.posts[0].moderationState).toBe('published')
-    const event = dbState.auditEvents.find((e) => e.event === 'post.moderation.approved')
-    expect(event!.before).toEqual({ moderationState: 'published' })
+    await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ConflictError)
   })
 
   it('member can approve', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_MEMBER)
     await approve()({ data: { postId: 'p1' } })
     expect(dbState.posts[0].moderationState).toBe('published')
@@ -272,15 +283,18 @@ describe('rejectPostFn', () => {
     await expect(reject()({ data: { postId: 'nope' } })).rejects.toBeInstanceOf(NotFoundError)
   })
 
-  it('flips moderationState pending → spam', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+  it('soft-deletes (sets deletedAt) instead of flipping moderationState to spam', async () => {
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     await reject()({ data: { postId: 'p1' } })
-    expect(dbState.posts[0].moderationState).toBe('spam')
+    const post = dbState.posts[0]
+    expect(post.deletedAt).toBeInstanceOf(Date)
+    // moderationState stays 'pending' — restoring returns the post to the queue
+    expect(post.moderationState).toBe('pending')
   })
 
   it('records reason in audit metadata when supplied', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     await reject()({ data: { postId: 'p1', reason: 'link spam' } })
     const event = dbState.auditEvents.find((e) => e.event === 'post.moderation.rejected')
@@ -288,17 +302,23 @@ describe('rejectPostFn', () => {
   })
 
   it('omits reason (null) when not supplied', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
     await reject()({ data: { postId: 'p1' } })
     const event = dbState.auditEvents.find((e) => e.event === 'post.moderation.rejected')
     expect(event!.metadata).toEqual({ reason: null })
   })
 
+  it('throws ConflictError when rejecting a non-pending post', async () => {
+    dbState.posts = [{ id: 'p1', moderationState: 'published', deletedAt: null }]
+    mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
+    await expect(reject()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ConflictError)
+  })
+
   it('member can reject', async () => {
-    dbState.posts = [{ id: 'p1', moderationState: 'pending' }]
+    dbState.posts = [{ id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_MEMBER)
     await reject()({ data: { postId: 'p1' } })
-    expect(dbState.posts[0].moderationState).toBe('spam')
+    expect(dbState.posts[0].deletedAt).toBeInstanceOf(Date)
   })
 })
