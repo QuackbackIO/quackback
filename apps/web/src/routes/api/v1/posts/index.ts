@@ -196,12 +196,23 @@ export const Route = createFileRoute('/api/v1/posts/')({
           // sees the correct team/role. API keys gated by role='team' above
           // means the actor is always team here and bypasses moderation,
           // but we pass it explicitly so audience checks apply (defense in depth).
-          const callerSegmentIds = await segmentIdsForPrincipal(auth.principalId)
+          // principalRecord was fetched for targetPrincipalId (the author when
+          // overridden), so we need the caller's own type separately.
+          const [callerSegmentIds, callerPrincipalRecord] = await Promise.all([
+            segmentIdsForPrincipal(auth.principalId),
+            overridePrincipalId
+              ? db.query.principal.findFirst({
+                  where: eq(principal.id, auth.principalId),
+                  columns: { type: true },
+                })
+              : Promise.resolve(null),
+          ])
+          // When there is no override, principalRecord IS the caller's record.
+          const callerType = (callerPrincipalRecord ?? principalRecord).type
           const actor = {
             principalId: auth.principalId,
             role: auth.role,
-            principalType:
-              principalRecord.type === 'service' ? ('service' as const) : ('user' as const),
+            principalType: callerType === 'service' ? ('service' as const) : ('user' as const),
             segmentIds: callerSegmentIds,
           }
 

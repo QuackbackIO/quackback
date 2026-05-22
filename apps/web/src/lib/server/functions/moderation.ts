@@ -19,6 +19,7 @@ import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import { isTeamMember } from '@/lib/shared/roles'
 import { ForbiddenError, NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 
 const ApproveInput = z.object({ postId: z.string() })
 const RejectInput = z.object({ postId: z.string(), reason: z.string().max(500).optional() })
@@ -76,6 +77,10 @@ export const approvePostFn = createServerFn({ method: 'POST' })
       before: { moderationState: before.moderationState },
       after: { moderationState: 'published' },
     })
+    // Dispatch deferred external notifications. The actor must be the post's
+    // author — not the moderator — so announcePublishedPost loads author data
+    // from the post row (which carries principalId, not the moderator's id).
+    await announcePublishedPost(data.postId as never)
     return { ok: true }
   })
 

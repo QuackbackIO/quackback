@@ -184,6 +184,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   updateDeveloperConfig: vi.fn(),
 }))
 
+const mockAnnouncePublishedPost = vi.fn().mockResolvedValue(undefined)
+vi.mock('@/lib/server/domains/posts/post.announce', () => ({
+  announcePublishedPost: (...args: unknown[]) => mockAnnouncePublishedPost(...args),
+}))
+
 const mockGetPortalConfig = hoisted.mockGetPortalConfig
 
 vi.mock('@/lib/server/db', () => ({
@@ -313,6 +318,8 @@ beforeEach(() => {
   dbState.auditEvents = []
   mockRequireAuth.mockReset()
   mockGetPortalConfig.mockReset()
+  mockAnnouncePublishedPost.mockReset()
+  mockAnnouncePublishedPost.mockResolvedValue(undefined)
 })
 
 // ----------------------------------------------------------------------
@@ -435,6 +442,23 @@ describe('approvePostFn', () => {
     mockRequireAuth.mockResolvedValue(AUTH_MEMBER)
     await approve()({ data: { postId: 'p1' } })
     expect(dbState.posts[0].moderationState).toBe('published')
+  })
+
+  it('calls announcePublishedPost with the postId on successful approve', async () => {
+    // The deferred announcement (webhooks, @-mentions) must fire after approve,
+    // not at create time when the post was held for moderation.
+    dbState.posts = [{ ...POST_DEFAULTS, id: 'p1', moderationState: 'pending', deletedAt: null }]
+    mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
+    await approve()({ data: { postId: 'p1' } })
+    expect(mockAnnouncePublishedPost).toHaveBeenCalledOnce()
+    expect(mockAnnouncePublishedPost).toHaveBeenCalledWith('p1')
+  })
+
+  it('does NOT call announcePublishedPost when approve fails (already published)', async () => {
+    dbState.posts = [{ ...POST_DEFAULTS, id: 'p1', moderationState: 'published', deletedAt: null }]
+    mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
+    await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ConflictError)
+    expect(mockAnnouncePublishedPost).not.toHaveBeenCalled()
   })
 })
 

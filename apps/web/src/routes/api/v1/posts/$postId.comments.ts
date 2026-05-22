@@ -136,14 +136,25 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
           // Build the policy actor from the API-key holder (the caller).
           // On override, the author differs from the caller — policy reflects
           // who is performing the write, not who is attributed.
+          // principalRecord was fetched for targetPrincipalId (the author when
+          // overridden), so we need the caller's own type separately.
           const { segmentIdsForPrincipal } =
             await import('@/lib/server/domains/segments/segment-membership.service')
-          const callerSegmentIds = await segmentIdsForPrincipal(auth.principalId)
+          const [callerSegmentIds, callerPrincipalRecord] = await Promise.all([
+            segmentIdsForPrincipal(auth.principalId),
+            overridePrincipalId
+              ? db.query.principal.findFirst({
+                  where: eq(principal.id, auth.principalId),
+                  columns: { type: true },
+                })
+              : Promise.resolve(null),
+          ])
+          // When there is no override, principalRecord IS the caller's record.
+          const callerType = (callerPrincipalRecord ?? principalRecord).type
           const callerActor = {
             principalId: auth.principalId,
             role: auth.role as import('@/lib/server/policy/types').Role,
-            principalType:
-              principalRecord.type === 'service' ? ('service' as const) : ('user' as const),
+            principalType: callerType === 'service' ? ('service' as const) : ('user' as const),
             segmentIds: callerSegmentIds,
           }
 

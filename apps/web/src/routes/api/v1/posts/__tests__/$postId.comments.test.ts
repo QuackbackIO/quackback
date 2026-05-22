@@ -24,6 +24,10 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
 }))
 
+vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
+  segmentIdsForPrincipal: vi.fn().mockResolvedValue(new Set()),
+}))
+
 import { Route } from '../$postId.comments'
 
 type RouteOpts = { server: { handlers: { POST: (...args: unknown[]) => Promise<Response> } } }
@@ -88,7 +92,10 @@ describe('POST /api/v1/posts/:postId/comments authorPrincipalId override', () =>
 
   it('attributes to the override principal for an admin caller', async () => {
     mockWithApiKeyAuth.mockResolvedValue(adminAuth)
-    mockPrincipalFindFirst.mockResolvedValue(userPrincipalRecord)
+    // First call: author (override), second call: caller (for principalType lookup)
+    mockPrincipalFindFirst
+      .mockResolvedValueOnce(userPrincipalRecord)
+      .mockResolvedValueOnce(apiKeyHolderRecord)
     const res = await POST({
       request: makeRequest({ content: 'Hello', authorPrincipalId: OVERRIDE_PRINCIPAL }),
       params: { postId: POST_ID },
@@ -98,6 +105,23 @@ describe('POST /api/v1/posts/:postId/comments authorPrincipalId override', () =>
     expect(author.principalId).toBe(OVERRIDE_PRINCIPAL)
     expect(author.role).toBe('user')
     expect(author.email).toBe('uv@example.com')
+  })
+
+  it('callerActor principalType reflects the caller, not the override author', async () => {
+    // Regression guard for Fix 3: the API key holder is a service principal;
+    // the override author is a user. callerActor must carry the service type.
+    mockWithApiKeyAuth.mockResolvedValue(adminAuth)
+    // First call: author (user type), second call: caller (service type)
+    mockPrincipalFindFirst
+      .mockResolvedValueOnce(userPrincipalRecord)
+      .mockResolvedValueOnce(apiKeyHolderRecord)
+    await POST({
+      request: makeRequest({ content: 'Hello', authorPrincipalId: OVERRIDE_PRINCIPAL }),
+      params: { postId: POST_ID },
+    })
+    const callerActor = mockCreateComment.mock.calls[0][2]
+    expect(callerActor.principalType).toBe('service')
+    expect(callerActor.principalId).toBe(ADMIN_KEY_PRINCIPAL)
   })
 
   it('ignores authorPrincipalId for non-admin callers', async () => {

@@ -1,3 +1,7 @@
+/* eslint-disable max-lines -- updatePost handles all side-effects (status, tags, owner, mentions)
+ * in one function to avoid multiple DB round-trips; extraction would complicate transaction
+ * semantics. announcePublishedPost was already split to post.announce.ts. */
+
 /**
  * Post Service - Core CRUD operations
  *
@@ -31,11 +35,11 @@ import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import {
-  dispatchPostCreated,
   dispatchPostStatusChanged,
   dispatchPostUpdated,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
+import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
@@ -210,21 +214,9 @@ export async function createPost(
   }
 
   if (!options?.skipDispatch) {
-    // Auto-subscribe the author to their own post
+    // Auto-subscribe the author to their own post. Runs even when held for
+    // moderation so the author receives notifications on approval/rejection.
     await subscribeToPost(author.principalId, post.id, 'author')
-
-    // Dispatch post.created event for webhooks, Slack, AI processing, etc.
-    const actorName = author.displayName ?? author.name
-    await dispatchPostCreated(buildEventActor(author), {
-      id: post.id,
-      title: post.title,
-      content: post.content,
-      boardId: post.boardId,
-      boardSlug: board.slug,
-      authorEmail: author.email,
-      authorName: actorName,
-      voteCount: post.voteCount,
-    })
 
     createActivity({
       postId: post.id,
@@ -233,19 +225,22 @@ export async function createPost(
       metadata: { boardName: board.name },
     })
 
-    // Record + dispatch @-mentions extracted from the rich-text body.
-    if (post.contentJson) {
-      const mentionedIds = extractMentions(post.contentJson)
-      if (mentionedIds.size > 0) {
-        await syncPostMentions({
-          postId: post.id,
-          postTitle: post.title,
-          postUrl: buildPostUrl(getBaseUrl(), board.slug, post.id),
-          mentionedIds,
-          excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
-          actor: buildEventActor(author),
-        })
-      }
+    // External dispatch (webhooks, Slack, @-mention emails) is deferred until
+    // the post is visible. A held post must not trigger integrations until a
+    // moderator approves it — approvePostFn calls announcePublishedPost() then.
+    if (moderationState === 'published') {
+      await announcePublishedPost(post.id, {
+        post: {
+          id: post.id,
+          title: post.title,
+          content: post.content,
+          boardId: post.boardId,
+          contentJson: post.contentJson,
+          voteCount: post.voteCount,
+        },
+        board: { slug: board.slug, name: board.name },
+        author,
+      })
     }
   }
 

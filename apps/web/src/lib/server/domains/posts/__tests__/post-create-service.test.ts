@@ -10,6 +10,8 @@ const recordAuditEvent = vi.fn()
 
 const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags: [] }
 const subscribeToPost = vi.fn()
+const dispatchPostCreated = vi.fn().mockResolvedValue(undefined)
+const syncPostMentions = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@/lib/server/db', async () => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
@@ -86,8 +88,12 @@ vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
 }))
 
 vi.mock('@/lib/server/events/dispatch', () => ({
-  dispatchPostCreated: vi.fn(),
+  dispatchPostCreated: (...args: unknown[]) => dispatchPostCreated(...args),
   buildEventActor: vi.fn(() => ({})),
+}))
+
+vi.mock('../sync-post-mentions', () => ({
+  syncPostMentions: (...args: unknown[]) => syncPostMentions(...args),
 }))
 
 vi.mock('@/lib/server/domains/activity/activity.service', () => ({
@@ -226,5 +232,113 @@ describe('createPost held audit event', () => {
     )
 
     expect(recordAuditEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('createPost dispatch guard (moderation)', () => {
+  beforeEach(() => {
+    insertedRows.posts.length = 0
+    insertedRows.votes.length = 0
+    insertedRows.postTags.length = 0
+    subscribeToPost.mockClear()
+    recordAuditEvent.mockClear()
+    dispatchPostCreated.mockClear()
+    syncPostMentions.mockClear()
+  })
+
+  it('does NOT call dispatchPostCreated when the post is held (moderationState=pending)', async () => {
+    const { db } = await import('@/lib/server/db')
+    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+
+    vi.mocked(db.query.boards.findFirst).mockResolvedValueOnce({
+      id: 'board_b',
+      slug: 'feedback',
+      name: 'Feedback',
+      audience: { kind: 'public' },
+    } as unknown as Awaited<ReturnType<typeof db.query.boards.findFirst>>)
+    vi.mocked(getPortalConfig).mockResolvedValueOnce({
+      moderationDefault: { requireApproval: 'all' },
+    } as unknown as Awaited<ReturnType<typeof getPortalConfig>>)
+
+    const { createPost } = await import('../post.service')
+    const principalId = 'principal_anon' as unknown as PrincipalId
+    await createPost(
+      {
+        boardId: 'board_b' as unknown as BoardId,
+        title: 'Held post',
+        content: 'Body',
+        statusId: 'status_open' as unknown as StatusId,
+      },
+      {
+        principalId,
+        actor: { principalId, role: null, principalType: 'anonymous', segmentIds: new Set() },
+      }
+    )
+
+    expect(dispatchPostCreated).not.toHaveBeenCalled()
+  })
+
+  it('calls dispatchPostCreated when the post publishes immediately', async () => {
+    const { db } = await import('@/lib/server/db')
+    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+
+    vi.mocked(db.query.boards.findFirst).mockResolvedValueOnce({
+      id: 'board_b',
+      slug: 'feedback',
+      name: 'Feedback',
+      audience: { kind: 'public' },
+    } as unknown as Awaited<ReturnType<typeof db.query.boards.findFirst>>)
+    vi.mocked(getPortalConfig).mockResolvedValueOnce({
+      moderationDefault: { requireApproval: 'none' },
+    } as unknown as Awaited<ReturnType<typeof getPortalConfig>>)
+
+    const { createPost } = await import('../post.service')
+    const principalId = 'principal_user' as unknown as PrincipalId
+    await createPost(
+      {
+        boardId: 'board_b' as unknown as BoardId,
+        title: 'Published post',
+        content: 'Body',
+        statusId: 'status_open' as unknown as StatusId,
+      },
+      {
+        principalId,
+        actor: { principalId, role: null, principalType: 'user', segmentIds: new Set() },
+      }
+    )
+
+    expect(dispatchPostCreated).toHaveBeenCalledOnce()
+  })
+
+  it('subscribeToPost runs even when post is held (author still subscribed)', async () => {
+    const { db } = await import('@/lib/server/db')
+    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
+
+    vi.mocked(db.query.boards.findFirst).mockResolvedValueOnce({
+      id: 'board_b',
+      slug: 'feedback',
+      name: 'Feedback',
+      audience: { kind: 'public' },
+    } as unknown as Awaited<ReturnType<typeof db.query.boards.findFirst>>)
+    vi.mocked(getPortalConfig).mockResolvedValueOnce({
+      moderationDefault: { requireApproval: 'all' },
+    } as unknown as Awaited<ReturnType<typeof getPortalConfig>>)
+
+    const { createPost } = await import('../post.service')
+    const principalId = 'principal_anon' as unknown as PrincipalId
+    await createPost(
+      {
+        boardId: 'board_b' as unknown as BoardId,
+        title: 'Held post',
+        content: 'Body',
+        statusId: 'status_open' as unknown as StatusId,
+      },
+      {
+        principalId,
+        actor: { principalId, role: null, principalType: 'anonymous', segmentIds: new Set() },
+      }
+    )
+
+    expect(subscribeToPost).toHaveBeenCalledWith(principalId, 'post_new', 'author')
   })
 })
