@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheckIcon } from '@heroicons/react/24/outline'
+import { toast } from 'sonner'
 import { listPendingPostsFn, approvePostFn, rejectPostFn } from '@/lib/server/functions/moderation'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { Button } from '@/components/ui/button'
@@ -28,13 +29,20 @@ function ModerationPage() {
     queryClient.invalidateQueries({ queryKey: adminQueries.moderationStatus().queryKey })
   }
 
+  const onError = () => {
+    toast.error('This post was already handled -- refreshing the queue.')
+    invalidateAfterDecision()
+  }
+
   const approve = useMutation({
     mutationFn: (postId: string) => approvePostFn({ data: { postId } }),
     onSuccess: invalidateAfterDecision,
+    onError,
   })
   const reject = useMutation({
     mutationFn: (postId: string) => rejectPostFn({ data: { postId } }),
     onSuccess: invalidateAfterDecision,
+    onError,
   })
 
   if (isLoading) {

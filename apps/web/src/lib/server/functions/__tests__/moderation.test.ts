@@ -414,6 +414,23 @@ describe('approvePostFn', () => {
     await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ConflictError)
   })
 
+  it('throws ConflictError and does not publish a soft-deleted (rejected) post', async () => {
+    // Approve on a post that is pending but already soft-deleted (reject was called first).
+    // The WHERE clause must include isNull(deletedAt) so that ghost-publishing is blocked.
+    dbState.posts = [
+      {
+        ...POST_DEFAULTS,
+        id: 'p1',
+        moderationState: 'pending',
+        deletedAt: new Date('2024-06-01'),
+      },
+    ]
+    mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
+    await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ConflictError)
+    // The post must NOT have been flipped to published.
+    expect(dbState.posts[0].moderationState).toBe('pending')
+  })
+
   it('member can approve', async () => {
     dbState.posts = [{ ...POST_DEFAULTS, id: 'p1', moderationState: 'pending', deletedAt: null }]
     mockRequireAuth.mockResolvedValue(AUTH_MEMBER)

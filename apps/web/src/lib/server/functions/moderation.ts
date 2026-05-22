@@ -58,7 +58,13 @@ export const approvePostFn = createServerFn({ method: 'POST' })
     const updated = await db
       .update(posts)
       .set({ moderationState: 'published' })
-      .where(and(eq(posts.id, data.postId as never), eq(posts.moderationState, 'pending')))
+      .where(
+        and(
+          eq(posts.id, data.postId as never),
+          eq(posts.moderationState, 'pending'),
+          isNull(posts.deletedAt)
+        )
+      )
       .returning({ id: posts.id })
     if (updated.length === 0) {
       throw new ConflictError('POST_NOT_PENDING', 'Post is not awaiting review')
@@ -82,9 +88,10 @@ export const rejectPostFn = createServerFn({ method: 'POST' })
     }
     const before = await db.query.posts.findFirst({ where: eq(posts.id, data.postId as never) })
     if (!before) throw new NotFoundError('POST_NOT_FOUND', `Post ${data.postId}`)
+    const deletedAt = new Date()
     const updated = await db
       .update(posts)
-      .set({ deletedAt: new Date() })
+      .set({ deletedAt })
       .where(
         and(
           eq(posts.id, data.postId as never),
@@ -101,7 +108,7 @@ export const rejectPostFn = createServerFn({ method: 'POST' })
       actor: actorFromAuth(auth),
       target: { type: 'post', id: data.postId },
       before: { moderationState: before.moderationState, deletedAt: null },
-      after: { moderationState: before.moderationState, deletedAt: 'set' },
+      after: { moderationState: before.moderationState, deletedAt },
       metadata: { reason: data.reason ?? null },
     })
     return { ok: true }
