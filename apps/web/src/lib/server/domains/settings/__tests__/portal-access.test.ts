@@ -333,7 +333,64 @@ describe('evaluatePortalAccess — private portal, accepted portal invite', () =
       expect(result.reason).toBe('team')
     }
   })
+})
 
+describe('evaluatePortalAccess — segment branch', () => {
+  it('grants a user in an allowed segment', () => {
+    const result = evaluatePortalAccess({
+      visibility: 'private',
+      role: 'user',
+      isAuthenticated: true,
+      emailVerified: true,
+      userEmail: 'user@external.com',
+      allowedDomains: [],
+      hasAcceptedPortalInvite: false,
+      widgetSignInEnabled: false,
+      hasViaWidgetMarker: false,
+      identifyVerificationEnabled: false,
+      isInAllowedSegment: true,
+    })
+    expect(result).toEqual({ granted: true, reason: 'segment' })
+  })
+
+  it('denies a user NOT in any allowed segment when no other branch grants', () => {
+    const result = evaluatePortalAccess({
+      visibility: 'private',
+      role: 'user',
+      isAuthenticated: true,
+      emailVerified: true,
+      userEmail: 'user@external.com',
+      allowedDomains: [],
+      hasAcceptedPortalInvite: false,
+      widgetSignInEnabled: false,
+      hasViaWidgetMarker: false,
+      identifyVerificationEnabled: false,
+      isInAllowedSegment: false,
+    })
+    expect(result).toEqual({ granted: false, reason: 'unauthorized' })
+  })
+
+  it('does NOT grant via segment when unauthenticated, even if isInAllowedSegment=true', () => {
+    // defensive: segment membership without an authenticated session must not grant
+    const result = evaluatePortalAccess({
+      visibility: 'private',
+      role: null,
+      isAuthenticated: false,
+      emailVerified: false,
+      userEmail: null,
+      allowedDomains: [],
+      hasAcceptedPortalInvite: false,
+      widgetSignInEnabled: false,
+      hasViaWidgetMarker: false,
+      identifyVerificationEnabled: false,
+      isInAllowedSegment: true, // shouldn't grant — caller is anonymous
+    })
+    expect(result.granted).toBe(false)
+    expect(result.reason).toBe('unauthenticated')
+  })
+})
+
+describe('evaluatePortalAccess — invite precedence (continued)', () => {
   it('domain grant takes precedence over invite (domain checked before invite)', () => {
     const result = evaluatePortalAccess({
       visibility: 'private',

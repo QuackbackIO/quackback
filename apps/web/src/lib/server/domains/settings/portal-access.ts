@@ -78,11 +78,24 @@ export interface PortalAccessContext {
    * bypass the verified-identity intent. Defaults to `false`.
    */
   identifyVerificationEnabled?: boolean
+  /**
+   * True when the authenticated visitor is a member of at least one
+   * segment the admin has listed in `portalConfig.access.allowedSegmentIds`.
+   *
+   * Populated by the resolver via a DB lookup against `user_segments`.
+   * Defaults to `false` so callers that don't consult the segment table
+   * (e.g. legacy code) remain valid without changes.
+   *
+   * Does NOT require emailVerified — segment membership is admin-curated
+   * (rule-based on user attributes the admin controls), and the segment
+   * evaluator is the trust anchor here.
+   */
+  isInAllowedSegment?: boolean
 }
 
 /** Discriminated union — narrows cleanly in if/switch. */
 export type PortalAccessResult =
-  | { granted: true; reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' }
+  | { granted: true; reason: 'public' | 'team' | 'domain' | 'invite' | 'widget' | 'segment' }
   | { granted: false; reason: 'unauthenticated' | 'unauthorized' }
 
 // =============================================================================
@@ -155,7 +168,16 @@ export function evaluatePortalAccess(ctx: PortalAccessContext): PortalAccessResu
     return { granted: true, reason: 'invite' }
   }
 
-  // 5. Widget sign-in grant.
+  // 5. Allowed segment grant.
+  //    An authenticated user who is a member of any segment the admin has
+  //    marked as portal-allowed is granted. Does NOT require emailVerified —
+  //    segment membership is admin-curated (rule-based on user attributes the
+  //    admin controls), and the segment evaluator is the trust anchor here.
+  if (ctx.isAuthenticated && (ctx.isInAllowedSegment ?? false)) {
+    return { granted: true, reason: 'segment' }
+  }
+
+  // 6. Widget sign-in grant.
   //    Three guards beyond authentication:
   //      - widgetSignInEnabled: admin opted in.
   //      - hasViaWidgetMarker: session was minted by the handoff route, not by
@@ -172,11 +194,11 @@ export function evaluatePortalAccess(ctx: PortalAccessContext): PortalAccessResu
     return { granted: true, reason: 'widget' }
   }
 
-  // 6. No real authentication → redirect to login.
+  // 7. No real authentication → redirect to login.
   if (!ctx.isAuthenticated) {
     return { granted: false, reason: 'unauthenticated' }
   }
 
-  // 7. Authenticated but no matching grant → show access-denied UI.
+  // 8. Authenticated but no matching grant → show access-denied UI.
   return { granted: false, reason: 'unauthorized' }
 }
