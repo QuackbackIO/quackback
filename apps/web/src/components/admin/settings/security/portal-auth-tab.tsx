@@ -117,6 +117,12 @@ export function PortalAuthTab({
   const allowedDomainsRef = useRef(allowedDomains)
   allowedDomainsRef.current = allowedDomains
 
+  const [widgetSignIn, setWidgetSignIn] = useState<boolean>(
+    portalConfig.access?.widgetSignIn ?? false
+  )
+  const widgetSignInRef = useRef(widgetSignIn)
+  widgetSignInRef.current = widgetSignIn
+
   const [accessBusy, setAccessBusy] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [pendingVisibility, setPendingVisibility] = useState<'public' | 'private' | null>(null)
@@ -126,37 +132,47 @@ export function PortalAuthTab({
   const isAccessBusy = accessBusy || isPending
 
   /**
-   * Single save path for both visibility and domain changes.
+   * Single save path for visibility, domain, and widget sign-in changes.
    *
-   * `nextVisibility` and `nextDomains` are always supplied explicitly by the
-   * caller — they represent the intended new state for the field being
-   * changed. The OTHER field is read from its ref so it reflects the latest
-   * committed value rather than anything captured in a stale closure. This
+   * The changed field is supplied explicitly by the caller; all peer fields
+   * are read from their refs so stale-closure captures are impossible. This
    * ensures:
-   *  - No two saves overlap (`accessBusy` gates both controls).
-   *  - Neither field persists a stale value: the caller owns its field, and
-   *    the ref owns the peer field.
+   *  - No two saves overlap (`accessBusy` gates all three controls).
+   *  - No field persists a stale value: the caller owns its field, refs own
+   *    the peers.
    */
-  async function applyAccess(nextVisibility: 'public' | 'private', nextDomains: string[]) {
+  async function applyAccess(
+    nextVisibility: 'public' | 'private',
+    nextDomains: string[],
+    nextWidgetSignIn?: boolean
+  ) {
     const prevVisibility = visibilityRef.current
     const prevDomains = allowedDomainsRef.current
+    const prevWidgetSignIn = widgetSignInRef.current
+    const resolvedWidgetSignIn = nextWidgetSignIn ?? prevWidgetSignIn
 
     // Optimistic update
     setVisibility(nextVisibility)
     setAllowedDomains(nextDomains)
+    setWidgetSignIn(resolvedWidgetSignIn)
     setAccessBusy(true)
 
     try {
       await updatePortalAccessFn({
-        data: { visibility: nextVisibility, allowedDomains: nextDomains },
+        data: {
+          visibility: nextVisibility,
+          allowedDomains: nextDomains,
+          widgetSignIn: resolvedWidgetSignIn,
+        },
       })
       startTransition(() => {
         router.invalidate()
       })
     } catch {
-      // Revert both fields on error
+      // Revert all fields on error
       setVisibility(prevVisibility)
       setAllowedDomains(prevDomains)
+      setWidgetSignIn(prevWidgetSignIn)
     } finally {
       setAccessBusy(false)
     }
@@ -407,6 +423,29 @@ export function PortalAuthTab({
 
             {/* Email invites — below domains, same private-only block */}
             <PortalInvitesSection />
+
+            {/* Widget sign-in — below invites, same private-only block */}
+            <div className="mt-6 border-t border-border/50 pt-6 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Widget sign-in</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Allow users authenticated through the widget (in verified-identity mode) to
+                    access this portal. They&apos;ll see a &ldquo;Go to portal&rdquo; link in the
+                    widget.
+                  </p>
+                </div>
+                <Switch
+                  id="widget-signin-toggle"
+                  checked={widgetSignIn}
+                  onCheckedChange={(checked) => {
+                    void applyAccess(visibilityRef.current, allowedDomainsRef.current, checked)
+                  }}
+                  disabled={isAccessBusy}
+                  aria-label="Allow widget-authenticated users to access the portal"
+                />
+              </div>
+            </div>
           </div>
         )}
       </SettingsCard>

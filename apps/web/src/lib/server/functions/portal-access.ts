@@ -221,6 +221,7 @@ function normalizeDomains(raw: string[]): string[] {
 export const updatePortalVisibilitySchema = z.object({
   visibility: z.enum(['public', 'private']),
   allowedDomains: z.array(z.string()).optional(),
+  widgetSignIn: z.boolean().optional(),
 })
 
 export type UpdatePortalVisibilityInput = z.infer<typeof updatePortalVisibilitySchema>
@@ -234,7 +235,7 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     console.log(
-      `[fn:portal-access] updatePortalAccessFn: visibility=${data.visibility}, domainCount=${(data.allowedDomains ?? []).length}`
+      `[fn:portal-access] updatePortalAccessFn: visibility=${data.visibility}, domainCount=${(data.allowedDomains ?? []).length}, widgetSignIn=${data.widgetSignIn}`
     )
 
     const headers = getRequestHeaders()
@@ -247,8 +248,15 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
         ? normalizeDomains(data.allowedDomains)
         : (before.access?.allowedDomains ?? [])
 
+    const nextWidgetSignIn =
+      data.widgetSignIn !== undefined ? data.widgetSignIn : (before.access?.widgetSignIn ?? false)
+
     const updated = await updatePortalConfig({
-      access: { visibility: data.visibility, allowedDomains: normalizedDomains },
+      access: {
+        visibility: data.visibility,
+        allowedDomains: normalizedDomains,
+        widgetSignIn: nextWidgetSignIn,
+      },
     })
 
     const prevVisibility = before.access?.visibility ?? 'public'
@@ -276,6 +284,18 @@ export const updatePortalAccessFn = createServerFn({ method: 'POST' })
         target: { type: 'settings', id: 'portal-config' },
         before: { allowedDomains: prevDomains },
         after: { allowedDomains: nextDomains },
+      })
+    }
+
+    const prevWidgetSignIn = before.access?.widgetSignIn ?? false
+    if (data.widgetSignIn !== undefined && prevWidgetSignIn !== data.widgetSignIn) {
+      await recordAuditEvent({
+        event: 'portal.widget_signin.changed',
+        actor,
+        headers,
+        target: { type: 'settings', id: 'portal-config' },
+        before: { widgetSignIn: prevWidgetSignIn },
+        after: { widgetSignIn: data.widgetSignIn },
       })
     }
 

@@ -69,6 +69,8 @@ export type AuditEventType =
   // v1 portal widget sign-in handshake
   | 'portal.widget_handshake.consumed'
   | 'portal.widget_handshake.invalid'
+  // v1 portal widget sign-in toggle
+  | 'portal.widget_signin.changed'
 
 export type AuditEventOutcome = 'success' | 'failure'
 

@@ -258,6 +258,62 @@ describe('updatePortalAccessFn — audit events', () => {
     // No domains key in payload, so no domain audit; no visibility change.
     expect(hoisted.mockRecordAuditEvent).not.toHaveBeenCalled()
   })
+
+  it('emits portal.widget_signin.changed when widgetSignIn flips', async () => {
+    hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
+    hoisted.mockGetPortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
+    })
+    hoisted.mockUpdatePortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: true },
+    })
+
+    await updatePortalAccessHandler({ data: { visibility: 'private', widgetSignIn: true } })
+
+    const widgetCall = hoisted.mockRecordAuditEvent.mock.calls.find(
+      (c) => (c[0] as { event: string }).event === 'portal.widget_signin.changed'
+    )
+    expect(widgetCall).toBeDefined()
+    expect(widgetCall![0]).toMatchObject({
+      event: 'portal.widget_signin.changed',
+      before: { widgetSignIn: false },
+      after: { widgetSignIn: true },
+    })
+  })
+
+  it('does NOT emit portal.widget_signin.changed when widgetSignIn is unchanged', async () => {
+    hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
+    hoisted.mockGetPortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: true },
+    })
+    hoisted.mockUpdatePortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: true },
+    })
+
+    await updatePortalAccessHandler({ data: { visibility: 'private', widgetSignIn: true } })
+
+    const widgetCall = hoisted.mockRecordAuditEvent.mock.calls.find(
+      (c) => (c[0] as { event: string }).event === 'portal.widget_signin.changed'
+    )
+    expect(widgetCall).toBeUndefined()
+  })
+
+  it('does NOT emit portal.widget_signin.changed when widgetSignIn is absent from payload', async () => {
+    hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
+    hoisted.mockGetPortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [], widgetSignIn: false },
+    })
+    hoisted.mockUpdatePortalConfig.mockResolvedValue({
+      access: { visibility: 'private', allowedDomains: [] },
+    })
+
+    await updatePortalAccessHandler({ data: { visibility: 'private' } })
+
+    const widgetCall = hoisted.mockRecordAuditEvent.mock.calls.find(
+      (c) => (c[0] as { event: string }).event === 'portal.widget_signin.changed'
+    )
+    expect(widgetCall).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------
