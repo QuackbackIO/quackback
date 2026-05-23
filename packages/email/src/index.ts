@@ -205,10 +205,11 @@ interface SendPortalInviteParams {
   workspaceName: string
   inviteLink: string
   logoUrl?: string
+  personalMessage?: string
 }
 
 export async function sendPortalInviteEmail(params: SendPortalInviteParams): Promise<EmailResult> {
-  const { to, workspaceName, inviteLink, logoUrl } = params
+  const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
 
   if (getProvider() === 'console') {
     console.log('\n┌────────────────────────────────────────────────────────────')
@@ -224,7 +225,7 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
   return sendEmail({
     to,
     subject: `You've been invited to ${workspaceName}`,
-    react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl }),
+    react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
   })
 }
 
