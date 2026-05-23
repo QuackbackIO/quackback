@@ -121,8 +121,15 @@ export const Route = createFileRoute('/auth/widget-handoff')({
       const single = verifyResponse.headers.get('set-cookie')
       if (single) setCookieValues.push(single)
     }
-    for (const cookie of setCookieValues) {
-      setResponseHeader('Set-Cookie', cookie)
+    // Pass the array so h3/Node emits a separate Set-Cookie line per cookie.
+    // Calling setResponseHeader in a loop would overwrite (set, not append),
+    // losing all but the last. The array form is multi-value-safe at runtime
+    // even though the TS signature only types it as string.
+    if (setCookieValues.length > 0) {
+      ;(setResponseHeader as (name: string, value: string | string[]) => void)(
+        'Set-Cookie',
+        setCookieValues
+      )
     }
 
     // Parse the session info from the BA response body.
