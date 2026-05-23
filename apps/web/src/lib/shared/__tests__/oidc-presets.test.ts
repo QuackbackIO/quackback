@@ -26,4 +26,8 @@ describe('detectOidcProvider', () => {
     expect(detectOidcProvider('')).toBeNull()
     expect(detectOidcProvider(null)).toBeNull()
   })
+  it('rejects spoofed subdomain attempts (anchored pattern)', () => {
+    expect(detectOidcProvider('https://dev-123.okta.com.attacker.example')).toBeNull()
+    expect(detectOidcProvider('https://acme.onelogin.com.attacker.example')).toBeNull()
+  })
 })

@@ -13,7 +13,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
-import { and, auditLog, db, desc, eq, gte, ilike, lte } from '@/lib/server/db'
+import { and, auditLog, db, desc, eq, gte, ilike, lte, notInArray } from '@/lib/server/db'
 import type { SQL } from 'drizzle-orm'
 import type { AuditEventOutcome, JsonValue } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
@@ -37,6 +37,13 @@ const listAuditEventsInput = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   limit: z.number().int().positive().optional(),
+  /**
+   * Event types to exclude from results. Used by the default view to
+   * suppress high-volume events (e.g. portal.widget_handshake.consumed)
+   * unless the user explicitly opts in. Ignored when `eventType` is set
+   * — a deliberate selection always wins.
+   */
+  excludeEventTypes: z.array(z.string()).optional(),
 })
 
 export type AuditEventRow = {
@@ -73,6 +80,11 @@ export const listAuditEventsFn = createServerFn({ method: 'GET' })
     }
     if (data.from) conditions.push(gte(auditLog.occurredAt, new Date(data.from)))
     if (data.to) conditions.push(lte(auditLog.occurredAt, new Date(data.to)))
+    // Only apply the exclusion list when no specific eventType is selected — a
+    // deliberate selection always wins over the default-hide behaviour.
+    if (!data.eventType && data.excludeEventTypes && data.excludeEventTypes.length > 0) {
+      conditions.push(notInArray(auditLog.eventType, data.excludeEventTypes))
+    }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 

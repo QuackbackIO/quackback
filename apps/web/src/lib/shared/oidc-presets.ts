@@ -15,7 +15,7 @@ export const OIDC_PRESETS: OidcPreset[] = [
   {
     id: 'okta',
     label: 'Okta',
-    issuerPattern: /\.okta\.com/i,
+    issuerPattern: /\.okta\.com$/i,
     issuerTemplate: 'https://{your-org}.okta.com',
   },
   {
@@ -27,7 +27,7 @@ export const OIDC_PRESETS: OidcPreset[] = [
   {
     id: 'onelogin',
     label: 'OneLogin',
-    issuerPattern: /\.onelogin\.com/i,
+    issuerPattern: /\.onelogin\.com$/i,
     issuerTemplate: 'https://{your-org}.onelogin.com/oidc/2',
   },
 ]

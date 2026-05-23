@@ -474,6 +474,7 @@ export const adminQueries = {
     from?: string
     to?: string
     limit?: number
+    excludeEventTypes?: string[]
   }) =>
     queryOptions({
       queryKey: ['admin', 'auditEvents', filters],

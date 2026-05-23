@@ -18,6 +18,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -230,9 +232,25 @@ export function AuditLogPage() {
   const [eventType, setEventType] = useState<string>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
   const [actorEmailInput, setActorEmailInput] = useState<string>('')
+  // Widget-activity rows are high-volume; hide them by default.
+  const [includeWidgetActivity, setIncludeWidgetActivity] = useState<boolean>(false)
+
   // Debounce so each keystroke doesn't fire a fresh server-fn request.
   // 300ms feels instant without spamming.
   const debouncedActorEmail = useDebouncedValue(actorEmailInput, 300)
+
+  // Collect event types that are hidden unless the user explicitly opts in.
+  const defaultExcludedEventTypes = useMemo(
+    () => FILTER_EVENT_TYPES.filter((o) => o.excludeByDefault).map((o) => o.value),
+    []
+  )
+
+  // When the user picks a specific event type the dropdown selection wins —
+  // exclusions only apply to the catch-all "all events" view.
+  const excludeEventTypes = useMemo(
+    () => (eventType === 'all' && !includeWidgetActivity ? defaultExcludedEventTypes : []),
+    [eventType, includeWidgetActivity, defaultExcludedEventTypes]
+  )
 
   const filters = useMemo(
     () => ({
@@ -240,8 +258,9 @@ export function AuditLogPage() {
       actorEmail: debouncedActorEmail.trim() || undefined,
       from: rangeToFromIso(timeRange),
       limit: 200,
+      excludeEventTypes: excludeEventTypes.length > 0 ? excludeEventTypes : undefined,
     }),
-    [eventType, timeRange, debouncedActorEmail]
+    [eventType, timeRange, debouncedActorEmail, excludeEventTypes]
   )
 
   const { data } = useSuspenseQuery(adminQueries.auditEvents(filters))
@@ -305,6 +324,29 @@ export function AuditLogPage() {
             className="h-9 w-full sm:w-56 text-xs"
             aria-label="Filter audit events by actor email"
           />
+          {/* Widget-activity toggle — shown only when "all events" is selected so
+           *  it's clear what it controls. When a specific type is chosen the user
+           *  already sees exactly what they asked for. */}
+          {eventType === 'all' && (
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <Checkbox
+                  id="include-widget-activity"
+                  checked={includeWidgetActivity}
+                  onCheckedChange={(checked) => setIncludeWidgetActivity(checked === true)}
+                />
+                <Label
+                  htmlFor="include-widget-activity"
+                  className="text-xs font-normal cursor-pointer select-none"
+                >
+                  Include widget activity
+                </Label>
+              </div>
+              <p className="text-[10px] text-muted-foreground pl-5">
+                Widget access events are high-volume and are hidden by default.
+              </p>
+            </div>
+          )}
         </div>
         <Button
           variant="outline"
