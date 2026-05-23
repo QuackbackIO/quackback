@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin API Keys Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/api-keys')
+    // API keys live under the Developers page → Keys tab.
+    await page.goto('/admin/settings/developers?tab=keys')
     await page.waitForLoadState('networkidle')
   })
 
@@ -12,9 +13,9 @@ test.describe('Admin API Keys Settings', () => {
   })
 
   test('shows page header description', async ({ page }) => {
-    await expect(
-      page.getByText(/manage api keys for programmatic access/i)
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/manage api keys for programmatic access/i)).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('shows create API key button or empty state action', async ({ page }) => {
@@ -124,7 +125,10 @@ test.describe('Admin API Keys Settings', () => {
     await page.waitForTimeout(500)
 
     // If there are existing keys, check name and "Created X ago" text
-    const keyItems = page.locator('div').filter({ has: page.locator('code') }).first()
+    const keyItems = page
+      .locator('div')
+      .filter({ has: page.locator('code') })
+      .first()
 
     if ((await keyItems.count()) > 0) {
       // Creation date uses formatDistanceToNow — matches "ago"

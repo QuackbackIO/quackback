@@ -98,7 +98,7 @@ describe('buildNavSections', () => {
     expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Customers'])
   })
 
-  it('Administration contains Members, Integrations, Security, Audit log, API, Experimental in that order', () => {
+  it('Administration contains Members, Integrations, Security, Audit log, Developers, Experimental in that order', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
     expect(administration.items.map((i) => i.label)).toEqual([
@@ -106,7 +106,7 @@ describe('buildNavSections', () => {
       'Integrations',
       'Security',
       'Audit log',
-      'API',
+      'Developers',
       'Experimental',
     ])
   })
@@ -139,11 +139,11 @@ describe('buildNavSections', () => {
     expect(integrations.to).toBe('/admin/settings/integrations')
   })
 
-  it('API points at the combined api URL', () => {
+  it('Developers points at the developers URL', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
-    const api = administration.items.find((i) => i.label === 'API')!
-    expect(api.to).toBe('/admin/settings/api')
+    const developers = administration.items.find((i) => i.label === 'Developers')!
+    expect(developers.to).toBe('/admin/settings/developers')
   })
 
   it('Experimental points at the experimental URL', () => {

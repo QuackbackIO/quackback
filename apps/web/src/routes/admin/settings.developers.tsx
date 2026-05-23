@@ -21,7 +21,7 @@ const searchSchema = z.object({
 
 type ApiTab = 'keys' | 'webhooks' | 'mcp'
 
-export const Route = createFileRoute('/admin/settings/api')({
+export const Route = createFileRoute('/admin/settings/developers')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
@@ -60,8 +60,8 @@ function ApiPage() {
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
       <PageHeader
-        icon={KeyIcon}
-        title="API"
+        icon={CommandLineIcon}
+        title="Developers"
         description="API keys, webhooks, and the MCP server for programmatic integrations."
       />
 
@@ -71,7 +71,7 @@ function ApiPage() {
           // Callback form preserves any other search params on the URL —
           // a literal `{ tab }` would silently strip them.
           void navigate({
-            to: '/admin/settings/api',
+            to: '/admin/settings/developers',
             search: (prev) => ({ ...prev, tab: next as ApiTab }),
             replace: true,
           })
