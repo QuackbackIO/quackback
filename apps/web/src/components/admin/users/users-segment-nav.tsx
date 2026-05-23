@@ -40,7 +40,12 @@ export function UsersSegmentNav({
   isLoading,
   selectedSegmentIds,
   onSelectSegment,
-  onClearSegments,
+  // `onClearSegments` is part of the public prop shape (the mobile
+  // selector below + downstream callers still pass it), but the
+  // 'All users' click handler now uses a single navigate that strips
+  // both `invites` and `segments` at once — see the comment on that
+  // button. Calling onClearSegments here would re-introduce the race.
+  onClearSegments: _onClearSegments,
   totalUserCount,
   onCreateSegment,
   onEditSegment,
@@ -63,21 +68,25 @@ export function UsersSegmentNav({
         <div className="space-y-1">
           {/* All users — clearing both segment selection and invites mode
               brings the user back here. Both can be active at once
-              (e.g. `?segments=abc&invites=pending`), so we clear both
-              unconditionally — using if/else would require two clicks. */}
+              (e.g. `?segments=abc&invites=pending`), so we strip both
+              in a SINGLE navigate — splitting it across two updates
+              (one for invites, then `onClearSegments` for segments)
+              races: the second navigate re-includes the key the first
+              one just cleared because it reads search state from a
+              snapshot taken before the first navigate settled. */}
           <button
             type="button"
             onClick={() => {
-              if (inInvitesMode) {
-                void navigate({
-                  from: '/admin/users',
-                  search: (prev) => ({ ...prev, invites: undefined }),
-                  replace: true,
-                })
-              }
-              if (hasSelection) {
-                onClearSegments()
-              }
+              if (!inInvitesMode && !hasSelection) return
+              void navigate({
+                from: '/admin/users',
+                search: (prev) => ({
+                  ...prev,
+                  invites: undefined,
+                  segments: undefined,
+                }),
+                replace: true,
+              })
             }}
             className={cn(
               'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
