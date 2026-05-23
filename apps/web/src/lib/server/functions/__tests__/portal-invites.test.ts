@@ -138,6 +138,7 @@ const SEND_IDX = 0
 const CANCEL_IDX = 1
 const RESEND_IDX = 2
 const FETCH_IDX = 3
+const GET_LINK_IDX = 4
 
 const ADMIN_AUTH = {
   user: { id: 'user_admin', email: 'admin@acme.com', name: 'Admin' },
@@ -150,6 +151,7 @@ let sendHandler: AnyHandler
 let cancelHandler: AnyHandler
 let resendHandler: AnyHandler
 let fetchHandler: NoArgHandler
+let getLinkHandler: AnyHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -162,6 +164,7 @@ beforeEach(async () => {
   cancelHandler = handlers[CANCEL_IDX] as AnyHandler
   resendHandler = handlers[RESEND_IDX] as AnyHandler
   fetchHandler = handlers[FETCH_IDX] as NoArgHandler
+  getLinkHandler = handlers[GET_LINK_IDX] as AnyHandler
 
   // Sensible defaults
   hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
@@ -193,40 +196,44 @@ beforeEach(async () => {
 describe('sendPortalInviteFn — auth gate', () => {
   it('rejects non-admin callers', async () => {
     hoisted.mockRequireAuth.mockRejectedValue(new Error('Access denied: Requires [admin]'))
-    await expect(sendHandler({ data: { email: 'user@example.com' } })).rejects.toThrow(
+    await expect(sendHandler({ data: { emails: ['user@example.com'] } })).rejects.toThrow(
       'Access denied'
     )
   })
 })
 
-describe('sendPortalInviteFn — validation', () => {
-  it('rejects when email belongs to a team member (admin)', async () => {
+describe('sendPortalInviteFn — validation (per-email, single)', () => {
+  it('returns ok:false when email belongs to a team member (admin)', async () => {
     hoisted.mockDbQuery.user.findFirst.mockResolvedValue({ id: 'user_1' })
     hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({ role: 'admin' })
 
-    await expect(sendHandler({ data: { email: 'admin@acme.com' } })).rejects.toThrow(
-      'already a team member'
-    )
+    const result = await sendHandler({ data: { emails: ['admin@acme.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; error?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'admin@acme.com', ok: false })
+    expect(r.results[0].error).toMatch(/already a team member/)
   })
 
-  it('rejects when email belongs to a team member (member)', async () => {
+  it('returns ok:false when email belongs to a team member (member)', async () => {
     hoisted.mockDbQuery.user.findFirst.mockResolvedValue({ id: 'user_1' })
     hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({ role: 'member' })
 
-    await expect(sendHandler({ data: { email: 'member@acme.com' } })).rejects.toThrow(
-      'already a team member'
-    )
+    const result = await sendHandler({ data: { emails: ['member@acme.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; error?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'member@acme.com', ok: false })
+    expect(r.results[0].error).toMatch(/already a team member/)
   })
 
   it('allows invite when user exists as role=user (portal user)', async () => {
     hoisted.mockDbQuery.user.findFirst.mockResolvedValue({ id: 'user_1' })
     hoisted.mockDbQuery.principal.findFirst.mockResolvedValue({ role: 'user' })
 
-    const result = await sendHandler({ data: { email: 'portaluser@example.com' } })
-    expect((result as { inviteId: string }).inviteId).toBe('invite_test')
+    const result = await sendHandler({ data: { emails: ['portaluser@example.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; inviteId?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'portaluser@example.com', ok: true })
+    expect(r.results[0].inviteId).toBe('invite_test')
   })
 
-  it('rejects when a pending portal invite already exists', async () => {
+  it('returns ok:false when a pending portal invite already exists', async () => {
     hoisted.mockDbQuery.user.findFirst.mockResolvedValue(null)
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_existing',
@@ -234,15 +241,16 @@ describe('sendPortalInviteFn — validation', () => {
       kind: 'portal',
     })
 
-    await expect(sendHandler({ data: { email: 'someone@example.com' } })).rejects.toThrow(
-      'pending portal invitation has already been sent'
-    )
+    const result = await sendHandler({ data: { emails: ['someone@example.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; error?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'someone@example.com', ok: false })
+    expect(r.results[0].error).toMatch(/pending portal invitation has already been sent/)
   })
 })
 
-describe('sendPortalInviteFn — success', () => {
+describe('sendPortalInviteFn — success (single)', () => {
   it('inserts a row with kind=portal and status=pending', async () => {
-    await sendHandler({ data: { email: 'newuser@example.com' } })
+    await sendHandler({ data: { emails: ['newuser@example.com'] } })
 
     const insertCall = hoisted.mockDbInsert.mock.calls[0][0] as Record<string, unknown>
     expect(insertCall.kind).toBe('portal')
@@ -253,7 +261,7 @@ describe('sendPortalInviteFn — success', () => {
   })
 
   it('normalizes the email to lowercase', async () => {
-    await sendHandler({ data: { email: 'MixedCase@EXAMPLE.COM' } })
+    await sendHandler({ data: { emails: ['MixedCase@EXAMPLE.COM'] } })
 
     const insertCall = hoisted.mockDbInsert.mock.calls[0][0] as Record<string, unknown>
     expect(insertCall.email).toBe('mixedcase@example.com')
@@ -262,7 +270,7 @@ describe('sendPortalInviteFn — success', () => {
   it('calls sendPortalInviteEmail with the magic link', async () => {
     hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: true })
 
-    await sendHandler({ data: { email: 'invitee@example.com' } })
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
 
     expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -273,7 +281,7 @@ describe('sendPortalInviteFn — success', () => {
   })
 
   it('records a portal.invite.sent audit event', async () => {
-    await sendHandler({ data: { email: 'invitee@example.com' } })
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
 
     const auditCall = hoisted.mockRecordAuditEvent.mock.calls.find(
       (c) => (c[0] as { event: string }).event === 'portal.invite.sent'
@@ -281,27 +289,125 @@ describe('sendPortalInviteFn — success', () => {
     expect(auditCall).toBeDefined()
   })
 
-  it('returns inviteId', async () => {
-    const result = await sendHandler({ data: { email: 'invitee@example.com' } })
-    expect((result as { inviteId: string }).inviteId).toBe('invite_test')
+  it('returns results array with ok:true and inviteId', async () => {
+    const result = await sendHandler({ data: { emails: ['invitee@example.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; inviteId?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'invitee@example.com', ok: true })
+    expect(r.results[0].inviteId).toBe('invite_test')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// sendPortalInviteFn — bulk
+// ---------------------------------------------------------------------------
+
+describe('sendPortalInviteFn — bulk', () => {
+  it('accepts an array of emails and returns per-email results', async () => {
+    const result = await sendHandler({ data: { emails: ['a@acme.com', 'b@acme.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean }> }
+    expect(r.results).toHaveLength(2)
+    expect(r.results[0]).toMatchObject({ email: 'a@acme.com', ok: true })
+    expect(r.results[1]).toMatchObject({ email: 'b@acme.com', ok: true })
   })
 
-  it('returns inviteLink when email is not configured', async () => {
-    hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: false })
+  it('returns per-email failures without failing the whole batch', async () => {
+    // b@acme.com has a pending invite; a@acme.com is clean
+    hoisted.mockDbQuery.invitation.findFirst
+      .mockResolvedValueOnce(null) // a@acme.com: no pending invite
+      .mockResolvedValueOnce({
+        id: 'invite_existing',
+        status: 'pending',
+        kind: 'portal',
+      }) // b@acme.com: has pending invite
+    hoisted.mockDbQuery.user.findFirst.mockResolvedValue(null)
 
-    const result = await sendHandler({ data: { email: 'invitee@example.com' } })
-    const r = result as { emailSent: boolean; inviteLink?: string }
-    expect(r.emailSent).toBe(false)
-    expect(r.inviteLink).toBeDefined()
+    const result = await sendHandler({ data: { emails: ['a@acme.com', 'b@acme.com'] } })
+    const r = result as {
+      results: Array<{ email: string; ok: boolean; error?: string }>
+    }
+    expect(r.results[0]).toMatchObject({ email: 'a@acme.com', ok: true })
+    expect(r.results[1]).toMatchObject({ email: 'b@acme.com', ok: false })
+    expect(r.results[1].error).toMatch(/pending/)
   })
 
-  it('does NOT return inviteLink when email is sent', async () => {
-    hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: true })
+  it('rejects when the bulk size exceeds the cap', async () => {
+    const emails = Array.from({ length: 51 }, (_, i) => `u${i}@acme.com`)
+    await expect(sendHandler({ data: { emails } })).rejects.toThrow(/at most 50/i)
+  })
 
-    const result = await sendHandler({ data: { email: 'invitee@example.com' } })
-    const r = result as { emailSent: boolean; inviteLink?: string }
-    expect(r.emailSent).toBe(true)
-    expect(r.inviteLink).toBeUndefined()
+  it('passes the optional message through to sendPortalInviteEmail', async () => {
+    await sendHandler({ data: { emails: ['a@acme.com'], message: 'Welcome!' } })
+    expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ personalMessage: 'Welcome!' })
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getPortalInviteLinkFn
+// ---------------------------------------------------------------------------
+
+describe('getPortalInviteLinkFn', () => {
+  it('mints a fresh magic-link URL for a pending portal invite', async () => {
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_abc',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    })
+    hoisted.mockMintMagicLinkUrl.mockResolvedValue(
+      'https://acme.example.com/verify-magic-link?token=xyz'
+    )
+
+    const result = await getLinkHandler({ data: { inviteId: 'invite_abc' } })
+    const r = result as { inviteLink: string; expiresAt: Date }
+    expect(r.inviteLink).toMatch(/verify-magic-link/)
+    expect(r.expiresAt).toBeInstanceOf(Date)
+  })
+
+  it('rejects for a non-portal invite kind (returns null from DB)', async () => {
+    // findFirst returns null because kind='team' is filtered out in the WHERE clause
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue(null)
+    await expect(getLinkHandler({ data: { inviteId: 'invite_team' } })).rejects.toThrow(
+      'PORTAL_INVITE_NOT_FOUND'
+    )
+  })
+
+  it('rejects for a non-pending invite', async () => {
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_accepted',
+      kind: 'portal',
+      status: 'accepted',
+      email: 'user@example.com',
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    })
+    await expect(getLinkHandler({ data: { inviteId: 'invite_accepted' } })).rejects.toThrow()
+  })
+
+  it('emits portal.invite.link_minted audit on success', async () => {
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_abc',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    })
+    hoisted.mockMintMagicLinkUrl.mockResolvedValue(
+      'https://acme.example.com/verify-magic-link?token=xyz'
+    )
+
+    await getLinkHandler({ data: { inviteId: 'invite_abc' } })
+    expect(hoisted.mockRecordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'portal.invite.link_minted' })
+    )
+  })
+
+  it('rejects non-admin callers', async () => {
+    hoisted.mockRequireAuth.mockRejectedValue(new Error('Access denied: Requires [admin]'))
+    await expect(getLinkHandler({ data: { inviteId: 'invite_abc' } })).rejects.toThrow(
+      'Access denied'
+    )
   })
 })
 
@@ -515,11 +621,13 @@ describe('sendPortalInviteFn — expired pending invite is not a blocker', () =>
     // null because the stale row is excluded — the findFirst mock simulates this.
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue(null)
 
-    const result = await sendHandler({ data: { email: 'returning@example.com' } })
-    expect((result as { inviteId: string }).inviteId).toBe('invite_test')
+    const result = await sendHandler({ data: { emails: ['returning@example.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; inviteId?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'returning@example.com', ok: true })
+    expect(r.results[0].inviteId).toBe('invite_test')
   })
 
-  it('still blocks when a non-expired pending invite exists', async () => {
+  it('still blocks (per-email failure) when a non-expired pending invite exists', async () => {
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_active',
       status: 'pending',
@@ -527,9 +635,10 @@ describe('sendPortalInviteFn — expired pending invite is not a blocker', () =>
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     })
 
-    await expect(sendHandler({ data: { email: 'someone@example.com' } })).rejects.toThrow(
-      'pending portal invitation has already been sent'
-    )
+    const result = await sendHandler({ data: { emails: ['someone@example.com'] } })
+    const r = result as { results: Array<{ email: string; ok: boolean; error?: string }> }
+    expect(r.results[0]).toMatchObject({ email: 'someone@example.com', ok: false })
+    expect(r.results[0].error).toMatch(/pending portal invitation has already been sent/)
   })
 })
 

@@ -66,6 +66,7 @@ export type AuditEventType =
   | 'portal.invite.sent'
   | 'portal.invite.accepted'
   | 'portal.invite.revoked'
+  | 'portal.invite.link_minted'
   // v1 portal widget sign-in toggle
   | 'portal.widget_signin.changed'
   // v1 widget OTT handoff

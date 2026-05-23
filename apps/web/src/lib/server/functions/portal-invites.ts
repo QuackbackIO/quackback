@@ -28,11 +28,21 @@ const PORTAL_INVITE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000
 // Schemas
 // ---------------------------------------------------------------------------
 
+const PORTAL_INVITE_BATCH_CAP = 50
+
 const sendPortalInviteSchema = z.object({
-  email: z.string().email(),
+  emails: z
+    .array(z.string().email())
+    .min(1, 'At least one email is required')
+    .max(PORTAL_INVITE_BATCH_CAP, `Send at most ${PORTAL_INVITE_BATCH_CAP} invites at a time`),
+  message: z.string().trim().max(500).optional(),
 })
 
 const portalInviteByIdSchema = z.object({
+  inviteId: z.string(),
+})
+
+const portalInviteLinkSchema = z.object({
   inviteId: z.string(),
 })
 
@@ -61,97 +71,155 @@ async function mintPortalInviteMagicLink(
 // sendPortalInviteFn
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// sendOnePortalInvite — per-email helper used by sendPortalInviteFn
+// ---------------------------------------------------------------------------
+
+type SendOnePortalInviteArgs = {
+  email: string
+  message: string | undefined
+  batchId: string | undefined
+  auth: Awaited<ReturnType<typeof requireAuth>>
+  headers: Headers
+  actor: ReturnType<typeof actorFromAuth>
+}
+
+async function sendOnePortalInvite({
+  email,
+  message,
+  batchId,
+  auth,
+  headers,
+  actor,
+}: SendOnePortalInviteArgs): Promise<string> {
+  // Reject if the email already belongs to a team member.
+  const existingTeamUser = await db.query.user.findFirst({
+    where: eq(user.email, email),
+  })
+  if (existingTeamUser) {
+    const existingPrincipal = await db.query.principal.findFirst({
+      where: eq(principal.userId, existingTeamUser.id),
+    })
+    if (
+      existingPrincipal &&
+      (existingPrincipal.role === 'admin' || existingPrincipal.role === 'member')
+    ) {
+      throw new Error('This person is already a team member and has access to the portal.')
+    }
+  }
+
+  // Reject if a non-expired pending portal invite already exists.
+  const now = new Date()
+  const existingInvite = await db.query.invitation.findFirst({
+    where: and(
+      eq(invitation.email, email),
+      eq(invitation.kind, 'portal'),
+      eq(invitation.status, 'pending'),
+      gt(invitation.expiresAt, now)
+    ),
+  })
+  if (existingInvite) {
+    throw new Error('A pending portal invitation has already been sent to this email address.')
+  }
+
+  const inviteId = generateId('invite')
+  const expiresAt = new Date(now.getTime() + PORTAL_INVITE_EXPIRY_MS)
+
+  await db.insert(invitation).values({
+    id: inviteId,
+    email,
+    name: null,
+    role: null,
+    kind: 'portal',
+    status: 'pending',
+    expiresAt,
+    createdAt: now,
+    lastSentAt: now,
+    inviterId: auth.user.id as UserId,
+  })
+
+  const portalUrl = getBaseUrl()
+  const inviteLink = await mintPortalInviteMagicLink(email, inviteId, portalUrl)
+
+  const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+  const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+  await sendPortalInviteEmail({
+    to: email,
+    workspaceName: auth.settings.name,
+    inviteLink,
+    logoUrl,
+    personalMessage: message,
+  })
+
+  await recordAuditEvent({
+    event: 'portal.invite.sent',
+    actor,
+    headers,
+    target: { type: 'invitation', id: inviteId },
+    metadata: {
+      email,
+      expiresAt: expiresAt.toISOString(),
+      hasMessage: !!message,
+      ...(batchId ? { batchId } : {}),
+    },
+  })
+
+  console.log(`[fn:portal-invites] sendOnePortalInvite: sent id=${inviteId} email=${email}`)
+  return inviteId
+}
+
+// ---------------------------------------------------------------------------
+// sendPortalInviteFn
+// ---------------------------------------------------------------------------
+
+type SendPortalInviteResult = {
+  results: Array<
+    { email: string; ok: true; inviteId: string } | { email: string; ok: false; error: string }
+  >
+}
+
 /**
- * Send a portal-access invitation to the given email address.
+ * Send portal-access invitations to one or more email addresses (up to 50).
  *
- * Rejects when:
- *   - The email already belongs to a team member (they already have access).
- *   - A pending portal invite for that email already exists.
- *
- * Inserts an `invitation` row with `kind='portal'`, mints a magic-link, and
- * sends the portal-invite email. Records a `portal.invite.sent` audit event.
+ * Returns a per-email result so callers can surface partial failures without
+ * throwing on the first bad address. Each successful send emits a
+ * `portal.invite.sent` audit event. An optional personal message is
+ * forwarded to the email template.
  */
 export const sendPortalInviteFn = createServerFn({ method: 'POST' })
   .inputValidator(sendPortalInviteSchema)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): Promise<SendPortalInviteResult> => {
     const auth = await requireAuth({ roles: ['admin'] })
-    const email = data.email.toLowerCase().trim()
     const headers = getRequestHeaders()
     const actor = actorFromAuth(auth)
+    const message = data.message?.trim() || undefined
 
-    console.log(`[fn:portal-invites] sendPortalInviteFn: email=${email}`)
+    if (data.emails.length > PORTAL_INVITE_BATCH_CAP) {
+      throw new Error(`Send at most ${PORTAL_INVITE_BATCH_CAP} invites at a time`)
+    }
 
-    // Reject if the email already belongs to a team member.
-    const existingTeamUser = await db.query.user.findFirst({
-      where: eq(user.email, email),
-    })
-    if (existingTeamUser) {
-      const existingPrincipal = await db.query.principal.findFirst({
-        where: eq(principal.userId, existingTeamUser.id),
-      })
-      if (
-        existingPrincipal &&
-        (existingPrincipal.role === 'admin' || existingPrincipal.role === 'member')
-      ) {
-        throw new Error('This person is already a team member and has access to the portal.')
+    const batchId = data.emails.length > 1 ? `batch_${crypto.randomUUID()}` : undefined
+
+    const results: SendPortalInviteResult['results'] = []
+    for (const rawEmail of data.emails) {
+      const email = rawEmail.toLowerCase().trim()
+      try {
+        const inviteId = await sendOnePortalInvite({
+          email,
+          message,
+          batchId,
+          auth,
+          headers,
+          actor,
+        })
+        results.push({ email, ok: true, inviteId })
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        console.warn(`[fn:portal-invites] bulk send failed for ${email}:`, errorMsg)
+        results.push({ email, ok: false, error: errorMsg })
       }
     }
-
-    // Reject if a non-expired pending portal invite already exists.
-    // An expired pending row no longer blocks — a fresh invite can be sent.
-    const now = new Date()
-    const existingInvite = await db.query.invitation.findFirst({
-      where: and(
-        eq(invitation.email, email),
-        eq(invitation.kind, 'portal'),
-        eq(invitation.status, 'pending'),
-        gt(invitation.expiresAt, now)
-      ),
-    })
-    if (existingInvite) {
-      throw new Error('A pending portal invitation has already been sent to this email address.')
-    }
-
-    const inviteId = generateId('invite')
-    const expiresAt = new Date(now.getTime() + PORTAL_INVITE_EXPIRY_MS)
-
-    await db.insert(invitation).values({
-      id: inviteId,
-      email,
-      name: null,
-      role: null,
-      kind: 'portal',
-      status: 'pending',
-      expiresAt,
-      createdAt: now,
-      lastSentAt: now,
-      inviterId: auth.user.id as UserId,
-    })
-
-    const portalUrl = getBaseUrl()
-    const inviteLink = await mintPortalInviteMagicLink(email, inviteId, portalUrl)
-
-    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    const result = await sendPortalInviteEmail({
-      to: email,
-      workspaceName: auth.settings.name,
-      inviteLink,
-      logoUrl,
-    })
-
-    await recordAuditEvent({
-      event: 'portal.invite.sent',
-      actor,
-      headers,
-      target: { type: 'invitation', id: inviteId },
-      after: { email, kind: 'portal' },
-    })
-
-    console.log(
-      `[fn:portal-invites] sendPortalInviteFn: ${result.sent ? 'sent' : 'created (email not configured)'} id=${inviteId}`
-    )
-    return { inviteId, emailSent: result.sent, inviteLink: !result.sent ? inviteLink : undefined }
+    return { results }
   })
 
 // ---------------------------------------------------------------------------
@@ -332,6 +400,46 @@ export const fetchPortalInvitesFn = createServerFn({ method: 'GET' }).handler(as
     expiresAt: inv.expiresAt.toISOString(),
   }))
 })
+
+// ---------------------------------------------------------------------------
+// getPortalInviteLinkFn
+// ---------------------------------------------------------------------------
+
+/**
+ * Mint a fresh magic-link for a pending portal invite.
+ *
+ * Admin-only. The link expires in 10 minutes. The invite row itself must
+ * be `kind='portal'`, `status='pending'`, and not past its own `expiresAt`.
+ * Records a `portal.invite.link_minted` audit event on success.
+ */
+export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
+  .inputValidator(portalInviteLinkSchema)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+    const actor = actorFromAuth(auth)
+
+    const inv = await db.query.invitation.findFirst({
+      where: and(eq(invitation.id, data.inviteId as InviteId), eq(invitation.kind, 'portal')),
+    })
+    if (!inv) throw new Error('PORTAL_INVITE_NOT_FOUND')
+    if (inv.status !== 'pending') throw new Error(`Invite is ${inv.status}, cannot mint a link`)
+    if (inv.expiresAt && inv.expiresAt < new Date()) throw new Error('Invite has expired')
+
+    const portalUrl = getBaseUrl()
+    const linkTtlSeconds = 10 * 60
+    const inviteLink = await mintPortalInviteMagicLink(inv.email, inv.id, portalUrl)
+
+    await recordAuditEvent({
+      event: 'portal.invite.link_minted',
+      outcome: 'success',
+      actor,
+      target: { type: 'invitation', id: inv.id },
+      metadata: { email: inv.email },
+    })
+
+    const expiresAt = new Date(Date.now() + linkTtlSeconds * 1000)
+    return { inviteLink, expiresAt }
+  })
 
 // ---------------------------------------------------------------------------
 // acceptPortalInviteFn
