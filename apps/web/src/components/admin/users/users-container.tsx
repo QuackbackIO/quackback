@@ -53,8 +53,12 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
 
   // Total pending-invite count powers the badge on the segment-nav entry.
   // Pulled at the container level so we don't have to drill into the
-  // invitations view to read it.
-  const { pendingCount: invitesPendingCount } = usePortalInvites()
+  // invitations view to read it. Gated on admin role — the underlying
+  // server fn requires admin and would 403 on every /admin/users mount
+  // for `member` / `user` roles otherwise.
+  const { pendingCount: invitesPendingCount } = usePortalInvites({
+    enabled: currentMemberRole === 'admin',
+  })
 
   // Server state - Users list (with infinite query for pagination)
   const {

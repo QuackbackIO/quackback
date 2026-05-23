@@ -76,68 +76,109 @@ export function SignInProvidersTab({
 
   const [oauthState, setOauthState] = useState<Record<string, boolean | undefined>>(() => ({
     ...initialPortalOauth,
-    // For built-ins, OR the two surfaces — show "on" if either side has
-    // it. Subsequent writes go to both surfaces simultaneously.
-    password: teamOauth.password !== false || initialPortalOauth.password === true,
-    magicLink: teamOauth.magicLink !== false || initialPortalOauth.magicLink === true,
+    // For built-ins, OR the two surfaces — show "on" if either side
+    // would actually accept a sign-in. Per-surface defaults mirror the
+    // runtime gates in `auth-restrictions.ts` so the seed never
+    // disagrees with what the server is accepting:
+    //   - Team password / magic-link: `!== false`  (default ON)
+    //   - Portal password:            `?? true`    (default ON)
+    //   - Portal magic-link:          `?? false`   (default OFF)
+    // Treating `undefined` on the team side as enabled (the prior
+    // `!== false` check) was correct; treating `undefined` on the
+    // portal side as disabled (the prior `=== true` check) was NOT
+    // — it produced "off" seeds on tenants whose portal password is
+    // running on the implicit default. Subsequent writes fan to both.
+    password: teamOauth.password !== false || (initialPortalOauth.password ?? true),
+    magicLink: teamOauth.magicLink !== false || (initialPortalOauth.magicLink ?? false),
   }))
 
   const emailConfigured = credentialStatus._emailConfigured !== false
   const passwordEnabled = !!oauthState.password
   const magicLinkEnabled = !!oauthState.magicLink
+  const twoFactorRequired = teamAuthConfig.twoFactor?.required === true
 
   /** "Last method standing" guard — refuses to disable the only enabled
-   *  provider so visitors aren't locked out. Counts configured+enabled
-   *  OAuth providers in addition to password + magic link. The legacy
-   *  `email` flag is excluded (migration 0049 retired it). */
+   *  provider so visitors and team admins aren't locked out. Counts only
+   *  what would *actually accept a sign-in today*:
+   *   - password — always counts when enabled
+   *   - magicLink — only when email delivery is configured (otherwise
+   *     the toggle is on but the runtime path rejects)
+   *   - social/OIDC — only when credentials are configured (the row
+   *     renders as "Not configured" otherwise and isn't usable)
+   *  Legacy `email` flag excluded (migration 0049 retired it). */
   const enabledMethodCount = Object.entries(oauthState).reduce((acc, [id, enabled]) => {
     if (!enabled) return acc
     if (id === 'email') return acc
-    if (id === 'password' || id === 'magicLink') return acc + 1
+    if (id === 'password') return acc + 1
+    if (id === 'magicLink') return emailConfigured ? acc + 1 : acc
     return credentialStatus[id] ? acc + 1 : acc
   }, 0)
-  const isLastMethod = (id: string) => !!oauthState[id] && enabledMethodCount === 1
+  const isLastMethod = (id: string) => {
+    if (!oauthState[id]) return false
+    // Mirror the same usability filter the count uses — an enabled-but-
+    // unusable row (magic link with no email config, social with no
+    // credentials) shouldn't be treated as the "last working method"
+    // because it isn't actually working.
+    if (id === 'magicLink' && !emailConfigured) return false
+    if (id !== 'password' && id !== 'magicLink' && id !== 'email' && !credentialStatus[id]) {
+      return false
+    }
+    return enabledMethodCount === 1
+  }
 
   /** Gate on what's actually *usable*: a `google: true` flag with no
    *  saved credential is shown as "Not configured" and doesn't count.
    *  When everything is off (or off + unusable), surface the warning
    *  banner — admins would otherwise have a portal that no one can
    *  sign into. */
-  const noAuthEnabled = (() => {
-    if (oauthState.password) return false
-    if (oauthState.magicLink && emailConfigured) return false
-    return !Object.entries(oauthState).some(([id, enabled]) => {
-      if (!enabled) return false
-      if (id === 'password' || id === 'magicLink' || id === 'email') return false
-      return !!credentialStatus[id]
-    })
-  })()
+  const noAuthEnabled = enabledMethodCount === 0
 
   // ---------- Save fan-out ----------
   /**
    * Toggling password / magic link writes to BOTH the team auth config
-   * and the portal oauth config in parallel. Both writes are required
-   * for the unified flag semantics; partial success would leave the two
-   * surfaces inconsistent (the very thing we're collapsing away from),
-   * so we wait for both and revert on either failure.
+   * and the portal oauth config. We do them SEQUENTIALLY (team first,
+   * then portal) so that on failure of the second call we can attempt
+   * to roll back the first one — leaving the two surfaces consistent
+   * is the entire reason the unified toggle exists. A best-effort
+   * rollback isn't perfect (the rollback itself can fail), but it's
+   * strictly better than the Promise.all behavior which silently kept
+   * the surviving server-side change.
    */
   const saveBuiltin = async (key: 'password' | 'magicLink', value: boolean) => {
     setSaving(true)
     const prevTeam = teamAuthConfig
     const prevOauth = oauthState
+    const prevValue = prevOauth[key]
     setOauthState((p) => ({ ...p, [key]: value }))
     setTeamAuthConfig((p) => ({ ...p, oauth: { ...(p.oauth ?? {}), [key]: value } }))
     try {
-      const [updated] = await Promise.all([
-        updateAuthConfigFn({ data: { oauth: { [key]: value } } }),
-        updatePortalConfigFn({ data: { oauth: { [key]: value } } }),
-      ])
+      const updated = await updateAuthConfigFn({ data: { oauth: { [key]: value } } })
+      try {
+        await updatePortalConfigFn({ data: { oauth: { [key]: value } } })
+      } catch (portalErr) {
+        // Portal write failed — team write already committed. Try to
+        // roll team back to the prior value so the server stays
+        // consistent; if rollback itself fails the surfaces drift,
+        // and we surface a more specific error so the admin knows.
+        try {
+          // `!!` coerces undefined to false. Strictly, undefined meant
+          // "rely on the runtime default"; writing false is slightly
+          // more restrictive but is the safer rollback choice on a
+          // path that exists only after a save failure.
+          await updateAuthConfigFn({ data: { oauth: { [key]: !!prevValue } } })
+        } catch {
+          toast.error(
+            'Saved on the team side but the portal save failed; rollback also failed — please reload and verify.'
+          )
+          throw portalErr
+        }
+        throw portalErr
+      }
       setTeamAuthConfig(updated)
       void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
       startTransition(() => router.invalidate())
-      toast.success('Sign-in providers saved.')
     } catch (err) {
-      // Revert both — neither surface should silently drift.
+      // Revert local state to match what the server (now) reflects.
       setOauthState(prevOauth)
       setTeamAuthConfig(prevTeam)
       toast.error(err instanceof Error ? err.message : 'Could not save settings.')
@@ -147,20 +188,45 @@ export function SignInProvidersTab({
   }
 
   /**
-   * Toggling a social / OIDC provider writes only to the portal config
-   * — that's the schema's single source of truth for those providers
-   * today. The flag governs both surfaces under the unified model; the
-   * route's auth handler treats it as "enabled platform-wide".
+   * Toggling a social / OIDC provider writes to BOTH the team auth
+   * config and the portal oauth config under the unified model —
+   * `auth-restrictions.ts:96` gates the team surface on
+   * `authConfig?.oauth?.[provider] === true`, so a portal-only write
+   * would leave the provider broken for team admin sign-in despite
+   * the UI claiming it's enabled. Same sequential + rollback shape
+   * as `saveBuiltin`.
    */
   const saveOauthProvider = async (providerId: string, checked: boolean) => {
     setSaving(true)
-    const prev = oauthState
+    const prevTeam = teamAuthConfig
+    const prevValue = oauthState[providerId]
+    // Use an updater so concurrent toggles on other providers don't
+    // get clobbered by a stale closure capture.
     setOauthState((p) => ({ ...p, [providerId]: checked }))
+    setTeamAuthConfig((p) => ({ ...p, oauth: { ...(p.oauth ?? {}), [providerId]: checked } }))
     try {
-      await updatePortalConfigFn({ data: { oauth: { [providerId]: checked } } })
+      const updated = await updateAuthConfigFn({ data: { oauth: { [providerId]: checked } } })
+      try {
+        await updatePortalConfigFn({ data: { oauth: { [providerId]: checked } } })
+      } catch (portalErr) {
+        try {
+          await updateAuthConfigFn({ data: { oauth: { [providerId]: !!prevValue } } })
+        } catch {
+          toast.error(
+            'Saved on the team side but the portal save failed; rollback also failed — please reload and verify.'
+          )
+          throw portalErr
+        }
+        throw portalErr
+      }
+      setTeamAuthConfig(updated)
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
       startTransition(() => router.invalidate())
     } catch (err) {
-      setOauthState(prev)
+      // Updater form so the revert doesn't clobber unrelated provider
+      // toggles that landed between the optimistic update and now.
+      setOauthState((p) => ({ ...p, [providerId]: prevValue }))
+      setTeamAuthConfig(prevTeam)
       toast.error(err instanceof Error ? err.message : 'Could not save settings.')
     } finally {
       setSaving(false)
@@ -217,14 +283,23 @@ export function SignInProvidersTab({
         <MethodRow
           icon={KeyIcon}
           label="Password"
-          description="Sign in with email and password."
+          description={
+            passwordEnabled && twoFactorRequired
+              ? 'Sign in with email and password. Required while 2FA enforcement is on — TOTP enrollment requires a password.'
+              : 'Sign in with email and password.'
+          }
           checked={passwordEnabled}
           onCheckedChange={(v) => void saveBuiltin('password', v)}
           disabled={
             busy ||
             isManaged('auth.oauth.password') ||
             isManaged('portalConfig.oauth.password') ||
-            isLastMethod('password')
+            isLastMethod('password') ||
+            // 2FA enforcement (Team access tab) requires password as the
+            // factor that 2FA enrolls *on top of*. Disabling password
+            // while 2FA is required would lock all team members out;
+            // mirror the guard the old Team-tab Sign-in card carried.
+            (passwordEnabled && twoFactorRequired)
           }
           badge={
             isManaged('auth.oauth.password') || isManaged('portalConfig.oauth.password')

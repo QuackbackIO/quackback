@@ -62,7 +62,9 @@ export function UsersSegmentNav({
             and the SEGMENTS subheader below provides the grouping cue. */}
         <div className="space-y-1">
           {/* All users — clearing both segment selection and invites mode
-              brings the user back here. */}
+              brings the user back here. Both can be active at once
+              (e.g. `?segments=abc&invites=pending`), so we clear both
+              unconditionally — using if/else would require two clicks. */}
           <button
             type="button"
             onClick={() => {
@@ -72,7 +74,8 @@ export function UsersSegmentNav({
                   search: (prev) => ({ ...prev, invites: undefined }),
                   replace: true,
                 })
-              } else if (hasSelection) {
+              }
+              if (hasSelection) {
                 onClearSegments()
               }
             }}

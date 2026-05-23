@@ -61,10 +61,13 @@ export function AuthSettings({
       onValueChange={(next) => {
         // URL-driven tab state. `replace: true` so the back button
         // doesn't accumulate per-click history entries within the page.
+        // Callback form preserves any other search params on the URL;
+        // a literal `{ tab }` would silently strip them, breaking any
+        // future deep-link that adds a sibling param like `?highlight=`.
         const nextTab = next as AuthTab
         void navigate({
           to: '/admin/settings/security/authentication',
-          search: { tab: nextTab },
+          search: (prev) => ({ ...prev, tab: nextTab }),
           replace: true,
         })
       }}

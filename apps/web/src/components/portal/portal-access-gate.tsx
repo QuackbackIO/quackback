@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -128,14 +129,25 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
   // Sign out + invalidate so the gate re-evaluates as unauthenticated and
   // the visitor can sign back in with a different account. Mirrors the
   // portal-header sign-out path so cookie + cache + router stay in sync.
+  //
+  // All invalidations are awaited so the spinner doesn't clear before
+  // the loader has actually re-run — otherwise the gate keeps showing
+  // the old userEmail message with a re-enabled Sign-out button for a
+  // visible frame. The signOut call itself is wrapped in catch so a
+  // CSRF / network failure surfaces a toast instead of silently
+  // bouncing back to the same screen.
   const handleSignOut = async () => {
     if (signingOut) return
     setSigningOut(true)
     try {
       await signOut()
-      queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
-      queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
-      router.invalidate()
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['portal', 'post'] }),
+        queryClient.invalidateQueries({ queryKey: ['votedPosts'] }),
+        router.invalidate(),
+      ])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sign out failed. Please try again.')
     } finally {
       setSigningOut(false)
     }
@@ -173,14 +185,14 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
             <div>
               <h1 className="text-xl font-semibold tracking-tight">You don&apos;t have access</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                This portal is private and {userEmail ? '' : 'your account'} isn&apos;t on the
-                access list.
-                {userEmail && (
+                {userEmail ? (
                   <>
-                    {' '}
                     You&apos;re signed in as{' '}
-                    <span className="font-medium text-foreground">{userEmail}</span>.
+                    <span className="font-medium text-foreground">{userEmail}</span>, but this
+                    account isn&apos;t on the access list for this private portal.
                   </>
+                ) : (
+                  <>This portal is private and your account isn&apos;t on the access list.</>
                 )}{' '}
                 Reach out to the {workspaceName} team to request access, or sign out and try a
                 different account.

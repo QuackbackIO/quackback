@@ -68,9 +68,11 @@ function ApiPage() {
       <Tabs
         value={tab}
         onValueChange={(next) => {
+          // Callback form preserves any other search params on the URL —
+          // a literal `{ tab }` would silently strip them.
           void navigate({
             to: '/admin/settings/api',
-            search: { tab: next as ApiTab },
+            search: (prev) => ({ ...prev, tab: next as ApiTab }),
             replace: true,
           })
         }}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   sendPortalInviteFn,
@@ -40,7 +40,10 @@ function partitionValidEmails(items: string[]): { valid: string[]; invalid: stri
   const valid: string[] = []
   const invalid: string[] = []
   for (const item of items) {
-    if (EMAIL_RE.test(item)) valid.push(item)
+    // Normalize valid addresses to lowercase to match the server's
+    // insert path — otherwise the failed-list rendering and any retry
+    // workflow drift from what the server actually stored.
+    if (EMAIL_RE.test(item)) valid.push(item.toLowerCase())
     else invalid.push(item)
   }
   return { valid, invalid }
@@ -59,13 +62,31 @@ function partitionValidEmails(items: string[]): { valid: string[]; invalid: stri
  *   what to show (we close on full success, keep open on partial fail).
  * - `handleResend`/`handleRevoke`: row actions, with per-row busy state.
  */
-export function usePortalInvites() {
+export interface UsePortalInvitesOptions {
+  /**
+   * Whether to actually fire the `fetchPortalInvitesFn` query. The
+   * underlying server fn requires `roles: ['admin']` and will 403 for
+   * `member` / `user`. UsersContainer mounts this hook for every
+   * /admin/users render (even non-admin members hitting the page),
+   * so callers MUST gate the query on the caller's role to avoid
+   * console-noisy 403s on every page load.
+   *
+   * Defaults to `true` so existing call sites that knew they were
+   * admin-scoped (PortalAuthTab inside Settings, which is admin-only)
+   * keep working without change.
+   */
+  enabled?: boolean
+}
+
+export function usePortalInvites(options: UsePortalInvitesOptions = {}) {
+  const { enabled = true } = options
   const queryClient = useQueryClient()
 
   const query = useQuery<PortalInvite[]>({
     queryKey: PORTAL_INVITES_QUERY_KEY,
     queryFn: () => fetchPortalInvitesFn(),
     staleTime: 30 * 1000,
+    enabled,
   })
 
   const invites = query.data ?? []
@@ -88,6 +109,27 @@ export function usePortalInvites() {
   const [sendBusy, setSendBusy] = useState(false)
   const [lastSentSummary, setLastSentSummary] = useState<string | null>(null)
 
+  // Tracks any pending fade-out timers (lastSentSummary, resendConfirm)
+  // so we can cancel them on unmount — otherwise the timeout fires
+  // setState on a torn-down hook (three live consumer components mount
+  // this hook today, so a single send leaks per navigation).
+  const timerRefs = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  useEffect(() => {
+    const timers = timerRefs.current
+    return () => {
+      timers.forEach((t) => clearTimeout(t))
+      timers.clear()
+    }
+  }, [])
+  const trackedSetTimeout = (cb: () => void, ms: number) => {
+    const t = setTimeout(() => {
+      timerRefs.current.delete(t)
+      cb()
+    }, ms)
+    timerRefs.current.add(t)
+    return t
+  }
+
   const handleDialogChange = (next: boolean) => {
     setDialogOpen(next)
     if (!next) {
@@ -95,6 +137,11 @@ export function usePortalInvites() {
       setMessageInput('')
       setEmailError(null)
       setBatchResults(null)
+      // Clear the success summary so reopening within the fade window
+      // doesn't render a stale "Sent N invites" banner above the new
+      // send. The summary's autoclear timer is also still in-flight;
+      // it'll no-op when it fires.
+      setLastSentSummary(null)
     }
   }
 
@@ -136,7 +183,7 @@ export function usePortalInvites() {
       // only those.
       if (failed.length === 0) {
         setLastSentSummary(`Sent ${sent} invite${sent === 1 ? '' : 's'}.`)
-        setTimeout(() => setLastSentSummary(null), 4000)
+        trackedSetTimeout(() => setLastSentSummary(null), 4000)
         handleDialogChange(false)
       } else {
         setBatchResults({ sent, failed })
@@ -163,7 +210,7 @@ export function usePortalInvites() {
       await resendPortalInviteFn({ data: { inviteId: id } })
       setResendConfirm(id)
       void refetch()
-      setTimeout(() => setResendConfirm((prev) => (prev === id ? null : prev)), 3000)
+      trackedSetTimeout(() => setResendConfirm((prev) => (prev === id ? null : prev)), 3000)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to resend invite.')
     } finally {
