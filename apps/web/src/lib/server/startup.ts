@@ -155,21 +155,32 @@ export function logStartupBanner(): void {
   // the configured retention window (default 365d, SOC2-aligned).
   // First sweep runs 30s after boot so it doesn't compete with
   // migrations + worker init on the startup hot path.
-  import('@/lib/server/audit/log')
-    .then(({ pruneAuditLog }) => {
-      setTimeout(() => {
-        pruneAuditLog().catch((err) =>
-          console.error('[Startup] Initial audit-log prune failed:', err)
+  //
+  // Also sweeps expired portal invitations: finds pending invites past
+  // their expiresAt, emits portal.invite.expired per invite, and bulk-
+  // updates status='expired'. Runs in the same daily timer so both
+  // maintenance tasks share a single scheduler.
+  Promise.all([import('@/lib/server/audit/log'), import('@/lib/server/audit/invite-sweep')])
+    .then(([{ pruneAuditLog }, { sweepExpiredPortalInvites }]) => {
+      const runDailyAuditMaintenance = async () => {
+        await pruneAuditLog().catch((err) =>
+          console.error('[Startup] Audit-log prune failed:', err)
         )
+        await sweepExpiredPortalInvites().catch((err) =>
+          console.error('[Startup] Invite sweep failed:', err)
+        )
+      }
+      setTimeout(() => {
+        void runDailyAuditMaintenance()
       }, 30_000)
       setInterval(
         () => {
-          pruneAuditLog().catch((err) => console.error('[Startup] Audit-log prune failed:', err))
+          void runDailyAuditMaintenance()
         },
         24 * 60 * 60 * 1000
       )
     })
-    .catch((err) => console.error('[Startup] Failed to init audit-log prune:', err))
+    .catch((err) => console.error('[Startup] Failed to init audit-log maintenance:', err))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries)
   // Runs once at startup (after a short delay) then every 30 minutes
