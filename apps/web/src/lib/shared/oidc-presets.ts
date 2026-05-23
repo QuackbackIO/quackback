@@ -37,9 +37,19 @@ export function detectOidcProvider(issuerUrl: string | undefined | null): OidcPr
   const trimmed = issuerUrl.trim()
   if (!trimmed) return null
   try {
-    const host = new URL(trimmed).host
+    const parsed = new URL(trimmed)
+    const host = parsed.host // includes explicit port, e.g. "login.microsoftonline.com:443"
+    // parsed.href is the browser-normalised form: default ports are stripped
+    // so "https://…:443/…" becomes "https://…/…". Testing it catches URLs
+    // where the user typed an explicit default port.
+    const normalised = parsed.href
     return (
-      OIDC_PRESETS.find((p) => p.issuerPattern.test(trimmed) || p.issuerPattern.test(host)) ?? null
+      OIDC_PRESETS.find(
+        (p) =>
+          p.issuerPattern.test(trimmed) ||
+          p.issuerPattern.test(host) ||
+          p.issuerPattern.test(normalised)
+      ) ?? null
     )
   } catch {
     return null

@@ -30,4 +30,8 @@ describe('detectOidcProvider', () => {
     expect(detectOidcProvider('https://dev-123.okta.com.attacker.example')).toBeNull()
     expect(detectOidcProvider('https://acme.onelogin.com.attacker.example')).toBeNull()
   })
+  it('detects Entra ID when an explicit :443 port is present in the URL', () => {
+    const p = detectOidcProvider('https://login.microsoftonline.com:443/abc-def/v2.0')
+    expect(p?.id).toBe('entra')
+  })
 })

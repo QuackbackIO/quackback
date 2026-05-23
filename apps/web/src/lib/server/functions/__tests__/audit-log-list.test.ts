@@ -54,12 +54,15 @@ vi.mock('@/lib/server/db', () => {
       id: 'audit_log.id',
       occurredAt: 'audit_log.occurred_at',
       actorUserId: 'audit_log.actor_user_id',
+      actorEmail: 'audit_log.actor_email',
       eventType: 'audit_log.event_type',
     },
     and: vi.fn((...parts) => ({ op: 'and', parts })),
     eq: vi.fn((col, val) => ({ op: 'eq', col, val })),
     gte: vi.fn((col, val) => ({ op: 'gte', col, val })),
     lte: vi.fn((col, val) => ({ op: 'lte', col, val })),
+    ilike: vi.fn((col, val) => ({ op: 'ilike', col, val })),
+    notInArray: vi.fn((col, vals) => ({ op: 'notInArray', col, vals })),
     desc: vi.fn((col) => ({ op: 'desc', col })),
     __helpers: { where, orderBy, limit, from },
   }
@@ -75,6 +78,11 @@ beforeEach(() => {
 
 await import('../audit-log')
 const listAuditEvents = handlers[0]
+
+// Grab the mock fns from the hoisted db mock so tests can inspect calls.
+const db = await import('@/lib/server/db')
+const mockNotInArray = vi.mocked(db.notInArray)
+const mockEq = vi.mocked(db.eq)
 
 function chainReturning(rows: unknown[]): unknown {
   // Track limit so the test can verify hasMore-lookahead.
@@ -153,5 +161,40 @@ describe('listAuditEventsFn', () => {
     await listAuditEvents({ data: { limit: 9999 } })
 
     expect(chain.__limit()).toBe(501)
+  })
+
+  it('applies notInArray when excludeEventTypes is set and no specific eventType is chosen', async () => {
+    hoisted.mockSelect.mockReturnValue(chainReturning([]))
+
+    await listAuditEvents({
+      data: { excludeEventTypes: ['portal.widget_handshake.consumed'] },
+    })
+
+    // notInArray should have been called with the excluded list.
+    expect(mockNotInArray).toHaveBeenCalledOnce()
+    const [col, vals] = mockNotInArray.mock.calls[0]
+    expect(col).toBe('audit_log.event_type')
+    expect(vals).toEqual(['portal.widget_handshake.consumed'])
+  })
+
+  it('does NOT apply notInArray when a specific eventType is also set (deliberate selection wins)', async () => {
+    hoisted.mockSelect.mockReturnValue(chainReturning([]))
+
+    await listAuditEvents({
+      data: {
+        eventType: 'portal.widget_handshake.consumed',
+        excludeEventTypes: ['portal.widget_handshake.consumed'],
+      },
+    })
+
+    // The explicit eventType selection suppresses the exclude list.
+    expect(mockNotInArray).not.toHaveBeenCalled()
+    // But eq should be called for the eventType filter. The mock receives the
+    // string-keyed column stubs from the auditLog mock object, so cast to
+    // inspect them as plain values.
+    const eqCalls = mockEq.mock.calls as unknown as Array<[string, string]>
+    const eqCall = eqCalls.find(([col]) => col === 'audit_log.event_type')
+    expect(eqCall).toBeDefined()
+    expect(eqCall?.[1]).toBe('portal.widget_handshake.consumed')
   })
 })

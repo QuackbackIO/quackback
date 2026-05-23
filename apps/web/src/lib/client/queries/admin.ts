@@ -470,7 +470,7 @@ export const adminQueries = {
    */
   auditEvents: (filters: {
     eventType?: string
-    actorUserId?: string
+    actorEmail?: string
     from?: string
     to?: string
     limit?: number

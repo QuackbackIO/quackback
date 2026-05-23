@@ -50,6 +50,8 @@ interface FilterEventOption {
   excludeByDefault?: boolean
 }
 
+const WIDGET_ACTIVITY_GROUP = 'Widget activity'
+
 const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { label: 'All events', value: 'all' },
   { label: 'SSO enforcement enabled (domain)', value: 'sso.enforcement.domain.enabled' },
@@ -72,13 +74,13 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
   // Widget activity — separated because handshake events are high-volume on active workspaces.
   // portal.widget_handshake.consumed is flagged excludeByDefault for future multi-select support.
   {
-    group: 'Widget activity',
+    group: WIDGET_ACTIVITY_GROUP,
     label: 'Handshake consumed',
     value: 'portal.widget_handshake.consumed',
     excludeByDefault: true,
   },
   {
-    group: 'Widget activity',
+    group: WIDGET_ACTIVITY_GROUP,
     label: 'Handshake invalid',
     value: 'portal.widget_handshake.invalid',
   },
@@ -289,7 +291,7 @@ export function AuditLogPage() {
                   <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1">
                     {group}
                   </SelectLabel>
-                  {group === 'Widget activity' && (
+                  {group === WIDGET_ACTIVITY_GROUP && (
                     <p className="px-2 pb-1 text-[10px] text-muted-foreground leading-snug">
                       Widget access events are high-volume on active workspaces and are hidden by
                       default.
@@ -339,11 +341,11 @@ export function AuditLogPage() {
                   htmlFor="include-widget-activity"
                   className="text-xs font-normal cursor-pointer select-none"
                 >
-                  Include widget activity
+                  Include widget handshakes
                 </Label>
               </div>
               <p className="text-[10px] text-muted-foreground pl-5">
-                Widget access events are high-volume and are hidden by default.
+                Handshake events are high-volume and hidden by default.
               </p>
             </div>
           )}
