@@ -71,6 +71,10 @@ export async function handleSsoTestCallback(
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,
+    // Optional on the type so older cached sessions (started before
+    // PKCE was added to the test flow) still typecheck — runHandshake
+    // skips the `code_verifier` token param when this is undefined.
+    codeVerifier: session.codeVerifier,
   })
 
   // Strip the failure-branch `raw` debug field before persisting:
