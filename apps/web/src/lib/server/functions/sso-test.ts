@@ -118,7 +118,18 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     await cacheSet(ssoTestSessionKey(state), session, TTL_SECONDS)
 
     // Mirror production: no PKCE on the authorize request because
-    // genericOAuth doesn't send code_verifier on the token request.
+    // genericOAuth doesn't send code_verifier on the token request,
+    // and `prompt=select_account` to match the production SSO config
+    // ([auth/index.ts](../auth/index.ts) — the `genericOAuthConfigs.push`
+    // call for providerId='sso'). An earlier revision sent
+    // `prompt=login` here, which made the test diverge from production
+    // and — worse — trigger an unbreakable loop on IdPs whose login
+    // page auto-redirects an already-authenticated user back to the
+    // authorize endpoint: authorize sees `prompt=login`, re-redirects
+    // to /login, /login sees the live session, sends the browser
+    // back to /authorize, and so on. The handshake test only needs
+    // to verify discovery → authorize → token → userinfo round-trip;
+    // forced re-auth isn't part of what's being validated.
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: sso.clientId,
@@ -126,7 +137,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       scope: 'openid email profile',
       state,
       nonce,
-      prompt: 'login',
+      prompt: 'select_account',
     })
     return {
       testId,
