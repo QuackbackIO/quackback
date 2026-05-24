@@ -426,6 +426,61 @@ describe('<BoardAccessForm> belt-and-braces submit guard', () => {
   })
 })
 
+describe('<BoardAccessForm> resyncs when board.audience prop changes', () => {
+  // The mutation hook does optimistic updates and rolls back on error.
+  // If the rollback flips board.audience back to its old value, the
+  // form's internal state (held by react-hook-form's defaultValues)
+  // doesn't follow — the form stays "lying" to the admin about what
+  // the server actually has. A useEffect on board.audience must
+  // reset the form so the radios match the source of truth.
+
+  it('updates the selected radio when board.audience changes externally', () => {
+    const qc = new QueryClient()
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <BoardAccessForm board={{ id: BOARD_ID, audience: { kind: 'public' } }} />
+      </QueryClientProvider>
+    )
+    // shadcn RadioGroupItem renders as <button role="radio"> with
+    // aria-checked, not a native input — read state via that attr.
+    const radios = () => screen.getAllByRole('radio')
+    expect(radios()[0].getAttribute('aria-checked')).toBe('true')
+
+    // Server returned a different audience (rolled back, or refreshed
+    // from a stale-while-revalidate). Form should follow.
+    rerender(
+      <QueryClientProvider client={qc}>
+        <BoardAccessForm board={{ id: BOARD_ID, audience: { kind: 'team' } }} />
+      </QueryClientProvider>
+    )
+    expect(radios()[2].getAttribute('aria-checked')).toBe('true')
+    expect(radios()[0].getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('restores the segmentIds when an audience prop flips to a segments kind', () => {
+    const qc = new QueryClient()
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <BoardAccessForm board={{ id: BOARD_ID, audience: { kind: 'team' } }} />
+      </QueryClientProvider>
+    )
+    // No multi-select yet
+    expect(screen.queryByRole('list', { name: /allowlist|allowed segments/i })).toBeNull()
+
+    // Prop flips to segments — multi-select appears with the right ticks
+    rerender(
+      <QueryClientProvider client={qc}>
+        <BoardAccessForm
+          board={{ id: BOARD_ID, audience: { kind: 'segments', segmentIds: ['seg_2'] } }}
+        />
+      </QueryClientProvider>
+    )
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(boxes[0].checked).toBe(false) // seg_1
+    expect(boxes[1].checked).toBe(true) // seg_2
+  })
+})
+
 describe('<BoardAccessForm> mutation error', () => {
   it('renders the mutation error message when the save fails', () => {
     useUpdateBoardAccessSpy.mockReturnValue({

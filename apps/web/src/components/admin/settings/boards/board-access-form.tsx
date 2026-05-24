@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from '@tanstack/react-router'
 import { GlobeAltIcon, LockClosedIcon, TagIcon, UsersIcon } from '@heroicons/react/24/solid'
@@ -147,6 +148,20 @@ function BoardAccessFormInner({ board }: { board: Board }) {
     // selection. Switching back from another kind starts empty.
     defaultValues: audienceToFormValues(board.audience),
   })
+
+  // Keep the form in lockstep with the server's view of board.audience.
+  // - Successful save: cache updates → board.audience matches → no-op
+  //   visible change but isDirty gets cleared.
+  // - Failed save: cache is rolled back by the mutation's onError → the
+  //   board.audience prop snaps back to its pre-mutate value → the form
+  //   must follow so the radios stop lying about what the server has.
+  // - Background refetch: same story.
+  // Serialized audience powers the dependency check because deep-eq on
+  // arrays is the source-of-truth comparison here.
+  const audienceKey = JSON.stringify(board.audience)
+  useEffect(() => {
+    form.reset(audienceToFormValues(board.audience))
+  }, [audienceKey, board.audience, form])
 
   const visibility = form.watch('visibility')
   const segmentIds = form.watch('segmentIds')
