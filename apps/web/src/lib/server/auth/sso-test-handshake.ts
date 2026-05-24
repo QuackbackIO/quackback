@@ -264,30 +264,56 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   })
 
   let verifiedPayload: ReturnType<typeof decodeJwt>
+  // OIDC providers may sign id_tokens with either an asymmetric key
+  // (RS256/ES256/EdDSA — public part served from `jwks_uri`) or a
+  // symmetric key (HS256/HS384/HS512 — shared secret == the OAuth
+  // `client_secret`). Better-Auth's `oidc-provider` plugin defaults to
+  // HS256 unless its companion `jwt` plugin is also loaded, so a chunk
+  // of real-world IdPs we want to integrate with — including a sibling
+  // InterpriseOne instance under default config — sign with HS. We
+  // pick the verification key based on the protected header's `alg`
+  // rather than going to JWKS unconditionally; otherwise the test
+  // would fail at `signature-verify` against any HS-signing IdP with
+  // a misleading "JWKS endpoint returned 404" even when the token
+  // itself is fine.
+  const alg = (header.alg ?? '').toString()
+  const isSymmetric = alg.startsWith('HS')
   try {
-    // Fetch the JWKS through the pinned fetch rather than letting jose's
-    // createRemoteJWKSet do its own unpinned (DNS-rebind-able) fetch,
-    // then verify against the resulting local key set.
-    const jwksRes = await safeFetch(discovery.jwks_uri, {
-      timeoutMs: 5000,
-      maxResponseBytes: 256 * 1024,
-    })
-    if (!jwksRes.ok) {
-      return {
-        ok: false,
-        stage: 'signature-verify',
-        hint: `JWKS endpoint returned ${jwksRes.status}. The IdP's jwks_uri must serve the signing key set.`,
-        steps,
+    if (isSymmetric) {
+      // RFC 7518 §5.2.1: the HMAC key is the raw client_secret bytes
+      // (no base64 decode). `jose`'s SignJWT/jwtVerify expects a
+      // Uint8Array for HS, which we get straight from the secret.
+      const key = new TextEncoder().encode(input.clientSecret)
+      const { payload } = await jwtVerify(tokens.id_token, key, {
+        issuer: discovery.issuer,
+        audience: input.clientId,
+      })
+      verifiedPayload = payload
+    } else {
+      // Fetch the JWKS through the pinned fetch rather than letting jose's
+      // createRemoteJWKSet do its own unpinned (DNS-rebind-able) fetch,
+      // then verify against the resulting local key set.
+      const jwksRes = await safeFetch(discovery.jwks_uri, {
+        timeoutMs: 5000,
+        maxResponseBytes: 256 * 1024,
+      })
+      if (!jwksRes.ok) {
+        return {
+          ok: false,
+          stage: 'signature-verify',
+          hint: `JWKS endpoint returned ${jwksRes.status}. The IdP's jwks_uri must serve the signing key set.`,
+          steps,
+        }
       }
+      const jwks = createLocalJWKSet(
+        (await jwksRes.json()) as Parameters<typeof createLocalJWKSet>[0]
+      )
+      const { payload } = await jwtVerify(tokens.id_token, jwks, {
+        issuer: discovery.issuer,
+        audience: input.clientId,
+      })
+      verifiedPayload = payload
     }
-    const jwks = createLocalJWKSet(
-      (await jwksRes.json()) as Parameters<typeof createLocalJWKSet>[0]
-    )
-    const { payload } = await jwtVerify(tokens.id_token, jwks, {
-      issuer: discovery.issuer,
-      audience: input.clientId,
-    })
-    verifiedPayload = payload
   } catch (err) {
     if (err instanceof SsrfError) {
       return {
@@ -300,11 +326,17 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     return {
       ok: false,
       stage: 'signature-verify',
-      hint: `ID token signature verification failed: ${err instanceof Error ? err.message : 'unknown error'}. Likely causes: JWKS rotation, wrong issuer, or 'aud' claim does not include your client_id.`,
+      hint: `ID token signature verification failed: ${err instanceof Error ? err.message : 'unknown error'}. Likely causes: ${isSymmetric ? 'client_secret mismatch on the IdP, wrong issuer, or `aud` claim does not include your client_id' : 'JWKS rotation, wrong issuer, or `aud` claim does not include your client_id'}.`,
       steps,
     }
   }
-  steps.push({ ok: true, stage: 'signature-verify', label: 'Signature verified against JWKS' })
+  steps.push({
+    ok: true,
+    stage: 'signature-verify',
+    label: isSymmetric
+      ? 'Signature verified (HS, client_secret)'
+      : 'Signature verified against JWKS',
+  })
 
   if (verifiedPayload.nonce !== input.expectedNonce) {
     return {
