@@ -8,6 +8,7 @@ import {
   twoFactorClient,
 } from 'better-auth/client/plugins'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { SESSION_TOKEN_COOKIE_NAME } from '@/lib/shared/auth-cookie'
 
 /**
  * sessionStorage key for the post-2FA destination URL.
@@ -133,7 +134,11 @@ export const signOut = authClient.signOut
  * cannot read them. This function serves as a best-effort check for
  * non-HttpOnly cookies (e.g. widget identify endpoint sets its own).
  * For portal components, prefer checking the session from route context.
+ *
+ * The substring match against the bare prefix-included name covers
+ * both the http (`quackback.session_token`) and https
+ * (`__Secure-quackback.session_token`) variants in one check.
  */
 export function hasSession(): boolean {
-  return typeof document !== 'undefined' && document.cookie.includes('better-auth.session_token')
+  return typeof document !== 'undefined' && document.cookie.includes(SESSION_TOKEN_COOKIE_NAME)
 }

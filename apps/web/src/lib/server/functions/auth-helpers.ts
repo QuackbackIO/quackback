@@ -11,6 +11,7 @@ import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
 import { db, principal, eq } from '@/lib/server/db'
+import { SESSION_TOKEN_COOKIE_NAME } from '@/lib/shared/auth-cookie'
 
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
@@ -24,7 +25,7 @@ type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
 export function hasSessionCookie(): boolean {
   const headers = getRequestHeaders()
   const cookie = headers.get('cookie') ?? ''
-  return cookie.includes('better-auth.session_token')
+  return cookie.includes(SESSION_TOKEN_COOKIE_NAME)
 }
 
 /**
@@ -36,7 +37,7 @@ export function hasAuthCredentials(): boolean {
   const headers = getRequestHeaders()
   const cookie = headers.get('cookie') ?? ''
   const auth = headers.get('authorization') ?? ''
-  return cookie.includes('better-auth.session_token') || auth.startsWith('Bearer ')
+  return cookie.includes(SESSION_TOKEN_COOKIE_NAME) || auth.startsWith('Bearer ')
 }
 
 /**

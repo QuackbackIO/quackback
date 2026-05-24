@@ -14,6 +14,7 @@ import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
+import { AUTH_COOKIE_PREFIX } from '@/lib/shared/auth-cookie'
 
 // Plugin callbacks (magicLink, emailOTP) stash tokens here instead of
 // emailing — callers that own the email template (invitations,
@@ -371,6 +372,18 @@ async function createAuth() {
           return crypto.randomUUID()
         },
       },
+      // Override Better-Auth's stock `"better-auth"` prefix so our
+      // cookie names don't collide with sibling Better-Auth apps
+      // deployed on the same eTLD+1 (a common Quackback deployment
+      // shape — e.g. `feedback.acme.com` next to `app.acme.com`). The
+      // sibling typically scopes its session cookie to the apex with
+      // `Domain=.acme.com`, which then leaks into Quackback's
+      // requests; under the stock prefix the names are identical and
+      // Better-Auth's cookie parser picks whichever value comes first
+      // — frequently the sibling's apex value, which we can't
+      // validate. See lib/shared/auth-cookie.ts for the full
+      // rationale.
+      cookiePrefix: AUTH_COOKIE_PREFIX,
       defaultCookieAttributes: {
         sameSite: 'lax',
         secure: baseURL.startsWith('https://'),
