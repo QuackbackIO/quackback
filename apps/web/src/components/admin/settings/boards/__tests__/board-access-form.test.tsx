@@ -69,11 +69,11 @@ const SEGMENTS = [
   { id: 'seg_2', name: 'New Users', memberCount: 0 },
 ]
 
-function renderForm(audience: BoardAudience) {
+function renderForm(audience: BoardAudience, canEdit = true) {
   const qc = new QueryClient()
   return render(
     <QueryClientProvider client={qc}>
-      <BoardAccessForm board={{ id: BOARD_ID, audience }} />
+      <BoardAccessForm board={{ id: BOARD_ID, audience }} canEdit={canEdit} />
     </QueryClientProvider>
   )
 }
@@ -362,6 +362,52 @@ describe('<BoardAccessForm> segments query states', () => {
 // ---------------------------------------------------------------------------
 // Error rendering
 // ---------------------------------------------------------------------------
+
+describe('<BoardAccessForm> read-only mode (canEdit=false)', () => {
+  // Visibility is admin-only on the server (updateBoardAccessFn rejects
+  // non-admin callers). Showing the interactive form to a member-role
+  // viewer is dishonest — they can't actually save. In read-only mode
+  // we render the current audience as plain text + an explanatory line,
+  // and we don't render any radios, save buttons, or segment pickers.
+
+  it('renders the current audience as text + admin-only note for a public board', () => {
+    renderForm({ kind: 'public' }, false)
+    expect(screen.getByText(/Public/)).toBeInTheDocument()
+    expect(screen.getByText(/admin/i)).toBeInTheDocument()
+    // No interactive controls
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull()
+  })
+
+  it('renders the audience as text for an authenticated board', () => {
+    renderForm({ kind: 'authenticated' }, false)
+    expect(screen.getByText(/Authenticated/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+  })
+
+  it('renders the audience as text for a team board', () => {
+    renderForm({ kind: 'team' }, false)
+    expect(screen.getByText(/Team only/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+  })
+
+  it('renders the audience as text + lists the segment names for a segments board', () => {
+    renderForm({ kind: 'segments', segmentIds: ['seg_1', 'seg_2'] }, false)
+    expect(screen.getByText(/Specific segments/)).toBeInTheDocument()
+    // Segment names should appear so the member knows WHICH segments
+    expect(screen.getByText(/Active Users/)).toBeInTheDocument()
+    expect(screen.getByText(/New Users/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+  })
+
+  it('does NOT call useUpdateBoardAccess (no mutation needed in read-only mode)', () => {
+    useUpdateBoardAccessSpy.mockClear()
+    renderForm({ kind: 'public' }, false)
+    // The mutation hook should not have been invoked at all
+    expect(useUpdateBoardAccessSpy).not.toHaveBeenCalled()
+  })
+})
 
 describe('<BoardAccessForm> belt-and-braces submit guard', () => {
   // The disabled Save button gates the happy path. But a `disabled`

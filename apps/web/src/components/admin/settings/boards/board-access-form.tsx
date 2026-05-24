@@ -46,6 +46,11 @@ interface Board {
 
 interface BoardAccessFormProps {
   board: Board
+  /** When false (member role), render a read-only summary instead of
+   *  the interactive form. The server rejects audience changes from
+   *  non-admins (updateBoardAccessFn is isAdmin-gated), so showing the
+   *  editable controls would lead to a 403 on save. */
+  canEdit?: boolean
 }
 
 type RadioVisibility = 'public' | 'authenticated' | 'team' | 'segments'
@@ -88,7 +93,51 @@ function formValuesToAudience(values: FormValues): BoardAudience {
   }
 }
 
-export function BoardAccessForm({ board }: BoardAccessFormProps) {
+/** Shared label/description/icon table — the source of truth for both
+ *  the editable form and the read-only summary. Adding a new audience
+ *  kind starts here; both views pick it up automatically. */
+const AUDIENCE_META: Record<
+  BoardAudience['kind'],
+  {
+    label: string
+    description: string
+    icon: React.ComponentType<{ className?: string }>
+  }
+> = {
+  public: {
+    label: 'Public',
+    description:
+      'Anyone can view this board on your portal, including unsigned visitors. Signed-in users can vote, comment, and submit feedback.',
+    icon: GlobeAltIcon,
+  },
+  authenticated: {
+    label: 'Authenticated',
+    description:
+      'Any signed-in portal user can view this board. Hidden from anonymous visitors and search indexes.',
+    icon: UsersIcon,
+  },
+  team: {
+    label: 'Team only',
+    description: 'Only admins and team members can view this board.',
+    icon: LockClosedIcon,
+  },
+  segments: {
+    label: 'Specific segments',
+    description: 'Only members of the segments you pick can view this board.',
+    icon: TagIcon,
+  },
+}
+
+const AUDIENCE_KINDS: RadioVisibility[] = ['public', 'authenticated', 'team', 'segments']
+
+export function BoardAccessForm({ board, canEdit = true }: BoardAccessFormProps) {
+  if (!canEdit) {
+    return <BoardAccessSummary audience={board.audience} />
+  }
+  return <BoardAccessFormInner board={board} />
+}
+
+function BoardAccessFormInner({ board }: { board: Board }) {
   const mutation = useUpdateBoardAccess()
   const segmentsQuery = useSegments()
 
@@ -149,30 +198,9 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
                   value={field.value}
                   className="grid gap-3"
                 >
-                  <AccessOption
-                    value="public"
-                    icon={GlobeAltIcon}
-                    label="Public"
-                    description="Anyone can view this board on your portal, including unsigned visitors. Signed-in users can vote, comment, and submit feedback."
-                  />
-                  <AccessOption
-                    value="authenticated"
-                    icon={UsersIcon}
-                    label="Authenticated"
-                    description="Any signed-in portal user can view this board. Hidden from anonymous visitors and search indexes."
-                  />
-                  <AccessOption
-                    value="team"
-                    icon={LockClosedIcon}
-                    label="Team only"
-                    description="Only admins and team members can view this board."
-                  />
-                  <AccessOption
-                    value="segments"
-                    icon={TagIcon}
-                    label="Specific segments"
-                    description="Only members of the segments you pick can view this board."
-                  />
+                  {AUDIENCE_KINDS.map((kind) => (
+                    <AccessOption key={kind} value={kind} meta={AUDIENCE_META[kind]} />
+                  ))}
                 </RadioGroup>
               </FormControl>
             </FormItem>
@@ -236,21 +264,59 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
   )
 }
 
+/** Read-only audience summary for non-admin viewers. Mirrors the same
+ *  audience labels as the editable form so the two views stay legible
+ *  side by side. Lists segment names for `segments` so members know
+ *  WHICH segments without having to click into the People page. */
+function BoardAccessSummary({ audience }: { audience: BoardAudience }) {
+  const segmentsQuery = useSegments({ enabled: audience.kind === 'segments' })
+  const { icon: Icon, label, description } = AUDIENCE_META[audience.kind]
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border bg-muted/30 p-4">
+        <div className="flex items-start gap-3">
+          <Icon className="h-4 w-4 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <p className="font-medium text-sm">{label}</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {audience.kind === 'segments' && (
+          <div className="mt-3 border-t pt-3">
+            <p className="text-xs font-medium mb-1.5">Allowed segments</p>
+            {segmentsQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading segments…</p>
+            ) : (
+              <ul className="text-xs text-muted-foreground space-y-0.5">
+                {audience.segmentIds.map((segId) => {
+                  const seg = (segmentsQuery.data ?? []).find((s) => s.id === segId)
+                  return <li key={segId}>{seg?.name ?? segId}</li>
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Only admins can change board visibility. Ask an admin if you need it changed.
+      </p>
+    </div>
+  )
+}
+
 /** Single radio card — same visual treatment for all four kinds.
- *  `value` is the audience kind sent to the form; `id` is derived
- *  from it so callers don't have to keep two strings in sync. */
+ *  Driven from AUDIENCE_META so the labels stay in lockstep with the
+ *  read-only summary. */
 function AccessOption({
   value,
-  icon: Icon,
-  label,
-  description,
+  meta,
 }: {
   value: RadioVisibility
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  description: string
+  meta: (typeof AUDIENCE_META)[RadioVisibility]
 }) {
   const id = `visibility-${value}`
+  const Icon = meta.icon
   return (
     <Label
       htmlFor={id}
@@ -260,9 +326,9 @@ function AccessOption({
       <div className="flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4" />
-          <span className="font-medium">{label}</span>
+          <span className="font-medium">{meta.label}</span>
         </div>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground">{meta.description}</p>
       </div>
     </Label>
   )
