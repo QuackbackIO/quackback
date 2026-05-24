@@ -22,11 +22,28 @@ import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.
 // Schemas
 // ============================================
 
-const audienceSchema = z.discriminatedUnion('kind', [
+/**
+ * Last line of defense against a board accidentally landing in an
+ * unreachable state. The `segments` branch must reject an empty
+ * `segmentIds` array — an empty allowlist hides the board from every
+ * non-team viewer (canViewBoard's `.some(...)` returns false; the SQL
+ * filter collapses to `false`). The client form's disabled-Save is
+ * defense in depth on TOP of this, not a substitute.
+ *
+ * Exported so a unit test can exercise the shape directly without
+ * standing up the full server-fn handler.
+ */
+export const audienceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('public') }),
   z.object({ kind: z.literal('authenticated') }),
   z.object({ kind: z.literal('team') }),
-  z.object({ kind: z.literal('segments'), segmentIds: z.array(z.string()).max(50) }),
+  z.object({
+    kind: z.literal('segments'),
+    segmentIds: z
+      .array(z.string())
+      .min(1, 'Pick at least one segment — empty allowlist hides the board from everyone.')
+      .max(50, 'At most 50 segments per board.'),
+  }),
 ])
 
 const createBoardSchema = z.object({
