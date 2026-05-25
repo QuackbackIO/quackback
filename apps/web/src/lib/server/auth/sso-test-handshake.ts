@@ -284,8 +284,20 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       // (no base64 decode). `jose`'s SignJWT/jwtVerify expects a
       // Uint8Array for HS, which we get straight from the secret.
       const key = new TextEncoder().encode(input.clientSecret)
+      // Deliberately NOT passing `issuer` to jwtVerify here even though
+      // we *do* validate it later in claim-check. Better-Auth's
+      // `oidc-provider` HS256 fallback (used whenever the companion
+      // `jwt` plugin isn't loaded) signs the id_token via
+      // `new SignJWT(payload).setProtectedHeader(...).setIssuedAt(...).setExpirationTime(...).sign(...)`
+      // and skips `.setIssuer(...)` — see better-auth's
+      // plugins/oidc-provider/index.mjs around line 615. The resulting
+      // token is missing the spec-required `iss` claim. jose's
+      // jwtVerify, when handed `issuer:`, throws "missing required iss
+      // claim" before we even reach our own claim-check, which
+      // produces a misleading error message blaming the client_secret.
+      // We still validate `aud` here (Better-Auth does set that) and
+      // surface a clear `iss`-missing diagnostic in claim-check below.
       const { payload } = await jwtVerify(tokens.id_token, key, {
-        issuer: discovery.issuer,
         audience: input.clientId,
       })
       verifiedPayload = payload
@@ -347,6 +359,35 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     }
   }
   steps.push({ ok: true, stage: 'claim-check', label: 'Nonce matched' })
+
+  // Validate `iss` here rather than in jwtVerify because Better-Auth's
+  // HS256 fallback omits the claim entirely (see signature-verify
+  // comment above). A spec-strict reading would hard-fail on missing
+  // `iss`, but for first-party SSO between two services that already
+  // share the `client_secret` the signature itself proves authenticity
+  // — `iss` is belt-and-braces. We treat it as a soft check: report a
+  // failing step in the diagnostic so the operator sees the spec
+  // violation, but don't abort the test. A *mismatched* `iss` (token
+  // claims one issuer but discovery advertises another) IS a real
+  // misconfiguration and still fails hard.
+  if (verifiedPayload.iss === undefined) {
+    steps.push({
+      ok: false,
+      stage: 'claim-check',
+      label: 'Issuer missing from ID token',
+      detail:
+        "Token has no 'iss' claim — spec violation but tolerated. If the IdP is Better-Auth, load the companion 'jwt' plugin + set useJWTPlugin: true on oidcProvider to emit RS256 with proper claims.",
+    })
+  } else if (verifiedPayload.iss !== discovery.issuer) {
+    return {
+      ok: false,
+      stage: 'claim-check',
+      hint: `ID token 'iss' (${String(verifiedPayload.iss)}) does not match the discovery document's issuer (${discovery.issuer}). The IdP is misconfigured — make the two match.`,
+      steps,
+    }
+  } else {
+    steps.push({ ok: true, stage: 'claim-check', label: 'Issuer matched' })
+  }
 
   if (!verifiedPayload.sub) {
     return {
