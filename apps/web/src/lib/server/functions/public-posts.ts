@@ -24,7 +24,6 @@ import {
 } from './auth-helpers'
 import { getSettings } from './workspace'
 import { listPublicPosts, getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
-import { canViewBoard } from '@/lib/server/policy'
 import {
   getPublicRoadmapPostsPaginated,
   getVoteAndSubscriptionStatus,
@@ -360,25 +359,22 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       const { boardId: boardIdRaw, title, content, contentJson, metadata } = data
       const boardId = boardIdRaw as BoardId
 
-      // Run all independent lookups in parallel (board, principal, defaultStatus, settings)
+      // Resolve the actor first so getPublicBoardById can apply
+      // canViewBoard internally — a "not found" framing for any
+      // audience denial preserves the previous behaviour (don't leak
+      // existence). createPost will re-check via canCreatePost with
+      // the same actor, so this stays as defense in depth.
+      const actor = await policyActorFromAuth(ctx)
+
+      // Run remaining independent lookups in parallel
       const [board, principalRecord, defaultStatus, settings] = await Promise.all([
-        getPublicBoardById(boardId),
+        getPublicBoardById(boardId, actor),
         getMemberByUser(ctx.user.id as UserId),
         getDefaultStatus(),
         getSettings(),
       ])
 
-      // Validate results
       if (!board) {
-        throw new Error('Board not found')
-      }
-
-      // Authorize via policy. canViewBoard handles all four audience kinds —
-      // a "not found" framing for any denial preserves the previous behaviour
-      // (don't leak existence). Note: createPost will re-check via
-      // canCreatePost with the same actor, so this is defense-in-depth.
-      const actor = await policyActorFromAuth(ctx)
-      if (!canViewBoard(actor, board).allowed) {
         throw new Error('Board not found')
       }
 

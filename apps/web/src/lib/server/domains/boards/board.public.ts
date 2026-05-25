@@ -1,23 +1,35 @@
 import { db, eq, and, isNull, sql, boards, posts, type Board } from '@/lib/server/db'
 import { getTableColumns } from 'drizzle-orm'
 import type { BoardId } from '@quackback/ids'
-import { NotFoundError, InternalError } from '@/lib/shared/errors'
+import { InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'
 import { boardViewFilter, postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
-export async function getPublicBoardById(boardId: BoardId): Promise<Board> {
+/**
+ * Fetch a board by id, gated by the actor's view permission.
+ *
+ * Returns `null` when the board doesn't exist OR the actor isn't
+ * allowed to see it under its audience. Don't differentiate the two
+ * cases at the callsite — it'd leak board existence to unauthorized
+ * viewers. The sibling `getPublicBoardBySlug` has the same contract.
+ *
+ * The previous version returned the row unconditionally; every
+ * caller had to remember to run `canViewBoard` themselves. Making
+ * the policy check a property of the function removes the foot-gun.
+ */
+export async function getPublicBoardById(
+  boardId: BoardId,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<Board | null> {
   try {
     const board = await db.query.boards.findFirst({
       where: eq(boards.id, boardId),
     })
 
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${boardId} not found`)
-    }
-
-    return board
+    if (!board) return null
+    const { canViewBoard } = await import('@/lib/server/policy')
+    return canViewBoard(actor, board).allowed ? board : null
   } catch (error) {
-    if (error instanceof NotFoundError) throw error
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to fetch board: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -101,27 +113,6 @@ export async function countBoards(): Promise<number> {
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to count boards: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      error
-    )
-  }
-}
-
-export async function validateBoardExists(boardId: BoardId): Promise<Board> {
-  try {
-    const board = await db.query.boards.findFirst({
-      where: eq(boards.id, boardId),
-    })
-
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board ${boardId} not found`)
-    }
-
-    return board
-  } catch (error) {
-    if (error instanceof NotFoundError) throw error
-    throw new InternalError(
-      'DATABASE_ERROR',
-      `Failed to validate board: ${error instanceof Error ? error.message : 'Unknown error'}`,
       error
     )
   }
