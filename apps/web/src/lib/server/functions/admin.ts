@@ -1125,6 +1125,9 @@ export const segmentConditionSchema = z.object({
     'metadata_key',
     'name',
     'locale',
+    'country',
+    'last_active_days_ago',
+    'signup_source',
     'principal_type',
   ]),
   operator: z.enum([
@@ -1199,6 +1202,28 @@ const assignUsersSchema = z.object({
   segmentId: z.string(),
   principalIds: z.array(z.string()).min(1),
 })
+
+/**
+ * Distinct-value typeahead for the segment rule-builder. Returns the
+ * most-common existing values for the given attribute among portal
+ * users, optionally prefix-filtered by `query`. Drives the
+ * SearchableInput in the segment edit dialog so admins see what
+ * values are actually present in their workspace as they type.
+ */
+const fetchSegmentAttributeValuesSchema = z.object({
+  attribute: z.enum(['country', 'locale', 'name', 'email', 'signup_source']),
+  query: z.string().max(200).default(''),
+  limit: z.number().int().min(1).max(50).default(20),
+})
+
+export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
+  .inputValidator(fetchSegmentAttributeValuesSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const { getAttributeValueSuggestions } =
+      await import('@/lib/server/domains/segments/segment-attribute-values')
+    return { values: await getAttributeValueSuggestions(data.attribute, data.query, data.limit) }
+  })
 
 /**
  * List all segments with member counts.

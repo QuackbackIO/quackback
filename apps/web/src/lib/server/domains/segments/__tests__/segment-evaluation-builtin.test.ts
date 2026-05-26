@@ -278,6 +278,116 @@ describe('evaluator — locale attribute (nullable string from OIDC)', () => {
   })
 })
 
+describe('evaluator — country attribute (ISO-3166 alpha-2)', () => {
+  it('eq operator uppercases the comparand so "us" matches the stored "US"', async () => {
+    mockSegment = makeSegment([{ attribute: 'country', operator: 'eq', value: 'us' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('u.country')
+    expect(capturedSql).toContain('=')
+    expect(capturedSql).toContain('US')
+    // Lowercase value must NOT leak through.
+    expect(capturedSql).not.toContain(' us')
+  })
+
+  it('in operator uppercases each candidate code', async () => {
+    mockSegment = makeSegment([{ attribute: 'country', operator: 'in', value: ['us', 'gb', 'de'] }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('u.country')
+    expect(capturedSql).toContain('IN')
+    expect(capturedSql).toContain('US')
+    expect(capturedSql).toContain('GB')
+    expect(capturedSql).toContain('DE')
+  })
+
+  it('is_set produces u.country IS NOT NULL', async () => {
+    mockSegment = makeSegment([{ attribute: 'country', operator: 'is_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('u.country')
+    expect(capturedSql).toContain('IS NOT NULL')
+  })
+
+  it('is_not_set produces u.country IS NULL', async () => {
+    mockSegment = makeSegment([{ attribute: 'country', operator: 'is_not_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('u.country')
+    expect(capturedSql).toContain('IS NULL')
+  })
+})
+
+describe('evaluator — last_active_days_ago attribute (derived from session)', () => {
+  it('gt operator emits an EXTRACT-from-MAX(session.created_at) comparison', async () => {
+    mockSegment = makeSegment([{ attribute: 'last_active_days_ago', operator: 'gt', value: 30 }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('EXTRACT(EPOCH FROM')
+    expect(capturedSql).toContain('MAX(s.created_at)')
+    expect(capturedSql).toContain('session s')
+    expect(capturedSql).toContain('s.user_id = u.id')
+    expect(capturedSql).toContain('86400')
+    expect(capturedSql).toContain('>')
+    expect(capturedSql).toContain('30')
+  })
+
+  it('lte operator emits <=', async () => {
+    mockSegment = makeSegment([{ attribute: 'last_active_days_ago', operator: 'lte', value: 7 }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('<=')
+    expect(capturedSql).toContain('7')
+  })
+
+  it('is_set checks session existence (has ever signed in)', async () => {
+    mockSegment = makeSegment([{ attribute: 'last_active_days_ago', operator: 'is_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('EXISTS')
+    expect(capturedSql).toContain('session s')
+    expect(capturedSql).toContain('s.user_id = u.id')
+    expect(capturedSql).not.toContain('NOT EXISTS')
+  })
+
+  it('is_not_set checks no-session (has never signed in)', async () => {
+    mockSegment = makeSegment([{ attribute: 'last_active_days_ago', operator: 'is_not_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('NOT EXISTS')
+    expect(capturedSql).toContain('session s')
+  })
+})
+
+describe('evaluator — signup_source attribute (derived from account.providerId)', () => {
+  it('eq operator COALESCEs missing-account users to "email"', async () => {
+    mockSegment = makeSegment([{ attribute: 'signup_source', operator: 'eq', value: 'google' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('COALESCE')
+    expect(capturedSql).toContain('account a')
+    expect(capturedSql).toContain('a.user_id = u.id')
+    expect(capturedSql).toContain("'email'") // fallback string
+    expect(capturedSql).toContain('=')
+    expect(capturedSql).toContain('google')
+  })
+
+  it('in operator allows multiple providers', async () => {
+    mockSegment = makeSegment([
+      { attribute: 'signup_source', operator: 'in', value: ['google', 'github', 'sso'] },
+    ])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('COALESCE')
+    expect(capturedSql).toContain('IN')
+    expect(capturedSql).toContain('google')
+    expect(capturedSql).toContain('github')
+    expect(capturedSql).toContain('sso')
+  })
+
+  it('is_set produces TRUE (signup_source always resolves via COALESCE)', async () => {
+    mockSegment = makeSegment([{ attribute: 'signup_source', operator: 'is_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('TRUE')
+  })
+
+  it('is_not_set produces FALSE', async () => {
+    mockSegment = makeSegment([{ attribute: 'signup_source', operator: 'is_not_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('FALSE')
+  })
+})
+
 describe('evaluator — email attribute (full address matching)', () => {
   it('eq operator produces u.email = value', async () => {
     mockSegment = makeSegment([{ attribute: 'email', operator: 'eq', value: 'alice@example.com' }])

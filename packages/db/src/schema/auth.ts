@@ -46,6 +46,11 @@ export const user = pgTable(
     // BCP-47 locale claim from OIDC (e.g. "en", "en-US"); NULL for
     // sign-up paths that don't carry one (magic-link, password).
     locale: text('locale'),
+    // ISO-3166-1 alpha-2 country code captured from CDN-injected
+    // headers (CF-IPCountry, X-Vercel-IP-Country, Fly-Client-IP-Country,
+    // X-Country-Code) on session creation. NULL when no header is
+    // present — local dev or deployments without a geo-aware proxy.
+    country: text('country'),
     // Anonymous user flag (Better Auth anonymous plugin)
     isAnonymous: boolean('is_anonymous').default(false).notNull(),
     // Better-Auth twoFactor plugin — flips true once the user verifies

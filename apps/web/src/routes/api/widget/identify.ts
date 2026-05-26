@@ -25,6 +25,7 @@ import {
   mergeMetadata,
 } from '@/lib/server/domains/users/user.attributes'
 import { addMember } from '@/lib/server/domains/segments/segment-membership.service'
+import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 
 const identifySchema = z
   .object({
@@ -257,6 +258,8 @@ export const Route = createFileRoute('/api/widget/identify')({
           }
         }
 
+        const country = captureCountryFromHeaders(request.headers)
+
         if (userRecord) {
           const updates: Record<string, string> = {}
           if (identified.name && identified.name !== userRecord.name) updates.name = identified.name
@@ -264,6 +267,9 @@ export const Route = createFileRoute('/api/widget/identify')({
             updates.image = identified.avatarURL
           if (hasAttrs) {
             updates.metadata = mergeMetadata(userRecord.metadata ?? null, validAttrs, [])
+          }
+          if (country && country !== userRecord.country) {
+            updates.country = country
           }
 
           if (Object.keys(updates).length > 0) {
@@ -279,6 +285,7 @@ export const Route = createFileRoute('/api/widget/identify')({
               emailVerified: false,
               image: identified.avatarURL ?? null,
               metadata: hasAttrs ? JSON.stringify(validAttrs) : null,
+              country: country ?? null,
               createdAt: new Date(),
               updatedAt: new Date(),
             })

@@ -43,6 +43,9 @@ export type SegmentRuleAttribute =
   | 'metadata_key'
   | 'name'
   | 'locale'
+  | 'country'
+  | 'last_active_days_ago'
+  | 'signup_source'
   | 'principal_type'
 
 export interface SegmentCondition {

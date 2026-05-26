@@ -48,6 +48,9 @@ describe('segmentConditionSchema — attribute allowlist', () => {
     'metadata_key',
     'name',
     'locale',
+    'country',
+    'last_active_days_ago',
+    'signup_source',
     'principal_type',
   ])('accepts attribute "%s"', (attribute) => {
     const result = segmentConditionSchema.safeParse({ attribute, ...baseCondition })

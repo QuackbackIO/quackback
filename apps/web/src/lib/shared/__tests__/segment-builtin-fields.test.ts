@@ -62,6 +62,9 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
       'comment_count',
       'name',
       'locale',
+      'country',
+      'last_active_days_ago',
+      'signup_source',
       'principal_type',
     ]
     for (const key of expected) {
@@ -97,14 +100,20 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
   })
 
   it('numeric fields have type number', () => {
-    for (const key of ['created_at_days_ago', 'post_count', 'vote_count', 'comment_count']) {
+    for (const key of [
+      'created_at_days_ago',
+      'last_active_days_ago',
+      'post_count',
+      'vote_count',
+      'comment_count',
+    ]) {
       const field = BUILTIN_FIELDS.find((f) => f.key === key)
       expect(field?.type, `"${key}" should be number`).toBe('number')
     }
   })
 
   it('string fields have type string', () => {
-    for (const key of ['email', 'name', 'locale', 'principal_type']) {
+    for (const key of ['email', 'name', 'locale', 'country', 'signup_source', 'principal_type']) {
       const field = BUILTIN_FIELDS.find((f) => f.key === key)
       expect(field?.type, `"${key}" should be string`).toBe('string')
     }
@@ -122,9 +131,17 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
     expect(attributeKeys).not.toContain('created_at_days_ago')
   })
 
-  it('account-group fields are principal_type and created_at_days_ago', () => {
+  it('account-group fields include principal_type, created_at_days_ago, country, last_active_days_ago, signup_source', () => {
     const accountKeys = BUILTIN_FIELDS.filter((f) => f.group === 'account').map((f) => f.key)
-    expect(accountKeys).toEqual(expect.arrayContaining(['principal_type', 'created_at_days_ago']))
+    expect(accountKeys).toEqual(
+      expect.arrayContaining([
+        'principal_type',
+        'created_at_days_ago',
+        'country',
+        'last_active_days_ago',
+        'signup_source',
+      ])
+    )
     expect(accountKeys).not.toContain('name')
     expect(accountKeys).not.toContain('email')
     expect(accountKeys).not.toContain('email_verified')

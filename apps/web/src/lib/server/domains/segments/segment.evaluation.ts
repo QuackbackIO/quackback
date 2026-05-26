@@ -74,6 +74,16 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         return isSet ? sql`TRUE` : sql`FALSE`
       case 'locale':
         return isSet ? sql`u.locale IS NOT NULL` : sql`u.locale IS NULL`
+      case 'country':
+        return isSet ? sql`u.country IS NOT NULL` : sql`u.country IS NULL`
+      case 'last_active_days_ago':
+        return isSet
+          ? sql`EXISTS (SELECT 1 FROM session s WHERE s.user_id = u.id)`
+          : sql`NOT EXISTS (SELECT 1 FROM session s WHERE s.user_id = u.id)`
+      // signup_source falls back to 'email' for users with no account row,
+      // so it's always set — mirror principal_type / name semantics.
+      case 'signup_source':
+        return isSet ? sql`TRUE` : sql`FALSE`
       // principal.type is always set — is_set is always true, is_not_set is never true
       case 'principal_type':
         return isSet ? sql`TRUE` : sql`FALSE`
@@ -107,6 +117,12 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         return sql`u.name IN (${placeholders})`
       case 'locale':
         return sql`u.locale IN (${placeholders})`
+      case 'country': {
+        const codes = values.map((v) => sql`${String(v).toUpperCase()}`)
+        return sql`u.country IN (${sql.join(codes, sql`, `)})`
+      }
+      case 'signup_source':
+        return sql`COALESCE((SELECT a.provider_id FROM account a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1), 'email') IN (${placeholders})`
       case 'principal_type':
         return sql`p.type IN (${placeholders})`
       default:
@@ -190,6 +206,35 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       const sqlOp = OPERATOR_SQL[operator]
       if (!sqlOp) return null
       return sql`${field} ${sql.raw(sqlOp)} ${String(value)}`
+    }
+
+    case 'country': {
+      // Country codes are normalized uppercase on write (capture helper) —
+      // uppercase the comparand too so admins typing "us" still match.
+      const field = sql`u.country`
+      const upperValue = String(value).toUpperCase()
+      const strResult = stringOperatorSql(field, operator, upperValue)
+      if (strResult) return strResult
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`${field} ${sql.raw(sqlOp)} ${upperValue}`
+    }
+
+    case 'last_active_days_ago': {
+      // EXTRACT returns NULL when the user has no session — NULL fails every
+      // comparison, so users who never signed in correctly do not match
+      // numeric predicates. Use is_set / is_not_set for that audience.
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`EXTRACT(EPOCH FROM (NOW() - (SELECT MAX(s.created_at) FROM session s WHERE s.user_id = u.id))) / 86400 ${sql.raw(sqlOp)} ${Number(value)}`
+    }
+
+    case 'signup_source': {
+      // No account row (magic-link / OTP only sign-ups) → COALESCE to 'email'
+      // so admins can target that cohort explicitly.
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`COALESCE((SELECT a.provider_id FROM account a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1), 'email') ${sql.raw(sqlOp)} ${String(value)}`
     }
 
     case 'principal_type': {

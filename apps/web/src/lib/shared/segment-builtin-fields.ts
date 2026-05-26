@@ -165,6 +165,45 @@ export const BUILTIN_FIELDS = [
     ],
   },
   {
+    key: 'country',
+    label: 'Country',
+    type: 'string',
+    group: 'account',
+    description:
+      "ISO-3166-1 alpha-2 country code captured from CDN-injected headers on sign-in (e.g. 'US', 'GB'). Only set when a geo-aware proxy is in front of the app.",
+    // evaluator: full string default — eq/neq/contains/starts_with/ends_with/is_set/is_not_set
+  },
+  {
+    key: 'last_active_days_ago',
+    label: 'Last Active (days ago)',
+    type: 'number',
+    group: 'account',
+    description: 'How many days ago the most recent session was created.',
+    // evaluator: OPERATOR_SQL + is_set (has ever signed in) / is_not_set (never signed in)
+    operators: [
+      { value: 'gt', label: 'more than (days ago)' },
+      { value: 'lt', label: 'less than (days ago)' },
+      { value: 'gte', label: 'at least (days ago)' },
+      { value: 'lte', label: 'at most (days ago)' },
+      { value: 'eq', label: 'equals' },
+      { value: 'is_set', label: 'has ever signed in' },
+      { value: 'is_not_set', label: 'has never signed in' },
+    ],
+  },
+  {
+    key: 'signup_source',
+    label: 'Sign-up Source',
+    type: 'string',
+    group: 'account',
+    description:
+      "How the person first signed up: an auth provider id (e.g. 'credential', 'google', 'github', 'sso') or 'email' for magic-link / OTP only.",
+    // evaluator: only eq/neq via OPERATOR_SQL; is_set/is_not_set are trivial because we COALESCE to 'email'
+    operators: [
+      { value: 'eq', label: 'equals' },
+      { value: 'neq', label: 'not equals' },
+    ],
+  },
+  {
     key: 'post_count',
     label: 'Post Count',
     type: 'number',

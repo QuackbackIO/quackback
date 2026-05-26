@@ -23,6 +23,7 @@
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
+import { captureCountryFromHeaders } from './country-capture'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import {
@@ -1071,6 +1072,41 @@ export async function handleNewDeviceNotification(
 }
 
 /**
+ * Stamps `user.country` from CDN-injected request headers when a sign-in
+ * mints a new session. Best-effort: a write failure must never block
+ * sign-in. Only writes when the captured value differs from what's
+ * already stored, so the column survives header-less requests instead
+ * of being blanked on every login.
+ */
+export async function handleCountryCapture(ctx: {
+  context?: {
+    newSession?: { user?: { id?: string } } | null
+  }
+}): Promise<void> {
+  const userId = ctx.context?.newSession?.user?.id
+  if (typeof userId !== 'string') return
+
+  const country = captureCountryFromHeaders(getRequestHeaders())
+  if (!country) return
+
+  try {
+    const { db, user: userTable, eq } = await import('@/lib/server/db')
+    type UserId = `user_${string}`
+    const row = await db.query.user.findFirst({
+      where: eq(userTable.id, userId as UserId),
+      columns: { country: true },
+    })
+    if (row?.country === country) return
+    await db
+      .update(userTable)
+      .set({ country })
+      .where(eq(userTable.id, userId as UserId))
+  } catch (error) {
+    console.error('[auth-hooks.after] handleCountryCapture: failed:', error)
+  }
+}
+
+/**
  * Composed `hooks.after` middleware. Order matters:
  *
  *  1. `handleSsoCallbackAfter` — bootstrap admin promotion +
@@ -1137,6 +1173,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   await handleTwoFactorLifecycleAudit(ctx as Parameters<typeof handleTwoFactorLifecycleAudit>[0])
   await handleSignInFailureAudit(ctx as Parameters<typeof handleSignInFailureAudit>[0])
   await handleSignInSuccessAudit(ctx as Parameters<typeof handleSignInSuccessAudit>[0])
+  // Geo-IP country from CDN headers; written best-effort, never blocks.
+  await handleCountryCapture(ctx as Parameters<typeof handleCountryCapture>[0])
   // Fires only when a new device fingerprint (UA + /24) for this user
   // is observed; default-on but workspace can opt out.
   await handleNewDeviceNotification(
