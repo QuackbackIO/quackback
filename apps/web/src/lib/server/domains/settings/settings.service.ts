@@ -799,9 +799,43 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       configuredTypes,
       passthroughKeys
     )
+
+    // Surface the dedicated `sso` provider as an OAuth-button candidate
+    // on both surfaces whenever the workspace's SSO IdP is enabled.
+    // Unlike the entries in `AUTH_PROVIDERS`, `sso` doesn't have a
+    // `platform_credentials` row keyed by `auth_sso` for its own URLs —
+    // the discoveryUrl/clientId live directly on `authConfig.ssoOidc`,
+    // and the client secret is in `platform_credentials` keyed by
+    // `auth_sso` only. So `filterOAuthByCredentials` would drop `sso`
+    // even if it were ever present in `oauth.*`. We inject it post-
+    // filter so the client-side `getEnabledOAuthProviders` renders the
+    // "Continue with $name" button on both `/admin/login` and
+    // `/auth/login`. The button calls `signIn.oauth2({providerId:'sso'})`,
+    // which is already universally allowed for team roles in
+    // `auth-restrictions.ts` and is now also accepted for portal roles
+    // (see the matching change in that file).
+    if (authConfig.ssoOidc?.enabled === true) {
+      filteredAuthOAuth.sso = true
+      filteredPortalOAuth.sso = true
+    }
+
     // Only portal exposes generic-oauth providers, so display-name overrides
     // are computed for the portal surface only.
-    const portalCustomNames = await getCustomProviderNames(filteredPortalOAuth, configuredTypes)
+    const portalCustomNamesRaw = await getCustomProviderNames(filteredPortalOAuth, configuredTypes)
+    // The SSO IdP name (e.g. "InterpriseOne", "Okta", "Acme Corp") isn't
+    // tracked on a `platform_credentials` row — `getCustomProviderNames`
+    // pulls names from credential rows for the social/custom-oidc entries
+    // there. Mirror that behavior by falling back to the workspace's
+    // verified-domain row or letting the client default to "Single
+    // sign-on". A future cleanup can add a dedicated `ssoOidc.displayName`
+    // field; for now this is enough to render a recognisable button label.
+    const portalCustomNames =
+      filteredPortalOAuth.sso && verifiedDomains[0]?.name
+        ? {
+            ...(portalCustomNamesRaw ?? {}),
+            sso: portalCustomNamesRaw?.sso ?? verifiedDomains[0].name,
+          }
+        : portalCustomNamesRaw
 
     const brandingData: SettingsBrandingData = {
       name: org.name,

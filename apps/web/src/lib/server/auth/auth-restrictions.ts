@@ -125,6 +125,21 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
     return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
   }
 
+  // SSO is always allowed on the portal when the workspace has SSO
+  // configured. Mirrors the team-side special case in
+  // `isAuthMethodAllowed`. The portal config exposes `sso=true` for
+  // sso-enabled workspaces via `getTenantSettings()` (see the inject
+  // block in settings.service), which is what `portalConfig.oauth.sso`
+  // returns here — so this check effectively reads the same source of
+  // truth as the button-rendering logic in `OAuthButtons`. We keep the
+  // condition explicit rather than falling through to the generic
+  // `portalConfig.oauth[provider]` lookup so the error path produces a
+  // clearer signal if SSO ever ends up *enabled-but-not-injected*.
+  if (provider === 'sso') {
+    const enabled = portalConfig.oauth.sso === true
+    return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
+  }
+
   // Any OAuth provider — check if enabled (already filtered by credential availability)
   const enabled = portalConfig.oauth[provider]
   return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }

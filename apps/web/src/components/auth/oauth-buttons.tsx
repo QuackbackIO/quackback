@@ -163,6 +163,17 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
 /**
  * Build provider list from PortalAuthMethods config.
  * Filters to only enabled OAuth providers (excludes 'email').
+ *
+ * `sso` is treated specially: it's not an entry in `AUTH_PROVIDERS`
+ * because its credentials/discoveryUrl live in `authConfig.ssoOidc`
+ * (a single dedicated config) rather than in `platform_credentials`
+ * keyed by `auth_<id>`. The server-side config builders inject
+ * `authConfig.sso = true` into the public configs whenever the
+ * workspace's SSO IdP is enabled, and we surface a synthetic
+ * `OAuthProviderEntry` for it here so it renders alongside the
+ * social providers (Google, GitHub, …). The display name comes
+ * from `customProviderNames.sso` (settable in the SSO admin page)
+ * and falls back to a sensible generic label.
  */
 export function getEnabledOAuthProviders(
   authConfig: Record<string, boolean | undefined>,
@@ -171,8 +182,18 @@ export function getEnabledOAuthProviders(
   const providerMap = new Map(AUTH_PROVIDERS.map((p) => [p.id, p]))
   const result: OAuthProviderEntry[] = []
 
+  // Surface SSO first so it sits at the top of the button stack —
+  // for tenants who set it up, SSO is almost always the primary path.
+  if (authConfig.sso === true) {
+    result.push({
+      id: 'sso',
+      name: customProviderNames?.sso || 'Single sign-on',
+      type: 'generic-oauth',
+    })
+  }
+
   for (const [key, enabled] of Object.entries(authConfig)) {
-    if (key === 'email' || key === 'password' || !enabled) continue
+    if (key === 'email' || key === 'password' || key === 'sso' || !enabled) continue
     const provider = providerMap.get(key)
     if (provider) {
       result.push({
