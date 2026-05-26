@@ -150,62 +150,23 @@ export const AUTH_PROVIDERS: AuthProviderDefinition[] = [
       'https://developer.x.com/en/portal/projects-and-apps'
     ),
   },
-  {
-    id: 'custom-oidc',
-    name: 'Custom OIDC',
-    credentialType: `${AUTH_CREDENTIAL_PREFIX}custom-oidc`,
-    iconBg: 'bg-violet-600',
-    type: 'generic-oauth',
-    platformCredentials: [
-      {
-        key: 'displayName',
-        label: 'Display Name',
-        placeholder: 'e.g. Okta, Auth0, Keycloak',
-        sensitive: false,
-        helpText: 'Name shown on the sign-in button',
-      },
-      {
-        key: 'clientId',
-        label: 'Client ID',
-        placeholder: 'Enter your Client ID',
-        sensitive: false,
-      },
-      {
-        key: 'clientSecret',
-        label: 'Client Secret',
-        placeholder: 'Enter your Client Secret',
-        sensitive: true,
-      },
-      {
-        key: 'discoveryUrl',
-        label: 'Discovery URL',
-        placeholder: 'https://example.com/.well-known/openid-configuration',
-        sensitive: false,
-        helpText: 'If provided, authorization and token URLs are auto-discovered',
-      },
-      {
-        key: 'authorizationUrl',
-        label: 'Authorization URL',
-        placeholder: 'https://example.com/oauth/authorize',
-        sensitive: false,
-        helpText: 'Required if Discovery URL is not provided',
-      },
-      {
-        key: 'tokenUrl',
-        label: 'Token URL',
-        placeholder: 'https://example.com/oauth/token',
-        sensitive: false,
-        helpText: 'Required if Discovery URL is not provided',
-      },
-      {
-        key: 'scopes',
-        label: 'Scopes',
-        placeholder: 'openid email profile',
-        sensitive: false,
-        helpText: 'Space-separated list of scopes (defaults to "openid email profile")',
-      },
-    ],
-  },
+  // The `custom-oidc` generic-OIDC entry was retired in favour of the
+  // dedicated `sso` provider configured under
+  // /admin/settings/security/sso. The new SSO surface drives a single
+  // "Continue with $idp" button on both team and portal sign-in pages
+  // via `authConfig.ssoOidc.enabled === true`; maintaining a parallel
+  // `auth_custom-oidc` credentials row with its own toggles produced
+  // two visually-identical buttons under the same workspace and was
+  // the proximate cause of the cross-app cookie-collision + Layer-B
+  // "oauth_method_not_allowed" loops we spent a week tracking down.
+  //
+  // Existing `auth_custom-oidc` rows in `platform_credentials` are
+  // left intact so a future cleanup migration can copy their
+  // displayName/clientId/discoveryUrl into `ssoOidc` (the display-name
+  // shim in settings.service already reads from this row), and so a
+  // tenant who hasn't yet migrated isn't silently truncated. They
+  // simply no longer surface anywhere in the admin UI or sign-in
+  // buttons.
 ]
 
 // Lookup maps for fast access

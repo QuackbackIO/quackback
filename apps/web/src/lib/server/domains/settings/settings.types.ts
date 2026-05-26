@@ -500,7 +500,7 @@ export interface PublicAuthConfig {
 export interface PublicPortalConfig {
   oauth: PortalAuthMethods
   features: PortalFeatures
-  /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
+  /** Display name overrides for generic OAuth providers (e.g. sso → "Okta") */
   customProviderNames?: Record<string, string>
 }
 

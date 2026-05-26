@@ -18,8 +18,6 @@ interface AuthSettingsProps {
   /** Portal-side oauth/methods from settings.portalConfig.oauth. */
   portalOauth: PortalAuthMethods
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
-  /** Tier flag for portal custom OIDC — passed through to <PortalAuthTab>. */
-  customOidcProviderTier: boolean
 }
 
 /**
@@ -40,7 +38,6 @@ export function AuthSettings({
   teamAuthConfig,
   portalOauth,
   credentialStatus,
-  customOidcProviderTier,
 }: AuthSettingsProps) {
   // No `from` — passes an absolute `to`, so binding the navigate hook
   // to a route would just append paths under TanStack Router's
@@ -73,12 +70,7 @@ export function AuthSettings({
       </TabsContent>
 
       <TabsContent value="portal">
-        <PortalAuthTab
-          initialOauth={portalOauth}
-          credentialStatus={credentialStatus}
-          customOidcProviderTier={customOidcProviderTier}
-          ssoEnabled={teamAuthConfig.ssoOidc?.enabled === true}
-        />
+        <PortalAuthTab initialOauth={portalOauth} credentialStatus={credentialStatus} />
       </TabsContent>
     </Tabs>
   )

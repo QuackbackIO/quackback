@@ -44,13 +44,6 @@ function AuthenticationPage() {
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const credentialStatusQuery = useSuspenseQuery(adminQueries.authProviderStatus())
 
-  // Tier flag from the root context (already populated by BootstrapData
-  // for every admin route).
-  const ctx = Route.useRouteContext()
-  const customOidcProviderTier =
-    (ctx as { tierLimits?: { features?: { customOidcProvider?: boolean } } }).tierLimits?.features
-      ?.customOidcProvider !== false
-
   const portalOauth = portalConfigQuery.data?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
 
   return (
@@ -68,7 +61,6 @@ function AuthenticationPage() {
         teamAuthConfig={authConfigQuery.data}
         portalOauth={portalOauth}
         credentialStatus={credentialStatusQuery.data}
-        customOidcProviderTier={customOidcProviderTier}
       />
     </div>
   )
