@@ -7,14 +7,13 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
-const audienceSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('public') }),
-  z.object({ kind: z.literal('authenticated') }),
-  z.object({ kind: z.literal('team') }),
-  z.object({ kind: z.literal('segments'), segmentIds: z.array(z.string()).max(50) }),
-])
-
-// Input validation schema
+// Input validation schema — `audience` is intentionally excluded, matching
+// the matching strip on PATCH /api/v1/boards/:boardId. Visibility is a
+// policy-level setting changed only via updateBoardAccessFn (admin-only,
+// audited); accepting `audience` here would let a member-role API key
+// silently create a board with restricted visibility (or, worse,
+// `{kind:'segments', segmentIds:[]}` — a board no one can see) without an
+// audit event. New boards default to `{kind:'public'}` in createBoard.
 const createBoardSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   slug: z
@@ -24,7 +23,6 @@ const createBoardSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens')
     .optional(),
   description: z.string().max(500).optional(),
-  audience: audienceSchema.optional(),
 })
 
 export const Route = createFileRoute('/api/v1/boards/')({
@@ -86,7 +84,6 @@ export const Route = createFileRoute('/api/v1/boards/')({
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
-            audience: parsed.data.audience,
           })
 
           return createdResponse({

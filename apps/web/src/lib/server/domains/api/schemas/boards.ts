@@ -73,6 +73,11 @@ const BoardCreateResponseSchema = z.object({
 })
 
 // Request body schemas
+//
+// `audience` is intentionally excluded from create and update — board
+// visibility is a policy-level setting that only the admin UI can change
+// (admin-only, audited). New boards always start as { kind: 'public' };
+// admins reshape them via the dashboard.
 const CreateBoardSchema = z
   .object({
     name: z
@@ -91,16 +96,10 @@ const CreateBoardSchema = z
         example: 'feature-requests',
       }),
     description: z.string().max(500).optional().meta({ description: 'Board description' }),
-    audience: BoardAudienceSchema.optional().meta({
-      description: "Who can view this board. Defaults to { kind: 'public' } when omitted.",
-    }),
   })
   .meta({ description: 'Create board request body' })
 
-// PATCH intentionally does NOT accept `audience`. Visibility flips flow
-// through updateBoardAccessFn (admin-only, audited) so a member-role API
-// key can't silently re-scope a board. See the matching note in
-// routes/api/v1/boards/$boardId.ts.
+// Same rationale as CreateBoardSchema: `audience` is admin-UI only.
 const UpdateBoardSchema = z
   .object({
     name: z.string().min(1).max(100).optional(),
