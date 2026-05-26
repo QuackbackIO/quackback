@@ -18,13 +18,32 @@ import {
   ValidationErrorSchema,
 } from './common'
 
+// Board audience — discriminated union mirroring BoardAudience in
+// packages/db/src/schema/boards.ts. Kept in lockstep with the runtime
+// schema in routes/api/v1/boards/index.ts.
+const BoardAudienceSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('public') }),
+    z.object({ kind: z.literal('authenticated') }),
+    z.object({ kind: z.literal('team') }),
+    z.object({
+      kind: z.literal('segments'),
+      segmentIds: z.array(TypeIdSchema).max(50),
+    }),
+  ])
+  .meta({
+    description:
+      'Who can view this board. public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.',
+    example: { kind: 'public' },
+  })
+
 // Board list item schema (GET /boards)
 const BoardListItemSchema = z.object({
   id: TypeIdSchema.meta({ example: 'board_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'Feature Requests' }),
   slug: SlugSchema.meta({ example: 'feature-requests' }),
   description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
-  isPublic: z.boolean().meta({ example: true }),
+  audience: BoardAudienceSchema,
   postCount: z.number().meta({ description: 'Number of posts in this board', example: 42 }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
@@ -36,7 +55,7 @@ const BoardDetailSchema = z.object({
   name: z.string().meta({ example: 'Feature Requests' }),
   slug: SlugSchema.meta({ example: 'feature-requests' }),
   description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
-  isPublic: z.boolean().meta({ example: true }),
+  audience: BoardAudienceSchema,
   settings: z.record(z.string(), z.unknown()).meta({ description: 'Board-specific settings' }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
@@ -48,7 +67,7 @@ const BoardCreateResponseSchema = z.object({
   name: z.string().meta({ example: 'Feature Requests' }),
   slug: SlugSchema.meta({ example: 'feature-requests' }),
   description: z.string().nullable().meta({ example: 'Submit and vote on feature ideas' }),
-  isPublic: z.boolean().meta({ example: true }),
+  audience: BoardAudienceSchema,
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 })
@@ -72,19 +91,21 @@ const CreateBoardSchema = z
         example: 'feature-requests',
       }),
     description: z.string().max(500).optional().meta({ description: 'Board description' }),
-    isPublic: z
-      .boolean()
-      .optional()
-      .meta({ description: 'Whether board is public', default: true }),
+    audience: BoardAudienceSchema.optional().meta({
+      description: "Who can view this board. Defaults to { kind: 'public' } when omitted.",
+    }),
   })
   .meta({ description: 'Create board request body' })
 
+// PATCH intentionally does NOT accept `audience`. Visibility flips flow
+// through updateBoardAccessFn (admin-only, audited) so a member-role API
+// key can't silently re-scope a board. See the matching note in
+// routes/api/v1/boards/$boardId.ts.
 const UpdateBoardSchema = z
   .object({
     name: z.string().min(1).max(100).optional(),
     slug: z.string().min(1).max(100).optional(),
     description: z.string().max(500).nullable().optional(),
-    isPublic: z.boolean().optional(),
   })
   .meta({ description: 'Update board request body' })
 
