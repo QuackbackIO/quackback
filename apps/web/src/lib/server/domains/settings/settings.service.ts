@@ -731,21 +731,85 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   }
 }
 
+/**
+ * Apply the post-filter SSO injection: surface `sso=true` and suppress
+ * the legacy `custom-oidc` button when the workspace's SSO IdP is
+ * configured. Mutates the passed filtered-OAuth maps in place.
+ *
+ * Shared between `getPublicPortalConfig`, `getPublicAuthConfig`, and
+ * `getTenantSettings` so a tenant's SSO state propagates identically
+ * to every consumer of the public configs. See the long comment at
+ * the call site in `getTenantSettings` for the architectural rationale.
+ */
+function applySsoButtonInjection(
+  authConfig: AuthConfig,
+  filteredAuthOAuth: Record<string, boolean | undefined>,
+  filteredPortalOAuth: Record<string, boolean | undefined>
+): void {
+  if (authConfig.ssoOidc?.enabled !== true) return
+  filteredAuthOAuth.sso = true
+  filteredPortalOAuth.sso = true
+  delete filteredAuthOAuth['custom-oidc']
+  delete filteredPortalOAuth['custom-oidc']
+}
+
+/**
+ * Resolve the SSO IdP display name from the legacy `auth_custom-oidc`
+ * credentials row, then the first verified domain, then nothing
+ * (client falls back to `'Single sign-on'`). Pulling from the legacy
+ * row is a transitional shim so tenants who set "InterpriseOne" /
+ * "Okta" / etc. as their Custom OIDC display name don't lose that
+ * label when the new SSO button takes over. A future cleanup can
+ * promote `ssoOidc.displayName` to a first-class field on the SSO
+ * settings page and drop step 1.
+ */
+async function resolveSsoDisplayName(
+  configuredTypes: Set<string>,
+  verifiedDomains: readonly VerifiedDomain[]
+): Promise<string | undefined> {
+  if (configuredTypes.has('auth_custom-oidc')) {
+    const { getPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const legacyCreds = await getPlatformCredentials('auth_custom-oidc')
+    if (legacyCreds?.displayName) return legacyCreds.displayName
+  }
+  return verifiedDomains[0]?.name
+}
+
 export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
   try {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
+    const authConfig = parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
 
-    const [configuredTypes, passthroughKeys] = await Promise.all([
+    const [configuredTypes, passthroughKeys, verifiedDomains] = await Promise.all([
       getConfiguredAuthTypes(),
       getEmailDependentPassthroughKeys(),
+      listVerifiedDomains(),
     ])
     const filteredOAuth = filterOAuthByCredentials(
       portalConfig.oauth,
       configuredTypes,
       passthroughKeys
     )
-    const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    // Mirror the team/portal SSO injection from `getTenantSettings` so
+    // routes that hit `getPublicPortalConfig` directly (the portal
+    // /auth/login and /auth/signup pages bypass `getTenantSettings`)
+    // see the same `sso=true` button candidate + `custom-oidc` strip.
+    // Without this, a tenant who has SSO enabled would still see the
+    // legacy Custom OIDC button on portal sign-in.
+    applySsoButtonInjection(authConfig, filteredOAuth, filteredOAuth)
+    const customProviderNamesRaw = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    let customProviderNames = customProviderNamesRaw
+    if (filteredOAuth.sso) {
+      const ssoName = await resolveSsoDisplayName(configuredTypes, verifiedDomains)
+      if (ssoName) {
+        customProviderNames = {
+          ...(customProviderNamesRaw ?? {}),
+          sso: customProviderNamesRaw?.sso ?? ssoName,
+        }
+      }
+    }
     return {
       oauth: filteredOAuth,
       features: portalConfig.features,
@@ -800,41 +864,24 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       passthroughKeys
     )
 
-    // Surface the dedicated `sso` provider as an OAuth-button candidate
-    // on both surfaces whenever the workspace's SSO IdP is enabled.
-    // Unlike the entries in `AUTH_PROVIDERS`, `sso` doesn't have a
-    // `platform_credentials` row keyed by `auth_sso` for its own URLs —
-    // the discoveryUrl/clientId live directly on `authConfig.ssoOidc`,
-    // and the client secret is in `platform_credentials` keyed by
-    // `auth_sso` only. So `filterOAuthByCredentials` would drop `sso`
-    // even if it were ever present in `oauth.*`. We inject it post-
-    // filter so the client-side `getEnabledOAuthProviders` renders the
-    // "Continue with $name" button on both `/admin/login` and
-    // `/auth/login`. The button calls `signIn.oauth2({providerId:'sso'})`,
-    // which is already universally allowed for team roles in
-    // `auth-restrictions.ts` and is now also accepted for portal roles
-    // (see the matching change in that file).
-    if (authConfig.ssoOidc?.enabled === true) {
-      filteredAuthOAuth.sso = true
-      filteredPortalOAuth.sso = true
-    }
+    // See `applySsoButtonInjection` for the rationale — same logic
+    // applied in `getPublicPortalConfig` so direct consumers of that
+    // function (the /auth/login + /auth/signup routes) see the same
+    // button candidates as `getTenantSettings`-driven consumers.
+    applySsoButtonInjection(authConfig, filteredAuthOAuth, filteredPortalOAuth)
 
     // Only portal exposes generic-oauth providers, so display-name overrides
     // are computed for the portal surface only.
     const portalCustomNamesRaw = await getCustomProviderNames(filteredPortalOAuth, configuredTypes)
-    // The SSO IdP name (e.g. "InterpriseOne", "Okta", "Acme Corp") isn't
-    // tracked on a `platform_credentials` row — `getCustomProviderNames`
-    // pulls names from credential rows for the social/custom-oidc entries
-    // there. Mirror that behavior by falling back to the workspace's
-    // verified-domain row or letting the client default to "Single
-    // sign-on". A future cleanup can add a dedicated `ssoOidc.displayName`
-    // field; for now this is enough to render a recognisable button label.
+
+    const ssoDisplayName =
+      filteredAuthOAuth.sso || filteredPortalOAuth.sso
+        ? await resolveSsoDisplayName(configuredTypes, verifiedDomains)
+        : undefined
+
     const portalCustomNames =
-      filteredPortalOAuth.sso && verifiedDomains[0]?.name
-        ? {
-            ...(portalCustomNamesRaw ?? {}),
-            sso: portalCustomNamesRaw?.sso ?? verifiedDomains[0].name,
-          }
+      ssoDisplayName !== undefined
+        ? { ...(portalCustomNamesRaw ?? {}), sso: portalCustomNamesRaw?.sso ?? ssoDisplayName }
         : portalCustomNamesRaw
 
     const brandingData: SettingsBrandingData = {

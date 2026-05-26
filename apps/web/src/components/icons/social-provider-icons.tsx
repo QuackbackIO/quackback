@@ -97,6 +97,12 @@ export const AUTH_PROVIDER_ICON_MAP: Record<string, ComponentType<IconProps>> = 
   reddit: RedditIcon,
   twitter: TwitterIcon,
   'custom-oidc': CustomOidcIcon,
+  // The dedicated `sso` provider (rendered when authConfig.ssoOidc is
+  // enabled) is visually a Custom OIDC integration from the end user's
+  // perspective — same shield-with-checkmark identity. Reusing
+  // CustomOidcIcon keeps the button design consistent across the
+  // legacy custom-oidc card and the new unified sso button.
+  sso: CustomOidcIcon,
 }
 
 export type { IconProps }
