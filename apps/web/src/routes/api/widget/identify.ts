@@ -234,6 +234,29 @@ export const Route = createFileRoute('/api/widget/identify')({
           where: eq(user.email, identified.email),
         })
 
+        // Team-role guard: refuse to mint a session-Bearer for an email
+        // that already backs a team principal (admin or member). The Bearer
+        // the route hands out is a normal Better Auth session token — `bearer()`
+        // is registered globally, so it satisfies `auth.api.getSession()` at
+        // every server function, including `requireAuth({ roles: ['admin'] })`.
+        // Allowing this in the unverified path would turn "knowing an admin's
+        // email" into full admin takeover. Customer-tier collisions (role='user')
+        // remain allowed — that's the documented trust model for unverified
+        // identify. The verified (ssoToken) path is exempt: HMAC vouches for it.
+        if (!claimsAreVerified && userRecord) {
+          const existingPrincipal = await db.query.principal.findFirst({
+            where: eq(principal.userId, userRecord.id as UserId),
+            columns: { role: true },
+          })
+          if (existingPrincipal?.role === 'admin' || existingPrincipal?.role === 'member') {
+            return jsonError(
+              'IDENTITY_LOCKED',
+              'This address is bound to a team account. Use a verified ssoToken to identify.',
+              403
+            )
+          }
+        }
+
         if (userRecord) {
           const updates: Record<string, string> = {}
           if (identified.name && identified.name !== userRecord.name) updates.name = identified.name

@@ -784,6 +784,13 @@ function WidgetInstallation({
                 </div>
               </div>
 
+              {!verifiedIdentityOnly && (
+                <p className="text-[11px] text-muted-foreground bg-muted/40 border border-border/50 rounded px-2 py-1.5 leading-relaxed">
+                  Without verification, anyone with a customer&apos;s email can post as them. Team
+                  accounts are always protected.
+                </p>
+              )}
+
               {verifiedIdentityOnly && (
                 <div className="space-y-2.5">
                   {/* Framework */}
