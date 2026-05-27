@@ -261,9 +261,9 @@ export const getModerationStatus = createServerFn({ method: 'GET' }).handler(asy
   const pendingCount = (postsResult[0]?.count ?? 0) + (commentsResult[0]?.count ?? 0)
 
   const portalConfig = await getPortalConfig()
-  const enabled = portalConfig.moderationDefault.requireApproval !== 'none'
-  // NB: `enabled` is widened in Task 22 to also check per-board approval.comments
-  // once the BoardAccess type is in place.
+  // Self-consistent: if there is a backlog (e.g. per-board approval routes
+  // items to pending while the workspace default is 'none'), surface it.
+  const enabled = portalConfig.moderationDefault.requireApproval !== 'none' || pendingCount > 0
 
   return { enabled, pendingCount }
 })

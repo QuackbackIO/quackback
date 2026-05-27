@@ -682,7 +682,7 @@ describe('getModerationStatus', () => {
     expect(result.enabled).toBe(true)
   })
 
-  it('enabled=false when the workspace moderation policy is none', async () => {
+  it('enabled=false when the workspace moderation policy is none AND no backlog', async () => {
     stubSelectCalls(0)
     mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'none' } })
     const result = (await getModerationStatusHandler()({ data: {} })) as {
@@ -690,6 +690,21 @@ describe('getModerationStatus', () => {
       pendingCount: number
     }
     expect(result.enabled).toBe(false)
+  })
+
+  it('enabled=true when policy is none but a per-board backlog exists', async () => {
+    // Per-board approval can route items to pending while the workspace
+    // default is 'none'. The sidebar status must surface that backlog so
+    // moderators can still find the queue — otherwise the badge silently
+    // hides work.
+    stubSelectCalls(2)
+    mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'none' } })
+    const result = (await getModerationStatusHandler()({ data: {} })) as {
+      enabled: boolean
+      pendingCount: number
+    }
+    expect(result.enabled).toBe(true)
+    expect(result.pendingCount).toBe(2)
   })
 
   it('enabled=true for a partial gating policy (anonymous), pendingCount passes through', async () => {
