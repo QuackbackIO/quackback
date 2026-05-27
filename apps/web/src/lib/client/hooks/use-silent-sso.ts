@@ -29,13 +29,18 @@
  *
  * Loop / UX guards:
  *  - `quackback.sso.attempted` (sessionStorage): set once an attempt
- *    is mounted, cleared on successful sign-in. Prevents an infinite
- *    re-attempt loop if the IdP is mis-configured or the user closes
- *    the IdP session mid-flow.
- *  - `quackback.sso.suppressed` (sessionStorage): set by the signout
+ *    is mounted, cleared only after the post-success reload has
+ *    actually produced a signed-in session (verified by route
+ *    context). Prevents a reload-loop when the cookie was set but
+ *    the route loader refuses to recognise the session for some
+ *    other reason.
+ *  - `quackback.sso.suppressed` (localStorage): set by the signout
  *    flow so a user who explicitly signed out doesn't get yanked
- *    straight back in. Cleared on the next sessionStorage scope
- *    boundary (tab close) or when they explicitly start an SSO sign-in.
+ *    straight back in — even if they close the tab and open a new
+ *    one. Cleared only when the user explicitly opts back into SSO
+ *    (clicks "Continue with SSO" on a login page) or by an admin
+ *    clearing site data. Defense-in-depth alongside RP-initiated
+ *    logout, which destroys the IdP session itself.
  */
 import { useEffect, useRef } from 'react'
 import { authClient } from '@/lib/client/auth-client'
@@ -62,20 +67,21 @@ export interface UseSilentSsoOptions {
   signedIn: boolean
 }
 
-/** Mark silent SSO as suppressed for the rest of this browser tab.
+/** Mark silent SSO as suppressed across browser tabs / restarts.
  *  Called from the signout path so an explicit logout doesn't get
- *  immediately undone on the next page load. */
+ *  immediately undone on the next page load — even if the user
+ *  closes the tab and opens a new one. Lives in localStorage so it
+ *  survives sessionStorage's tab-scope reset. */
 export function suppressSilentSso(): void {
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.setItem(SUPPRESSED_KEY, '1')
-    // Also clear `attempted` so if the user signs back in via a
-    // different method and signs out again later, the attempt
-    // counter is fresh.
+    window.localStorage.setItem(SUPPRESSED_KEY, '1')
+    // Also clear the (sessionStorage-scoped) attempted counter so a
+    // future explicit SSO sign-in gets a fresh attempt budget.
     window.sessionStorage.removeItem(ATTEMPTED_KEY)
   } catch {
-    /* sessionStorage disabled (private mode) — silent SSO will
-       still respect the in-memory guard within a single load. */
+    /* storage disabled (private mode) — silent SSO will still
+       respect the in-memory guard within a single load. */
   }
 }
 
@@ -84,7 +90,7 @@ export function suppressSilentSso(): void {
 export function clearSilentSsoSuppression(): void {
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.removeItem(SUPPRESSED_KEY)
+    window.localStorage.removeItem(SUPPRESSED_KEY)
   } catch {
     /* noop */
   }
@@ -98,17 +104,42 @@ export function useSilentSso({ enabled, signedIn }: UseSilentSsoOptions): void {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (!enabled || signedIn) return
+    if (!enabled) return
     if (ranRef.current) return
 
+    // Two storage scopes intentionally — sessionStorage for the
+    // per-tab "did we already try this load" counter, and
+    // localStorage for the cross-tab "user opted out" flag.
+    let attempted = false
     try {
-      const attempted = !!window.sessionStorage.getItem(ATTEMPTED_KEY)
-      const suppressed = !!window.sessionStorage.getItem(SUPPRESSED_KEY)
-      if (attempted || suppressed) return
+      attempted = !!window.sessionStorage.getItem(ATTEMPTED_KEY)
+      const suppressed = !!window.localStorage.getItem(SUPPRESSED_KEY)
+      if (suppressed) return
     } catch {
-      /* If sessionStorage throws we fall through and rely on the
-         ranRef guard — worst case is one extra attempt per load. */
+      /* If storage throws we fall through and rely on the ranRef
+         guard — worst case is one extra attempt per load. */
     }
+
+    // Verify-before-clear: if a previous attempt left
+    // `attempted=true` AND we now have a real session
+    // (signedIn=true), the silent flow succeeded and the post-reload
+    // route context confirms it — safe to clear so a future signout
+    // resets the budget cleanly.
+    if (signedIn) {
+      if (attempted) {
+        try {
+          window.sessionStorage.removeItem(ATTEMPTED_KEY)
+        } catch {
+          /* noop */
+        }
+      }
+      return
+    }
+
+    // Not signed in but previous attempt already mounted an iframe
+    // this tab — don't re-fire. The user can manually click
+    // "Continue with SSO" to retry, which also clears suppression.
+    if (attempted) return
 
     ranRef.current = true
 
@@ -136,11 +167,11 @@ export function useSilentSso({ enabled, signedIn }: UseSilentSsoOptions): void {
     channel.onmessage = (event: MessageEvent<{ type?: string }>) => {
       if (event.data?.type !== 'auth-success') return
       cleanup()
-      try {
-        window.sessionStorage.removeItem(ATTEMPTED_KEY)
-      } catch {
-        /* noop */
-      }
+      // Intentionally LEAVE `attempted=true` set. The next mount,
+      // post-reload, will see `signedIn=true` from route context and
+      // clear it then. If the reload somehow fails to pick up a
+      // session (loader bug, cookie eaten, etc.), `attempted` stays
+      // set and we don't ping-pong reload forever.
       // Reload so TanStack Router's beforeLoad re-runs with the new
       // session cookie — the user lands on whatever page they
       // originally requested, now signed in.

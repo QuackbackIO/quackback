@@ -123,24 +123,63 @@ export const authClient = createAuthClient({
 /**
  * Sign out the current user.
  *
- * Wrapped to also set the silent-SSO suppression flag so a user who
- * just signed out doesn't get immediately re-signed-in by the
- * `useSilentSso` hook on the very next page load. The flag lives in
- * sessionStorage and is naturally cleared when the tab closes.
+ * Layered approach (both fire, the order matters):
+ *  1. Mark silent SSO as suppressed in **localStorage**. Survives
+ *     tab close so opening Quackback in a new tab doesn't
+ *     immediately re-sign the user back in via `useSilentSso`. This
+ *     is the defense-in-depth layer — works even when RP-initiated
+ *     logout fails (network blip, IdP doesn't publish
+ *     `end_session_endpoint`, etc.).
+ *  2. Clear the Better-Auth session cookie via `authClient.signOut`.
+ *  3. If the workspace has SSO configured AND the IdP advertises an
+ *     `end_session_endpoint` in its discovery doc, top-window-
+ *     navigate to it with `client_id` + `post_logout_redirect_uri`
+ *     set. The IdP destroys its session and bounces back to
+ *     `/auth/sso-logout-complete`, which forwards to `/auth/login`.
+ *     This is the spec'd RP-Initiated Logout flow — the only way
+ *     to actually end the cross-app SSO session.
  *
- * Note: Call router.invalidate() after signOut to update session.
+ * Falls back to a normal Quackback-only signout (callers handle the
+ * subsequent redirect themselves) if RP-initiated logout isn't
+ * available. The suppression flag from step (1) still protects
+ * against silent re-sign-in in that case.
+ *
+ * Note: callers that need to invalidate the router AFTER local
+ * signout (admin sidebar, etc.) should still call
+ * `router.invalidate()` themselves. When RP-initiated logout is
+ * available we navigate away before that runs, which is fine —
+ * the post-logout landing page is fresh-loaded.
  */
-export const signOut: typeof authClient.signOut = (...args) => {
+export const signOut: typeof authClient.signOut = async (...args) => {
   if (typeof window !== 'undefined') {
     try {
-      window.sessionStorage.setItem('quackback.sso.suppressed', '1')
+      window.localStorage.setItem('quackback.sso.suppressed', '1')
       window.sessionStorage.removeItem('quackback.sso.attempted')
     } catch {
-      /* sessionStorage disabled — silent SSO has its own in-memory
-         guard within a single load so the worst case is one bounce. */
+      /* storage disabled — `useSilentSso`'s in-memory guard still
+         catches us within a single load. */
     }
   }
-  return authClient.signOut(...args)
+
+  const result = await authClient.signOut(...args)
+
+  // RP-initiated logout — best-effort. If the server fn returns null
+  // (no SSO, no end_session_endpoint, fetch failure) we just leave
+  // the user on whatever page the caller's redirect takes them to;
+  // suppression from step (1) keeps them safe either way.
+  if (typeof window !== 'undefined') {
+    try {
+      const { getSsoLogoutUrlFn } = await import('@/lib/server/functions/sso-logout')
+      const info = await getSsoLogoutUrlFn()
+      if (info?.url) {
+        window.location.href = info.url
+      }
+    } catch {
+      /* swallow — caller's local-redirect path keeps working. */
+    }
+  }
+
+  return result
 }
 
 /**
