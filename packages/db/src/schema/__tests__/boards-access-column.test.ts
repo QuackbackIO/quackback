@@ -3,10 +3,9 @@ import { getTableColumns } from 'drizzle-orm'
 import { boards } from '../boards'
 
 describe('boards.access column', () => {
-  it('exists alongside boards.audience (transitional)', () => {
+  it('exists on the boards table', () => {
     const cols = getTableColumns(boards)
     expect(cols.access).toBeDefined()
-    expect(cols.audience).toBeDefined() // still present until 0080
   })
 
   it('access is NOT NULL with a default', () => {

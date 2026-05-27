@@ -19,7 +19,6 @@ describe('Schema definitions', () => {
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
-      expect(columns).toContain('audience')
       expect(columns).toContain('access')
       expect(columns).toContain('settings')
       expect(columns).toContain('createdAt')
@@ -29,9 +28,9 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(boards))
-      // 10 columns once `access` (T8) sits alongside `audience` during the
-      // dual-write window; reduces back to 9 in T24 when `audience` is dropped.
-      expect(columns.length).toBe(10)
+      // 9 columns after T24 (migration 0080) dropped the legacy `audience`
+      // column; `access` is now the sole source of truth.
+      expect(columns.length).toBe(9)
     })
 
     it('no longer has the legacy isPublic column', () => {
