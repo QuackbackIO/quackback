@@ -268,8 +268,6 @@ describe('createComment — board.access.approval.comments holds for review', ()
   it('held comments do NOT dispatch comment.created (defer until approval)', async () => {
     await mockPostWithApproval(true)
     const { dispatchCommentCreated } = await import('@/lib/server/events/dispatch')
-    const { subscribeToPost } =
-      await import('@/lib/server/domains/subscriptions/subscription.service')
     const { createComment } = await import('../comment.service')
     await createComment(
       { postId: 'post_p' as unknown as PostId, content: 'Hi' },
@@ -278,6 +276,18 @@ describe('createComment — board.access.approval.comments holds for review', ()
       // intentionally no skipDispatch — verify the function itself gates dispatch
     )
     expect(vi.mocked(dispatchCommentCreated)).not.toHaveBeenCalled()
-    expect(vi.mocked(subscribeToPost)).not.toHaveBeenCalled()
+  })
+
+  it('held comments DO subscribe the author to the post (so they hear about approval)', async () => {
+    await mockPostWithApproval(true)
+    const { subscribeToPost } =
+      await import('@/lib/server/domains/subscriptions/subscription.service')
+    const { createComment } = await import('../comment.service')
+    await createComment(
+      { postId: 'post_p' as unknown as PostId, content: 'Hi' },
+      { principalId: 'principal_uv' as unknown as PrincipalId, role: 'user' },
+      portalActor
+    )
+    expect(vi.mocked(subscribeToPost)).toHaveBeenCalled()
   })
 })

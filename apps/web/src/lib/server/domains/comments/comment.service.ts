@@ -244,19 +244,22 @@ export async function createComment(
       headers: options?.headers,
       target: { type: 'comment', id: comment.id },
       after: { moderationState: 'pending' },
-      metadata: { postId: post.id, principalType: actor.principalType },
+      metadata: { postId: post.id, boardId: board.id, principalType: actor.principalType },
     })
+  }
+
+  // Auto-subscribe commenter to the post even when held — so the author
+  // receives the approval/rejection notification and any subsequent thread
+  // activity once approved. Mirrors post.service.ts which subscribes
+  // authors of held posts.
+  if (!options?.skipDispatch && author.principalId) {
+    await subscribeToPost(author.principalId, input.postId, 'comment')
   }
 
   // External dispatch (webhooks, Slack, @-mention emails) is deferred until
   // the comment is visible. Held comments fire dispatch only on approval
   // via approveCommentFn — mirroring the post-moderation flow.
   if (!options?.skipDispatch && initialModerationState === 'published') {
-    // Auto-subscribe commenter to the post
-    if (author.principalId) {
-      await subscribeToPost(author.principalId, input.postId, 'comment')
-    }
-
     // Dispatch comment.created event for webhooks, Slack, etc.
     const actorName = author.displayName ?? author.name
     await dispatchCommentCreated(
