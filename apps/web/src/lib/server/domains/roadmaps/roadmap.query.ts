@@ -199,7 +199,7 @@ export async function getPublicRoadmapPosts(
 
   // Run data and count queries in parallel.
   // Both queries need the boards join so the boardViewFilter SQL can
-  // reference boards.audience.
+  // reference boards.access.
   const [results, countResult] = await Promise.all([
     db
       .select({

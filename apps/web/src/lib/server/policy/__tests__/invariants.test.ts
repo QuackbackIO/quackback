@@ -211,17 +211,17 @@ describe('boardViewFilter — SQL shape', () => {
     expect(params).toEqual([])
   })
 
-  it('anonymous actor predicate references audience->>kind and excludes the authenticated branch', () => {
+  it('anonymous actor predicate references access->>view and excludes the authenticated branch', () => {
     const { sql } = toQueryShape(boardViewFilter(ANONYMOUS_ACTOR))
-    // Must check the public kind
-    expect(sql).toMatch(/audience.*'public'/)
+    // Must check the anonymous view tier
+    expect(sql).toMatch(/access.*'anonymous'/)
     // The authenticated branch is gated by `isUser` (false for anon) — drizzle inlines the
-    // literal false alongside the kind check, so the branch is structurally present but
-    // never satisfied. The important property is that the JSON kind comparison is present.
+    // literal false alongside the tier check, so the branch is structurally present but
+    // never satisfied. The important property is that the JSON tier comparison is present.
     expect(sql).toMatch(/'authenticated'/)
     // The segments branch collapses to a constant `false` for an actor with
     // no memberships (anonymous always qualifies) — it can never match, so
-    // the `'segments'` kind comparison is correctly absent.
+    // the `'segments'` tier comparison is correctly absent.
     expect(sql).not.toMatch(/'segments'/)
   })
 
@@ -293,9 +293,9 @@ describe('postViewFilter — SQL shape', () => {
     expect(params).toEqual([])
   })
 
-  it('non-team predicate references audience AND moderation_state', () => {
+  it('non-team predicate references access AND moderation_state', () => {
     const { sql } = toQueryShape(postViewFilter(actors.user))
-    expect(sql).toMatch(/audience/)
+    expect(sql).toMatch(/access/)
     expect(sql).toMatch(/moderation_state/)
     // Both 'published' and 'pending' are bound as parameters (next test).
   })

@@ -45,7 +45,7 @@ export function canViewPost(actor: Actor, post: PostShape, board: BoardShape): D
 
 /**
  * SQL predicate for post list queries. Caller must join `boards` so
- * that boards.audience is resolvable. The predicate composes WITH
+ * that boards.access is resolvable. The predicate composes WITH
  * `isNull(posts.deletedAt)` from existing list queries — never replaces it.
  */
 export function postViewFilter(actor: Actor): SQL {

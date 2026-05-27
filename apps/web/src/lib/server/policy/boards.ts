@@ -37,10 +37,9 @@ export function canViewBoard(actor: Actor, board: { access: BoardAccess }): Deci
  * SQL predicate for board list queries. The row-by-row truthiness must
  * match canViewBoard exactly — invariant test enforces this.
  *
- * NOTE: still reads from the legacy `audience` column. Rewritten to use
- * `access` in the next task; the dual-write in updateBoardAccessFn keeps
- * audience and access in lockstep so the two predicates stay aligned
- * during the transition.
+ * Reads from the `access` JSONB column (matching canViewBoard). The legacy
+ * `audience` column is still written by the dual-write path for backward
+ * compatibility but is no longer read here.
  */
 export function boardViewFilter(actor: Actor): SQL {
   if (isTeamActor(actor)) {
@@ -48,17 +47,19 @@ export function boardViewFilter(actor: Actor): SQL {
   }
   const memberIds = Array.from(actor.segmentIds) as string[]
   const isUser = actor.principalType === 'user'
-  // The segments branch can only match an actor who belongs to a segment.
-  // With no memberships, collapse it to a constant — this also avoids
-  // rendering `ANY(()::text[])`, which Postgres rejects. A non-empty list
-  // is built as `ARRAY[$1, …]` because a bare array in a `sql` template is
-  // spread as comma-separated params, not a single array literal.
+  // The segments branch can only match an actor who belongs to a segment AND
+  // is a user principal (matches tierAllows semantics — a service principal
+  // in a segment is denied). With no memberships, collapse to a constant —
+  // this also avoids rendering `ANY(()::text[])`, which Postgres rejects. A
+  // non-empty list is built as `ARRAY[$1, …]` because a bare array in a
+  // `sql` template is spread as comma-separated params, not a single array
+  // literal.
   const segmentsMatch =
-    memberIds.length > 0
+    memberIds.length > 0 && isUser
       ? sql`
-        ${boards.audience}->>'kind' = 'segments'
+        ${boards.access}->>'view' = 'segments'
         AND EXISTS (
-          SELECT 1 FROM jsonb_array_elements_text(${boards.audience}->'segmentIds') seg
+          SELECT 1 FROM jsonb_array_elements_text(${boards.access}->'segmentIds') seg
           WHERE seg = ANY(ARRAY[${sql.join(
             memberIds.map((id) => sql`${id}`),
             sql`, `
@@ -68,8 +69,8 @@ export function boardViewFilter(actor: Actor): SQL {
       : sql`false`
   return sql`
     (
-      ${boards.audience}->>'kind' = 'public'
-      OR (${boards.audience}->>'kind' = 'authenticated' AND ${isUser})
+      ${boards.access}->>'view' = 'anonymous'
+      OR (${boards.access}->>'view' = 'authenticated' AND ${isUser})
       OR (${segmentsMatch})
     )
   `
