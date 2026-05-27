@@ -52,7 +52,6 @@ export type AuditEventType =
   | 'two_factor.enabled'
   | 'two_factor.disabled'
   // v1 access controls
-  | 'board.audience.changed'
   | 'board.access.changed'
   | 'moderation.default.changed'
   | 'portal.visibility.changed'

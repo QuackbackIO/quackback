@@ -5,9 +5,9 @@
  * accepted an `audience` field, that key could silently spin up a board
  * with restricted visibility (or, worse, `{kind:'segments', segmentIds:[]}`
  * — a board no audience could see) without an audit row. Visibility lives
- * with the admin-only updateBoardAccessFn (and emits `board.audience.changed`);
- * the REST create path must default to `{kind:'public'}` and refuse to
- * influence audience.
+ * with the admin-only updateBoardAccessFn (and emits `board.access.changed`);
+ * the REST create path must default to all-anonymous access and refuse to
+ * influence visibility.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,6 +24,20 @@ vi.mock('@/lib/server/domains/api/auth', () => ({
 vi.mock('@/lib/server/domains/boards/board.service', () => ({
   createBoard: (...args: unknown[]) => mockCreateBoard(...args),
   listBoardsWithDetails: (...args: unknown[]) => mockListBoardsWithDetails(...args),
+  accessToAudience: (access: { view: string; segmentIds: string[] }) => {
+    switch (access.view) {
+      case 'anonymous':
+        return { kind: 'public' }
+      case 'authenticated':
+        return { kind: 'authenticated' }
+      case 'segments':
+        return { kind: 'segments', segmentIds: access.segmentIds }
+      case 'team':
+        return { kind: 'team' }
+      default:
+        return { kind: 'public' }
+    }
+  },
 }))
 
 import { Route } from '../index'
@@ -40,7 +54,13 @@ const CREATED_BOARD = {
   name: 'My Board',
   slug: 'my-board',
   description: null,
-  audience: { kind: 'public' },
+  access: {
+    view: 'anonymous',
+    comment: 'anonymous',
+    submit: 'anonymous',
+    segmentIds: [],
+    approval: { posts: false, comments: false },
+  },
   createdAt: new Date(),
   updatedAt: new Date(),
 }
@@ -65,7 +85,6 @@ describe('POST /api/v1/boards — audience stripping (G3)', () => {
     const res = await POST({
       request: makeRequest({
         name: 'Internal Roadmap',
-        audience: { kind: 'segments', segmentIds: ['seg_abc'] },
       }),
     })
 

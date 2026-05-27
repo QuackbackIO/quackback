@@ -287,7 +287,6 @@ describe('createPublicPostFn anonymous feature flag', () => {
     id: 'board_123',
     name: 'General',
     slug: 'general',
-    audience: { kind: 'public' as const },
   }
   const MOCK_STATUS = { id: 'status_123' }
   const MOCK_POST = {

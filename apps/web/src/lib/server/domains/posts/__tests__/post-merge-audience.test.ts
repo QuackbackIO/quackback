@@ -45,7 +45,6 @@ vi.mock('@/lib/server/db', () => ({
   boards: {
     id: 'boards.id',
     slug: 'boards.slug',
-    audience: 'boards.audience',
     access: 'boards.access',
     deletedAt: 'boards.deletedAt',
   },

@@ -1,10 +1,10 @@
 /**
- * updateBoardFn must NOT write board.audience.
+ * updateBoardFn must NOT write board.access.
  *
  * Board visibility changes are admin-only policy operations gated behind
  * updateBoardAccessFn. updateBoardFn is team-reachable and must only mutate
- * name / description / settings — never audience. This file guards that
- * contract and the simplification that follows from removing the audience
+ * name / description / settings — never access. This file guards that
+ * contract and the simplification that follows from removing the access
  * write path.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -99,13 +99,19 @@ function getUpdateBoardFn(): AnyHandler {
 const BOARD_ID = 'board_test_1'
 const BASE_DATE = new Date('2025-01-01T00:00:00Z')
 
-type BoardAudience = { kind: string; segmentIds?: string[] }
+type BoardAccess = {
+  view: 'anonymous' | 'authenticated' | 'segments' | 'team'
+  comment: 'anonymous' | 'authenticated' | 'segments' | 'team'
+  submit: 'anonymous' | 'authenticated' | 'segments' | 'team'
+  segmentIds: string[]
+  approval: { posts: boolean; comments: boolean }
+}
 type BoardRow = {
   id: string
   name: string
   slug: string
   description: string | null
-  audience: BoardAudience
+  access: BoardAccess
   settings: Record<string, unknown>
   createdAt: Date
   updatedAt: Date
@@ -117,7 +123,13 @@ const BOARD_ROW: BoardRow = {
   name: 'My Board',
   slug: 'my-board',
   description: null,
-  audience: { kind: 'segments', segmentIds: ['seg_1'] },
+  access: {
+    view: 'segments',
+    comment: 'segments',
+    submit: 'segments',
+    segmentIds: ['seg_1'],
+    approval: { posts: false, comments: false },
+  },
   settings: {},
   createdAt: BASE_DATE,
   updatedAt: BASE_DATE,
@@ -138,19 +150,20 @@ beforeEach(() => {
   hoisted.mockUpdateBoard.mockResolvedValue(BOARD_ROW)
 })
 
-describe('updateBoardFn — audience immutability', () => {
-  it('does not call db.update (no audience write) when updating name', async () => {
+describe('updateBoardFn — access immutability', () => {
+  it('does not call db.update (no access write) when updating name', async () => {
     await getUpdateBoardFn()({ data: { id: BOARD_ID, name: 'Renamed' } })
     expect(hoisted.mockDbUpdate).not.toHaveBeenCalled()
   })
 
-  it('returns the board from updateBoard service without touching audience', async () => {
+  it('returns the board from updateBoard service without touching access', async () => {
     const result = (await getUpdateBoardFn()({
       data: { id: BOARD_ID, name: 'Renamed' },
-    })) as { audience: BoardAudience }
+    })) as { access: BoardAccess }
 
-    // The segments audience must come back intact — no clobber
-    expect(result.audience).toEqual({ kind: 'segments', segmentIds: ['seg_1'] })
+    // The segments access must come back intact — no clobber
+    expect(result.access.view).toBe('segments')
+    expect(result.access.segmentIds).toEqual(['seg_1'])
   })
 
   it('passes name / description / settings to updateBoard service', async () => {

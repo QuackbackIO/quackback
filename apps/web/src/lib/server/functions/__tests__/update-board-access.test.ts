@@ -1,14 +1,11 @@
 /**
- * Tests for the T16 expansion of updateBoardAccessFn.
+ * Tests for updateBoardAccessFn.
  *
- * After T16 the handler accepts BOTH a legacy `audience` payload AND a direct
- * `access` payload. When `access` is provided it wins and audience is left
- * untouched. The boardAccessSchema's tier-rank invariants must be enforced by
- * input validation (so callers can't slip an inconsistent matrix past the
- * server).
- *
- * The base auth + dual-write contract from PR1 is covered in board-access.test.ts;
- * this file only pins the new behaviours T16 adds.
+ * The handler accepts a `BoardAccess` matrix (view/comment/submit + segmentIds
+ * + approval). boardAccessSchema's tier-rank invariants must be enforced by
+ * input validation so callers can't slip an inconsistent matrix past the
+ * server. Each successful call writes the matrix and records a
+ * `board.access.changed` audit event.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -20,8 +17,8 @@ vi.mock('@tanstack/react-start', () => ({
     const chain = {
       inputValidator(parse: (data: unknown) => unknown) {
         // Capture the validator so we can drive it at the handler call site —
-        // T16 promotes a Zod schema to gate inputs, and we need real
-        // validation errors to bubble out (not silently bypass).
+        // a Zod schema gates inputs, and we need real validation errors to
+        // bubble out (not silently bypass).
         const inner = {
           handler(fn: Handler) {
             const wrapped: Handler = async ({ data }) => {
@@ -53,41 +50,12 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 
 vi.mock('./workspace', () => ({ getSettings: vi.fn() }))
 
-// Mirror the real audienceToAccess derivation so dual-write assertions work.
-type StubAccessTier = 'anonymous' | 'authenticated' | 'team' | 'segments'
-function stubAudienceToAccess(audience: { kind: string; segmentIds?: string[] }): {
-  view: StubAccessTier
-  comment: StubAccessTier
-  submit: StubAccessTier
-  segmentIds: string[]
-  approval: { posts: boolean; comments: boolean }
-} {
-  const tier: StubAccessTier =
-    audience.kind === 'public'
-      ? 'anonymous'
-      : audience.kind === 'authenticated'
-        ? 'authenticated'
-        : audience.kind === 'team'
-          ? 'team'
-          : audience.kind === 'segments'
-            ? 'segments'
-            : 'anonymous'
-  return {
-    view: tier,
-    comment: tier,
-    submit: tier,
-    segmentIds: audience.kind === 'segments' ? (audience.segmentIds ?? []) : [],
-    approval: { posts: false, comments: false },
-  }
-}
-
 vi.mock('@/lib/server/domains/boards/board.service', () => ({
   listBoards: vi.fn(),
   getBoardById: vi.fn(),
   createBoard: vi.fn(),
   updateBoard: vi.fn(),
   deleteBoard: vi.fn(),
-  audienceToAccess: vi.fn(stubAudienceToAccess),
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
@@ -96,7 +64,6 @@ vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
 
 type BoardRow = {
   id: string
-  audience: { kind: string; segmentIds?: string[] }
   access?: Record<string, unknown>
 }
 const state: {
@@ -183,7 +150,6 @@ const AUTH_ADMIN = {
 
 const BOARD_DEFAULT: BoardRow = {
   id: 'board_1',
-  audience: { kind: 'public' },
   access: {
     view: 'anonymous',
     comment: 'anonymous',
@@ -201,7 +167,7 @@ beforeEach(() => {
   mockRequireAuth.mockResolvedValue(AUTH_ADMIN)
 })
 
-describe('updateBoardAccessFn — accepts access payload directly (T16)', () => {
+describe('updateBoardAccessFn — accepts BoardAccess payload', () => {
   it('accepts an access object shaped like BoardAccess', async () => {
     await getUpdateBoardAccessFn()({
       data: {
@@ -251,23 +217,10 @@ describe('updateBoardAccessFn — accepts access payload directly (T16)', () => 
       })
     ).rejects.toThrow()
   })
-
-  it('still accepts the legacy audience-only payload (no regression)', async () => {
-    await getUpdateBoardAccessFn()({
-      data: {
-        boardId: 'board_1',
-        audience: { kind: 'team' },
-      },
-    })
-    expect(state.updates).toHaveLength(1)
-    const patch = state.updates[0] as { audience?: unknown; access?: unknown }
-    expect(patch.audience).toEqual({ kind: 'team' })
-    expect(patch.access).toBeDefined()
-  })
 })
 
-describe('updateBoardAccessFn — access-only path (T16)', () => {
-  it('when only access is provided, writes access and leaves audience alone', async () => {
+describe('updateBoardAccessFn — writes access and emits audit event', () => {
+  it('writes access to the boards row', async () => {
     const access = {
       view: 'authenticated' as const,
       comment: 'team' as const,
@@ -278,12 +231,8 @@ describe('updateBoardAccessFn — access-only path (T16)', () => {
     await getUpdateBoardAccessFn()({ data: { boardId: 'board_1', access } })
 
     expect(state.updates).toHaveLength(1)
-    const patch = state.updates[0] as { audience?: unknown; access?: unknown }
+    const patch = state.updates[0] as { access?: unknown }
     expect(patch.access).toEqual(access)
-    // The caller didn't ask to change audience; we must NOT clobber it.
-    expect(patch.audience).toBeUndefined()
-    // And the row's audience is still the seed value.
-    expect(state.boards[0].audience).toEqual({ kind: 'public' })
   })
 
   it('fires board.access.changed audit with before/after access', async () => {
@@ -303,29 +252,69 @@ describe('updateBoardAccessFn — access-only path (T16)', () => {
     expect(before.access).toEqual(BOARD_DEFAULT.access)
     expect(after.access).toEqual(access)
   })
+})
 
-  it('when both audience and access are provided, access wins (no audience write)', async () => {
-    const access = {
-      view: 'team' as const,
-      comment: 'team' as const,
-      submit: 'team' as const,
-      segmentIds: [],
-      approval: { posts: false, comments: false },
-    }
-    await getUpdateBoardAccessFn()({
-      data: {
-        boardId: 'board_1',
-        audience: { kind: 'authenticated' },
-        access,
-      },
+describe('updateBoardAccessFn — auth + not-found', () => {
+  it('propagates requireAuth rejection (no swallowing 401 into 500)', async () => {
+    const authError = new Error('UNAUTHORIZED')
+    mockRequireAuth.mockReset()
+    mockRequireAuth.mockRejectedValue(authError)
+    await expect(
+      getUpdateBoardAccessFn()({
+        data: {
+          boardId: 'board_1',
+          access: {
+            view: 'anonymous',
+            comment: 'anonymous',
+            submit: 'anonymous',
+            segmentIds: [],
+            approval: { posts: false, comments: false },
+          },
+        },
+      })
+    ).rejects.toBe(authError)
+    expect(state.updates).toEqual([])
+    expect(state.auditEvents).toEqual([])
+  })
+
+  it('rejects non-admin (member) with ForbiddenError', async () => {
+    const { ForbiddenError } = await import('@/lib/shared/errors')
+    mockRequireAuth.mockReset()
+    mockRequireAuth.mockResolvedValue({
+      ...AUTH_ADMIN,
+      principal: { ...AUTH_ADMIN.principal, role: 'member' as const },
     })
+    await expect(
+      getUpdateBoardAccessFn()({
+        data: {
+          boardId: 'board_1',
+          access: {
+            view: 'anonymous',
+            comment: 'anonymous',
+            submit: 'anonymous',
+            segmentIds: [],
+            approval: { posts: false, comments: false },
+          },
+        },
+      })
+    ).rejects.toBeInstanceOf(ForbiddenError)
+  })
 
-    expect(state.updates).toHaveLength(1)
-    const patch = state.updates[0] as { audience?: unknown; access?: unknown }
-    expect(patch.access).toEqual(access)
-    expect(patch.audience).toBeUndefined()
-    // Audit event reflects the access change, not the audience change.
-    expect(state.auditEvents).toHaveLength(1)
-    expect(state.auditEvents[0].event).toBe('board.access.changed')
+  it('returns NotFoundError for missing boardId', async () => {
+    const { NotFoundError } = await import('@/lib/shared/errors')
+    await expect(
+      getUpdateBoardAccessFn()({
+        data: {
+          boardId: 'missing',
+          access: {
+            view: 'anonymous',
+            comment: 'anonymous',
+            submit: 'anonymous',
+            segmentIds: [],
+            approval: { posts: false, comments: false },
+          },
+        },
+      })
+    ).rejects.toBeInstanceOf(NotFoundError)
   })
 })

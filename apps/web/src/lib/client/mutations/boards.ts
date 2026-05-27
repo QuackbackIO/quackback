@@ -14,48 +14,11 @@ import {
   type UpdateBoardInput,
   type DeleteBoardInput,
 } from '@/lib/server/functions/boards'
-import {
-  type Board,
-  type BoardAudience,
-  type BoardAccess,
-  type AccessTier,
-  DEFAULT_BOARD_AUDIENCE,
-  DEFAULT_BOARD_ACCESS,
-} from '@/lib/shared/db-types'
+import type { Board, BoardAccess } from '@/lib/shared/db-types'
 import type { BoardId } from '@quackback/ids'
 import { boardKeys } from '@/lib/client/hooks/use-boards-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { slugify } from '@/lib/shared/utils'
-
-// ============================================================================
-// Local helpers
-// ============================================================================
-
-/**
- * Local copy of the server's audienceToAccess derivation. Identical mapping;
- * inlined to avoid pulling server-only modules into the client bundle. Keeps
- * optimistic updates in sync with the server's dual-write so any UI that
- * reads `board.access` doesn't show stale tiers for the ~1s round-trip.
- */
-function clientAudienceToAccess(audience: BoardAudience): BoardAccess {
-  const tier: AccessTier =
-    audience.kind === 'public'
-      ? 'anonymous'
-      : audience.kind === 'authenticated'
-        ? 'authenticated'
-        : audience.kind === 'team'
-          ? 'team'
-          : audience.kind === 'segments'
-            ? 'segments'
-            : 'anonymous'
-  return {
-    ...DEFAULT_BOARD_ACCESS,
-    view: tier,
-    comment: tier,
-    submit: tier,
-    segmentIds: audience.kind === 'segments' ? audience.segmentIds : [],
-  }
-}
 
 // ============================================================================
 // Mutation Hooks
@@ -73,13 +36,21 @@ export function useCreateBoard() {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
       const previous = queryClient.getQueryData<Board[]>(boardKeys.lists())
 
+      // Mirror the server's createBoardFn isPublic→tier mapping so the
+      // optimistic row matches what the server will actually insert.
+      const tier = input.isPublic === false ? 'team' : 'anonymous'
       const optimisticBoard: Board = {
         id: `board_temp_${Date.now()}` as Board['id'],
         name: input.name,
         slug: slugify(input.name),
         description: input.description ?? null,
-        audience: input.isPublic === false ? { kind: 'team' as const } : DEFAULT_BOARD_AUDIENCE,
-        access: DEFAULT_BOARD_ACCESS,
+        access: {
+          view: tier,
+          comment: tier,
+          submit: tier,
+          segmentIds: [],
+          approval: { posts: false, comments: false },
+        },
         settings: {},
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -163,7 +134,7 @@ export function useUpdateBoard() {
 }
 
 /**
- * Hook to update board audience.
+ * Hook to update board access policy.
  *
  * Admin-only server-side. Use this from the Access tab; never from the
  * general-update path, which mustn't carry visibility changes.
@@ -171,7 +142,7 @@ export function useUpdateBoard() {
 export function useUpdateBoardAccess() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { boardId: BoardId; audience?: BoardAudience; access?: BoardAccess }) =>
+    mutationFn: (input: { boardId: BoardId; access: BoardAccess }) =>
       updateBoardAccessFn({ data: input }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: boardKeys.lists() })
@@ -179,15 +150,7 @@ export function useUpdateBoardAccess() {
       const previousList = queryClient.getQueryData<Board[]>(boardKeys.lists())
       const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.boardId))
 
-      // Compute the optimistic patch: when `access` is provided directly, write
-      // only `access` (mirrors the server's access-wins logic in T16). When only
-      // `audience` is provided, dual-write both via `clientAudienceToAccess`.
-      const accessPatch: Partial<Pick<Board, 'audience' | 'access'>> =
-        input.access !== undefined
-          ? { access: input.access }
-          : input.audience !== undefined
-            ? { audience: input.audience, access: clientAudienceToAccess(input.audience) }
-            : {}
+      const accessPatch: Partial<Pick<Board, 'access'>> = { access: input.access }
 
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
         old?.map((board) =>

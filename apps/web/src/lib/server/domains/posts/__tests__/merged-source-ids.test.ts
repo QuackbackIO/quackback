@@ -34,7 +34,7 @@ vi.mock('@/lib/server/db', () => ({
     canonicalPostId: 'posts.canonical_post_id',
     deletedAt: 'posts.deleted_at',
   },
-  boards: { id: 'boards.id', audience: 'boards.audience', deletedAt: 'boards.deleted_at' },
+  boards: { id: 'boards.id', access: 'boards.access', deletedAt: 'boards.deleted_at' },
   eq: vi.fn((col, val) => ({ eq: [col, val] })),
   and: vi.fn((...parts) => ({ and: parts })),
   isNull: vi.fn((col) => ({ isNull: col })),

@@ -8,44 +8,27 @@ import type { BoardId } from '@quackback/ids'
 import type { BoardSettings, SetupState } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, settings, boards, eq, ACCESS_TIERS, ACCESS_TIER_RANK } from '@/lib/server/db'
+import {
+  db,
+  settings,
+  boards,
+  eq,
+  ACCESS_TIERS,
+  ACCESS_TIER_RANK,
+  type AccessTier,
+} from '@/lib/server/db'
 import {
   listBoards,
   getBoardById,
   createBoard,
   updateBoard,
   deleteBoard,
-  audienceToAccess,
 } from '@/lib/server/domains/boards/board.service'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 
 // ============================================
 // Schemas
 // ============================================
-
-/**
- * Last line of defense against a board accidentally landing in an
- * unreachable state. The `segments` branch must reject an empty
- * `segmentIds` array — an empty allowlist hides the board from every
- * non-team viewer (canViewBoard's `.some(...)` returns false; the SQL
- * filter collapses to `false`). The client form's disabled-Save is
- * defense in depth on TOP of this, not a substitute.
- *
- * Exported so a unit test can exercise the shape directly without
- * standing up the full server-fn handler.
- */
-export const audienceSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('public') }),
-  z.object({ kind: z.literal('authenticated') }),
-  z.object({ kind: z.literal('team') }),
-  z.object({
-    kind: z.literal('segments'),
-    segmentIds: z
-      .array(z.string())
-      .min(1, 'Pick at least one segment — empty allowlist hides the board from everyone.')
-      .max(50, 'At most 50 segments per board.'),
-  }),
-])
 
 /**
  * Validation for the per-action `BoardAccess` payload (view/comment/submit
@@ -110,8 +93,8 @@ const createBoardSchema = z.object({
     .max(100, 'Board name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
   // Back-compat with the existing admin create dialog which submits a binary
-  // public/private toggle. Internally mapped to BoardAudience. Richer
-  // audience choices (authenticated, segments[]) land via updateBoardAccessFn
+  // public/private toggle. Internally mapped to a BoardAccess matrix. Richer
+  // tier choices (authenticated, segments[]) land via updateBoardAccessFn
   // after the board exists.
   isPublic: z.boolean().default(true),
 })
@@ -130,9 +113,9 @@ const updateBoardSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
-  // Visibility (audience + moderation) is NOT accepted here — those are
+  // Visibility (access + moderation) is NOT accepted here — those are
   // policy changes, admin-only via updateBoardAccessFn. If we accepted
-  // audience on this team-level path, members could grant/revoke board
+  // access on this team-level path, members could grant/revoke board
   // visibility despite the access-control split.
   settings: boardSettingsSchema.optional(),
 })
@@ -217,16 +200,22 @@ export const createBoardFn = createServerFn({ method: 'POST' })
     console.log(`[fn:boards] createBoardFn: name=${data.name}`)
     await requireAuth({ roles: ['admin', 'member'] })
 
-    // Map the binary toggle into an audience. Default to public when
-    // omitted (the existing UI contract). For finer-grained audience
+    // Map the binary toggle into a BoardAccess matrix. Default to all-
+    // anonymous when public (the existing UI contract); flip every tier
+    // to 'team' when the toggle is off. For finer-grained access
     // (authenticated, segments), the admin sets it via updateBoardAccessFn
     // after create — that path is admin-only and audited.
-    const audience =
-      data.isPublic === false ? { kind: 'team' as const } : { kind: 'public' as const }
+    const tier: AccessTier = data.isPublic === false ? 'team' : 'anonymous'
     const board = await createBoard({
       name: data.name,
       description: data.description,
-      audience,
+      access: {
+        view: tier,
+        comment: tier,
+        submit: tier,
+        segmentIds: [],
+        approval: { posts: false, comments: false },
+      },
     })
     console.log(`[fn:boards] createBoardFn: id=${board.id}`)
     return serializeBoard(board)
@@ -235,10 +224,10 @@ export const createBoardFn = createServerFn({ method: 'POST' })
 /**
  * Update an existing board
  *
- * Updates name / description / settings only. Board visibility (audience)
+ * Updates name / description / settings only. Board visibility (access)
  * is a policy change and must go through updateBoardAccessFn (admin-only,
- * audited). Accepting audience here would let member-role callers silently
- * override a segments or authenticated audience with a bare public/team one.
+ * audited). Accepting access here would let member-role callers silently
+ * override a segments or authenticated tier with a bare public/team one.
  */
 export const updateBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(updateBoardSchema)
@@ -353,23 +342,16 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
   })
 
 // ============================================
-// v1 access controls — board audience
+// v1 access controls — board access matrix
 // ============================================
 
 import { isAdmin } from '@/lib/shared/roles'
 import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 
-// audienceSchema is defined at the top of this file (reused by create/update).
-
 const updateBoardAccessSchema = z.object({
   boardId: z.string(),
-  // Transitional: both `audience` and `access` are accepted while clients
-  // migrate. If both are present, `access` wins. After the UI rewrite (T21)
-  // the form sends `access` only; `audience` here is purely back-compat for
-  // legacy callers and gets dropped at T24 alongside the column itself.
-  audience: audienceSchema.optional(),
-  access: boardAccessSchema.optional(),
+  access: boardAccessSchema,
 })
 
 /**
@@ -378,12 +360,8 @@ const updateBoardAccessSchema = z.object({
  * isAdmin-gated — granting/revoking access is policy-level work. Members can
  * moderate posts (approve/reject) but not change who sees the board.
  *
- * Two accepted input shapes during the audience → access transition:
- *   - `access` (preferred, post-T16): per-action tier matrix written directly
- *   - `audience` (legacy): old discriminated union; dual-writes into both
- *     columns via audienceToAccess so canViewBoard stays consistent
- * When both are supplied `access` wins and we DO NOT touch audience — the
- * caller didn't ask to change it, and silently overwriting would lose state.
+ * Accepts a per-action tier matrix (BoardAccess). Each call records a
+ * `board.access.changed` audit event capturing the before/after access shape.
  */
 export const updateBoardAccessFn = createServerFn({ method: 'POST' })
   .inputValidator(updateBoardAccessSchema.parse)
@@ -397,45 +375,18 @@ export const updateBoardAccessFn = createServerFn({ method: 'POST' })
     })
     if (!before) throw new NotFoundError('BOARD_NOT_FOUND', `Board ${data.boardId} not found`)
 
-    const updates: Record<string, unknown> = {}
-    if (data.access) {
-      // `access` is the authoritative input post-Phase 4. When provided
-      // directly it wins over an `audience` derivation and we leave the
-      // legacy audience column alone (T24 drops it entirely).
-      updates.access = data.access
-    } else if (data.audience) {
-      // Dual-write back-compat path (PR1): keep audience and the derived
-      // access matrix in lockstep so canViewBoard never reads stale tiers.
-      updates.audience = data.audience
-      updates.access = audienceToAccess(data.audience)
-    }
-    if (Object.keys(updates).length === 0) return { ok: true }
-
     await db
       .update(boards)
-      .set(updates)
+      .set({ access: data.access })
       .where(eq(boards.id, data.boardId as BoardId))
 
-    // Prefer the more specific 'board.access.changed' when access was the
-    // input; fall back to the audience event for the legacy path so audit
-    // reviewers can tell which API surface the change came from.
-    if (data.access) {
-      await recordAuditEvent({
-        event: 'board.access.changed',
-        actor: actorFromAuth(auth),
-        target: { type: 'board', id: data.boardId },
-        before: { access: before.access },
-        after: { access: data.access },
-      })
-    } else if (data.audience) {
-      await recordAuditEvent({
-        event: 'board.audience.changed',
-        actor: actorFromAuth(auth),
-        target: { type: 'board', id: data.boardId },
-        before: { audience: before.audience, access: before.access },
-        after: { audience: data.audience, access: audienceToAccess(data.audience) },
-      })
-    }
+    await recordAuditEvent({
+      event: 'board.access.changed',
+      actor: actorFromAuth(auth),
+      target: { type: 'board', id: data.boardId },
+      before: { access: before.access },
+      after: { access: data.access },
+    })
 
     return { ok: true }
   })

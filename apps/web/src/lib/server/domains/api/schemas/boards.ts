@@ -18,9 +18,10 @@ import {
   ValidationErrorSchema,
 } from './common'
 
-// Board audience — discriminated union mirroring BoardAudience in
-// packages/db/src/schema/boards.ts. Kept in lockstep with the runtime
-// schema in routes/api/v1/boards/index.ts.
+// Board audience — legacy API contract. The internal storage shape is now
+// the BoardAccess matrix (view/comment/submit + segmentIds + approval), but
+// REST consumers see a synthesised `audience` derived from access.view via
+// accessToAudience() in board.service.ts. Kept in lockstep with that helper.
 const BoardAudienceSchema = z
   .discriminatedUnion('kind', [
     z.object({ kind: z.literal('public') }),
@@ -33,7 +34,7 @@ const BoardAudienceSchema = z
   ])
   .meta({
     description:
-      'Who can view this board. public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.',
+      'Who can view this board (legacy shape — derived from the internal access matrix). public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.',
     example: { kind: 'public' },
   })
 

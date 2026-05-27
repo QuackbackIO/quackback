@@ -1,13 +1,7 @@
 import { pgTable, text, timestamp, boolean, jsonb, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
-import {
-  type BoardSettings,
-  type BoardAudience,
-  type BoardAccess,
-  DEFAULT_BOARD_AUDIENCE,
-  DEFAULT_BOARD_ACCESS,
-} from '../types'
+import { type BoardSettings, type BoardAccess, DEFAULT_BOARD_ACCESS } from '../types'
 
 export const boards = pgTable(
   'boards',
@@ -16,10 +10,9 @@ export const boards = pgTable(
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
-    // v1 access controls — see BoardAudience in ../types. Replaces the legacy
-    // `is_public` boolean. Existing rows are backfilled by the 0066 migration
-    // before the column is dropped.
-    audience: jsonb('audience').$type<BoardAudience>().default(DEFAULT_BOARD_AUDIENCE).notNull(),
+    // v1 access controls — per-action tier matrix. Replaces the legacy
+    // `audience` jsonb column (dropped in migration 0080) and the older
+    // `is_public` boolean before that.
     access: jsonb('access').$type<BoardAccess>().default(DEFAULT_BOARD_ACCESS).notNull(),
     settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

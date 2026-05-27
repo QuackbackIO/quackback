@@ -51,7 +51,6 @@ describe('getPublicBoardById — defensive policy check', () => {
   it('returns the board for a team actor regardless of audience', async () => {
     mockFindFirst.mockResolvedValueOnce({
       id: 'brd_team' as BoardId,
-      audience: { kind: 'team' },
       access: {
         view: 'team',
         comment: 'team',
@@ -68,7 +67,6 @@ describe('getPublicBoardById — defensive policy check', () => {
   it('returns null when the audience is team and the actor is a portal user', async () => {
     mockFindFirst.mockResolvedValueOnce({
       id: 'brd_team' as BoardId,
-      audience: { kind: 'team' },
       access: {
         view: 'team',
         comment: 'team',
@@ -85,7 +83,6 @@ describe('getPublicBoardById — defensive policy check', () => {
   it('returns null when the audience is segments and the actor is not in any', async () => {
     mockFindFirst.mockResolvedValueOnce({
       id: 'brd_seg' as BoardId,
-      audience: { kind: 'segments', segmentIds: ['seg_alpha'] },
       access: {
         view: 'segments',
         comment: 'segments',
@@ -102,7 +99,6 @@ describe('getPublicBoardById — defensive policy check', () => {
   it('returns the board for a segments-audience match', async () => {
     mockFindFirst.mockResolvedValueOnce({
       id: 'brd_seg' as BoardId,
-      audience: { kind: 'segments', segmentIds: ['seg_alpha'] },
       access: {
         view: 'segments',
         comment: 'segments',
@@ -135,7 +131,6 @@ describe('getPublicBoardById — defensive policy check', () => {
     // a long time; this test brings the byId variant in line.
     mockFindFirst.mockResolvedValueOnce({
       id: 'brd_x' as BoardId,
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',

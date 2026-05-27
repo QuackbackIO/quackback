@@ -93,7 +93,6 @@ vi.mock('@/lib/server/db', async () => {
           board: {
             id: 'board_mock',
             slug: 'test',
-            audience: { kind: 'public' },
             access: {
               view: 'anonymous',
               comment: 'anonymous',

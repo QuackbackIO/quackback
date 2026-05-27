@@ -52,7 +52,6 @@ vi.mock('@/lib/server/db', async () => {
             id: 'board_b',
             slug: 'feedback',
             name: 'Feedback',
-            audience: { kind: 'public' },
             access: {
               view: 'anonymous',
               comment: 'anonymous',
@@ -176,7 +175,6 @@ describe('createPost held audit event', () => {
       id: 'board_b',
       slug: 'feedback',
       name: 'Feedback',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',
@@ -224,7 +222,6 @@ describe('createPost held audit event', () => {
       id: 'board_b',
       slug: 'feedback',
       name: 'Feedback',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',
@@ -275,7 +272,6 @@ describe('createPost dispatch guard (moderation)', () => {
       id: 'board_b',
       slug: 'feedback',
       name: 'Feedback',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',
@@ -314,7 +310,6 @@ describe('createPost dispatch guard (moderation)', () => {
       id: 'board_b',
       slug: 'feedback',
       name: 'Feedback',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',
@@ -353,7 +348,6 @@ describe('createPost dispatch guard (moderation)', () => {
       id: 'board_b',
       slug: 'feedback',
       name: 'Feedback',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',

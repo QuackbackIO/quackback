@@ -1,9 +1,9 @@
 /**
- * G2 regression: updateBoard (the generic service) must not touch audience.
- * Audience is a policy-level field, admin-only via updateBoardAccessFn.
+ * G2 regression: updateBoard (the generic service) must not touch access.
+ * Access is a policy-level field, admin-only via updateBoardAccessFn.
  *
- * Structural guarantee: UpdateBoardInput (board.types.ts) omits the audience
- * field entirely, so passing audience to updateBoard is a TypeScript error.
+ * Structural guarantee: UpdateBoardInput (board.types.ts) omits the access
+ * field entirely, so passing access to updateBoard is a TypeScript error.
  * This test verifies the runtime behavior matches that guarantee.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -52,7 +52,13 @@ const EXISTING_BOARD = {
   name: 'Original',
   slug: 'original',
   description: null,
-  audience: { kind: 'public' },
+  access: {
+    view: 'anonymous',
+    comment: 'anonymous',
+    submit: 'anonymous',
+    segmentIds: [],
+    approval: { posts: false, comments: false },
+  },
   settings: {},
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -82,20 +88,20 @@ beforeEach(() => {
   setupUpdateMock()
 })
 
-describe('updateBoard — audience isolation (G2)', () => {
-  it('never writes audience to the DB when a name update is requested', async () => {
+describe('updateBoard — access isolation (G2)', () => {
+  it('never writes access to the DB when a name update is requested', async () => {
     await updateBoard(BOARD_ID, { name: 'New Name' })
-    expect(capturedSet).not.toHaveProperty('audience')
+    expect(capturedSet).not.toHaveProperty('access')
   })
 
-  it('never writes audience when description changes', async () => {
+  it('never writes access when description changes', async () => {
     await updateBoard(BOARD_ID, { description: 'hello' })
-    expect(capturedSet).not.toHaveProperty('audience')
+    expect(capturedSet).not.toHaveProperty('access')
   })
 
-  it('never writes audience when settings change', async () => {
+  it('never writes access when settings change', async () => {
     await updateBoard(BOARD_ID, { settings: {} })
-    expect(capturedSet).not.toHaveProperty('audience')
+    expect(capturedSet).not.toHaveProperty('access')
   })
 
   it('does update name and description normally', async () => {

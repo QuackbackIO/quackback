@@ -23,6 +23,20 @@ vi.mock('@/lib/server/domains/boards/board.service', () => ({
   updateBoard: (...args: unknown[]) => mockUpdateBoard(...args),
   getBoardById: (...args: unknown[]) => mockGetBoardById(...args),
   deleteBoard: (...args: unknown[]) => mockDeleteBoard(...args),
+  accessToAudience: (access: { view: string; segmentIds: string[] }) => {
+    switch (access.view) {
+      case 'anonymous':
+        return { kind: 'public' }
+      case 'authenticated':
+        return { kind: 'authenticated' }
+      case 'segments':
+        return { kind: 'segments', segmentIds: access.segmentIds }
+      case 'team':
+        return { kind: 'team' }
+      default:
+        return { kind: 'public' }
+    }
+  },
 }))
 vi.mock('@/lib/server/domains/api/validation', () => ({
   parseTypeId: vi.fn((value: string) => value),
@@ -46,7 +60,13 @@ const BASE_BOARD = {
   name: 'My Board',
   slug: 'my-board',
   description: null,
-  audience: { kind: 'public' },
+  access: {
+    view: 'anonymous',
+    comment: 'anonymous',
+    submit: 'anonymous',
+    segmentIds: [],
+    approval: { posts: false, comments: false },
+  },
   settings: {},
   createdAt: new Date(),
   updatedAt: new Date(),

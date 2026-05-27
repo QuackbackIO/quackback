@@ -26,50 +26,43 @@ import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
-import {
-  DEFAULT_BOARD_ACCESS,
-  type AccessTier,
-  type BoardAccess,
-  type BoardAudience,
-} from '@/lib/server/db'
+import { type BoardAccess } from '@/lib/server/db'
+import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 
 /**
- * Derive a BoardAccess from a legacy BoardAudience. Same semantics as the
- * 0079 migration backfill: all three actions land on the tier that matches
- * the legacy kind, and approval defaults to off. Exported for tests; used
- * when creating a new board so audience and access stay consistent.
+ * Legacy API-contract shape — derived from BoardAccess for backward
+ * compatibility with the REST `/api/v1/boards*` endpoints. The internal
+ * data model no longer stores audience; this helper synthesises the old
+ * discriminated union from the current access matrix so external clients
+ * keep working. New code should consume `BoardAccess` directly.
  */
-export function audienceToAccess(audience: BoardAudience): BoardAccess {
-  // Explicit kind→tier mapping with an 'anonymous' default. The default
-  // mirrors the ELSE clause in migration 0079 and keeps the function safe if
-  // the BoardAudience union is ever widened without updating this map.
-  let tier: AccessTier
-  switch (audience.kind) {
-    case 'public':
-      tier = 'anonymous'
-      break
+export type LegacyBoardAudience =
+  | { kind: 'public' }
+  | { kind: 'authenticated' }
+  | { kind: 'team' }
+  | { kind: 'segments'; segmentIds: string[] }
+
+/**
+ * Derive a legacy BoardAudience from the current BoardAccess. We collapse
+ * the three-action matrix onto `view` — that's the historical meaning of
+ * "audience" (who can see the board). Boards with mixed tiers map to the
+ * view tier; non-view restrictions (e.g. team-only comment on a public
+ * board) aren't expressible in the legacy shape.
+ */
+export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
+  switch (access.view) {
+    case 'anonymous':
+      return { kind: 'public' }
     case 'authenticated':
-      tier = 'authenticated'
-      break
-    case 'team':
-      tier = 'team'
-      break
+      return { kind: 'authenticated' }
     case 'segments':
-      tier = 'segments'
-      break
+      return { kind: 'segments', segmentIds: access.segmentIds }
+    case 'team':
+      return { kind: 'team' }
     default:
-      tier = 'anonymous'
-  }
-  const segmentIds = audience.kind === 'segments' ? audience.segmentIds : []
-  return {
-    ...DEFAULT_BOARD_ACCESS,
-    view: tier,
-    comment: tier,
-    submit: tier,
-    segmentIds,
+      return { kind: 'public' }
   }
 }
-import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 
 /**
@@ -126,22 +119,27 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     slug = `${baseSlug}-${counter}`
   }
 
-  // Create the board. Audience defaults to public when omitted; richer
-  // choices (authenticated/team/segments) can be set here on create or
-  // changed later via updateBoardAccessFn (admin-only, audited).
-  const audience: BoardAudience = input.audience ?? { kind: 'public' }
+  // Create the board. Access defaults to the column default
+  // (DEFAULT_BOARD_ACCESS — all-anonymous, approval off) when omitted;
+  // richer choices can be set here on create or changed later via
+  // updateBoardAccessFn (admin-only, audited).
+  const insertValues: {
+    name: string
+    slug: string
+    description: string | null
+    settings: BoardSettings
+    access?: BoardAccess
+  } = {
+    name: input.name.trim(),
+    slug,
+    description: input.description?.trim() || null,
+    settings: input.settings || {},
+  }
+  if (input.access) {
+    insertValues.access = input.access
+  }
 
-  const [board] = await db
-    .insert(boards)
-    .values({
-      name: input.name.trim(),
-      slug,
-      description: input.description?.trim() || null,
-      audience,
-      access: audienceToAccess(audience),
-      settings: input.settings || {},
-    })
-    .returning()
+  const [board] = await db.insert(boards).values(insertValues).returning()
 
   return board
 }

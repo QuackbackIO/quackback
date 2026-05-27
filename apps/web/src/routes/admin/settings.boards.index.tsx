@@ -29,7 +29,6 @@ interface BoardForSettings {
   name: string
   slug: string
   description: string | null
-  audience: import('@/lib/shared/db-types').BoardAudience
   access: import('@/lib/shared/db-types').BoardAccess
 }
 

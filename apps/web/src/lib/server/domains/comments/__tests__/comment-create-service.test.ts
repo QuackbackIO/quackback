@@ -64,7 +64,6 @@ vi.mock('@/lib/server/db', async () => {
             board: {
               id: 'board_b',
               slug: 'b',
-              audience: { kind: 'public' },
               access: {
                 view: 'anonymous',
                 comment: 'anonymous',
@@ -178,7 +177,6 @@ async function mockPostWithApproval(approvalComments: boolean) {
     board: {
       id: 'board_b',
       slug: 'b',
-      audience: { kind: 'public' },
       access: {
         view: 'anonymous',
         comment: 'anonymous',

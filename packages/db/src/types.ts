@@ -39,20 +39,10 @@ export interface BoardSettings {
   roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
 }
 
-// Stored in boards.audience jsonb. Team members retain access at every kind
-// — kind='team' is the *non-team excluded* tier, not a team-only allowlist.
-export type BoardAudience =
-  | { kind: 'public' }
-  | { kind: 'authenticated' }
-  | { kind: 'team' }
-  | { kind: 'segments'; segmentIds: string[] }
-
-export const DEFAULT_BOARD_AUDIENCE: BoardAudience = { kind: 'public' }
-
 // ----------------------------------------------------------------------
 // Per-action access tiers (View+Vote / Comment / Submit) and per-board
-// approval overrides. Lives alongside BoardAudience during the additive
-// migration; BoardAudience is removed once all callers migrate.
+// approval overrides. The legacy `BoardAudience` discriminated union was
+// removed in migration 0080 — every reader now consults `BoardAccess`.
 // ----------------------------------------------------------------------
 
 export const ACCESS_TIERS = ['anonymous', 'authenticated', 'segments', 'team'] as const
