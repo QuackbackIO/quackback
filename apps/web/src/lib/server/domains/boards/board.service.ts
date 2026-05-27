@@ -26,7 +26,32 @@ import type { BoardId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
-import type { BoardAudience } from '@/lib/server/db'
+import { DEFAULT_BOARD_ACCESS, type BoardAccess, type BoardAudience } from '@/lib/server/db'
+
+/**
+ * Derive a BoardAccess from a legacy BoardAudience. Same semantics as the
+ * 0079 migration backfill: all three actions land on the tier that matches
+ * the legacy kind, and approval defaults to off. Exported for tests; used
+ * when creating a new board so audience and access stay consistent.
+ */
+export function audienceToAccess(audience: BoardAudience): BoardAccess {
+  const tier =
+    audience.kind === 'public'
+      ? 'anonymous'
+      : audience.kind === 'authenticated'
+        ? 'authenticated'
+        : audience.kind === 'team'
+          ? 'team'
+          : 'segments'
+  const segmentIds = audience.kind === 'segments' ? audience.segmentIds : []
+  return {
+    ...DEFAULT_BOARD_ACCESS,
+    view: tier,
+    comment: tier,
+    submit: tier,
+    segmentIds,
+  }
+}
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 
@@ -96,6 +121,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
       slug,
       description: input.description?.trim() || null,
       audience,
+      access: audienceToAccess(audience),
       settings: input.settings || {},
     })
     .returning()

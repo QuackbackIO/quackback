@@ -30,6 +30,13 @@ vi.mock('@/lib/server/db', async () => {
     inArray: drizzle.inArray,
     asc: drizzle.asc,
     sql: drizzle.sql,
+    DEFAULT_BOARD_ACCESS: {
+      view: 'anonymous',
+      comment: 'anonymous',
+      submit: 'anonymous',
+      segmentIds: [],
+      approval: { posts: false, comments: false },
+    },
   }
 })
 
