@@ -81,6 +81,12 @@ export async function addMember(input: AddMemberInput): Promise<void> {
       ) < ${SOURCE_PRIORITY[input.source]}`,
     })
 
+  // Audit fires whenever an actor is supplied — including the no-op
+  // "preserve stickier source" path. The behaviour is intentional:
+  // the actor field captures CALLER INTENT, and an admin clicking
+  // "Add user to segment X" or an API key POSTing to a segment-members
+  // route IS expressing intent even when the row was already there.
+  // System reconciles (SSO / widget) pass null and don't audit.
   if (input.actor) {
     await recordAuditEvent({
       event: 'segment.member.added',

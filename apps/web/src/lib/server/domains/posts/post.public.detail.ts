@@ -20,7 +20,13 @@ import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
-import { canViewPost, isTeamActor, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
+import {
+  canViewPost,
+  isTeamActor,
+  postViewFilter,
+  ANONYMOUS_ACTOR,
+  type Actor,
+} from '@/lib/server/policy'
 import { hydrateMentions } from './hydrate-mentions'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { JSONContent } from '@tiptap/core'
@@ -52,36 +58,28 @@ export async function listViewableMergedSourceIds(
   canonicalPostId: PostId,
   actor: Actor
 ): Promise<string[]> {
-  // Pull audience + moderation state + author so the full canViewPost
-  // gate runs (audience + moderation + own-pending). canViewBoard alone
-  // let a pending/spam source post's public-board comments leak under
-  // the canonical's detail.
+  // Push the audience + moderation gate into SQL via the existing
+  // `postViewFilter(actor)` predicate so the database returns only
+  // rows the actor is entitled to see. Previously the helper pulled
+  // every merged-source row + every board.audience for the canonical
+  // and filtered them in JS — for a heavily-merged canonical that's
+  // N rows pulled per public-detail load even when N-1 of them are
+  // immediately discarded. The SQL filter is the same one the public
+  // list/detail queries use, so this also keeps the two view paths
+  // in lockstep.
   const rows = await db
-    .select({
-      id: posts.id,
-      audience: boards.audience,
-      moderationState: posts.moderationState,
-      principalId: posts.principalId,
-    })
+    .select({ id: posts.id })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(
       and(
         eq(posts.canonicalPostId, canonicalPostId),
         isNull(posts.deletedAt),
-        isNull(boards.deletedAt)
+        isNull(boards.deletedAt),
+        postViewFilter(actor)
       )
     )
-  return rows
-    .filter(
-      (r) =>
-        canViewPost(
-          actor,
-          { moderationState: r.moderationState, principalId: r.principalId },
-          { audience: r.audience }
-        ).allowed
-    )
-    .map((r) => String(r.id))
+  return rows.map((r) => String(r.id))
 }
 
 export async function getPublicPostDetail(

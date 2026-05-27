@@ -8,7 +8,18 @@
  * rather than loading all users into memory.
  */
 
-import { db, eq, and, inArray, isNull, sql, asc, segments, userSegments } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  inArray,
+  isNull,
+  sql,
+  asc,
+  segments,
+  userSegments,
+  principal as principalTable,
+} from '@/lib/server/db'
 import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
@@ -247,8 +258,20 @@ export async function assignUsersToSegment(
   }
   if (principalIds.length === 0) return
 
+  // Validate principal ids up-front so one missing id doesn't FK-violate
+  // mid-loop and abort the bulk. The REST endpoint has this; the admin
+  // UI path used to throw on the first bad id (UX surprise where ~half
+  // the click "succeeded" but the rest silently didn't).
+  const validatedRows = await db
+    .select({ id: principalTable.id })
+    .from(principalTable)
+    .where(inArray(principalTable.id, principalIds))
+  const validIds = new Set(validatedRows.map((r) => String(r.id)))
+  const known = principalIds.filter((id) => validIds.has(id))
+  if (known.length === 0) return
+
   const { addMember } = await import('./segment-membership.service')
-  for (const principalId of principalIds) {
+  for (const principalId of known) {
     await addMember({
       principalId,
       segmentId,

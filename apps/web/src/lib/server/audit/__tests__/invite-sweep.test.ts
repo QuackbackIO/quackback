@@ -17,7 +17,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockFindMany = vi.fn()
 const mockDbSet = vi.fn()
 const mockDbWhere = vi.fn()
-// update chain: db.update(table).set({}).where()
+const mockDbReturning = vi.fn()
+// update chain: db.update(table).set({}).where(...).returning(...)
+mockDbWhere.mockReturnValue({ returning: mockDbReturning })
 mockDbSet.mockReturnValue({ where: mockDbWhere })
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockDbUpdate = vi.fn((_table?: any) => ({ set: mockDbSet }))
@@ -69,7 +71,17 @@ function fakeInvite(id: string, email: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockRecordAuditEvent.mockResolvedValue(undefined)
-  mockDbWhere.mockResolvedValue(undefined)
+  mockDbWhere.mockReturnValue({ returning: mockDbReturning })
+  // Default: pretend every row the sweep tried to expire was actually
+  // flipped. Individual tests override to exercise the lost-race path.
+  mockDbReturning.mockImplementation(async () => {
+    const last = mockFindMany.mock.results[mockFindMany.mock.results.length - 1]
+    if (last && last.type === 'return') {
+      const rows = (await last.value) as Array<{ id: string; email: string; createdAt: Date }>
+      return rows
+    }
+    return []
+  })
 })
 
 // ---------------------------------------------------------------------------

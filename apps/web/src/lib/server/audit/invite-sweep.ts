@@ -34,9 +34,36 @@ export async function sweepExpiredPortalInvites(): Promise<number> {
 
   if (stale.length === 0) return 0
 
-  // Emit one audit row per invite. Best-effort — failures are logged but
-  // don't prevent the subsequent status update.
-  for (const inv of stale) {
+  // Single bulk UPDATE first — idempotent, never re-sweeps the same row.
+  //
+  // The WHERE pins `status='pending'` (in addition to the id-list) to close
+  // the TOCTOU window between the SELECT above and this UPDATE: if an
+  // invitee accepts their link in that gap, the row flips to 'accepted'
+  // and must not be silently overwritten to 'expired'. Every sister write
+  // (cancelPortalInviteFn, resendPortalInviteFn, acceptPortalInviteFn)
+  // pins the same predicate for the same reason.
+  //
+  // `.returning()` lets us emit audit rows only for invites the UPDATE
+  // actually flipped. Previously we emitted before the UPDATE — a
+  // concurrent accept then left a ghost `portal.invite.expired` row in
+  // the audit log for an invite that was actually accepted.
+  const actuallyExpired = await db
+    .update(invitation)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        inArray(
+          invitation.id,
+          stale.map((i) => i.id)
+        ),
+        eq(invitation.status, 'pending')
+      )
+    )
+    .returning({ id: invitation.id, email: invitation.email, createdAt: invitation.createdAt })
+
+  // Emit one audit row per invite that was actually flipped. Best-effort
+  // — emit failures are logged but don't change the data outcome.
+  for (const inv of actuallyExpired) {
     await recordAuditEvent({
       event: 'portal.invite.expired',
       outcome: 'success',
@@ -50,27 +77,6 @@ export async function sweepExpiredPortalInvites(): Promise<number> {
     }).catch((err) => console.warn('[invite-sweep] audit emit failed:', err))
   }
 
-  // Single bulk UPDATE — idempotent, never re-sweeps the same row.
-  //
-  // The WHERE pins `status='pending'` (in addition to the id-list) to close
-  // the TOCTOU window between the SELECT above and this UPDATE: if an
-  // invitee accepts their link in that gap, the row flips to 'accepted'
-  // and must not be silently overwritten to 'expired'. Every sister write
-  // (cancelPortalInviteFn, resendPortalInviteFn, acceptPortalInviteFn)
-  // pins the same predicate for the same reason.
-  await db
-    .update(invitation)
-    .set({ status: 'expired' })
-    .where(
-      and(
-        inArray(
-          invitation.id,
-          stale.map((i) => i.id)
-        ),
-        eq(invitation.status, 'pending')
-      )
-    )
-
-  console.log(`[invite-sweep] marked ${stale.length} portal invites as expired`)
-  return stale.length
+  console.log(`[invite-sweep] marked ${actuallyExpired.length} invites as expired`)
+  return actuallyExpired.length
 }

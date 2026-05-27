@@ -526,6 +526,13 @@
       "when": 1779062400000,
       "tag": "0074_user_country_locale_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1779148800000,
+      "tag": "0075_invitation_account_indexes",
+      "breakpoints": true
     }
   ]
 }

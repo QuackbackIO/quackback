@@ -330,31 +330,39 @@ export const Route = createFileRoute('/api/widget/identify')({
         // `enterprise` membership forever and retain portal-access via
         // allowedSegmentIds. Manual / sso / api memberships are sticky
         // (addedBy='widget' filter inside reconcileWidgetMemberships).
-        if (claimsAreVerified) {
-          const rawSegments = Array.isArray(claims.segments) ? claims.segments : []
-          // Dedupe + filter non-strings BEFORE the DB lookup so we don't
-          // round-trip per duplicate. Previously this was a per-slug
-          // findFirst loop — a 10-slug claim was 10 sequential queries
-          // on the identify hot path. Batch via inArray.
-          const slugSet = new Set<string>()
-          for (const slug of rawSegments) {
-            if (typeof slug === 'string' && slug.length > 0) slugSet.add(slug)
-          }
-          let resolvedSegmentIds: SegmentId[] = []
-          if (slugSet.size > 0) {
-            const slugList = Array.from(slugSet)
-            const { inArray } = await import('@/lib/server/db')
-            const rows = await db.query.segments.findMany({
-              where: and(inArray(segments.slug, slugList), isNull(segments.deletedAt)),
-              columns: { id: true },
-            })
-            resolvedSegmentIds = rows.map((r) => r.id)
-          }
-          await reconcileWidgetMemberships({
-            principalId,
-            desiredSegmentIds: resolvedSegmentIds,
-          })
+        // Reconcile widget-sourced memberships on EVERY identify, not
+        // only the verified path. A previously-verified session that
+        // later re-identifies on the unverified path (e.g. admin flipped
+        // off identifyVerification, or the embedding code regressed)
+        // would otherwise keep its stale 'enterprise' membership
+        // indefinitely — exactly the bug reconcileWidgetMemberships was
+        // added to close. The unverified path supplies no segment claim
+        // (already stripped), so it reconciles to []: any widget-sourced
+        // row gets dropped, manual / sso / api stay sticky.
+        const rawSegments =
+          claimsAreVerified && Array.isArray(claims.segments) ? claims.segments : []
+        // Dedupe + filter non-strings BEFORE the DB lookup so we don't
+        // round-trip per duplicate. Previously this was a per-slug
+        // findFirst loop — a 10-slug claim was 10 sequential queries
+        // on the identify hot path. Batch via inArray.
+        const slugSet = new Set<string>()
+        for (const slug of rawSegments) {
+          if (typeof slug === 'string' && slug.length > 0) slugSet.add(slug)
         }
+        let resolvedSegmentIds: SegmentId[] = []
+        if (slugSet.size > 0) {
+          const slugList = Array.from(slugSet)
+          const { inArray } = await import('@/lib/server/db')
+          const rows = await db.query.segments.findMany({
+            where: and(inArray(segments.slug, slugList), isNull(segments.deletedAt)),
+            columns: { id: true },
+          })
+          resolvedSegmentIds = rows.map((r) => r.id)
+        }
+        await reconcileWidgetMemberships({
+          principalId,
+          desiredSegmentIds: resolvedSegmentIds,
+        })
 
         // If the widget had a previous anonymous session, merge its activity.
         // Ownership check: the caller must send the previousToken as both a body

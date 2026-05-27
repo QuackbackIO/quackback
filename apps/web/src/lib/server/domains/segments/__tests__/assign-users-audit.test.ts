@@ -15,14 +15,34 @@ import { generateId, type PrincipalId, type SegmentId } from '@quackback/ids'
 const mockAddMember = vi.fn()
 const mockSegmentFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
-  db: { query: { segments: { findFirst: (...a: unknown[]) => mockSegmentFindFirst(...a) } } },
-  eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
-  and: vi.fn((...parts: unknown[]) => ({ kind: 'and', parts })),
-  isNull: vi.fn((col) => ({ kind: 'isNull', col })),
-  segments: { id: 'segments.id', deletedAt: 'segments.deleted_at' },
-  userSegments: {},
-}))
+vi.mock('@/lib/server/db', () => {
+  // assignUsersToSegment validates principal ids exist before looping
+  // by selecting from `principal where id IN (ids)`. We can't introspect
+  // the WHERE shape reliably across mock variants — just inspect what
+  // the test passed into the most recent `inArray` mock call and echo
+  // those back as valid ids.
+  const mockInArray = vi.fn((col: unknown, vals: string[]) => ({ kind: 'inArray', col, vals }))
+  const mockWhere = vi.fn().mockImplementation(() => {
+    const lastInArray = mockInArray.mock.calls[mockInArray.mock.calls.length - 1]
+    const ids = (lastInArray?.[1] as string[] | undefined) ?? []
+    return Promise.resolve(ids.map((id) => ({ id })))
+  })
+  const mockFrom = vi.fn().mockReturnValue({ where: mockWhere })
+  const mockSelect = vi.fn().mockReturnValue({ from: mockFrom })
+  return {
+    db: {
+      query: { segments: { findFirst: (...a: unknown[]) => mockSegmentFindFirst(...a) } },
+      select: mockSelect,
+    },
+    eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
+    and: vi.fn((...parts: unknown[]) => ({ kind: 'and', parts })),
+    inArray: mockInArray,
+    isNull: vi.fn((col) => ({ kind: 'isNull', col })),
+    segments: { id: 'segments.id', deletedAt: 'segments.deleted_at' },
+    userSegments: {},
+    principal: { id: 'principal.id' },
+  }
+})
 
 vi.mock('../segment-membership.service', () => ({
   addMember: (...a: unknown[]) => mockAddMember(...a),

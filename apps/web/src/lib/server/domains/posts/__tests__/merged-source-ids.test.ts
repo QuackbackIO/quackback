@@ -7,6 +7,11 @@
  * UNION ALL SELECT id FROM posts WHERE canonical_post_id = $1)` would
  * union in comments from every merged source, including ones from
  * team-only / segment-restricted boards.
+ *
+ * The audience + moderation gate is now applied IN SQL via
+ * `postViewFilter(actor)`. These tests assert the helper:
+ *   - composes the right join + where shape (postViewFilter included)
+ *   - returns whichever ids the SQL produced (with no extra JS filtering)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { generateId, type PrincipalId, type SegmentId } from '@quackback/ids'
@@ -16,6 +21,8 @@ const mockWhere = vi.fn()
 const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere })
 const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin })
 const mockSelect = vi.fn().mockReturnValue({ from: mockFrom })
+
+const mockPostViewFilter = vi.fn((_actor: Actor) => ({ kind: 'postViewFilter' }))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -27,11 +34,19 @@ vi.mock('@/lib/server/db', () => ({
     canonicalPostId: 'posts.canonical_post_id',
     deletedAt: 'posts.deleted_at',
   },
-  boards: { id: 'boards.id', audience: 'boards.audience' },
+  boards: { id: 'boards.id', audience: 'boards.audience', deletedAt: 'boards.deleted_at' },
   eq: vi.fn((col, val) => ({ eq: [col, val] })),
   and: vi.fn((...parts) => ({ and: parts })),
   isNull: vi.fn((col) => ({ isNull: col })),
 }))
+
+vi.mock('@/lib/server/policy', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    postViewFilter: (...a: unknown[]) => mockPostViewFilter(...(a as [Actor])),
+  }
+})
 
 function actor(overrides: Partial<Actor> = {}): Actor {
   return {
@@ -45,83 +60,43 @@ function actor(overrides: Partial<Actor> = {}): Actor {
 
 const CANON_ID = generateId('post')
 
-// Test rows now also need moderationState + principalId because the
-// helper switched from canViewBoard to canViewPost. Default to
-// 'published' + a stable author id; tests that exercise moderation
-// state can override.
-function published<T extends { id: string; audience: unknown }>(
-  row: T
-): T & { moderationState: string; principalId: string } {
-  return { ...row, moderationState: 'published', principalId: 'prn_author' }
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
 describe('listViewableMergedSourceIds', () => {
-  it('drops merged sources whose board is team-only when the actor is anonymous', async () => {
+  it('passes the resolved actor to postViewFilter (SQL-side audience gate)', async () => {
+    mockWhere.mockResolvedValueOnce([])
+    const { listViewableMergedSourceIds } = await import('../post.public.detail')
+    const a = actor({ role: 'admin' })
+
+    await listViewableMergedSourceIds(CANON_ID, a)
+
+    expect(mockPostViewFilter).toHaveBeenCalledWith(a)
+  })
+
+  it('returns the ids the SQL returned, in order', async () => {
     mockWhere.mockResolvedValueOnce([
-      published({ id: 'post_src_pub', audience: { kind: 'public' } }),
-      published({ id: 'post_src_team', audience: { kind: 'team' } }),
+      { id: 'post_src_a' },
+      { id: 'post_src_b' },
+      { id: 'post_src_c' },
     ])
     const { listViewableMergedSourceIds } = await import('../post.public.detail')
     const ids = await listViewableMergedSourceIds(CANON_ID, actor())
-    expect(ids).toEqual(['post_src_pub'])
+    expect(ids).toEqual(['post_src_a', 'post_src_b', 'post_src_c'])
   })
 
-  it('keeps a segments-audience source only when the actor is a member', async () => {
-    mockWhere.mockResolvedValueOnce([
-      published({ id: 'post_src_in', audience: { kind: 'segments', segmentIds: ['seg_a'] } }),
-      published({ id: 'post_src_out', audience: { kind: 'segments', segmentIds: ['seg_b'] } }),
-    ])
-    const { listViewableMergedSourceIds } = await import('../post.public.detail')
-    const ids = await listViewableMergedSourceIds(
-      CANON_ID,
-      actor({ segmentIds: new Set(['seg_a' as SegmentId]) })
-    )
-    expect(ids).toEqual(['post_src_in'])
-  })
-
-  it('returns every source id for a team actor regardless of audience', async () => {
-    mockWhere.mockResolvedValueOnce([
-      published({ id: 'post_src_pub', audience: { kind: 'public' } }),
-      published({ id: 'post_src_team', audience: { kind: 'team' } }),
-      published({ id: 'post_src_seg', audience: { kind: 'segments', segmentIds: ['seg_x'] } }),
-    ])
-    const { listViewableMergedSourceIds } = await import('../post.public.detail')
-    const ids = await listViewableMergedSourceIds(CANON_ID, actor({ role: 'admin' }))
-    expect(ids.sort()).toEqual(['post_src_pub', 'post_src_seg', 'post_src_team'].sort())
-  })
-
-  it('returns an empty array when no merged sources exist', async () => {
+  it('returns an empty array when the SQL returns no rows', async () => {
     mockWhere.mockResolvedValueOnce([])
     const { listViewableMergedSourceIds } = await import('../post.public.detail')
     const ids = await listViewableMergedSourceIds(CANON_ID, actor())
     expect(ids).toEqual([])
   })
 
-  it('keeps authenticated-audience sources for any signed-in user', async () => {
-    mockWhere.mockResolvedValueOnce([
-      published({ id: 'post_src_auth', audience: { kind: 'authenticated' } }),
-    ])
+  it('always joins boards so the audience filter has a column to reference', async () => {
+    mockWhere.mockResolvedValueOnce([])
     const { listViewableMergedSourceIds } = await import('../post.public.detail')
-    const ids = await listViewableMergedSourceIds(
-      CANON_ID,
-      actor({ role: 'user', principalType: 'user' })
-    )
-    expect(ids).toEqual(['post_src_auth'])
-  })
-
-  it('drops authenticated-audience sources for anonymous principals', async () => {
-    mockWhere.mockResolvedValueOnce([
-      published({ id: 'post_src_auth', audience: { kind: 'authenticated' } }),
-    ])
-    const { listViewableMergedSourceIds } = await import('../post.public.detail')
-    const ids = await listViewableMergedSourceIds(
-      CANON_ID,
-      actor({ role: 'user', principalType: 'anonymous' })
-    )
-    expect(ids).toEqual([])
+    await listViewableMergedSourceIds(CANON_ID, actor())
+    expect(mockInnerJoin).toHaveBeenCalled()
   })
 })

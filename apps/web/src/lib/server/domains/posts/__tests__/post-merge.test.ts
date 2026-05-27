@@ -36,6 +36,18 @@ vi.mock('@/lib/server/db', async () => {
         return createUpdateChain()
       },
       execute: (...args: unknown[]) => mockDbExecute(...args),
+      // Transaction wrapper for mergePost / unmergePost — runs the
+      // callback synchronously against the same mock surface (the
+      // production code only uses tx.update / tx.execute, both of
+      // which forward to db here).
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          update: (..._args: unknown[]) => {
+            mockDbUpdate(..._args)
+            return createUpdateChain()
+          },
+          execute: (...args: unknown[]) => mockDbExecute(...args),
+        }),
     },
     posts: { id: 'post_id', canonicalPostId: 'canonical_post_id' },
     votes: { principalId: 'principal_id', postId: 'post_id' },

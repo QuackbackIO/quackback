@@ -112,28 +112,43 @@ vi.mock('@/lib/server/db', () => {
               return Promise.resolve().then(onFulfilled)
             },
             // Path (b)
-            onConflictDoUpdate: async (conflict: {
+            onConflictDoUpdate: (conflict: {
               target: unknown
               set: Record<string, unknown>
               setWhere: unknown
             }) => {
               upsertCalls.push({ values: row, conflict })
               const incoming = Array.isArray(row) ? row[0] : row
-              const existing = state.rows.find(
-                (r) => r.principalId === incoming.principalId && r.segmentId === incoming.segmentId
-              )
-              if (!existing) {
-                state.rows.push(incoming)
-                return
+              // Mirror PG's RETURNING behaviour for ON CONFLICT DO UPDATE
+              // with a setWhere: rows are returned when the INSERT fired
+              // OR when the UPDATE matched the setWhere. The phantom-audit
+              // fix relies on returning() length to detect real changes.
+              const runUpsert = (): typeof state.rows => {
+                const existing = state.rows.find(
+                  (r) =>
+                    r.principalId === incoming.principalId && r.segmentId === incoming.segmentId
+                )
+                if (!existing) {
+                  state.rows.push(incoming)
+                  return [incoming]
+                }
+                const newPriority = MOCK_PRIORITY[String(conflict.set.addedBy)]
+                const existingPriority = MOCK_PRIORITY[existing.addedBy]
+                if (newPriority > existingPriority) {
+                  existing.addedBy = String(conflict.set.addedBy)
+                  return [existing]
+                }
+                return [] // no-op (preserves stickier source)
               }
-              // Mirror the production setWhere: only update when the
-              // incoming source's priority exceeds the existing's.
-              const newPriority = MOCK_PRIORITY[String(conflict.set.addedBy)]
-              const existingPriority = MOCK_PRIORITY[existing.addedBy]
-              if (newPriority > existingPriority) {
-                existing.addedBy = String(conflict.set.addedBy)
+              // Support both legacy `await onConflictDoUpdate(...)` and the
+              // new `.onConflictDoUpdate(...).returning(...)` chain.
+              return {
+                then(onFulfilled: (v: void) => void) {
+                  runUpsert()
+                  return Promise.resolve().then(onFulfilled)
+                },
+                returning: async () => runUpsert(),
               }
-              // else: no-op (preserves stickier source)
             },
           }
         }),

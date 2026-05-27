@@ -145,7 +145,14 @@ export const account = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index('account_userId_idx').on(table.userId)]
+  (table) => [
+    index('account_userId_idx').on(table.userId),
+    // Backs the segment evaluator's signup_source lookup:
+    // `SELECT provider_id FROM account WHERE user_id = $1 ORDER BY
+    // created_at ASC LIMIT 1`. Without the composite the ORDER BY
+    // requires a sort even though the WHERE is index-satisfied.
+    index('account_userId_createdAt_idx').on(table.userId, table.createdAt),
+  ]
 )
 
 export const verification = pgTable(
@@ -434,6 +441,14 @@ export const invitation = pgTable(
     index('invitation_email_status_idx').on(table.email, table.status),
     // Composite index for kind-discriminated lookup paths
     index('invitation_email_kind_status_idx').on(table.email, table.kind, table.status),
+    // Backs the daily invite-sweep: `kind IN (...) AND status='pending'
+    // AND expires_at < now()`. The existing email-leading indexes can't
+    // serve this query — sweep would seq-scan as the table grows.
+    // Partial-on-pending keeps the index footprint small (terminal
+    // rows dominate over time).
+    index('invitation_pending_expires_idx')
+      .on(table.kind, table.expiresAt)
+      .where(sql`status = 'pending'`),
   ]
 )
 
