@@ -636,11 +636,18 @@ describe('listPendingPostsFn — listPendingPosts exclusion + enrichment', () =>
 import { db } from '@/lib/server/db'
 
 function stubSelectCalls(postsCount: number, commentsCount = 0) {
-  const makeCountChain = (n: number) => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => Promise.resolve([{ count: n }])),
-    })),
-  })
+  // The count queries join through parent tables (posts→boards, comments→
+  // posts→boards) so the fluent chain may include one or more innerJoin
+  // calls before the terminal where() resolves the promise. Make the chain
+  // self-returning so any number of joins is supported.
+  const makeCountChain = (n: number) => {
+    const chain: Record<string, unknown> = {}
+    chain.innerJoin = vi.fn(() => chain)
+    chain.where = vi.fn(() => Promise.resolve([{ count: n }]))
+    return {
+      from: vi.fn(() => chain),
+    }
+  }
   vi.mocked(db.select)
     .mockImplementationOnce(() => makeCountChain(postsCount) as never)
     .mockImplementationOnce(() => makeCountChain(commentsCount) as never)
@@ -716,6 +723,37 @@ describe('getModerationStatus', () => {
     }
     expect(result.enabled).toBe(true)
     expect(result.pendingCount).toBe(3)
+  })
+
+  it('survives a failure on one count query (allSettled) and contributes 0 for the failed branch', async () => {
+    // Use a chain that rejects on .where() for the second query (comments).
+    // The handler must still return a usable status response (posts count
+    // intact) instead of bubbling the rejection up to the caller.
+    const makeOk = (n: number) => {
+      const chain: Record<string, unknown> = {}
+      chain.innerJoin = vi.fn(() => chain)
+      chain.where = vi.fn(() => Promise.resolve([{ count: n }]))
+      return { from: vi.fn(() => chain) }
+    }
+    const makeFail = () => {
+      const chain: Record<string, unknown> = {}
+      chain.innerJoin = vi.fn(() => chain)
+      chain.where = vi.fn(() => Promise.reject(new Error('db down')))
+      return { from: vi.fn(() => chain) }
+    }
+    vi.mocked(db.select)
+      .mockImplementationOnce(() => makeOk(4) as never)
+      .mockImplementationOnce(() => makeFail() as never)
+    mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'all' } })
+    // Silence the expected console.error from the rejected branch.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = (await getModerationStatusHandler()({ data: {} })) as {
+      enabled: boolean
+      pendingCount: number
+    }
+    expect(result.pendingCount).toBe(4)
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
   })
 
   it('pendingCount sums pending posts AND pending comments', async () => {

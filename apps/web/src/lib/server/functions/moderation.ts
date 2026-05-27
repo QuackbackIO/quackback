@@ -248,17 +248,43 @@ export const getModerationStatus = createServerFn({ method: 'GET' }).handler(asy
   if (!isTeamMember(auth.principal.role)) {
     throw new ForbiddenError('FORBIDDEN', 'Team only')
   }
-  const [postsResult, commentsResult] = await Promise.all([
+  // Use allSettled so a transient failure of one query does not nuke the
+  // entire status badge. Filter through parent deletedAt to stay consistent
+  // with the listPending*Fn queries — items on a soft-deleted board (or, for
+  // comments, a soft-deleted post) should not contribute to the moderator's
+  // workload count.
+  const [postsResult, commentsResult] = await Promise.allSettled([
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(posts)
-      .where(and(eq(posts.moderationState, 'pending'), isNull(posts.deletedAt))),
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(
+        and(eq(posts.moderationState, 'pending'), isNull(posts.deletedAt), isNull(boards.deletedAt))
+      ),
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(comments)
-      .where(and(eq(comments.moderationState, 'pending'), isNull(comments.deletedAt))),
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .innerJoin(boards, eq(posts.boardId, boards.id))
+      .where(
+        and(
+          eq(comments.moderationState, 'pending'),
+          isNull(comments.deletedAt),
+          isNull(posts.deletedAt),
+          isNull(boards.deletedAt)
+        )
+      ),
   ])
-  const pendingCount = (postsResult[0]?.count ?? 0) + (commentsResult[0]?.count ?? 0)
+  if (postsResult.status === 'rejected') {
+    console.error('[moderation] pending posts count failed:', postsResult.reason)
+  }
+  if (commentsResult.status === 'rejected') {
+    console.error('[moderation] pending comments count failed:', commentsResult.reason)
+  }
+  const postsCount = postsResult.status === 'fulfilled' ? (postsResult.value[0]?.count ?? 0) : 0
+  const commentsCount =
+    commentsResult.status === 'fulfilled' ? (commentsResult.value[0]?.count ?? 0) : 0
+  const pendingCount = postsCount + commentsCount
 
   const portalConfig = await getPortalConfig()
   // Self-consistent: if there is a backlog (e.g. per-board approval routes
