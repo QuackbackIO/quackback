@@ -72,37 +72,35 @@ interface TierMeta {
   label: string
   blurb: string
   icon: React.ComponentType<{ className?: string }>
-  hueClass: string
 }
 
+// Tier icons use semantic muted token; the open→restrictive color ramp is
+// shown once on the legend swatch only (a documented data-viz exception),
+// so it stays out of the matrix cells where it would not theme correctly.
 const TIERS: readonly TierMeta[] = [
   {
     id: 'anonymous',
     label: 'Anyone',
     blurb: 'Public · no sign-in',
     icon: GlobeAltIcon,
-    hueClass: 'text-emerald-400',
   },
   {
     id: 'authenticated',
     label: 'Signed-in',
     blurb: 'Any logged-in user',
     icon: UsersIcon,
-    hueClass: 'text-yellow-300',
   },
   {
     id: 'segments',
     label: 'Segments',
     blurb: 'Specific audiences',
     icon: TagIcon,
-    hueClass: 'text-orange-400',
   },
   {
     id: 'team',
     label: 'Team only',
     blurb: 'Workspace members',
     icon: LockClosedIcon,
-    hueClass: 'text-rose-400',
   },
 ] as const
 
@@ -378,7 +376,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
   }, [board.access, form])
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-24">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pb-24">
       {mutation.isError && <FormError message={mutation.error?.message ?? 'An error occurred'} />}
 
       <div className="space-y-4">
@@ -390,10 +388,13 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
         <PresetGrid active={activePreset} onSelect={handlePresetClick} />
       </div>
 
-      <div className="space-y-3 pt-2">
-        <div className="flex items-baseline justify-between">
+      <div className="space-y-4">
+        <div className="flex items-baseline justify-between gap-2">
           <span className="text-sm font-semibold">Per-action permissions</span>
-          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+            {/* Legend swatch: the open→restrictive color ramp is a deliberate
+                data-viz signal and is the sole sanctioned literal-color use
+                in this form (it never appears in the themed matrix cells). */}
             <span
               className="inline-block h-1 w-5 rounded-sm"
               style={{
@@ -418,7 +419,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
         />
 
         {!wsAllowAnonymous && (
-          <div className="mt-2.5 flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-[11.5px] text-muted-foreground">
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <GlobeAltIcon className="h-3 w-3 shrink-0" />
             <span>
               Workspace policy disables the <span className="text-foreground">Anyone</span> tier
@@ -438,7 +439,7 @@ export function BoardAccessForm({ board }: BoardAccessFormProps) {
         )}
       </div>
 
-      <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <ShieldCheckIcon className="h-3 w-3" />
         Team members and admins always have full access — they bypass these rules.
       </p>
@@ -506,7 +507,7 @@ function PresetCard({ active, label, description, icon, onClick }: PresetCardPro
         <span className={cn('text-xs font-semibold', active && 'text-primary')}>{label}</span>
         {active && <CheckIcon className="ml-auto h-3 w-3 text-primary" />}
       </div>
-      <span className="text-[11px] leading-snug text-muted-foreground">{description}</span>
+      <span className="text-xs leading-snug text-muted-foreground">{description}</span>
     </button>
   )
 }
@@ -534,7 +535,7 @@ function CustomStatusCard({ active }: CustomStatusCardProps) {
         <span className={cn('text-xs font-semibold', active && 'text-primary')}>Custom</span>
         {active && <CheckIcon className="ml-auto h-3 w-3 text-primary" />}
       </div>
-      <span className="text-[11px] leading-snug text-muted-foreground">
+      <span className="text-xs leading-snug text-muted-foreground">
         Set when any cell deviates from a preset.
       </span>
     </div>
@@ -567,48 +568,53 @@ function Matrix({
   onSegsChange,
 }: MatrixProps) {
   return (
-    <div
-      className="overflow-hidden rounded-lg border bg-muted/20"
-      role="grid"
-      aria-label="Permissions matrix"
-    >
+    // Mobile: the fixed 5-col grid can't crush below ~560px, so let it scroll
+    // horizontally instead. The negative margin lets the scroll area bleed to
+    // the card edge on phones; it resets at sm where the column has room.
+    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
       <div
-        className="grid bg-muted/40 border-b text-[11px] uppercase tracking-wider text-muted-foreground"
-        style={{ gridTemplateColumns: '1.5fr repeat(4, 1fr)' }}
+        className="min-w-[560px] overflow-hidden rounded-lg border bg-muted/20"
+        role="grid"
+        aria-label="Permissions matrix"
       >
-        <div className="px-4 py-2.5 font-medium">Action</div>
-        {TIERS.map((t) => (
-          <div
-            key={t.id}
-            className="flex flex-col items-center justify-center gap-0.5 border-l py-2 text-center normal-case"
-          >
-            <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
-              <span className={t.hueClass}>
-                <t.icon className="h-3 w-3" />
-              </span>
-              {t.label}
+        <div
+          className="grid min-w-[560px] bg-muted/40 border-b text-xs uppercase tracking-wider text-muted-foreground"
+          style={{ gridTemplateColumns: '1.5fr repeat(4, 1fr)' }}
+        >
+          <div className="px-4 py-2.5 font-medium">Action</div>
+          {TIERS.map((t) => (
+            <div
+              key={t.id}
+              className="flex flex-col items-center justify-center gap-0.5 border-l py-2 text-center normal-case"
+            >
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <span className="text-muted-foreground">
+                  <t.icon className="h-3 w-3" />
+                </span>
+                {t.label}
+              </div>
+              <div className="text-xs text-muted-foreground tracking-normal">{t.blurb}</div>
             </div>
-            <div className="text-[10px] text-muted-foreground tracking-normal">{t.blurb}</div>
-          </div>
+          ))}
+        </div>
+
+        {ACTIONS.map((action, idx) => (
+          <MatrixRow
+            key={action.id}
+            action={action}
+            values={values}
+            wsAllowAnonymous={wsAllowAnonymous}
+            isLast={idx === ACTIONS.length - 1}
+            segments={segments}
+            segmentsLoading={segmentsLoading}
+            pickerOpen={openPicker === action.id}
+            onCellClick={(tier) => onCellClick(action.id, tier)}
+            onOpenPicker={() => onOpenPicker(action.id)}
+            onClosePicker={onClosePicker}
+            onSegsChange={(ids) => onSegsChange(action.id, ids)}
+          />
         ))}
       </div>
-
-      {ACTIONS.map((action, idx) => (
-        <MatrixRow
-          key={action.id}
-          action={action}
-          values={values}
-          wsAllowAnonymous={wsAllowAnonymous}
-          isLast={idx === ACTIONS.length - 1}
-          segments={segments}
-          segmentsLoading={segmentsLoading}
-          pickerOpen={openPicker === action.id}
-          onCellClick={(tier) => onCellClick(action.id, tier)}
-          onOpenPicker={() => onOpenPicker(action.id)}
-          onClosePicker={onClosePicker}
-          onSegsChange={(ids) => onSegsChange(action.id, ids)}
-        />
-      ))}
     </div>
   )
 }
@@ -652,17 +658,17 @@ function MatrixRow({
 
   return (
     <div
-      className={cn('relative grid border-b', isLast && 'border-b-0')}
+      className={cn('relative grid min-w-[560px] border-b', isLast && 'border-b-0')}
       style={{ gridTemplateColumns: '1.5fr repeat(4, 1fr)' }}
       role="row"
     >
       <div className="flex items-center gap-3 px-4 py-3">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
+        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground">
           <action.icon className="h-3.5 w-3.5" />
         </span>
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-medium">{action.label}</div>
-          <div className="text-[11px] text-muted-foreground">{action.sub}</div>
+          <div className="text-xs text-muted-foreground">{action.sub}</div>
         </div>
       </div>
 
@@ -772,7 +778,7 @@ interface SegmentCellPreviewProps {
 function SegmentCellPreview({ empty, selected, reach }: SegmentCellPreviewProps) {
   if (empty) {
     return (
-      <span className="flex flex-col items-center gap-0.5 text-[11px] font-medium text-destructive">
+      <span className="flex flex-col items-center gap-0.5 text-xs font-medium text-destructive">
         <InformationCircleIcon className="h-3 w-3" />
         Pick segments
       </span>
@@ -781,19 +787,17 @@ function SegmentCellPreview({ empty, selected, reach }: SegmentCellPreviewProps)
   const first = selected[0]
   const extra = selected.length - 1
   return (
-    <span className="flex w-full flex-col items-center gap-0.5 px-1 text-center">
-      <span className="flex max-w-full items-center gap-1">
-        <span className="max-w-[110px] truncate text-[11.5px] font-medium text-primary">
-          {first?.name}
-        </span>
+    <span className="flex w-full min-w-0 flex-col items-center gap-0.5 px-1 text-center">
+      <span className="flex w-full min-w-0 items-center justify-center gap-1">
+        <span className="min-w-0 truncate text-sm font-medium text-primary">{first?.name}</span>
         {extra > 0 && (
-          <span className="rounded border border-primary/30 bg-primary/10 px-1 text-[10px] font-semibold leading-4 text-primary">
+          <span className="shrink-0 rounded border border-primary/30 bg-primary/10 px-1 text-xs font-semibold leading-4 text-primary">
             +{extra}
           </span>
         )}
-        <ChevronDownIcon className="h-2.5 w-2.5 text-primary/70" />
+        <ChevronDownIcon className="h-2.5 w-2.5 shrink-0 text-primary/70" />
       </span>
-      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
         <UsersIcon className="h-2.5 w-2.5" />
         <span className="font-mono tabular-nums">≈ {reach}</span>
       </span>
@@ -828,7 +832,9 @@ function SegmentPicker({
   useLayoutEffect(() => {
     if (!anchorRef.current) return
     const r = anchorRef.current.getBoundingClientRect()
-    setPos({ top: r.bottom + 4, left: Math.max(8, r.right - 320), width: 320 })
+    // Clamp the popover so it never exceeds the viewport on a narrow phone.
+    const width = Math.min(320, window.innerWidth - 16)
+    setPos({ top: r.bottom + 4, left: Math.max(8, r.right - width), width })
   }, [anchorRef])
 
   useEffect(() => {
@@ -876,6 +882,7 @@ function SegmentPicker({
         top: pos.top,
         left: pos.left,
         width: pos.width,
+        maxWidth: 'calc(100vw - 16px)',
         zIndex: 200,
       }}
       className="overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-xl"
@@ -887,13 +894,14 @@ function SegmentPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search or create…"
-          className="flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
+          aria-label="Search segments"
+          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
         {selected.length > 0 && (
           <button
             type="button"
             onClick={() => onChange([])}
-            className="text-[11px] text-muted-foreground hover:text-foreground"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Clear
           </button>
@@ -919,14 +927,12 @@ function SegmentPicker({
               >
                 <Checkbox checked={on} aria-hidden tabIndex={-1} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[12.5px] font-medium">{s.name}</div>
+                  <div className="text-sm font-medium">{s.name}</div>
                   {s.description && (
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {s.description}
-                    </div>
+                    <div className="truncate text-xs text-muted-foreground">{s.description}</div>
                   )}
                 </div>
-                <span className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="inline-flex items-center gap-1 font-mono text-xs tabular-nums text-muted-foreground">
                   <UsersIcon className="h-2.5 w-2.5" />
                   {s.count}
                 </span>
@@ -947,7 +953,7 @@ function SegmentPicker({
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <UsersIcon className="h-2.5 w-2.5" />
           <span>Reach:</span>
@@ -986,7 +992,7 @@ function SaveDock({ dirty, error, saving, onDiscard }: SaveDockProps) {
         dirty ? 'translate-y-0' : 'pointer-events-none translate-y-full'
       )}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 sm:pl-72">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span
             className={cn(
