@@ -28,12 +28,16 @@
  *     normal.
  *
  * Loop / UX guards:
- *  - `quackback.sso.attempted` (sessionStorage): set once an attempt
- *    is mounted, cleared only after the post-success reload has
- *    actually produced a signed-in session (verified by route
- *    context). Prevents a reload-loop when the cookie was set but
- *    the route loader refuses to recognise the session for some
- *    other reason.
+ *  - `quackback.sso.attempted` (sessionStorage): set to a **timestamp**
+ *    when an attempt is mounted. Subsequent loads bail if the
+ *    timestamp is within `ATTEMPTED_TTL_MS` of now, then auto-expire
+ *    so a user who hit a transient failure (network blip, iframe
+ *    blocked by an extension, etc.) doesn't get stuck for the rest
+ *    of the tab's lifetime. The TTL is short enough to prevent
+ *    reload-loops in pathological cases (a bad cookie that survives
+ *    reload would still cooldown after one cycle) and long enough
+ *    that a happy-path success → reload → mount sees signedIn=true
+ *    and clears the flag cleanly before TTL matters.
  *  - `quackback.sso.suppressed` (sessionStorage): set by the signout
  *    flow for in-tab protection against the brief race between
  *    "user clicked sign out" and "RP-initiated logout completes" —
@@ -58,6 +62,13 @@ const AUTH_COMPLETE_PATH = '/auth/auth-complete'
  *  enough for a slow IdP discovery + redirect round-trip and short
  *  enough that a flaky path doesn't leak a hidden network request. */
 const TIMEOUT_MS = 8000
+/** How long an `attempted` flag in sessionStorage keeps blocking
+ *  re-tries. 60s is comfortably longer than the iframe `TIMEOUT_MS`
+ *  (so back-to-back reloads can't ping-pong while an attempt is
+ *  legitimately in-flight) and short enough that a user who hit a
+ *  transient failure can recover by waiting ~a minute, or by closing
+ *  and reopening the tab. */
+const ATTEMPTED_TTL_MS = 60_000
 
 export interface UseSilentSsoOptions {
   /** Whether the `sso` provider is registered for this workspace.
@@ -117,7 +128,22 @@ export function useSilentSso({ enabled, signedIn }: UseSilentSsoOptions): void {
 
     let attempted = false
     try {
-      attempted = !!window.sessionStorage.getItem(ATTEMPTED_KEY)
+      const raw = window.sessionStorage.getItem(ATTEMPTED_KEY)
+      if (raw) {
+        // Legacy values stored the flag as `'1'`; treat any non-
+        // numeric value as "attempted recently, just stale data" so
+        // we honor it on this load and let the timestamp branch
+        // refresh on the next set.
+        const ts = Number(raw)
+        if (Number.isFinite(ts) && ts > 0) {
+          attempted = Date.now() - ts < ATTEMPTED_TTL_MS
+          // Stale timestamp → garbage-collect so storage doesn't
+          // accumulate values we'll never honor again.
+          if (!attempted) window.sessionStorage.removeItem(ATTEMPTED_KEY)
+        } else {
+          attempted = true
+        }
+      }
       const suppressed = !!window.sessionStorage.getItem(SUPPRESSED_KEY)
       if (suppressed) return
       // One-shot cleanup of the legacy durable flag from an earlier
@@ -214,7 +240,10 @@ export function useSilentSso({ enabled, signedIn }: UseSilentSsoOptions): void {
         authorizeUrl.searchParams.set('prompt', 'none')
 
         try {
-          window.sessionStorage.setItem(ATTEMPTED_KEY, '1')
+          // Timestamp-based — read side checks against ATTEMPTED_TTL_MS
+          // to expire stale flags so users aren't permanently locked
+          // out of silent SSO if an attempt errored partway through.
+          window.sessionStorage.setItem(ATTEMPTED_KEY, String(Date.now()))
         } catch {
           /* noop — the ranRef guard still prevents in-memory loop */
         }
