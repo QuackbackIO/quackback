@@ -17,7 +17,7 @@
 
 import type { TiptapContent } from '@/lib/server/db'
 import { isS3Configured, uploadImageBuffer } from '@/lib/server/storage/s3'
-import { checkUrlSafety } from './ssrf-guard'
+import { safeFetch, SsrfError, ResponseTooLargeError, TimeoutError } from './ssrf-guard'
 import { sniffImageMime, ALLOWED_REHOST_MIMES } from './magic-bytes'
 
 const MAX_BYTES = Number(process.env.REHOST_MAX_BYTES) || 10 * 1024 * 1024
@@ -137,25 +137,31 @@ function isSameOrigin(src: string): boolean {
   return srcUrl.pathname === publicPath || srcUrl.pathname.startsWith(`${publicPath}/`)
 }
 
-/** Fetch a URL with timeout + manual redirect + stream-limited body read. */
+/**
+ * Fetch a URL via the SSRF-safe pinned primitive, then enforce the rehost
+ * limits. `safeFetch` validates the URL and connects to the validated IP
+ * (no second DNS resolution), so the DNS-rebinding TOCTOU window is closed;
+ * it also never follows redirects and caps the body at `maxResponseBytes`.
+ */
 async function fetchWithLimits(
   url: string
 ): Promise<{ ok: true; buffer: Buffer; mimeHeader: string } | { ok: false; reason: RejectReason }> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   let response: Response
   try {
-    response = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'manual',
+    response = await safeFetch(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxResponseBytes: MAX_BYTES,
+      onOverflow: 'error',
     })
   } catch (err) {
-    clearTimeout(timer)
-    const reason = (err as Error).name === 'AbortError' ? 'fetch-timeout' : 'fetch-error'
-    return { ok: false, reason }
+    if (err instanceof SsrfError) return { ok: false, reason: err.reason }
+    if (err instanceof ResponseTooLargeError) return { ok: false, reason: 'oversized' }
+    if (err instanceof TimeoutError) return { ok: false, reason: 'fetch-timeout' }
+    return { ok: false, reason: 'fetch-error' }
   }
-  clearTimeout(timer)
 
+  // safeFetch returns 3xx verbatim rather than following it (a followed
+  // redirect would re-resolve an unvalidated host).
   if (response.status >= 300 && response.status < 400) {
     return { ok: false, reason: 'redirect-rejected' }
   }
@@ -176,31 +182,8 @@ async function fetchWithLimits(
     return { ok: false, reason: 'oversized' }
   }
 
-  // Stream-limited read: abort if the body overruns the cap.
-  if (!response.body) {
-    return { ok: false, reason: 'fetch-error' }
-  }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) {
-        total += value.byteLength
-        if (total > MAX_BYTES) {
-          await reader.cancel()
-          return { ok: false, reason: 'oversized' }
-        }
-        chunks.push(value)
-      }
-    }
-  } catch {
-    return { ok: false, reason: 'fetch-error' }
-  }
-
-  const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)))
+  // Body is already capped at MAX_BYTES by safeFetch (onOverflow: 'error').
+  const buffer = Buffer.from(await response.arrayBuffer())
   return { ok: true, buffer, mimeHeader }
 }
 
@@ -235,12 +218,8 @@ async function rehostOne(
     }
   }
 
-  // HTTP(S) path
-  const safety = await checkUrlSafety(src)
-  if (!safety.safe) {
-    return { rejected: safety.reason }
-  }
-
+  // HTTP(S) path — fetchWithLimits runs the URL through safeFetch, which
+  // validates it (SSRF guard) and pins the connection to the resolved IP.
   const fetched = await fetchWithLimits(src)
   if (!fetched.ok) {
     return { rejected: fetched.reason }

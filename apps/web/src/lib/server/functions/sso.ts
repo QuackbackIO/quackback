@@ -51,7 +51,8 @@ export const testSsoConnectionFn = createServerFn({ method: 'POST' })
     // safeFetch validates the URL, connects to the *resolved IP*
     // (closing the DNS-rebind window a bare checkUrlSafety + fetch
     // leaves open), never follows redirects, and caps the body size.
-    const { safeFetch, SsrfError, checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
+    const { safeFetch, SsrfError, TimeoutError, checkUrlSafety } =
+      await import('@/lib/server/content/ssrf-guard')
 
     let res: Response
     try {
@@ -70,7 +71,7 @@ export const testSsoConnectionFn = createServerFn({ method: 'POST' })
               : 'dns_error'
         return { ok: false, error: code }
       }
-      const code = (err as Error).name === 'TimeoutError' ? 'timeout' : 'fetch_error'
+      const code = err instanceof TimeoutError ? 'timeout' : 'fetch_error'
       return { ok: false, error: code }
     }
     if (res.status >= 300 && res.status < 400) {

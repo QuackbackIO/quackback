@@ -3,11 +3,15 @@ import type { TiptapContent } from '@/lib/server/db'
 
 // ---- Mocks ----
 
+// The rehoster fetches external images through the pinned `safeFetch`
+// primitive (which validates + pins the connection to the resolved IP,
+// closing the DNS-rebinding TOCTOU window). We mock `safeFetch` and keep the
+// real error classes so reason-mapping is exercised against real instances.
 vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ssrf-guard')>()
   return {
     ...actual,
-    checkUrlSafety: vi.fn(),
+    safeFetch: vi.fn(),
   }
 })
 
@@ -16,15 +20,16 @@ vi.mock('@/lib/server/storage/s3', () => ({
   uploadImageBuffer: vi.fn(),
 }))
 
-// We mock the global fetch
+// The bare global fetch must NEVER be used on the rehost path — that would
+// reopen the SSRF window safeFetch closes. We stub it to assert it stays cold.
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
 import { rehostExternalImages } from '../rehost-images'
-import { checkUrlSafety } from '@/lib/server/content/ssrf-guard'
+import { safeFetch, SsrfError, ResponseTooLargeError } from '@/lib/server/content/ssrf-guard'
 import { isS3Configured, uploadImageBuffer } from '@/lib/server/storage/s3'
 
-const checkUrlSafetyMock = checkUrlSafety as unknown as ReturnType<typeof vi.fn>
+const safeFetchMock = safeFetch as unknown as ReturnType<typeof vi.fn>
 const isS3ConfiguredMock = isS3Configured as unknown as ReturnType<typeof vi.fn>
 const uploadImageBufferMock = uploadImageBuffer as unknown as ReturnType<typeof vi.fn>
 
@@ -41,7 +46,11 @@ function docWithImages(...srcs: string[]): TiptapContent {
   } as unknown as TiptapContent
 }
 
-/** Build a Response-shaped mock for a successful image fetch. */
+/**
+ * Build a Response-shaped value for a successful image fetch. `safeFetch`
+ * returns an already-buffered Response, so we back it with the Buffer
+ * directly (no streaming needed).
+ */
 function okImageResponse(
   mime: string,
   bodyBytes: Buffer,
@@ -51,18 +60,7 @@ function okImageResponse(
   if (options.contentLength !== null) {
     headers.set('content-length', String(options.contentLength ?? bodyBytes.length))
   }
-  // Wrap in a ReadableStream so .body.getReader() works in test envs that
-  // don't auto-streamify Buffer-backed Responses.
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(new Uint8Array(bodyBytes))
-      controller.close()
-    },
-  })
-  return new Response(stream, {
-    status: 200,
-    headers,
-  })
+  return new Response(new Uint8Array(bodyBytes), { status: 200, headers })
 }
 
 const PNG_HEADER = Buffer.concat([
@@ -81,14 +79,48 @@ beforeEach(() => {
   uploadImageBufferMock.mockImplementation(async (_buf, _mime, prefix) => ({
     url: `https://cdn.example.com/${prefix}/rehosted-${Math.random().toString(36).slice(2, 8)}.png`,
   }))
-  checkUrlSafetyMock.mockResolvedValue({ safe: true, address: '93.184.216.34', family: 4 })
 })
 
 // ---- Tests ----
 
+describe('rehostExternalImages — SSRF-safe transport', () => {
+  it('fetches through pinned safeFetch and never the bare global fetch', async () => {
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    uploadImageBufferMock.mockResolvedValueOnce({
+      url: 'https://cdn.example.com/post-images/new.png',
+    })
+
+    await rehostExternalImages(docWithImages('https://external.example.com/img.png'), {
+      contentType: 'post',
+    })
+
+    expect(safeFetchMock).toHaveBeenCalledTimes(1)
+    expect(safeFetchMock.mock.calls[0][0]).toBe('https://external.example.com/img.png')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('caps the download size by asking safeFetch to error on overflow', async () => {
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    uploadImageBufferMock.mockResolvedValueOnce({
+      url: 'https://cdn.example.com/post-images/new.png',
+    })
+
+    await rehostExternalImages(docWithImages('https://external.example.com/img.png'), {
+      contentType: 'post',
+    })
+
+    const init = safeFetchMock.mock.calls[0][1] as {
+      onOverflow?: string
+      maxResponseBytes?: number
+    }
+    expect(init.onOverflow).toBe('error')
+    expect(init.maxResponseBytes).toBe(10 * 1024 * 1024)
+  })
+})
+
 describe('rehostExternalImages — happy paths', () => {
   it('rehosts a single external PNG', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/new.png',
     })
@@ -98,13 +130,13 @@ describe('rehostExternalImages — happy paths', () => {
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
 
     expect(node.attrs.src).toBe('https://cdn.example.com/post-images/new.png')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(safeFetchMock).toHaveBeenCalledTimes(1)
     expect(uploadImageBufferMock).toHaveBeenCalledTimes(1)
     expect(uploadImageBufferMock.mock.calls[0][2]).toBe('post-images')
   })
 
   it('rehosts multiple distinct external images', async () => {
-    fetchMock
+    safeFetchMock
       .mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
       .mockResolvedValueOnce(okImageResponse('image/jpeg', JPEG_HEADER))
     uploadImageBufferMock
@@ -120,11 +152,11 @@ describe('rehostExternalImages — happy paths', () => {
 
     expect(nodes[0].attrs.src).toBe('https://cdn.example.com/post-images/a.png')
     expect(nodes[1].attrs.src).toBe('https://cdn.example.com/post-images/b.jpg')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(safeFetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('dedupes repeated URLs (one fetch, both nodes rewritten)', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/x.png',
     })
@@ -138,7 +170,7 @@ describe('rehostExternalImages — happy paths', () => {
 
     expect(nodes[0].attrs.src).toBe('https://cdn.example.com/post-images/x.png')
     expect(nodes[1].attrs.src).toBe('https://cdn.example.com/post-images/x.png')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(safeFetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('uses the right storage prefix per content type', async () => {
@@ -149,7 +181,7 @@ describe('rehostExternalImages — happy paths', () => {
     ]
 
     for (const [contentType, prefix] of cases) {
-      fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+      safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
       uploadImageBufferMock.mockResolvedValueOnce({
         url: `https://cdn.example.com/${prefix}/x.png`,
       })
@@ -177,7 +209,7 @@ describe('rehostExternalImages — happy paths', () => {
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
 
     expect(node.attrs.src).toBe('https://cdn.example.com/post-images/existing.png')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(safeFetchMock).not.toHaveBeenCalled()
 
     delete process.env.S3_PUBLIC_URL
   })
@@ -187,7 +219,7 @@ describe('rehostExternalImages — happy paths', () => {
     // starts with the public URL's scheme+host prefix. A naive startsWith
     // check would skip the rehost and leave the attacker image embedded.
     process.env.S3_PUBLIC_URL = 'https://cdn.example.com'
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/rehosted.png',
     })
@@ -197,7 +229,7 @@ describe('rehostExternalImages — happy paths', () => {
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
 
     expect(node.attrs.src).toBe('https://cdn.example.com/post-images/rehosted.png')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(safeFetchMock).toHaveBeenCalledTimes(1)
     expect(uploadImageBufferMock).toHaveBeenCalledTimes(1)
 
     delete process.env.S3_PUBLIC_URL
@@ -216,12 +248,12 @@ describe('rehostExternalImages — happy paths', () => {
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
 
     expect(node.attrs.src).toBe('https://cdn.example.com/post-images/decoded.png')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(safeFetchMock).not.toHaveBeenCalled()
     expect(uploadImageBufferMock).toHaveBeenCalledTimes(1)
   })
 
   it('walks nested nodes (image inside a paragraph)', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/nested.png',
     })
@@ -247,7 +279,7 @@ describe('rehostExternalImages — happy paths', () => {
   })
 
   it('walks resizableImage nodes too', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/resized.png',
     })
@@ -279,7 +311,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   })
 
   it('rejects an external SVG URL', async () => {
-    fetchMock.mockResolvedValueOnce(
+    safeFetchMock.mockResolvedValueOnce(
       new Response('<svg></svg>', {
         status: 200,
         headers: { 'content-type': 'image/svg+xml' },
@@ -294,7 +326,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   })
 
   it('rejects disallowed mime types (application/pdf)', async () => {
-    fetchMock.mockResolvedValueOnce(
+    safeFetchMock.mockResolvedValueOnce(
       new Response('%PDF-1.4...', {
         status: 200,
         headers: { 'content-type': 'application/pdf' },
@@ -309,7 +341,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   })
 
   it('rejects when content-length declares > 10MB', async () => {
-    fetchMock.mockResolvedValueOnce(
+    safeFetchMock.mockResolvedValueOnce(
       okImageResponse('image/png', PNG_HEADER, { contentLength: 20 * 1024 * 1024 })
     )
 
@@ -322,19 +354,11 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
 
   it('rejects when header mime and sniffed bytes disagree', async () => {
     const lie = Buffer.from('PK\x03\x04...zip')
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(new Uint8Array(lie))
-            controller.close()
-          },
-        }),
-        {
-          status: 200,
-          headers: { 'content-type': 'image/png' },
-        }
-      )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array(lie), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })
     )
 
     const input = docWithImages('https://external.example.com/lie.png')
@@ -345,27 +369,37 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   })
 
   it('rejects schemes other than http/https', async () => {
-    checkUrlSafetyMock.mockResolvedValueOnce({ safe: false, reason: 'scheme-rejected' })
+    safeFetchMock.mockRejectedValueOnce(new SsrfError('scheme-rejected'))
 
     const input = docWithImages('file:///etc/passwd')
     const output = await rehostExternalImages(input, { contentType: 'post' })
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
     expect(node.attrs.src).toBe('file:///etc/passwd')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(uploadImageBufferMock).not.toHaveBeenCalled()
   })
 
   it('rejects SSRF targets (private IP, cloud metadata, loopback)', async () => {
-    checkUrlSafetyMock.mockResolvedValueOnce({ safe: false, reason: 'ssrf-rejected' })
+    safeFetchMock.mockRejectedValueOnce(new SsrfError('ssrf-rejected'))
 
     const input = docWithImages('https://attacker.example.com/img.png')
     const output = await rehostExternalImages(input, { contentType: 'post' })
     const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
     expect(node.attrs.src).toBe('https://attacker.example.com/img.png')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(uploadImageBufferMock).not.toHaveBeenCalled()
   })
 
-  it('rejects redirect responses (302)', async () => {
-    fetchMock.mockResolvedValueOnce(
+  it('rejects when DNS resolution fails', async () => {
+    safeFetchMock.mockRejectedValueOnce(new SsrfError('dns-error'))
+
+    const input = docWithImages('https://does-not-exist.example/img.png')
+    const output = await rehostExternalImages(input, { contentType: 'post' })
+    const node = (output.content as unknown as Array<{ attrs: { src: string } }>)[0]
+    expect(node.attrs.src).toBe('https://does-not-exist.example/img.png')
+    expect(uploadImageBufferMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects redirect responses (302) without following them', async () => {
+    safeFetchMock.mockResolvedValueOnce(
       new Response(null, {
         status: 302,
         headers: { location: 'http://127.0.0.1/payload' },
@@ -379,8 +413,8 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
     expect(uploadImageBufferMock).not.toHaveBeenCalled()
   })
 
-  it('rejects when fetch throws (timeout, network error)', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('aborted'))
+  it('rejects when safeFetch throws (timeout, network error)', async () => {
+    safeFetchMock.mockRejectedValueOnce(new Error('aborted'))
 
     const input = docWithImages('https://external.example.com/slow.png')
     const output = await rehostExternalImages(input, { contentType: 'post' })
@@ -390,7 +424,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
   })
 
   it('rejects when S3 upload throws', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockRejectedValueOnce(new Error('S3 500'))
 
     const input = docWithImages('https://external.example.com/bad.png')
@@ -399,21 +433,8 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
     expect(node.attrs.src).toBe('https://external.example.com/bad.png')
   })
 
-  it('aborts streaming read when body exceeds cap mid-stream (no content-length)', async () => {
-    // No content-length header, body actually larger than MAX_BYTES
-    const oversized = Buffer.alloc(11 * 1024 * 1024) // 11 MB > 10 MB cap
-    // Put valid PNG header at the start so any pre-stream header check passes
-    oversized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
-
-    const headers = new Headers({ 'content-type': 'image/png' })
-    // Deliberately omit content-length
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new Uint8Array(oversized))
-        controller.close()
-      },
-    })
-    fetchMock.mockResolvedValueOnce(new Response(stream, { status: 200, headers }))
+  it('rejects when the body exceeds the cap mid-stream (safeFetch overflow)', async () => {
+    safeFetchMock.mockRejectedValueOnce(new ResponseTooLargeError(10 * 1024 * 1024))
 
     const input = docWithImages('https://external.example.com/lying.png')
     const output = await rehostExternalImages(input, { contentType: 'post' })
@@ -426,7 +447,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
     const urls = Array.from({ length: 21 }, (_, i) => `https://external.example.com/${i}.png`)
     // First 20 succeed
     for (let i = 0; i < 20; i++) {
-      fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+      safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
       uploadImageBufferMock.mockResolvedValueOnce({
         url: `https://cdn.example.com/post-images/${i}.png`,
       })
@@ -440,7 +461,7 @@ describe('rehostExternalImages — rejections (fail-soft)', () => {
       expect(nodes[i].attrs.src).toBe(`https://cdn.example.com/post-images/${i}.png`)
     }
     expect(nodes[20].attrs.src).toBe('https://external.example.com/20.png')
-    expect(fetchMock).toHaveBeenCalledTimes(20)
+    expect(safeFetchMock).toHaveBeenCalledTimes(20)
   })
 })
 
@@ -456,7 +477,7 @@ describe('rehostExternalImages — edge cases', () => {
 
     const output = await rehostExternalImages(input, { contentType: 'post' })
     expect(output).toEqual(input)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(safeFetchMock).not.toHaveBeenCalled()
   })
 
   it('returns input unchanged when S3 is not configured', async () => {
@@ -464,11 +485,11 @@ describe('rehostExternalImages — edge cases', () => {
     const input = docWithImages('https://external.example.com/img.png')
     const output = await rehostExternalImages(input, { contentType: 'post' })
     expect(output).toEqual(input)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(safeFetchMock).not.toHaveBeenCalled()
   })
 
   it('does not mutate the input tree', async () => {
-    fetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
+    safeFetchMock.mockResolvedValueOnce(okImageResponse('image/png', PNG_HEADER))
     uploadImageBufferMock.mockResolvedValueOnce({
       url: 'https://cdn.example.com/post-images/x.png',
     })

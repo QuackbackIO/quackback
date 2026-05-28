@@ -1,6 +1,14 @@
 import { EventEmitter } from 'node:events'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { isSafeScheme, isPrivateAddress, checkUrlSafety, safeFetch, SsrfError } from '../ssrf-guard'
+import {
+  isSafeScheme,
+  isPrivateAddress,
+  checkUrlSafety,
+  safeFetch,
+  SsrfError,
+  ResponseTooLargeError,
+  TimeoutError,
+} from '../ssrf-guard'
 
 vi.mock('node:dns/promises', () => ({
   default: {},
@@ -35,7 +43,10 @@ function requestImpl(spec: {
       destroy: ReturnType<typeof vi.fn>
     }
     req.write = vi.fn()
-    req.destroy = vi.fn()
+    // Faithful to node: destroying a request with an error emits 'error'.
+    req.destroy = vi.fn((err?: unknown) => {
+      if (err) req.emit('error', err)
+    })
     req.end = vi.fn(() => {
       let destroyed = false
       const res = new EventEmitter() as EventEmitter & {
@@ -284,6 +295,49 @@ describe('safeFetch', () => {
     // stream is cut and only what arrived before the cap is kept.
     expect(await res.text()).toBe('AAAAAAAA')
     expect(capturedRes?.destroy).toHaveBeenCalled()
+  })
+
+  it('rejects with ResponseTooLargeError and destroys the socket when onOverflow is "error"', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    let capturedRes: { destroy: ReturnType<typeof vi.fn> } | undefined
+    httpsRequestMock.mockImplementation((_o: unknown, cb: (res: unknown) => void) => {
+      const impl = requestImpl({ status: 200, chunks: ['AAAAAAAA', 'BBBBBBBB'] })
+      return impl(_o, (res) => {
+        capturedRes = res as { destroy: ReturnType<typeof vi.fn> }
+        cb(res)
+      })
+    })
+
+    // 8-byte chunk fits; the second chunk pushes total past 10. In 'error'
+    // mode the over-cap body is a hard rejection, not a silent truncation.
+    await expect(
+      safeFetch('https://idp.example.com/huge', { maxResponseBytes: 10, onOverflow: 'error' })
+    ).rejects.toBeInstanceOf(ResponseTooLargeError)
+    expect(capturedRes?.destroy).toHaveBeenCalled()
+  })
+
+  it('rejects with a typed TimeoutError (name "TimeoutError") when the request times out', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
+    // Drive the timeout path: end() emits 'timeout' instead of replying.
+    httpsRequestMock.mockImplementation((_o: unknown) => {
+      const req = new EventEmitter() as EventEmitter & {
+        write: ReturnType<typeof vi.fn>
+        end: ReturnType<typeof vi.fn>
+        destroy: ReturnType<typeof vi.fn>
+      }
+      req.write = vi.fn()
+      req.destroy = vi.fn((err?: unknown) => {
+        if (err) req.emit('error', err)
+      })
+      req.end = vi.fn(() => {
+        queueMicrotask(() => req.emit('timeout'))
+      })
+      return req
+    })
+
+    const err = await safeFetch('https://slow.example.com/x').catch((e) => e)
+    expect(err).toBeInstanceOf(TimeoutError)
+    expect((err as Error).name).toBe('TimeoutError')
   })
 
   it('uses node:http with no TLS options for an http:// URL', async () => {

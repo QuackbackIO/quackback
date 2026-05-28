@@ -190,6 +190,22 @@ export class SsrfError extends Error {
   }
 }
 
+/** Thrown by `safeFetch` when the body exceeds the cap and `onOverflow: 'error'`. */
+export class ResponseTooLargeError extends Error {
+  constructor(public readonly maxResponseBytes: number) {
+    super(`safeFetch: response body exceeded ${maxResponseBytes} bytes`)
+    this.name = 'ResponseTooLargeError'
+  }
+}
+
+/** Thrown by `safeFetch` when the request exceeds `timeoutMs`. */
+export class TimeoutError extends Error {
+  constructor(public readonly timeoutMs: number) {
+    super(`safeFetch: request timed out after ${timeoutMs}ms`)
+    this.name = 'TimeoutError'
+  }
+}
+
 export interface SafeFetchInit {
   method?: string
   headers?: Record<string, string>
@@ -199,6 +215,14 @@ export interface SafeFetchInit {
   timeoutMs?: number
   /** Hard cap on the buffered response body. Default 64 KiB. */
   maxResponseBytes?: number
+  /**
+   * What to do when the body exceeds `maxResponseBytes`:
+   * - `'truncate'` (default): cut the stream and resolve with the bytes that
+   *   arrived before the cap. Right for JSON metadata endpoints (JWKS, OIDC).
+   * - `'error'`: reject with `ResponseTooLargeError`. Right for callers that
+   *   must not act on a partial body (e.g. image rehosting).
+   */
+  onOverflow?: 'truncate' | 'error'
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
@@ -238,6 +262,7 @@ export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<
     body,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES,
+    onOverflow = 'truncate',
   } = init
 
   return new Promise<Response>((resolve, reject) => {
@@ -283,9 +308,14 @@ export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<
         res.on('data', (chunk: Buffer) => {
           total += chunk.length
           if (total > maxResponseBytes) {
-            // Soft cap: keep whatever arrived before the over-cap
-            // chunk, cut the stream, resolve with what we have.
+            // Over cap: cut the stream either way. In 'error' mode reject so
+            // the caller never acts on a partial body; otherwise keep what
+            // arrived before the over-cap chunk and resolve with it.
             res.destroy()
+            if (onOverflow === 'error') {
+              reject(new ResponseTooLargeError(maxResponseBytes))
+              return
+            }
             finish()
             return
           }
@@ -295,7 +325,7 @@ export async function safeFetch(url: string, init: SafeFetchInit = {}): Promise<
         res.on('error', reject)
       }
     )
-    req.on('timeout', () => req.destroy(new Error('safeFetch: request timed out')))
+    req.on('timeout', () => req.destroy(new TimeoutError(timeoutMs)))
     req.on('error', reject)
     if (body) req.write(body)
     req.end()
