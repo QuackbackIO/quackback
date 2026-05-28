@@ -38,17 +38,16 @@
  *    reload would still cooldown after one cycle) and long enough
  *    that a happy-path success → reload → mount sees signedIn=true
  *    and clears the flag cleanly before TTL matters.
- *  - `quackback.sso.suppressed` (sessionStorage): set by the signout
- *    flow for in-tab protection against the brief race between
- *    "user clicked sign out" and "RP-initiated logout completes" —
- *    we don't want this tab to silently re-auth in the half-second
- *    window before the redirect to the IdP endsession endpoint
- *    fires. Cross-tab + cross-restart protection comes from
- *    RP-initiated logout itself, which destroys the IdP session
- *    so a fresh `prompt=none` returns `login_required` cleanly.
- *    Keeping this flag tab-scoped means closing and reopening a
- *    tab a day later auto-signs in normally (the IdP is the
- *    source of truth for "am I signed in here").
+ *  - `quackback.sso.suppressed` (sessionStorage, timestamp): set by
+ *    the signout flow for in-tab protection against the brief race
+ *    between "user clicked sign out" and "RP-initiated logout
+ *    completes". Expires after `SUPPRESSED_TTL_MS` so a user who
+ *    signs back in via the IdP elsewhere isn't stuck without auto
+ *    sign-in until they close the tab — the suppression should
+ *    only protect the immediate post-signout window. Cross-tab +
+ *    cross-restart protection comes from RP-initiated logout
+ *    itself, which destroys the IdP session so a fresh
+ *    `prompt=none` returns `login_required` cleanly.
  */
 import { useEffect, useRef } from 'react'
 import { authClient } from '@/lib/client/auth-client'
@@ -69,6 +68,13 @@ const TIMEOUT_MS = 8000
  *  transient failure can recover by waiting ~a minute, or by closing
  *  and reopening the tab. */
 const ATTEMPTED_TTL_MS = 60_000
+/** How long the `suppressed` flag stays sticky after a signout. Long
+ *  enough that an immediate "I signed out, now refresh" doesn't
+ *  auto-re-auth (e.g. RP-initiated logout may still be in-flight,
+ *  IdP session may not be dead yet). Short enough that a user who
+ *  signs back into the IdP in another tab and comes back to this
+ *  one isn't stuck signed-out until they close the tab. */
+const SUPPRESSED_TTL_MS = 5 * 60_000
 
 export interface UseSilentSsoOptions {
   /** Whether the `sso` provider is registered for this workspace.
@@ -92,7 +98,11 @@ export interface UseSilentSsoOptions {
 export function suppressSilentSso(): void {
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.setItem(SUPPRESSED_KEY, '1')
+    // Timestamp-based — read side checks against SUPPRESSED_TTL_MS
+    // so the flag expires on its own. Prevents the "stuck signed-out
+    // in this tab forever" failure mode after a signout when the
+    // user signs back in via the IdP in another tab.
+    window.sessionStorage.setItem(SUPPRESSED_KEY, String(Date.now()))
     window.sessionStorage.removeItem(ATTEMPTED_KEY)
   } catch {
     /* storage disabled (private mode) — silent SSO will still
@@ -144,8 +154,19 @@ export function useSilentSso({ enabled, signedIn }: UseSilentSsoOptions): void {
           attempted = true
         }
       }
-      const suppressed = !!window.sessionStorage.getItem(SUPPRESSED_KEY)
-      if (suppressed) return
+      const suppressedRaw = window.sessionStorage.getItem(SUPPRESSED_KEY)
+      if (suppressedRaw) {
+        // Same shape as the `attempted` check — accept a timestamp,
+        // tolerate the legacy `'1'` value as "suppressed, just stale
+        // shape" so the deploy doesn't strand users mid-flow.
+        const ts = Number(suppressedRaw)
+        const stillActive =
+          Number.isFinite(ts) && ts > 0 ? Date.now() - ts < SUPPRESSED_TTL_MS : true
+        if (stillActive) return
+        // Expired — clear so storage doesn't accumulate values we
+        // won't honor again.
+        window.sessionStorage.removeItem(SUPPRESSED_KEY)
+      }
       // One-shot cleanup of the legacy durable flag from an earlier
       // deploy — anyone who signed out under that build still has
       // `localStorage['quackback.sso.suppressed'] = '1'` set and

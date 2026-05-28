@@ -160,7 +160,12 @@ export const authClient = createAuthClient({
 export const signOut: typeof authClient.signOut = async (...args) => {
   if (typeof window !== 'undefined') {
     try {
-      window.sessionStorage.setItem('quackback.sso.suppressed', '1')
+      // Timestamp — `useSilentSso` checks against a TTL so the
+      // flag expires on its own (see SUPPRESSED_TTL_MS). Without
+      // this, a user who signs out and later signs back in via the
+      // IdP in another tab would stay stuck signed-out on refreshes
+      // of this tab until they closed it.
+      window.sessionStorage.setItem('quackback.sso.suppressed', String(Date.now()))
       window.sessionStorage.removeItem('quackback.sso.attempted')
     } catch {
       /* storage disabled — `useSilentSso`'s in-memory guard still
