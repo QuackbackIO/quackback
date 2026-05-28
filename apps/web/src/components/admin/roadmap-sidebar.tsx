@@ -128,7 +128,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
       {/* Header */}
       <div className="px-5 pt-5 pb-2">
         <div className="flex items-center justify-between py-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Roadmaps
           </span>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

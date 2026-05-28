@@ -97,7 +97,7 @@ export function UsersSegmentNav({
           >
             <UsersIcon className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 truncate">All users</span>
-            <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+            <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
               {totalUserCount}
             </span>
           </button>
@@ -120,7 +120,7 @@ export function UsersSegmentNav({
             <EnvelopeIcon className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 truncate">Invitations</span>
             {invitesPendingCount !== undefined && invitesPendingCount > 0 && (
-              <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+              <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
                 {invitesPendingCount}
               </span>
             )}
@@ -131,7 +131,7 @@ export function UsersSegmentNav({
             lives next to the SEGMENTS header where it belongs (the
             previous placement under USERS implied 'create user'). */}
         <div className="mt-5 flex w-full items-center justify-between py-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Segments
           </span>
           <button
@@ -214,7 +214,7 @@ function SegmentNavItem({
         {segment.type === 'dynamic' && (
           <BoltIcon className="h-2.5 w-2.5 shrink-0 opacity-50" title="Dynamic segment" />
         )}
-        <span className="group-hover:hidden text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+        <span className="group-hover:hidden text-xs text-muted-foreground/60 shrink-0 tabular-nums">
           {segment.memberCount}
         </span>
       </button>
@@ -336,7 +336,7 @@ export function MobileSegmentSelector({
               >
                 <span className="flex-1 truncate">{seg.name}</span>
                 {seg.type === 'dynamic' && <BoltIcon className="h-2.5 w-2.5 opacity-50" />}
-                <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                <span className="text-xs text-muted-foreground/60 tabular-nums">
                   {seg.memberCount}
                 </span>
               </button>

@@ -298,7 +298,7 @@ function DeletedItemsView() {
 
       {/* Deleted categories */}
       <section className="px-3 pb-4">
-        <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted categories
         </h2>
         {categoriesLoading ? (
@@ -341,7 +341,7 @@ function DeletedItemsView() {
 
       {/* Deleted articles */}
       <section className="px-3 pb-4">
-        <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted articles
         </h2>
         {articlesLoading ? (
