@@ -278,7 +278,7 @@ function BrandingPage() {
                       key={presetId}
                       onClick={() => state.setPreset(presetId)}
                       className={cn(
-                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors',
+                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
                         isActive
                           ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
                           : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
@@ -288,8 +288,8 @@ function BrandingPage() {
                         className="h-5 w-5 rounded-full border border-border/50"
                         style={{ backgroundColor: preset.color }}
                       />
-                      <span className="truncate">{preset.name}</span>
-                      <span className="text-xs text-muted-foreground truncate">
+                      <span className="w-full truncate">{preset.name}</span>
+                      <span className="w-full text-xs text-muted-foreground leading-tight">
                         {preset.description}
                       </span>
                     </button>
