@@ -491,6 +491,32 @@ describe('canCreatePost — board.access.submit tier gates submission independen
     }
     expect(canCreatePost(portal, board, 'none').allowed).toBe(false)
   })
+
+  // Invariant guard: submit is allowed ONLY if the actor can also VIEW the
+  // board. The schema enforces submit.rank >= view.rank but allows the
+  // per-action segment lists to differ — so a member of the submit segment
+  // who is NOT in the view segment satisfies the submit tier yet cannot see
+  // the board. canCreatePost must still deny (a post on a board you can't
+  // view contradicts the file invariant + mirrors canVotePost/canCreateComment).
+  it('rejects a submit-segment member who is not in the view segment', () => {
+    const board = {
+      access: {
+        view: 'segments',
+        vote: 'segments',
+        comment: 'segments',
+        submit: 'segments',
+        segments: {
+          view: ['segment_other'],
+          vote: ['segment_other'],
+          comment: ['segment_other'],
+          submit: ['segment_trusted'],
+        },
+        moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+      } satisfies BoardAccess,
+    }
+    // trustedPortal is in segment_trusted (submit) but NOT segment_other (view).
+    expect(canCreatePost(trustedPortal, board, 'none').allowed).toBe(false)
+  })
 })
 
 // ----------------------------------------------------------------------

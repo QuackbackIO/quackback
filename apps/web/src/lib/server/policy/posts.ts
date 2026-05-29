@@ -214,9 +214,18 @@ export function canCreatePost(
   board: BoardShape,
   workspaceApproval: RequireApproval | undefined
 ): CreateDecision {
-  // Submit is its own decision — a board can be public to view but
-  // team-only to submit (admin-curated roadmap pattern). Gate on
-  // access.submit directly rather than delegating to canViewBoard.
+  // View is a precondition (file invariant: create is denied when view is
+  // denied) — mirrors canVotePost / canCreateComment, which both gate on view
+  // first. The schema lets the per-action segment lists differ while only
+  // pinning submit.rank >= view.rank, so a member of the submit segment can
+  // sit outside the view segment; without this gate they could create a post
+  // on a board they cannot see.
+  const view = canViewBoard(actor, board)
+  if (!view.allowed) return { allowed: false, reason: view.reason }
+
+  // Submit is then its own decision on top of view — a board can be public to
+  // view but team-only to submit (admin-curated roadmap pattern), so the tier
+  // check stays independent rather than collapsing into canViewBoard.
   if (!tierAllows(actor, board.access.submit, board.access.segments.submit)) {
     return { allowed: false, reason: submitDenyMessage(board.access.submit) }
   }
@@ -243,14 +252,16 @@ export function canCreatePost(
 export interface BoardCapabilities {
   canSubmit: boolean
   canVote: boolean
+  canComment: boolean
 }
 
 /**
- * Per-board submit/vote capability for a viewer, composed with the workspace
- * anonymous master switch. This is the single source of truth the portal UI
- * uses to decide whether to advertise the submit/vote CTAs — the server sends
- * the booleans so the client never re-derives them from the workspace flag and
- * advertises an action the board's per-action tier would reject (Codex #191).
+ * Per-board submit/vote/comment capability for a viewer, composed with the
+ * workspace anonymous master switch. This is the single source of truth the
+ * portal + widget UIs use to decide whether to advertise the submit/vote/comment
+ * CTAs — the server sends the booleans so the client never re-derives them from
+ * the workspace flag and advertises an action the board's per-action tier would
+ * reject (Codex #191).
  *
  * `allowAnonymous` is the workspace switch (collapsed from the legacy
  * anonymousVoting/anonymousPosting flags in migration 0084). It is the outer
@@ -264,16 +275,28 @@ export function boardCapabilitiesForActor(
 ): BoardCapabilities {
   const board: BoardShape = { access }
   const canSubmit = canCreatePost(actor, board, undefined).allowed
-  // canVotePost composes canViewPost; pass a published, unauthored post so the
-  // decision reflects the vote tier (the feed already filtered to viewable).
+  // canVotePost / canCreateComment compose canViewPost; pass a published,
+  // unauthored post so each decision reflects its own tier (callers already
+  // filtered to viewable). isCommentsLocked is a per-post UI concern, not a
+  // board capability, so it stays false here.
   const canVote = canVotePost(
     actor,
     { moderationState: 'published', principalId: null },
     board
   ).allowed
+  const canComment = canCreateComment(
+    actor,
+    { moderationState: 'published', principalId: null, isCommentsLocked: false },
+    board,
+    undefined
+  ).allowed
   // Compose the workspace anonymous ceiling for non-user actors only.
   if (actor.principalType !== 'user') {
-    return { canSubmit: canSubmit && allowAnonymous, canVote: canVote && allowAnonymous }
+    return {
+      canSubmit: canSubmit && allowAnonymous,
+      canVote: canVote && allowAnonymous,
+      canComment: canComment && allowAnonymous,
+    }
   }
-  return { canSubmit, canVote }
+  return { canSubmit, canVote, canComment }
 }
