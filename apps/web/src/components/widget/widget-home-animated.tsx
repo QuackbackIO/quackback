@@ -429,6 +429,29 @@ export function WidgetHomeAnimated({
           setIsSubmitting(false)
           return
         }
+        // Identifying escalates an anonymous visitor to a real authenticated
+        // user, which satisfies an `authenticated` submit tier — but NOT a
+        // `segments`/`team` tier. Re-check the selected board's capability with
+        // the now-Bearer identity before posting, so we surface a clear
+        // no-access message instead of firing a createPost the server rejects
+        // (#191). The feed's boardPermissions also refetches on sessionVersion.
+        const [{ getWidgetAuthHeaders }, { fetchBoardCapabilitiesFn }] = await Promise.all([
+          import('@/lib/client/widget-auth'),
+          import('@/lib/server/functions/portal'),
+        ])
+        const freshPermissions = await fetchBoardCapabilitiesFn({
+          headers: getWidgetAuthHeaders(),
+        })
+        if (!freshPermissions?.[selectedBoardId]?.canSubmit) {
+          setError(
+            intl.formatMessage({
+              id: 'widget.home.form.noAccess',
+              defaultMessage: "You don't have access to post on this board",
+            })
+          )
+          setIsSubmitting(false)
+          return
+        }
       } else if (!canPost) {
         if (hmacRequired) {
           sendToHost({ type: 'quackback:navigate', url: `${window.location.origin}/auth/login` })
