@@ -347,7 +347,13 @@ vi.mock('@/lib/server/db', () => ({
                   }
                   return c
                 })
-                return Promise.resolve(matched.map((c) => ({ id: c.id })))
+                return Promise.resolve(
+                  matched.map((c) => ({
+                    id: c.id,
+                    postId: c.postId,
+                    isPrivate: (c as Comment & { isPrivate?: boolean }).isPrivate,
+                  }))
+                )
               }
               // Default: posts. Build a minimal context that carries the
               // post row so the EXISTS subqueries can correlate on
@@ -365,6 +371,13 @@ vi.mock('@/lib/server/db', () => ({
           })),
         })),
       }
+    }),
+    // approveCommentFn wraps the publish + count increment in a transaction.
+    // The tx is the same mocked db, so tests that wrap db.update still observe
+    // both writes.
+    transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const mod = (await import('@/lib/server/db')) as { db: unknown }
+      return fn(mod.db)
     }),
   },
   // Table mocks: carry the column refs PLUS a __tableName tag so the

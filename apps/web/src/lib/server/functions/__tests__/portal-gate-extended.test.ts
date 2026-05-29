@@ -166,8 +166,12 @@ vi.mock('@/lib/server/db', () => ({
 
 vi.mock('@/lib/shared/roles', () => ({ isTeamMember: vi.fn().mockReturnValue(false) }))
 
-// fetchPortalData + getCommentsSectionDataFn read the workspace anonymous
-// switch via getPortalConfig to compose per-board submit/vote capability.
+// The capability gates read the workspace anonymous switch fail-closed from the
+// RAW settings (workspaceAllowsAnonymous), so drive it via getSettings here.
+// getPortalConfig is still mocked for any merged-config consumers.
+vi.mock('@/lib/server/functions/workspace', () => ({
+  getSettings: vi.fn().mockResolvedValue({ portalConfig: { features: { allowAnonymous: true } } }),
+}))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getPortalConfig: vi.fn().mockResolvedValue({ features: { allowAnonymous: true } }),
 }))

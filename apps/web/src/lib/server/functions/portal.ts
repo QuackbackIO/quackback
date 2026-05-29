@@ -86,6 +86,21 @@ async function buildBoardPermissions(
   return map
 }
 
+/**
+ * Fail-closed workspace anonymous-interaction ceiling for the capability gates.
+ * Reads the RAW config (not getPortalConfig's permissive merged default) so a
+ * missing `features.allowAnonymous` denies — keeping the advertised capability
+ * in lockstep with the fail-closed write gates, so the UI can't out-advertise
+ * what the server permits (#191). Existing tenants carry an explicit value from
+ * migration 0084.
+ */
+async function loadAllowAnonymous(): Promise<boolean> {
+  const { getSettings } = await import('./workspace')
+  const { workspaceAllowsAnonymous } = await import('@/lib/server/domains/settings/settings.types')
+  const settings = await getSettings()
+  return workspaceAllowsAnonymous(settings?.portalConfig)
+}
+
 export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ userId: z.string() }))
   .handler(async ({ data }): Promise<PrincipalId | null> => {
@@ -129,11 +144,10 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     const auth = await getOptionalAuth()
     const actor = await policyActorFromAuth(auth)
 
-    // Run ALL queries in parallel for maximum performance — including the portal
-    // config read so buildBoardPermissions doesn't serialize an extra round-trip
-    // onto this (highest-traffic) loader.
-    const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-    const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts, portalConfig] =
+    // Run ALL queries in parallel for maximum performance — including the
+    // (fail-closed) anonymous-ceiling read so buildBoardPermissions doesn't
+    // serialize an extra round-trip onto this (highest-traffic) loader.
+    const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous] =
       await Promise.all([
         // Principal lookup (needed for principalId in response)
         data.userId
@@ -163,7 +177,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         data.userId
           ? getVotedPostIdsByUserId(data.userId as UserId)
           : Promise.resolve(new Set<PostId>()),
-        getPortalConfig(),
+        loadAllowAnonymous(),
       ])
     const principalId = memberResult?.id ?? null
 
@@ -174,7 +188,6 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     // Keyed by board id: vote permission is per-board, so this one map also
     // covers infinite-scroll feed pages (every post belongs to one of these
     // boards). Computed in-memory from boardsRaw.access — no extra query.
-    const allowAnonymous = portalConfig.features.allowAnonymous ?? false
     const boardPermissions = await buildBoardPermissions(actor, boardsRaw, allowAnonymous)
 
     // Return ALL voted post IDs (not just page 1) so infinite scroll pages show correct vote state
@@ -321,14 +334,12 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // its DB read overlaps the merge queries instead of running in series.
     const postId = data.postId as PostId
     const needsAnonCeiling = actor.principalType !== 'user'
-    const [mergeInfo, mergedPostsList, portalConfig] = await Promise.all([
+    const [mergeInfo, mergedPostsList, allowAnonymous] = await Promise.all([
       getPostMergeInfo(postId, actor).then((info) =>
         info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
       ),
       getMergedPosts(postId),
-      needsAnonCeiling
-        ? import('@/lib/server/domains/settings/settings.service').then((m) => m.getPortalConfig())
-        : Promise.resolve(null),
+      needsAnonCeiling ? loadAllowAnonymous() : Promise.resolve(false),
     ])
 
     // Per-board vote/comment capability for THIS viewer. The widget passes its
@@ -339,7 +350,6 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // so the UI never advertises a vote/comment CTA the board's tier rejects
     // (#191). canSubmit is unused on the detail view.
     const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-    const allowAnonymous = portalConfig?.features.allowAnonymous ?? false
     const { canVote, canComment } = boardCapabilitiesForActor(
       actor,
       result.boardAccess,
@@ -665,8 +675,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
       // rather than eager so a user actor's path never depends on it.
       let allowAnonymous = false
       if (actor.principalType !== 'user') {
-        const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-        allowAnonymous = (await getPortalConfig()).features.allowAnonymous ?? false
+        allowAnonymous = await loadAllowAnonymous()
       }
       const canComment = boardCapabilitiesForActor(actor, boardAccess, allowAnonymous).canComment
 
@@ -716,10 +725,9 @@ export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handle
 
   // Settings read overlaps the board query — only one DB round-trip is on the
   // critical path for this refetch-on-identify endpoint.
-  const [boards, config] = await Promise.all([
+  const [boards, allowAnonymous] = await Promise.all([
     listPublicBoardsWithStats(actor),
-    import('@/lib/server/domains/settings/settings.service').then((m) => m.getPortalConfig()),
+    loadAllowAnonymous(),
   ])
-  const allowAnonymous = config.features.allowAnonymous ?? false
   return buildBoardPermissions(actor, boards, allowAnonymous)
 })

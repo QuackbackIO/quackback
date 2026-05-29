@@ -168,49 +168,56 @@ export const approveCommentFn = createServerFn({ method: 'POST' })
       where: eq(comments.id, data.commentId as never),
     })
     if (!before) throw new NotFoundError('COMMENT_NOT_FOUND', `Comment ${data.commentId}`)
-    const updated = await db
-      .update(comments)
-      .set({ moderationState: 'published' })
-      .where(
-        and(
-          eq(comments.id, data.commentId as never),
-          eq(comments.moderationState, 'pending'),
-          isNull(comments.deletedAt),
-          // Block approval when the parent post or its board is soft-deleted.
-          // Matches the parent-deletedAt filter already applied to the
-          // LIST/COUNT queries; closes the TOCTOU window in the guarded UPDATE.
-          exists(
-            db
-              .select({ one: sql`1` })
-              .from(posts)
-              .where(
-                and(
-                  eq(posts.id, comments.postId),
-                  isNull(posts.deletedAt),
-                  exists(
-                    db
-                      .select({ one: sql`1` })
-                      .from(boards)
-                      .where(and(eq(boards.id, posts.boardId), isNull(boards.deletedAt)))
+    // Publish the comment and reconcile the public commentCount in ONE
+    // transaction: the row lock taken by the guarded UPDATE is held across the
+    // increment, so a concurrent softDeleteComment/deleteComment can't observe
+    // the comment as published-but-not-yet-counted and decrement first (which,
+    // with the GREATEST(0,…) clamp, would otherwise drift the count). The
+    // insert path skips the increment for pending comments, so approval is what
+    // flips it on; rejected comments stay uncounted.
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(comments)
+        .set({ moderationState: 'published' })
+        .where(
+          and(
+            eq(comments.id, data.commentId as never),
+            eq(comments.moderationState, 'pending'),
+            isNull(comments.deletedAt),
+            // Block approval when the parent post or its board is soft-deleted.
+            // Matches the parent-deletedAt filter already applied to the
+            // LIST/COUNT queries; closes the TOCTOU window in the guarded UPDATE.
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(posts)
+                .where(
+                  and(
+                    eq(posts.id, comments.postId),
+                    isNull(posts.deletedAt),
+                    exists(
+                      db
+                        .select({ one: sql`1` })
+                        .from(boards)
+                        .where(and(eq(boards.id, posts.boardId), isNull(boards.deletedAt)))
+                    )
                   )
                 )
-              )
+            )
           )
         )
-      )
-      .returning({ id: comments.id })
-    if (updated.length === 0) {
+        .returning({ id: comments.id, postId: comments.postId, isPrivate: comments.isPrivate })
+      if (!row) return null
+      if (!row.isPrivate) {
+        await tx
+          .update(posts)
+          .set({ commentCount: sql`${posts.commentCount} + 1` })
+          .where(eq(posts.id, row.postId))
+      }
+      return row
+    })
+    if (!updated) {
       throw new ConflictError('COMMENT_NOT_PENDING', 'Comment is not awaiting review')
-    }
-    // Reconcile the public commentCount now that the comment is visible.
-    // The insert path skipped the increment for pending comments
-    // (see comment.service.ts), so approval is what flips it on. Rejected
-    // comments stay uncounted — rejectCommentFn doesn't need a counterpart.
-    if (!before.isPrivate) {
-      await db
-        .update(posts)
-        .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, before.postId))
     }
     await recordAuditEvent({
       event: 'comment.moderation.approved',
