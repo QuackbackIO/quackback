@@ -95,9 +95,14 @@ export const createCommentFn = createServerFn({ method: 'POST' })
       // downstream; this is the workspace-wide ceiling collapsed in
       // migration 0084 from the legacy anonymousCommenting flag.
       if (auth.principal.type === 'anonymous') {
-        const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-        const config = await getPortalConfig()
-        if (!config.features.allowAnonymous) {
+        // Fail closed on a missing flag — read the raw config, not
+        // getPortalConfig's permissive merged default (matches the vote/post
+        // gates). The per-board comment tier is enforced downstream.
+        const { getSettings } = await import('./workspace')
+        const { workspaceAllowsAnonymous } =
+          await import('@/lib/server/domains/settings/settings.types')
+        const settings = await getSettings()
+        if (!workspaceAllowsAnonymous(settings?.portalConfig)) {
           throw new Error('Anonymous interaction is not enabled')
         }
       }

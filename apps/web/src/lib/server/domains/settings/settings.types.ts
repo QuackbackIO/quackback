@@ -285,6 +285,25 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
 }
 
+/**
+ * Fail-closed read of the workspace anonymous-interaction ceiling from a raw
+ * (un-merged) `settings.portalConfig`. Only an explicitly-enabled flag permits
+ * anonymous vote / comment / submit; a missing flag DENIES — the security gate
+ * must not inherit `getPortalConfig`'s permissive merged default. Existing
+ * tenants carry an explicit value from migration 0084, and the per-board tier
+ * is the inner gate. This is the single source of truth for every anonymous
+ * write/read gate so they cannot drift.
+ */
+export function workspaceAllowsAnonymous(
+  portalConfig: string | Record<string, unknown> | null | undefined
+): boolean {
+  const parsed = typeof portalConfig === 'string' ? JSON.parse(portalConfig) : portalConfig
+  return (
+    (parsed as { features?: { allowAnonymous?: boolean } } | null | undefined)?.features
+      ?.allowAnonymous === true
+  )
+}
+
 // =============================================================================
 // Branding Configuration (Theme and visual customization)
 // =============================================================================
