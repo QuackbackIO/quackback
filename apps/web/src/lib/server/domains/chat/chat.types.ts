@@ -15,6 +15,8 @@ export interface SendVisitorMessageInput {
   conversationId?: ConversationId
   content: string
   attachments?: ChatAttachment[]
+  /** Optional pre-chat email; stored on the conversation if not already set. */
+  visitorEmail?: string
 }
 
 export interface SendVisitorMessageResult {

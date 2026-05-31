@@ -958,8 +958,13 @@ function VisitorSidebar({
         <Avatar src={conversation.visitor.avatarUrl} name={name} className="size-12 text-base" />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{name}</p>
-          {detail?.email ? (
-            <p className="truncate text-xs text-muted-foreground">{detail.email}</p>
+          {detail?.email || conversation.visitorEmail ? (
+            <p className="truncate text-xs text-muted-foreground">
+              {detail?.email ?? conversation.visitorEmail}
+              {!detail?.email && conversation.visitorEmail && (
+                <span className="ml-1 text-muted-foreground/50">(provided in chat)</span>
+              )}
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">Anonymous visitor</p>
           )}

@@ -6,6 +6,7 @@
  */
 
 import type { TiptapContent } from '@/lib/shared/db-types'
+import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/chat/types'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -410,6 +411,10 @@ export interface LiveChatConfig {
   offlineMessage?: string
   /** Heading shown for the chat tab/view (falls back to the workspace name). */
   teamName?: string
+  /** Weekly office hours; when enabled, drives the widget's away state + copy. */
+  officeHours?: OfficeHoursConfig
+  /** Ask anonymous visitors for an email before chatting ('off' by default). */
+  preChatEmail?: PreChatEmailMode
   /** Agent-only saved replies — NEVER projected into the public widget config. */
   cannedReplies?: CannedReply[]
 }
@@ -456,6 +461,18 @@ export const DEFAULT_LIVE_CHAT_CONFIG: LiveChatConfig = {
   enabled: false,
   welcomeMessage: 'Hi! 👋 How can we help you today?',
   offlineMessage: "We're away right now — leave a message and we'll get back to you by email.",
+  preChatEmail: 'off',
+}
+
+/** A sensible starting schedule for the settings UI: Mon–Fri, 9–5, disabled. */
+export const DEFAULT_OFFICE_HOURS: OfficeHoursConfig = {
+  enabled: false,
+  timezone: 'UTC',
+  days: [0, 1, 2, 3, 4, 5, 6].map((d) => ({
+    enabled: d >= 1 && d <= 5,
+    start: '09:00',
+    end: '17:00',
+  })),
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {

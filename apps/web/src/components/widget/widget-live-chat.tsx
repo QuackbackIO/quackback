@@ -51,7 +51,13 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
   const [agentsOnline, setAgentsOnline] = useState(false)
+  // null = no office-hours schedule; true/false = the schedule's verdict at load.
+  const [withinOfficeHours, setWithinOfficeHours] = useState<boolean | null>(null)
   const [agentReadAt, setAgentReadAt] = useState<string | null>(null)
+  // Pre-chat email capture (anonymous visitors).
+  const [preChatMode, setPreChatMode] = useState<'off' | 'optional' | 'required'>('off')
+  const [emailKnown, setEmailKnown] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
   const [conversationStatus, setConversationStatus] = useState<string | null>(null)
   const [csatRating, setCsatRating] = useState<number | null>(null)
   const [csatSubmitted, setCsatSubmitted] = useState(false)
@@ -98,6 +104,9 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
         setOfflineMessage(res.offlineMessage)
         setTeamName(res.teamName)
         setAgentsOnline(res.agentsOnline)
+        setWithinOfficeHours(res.withinOfficeHours)
+        setPreChatMode(res.preChatEmail)
+        setEmailKnown(res.visitorHasEmail)
         setConversationId((res.conversation?.id as ConversationId | undefined) ?? null)
         setAgentReadAt(res.conversation?.agentLastReadAt ?? null)
         setConversationStatus(res.conversation?.status ?? null)
@@ -227,6 +236,17 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     !!lastVisitorMessage &&
     new Date(agentReadAt).getTime() >= new Date(lastVisitorMessage.createdAt).getTime()
 
+  // Availability shown to the visitor: a live agent always counts as online;
+  // when office hours are configured, the schedule also marks us available.
+  const available = withinOfficeHours === null ? agentsOnline : withinOfficeHours || agentsOnline
+
+  // Pre-chat email: prompt only before the conversation starts, for anonymous
+  // visitors, when configured. 'required' blocks sending until a valid address.
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())
+  const needsEmail =
+    preChatMode !== 'off' && !emailKnown && !conversationId && messages.length === 0
+  const emailBlocksSend = preChatMode === 'required' && needsEmail && !emailValid
+
   // Auto-scroll to the newest message.
   useEffect(() => {
     const el = scrollViewportRef.current
@@ -249,7 +269,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   const send = useCallback(async () => {
     const text = input.trim()
     const attachments = pendingAttachments
-    if ((!text && attachments.length === 0) || sending || uploading) return
+    if ((!text && attachments.length === 0) || sending || uploading || emailBlocksSend) return
     setSending(true)
     setInput('')
     clearAttachments()
@@ -266,11 +286,14 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           conversationId: conversationId ?? undefined,
           content: text,
           attachments: attachments.length > 0 ? attachments : undefined,
+          // Attach the captured email on the first message only.
+          visitorEmail: needsEmail && emailValid ? emailInput.trim() : undefined,
         },
         headers: getWidgetAuthHeaders(),
       })
       setConversationId(res.conversation.id as ConversationId)
       appendMessage(res.message)
+      if (needsEmail && emailValid) setEmailKnown(true)
     } catch {
       setInput(text)
     } finally {
@@ -281,6 +304,10 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     pendingAttachments,
     sending,
     uploading,
+    emailBlocksSend,
+    needsEmail,
+    emailValid,
+    emailInput,
     conversationId,
     ensureSession,
     appendMessage,
@@ -304,12 +331,12 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
         <span
           className={cn(
             'size-2 rounded-full',
-            agentsOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+            available ? 'bg-emerald-500' : 'bg-muted-foreground/40'
           )}
           aria-hidden
         />
         <span className="text-xs text-muted-foreground">
-          {agentsOnline ? (
+          {available ? (
             <FormattedMessage id="widget.chat.online" defaultMessage="We're online" />
           ) : (
             <FormattedMessage id="widget.chat.offline" defaultMessage="We'll reply by email" />
@@ -437,7 +464,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
       )}
 
       {/* Offline hint */}
-      {!agentsOnline && offlineMessage && (
+      {!available && offlineMessage && (
         <p className="px-4 pt-2 text-[11px] text-muted-foreground/70 text-center">
           {offlineMessage}
         </p>
@@ -445,6 +472,35 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
 
       {/* Composer */}
       <div className="border-t border-border/40 p-2 shrink-0">
+        {/* Pre-chat email capture (anonymous visitors). */}
+        {needsEmail && (
+          <div className="px-1 pb-2">
+            <label
+              htmlFor="widget-chat-email"
+              className="mb-1 block text-[11px] font-medium text-muted-foreground"
+            >
+              {preChatMode === 'required' ? (
+                <FormattedMessage
+                  id="widget.chat.email.required"
+                  defaultMessage="Your email so we can reply"
+                />
+              ) : (
+                <FormattedMessage
+                  id="widget.chat.email.optional"
+                  defaultMessage="Your email (optional)"
+                />
+              )}
+            </label>
+            <input
+              id="widget-chat-email"
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        )}
         {/* Pending attachment previews */}
         {pendingAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
@@ -508,7 +564,12 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           <button
             type="button"
             onClick={() => void send()}
-            disabled={(!input.trim() && pendingAttachments.length === 0) || sending || uploading}
+            disabled={
+              (!input.trim() && pendingAttachments.length === 0) ||
+              sending ||
+              uploading ||
+              emailBlocksSend
+            }
             className="shrink-0 flex items-center justify-center size-7 rounded-md bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
             aria-label={intl.formatMessage({ id: 'widget.chat.send', defaultMessage: 'Send' })}
           >

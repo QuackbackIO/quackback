@@ -15,6 +15,28 @@ export interface ChatTagDTO {
   color: string
 }
 
+/** One weekday's availability window, local to the config timezone. */
+export interface OfficeHoursDay {
+  /** Whether the team is available this weekday. */
+  enabled: boolean
+  /** Local open time, "HH:mm" (24-hour). */
+  start: string
+  /** Local close time, "HH:mm" (24-hour). */
+  end: string
+}
+
+/** Weekly office hours used to set visitor expectations in the widget. */
+export interface OfficeHoursConfig {
+  enabled: boolean
+  /** IANA timezone the ranges are expressed in (e.g. "America/New_York"). */
+  timezone: string
+  /** Seven entries, index 0 = Sunday … 6 = Saturday. */
+  days: OfficeHoursDay[]
+}
+
+/** Pre-chat email capture mode for anonymous visitors. */
+export type PreChatEmailMode = 'off' | 'optional' | 'required'
+
 /** Author identity attached to a rendered message. */
 export interface ChatAuthorDTO {
   principalId: PrincipalId
@@ -62,6 +84,8 @@ export interface ConversationDTO {
   csatRating: number | null
   /** Agent-only labels for inbox triage; never sent to the visitor. */
   tags: ChatTagDTO[]
+  /** Captured contact email for an anonymous visitor; agent-only, null otherwise. */
+  visitorEmail: string | null
 }
 
 /**

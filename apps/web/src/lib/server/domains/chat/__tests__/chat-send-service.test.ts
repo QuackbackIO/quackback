@@ -12,6 +12,8 @@ const insertedMessages: Record<string, unknown>[] = []
 
 vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishChatEvent: vi.fn(),
+  publishAgentChatEvent: vi.fn(),
+  publishConversationUpdate: vi.fn(),
 }))
 
 // config getters validate the full env (absent in tests); provide just what the

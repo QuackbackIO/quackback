@@ -121,6 +121,13 @@ function validateContent(raw: string, hasAttachments = false): string {
   return content
 }
 
+/** Normalize a captured email; returns undefined when it isn't plausibly one. */
+function normalizeEmail(raw: string | undefined): string | undefined {
+  const email = raw?.trim().toLowerCase() ?? ''
+  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
+  return email
+}
+
 function preview(content: string, attachments: ChatAttachment[] = []): string {
   if (content) return truncate(content, PREVIEW_LENGTH)
   if (attachments.length > 0) return `📎 ${attachments[0].name || 'Attachment'}`
@@ -211,6 +218,13 @@ export async function sendVisitorMessage(
       })
       .returning()
 
+    // Capture a pre-chat email once, only when none is recorded yet — a later
+    // send can't overwrite an address the visitor already gave.
+    const captureEmail =
+      !conversation.visitorEmail && input.visitorEmail
+        ? normalizeEmail(input.visitorEmail)
+        : undefined
+
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -220,6 +234,7 @@ export async function sendVisitorMessage(
         visitorLastReadAt: message.createdAt,
         status: conversation.status === 'closed' ? 'open' : conversation.status,
         updatedAt: message.createdAt,
+        ...(captureEmail ? { visitorEmail: captureEmail } : {}),
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
@@ -231,7 +246,7 @@ export async function sendVisitorMessage(
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
   if (created) {
-    publishChatEvent(conversationDTO.id, { kind: 'conversation', conversation: conversationDTO })
+    publishConversationUpdate(conversationDTO.id, conversationDTO)
   }
   publishChatEvent(messageDTO.conversationId, {
     kind: 'message',
@@ -302,9 +317,11 @@ export async function sendAgentMessage(
   })
 
   const messageDTO = toMessageDTO(txResult.message, authorFromInput(agent))
-  const conversationDTO = await conversationToDTO(txResult.conversation, 'visitor')
+  // Agent-side DTO so the inbox keeps tags; publishConversationUpdate strips
+  // them from the visitor's copy.
+  const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
-  publishChatEvent(conversationDTO.id, { kind: 'conversation', conversation: conversationDTO })
+  publishConversationUpdate(conversationDTO.id, conversationDTO)
   publishChatEvent(messageDTO.conversationId, {
     kind: 'message',
     conversationId: messageDTO.conversationId,
@@ -315,6 +332,7 @@ export async function sendAgentMessage(
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
     content: preview(content, attachments),
     agentName: agent.displayName ?? 'Support',
+    capturedEmail: txResult.conversation.visitorEmail,
   })
 
   return { conversation: conversationDTO, message: messageDTO }
@@ -515,9 +533,9 @@ export async function recordCsat(
     })
     .where(eq(conversations.id, conversationId))
     .returning()
-  // Surface the rating to the agent inbox live.
+  // Surface the rating to the agent inbox live (tags stripped for the visitor).
   const dto = await conversationToDTO(updated, 'agent')
-  publishChatEvent(conversationId, { kind: 'conversation', conversation: dto })
+  publishConversationUpdate(conversationId, dto)
 }
 
 /** Broadcast an ephemeral typing signal (never persisted). */

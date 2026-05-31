@@ -50,6 +50,9 @@ export const conversations = pgTable(
     csatRating: integer('csat_rating'),
     csatComment: text('csat_comment'),
     csatSubmittedAt: timestamp('csat_submitted_at', { withTimezone: true }),
+    // Optional contact email captured from an anonymous visitor for offline
+    // follow-up. Agent-only; the principal itself stays anonymous.
+    visitorEmail: text('visitor_email'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },

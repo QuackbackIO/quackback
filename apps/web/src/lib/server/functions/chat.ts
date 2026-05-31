@@ -23,6 +23,7 @@ import {
   type ChatSenderType,
   type ChatAttachment,
 } from '@/lib/shared/chat/types'
+import { isWithinOfficeHours } from '@/lib/shared/chat/office-hours'
 import {
   getOptionalAuth,
   requireAuth,
@@ -44,6 +45,8 @@ const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
   content: z.string().max(MAX_CHAT_MESSAGE_LENGTH).default(''),
   attachments: z.array(attachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional(),
+  /** Optional pre-chat email capture (anonymous visitors). */
+  visitorEmail: z.string().email().max(320).optional(),
 })
 
 const conversationIdSchema = z.object({ conversationId: z.string() })
@@ -125,6 +128,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
           conversationId: data.conversationId as ConversationId | undefined,
           content: data.content,
           attachments: data.attachments as ChatAttachment[] | undefined,
+          visitorEmail: data.visitorEmail,
         },
         {
           principalId: ctx.principal.id,
@@ -146,11 +150,19 @@ export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () =>
     const { getLiveChatConfig, isLiveChatEnabled } =
       await import('@/lib/server/domains/settings/settings.widget')
     const [enabled, chatConfig] = await Promise.all([isLiveChatEnabled(), getLiveChatConfig()])
+    const officeHours = chatConfig.officeHours
     const base = {
       enabled,
       welcomeMessage: chatConfig.welcomeMessage ?? null,
       offlineMessage: chatConfig.offlineMessage ?? null,
       teamName: chatConfig.teamName ?? null,
+      preChatEmail: chatConfig.preChatEmail ?? 'off',
+      // null = no office-hours schedule configured; the widget falls back to
+      // live agent presence. true/false = the schedule's current verdict.
+      withinOfficeHours: officeHours?.enabled ? isWithinOfficeHours(officeHours, new Date()) : null,
+      // Whether we already have a contact email — the widget skips the pre-chat
+      // prompt when true.
+      visitorHasEmail: false,
     }
 
     if (!enabled || !hasAuthCredentials()) {
@@ -170,15 +182,16 @@ export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () =>
       getActiveConversationForVisitor(ctx.principal.id),
       isAnyAgentOnline(),
     ])
+    const visitorHasEmail = Boolean(ctx.user?.email) || Boolean(conversation?.visitorEmail)
     if (!conversation) {
-      return { ...base, conversation: null, messages: [], agentsOnline }
+      return { ...base, visitorHasEmail, conversation: null, messages: [], agentsOnline }
     }
 
     const [dto, page] = await Promise.all([
       conversationToDTO(conversation, 'visitor'),
       listMessages(conversation.id),
     ])
-    return { ...base, conversation: dto, messages: page.messages, agentsOnline }
+    return { ...base, visitorHasEmail, conversation: dto, messages: page.messages, agentsOnline }
   } catch (error) {
     console.error('[fn:chat] getMyChatFn failed:', error)
     throw error

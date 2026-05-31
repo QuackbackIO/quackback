@@ -16,6 +16,8 @@ function publicLiveChatConfig(chat: LiveChatConfig): PublicLiveChatConfig {
     welcomeMessage: chat.welcomeMessage,
     offlineMessage: chat.offlineMessage,
     teamName: chat.teamName,
+    officeHours: chat.officeHours,
+    preChatEmail: chat.preChatEmail,
   }
 }
 import {

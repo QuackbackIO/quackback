@@ -122,11 +122,17 @@ export async function notifyNoteMentions(opts: {
   }
 }
 
-/** Email an offline, identified visitor when an agent replies. */
+/**
+ * Email an offline visitor when an agent replies. An identified visitor's
+ * account email is preferred; an anonymous visitor is reachable only via the
+ * pre-chat email they captured on the conversation.
+ */
 export async function notifyAgentReply(opts: {
   visitorPrincipalId: PrincipalId
   content: string
   agentName: string
+  /** Pre-chat email captured on the conversation, if any. */
+  capturedEmail?: string | null
 }): Promise<void> {
   try {
     if (await isPrincipalOnline(opts.visitorPrincipalId)) return
@@ -138,14 +144,17 @@ export async function notifyAgentReply(opts: {
       .where(eq(principal.id, opts.visitorPrincipalId))
       .limit(1)
 
-    // Anonymous visitors have no deliverable address.
-    if (!visitor || visitor.type === 'anonymous' || !visitor.email) return
+    // Prefer the account email; fall back to the captured pre-chat email so we
+    // can still reach an anonymous visitor who left one.
+    const recipient =
+      (visitor && visitor.type !== 'anonymous' && visitor.email) || opts.capturedEmail
+    if (!recipient) return
 
     const ctx = await buildHookContext()
     if (!ctx) return
     const { sendChatMessageEmail } = await import('@quackback/email')
     await sendChatMessageEmail({
-      to: visitor.email,
+      to: recipient,
       direction: 'agent_reply',
       senderName: opts.agentName,
       messagePreview: previewOf(opts.content),

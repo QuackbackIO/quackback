@@ -92,8 +92,9 @@ export function toConversationDTO(
   visitor: ChatAuthorDTO,
   assignedAgent: ChatAuthorDTO | null,
   unreadCount: number,
-  // Agent-only labels; callers pass [] on visitor-facing paths.
-  tagList: ChatTagDTO[] = []
+  // Agent-only fields; callers pass empty/null on visitor-facing paths.
+  tagList: ChatTagDTO[] = [],
+  visitorEmail: string | null = null
 ): ConversationDTO {
   return {
     id: conversation.id,
@@ -109,6 +110,7 @@ export function toConversationDTO(
     agentLastReadAt: conversation.agentLastReadAt?.toISOString() ?? null,
     csatRating: conversation.csatRating ?? null,
     tags: tagList,
+    visitorEmail,
   }
 }
 
@@ -184,7 +186,8 @@ export async function conversationToDTO(
           fallbackAuthor(conversation.assignedAgentPrincipalId))
       : null,
     unread,
-    tagMap.get(conversation.id) ?? []
+    tagMap.get(conversation.id) ?? [],
+    side === 'agent' ? (conversation.visitorEmail ?? null) : null
   )
 }
 
@@ -389,7 +392,9 @@ export async function listConversationsForAgent(
           ? (authors.get(c.assignedAgentPrincipalId) ?? fallbackAuthor(c.assignedAgentPrincipalId))
           : null,
         unreadMap.get(c.id) ?? 0,
-        tagMap.get(c.id) ?? []
+        tagMap.get(c.id) ?? [],
+        // Inbox is agent-only.
+        c.visitorEmail ?? null
       )
     ),
     hasMore,

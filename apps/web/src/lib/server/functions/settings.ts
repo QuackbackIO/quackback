@@ -725,6 +725,22 @@ const updateWidgetConfigSchema = z.object({
       welcomeMessage: z.string().max(500).optional(),
       offlineMessage: z.string().max(500).optional(),
       teamName: z.string().max(80).optional(),
+      preChatEmail: z.enum(['off', 'optional', 'required']).optional(),
+      officeHours: z
+        .object({
+          enabled: z.boolean(),
+          timezone: z.string().max(64),
+          days: z
+            .array(
+              z.object({
+                enabled: z.boolean(),
+                start: z.string().regex(/^\d{2}:\d{2}$/),
+                end: z.string().regex(/^\d{2}:\d{2}$/),
+              })
+            )
+            .length(7),
+        })
+        .optional(),
       cannedReplies: z
         .array(
           z.object({
