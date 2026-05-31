@@ -101,6 +101,7 @@ export function toConversationDTO(
     unreadCount,
     visitorLastReadAt: conversation.visitorLastReadAt?.toISOString() ?? null,
     agentLastReadAt: conversation.agentLastReadAt?.toISOString() ?? null,
+    csatRating: conversation.csatRating ?? null,
   }
 }
 

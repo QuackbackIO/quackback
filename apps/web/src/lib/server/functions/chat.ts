@@ -55,6 +55,12 @@ const listConversationsSchema = z.object({
 
 const messageIdSchema = z.object({ messageId: z.string() })
 
+const csatSchema = z.object({
+  conversationId: z.string(),
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(2000).optional(),
+})
+
 const agentSendSchema = z.object({
   conversationId: z.string(),
   content: z.string().max(MAX_CHAT_MESSAGE_LENGTH).default(''),
@@ -208,6 +214,22 @@ export const sendChatTypingFn = createServerFn({ method: 'POST' })
       return { ok: true }
     } catch (error) {
       console.error('[fn:chat] sendChatTypingFn failed:', error)
+      throw error
+    }
+  })
+
+/** Submit a CSAT rating for a conversation (visitor only). */
+export const submitCsatFn = createServerFn({ method: 'POST' })
+  .inputValidator(csatSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { recordCsat } = await import('@/lib/server/domains/chat/chat.service')
+      await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
+      return { ok: true }
+    } catch (error) {
+      console.error('[fn:chat] submitCsatFn failed:', error)
       throw error
     }
   })

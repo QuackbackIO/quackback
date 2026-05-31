@@ -425,7 +425,17 @@ function ChatThread({
               <p className="truncate text-sm font-semibold">
                 {conversation?.visitor.displayName ?? 'Visitor'}
               </p>
-              <p className="text-[11px] text-muted-foreground capitalize">{conversation?.status}</p>
+              <p className="text-[11px] text-muted-foreground capitalize">
+                {conversation?.status}
+                {conversation?.csatRating != null && (
+                  <span className="ml-1.5 text-amber-500">
+                    {'★'.repeat(conversation.csatRating)}
+                    <span className="text-muted-foreground/50">
+                      {'★'.repeat(Math.max(0, 5 - conversation.csatRating))}
+                    </span>
+                  </span>
+                )}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">

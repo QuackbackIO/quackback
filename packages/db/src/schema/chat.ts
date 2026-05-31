@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, index, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index, jsonb, integer } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -36,6 +36,10 @@ export const conversations = pgTable(
     // Read receipts power unread badges on each side independently.
     visitorLastReadAt: timestamp('visitor_last_read_at', { withTimezone: true }),
     agentLastReadAt: timestamp('agent_last_read_at', { withTimezone: true }),
+    // Post-conversation CSAT rating (1-5), submitted by the visitor.
+    csatRating: integer('csat_rating'),
+    csatComment: text('csat_comment'),
+    csatSubmittedAt: timestamp('csat_submitted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },

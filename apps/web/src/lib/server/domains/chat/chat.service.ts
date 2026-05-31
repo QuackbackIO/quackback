@@ -388,6 +388,36 @@ export async function deleteChatMessage(messageId: ChatMessageId, actor: Actor):
   })
 }
 
+/** Record a visitor CSAT rating (1-5) on their conversation. */
+export async function recordCsat(
+  conversationId: ConversationId,
+  rating: number,
+  comment: string | undefined,
+  actor: Actor
+): Promise<void> {
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new ValidationError('VALIDATION_ERROR', 'Rating must be between 1 and 5')
+  }
+  const conversation = await assertConversationViewable(conversationId, actor)
+  // Only the visitor who owns the conversation can rate it.
+  if (actor.principalId !== conversation.visitorPrincipalId) {
+    throw new ForbiddenError('FORBIDDEN', 'Only the visitor can rate this conversation')
+  }
+  const [updated] = await db
+    .update(conversations)
+    .set({
+      csatRating: rating,
+      csatComment: comment?.trim() ? comment.trim().slice(0, 2000) : null,
+      csatSubmittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  // Surface the rating to the agent inbox live.
+  const dto = await conversationToDTO(updated, 'agent')
+  publishChatEvent(conversationId, { kind: 'conversation', conversation: dto })
+}
+
 /** Broadcast an ephemeral typing signal (never persisted). */
 export async function signalTyping(
   conversationId: ConversationId,

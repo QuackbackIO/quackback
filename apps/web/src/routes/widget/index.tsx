@@ -296,7 +296,9 @@ function WidgetPage() {
     >
       {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
 
-      {view === 'chat' && <WidgetLiveChat />}
+      {view === 'chat' && (
+        <WidgetLiveChat helpEnabled={tabs.help} onArticleSelect={handleHelpArticleSelect} />
+      )}
 
       {view === 'changelog-detail' && selectedChangelogId && (
         <WidgetChangelogDetail entryId={selectedChangelogId} />

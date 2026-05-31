@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
-import { ChatBubbleLeftRightIcon, PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import {
+  ChatBubbleLeftRightIcon,
+  PaperClipIcon,
+  XMarkIcon,
+  BookOpenIcon,
+} from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
 import { TypingDots } from '@/components/shared/typing-dots'
@@ -21,13 +26,21 @@ import {
   markChatReadFn,
   mintChatStreamTokenFn,
   sendChatTypingFn,
+  submitCsatFn,
 } from '@/lib/server/functions/chat'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-export function WidgetLiveChat() {
+interface WidgetLiveChatProps {
+  /** Whether the help center is available (gates in-chat article suggestions). */
+  helpEnabled?: boolean
+  /** Open a help article by slug (switches the widget to the article view). */
+  onArticleSelect?: (slug: string) => void
+}
+
+export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatProps = {}) {
   const intl = useIntl()
   const { ensureSession, sessionVersion } = useWidgetAuth()
 
@@ -39,6 +52,9 @@ export function WidgetLiveChat() {
   const [teamName, setTeamName] = useState<string | null>(null)
   const [agentsOnline, setAgentsOnline] = useState(false)
   const [agentReadAt, setAgentReadAt] = useState<string | null>(null)
+  const [conversationStatus, setConversationStatus] = useState<string | null>(null)
+  const [csatRating, setCsatRating] = useState<number | null>(null)
+  const [csatSubmitted, setCsatSubmitted] = useState(false)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
 
@@ -84,6 +100,8 @@ export function WidgetLiveChat() {
         setAgentsOnline(res.agentsOnline)
         setConversationId((res.conversation?.id as ConversationId | undefined) ?? null)
         setAgentReadAt(res.conversation?.agentLastReadAt ?? null)
+        setConversationStatus(res.conversation?.status ?? null)
+        setCsatRating(res.conversation?.csatRating ?? null)
         setMessages(res.messages)
       } catch {
         /* leave greeting-only state */
@@ -135,10 +153,67 @@ export function WidgetLiveChat() {
         setAgentReadAt(evt.at)
       } else if (evt.kind === 'message_deleted') {
         setMessages((prev) => prev.filter((m) => m.id !== evt.messageId))
+      } else if (evt.kind === 'conversation' && evt.conversation.id === conversationId) {
+        setConversationStatus(evt.conversation.status)
+        setCsatRating(evt.conversation.csatRating)
       }
     },
     onReconnect: () => void refreshMessages(),
   })
+
+  const submitCsat = useCallback(
+    (rating: number) => {
+      if (!conversationId) return
+      setCsatSubmitted(true)
+      void submitCsatFn({
+        data: { conversationId, rating },
+        headers: getWidgetAuthHeaders(),
+      }).catch(() => setCsatSubmitted(false))
+    },
+    [conversationId]
+  )
+
+  // Prompt for a rating once the conversation is closed and not yet rated.
+  const showCsatPrompt =
+    !!conversationId &&
+    conversationStatus === 'closed' &&
+    csatRating == null &&
+    !csatSubmitted &&
+    messages.length > 0
+
+  // Help-center deflection: as the visitor types their first message (before a
+  // conversation exists), suggest relevant articles so they can self-serve.
+  const [helpResults, setHelpResults] = useState<Array<{ slug: string; title: string }>>([])
+  useEffect(() => {
+    if (!helpEnabled || conversationId || messages.length > 0) {
+      setHelpResults([])
+      return
+    }
+    const q = input.trim()
+    if (q.length < 3) {
+      setHelpResults([])
+      return
+    }
+    const controller = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/widget/kb-search?q=${encodeURIComponent(q)}&limit=3`, {
+          signal: controller.signal,
+        })
+        if (!res.ok) return
+        const json = (await res.json()) as {
+          data?: { articles?: Array<{ slug: string; title: string }> }
+        }
+        setHelpResults(json.data?.articles ?? [])
+      } catch {
+        /* aborted or failed — leave suggestions as-is */
+      }
+    }, 300)
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
+  }, [input, helpEnabled, conversationId, messages.length])
 
   // The newest visitor message is "Seen" once the agent's read watermark
   // reaches it.
@@ -291,8 +366,69 @@ export function WidgetLiveChat() {
               </span>
             </div>
           )}
+
+          {/* CSAT prompt once the conversation is closed. */}
+          {(showCsatPrompt || csatSubmitted || csatRating != null) && (
+            <div className="mt-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-center">
+              {csatSubmitted || csatRating != null ? (
+                <p className="text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="widget.chat.csat.thanks"
+                    defaultMessage="Thanks for your feedback!"
+                  />
+                </p>
+              ) : (
+                <>
+                  <p className="mb-1.5 text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="widget.chat.csat.prompt"
+                      defaultMessage="How was your conversation?"
+                    />
+                  </p>
+                  <div className="flex justify-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => submitCsat(n)}
+                        className="text-lg leading-none text-muted-foreground/50 hover:text-amber-500 transition-colors"
+                        aria-label={`Rate ${n} of 5`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Help-center deflection: suggested articles as the visitor types. */}
+      {helpResults.length > 0 && (
+        <div className="px-3 pb-1">
+          <p className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+            <FormattedMessage
+              id="widget.chat.suggestedArticles"
+              defaultMessage="Suggested articles"
+            />
+          </p>
+          <div className="flex flex-col gap-1">
+            {helpResults.map((a) => (
+              <button
+                key={a.slug}
+                type="button"
+                onClick={() => onArticleSelect?.(a.slug)}
+                className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-left text-xs hover:bg-muted/40 transition-colors"
+              >
+                <BookOpenIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{a.title}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Offline hint */}
       {!agentsOnline && offlineMessage && (

@@ -49,6 +49,8 @@ export interface ConversationDTO {
   /** Read-receipt watermarks (ISO) used to render a "Seen" state. */
   visitorLastReadAt: string | null
   agentLastReadAt: string | null
+  /** Post-conversation CSAT rating (1-5), or null if not yet rated. */
+  csatRating: number | null
 }
 
 /**
