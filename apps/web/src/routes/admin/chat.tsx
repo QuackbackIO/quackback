@@ -34,6 +34,7 @@ import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useChatComposerAttachments } from '@/lib/client/hooks/use-chat-composer-attachments'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { ChatAttachmentList } from '@/components/shared/chat-attachments'
+import { ConvertToPostDialog } from '@/components/admin/chat/convert-to-post-dialog'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -390,6 +391,14 @@ function ChatThread({
     setReply((r) => (r.trim() ? `${r}\n${body}` : body))
   }, [])
 
+  // Seed the "create post" draft from the conversation transcript.
+  const firstVisitorMessage = messages.find((m) => m.senderType === 'visitor')?.content
+  const convertTitle = (conversation?.subject || firstVisitorMessage || '').slice(0, 200)
+  const convertContent = messages
+    .filter((m) => m.senderType === 'visitor' && m.content)
+    .map((m) => m.content)
+    .join('\n\n')
+
   const onSend = useCallback(() => {
     const text = reply.trim()
     if ((!text && pendingAttachments.length === 0) || sendMutation.isPending || uploading) return
@@ -439,6 +448,11 @@ function ChatThread({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <ConvertToPostDialog
+              conversationId={conversationId}
+              defaultTitle={convertTitle}
+              defaultContent={convertContent}
+            />
             {!conversation?.assignedAgent && (
               <button
                 type="button"

@@ -9,7 +9,7 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { ConversationId, ChatMessageId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, ChatMessageId, PrincipalId, PostId, BoardId } from '@quackback/ids'
 import {
   MAX_CHAT_MESSAGE_LENGTH,
   MAX_CHAT_ATTACHMENTS,
@@ -343,6 +343,38 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
       )
     } catch (error) {
       console.error('[fn:chat] sendAgentMessageFn failed:', error)
+      throw error
+    }
+  })
+
+const convertSchema = z.object({
+  conversationId: z.string(),
+  boardId: z.string(),
+  title: z.string().max(200).optional(),
+  content: z.string().max(10000).optional(),
+  asUpvoteOfPostId: z.string().optional(),
+})
+
+/** Convert a conversation into a feedback post (create new, or upvote existing). */
+export const convertChatToPostFn = createServerFn({ method: 'POST' })
+  .inputValidator(convertSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { convertConversationToPost } = await import('@/lib/server/domains/chat/chat.convert')
+      return await convertConversationToPost(
+        {
+          conversationId: data.conversationId as ConversationId,
+          boardId: data.boardId as BoardId,
+          title: data.title,
+          content: data.content,
+          asUpvoteOfPostId: data.asUpvoteOfPostId as PostId | undefined,
+        },
+        { agentActor: actor, agentPrincipalId: ctx.principal.id }
+      )
+    } catch (error) {
+      console.error('[fn:chat] convertChatToPostFn failed:', error)
       throw error
     }
   })
