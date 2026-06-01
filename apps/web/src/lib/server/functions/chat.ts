@@ -58,6 +58,7 @@ const listMessagesSchema = z.object({
 
 const listConversationsSchema = z.object({
   status: z.enum(['open', 'snoozed', 'pending', 'closed']).optional(),
+  priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).optional(),
   assignedToMe: z.boolean().optional(),
   search: z.string().max(200).optional(),
   before: z.string().optional(),
@@ -416,6 +417,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
       const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
       return await listConversationsForAgent({
         status: data.status,
+        priority: data.priority,
         assignedAgentPrincipalId: data.assignedToMe ? ctx.principal.id : undefined,
         search: data.search,
         before: data.before,

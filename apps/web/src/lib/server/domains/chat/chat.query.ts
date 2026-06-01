@@ -5,8 +5,10 @@
 import {
   db,
   conversations,
+  conversationTags,
   chatMessages,
   principal,
+  tags,
   eq,
   and,
   or,
@@ -26,6 +28,7 @@ import type { ConversationId, PrincipalId, PostId } from '@quackback/ids'
 import type {
   ChatAuthorDTO,
   ChatMessageDTO,
+  ChatTagDTO,
   ConversationDTO,
   ChatSenderType,
   ConversationStatus,
@@ -63,6 +66,31 @@ export function fallbackAuthor(principalId: PrincipalId): ChatAuthorDTO {
   return { principalId, displayName: null, avatarUrl: null }
 }
 
+/** Batch-load conversation tags (agent-only triage metadata), grouped by id. */
+export async function loadTagsForConversations(
+  ids: ReadonlyArray<ConversationId>
+): Promise<Map<string, ChatTagDTO[]>> {
+  const map = new Map<string, ChatTagDTO[]>()
+  if (ids.length === 0) return map
+  const rows = await db
+    .select({
+      conversationId: conversationTags.conversationId,
+      id: tags.id,
+      name: tags.name,
+      color: tags.color,
+    })
+    .from(conversationTags)
+    .innerJoin(tags, eq(tags.id, conversationTags.tagId))
+    .where(and(inArray(conversationTags.conversationId, [...ids]), isNull(tags.deletedAt)))
+    .orderBy(tags.name)
+  for (const r of rows) {
+    const list = map.get(r.conversationId) ?? []
+    list.push({ id: r.id, name: r.name, color: r.color })
+    map.set(r.conversationId, list)
+  }
+  return map
+}
+
 /** Build an author DTO from a send-call author input (no DB round trip). */
 export function authorFromInput(input: {
   principalId: PrincipalId
@@ -95,12 +123,16 @@ export function toConversationDTO(
   assignedAgent: ChatAuthorDTO | null,
   unreadCount: number,
   // Agent-only field; callers pass null on visitor-facing paths.
-  visitorEmail: string | null = null
+  visitorEmail: string | null = null,
+  // Agent-only triage tags; callers pass [] on visitor-facing paths.
+  tagList: ChatTagDTO[] = []
 ): ConversationDTO {
   return {
     id: conversation.id,
     status: conversation.status,
     priority: conversation.priority,
+    channel: conversation.channel,
+    tags: tagList,
     subject: conversation.subject,
     lastMessagePreview: conversation.lastMessagePreview,
     lastMessageAt: conversation.lastMessageAt.toISOString(),
@@ -145,11 +177,15 @@ export async function conversationToDTO(
   conversation: Conversation,
   side: ChatSenderType
 ): Promise<ConversationDTO> {
-  // Independent queries (principal info vs message count) — run concurrently;
-  // this runs on the send hot path for every message.
-  const [authors, unread] = await Promise.all([
+  // Independent queries (principal info vs message count vs tags) — run
+  // concurrently; this runs on the send hot path for every message. Tags are
+  // agent-only triage metadata, so only load them on the agent side.
+  const [authors, unread, tagMap] = await Promise.all([
     loadAuthors([conversation.visitorPrincipalId, conversation.assignedAgentPrincipalId]),
     unreadCountFor(conversation, side),
+    side === 'agent'
+      ? loadTagsForConversations([conversation.id])
+      : Promise.resolve(new Map<string, ChatTagDTO[]>()),
   ])
   return toConversationDTO(
     conversation,
@@ -159,7 +195,8 @@ export async function conversationToDTO(
           fallbackAuthor(conversation.assignedAgentPrincipalId))
       : null,
     unread,
-    side === 'agent' ? (conversation.visitorEmail ?? null) : null
+    side === 'agent' ? (conversation.visitorEmail ?? null) : null,
+    tagMap.get(conversation.id) ?? []
   )
 }
 
@@ -447,6 +484,9 @@ export async function listConversationsForAgent(
   const unreadMap = new Map<string, number>()
   for (const row of unreadRows) unreadMap.set(row.conversationId, row.c)
 
+  // Tags for the whole page in one grouped query (inbox is agent-only).
+  const tagMap = await loadTagsForConversations(ids)
+
   return {
     conversations: page.map((c) =>
       toConversationDTO(
@@ -457,7 +497,8 @@ export async function listConversationsForAgent(
           : null,
         unreadMap.get(c.id) ?? 0,
         // Inbox is agent-only.
-        c.visitorEmail ?? null
+        c.visitorEmail ?? null,
+        tagMap.get(c.id) ?? []
       )
     ),
     hasMore,
