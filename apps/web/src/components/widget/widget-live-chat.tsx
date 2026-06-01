@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { buildChatRows, type ChatRow } from './widget-chat-rows'
 import { chatAvailable } from '@/lib/shared/chat/presence'
-import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
+import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import {
   ChatBubbleLeftRightIcon,
   PaperClipIcon,
@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { ChatAttachmentList } from '@/components/shared/chat-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
@@ -25,6 +26,7 @@ import { useChatComposerAttachments } from '@/lib/client/hooks/use-chat-composer
 import type { ChatAttachment, ChatMessageDTO } from '@/lib/shared/chat/types'
 import {
   getMyChatFn,
+  getChatPresenceFn,
   sendChatMessageFn,
   listChatMessagesFn,
   markChatReadFn,
@@ -128,6 +130,26 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     })()
     return () => {
       cancelled = true
+    }
+  }, [sessionVersion])
+
+  // Keep presence fresh while the chat is open. The SSE stream flips us online
+  // the moment an agent acts; this poll catches the reverse (agents going
+  // offline) and office-hours changes. Presence-only — never touches messages.
+  useEffect(() => {
+    let cancelled = false
+    const poll = () =>
+      void getChatPresenceFn({ headers: getWidgetAuthHeaders() })
+        .then((p) => {
+          if (cancelled) return
+          setAgentsOnline(p.agentsOnline)
+          setWithinOfficeHours(p.withinOfficeHours)
+        })
+        .catch(() => {})
+    const id = setInterval(poll, 45_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
     }
   }, [sessionVersion])
 
@@ -530,20 +552,38 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
         </span>
       </div>
 
-      <div ref={scrollViewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-          {virtualizer.getVirtualItems().map((vi) => (
-            <div
-              key={vi.key}
-              data-index={vi.index}
-              ref={virtualizer.measureElement}
-              className="absolute inset-x-0 top-0"
-              style={{ transform: `translateY(${vi.start}px)` }}
-            >
-              <div className="px-3 py-1.5">{renderRow(rows[vi.index])}</div>
-            </div>
-          ))}
-        </div>
+      <div className="relative flex-1 min-h-0">
+        <ScrollArea viewportRef={scrollViewportRef} scrollBarClassName="w-1.5" className="h-full">
+          <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+            {virtualizer.getVirtualItems().map((vi) => (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                className="absolute inset-x-0 top-0"
+                style={{ transform: `translateY(${vi.start}px)` }}
+              >
+                <div className="px-3 py-1.5">{renderRow(rows[vi.index])}</div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+
+        {/* Jump to latest — shown only when the visitor has scrolled up to read
+            history (followOnAppend keeps the view pinned when already at end). */}
+        {!virtualizer.isAtEnd() && (
+          <button
+            type="button"
+            onClick={() => virtualizer.scrollToEnd({ behavior: 'smooth' })}
+            aria-label={intl.formatMessage({
+              id: 'widget.chat.jumpToLatest',
+              defaultMessage: 'Jump to latest',
+            })}
+            className="absolute bottom-2 end-2 z-10 flex items-center justify-center size-8 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <ChevronDownIcon className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Help-center deflection: suggested articles as the visitor types. */}

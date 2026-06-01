@@ -172,6 +172,23 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
     }
   })
 
+/**
+ * Lightweight presence read for polling: agent-online state + the office-hours
+ * verdict, WITHOUT loading the conversation or messages. The widget polls this
+ * so the online/offline indicator stays fresh (e.g. agents going offline
+ * between messages) without re-fetching the whole thread.
+ */
+export const getChatPresenceFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const { getLiveChatConfig } = await import('@/lib/server/domains/settings/settings.widget')
+  const { isAnyAgentOnline } = await import('@/lib/server/realtime/presence')
+  const [chatConfig, agentsOnline] = await Promise.all([getLiveChatConfig(), isAnyAgentOnline()])
+  const officeHours = chatConfig.officeHours
+  return {
+    agentsOnline,
+    withinOfficeHours: officeHours?.enabled ? isWithinOfficeHours(officeHours, new Date()) : null,
+  }
+})
+
 /** The current visitor's active conversation + first page of messages. */
 export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {

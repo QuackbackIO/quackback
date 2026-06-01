@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getMyChatFn } from '@/lib/server/functions/chat'
+import { getMyChatFn, getChatPresenceFn } from '@/lib/server/functions/chat'
 import type { ConversationDTO } from '@/lib/shared/chat/types'
 
 export interface ChatSummary {
@@ -51,6 +51,29 @@ export function useChatSummary(enabled: boolean): ChatSummary {
     })()
     return () => {
       cancelled = true
+    }
+  }, [enabled, sessionVersion])
+
+  // Keep the online/offline indicator fresh while the widget is open by polling
+  // the lightweight presence endpoint (the initial load already seeded it).
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    const id = setInterval(() => {
+      void getChatPresenceFn({ headers: getWidgetAuthHeaders() })
+        .then((p) => {
+          if (cancelled) return
+          setSummary((prev) => ({
+            ...prev,
+            agentsOnline: p.agentsOnline,
+            withinOfficeHours: p.withinOfficeHours,
+          }))
+        })
+        .catch(() => {})
+    }, 45_000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
     }
   }, [enabled, sessionVersion])
 
