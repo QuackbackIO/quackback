@@ -6,12 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
-import { ChartBarIcon, InboxIcon, DocumentTextIcon, UsersIcon } from '@heroicons/react/24/solid'
+import {
+  ChartBarIcon,
+  InboxIcon,
+  DocumentTextIcon,
+  UsersIcon,
+  ChatBubbleLeftRightIcon,
+} from '@heroicons/react/24/solid'
 import { AnalyticsSummaryCards, METRICS, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
 import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
+import { AnalyticsCsatCard } from './analytics-csat-card'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
 // primitives that wrap it. Analytics is admin-gated and rarely the first
@@ -27,7 +34,7 @@ function ChartSkeleton({ className }: { className?: string }) {
   return <div className={cn('w-full rounded-md bg-muted/50 animate-pulse', className)} />
 }
 
-type Section = 'overview' | 'feedback' | 'changelog' | 'users'
+type Section = 'overview' | 'feedback' | 'support' | 'changelog' | 'users'
 
 const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
   { value: '7d', label: '7d' },
@@ -39,6 +46,7 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 const navItems: Array<{ key: Section; label: string; icon: React.ElementType }> = [
   { key: 'overview', label: 'Overview', icon: ChartBarIcon },
   { key: 'feedback', label: 'Feedback', icon: InboxIcon },
+  { key: 'support', label: 'Support', icon: ChatBubbleLeftRightIcon },
   { key: 'changelog', label: 'Changelog', icon: DocumentTextIcon },
   { key: 'users', label: 'Users', icon: UsersIcon },
 ]
@@ -174,6 +182,17 @@ export function AnalyticsPage() {
                       </CardContent>
                     </Card>
                   </div>
+                )}
+
+                {section === 'support' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Customer satisfaction (CSAT)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AnalyticsCsatCard csat={data.csat} />
+                    </CardContent>
+                  </Card>
                 )}
 
                 {section === 'changelog' && (

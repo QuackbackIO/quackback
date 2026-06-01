@@ -11,17 +11,21 @@ import {
   db,
   sql,
   eq,
+  and,
   gte,
   isNull,
+  isNotNull,
   sum,
   desc,
   analyticsDailyStats,
   analyticsTopPosts,
   postStatuses,
   changelogEntries,
+  conversations,
   boards,
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
+import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
@@ -218,6 +222,40 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
 
     const totalViews = Number(changelogResult[0]?.totalViews ?? 0)
 
+    // -- CSAT (live query; chat volume is low, no materialized view needed) --
+    // Pull rated conversations across current + previous window in one go, then
+    // split for the trend + period-over-period delta.
+    const csatRows = await db
+      .select({ rating: conversations.csatRating, ratedAt: conversations.csatSubmittedAt })
+      .from(conversations)
+      .where(
+        and(isNotNull(conversations.csatRating), gte(conversations.csatSubmittedAt, previousStart))
+      )
+
+    const ratedAtOrNow = (r: { ratedAt: Date | null }) => r.ratedAt ?? now
+    const csatCurrentRows = csatRows
+      .filter((r) => ratedAtOrNow(r) >= start)
+      .map((r) => ({ rating: r.rating as number, ratedAt: r.ratedAt as Date }))
+    const csatPreviousRows = csatRows
+      .filter((r) => ratedAtOrNow(r) >= previousStart && ratedAtOrNow(r) < start)
+      .map((r) => ({ rating: r.rating as number, ratedAt: r.ratedAt as Date }))
+
+    const csatSummary = summarizeCsat(csatCurrentRows)
+    const prevAvg = summarizeCsat(csatPreviousRows).avgRating
+
+    // Response rate = ratings collected / conversations closed in the period
+    // (a closed thread is the chance to be rated).
+    const [{ closedCount } = { closedCount: 0 }] = await db
+      .select({ closedCount: sql<number>`count(*)::int` })
+      .from(conversations)
+      .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start)))
+    // Cap at 100: the rated-window (csatSubmittedAt) and closed-window
+    // (resolvedAt) can drift at the period edge, so the ratio can exceed 1.
+    const responseRate =
+      closedCount > 0
+        ? Math.min(100, Math.round((csatSummary.responseCount / closedCount) * 100))
+        : 0
+
     // -- Computed at timestamp --
     const computedAt = latestRow?.computedAt?.toISOString() ?? null
 
@@ -228,6 +266,13 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       boardBreakdown,
       topPosts,
       topContributors,
+      csat: {
+        avgRating: csatSummary.avgRating,
+        avgRatingDelta: delta(csatSummary.avgRating, prevAvg),
+        responseCount: csatSummary.responseCount,
+        responseRate,
+        distribution: csatSummary.distribution,
+      },
       changelog: {
         totalViews,
         totalReactions: 0,
