@@ -5,7 +5,7 @@ import {
   HomeIcon,
   LightBulbIcon,
   NewspaperIcon,
-  BookOpenIcon,
+  QuestionMarkCircleIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -38,7 +38,12 @@ const TAB_CONFIG: {
     labelId: 'widget.shell.tab.changelog',
     defaultLabel: 'Changelog',
   },
-  { tab: 'help', icon: BookOpenIcon, labelId: 'widget.shell.tab.help', defaultLabel: 'Help' },
+  {
+    tab: 'help',
+    icon: QuestionMarkCircleIcon,
+    labelId: 'widget.shell.tab.help',
+    defaultLabel: 'Help',
+  },
 ]
 
 interface PortalAccessProps {
