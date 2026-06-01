@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless cosign signing via GitHub OIDC
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
@@ -31,6 +32,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - uses: docker/build-push-action@v7
+        id: build
         with:
           context: .
           file: ./apps/web/Dockerfile
@@ -39,3 +41,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Keyless cosign signature over the pushed digest, required by the
+      # cluster's Kyverno verify-images ClusterPolicy (keyless, GitHub OIDC
+      # issuer + QuackbackIO workflow subject). github.repository is a
+      # trusted GitHub-set slug; lowercased because OCI refs must be lower.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          REPO: ${{ github.repository }}
+        run: |
+          IMAGE="ghcr.io/$(printf '%s' "$REPO" | tr '[:upper:]' '[:lower:]')"
+          cosign sign --yes "${IMAGE}@${DIGEST}"
