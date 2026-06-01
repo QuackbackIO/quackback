@@ -29,11 +29,12 @@ describe('conversations schema', () => {
     )
   })
 
-  it('visitorPrincipalId + lastMessageAt are not null; assignedAgent is nullable', () => {
+  it('visitorPrincipalId + lastMessageAt are not null; assignedAgent + resolvedAt are nullable', () => {
     const cols = getTableColumns(conversations)
     expect(cols.visitorPrincipalId.notNull).toBe(true)
     expect(cols.lastMessageAt.notNull).toBe(true)
     expect(cols.assignedAgentPrincipalId.notNull).toBe(false)
+    expect(cols.resolvedAt.notNull).toBe(false)
   })
 
   it('status enum matches CONVERSATION_STATUSES and defaults to open', () => {

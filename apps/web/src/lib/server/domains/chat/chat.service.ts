@@ -33,7 +33,13 @@ import {
   MAX_CHAT_MESSAGE_LENGTH,
   MAX_CHAT_ATTACHMENTS,
   type ChatSenderType,
+  type ConversationStatus,
 } from '@/lib/shared/chat/types'
+import {
+  applyVisitorReopenStatus,
+  applyAgentReopenStatus,
+  resolvedAtForStatus,
+} from './chat.lifecycle'
 import {
   publishChatEvent,
   publishAgentChatEvent,
@@ -221,14 +227,18 @@ export async function sendVisitorMessage(
         ? normalizeEmail(input.visitorEmail)
         : undefined
 
+    const visitorNextStatus = applyVisitorReopenStatus()
     const [updated] = await tx
       .update(conversations)
       .set({
         lastMessageAt: message.createdAt,
         lastMessagePreview: preview(content, attachments),
-        // Visitor is active, so their side is read; a reply reopens a closed thread.
+        // Visitor is active, so their side is read; a reply surfaces the thread.
         visitorLastReadAt: message.createdAt,
-        status: conversation.status === 'closed' ? 'open' : conversation.status,
+        status: visitorNextStatus,
+        // Keep resolvedAt consistent with the new status — a reply that reopens
+        // a closed thread must clear the stale resolution timestamp.
+        resolvedAt: resolvedAtForStatus(visitorNextStatus, message.createdAt),
         updatedAt: message.createdAt,
         ...(captureEmail ? { visitorEmail: captureEmail } : {}),
       })
@@ -300,6 +310,7 @@ export async function sendAgentMessage(
       })
       .returning()
 
+    const agentNextStatus = applyAgentReopenStatus(existing.status)
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -308,7 +319,9 @@ export async function sendAgentMessage(
         // Replying counts as reading; claim the conversation if unassigned.
         agentLastReadAt: message.createdAt,
         assignedAgentPrincipalId: existing.assignedAgentPrincipalId ?? agent.principalId,
-        status: existing.status === 'closed' ? 'open' : existing.status,
+        status: agentNextStatus,
+        // Keep resolvedAt consistent with the new status (reopening clears it).
+        resolvedAt: resolvedAtForStatus(agentNextStatus, message.createdAt),
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversationId))
@@ -399,18 +412,20 @@ export async function addAgentNote(
   return { conversation: conversationDTO, message: messageDTO }
 }
 
-/** Agent action: set a conversation's status (open / snoozed / closed). */
+/** Agent action: set a conversation's status (open / snoozed / pending / closed). */
 export async function setConversationStatus(
   conversationId: ConversationId,
-  status: 'open' | 'snoozed' | 'closed',
+  status: ConversationStatus,
   actor: Actor
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   await loadConversationOr404(conversationId)
+  const now = new Date()
   const [updated] = await db
     .update(conversations)
-    .set({ status, updatedAt: new Date() })
+    // Stamp resolvedAt on close, clear it on any reopen.
+    .set({ status, resolvedAt: resolvedAtForStatus(status, now), updatedAt: now })
     .where(eq(conversations.id, conversationId))
     .returning()
   const dto = await conversationToDTO(updated, 'agent')

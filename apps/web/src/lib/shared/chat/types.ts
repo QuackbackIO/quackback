@@ -5,7 +5,7 @@
  */
 import type { ConversationId, ChatMessageId, PrincipalId } from '@quackback/ids'
 
-export type ConversationStatus = 'open' | 'snoozed' | 'closed'
+export type ConversationStatus = 'open' | 'snoozed' | 'pending' | 'closed'
 export type ChatSenderType = 'visitor' | 'agent'
 
 /** One weekday's availability window, local to the config timezone. */
@@ -77,6 +77,8 @@ export interface ConversationDTO {
   csatRating: number | null
   /** Captured contact email for an anonymous visitor; agent-only, null otherwise. */
   visitorEmail: string | null
+  /** When the conversation was resolved/closed (ISO), or null while still active. */
+  resolvedAt: string | null
 }
 
 /**

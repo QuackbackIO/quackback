@@ -107,6 +107,7 @@ export function toConversationDTO(
     agentLastReadAt: conversation.agentLastReadAt?.toISOString() ?? null,
     csatRating: conversation.csatRating ?? null,
     visitorEmail,
+    resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
   }
 }
 
@@ -258,7 +259,7 @@ export async function listMessages(
 }
 
 export interface ConversationListFilter {
-  status?: 'open' | 'snoozed' | 'closed'
+  status?: 'open' | 'snoozed' | 'pending' | 'closed'
   assignedAgentPrincipalId?: PrincipalId
   /** Free-text match over the visitor name + message content. */
   search?: string

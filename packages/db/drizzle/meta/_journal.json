@@ -652,6 +652,13 @@
       "when": 1780617600000,
       "tag": "0092_chat_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1780704000000,
+      "tag": "0093_chat_pending_resolved_at",
+      "breakpoints": true
     }
   ]
 }

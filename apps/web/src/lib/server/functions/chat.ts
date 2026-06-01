@@ -50,7 +50,7 @@ const listMessagesSchema = z.object({
 })
 
 const listConversationsSchema = z.object({
-  status: z.enum(['open', 'snoozed', 'closed']).optional(),
+  status: z.enum(['open', 'snoozed', 'pending', 'closed']).optional(),
   assignedToMe: z.boolean().optional(),
   search: z.string().max(200).optional(),
   before: z.string().optional(),
@@ -77,7 +77,7 @@ const agentNoteSchema = z.object({
 
 const setStatusSchema = z.object({
   conversationId: z.string(),
-  status: z.enum(['open', 'snoozed', 'closed']),
+  status: z.enum(['open', 'snoozed', 'pending', 'closed']),
 })
 
 const assignSchema = z.object({

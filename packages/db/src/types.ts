@@ -287,7 +287,7 @@ export type NewCommentReaction = InferInsertModel<typeof commentReactions>
 
 // Live chat conversation statuses — kept in sync with the conversations.status
 // column enum (schema.test.ts pins the match).
-export const CONVERSATION_STATUSES = ['open', 'snoozed', 'closed'] as const
+export const CONVERSATION_STATUSES = ['open', 'snoozed', 'pending', 'closed'] as const
 export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number]
 
 // The inbound channel a conversation arrived on — kept in sync with the
