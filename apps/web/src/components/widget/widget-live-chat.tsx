@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
+import { buildChatRows, type ChatRow } from './widget-chat-rows'
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
 import {
   ChatBubbleLeftRightIcon,
@@ -274,12 +276,53 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     preChatMode !== 'off' && !emailKnown && !conversationId && messages.length === 0
   const emailBlocksSend = preChatMode === 'required' && needsEmail && !emailValid
 
-  // Auto-scroll to the newest message. Keyed on the newest id (not length) so
-  // prepending older messages doesn't yank the view to the bottom.
-  useEffect(() => {
-    const el = scrollViewportRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages.at(-1)?.id, loading])
+  // Flatten the thread into virtualized rows. anchorTo:'end' + followOnAppend
+  // keep the view pinned to the newest message and stick to the bottom as
+  // messages stream in; getItemKey (message id) lets the virtualizer hold the
+  // viewport when older history is prepended.
+  const hasGreeting = !hasMoreOlder && !!welcomeMessage
+  const showEmpty = !loading && messages.length === 0 && !welcomeMessage
+  const rows = useMemo(
+    () =>
+      buildChatRows({
+        messages,
+        hasMoreOlder,
+        hasGreeting,
+        showEmpty,
+        showSeen: lastVisitorSeen && !remoteTyping,
+        showTyping: remoteTyping,
+        showCsat: showCsatPrompt || csatSubmitted || csatRating != null,
+      }),
+    [
+      messages,
+      hasMoreOlder,
+      hasGreeting,
+      showEmpty,
+      lastVisitorSeen,
+      remoteTyping,
+      showCsatPrompt,
+      csatSubmitted,
+      csatRating,
+    ]
+  )
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollViewportRef.current,
+    estimateSize: () => 64,
+    getItemKey: (index) => rows[index].key,
+    anchorTo: 'end',
+    followOnAppend: true,
+    overscan: 6,
+  })
+
+  // Land on the newest message once the initial thread has loaded.
+  const didInitialScroll = useRef(false)
+  useLayoutEffect(() => {
+    if (loading || didInitialScroll.current || rows.length === 0) return
+    didInitialScroll.current = true
+    virtualizer.scrollToEnd()
+  }, [loading, rows.length, virtualizer])
 
   // Clear unread on the visitor side only when the newest message is from an
   // agent — skip the visitor's own outbound sends (avoids a write + 'read'
@@ -352,6 +395,120 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     [send]
   )
 
+  const renderRow = (row: ChatRow) => {
+    switch (row.type) {
+      case 'load-older':
+        return (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadOlder()}
+              disabled={loadingOlder}
+              className="rounded-full border border-border/60 px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              {loadingOlder ? (
+                <FormattedMessage id="widget.chat.loadingOlder" defaultMessage="Loading…" />
+              ) : (
+                <FormattedMessage
+                  id="widget.chat.loadOlder"
+                  defaultMessage="Load earlier messages"
+                />
+              )}
+            </button>
+          </div>
+        )
+      case 'greeting':
+        return (
+          <ChatBubble
+            side="agent"
+            authorName={teamName ?? undefined}
+            content={welcomeMessage ?? ''}
+          />
+        )
+      case 'message': {
+        const m = row.message
+        return (
+          <ChatBubble
+            side={m.senderType === 'visitor' ? 'visitor' : 'agent'}
+            authorName={
+              m.senderType === 'agent' ? (m.author.displayName ?? teamName ?? undefined) : undefined
+            }
+            authorAvatar={m.senderType === 'agent' ? m.author.avatarUrl : null}
+            content={m.content}
+            attachments={m.attachments}
+            time={formatTime(m.createdAt)}
+          />
+        )
+      }
+      case 'empty':
+        return (
+          <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+            <ChatBubbleLeftRightIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+            <p className="text-sm font-medium text-muted-foreground/70">
+              <FormattedMessage
+                id="widget.chat.startPrompt"
+                defaultMessage="Send us a message and we'll get back to you."
+              />
+            </p>
+          </div>
+        )
+      case 'seen':
+        return (
+          <p className="text-end text-[10px] text-muted-foreground/50 pe-1">
+            <FormattedMessage id="widget.chat.seen" defaultMessage="Seen" />
+          </p>
+        )
+      case 'typing':
+        return (
+          <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/70">
+            <TypingDots />
+            <span>
+              <FormattedMessage
+                id="widget.chat.typing"
+                defaultMessage="{name} is typing…"
+                values={{ name: teamName ?? 'Support' }}
+              />
+            </span>
+          </div>
+        )
+      case 'csat':
+        return (
+          <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-center">
+            {csatSubmitted || csatRating != null ? (
+              <p className="text-xs text-muted-foreground">
+                <FormattedMessage
+                  id="widget.chat.csat.thanks"
+                  defaultMessage="Thanks for your feedback!"
+                />
+              </p>
+            ) : (
+              <>
+                <p className="mb-1.5 text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="widget.chat.csat.prompt"
+                    defaultMessage="How was your conversation?"
+                  />
+                </p>
+                <div className="flex justify-center gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => submitCsat(n)}
+                      className="text-lg leading-none text-muted-foreground/50 hover:text-amber-500 transition-colors"
+                      aria-label={`Rate ${n} of 5`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Presence strip */}
@@ -373,116 +530,18 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
       </div>
 
       <div ref={scrollViewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-col gap-3 px-3 py-4">
-          {/* Load older messages — shown until the start of the thread is reached. */}
-          {hasMoreOlder && (
-            <button
-              type="button"
-              onClick={() => void loadOlder()}
-              disabled={loadingOlder}
-              className="mx-auto rounded-full border border-border/60 px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+        <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+          {virtualizer.getVirtualItems().map((vi) => (
+            <div
+              key={vi.key}
+              data-index={vi.index}
+              ref={virtualizer.measureElement}
+              className="absolute inset-x-0 top-0"
+              style={{ transform: `translateY(${vi.start}px)` }}
             >
-              {loadingOlder ? (
-                <FormattedMessage id="widget.chat.loadingOlder" defaultMessage="Loading…" />
-              ) : (
-                <FormattedMessage
-                  id="widget.chat.loadOlder"
-                  defaultMessage="Load earlier messages"
-                />
-              )}
-            </button>
-          )}
-
-          {/* Greeting — rendered from settings, not stored as a message. Hidden
-              until the visitor has paged back to the start of the thread. */}
-          {!hasMoreOlder && welcomeMessage && (
-            <ChatBubble side="agent" authorName={teamName ?? undefined} content={welcomeMessage} />
-          )}
-
-          {messages.map((m) => (
-            <ChatBubble
-              key={m.id}
-              side={m.senderType === 'visitor' ? 'visitor' : 'agent'}
-              authorName={
-                m.senderType === 'agent'
-                  ? (m.author.displayName ?? teamName ?? undefined)
-                  : undefined
-              }
-              authorAvatar={m.senderType === 'agent' ? m.author.avatarUrl : null}
-              content={m.content}
-              attachments={m.attachments}
-              time={formatTime(m.createdAt)}
-            />
+              <div className="px-3 py-1.5">{renderRow(rows[vi.index])}</div>
+            </div>
           ))}
-
-          {!loading && messages.length === 0 && !welcomeMessage && (
-            <div className="flex flex-col items-center justify-center text-center py-8 px-4">
-              <ChatBubbleLeftRightIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground/70">
-                <FormattedMessage
-                  id="widget.chat.startPrompt"
-                  defaultMessage="Send us a message and we'll get back to you."
-                />
-              </p>
-            </div>
-          )}
-
-          {/* "Seen" on the visitor's latest message once the agent has read it. */}
-          {lastVisitorSeen && !remoteTyping && (
-            <p className="text-end text-[10px] text-muted-foreground/50 -mt-1.5 pe-1">
-              <FormattedMessage id="widget.chat.seen" defaultMessage="Seen" />
-            </p>
-          )}
-
-          {/* Agent typing indicator. */}
-          {remoteTyping && (
-            <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/70">
-              <TypingDots />
-              <span>
-                <FormattedMessage
-                  id="widget.chat.typing"
-                  defaultMessage="{name} is typing…"
-                  values={{ name: teamName ?? 'Support' }}
-                />
-              </span>
-            </div>
-          )}
-
-          {/* CSAT prompt once the conversation is closed. */}
-          {(showCsatPrompt || csatSubmitted || csatRating != null) && (
-            <div className="mt-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-center">
-              {csatSubmitted || csatRating != null ? (
-                <p className="text-xs text-muted-foreground">
-                  <FormattedMessage
-                    id="widget.chat.csat.thanks"
-                    defaultMessage="Thanks for your feedback!"
-                  />
-                </p>
-              ) : (
-                <>
-                  <p className="mb-1.5 text-xs text-muted-foreground">
-                    <FormattedMessage
-                      id="widget.chat.csat.prompt"
-                      defaultMessage="How was your conversation?"
-                    />
-                  </p>
-                  <div className="flex justify-center gap-1">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => submitCsat(n)}
-                        className="text-lg leading-none text-muted-foreground/50 hover:text-amber-500 transition-colors"
-                        aria-label={`Rate ${n} of 5`}
-                      >
-                        ★
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
