@@ -16,6 +16,7 @@ import {
   conversations,
   chatMessages,
   conversationTags,
+  conversationWatchers,
   principal,
   type Conversation,
 } from '@/lib/server/db'
@@ -526,6 +527,41 @@ export async function removeConversationTag(
       and(eq(conversationTags.conversationId, conversationId), eq(conversationTags.tagId, tagId))
     )
   publishConversationUpdate(conversationId, await conversationToDTO(conversation, 'agent'))
+}
+
+/** Agent action: start watching a conversation (notified of visitor messages
+ *  even when unassigned). Idempotent. */
+export async function addConversationWatcher(
+  conversationId: ConversationId,
+  watcherPrincipalId: PrincipalId,
+  actor: Actor
+): Promise<void> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  await loadConversationOr404(conversationId)
+  await db
+    .insert(conversationWatchers)
+    .values({ conversationId, principalId: watcherPrincipalId })
+    .onConflictDoNothing()
+}
+
+/** Agent action: stop watching a conversation. Idempotent. */
+export async function removeConversationWatcher(
+  conversationId: ConversationId,
+  watcherPrincipalId: PrincipalId,
+  actor: Actor
+): Promise<void> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  await loadConversationOr404(conversationId)
+  await db
+    .delete(conversationWatchers)
+    .where(
+      and(
+        eq(conversationWatchers.conversationId, conversationId),
+        eq(conversationWatchers.principalId, watcherPrincipalId)
+      )
+    )
 }
 
 /** Soft-delete a message. Team members may delete any message; a visitor may

@@ -13,6 +13,8 @@ import type { Conversation } from '@/lib/server/db'
 // `.limit(1)` to a single-row visitor array.
 let teamRows: Array<Record<string, unknown>> = []
 let visitorRows: Array<Record<string, unknown>> = []
+// Watchers of the conversation (P1.6b) — resolved by the mocked chat.query.
+let watcherRows: Array<{ principalId: string; email: string | null; name: string | null }> = []
 
 const isAnyAgentOnline = vi.fn<() => Promise<boolean>>()
 const isPrincipalOnline = vi.fn<(p: PrincipalId) => Promise<boolean>>()
@@ -44,6 +46,11 @@ vi.mock('@quackback/email', () => ({
 // Signed resume token (P2.6) — stub so the test doesn't pull in config/secretKey.
 vi.mock('@/lib/server/realtime/chat-resume-token', () => ({
   mintConversationResumeToken: () => 'tok_test',
+}))
+
+// Watchers (P1.6b) — notifyVisitorMessage queries this; drive it per test.
+vi.mock('../chat.query', () => ({
+  getWatchersForConversation: () => Promise.resolve(watcherRows),
 }))
 
 vi.mock('@/lib/server/db', () => {
@@ -81,6 +88,7 @@ const ctx = {
 beforeEach(() => {
   teamRows = []
   visitorRows = []
+  watcherRows = []
   vi.clearAllMocks()
   // Silence the fire-and-forget warning logs.
   vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -172,6 +180,47 @@ describe('notifyVisitorMessage', () => {
 
     expect(createNotificationsBatch).not.toHaveBeenCalled()
     expect(sendChatMessageEmail).not.toHaveBeenCalled()
+  })
+
+  it('notifies a watcher even when the team broadcast is suppressed (P1.6b)', async () => {
+    // Agent online + not the first message → the broad team is NOT pinged...
+    isAnyAgentOnline.mockResolvedValue(true)
+    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+    // ...but a watcher opted into this conversation, so they still get pinged.
+    watcherRows = [{ principalId: 'principal_watcher', email: 'w@x.com', name: 'W' }]
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'follow-up message',
+      authorName: 'Visitor',
+      isFirstMessage: false,
+    })
+
+    expect(createNotificationsBatch).toHaveBeenCalledTimes(1)
+    const batch = createNotificationsBatch.mock.calls[0][0] as Array<Record<string, unknown>>
+    // Only the watcher — the broad team query is skipped while an agent is live.
+    expect(batch).toHaveLength(1)
+    expect(batch[0]).toMatchObject({ principalId: 'principal_watcher' })
+    // Agent online → no offline email.
+    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+  })
+
+  it('dedupes a watcher who is also in the broad team (no double notification)', async () => {
+    isAnyAgentOnline.mockResolvedValue(false)
+    teamRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+    watcherRows = [{ principalId: 'principal_admin', email: 'a@x.com', name: 'A' }]
+
+    await notifyVisitorMessage({
+      conversation,
+      content: 'hi',
+      authorName: 'Visitor',
+      isFirstMessage: true,
+    })
+
+    const batch = createNotificationsBatch.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch).toHaveLength(1)
+    // No agent online → one email, not two.
+    expect(sendChatMessageEmail).toHaveBeenCalledTimes(1)
   })
 
   it('swallows a thrown dependency (does not reject)', async () => {

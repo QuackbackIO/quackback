@@ -6,8 +6,10 @@ import {
   db,
   conversations,
   conversationTags,
+  conversationWatchers,
   chatMessages,
   principal,
+  user,
   tags,
   eq,
   and,
@@ -64,6 +66,37 @@ export async function loadAuthors(
 
 export function fallbackAuthor(principalId: PrincipalId): ChatAuthorDTO {
   return { principalId, displayName: null, avatarUrl: null }
+}
+
+export interface ChatWatcher {
+  principalId: PrincipalId
+  email: string | null
+  name: string | null
+  avatarUrl: string | null
+}
+
+/** Team members watching a conversation (with contact info for notification). */
+export async function getWatchersForConversation(
+  conversationId: ConversationId
+): Promise<ChatWatcher[]> {
+  const rows = await db
+    .select({
+      principalId: conversationWatchers.principalId,
+      email: user.email,
+      name: user.name,
+      avatarUrl: principal.avatarUrl,
+    })
+    .from(conversationWatchers)
+    .innerJoin(principal, eq(conversationWatchers.principalId, principal.id))
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(eq(conversationWatchers.conversationId, conversationId))
+    .orderBy(user.name)
+  return rows.map((r) => ({
+    principalId: r.principalId as PrincipalId,
+    email: r.email ?? null,
+    name: r.name ?? null,
+    avatarUrl: r.avatarUrl ?? null,
+  }))
 }
 
 /** Batch-load conversation tags (agent-only triage metadata), grouped by id. */

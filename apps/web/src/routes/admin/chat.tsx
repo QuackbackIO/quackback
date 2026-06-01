@@ -46,6 +46,7 @@ import {
 } from '@/components/admin/chat/priority-control'
 import { AssigneeControl } from '@/components/admin/chat/assignee-control'
 import { ConversationTags } from '@/components/admin/chat/conversation-tags'
+import { ConversationWatchers } from '@/components/admin/chat/conversation-watchers'
 import { LinkedPosts } from '@/components/admin/chat/linked-posts'
 import { ChannelBadge, NoEmailBadge } from '@/components/admin/chat/channel-badge'
 import { TagChip } from '@/components/shared/tag-chip'
@@ -1025,6 +1026,7 @@ function VisitorSidebar({
           tags={conversation.tags}
           onChanged={onChanged}
         />
+        <ConversationWatchers conversationId={conversation.id} />
         <LinkedPosts conversationId={conversation.id} />
       </div>
       {detail && (

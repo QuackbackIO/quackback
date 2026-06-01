@@ -17,10 +17,12 @@ import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './chat.recipient'
 import { inboundReplyToAddress, isEmailInboundConfigured } from './chat.email-channel'
+import { getWatchersForConversation } from './chat.query'
+import { mergeChatRecipients } from './chat.recipients'
 
 const previewOf = (content: string) => truncate(content, 140)
 
-/** Notify the team of a new visitor message. */
+/** Notify the team + any watchers of a new visitor message. */
 export async function notifyVisitorMessage(opts: {
   conversation: Conversation
   content: string
@@ -29,24 +31,33 @@ export async function notifyVisitorMessage(opts: {
 }): Promise<void> {
   try {
     const agentsOnline = await isAnyAgentOnline()
-    // Avoid notification spam: only ping the team on the first message of a
-    // conversation, or when nobody is around to see it live.
-    if (!opts.isFirstMessage && agentsOnline) return
+    // The broad team ping is rate-limited (first message, or nobody online).
+    // Watchers opted into THIS conversation, so they're always notified.
+    const pingTeam = opts.isFirstMessage || !agentsOnline
 
-    const team = await db
-      .select({ principalId: principal.id, email: user.email, name: user.name })
-      .from(principal)
-      .leftJoin(user, eq(principal.userId, user.id))
-      .where(inArray(principal.role, ['admin', 'member']))
+    const [team, watchers] = await Promise.all([
+      pingTeam
+        ? db
+            .select({ principalId: principal.id, email: user.email, name: user.name })
+            .from(principal)
+            .leftJoin(user, eq(principal.userId, user.id))
+            .where(inArray(principal.role, ['admin', 'member']))
+        : Promise.resolve(
+            [] as Array<{ principalId: PrincipalId; email: string | null; name: string | null }>
+          ),
+      getWatchersForConversation(opts.conversation.id),
+    ])
 
-    if (team.length === 0) return
+    // Union + dedupe so a watcher who is also in the broad team isn't doubled.
+    const recipients = mergeChatRecipients(team, watchers)
+    if (recipients.length === 0) return
 
     const title = `New chat message from ${opts.authorName}`
     const body = previewOf(opts.content)
 
     await createNotificationsBatch(
-      team.map((t) => ({
-        principalId: t.principalId,
+      recipients.map((r) => ({
+        principalId: r.principalId as PrincipalId,
         type: 'chat_message' as const,
         title,
         body,
@@ -54,18 +65,18 @@ export async function notifyVisitorMessage(opts: {
       }))
     )
 
-    // Email the team only when no agent is online to handle it live.
+    // Email recipients only when no agent is online to handle it live.
     if (!agentsOnline) {
       const ctx = await buildHookContext()
       if (!ctx) return
       const ctaUrl = `${ctx.portalBaseUrl}/admin/chat?conversation=${opts.conversation.id}`
       const { sendChatMessageEmail } = await import('@quackback/email')
       await Promise.allSettled(
-        team
-          .filter((t) => t.email)
-          .map((t) =>
+        recipients
+          .filter((r) => r.email)
+          .map((r) =>
             sendChatMessageEmail({
-              to: t.email!,
+              to: r.email!,
               direction: 'visitor_message',
               senderName: opts.authorName,
               messagePreview: body,

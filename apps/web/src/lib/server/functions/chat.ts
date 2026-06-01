@@ -726,3 +726,57 @@ export const applyMacroFn = createServerFn({ method: 'POST' })
       throw error
     }
   })
+
+const watcherSchema = z.object({ conversationId: z.string() })
+
+/** Team members watching a conversation + whether the caller is one (so the
+ *  sidebar toggle needn't know the client's own principal id). */
+export const getConversationWatchersFn = createServerFn({ method: 'GET' })
+  .inputValidator(watcherSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const { getWatchersForConversation } = await import('@/lib/server/domains/chat/chat.query')
+      const watchers = await getWatchersForConversation(data.conversationId as ConversationId)
+      return { watchers, isWatching: watchers.some((w) => w.principalId === ctx.principal.id) }
+    } catch (error) {
+      console.error('[fn:chat] getConversationWatchersFn failed:', error)
+      throw error
+    }
+  })
+
+/** Start watching a conversation (the acting agent watches it). */
+export const addConversationWatcherFn = createServerFn({ method: 'POST' })
+  .inputValidator(watcherSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { addConversationWatcher } = await import('@/lib/server/domains/chat/chat.service')
+      await addConversationWatcher(data.conversationId as ConversationId, ctx.principal.id, actor)
+      return { ok: true }
+    } catch (error) {
+      console.error('[fn:chat] addConversationWatcherFn failed:', error)
+      throw error
+    }
+  })
+
+/** Stop watching a conversation. */
+export const removeConversationWatcherFn = createServerFn({ method: 'POST' })
+  .inputValidator(watcherSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { removeConversationWatcher } = await import('@/lib/server/domains/chat/chat.service')
+      await removeConversationWatcher(
+        data.conversationId as ConversationId,
+        ctx.principal.id,
+        actor
+      )
+      return { ok: true }
+    } catch (error) {
+      console.error('[fn:chat] removeConversationWatcherFn failed:', error)
+      throw error
+    }
+  })

@@ -102,6 +102,28 @@ export const conversationTags = pgTable(
 )
 
 /**
+ * Conversation watchers — team members who follow a conversation and get
+ * notified of new visitor messages even when they aren't the assignee. Both FKs
+ * cascade: deleting a conversation or a principal removes the watch.
+ */
+export const conversationWatchers = pgTable(
+  'conversation_watchers',
+  {
+    conversationId: typeIdColumn('conversation')('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    principalId: typeIdColumn('principal')('principal_id')
+      .notNull()
+      .references(() => principal.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    uniqueIndex('conversation_watchers_pk').on(table.conversationId, table.principalId),
+    index('conversation_watchers_conversation_id_idx').on(table.conversationId),
+    index('conversation_watchers_principal_id_idx').on(table.principalId),
+  ]
+)
+
+/**
  * Individual chat messages. Flat (no threading), plain-text content. Author is
  * always a real principal; the visitor-facing welcome message is rendered from
  * settings, not stored, so there are no author-less rows.
