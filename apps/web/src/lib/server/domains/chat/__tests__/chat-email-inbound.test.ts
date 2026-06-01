@@ -77,4 +77,27 @@ describe('extractReplyText', () => {
   it('leaves a plain reply untouched (trimmed)', () => {
     expect(extractReplyText('  just a normal reply  ')).toBe('just a normal reply')
   })
+
+  it('keeps a reply that begins with a "From:" prose line (not a forwarded header)', () => {
+    expect(extractReplyText('From: my perspective this is broken\nplease help')).toBe(
+      'From: my perspective this is broken\nplease help'
+    )
+  })
+
+  it('keeps prose that merely contains a mid-body "From:" line', () => {
+    const raw = 'I have two questions.\n\nFrom: the docs it says X\nCan you clarify?'
+    expect(extractReplyText(raw)).toBe(raw)
+  })
+
+  it('falls back to the visitor text when a quote separator lands on the first line', () => {
+    // Some clients put the attribution line first; cutting at it would drop the
+    // whole message, so we recover the non-quoted text instead of returning "".
+    expect(extractReplyText('On Mon, Jun 1, 2026 someone wrote:\nThanks, this is fixed now!')).toBe(
+      'Thanks, this is fixed now!'
+    )
+  })
+
+  it('still returns empty for a reply that is entirely quoted history', () => {
+    expect(extractReplyText('On Mon wrote:\n> only quoted text\n> more quoted')).toBe('')
+  })
 })

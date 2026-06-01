@@ -23,6 +23,9 @@ const conversationId = 'conversation_1' as ConversationId
 const agentDto = {
   id: conversationId,
   status: 'open',
+  priority: 'none',
+  channel: 'live_chat',
+  tags: [{ id: 'tag_1', name: 'VIP', color: '#ff0000' }],
   subject: null,
   lastMessagePreview: 'hi',
   lastMessageAt: '2026-01-01T00:00:00.000Z',
@@ -67,9 +70,12 @@ describe('publishConversationUpdate', () => {
     // Agents keep agent-only fields...
     const inboxConv = (inbox![1] as { conversation: ConversationDTO }).conversation
     expect(inboxConv.visitorEmail).toBe('visitor@example.com')
+    expect(inboxConv.tags).toHaveLength(1)
 
     // ...the visitor copy must have every agent-only field stripped.
     const visitorConv = (visitor![1] as { conversation: ConversationDTO }).conversation
     expect(visitorConv.visitorEmail).toBeNull()
+    // Internal triage tags are agent-only and must never reach the visitor wire.
+    expect(visitorConv.tags).toEqual([])
   })
 })

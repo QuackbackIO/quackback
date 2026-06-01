@@ -60,30 +60,36 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
   }
 }
 
-// Lines that mark the start of quoted history from common mail clients.
+// Lines that mark the start of quoted history from common mail clients. These
+// are deliberately well-anchored — a bare `From:` is NOT here because it occurs
+// in ordinary prose and a top-level cut on it would silently drop real text.
 const QUOTE_SEPARATORS = [
   /^On\s.+\swrote:\s*$/i, // Gmail / Apple Mail
   /^-{2,}\s*Original Message\s*-{2,}/i, // Outlook
   /^_{5,}\s*$/, // Outlook divider
-  /^From:\s.+/i, // forwarded/replied Outlook header block
 ]
+
+/** A line that starts quoted history or a signature block. */
+function isCutLine(line: string): boolean {
+  // "-- " (trims to "--") is the standard signature delimiter.
+  return line.trimEnd() === '--' || QUOTE_SEPARATORS.some((re) => re.test(line))
+}
 
 /**
  * Trim quoted reply history and a trailing signature so the stored message is
  * just the visitor's new text. Conservative: cut at the first quote separator
  * or signature delimiter, then drop a fully-quoted trailing block.
+ *
+ * If that empties the message (e.g. a client put the attribution line first),
+ * fall back to the visitor's own non-quoted lines rather than silently dropping
+ * a real reply — but a genuinely all-quoted reply still resolves to empty.
  */
 export function extractReplyText(raw: string): string {
   const lines = raw.replace(/\r\n/g, '\n').split('\n')
 
   let cut = lines.length
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.trimEnd() === '--') {
-      cut = i // signature delimiter ("-- " trims to "--")
-      break
-    }
-    if (QUOTE_SEPARATORS.some((re) => re.test(line))) {
+    if (isCutLine(lines[i])) {
       cut = i
       break
     }
@@ -96,5 +102,13 @@ export function extractReplyText(raw: string): string {
     if (last === '' || last.startsWith('>')) kept.pop()
     else break
   }
-  return kept.join('\n').trim()
+  const result = kept.join('\n').trim()
+  if (result) return result
+
+  // Recovery: keep any non-blank, non-quoted, non-separator line the visitor
+  // actually wrote. All-quoted/separator-only input correctly stays empty.
+  return lines
+    .filter((l) => l.trim() !== '' && !l.trimStart().startsWith('>') && !isCutLine(l))
+    .join('\n')
+    .trim()
 }

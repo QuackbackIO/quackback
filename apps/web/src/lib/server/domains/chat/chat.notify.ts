@@ -164,9 +164,9 @@ export async function notifyAgentReply(opts: {
     const ctx = await buildHookContext()
     if (!ctx) return
     const { sendChatMessageEmail } = await import('@quackback/email')
-    // Deep-link the visitor back to their conversation (the widget restores it
-    // from the persisted anon session), not just the portal root.
-    const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/?openChat=1`
+    // Link to the portal; the visitor reopens their conversation from there. (A
+    // URL param that auto-opens the widget isn't wired up, so don't imply one.)
+    const ctaUrl = ctx.portalBaseUrl
     // Only advertise a reply address we can actually receive on, so a visitor's
     // email reply threads back into this conversation (inbound email channel).
     const replyTo = isEmailInboundConfigured()

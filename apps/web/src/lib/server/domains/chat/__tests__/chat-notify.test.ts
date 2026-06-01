@@ -324,8 +324,8 @@ describe('notifyAgentReply', () => {
       to: 'account@x.com',
       direction: 'agent_reply',
       senderName: 'Agent',
-      // Deep-links the visitor back into their conversation (P1.3).
-      ctaUrl: 'https://acme.example.com/?openChat=1',
+      // Links to the portal root; no auto-open param is wired up.
+      ctaUrl: 'https://acme.example.com',
       workspaceName: 'Acme',
     })
   })
