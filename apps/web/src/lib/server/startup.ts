@@ -125,6 +125,11 @@ export function logStartupBanner(): void {
     .then(({ initAnalyticsWorker }) => initAnalyticsWorker())
     .catch((err) => console.error('[Startup] Failed to init analytics worker:', err))
 
+  // Initialize anonymous-principal sweep worker (daily; bounds anon-row bloat)
+  import('./domains/principals/anon-sweep-queue')
+    .then(({ initAnonSweepWorker }) => initAnonSweepWorker())
+    .catch((err) => console.error('[Startup] Failed to init anon-sweep worker:', err))
+
   // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily).
   // Runs under a cross-instance lock so only one replica executes per tick.
   Promise.all([
