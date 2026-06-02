@@ -461,7 +461,10 @@ function WidgetAppearanceControls({
               onChange={(checked) => toggleTab('chat', checked)}
               hint={
                 chatEnabled ? undefined : (
-                  <FeatureDisabledHint to="/admin/settings/live-chat" label="the Live Chat page" />
+                  <FeatureDisabledHint
+                    to="/admin/settings/conversations"
+                    label="the Conversations page"
+                  />
                 )
               }
             />

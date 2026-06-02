@@ -21,14 +21,14 @@ import { Button } from '@/components/ui/button'
 // Index 0 = Sunday … 6 = Saturday, matching OfficeHoursConfig.days.
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-export const Route = createFileRoute('/admin/settings/live-chat')({
+export const Route = createFileRoute('/admin/settings/conversations')({
   loader: async ({ context }) => {
     const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
     await context.queryClient.ensureQueryData(settingsQueries.widgetConfig())
     return {}
   },
-  component: LiveChatSettingsRoute,
+  component: ConversationsSettingsRoute,
 })
 
 /**
@@ -36,16 +36,16 @@ export const Route = createFileRoute('/admin/settings/live-chat')({
  * (off by default), mirroring the help-center route. Wrapping keeps the flag
  * check above the page's hooks so they aren't conditionally called.
  */
-function LiveChatSettingsRoute() {
+function ConversationsSettingsRoute() {
   const { settings } = Route.useRouteContext()
   const flags = settings?.featureFlags as FeatureFlags | undefined
   if (!flags?.supportInbox) {
     return <Navigate to="/admin/settings" />
   }
-  return <LiveChatSettingsPage />
+  return <ConversationsSettingsPage />
 }
 
-function LiveChatSettingsPage() {
+function ConversationsSettingsPage() {
   const router = useRouter()
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const config = widgetConfigQuery.data
@@ -124,8 +124,8 @@ function LiveChatSettingsPage() {
       </div>
       <PageHeader
         icon={ChatBubbleLeftRightIcon}
-        title="Live Chat"
-        description="Let visitors message your team in real time from the widget. Conversations land in your support inbox."
+        title="Conversations"
+        description="How support conversations work: the live chat channel in the widget and how new conversations are routed to your team."
       />
 
       {!widgetEnabled && (

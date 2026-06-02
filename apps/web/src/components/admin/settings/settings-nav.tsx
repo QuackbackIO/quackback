@@ -75,10 +75,16 @@ export function buildNavSections(flags?: {
     },
   ]
 
-  // Support — Live Chat + Help Center bundled together, each gated on its own flag.
+  // Support — Conversations + Help Center bundled together, each gated on its own flag.
   const supportItems: NavItem[] = [
     ...(flags?.supportInbox
-      ? [{ label: 'Live Chat', to: '/admin/settings/live-chat', icon: ChatBubbleLeftRightIcon }]
+      ? [
+          {
+            label: 'Conversations',
+            to: '/admin/settings/conversations',
+            icon: ChatBubbleLeftRightIcon,
+          },
+        ]
       : []),
     ...(flags?.helpCenter
       ? [{ label: 'Help Center', to: '/admin/settings/help-center', icon: BookOpenIcon }]

@@ -43,7 +43,7 @@ interface AdminSidebarProps {
 
 const navItems = [
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
-  { label: 'Inbox', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
+  { label: 'Conversations', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
