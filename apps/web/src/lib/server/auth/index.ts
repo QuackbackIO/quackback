@@ -554,7 +554,7 @@ async function createAuth() {
 
       // Anonymous authentication plugin — enables voting without sign-up
       anonymous({
-        emailDomainName: 'anon.quackback.io',
+        emailDomainName: ANON_EMAIL_DOMAIN,
         disableDeleteAnonymousUser: true, // we handle cleanup ourselves to avoid cascade-deleting sessions
         async onLinkAccount({ anonymousUser, newUser }) {
           const anonUserId = anonymousUser.user.id as ReturnType<typeof generateId<'user'>>
@@ -747,6 +747,7 @@ export type Auth = AuthInstance
 export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 
 import type { Role } from '@/lib/shared/roles'
+import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 
 const levels: Record<Role, number> = {
   admin: 3,

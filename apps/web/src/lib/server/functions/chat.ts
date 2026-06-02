@@ -17,6 +17,7 @@ import {
   type ChatAttachment,
 } from '@/lib/shared/chat/types'
 import { officeHoursSnapshot } from '@/lib/shared/chat/office-hours'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import {
   getOptionalAuth,
@@ -255,7 +256,10 @@ export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () =>
       isAnyAgentOnline(),
     ])
     const conversation = active.conversation
-    const visitorHasEmail = Boolean(ctx.user?.email) || Boolean(conversation?.visitorEmail)
+    // Anonymous visitors carry a synthetic placeholder email — it must not count
+    // as a real address (else the widget promises an email reply it can't send).
+    const visitorHasEmail =
+      Boolean(realEmail(ctx.user?.email)) || Boolean(realEmail(conversation?.visitorEmail))
     const canEmail = canEmailVisitor({ emailConfigured, preChatEmail, visitorHasEmail })
     if (!conversation) {
       return {

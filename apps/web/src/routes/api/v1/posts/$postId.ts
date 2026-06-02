@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
@@ -57,7 +58,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             boardName: post.board?.name,
             statusId: post.statusId,
             authorName: post.authorName ?? null,
-            authorEmail: post.authorEmail ?? null,
+            authorEmail: realEmail(post.authorEmail),
             ownerPrincipalId: post.ownerPrincipalId,
             tags: post.tags?.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? [],
             roadmapIds: post.roadmapIds,
@@ -110,10 +111,15 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             })
           }
 
-          const statusId = parseOptionalTypeId<StatusId>(parsed.data.statusId, 'status', 'status ID')
-          const tagIds = parsed.data.tagIds !== undefined
-            ? parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
-            : undefined
+          const statusId = parseOptionalTypeId<StatusId>(
+            parsed.data.statusId,
+            'status',
+            'status ID'
+          )
+          const tagIds =
+            parsed.data.tagIds !== undefined
+              ? parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+              : undefined
 
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')
 

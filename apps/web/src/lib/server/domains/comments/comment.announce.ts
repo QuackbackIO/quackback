@@ -10,6 +10,7 @@
  */
 
 import { db, boards, comments, posts, principal as principalTable, eq } from '@/lib/server/db'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   type CommentId,
   type PostId,
@@ -46,7 +47,7 @@ export async function dispatchCommentCreatedEvent(
       id: comment.id,
       content: comment.content,
       authorName: author.displayName ?? author.name,
-      authorEmail: author.email,
+      authorEmail: realEmail(author.email) ?? undefined,
       isPrivate: comment.isPrivate,
     },
     {

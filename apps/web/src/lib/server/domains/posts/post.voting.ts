@@ -20,6 +20,7 @@ import {
 import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import type { VoteResult } from './post.types'
 import {
   levelFromFlags,
@@ -346,7 +347,8 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
     return {
       principalId: row.principalId,
       displayName: isAnonymous ? null : row.displayName,
-      email: row.email,
+      // Anonymous voters carry the synthetic placeholder email — never expose it.
+      email: realEmail(row.email),
       avatarUrl: isAnonymous ? null : row.avatarUrl,
       isAnonymous,
       sourceType: row.sourceType,
