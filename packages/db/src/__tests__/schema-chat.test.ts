@@ -94,12 +94,16 @@ describe('chat_messages schema', () => {
     )
   })
 
-  it('conversationId, principalId, senderType, content are not null', () => {
+  it('conversationId, senderType, content are not null', () => {
     const cols = getTableColumns(chatMessages)
     expect(cols.conversationId.notNull).toBe(true)
-    expect(cols.principalId.notNull).toBe(true)
     expect(cols.senderType.notNull).toBe(true)
     expect(cols.content.notNull).toBe(true)
+  })
+
+  it('principalId is nullable (system events have no human author)', () => {
+    const cols = getTableColumns(chatMessages)
+    expect(cols.principalId.notNull).toBe(false)
   })
 
   it('senderType enum matches CHAT_SENDER_TYPES', () => {

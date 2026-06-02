@@ -7,7 +7,9 @@ import type { ConversationId, ChatMessageId, PrincipalId } from '@quackback/ids'
 
 export type ConversationStatus = 'open' | 'snoozed' | 'pending' | 'closed'
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
-export type ChatSenderType = 'visitor' | 'agent'
+// 'system' = a status event (e.g. assignment) shown to both sides, rendered as
+// a centered notice rather than a chat bubble.
+export type ChatSenderType = 'visitor' | 'agent' | 'system'
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
 export type Channel = 'live_chat' | 'email' | 'web_form'
 
@@ -55,7 +57,8 @@ export interface ChatMessageDTO {
   senderType: ChatSenderType
   content: string
   createdAt: string
-  author: ChatAuthorDTO
+  /** Null for system events, which have no human author. */
+  author: ChatAuthorDTO | null
   attachments: ChatAttachment[]
   /** Agent-only internal note — only ever present on agent-facing payloads. */
   isInternal: boolean

@@ -9,6 +9,7 @@ export type ChatRow =
   | { type: 'load-older'; key: 'load-older' }
   | { type: 'greeting'; key: 'greeting' }
   | { type: 'message'; key: string; message: ChatMessageDTO }
+  | { type: 'system'; key: string; message: ChatMessageDTO }
   | { type: 'empty'; key: 'empty' }
   | { type: 'seen'; key: 'seen' }
   | { type: 'typing'; key: 'typing' }
@@ -39,7 +40,11 @@ export function buildChatRows(input: ChatRowsInput): ChatRow[] {
   const rows: ChatRow[] = []
   if (input.hasMoreOlder) rows.push({ type: 'load-older', key: 'load-older' })
   if (input.hasGreeting) rows.push({ type: 'greeting', key: 'greeting' })
-  for (const message of input.messages) rows.push({ type: 'message', key: message.id, message })
+  for (const message of input.messages) {
+    // System events (e.g. "assigned to …") render as a centered notice, not a bubble.
+    const type = message.senderType === 'system' ? 'system' : 'message'
+    rows.push({ type, key: message.id, message })
+  }
   if (input.showEmpty) rows.push({ type: 'empty', key: 'empty' })
   if (input.showSeen) rows.push({ type: 'seen', key: 'seen' })
   if (input.showTyping) rows.push({ type: 'typing', key: 'typing' })

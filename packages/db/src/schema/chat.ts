@@ -81,9 +81,10 @@ export const chatMessages = pgTable(
     conversationId: typeIdColumn('conversation')('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
-    principalId: typeIdColumn('principal')('principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'restrict' }),
+    // Nullable: system events (e.g. assignment notices) have no human author.
+    principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
+      onDelete: 'restrict',
+    }),
     // Explicit sender side for rendering + authorization, independent of the
     // principal's current role (a team member could also be a visitor).
     senderType: text('sender_type', { enum: CHAT_SENDER_TYPES }).notNull(),

@@ -76,7 +76,7 @@ export function authorFromInput(input: {
   }
 }
 
-export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO): ChatMessageDTO {
+export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null): ChatMessageDTO {
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -349,7 +349,11 @@ export async function listMessages(
   const ordered = [...page].reverse() // oldest-first for rendering
   return {
     messages: ordered.map((m) =>
-      toMessageDTO(m, authors.get(m.principalId) ?? fallbackAuthor(m.principalId))
+      // System events have a null principal and therefore no author.
+      toMessageDTO(
+        m,
+        m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
+      )
     ),
     hasMore,
     nextCursor: page.length > 0 ? page[page.length - 1].id : null,

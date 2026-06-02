@@ -292,7 +292,9 @@ export const Route = createFileRoute('/api/chat/stream')({
                     for (const m of missed) {
                       const dto = toMessageDTO(
                         m,
-                        authors.get(m.principalId) ?? fallbackAuthor(m.principalId)
+                        m.principalId
+                          ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId))
+                          : null
                       )
                       sentMessageIds.add(dto.id)
                       send(

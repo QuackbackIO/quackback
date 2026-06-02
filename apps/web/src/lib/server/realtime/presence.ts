@@ -93,3 +93,22 @@ export async function isAnyAgentOnline(): Promise<boolean> {
     return true
   }
 }
+
+/**
+ * Principal ids of all team members with a live inbox stream right now (stale
+ * entries pruned first). Used by conversation routing to pick an active agent.
+ * Fails CLOSED (returns []) so a Redis outage leaves new conversations
+ * unassigned rather than mis-routing them.
+ */
+export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
+  try {
+    const redis = getRedis()
+    const cutoff = Date.now() - PRESENCE_TTL_SECONDS * 1000
+    await redis.zremrangebyscore(AGENTS_ZSET, 0, cutoff)
+    const ids = await redis.zrange(AGENTS_ZSET, 0, -1)
+    return ids as PrincipalId[]
+  } catch (err) {
+    console.warn('[presence] listOnlineAgentIds failed:', (err as Error).message)
+    return []
+  }
+}

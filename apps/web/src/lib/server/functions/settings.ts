@@ -750,6 +750,12 @@ const updateWidgetConfigSchema = z.object({
         )
         .max(100)
         .optional(),
+      routing: z
+        .object({
+          enabled: z.boolean(),
+          strategy: z.literal('auto_assign_active'),
+        })
+        .optional(),
     })
     .optional(),
 })

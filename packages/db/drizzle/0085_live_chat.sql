@@ -34,7 +34,8 @@ CREATE INDEX "conversations_assigned_agent_idx"
 CREATE TABLE "chat_messages" (
   "id" uuid PRIMARY KEY,
   "conversation_id" uuid NOT NULL REFERENCES "conversations"("id") ON DELETE CASCADE,
-  "principal_id" uuid NOT NULL REFERENCES "principal"("id") ON DELETE RESTRICT,
+  -- Nullable: system events (e.g. assignment notices) have no human author.
+  "principal_id" uuid REFERENCES "principal"("id") ON DELETE RESTRICT,
   "sender_type" text NOT NULL,
   "content" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),

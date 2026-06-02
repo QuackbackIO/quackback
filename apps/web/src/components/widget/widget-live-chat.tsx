@@ -479,15 +479,27 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           <ChatBubble
             side={m.senderType === 'visitor' ? 'visitor' : 'agent'}
             authorName={
-              m.senderType === 'agent' ? (m.author.displayName ?? teamName ?? undefined) : undefined
+              m.senderType === 'agent'
+                ? (m.author?.displayName ?? teamName ?? undefined)
+                : undefined
             }
-            authorAvatar={m.senderType === 'agent' ? m.author.avatarUrl : null}
+            authorAvatar={m.senderType === 'agent' ? (m.author?.avatarUrl ?? null) : null}
             content={m.content}
             attachments={m.attachments}
             time={formatTime(m.createdAt)}
           />
         )
       }
+      case 'system':
+        return (
+          <div className="flex items-center gap-2 py-1" role="status">
+            <span className="h-px flex-1 bg-border/50" />
+            <span className="text-center text-[11px] text-muted-foreground">
+              {row.message.content}
+            </span>
+            <span className="h-px flex-1 bg-border/50" />
+          </div>
+        )
       case 'empty':
         return (
           <div className="flex flex-col items-center justify-center text-center py-8 px-4">

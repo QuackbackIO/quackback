@@ -46,6 +46,19 @@ describe('buildChatRows', () => {
     ])
   })
 
+  it('routes system messages to system rows (still keyed by id)', () => {
+    const sys = {
+      id: 's1',
+      senderType: 'system',
+      content: 'Conversation assigned to Jane',
+    } as unknown as ChatMessageDTO
+    const rows = buildChatRows({ ...base, messages: [msg('a'), sys] })
+    expect(rows.map((r) => [r.type, r.key])).toEqual([
+      ['message', 'a'],
+      ['system', 's1'],
+    ])
+  })
+
   it('shows the empty row only when requested (no messages)', () => {
     expect(buildChatRows({ ...base, showEmpty: true }).map((r) => r.type)).toEqual(['empty'])
   })

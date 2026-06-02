@@ -450,10 +450,17 @@ export interface LiveChatConfig {
   preChatEmail?: PreChatEmailMode
   /** Agent-only saved replies — NEVER projected into the public widget config. */
   cannedReplies?: CannedReply[]
+  /** Conversation routing: auto-assign new conversations to an active agent.
+   *  Agent-only; never projected into the public config. */
+  routing?: {
+    enabled: boolean
+    /** Only one strategy today: assign to an online agent. */
+    strategy: 'auto_assign_active'
+  }
 }
 
 /** Client-safe subset of LiveChatConfig (drops agent-only fields). */
-export type PublicLiveChatConfig = Omit<LiveChatConfig, 'cannedReplies'>
+export type PublicLiveChatConfig = Omit<LiveChatConfig, 'cannedReplies' | 'routing'>
 
 export interface WidgetConfig {
   enabled: boolean

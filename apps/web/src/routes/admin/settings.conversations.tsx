@@ -65,6 +65,7 @@ function ConversationsSettingsPage() {
   const [preChatEmail, setPreChatEmail] = useState<'off' | 'optional' | 'required'>(
     config.chat?.preChatEmail ?? 'off'
   )
+  const [routingEnabled, setRoutingEnabled] = useState(config.chat?.routing?.enabled ?? false)
 
   const widgetEnabled = config.enabled
 
@@ -112,6 +113,15 @@ function ConversationsSettingsPage() {
     // Enabling chat also surfaces the widget tab; disabling hides it.
     persist('enabled', { chat: { enabled: checked }, tabs: { chat: checked } }, () =>
       setEnabled(!checked)
+    )
+  }
+
+  const onToggleRouting = (checked: boolean) => {
+    setRoutingEnabled(checked)
+    persist(
+      'routing',
+      { chat: { routing: { enabled: checked, strategy: 'auto_assign_active' } } },
+      () => setRoutingEnabled(!checked)
     )
   }
 
@@ -411,6 +421,34 @@ function ConversationsSettingsPage() {
           >
             <PlusIcon className="h-4 w-4" /> Add reply
           </Button>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Conversation Routing"
+        description="Decide how new conversations reach your team."
+      >
+        <div className="flex items-center justify-between py-1">
+          <div className="pr-4">
+            <Label htmlFor="routing-auto-assign" className="text-sm font-medium cursor-pointer">
+              Auto-assign to an active agent
+            </Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Automatically assign each new conversation to an agent who is currently online. When
+              no one is available, it stays unassigned for anyone to pick up.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {savingField === 'routing' && (
+              <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            )}
+            <Switch
+              id="routing-auto-assign"
+              checked={routingEnabled}
+              onCheckedChange={onToggleRouting}
+              disabled={isBusy}
+            />
+          </div>
         </div>
       </SettingsCard>
     </div>

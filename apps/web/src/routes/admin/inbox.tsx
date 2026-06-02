@@ -916,6 +916,20 @@ function ChatThread({
 }
 
 function AdminBubble({ message, onDelete }: { message: ChatMessageDTO; onDelete: () => void }) {
+  // System events (e.g. "assigned to …") are status notices, not messages:
+  // centered, no avatar, no actions. Shown to both the agent and the visitor.
+  if (message.senderType === 'system') {
+    return (
+      <div className="flex items-center gap-2 py-1" role="status">
+        <span className="h-px flex-1 bg-border/40" />
+        <span className="whitespace-nowrap px-2 text-[11px] text-muted-foreground">
+          {message.content}
+        </span>
+        <span className="h-px flex-1 bg-border/40" />
+      </div>
+    )
+  }
+
   // Internal notes are agent-only and never sent to the visitor — render them
   // as a distinct full-width note rather than a chat bubble.
   if (message.isInternal) {
@@ -923,7 +937,7 @@ function AdminBubble({ message, onDelete }: { message: ChatMessageDTO; onDelete:
       <div className="group relative rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm">
         <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
           <PencilSquareIcon className="h-3 w-3" />
-          {message.author.displayName ?? 'Teammate'} · Internal note
+          {message.author?.displayName ?? 'Teammate'} · Internal note
         </div>
         <p className="whitespace-pre-wrap break-words text-foreground/90">{message.content}</p>
         <span className="mt-0.5 block text-[10px] text-muted-foreground/50">
@@ -950,8 +964,8 @@ function AdminBubble({ message, onDelete }: { message: ChatMessageDTO; onDelete:
     <div className={cn('group flex items-end gap-2', isAgent ? 'flex-row-reverse' : 'flex-row')}>
       {!isAgent && (
         <Avatar
-          src={message.author.avatarUrl}
-          name={message.author.displayName ?? 'Visitor'}
+          src={message.author?.avatarUrl ?? null}
+          name={message.author?.displayName ?? 'Visitor'}
           className="size-6 text-[10px] shrink-0"
         />
       )}

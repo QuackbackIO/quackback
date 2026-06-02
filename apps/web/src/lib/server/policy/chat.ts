@@ -61,7 +61,9 @@ export function canActAsAgent(actor: Actor): Decision {
  */
 export function canDeleteMessage(
   actor: Actor,
-  message: { senderType: 'visitor' | 'agent'; authorPrincipalId: PrincipalId },
+  // authorPrincipalId is null for author-less rows; a null author can never be
+  // "your own message", so a non-team actor is correctly denied.
+  message: { senderType: 'visitor' | 'agent'; authorPrincipalId: PrincipalId | null },
   conversation: ConversationShape
 ): Decision {
   if (isTeamActor(actor)) return allowDecision()

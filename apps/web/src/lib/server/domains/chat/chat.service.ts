@@ -276,6 +276,32 @@ export async function sendVisitorMessage(
     message: messageDTO,
   })
 
+  // A brand-new conversation: try auto-routing it to an active agent. Best-
+  // effort (never blocks the send), and runs outside the transaction so a Redis
+  // hiccup can't roll back the visitor's message.
+  if (created && txResult.conversation.assignedAgentPrincipalId === null) {
+    const { routeConversation } = await import('./routing')
+    const { assignedPrincipalId } = await routeConversation(txResult.conversation)
+    if (assignedPrincipalId) {
+      // Atomic claim — only assign while still unassigned, so concurrent first
+      // messages can't double-assign.
+      const [assigned] = await db
+        .update(conversations)
+        .set({ assignedAgentPrincipalId: assignedPrincipalId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(conversations.id, txResult.conversation.id),
+            isNull(conversations.assignedAgentPrincipalId)
+          )
+        )
+        .returning()
+      if (assigned) {
+        await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
+        publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+      }
+    }
+  }
+
   void notifyVisitorMessage({
     conversation: txResult.conversation,
     content: preview(content, attachments),
@@ -448,6 +474,42 @@ export async function setConversationStatus(
   return updated
 }
 
+/**
+ * Record + broadcast a "Conversation assigned to <agent>" status event. The row
+ * is attributed to the assigned agent (so it has an author) but carries
+ * senderType 'system', so it renders as a centered notice on both sides, never
+ * counts as unread, and does not bump the conversation's last-message preview.
+ * Best-effort: a failure here must not undo an assignment that already landed.
+ */
+async function emitAssignmentSystemMessage(
+  conversationId: ConversationId,
+  agentPrincipalId: PrincipalId
+): Promise<void> {
+  try {
+    const [agent] = await db
+      .select({ displayName: principal.displayName })
+      .from(principal)
+      .where(eq(principal.id, agentPrincipalId))
+      .limit(1)
+    const name = agent?.displayName ?? 'an agent'
+    const [message] = await db
+      .insert(chatMessages)
+      .values({
+        conversationId,
+        // Author-less: a system event isn't sent by a person.
+        principalId: null,
+        senderType: 'system',
+        content: `Conversation assigned to ${name}`,
+        isInternal: false,
+      })
+      .returning()
+    const messageDTO = toMessageDTO(message, null)
+    publishChatEvent(conversationId, { kind: 'message', conversationId, message: messageDTO })
+  } catch (err) {
+    console.warn('[chat:assign] emitAssignmentSystemMessage failed:', (err as Error).message)
+  }
+}
+
 /** Agent action: (re)assign a conversation, or pass null to unassign. */
 export async function assignConversation(
   conversationId: ConversationId,
@@ -475,6 +537,9 @@ export async function assignConversation(
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
+  if (agentPrincipalId) {
+    await emitAssignmentSystemMessage(conversationId, agentPrincipalId)
+  }
   return updated
 }
 
@@ -509,6 +574,12 @@ export async function deleteChatMessage(messageId: ChatMessageId, actor: Actor):
   if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
 
   const conversation = await loadConversationOr404(message.conversationId)
+
+  // System events (assignment notices) are status records, not user content —
+  // no one deletes them. The guard also narrows senderType to visitor|agent.
+  if (message.senderType === 'system') {
+    throw new ForbiddenError('FORBIDDEN', 'System messages cannot be deleted')
+  }
 
   const decision = canDeleteMessage(
     actor,
