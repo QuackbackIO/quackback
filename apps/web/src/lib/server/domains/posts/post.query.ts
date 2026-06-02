@@ -21,6 +21,7 @@ import {
   isNull,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { realEmail } from '@/lib/shared/anonymous-email'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
@@ -169,7 +170,8 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     roadmapIds: roadmapsResult.map((r) => r.roadmapId),
     pinnedComment,
     authorName: post.author?.displayName ?? null,
-    authorEmail: post.author?.user?.email ?? null,
+    // Sanitize at the source so every consumer (admin detail, v1 API, …) is safe.
+    authorEmail: realEmail(post.author?.user?.email),
   } as unknown as PostWithDetails
 
   return postWithDetails

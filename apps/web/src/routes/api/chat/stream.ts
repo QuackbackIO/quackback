@@ -154,6 +154,10 @@ export const Route = createFileRoute('/api/chat/stream')({
             // even if start() throws partway, and so an abort that races the
             // awaits below still releases everything.
             let closed = false
+            // Separate from `closed`: a failed enqueue sets `closed` to stop
+            // sending, but teardown must still run, so cleanup keys off its own
+            // flag (else a dropped client would leak the heartbeat + presence).
+            let cleanedUp = false
             let counted = false
             let presenceMarked = false
             let heartbeat: ReturnType<typeof setInterval> | null = null
@@ -169,7 +173,8 @@ export const Route = createFileRoute('/api/chat/stream')({
             }
 
             cleanup = async () => {
-              if (closed) return
+              if (cleanedUp) return
+              cleanedUp = true
               closed = true
               if (heartbeat) clearInterval(heartbeat)
               if (unsubscribe) {

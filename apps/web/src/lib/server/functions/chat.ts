@@ -136,7 +136,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
         // Enforce required pre-chat email server-side (the widget gates the
         // button, but a direct call must not bypass it): only on the first
         // message of a new conversation, for a visitor with no email on file.
-        if (!data.conversationId && !data.visitorEmail && !ctx.user?.email) {
+        if (!data.conversationId && !data.visitorEmail && !realEmail(ctx.user?.email)) {
           const { getLiveChatConfig } =
             await import('@/lib/server/domains/settings/settings.widget')
           const { preChatEmail } = await getLiveChatConfig()

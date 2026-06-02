@@ -101,7 +101,10 @@ function zonedWallClockToUtc(
   tz: string
 ): Date {
   const guess = Date.UTC(year, month - 1, day, hour, minute)
-  return new Date(guess - tzOffsetMs(tz, new Date(guess)))
+  const firstPass = guess - tzOffsetMs(tz, new Date(guess))
+  // Re-derive the offset at the corrected instant so a DST boundary between the
+  // guess and the real instant doesn't leave the result an hour off.
+  return new Date(guess - tzOffsetMs(tz, new Date(firstPass)))
 }
 
 /**

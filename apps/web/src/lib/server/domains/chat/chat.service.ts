@@ -626,11 +626,13 @@ export async function requeueUnansweredOnAgentOffline(
     const updated = await db
       .update(conversations)
       .set({ assignedAgentPrincipalId: null, updatedAt: new Date() })
-      // Re-check the assignee in the WHERE so a concurrent reassignment wins.
+      // Re-check assignee + open status in the WHERE so a concurrent reassign
+      // or close between the read and here wins over the re-queue.
       .where(
         and(
           inArray(conversations.id, toRequeue),
-          eq(conversations.assignedAgentPrincipalId, agentPrincipalId)
+          eq(conversations.assignedAgentPrincipalId, agentPrincipalId),
+          eq(conversations.status, 'open')
         )
       )
       .returning()
