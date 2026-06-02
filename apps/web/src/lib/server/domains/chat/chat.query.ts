@@ -174,9 +174,8 @@ export interface ActiveConversationResult {
 }
 
 // Statuses a returning visitor can still reply to. 'pending' = waiting on the
-// customer, so they can resume; 'snoozed' is an agent-side defer the visitor
-// is unaware of (a reply un-defers it). Only 'closed' is read-only.
-const RESUMABLE_STATUSES: ReadonlySet<string> = new Set(['open', 'snoozed', 'pending'])
+// customer, so they can resume. Only 'closed' is read-only.
+const RESUMABLE_STATUSES: ReadonlySet<string> = new Set(['open', 'pending'])
 
 /**
  * Pick the conversation to surface to a returning visitor from their recent
@@ -361,7 +360,7 @@ export async function listMessages(
 }
 
 export interface ConversationListFilter {
-  status?: 'open' | 'snoozed' | 'pending' | 'closed'
+  status?: ConversationStatus
   priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent'
   assignedAgentPrincipalId?: PrincipalId
   /** Unassigned queue: only conversations with no assigned agent. */

@@ -155,7 +155,9 @@ function ConversationsSettingsPage() {
               Enable live chat
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Adds a live chat tab to the widget; conversations land in your support inbox.
+              Adds a live chat tab to the widget; conversations land in your support inbox. Turning
+              it off removes chat entirely — to pause outside working hours instead, set office
+              hours below.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -208,7 +210,9 @@ function ConversationsSettingsPage() {
               disabled={isBusy || !enabled}
             />
             <p className="text-xs text-muted-foreground">
-              The first thing visitors see when they open chat.
+              The first thing visitors see when they open chat. Use{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{'{{first_name}}'}</code>{' '}
+              to greet known visitors by name.
             </p>
           </div>
 

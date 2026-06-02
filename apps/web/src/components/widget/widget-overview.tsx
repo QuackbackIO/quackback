@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 import { useChatSummary } from './use-chat-summary'
 import { useWidgetAuth } from './widget-auth-provider'
+import { firstNameOf } from '@/lib/shared/chat/personalize'
 import { WidgetResumeCard } from './widget-resume-card'
 import { WidgetChangelogTeaser } from './widget-changelog-teaser'
 import { type EnabledTabs, supportEnabled } from './widget-nav'
@@ -39,7 +40,7 @@ export function WidgetOverview({
   onOpenChangelogEntry,
 }: WidgetOverviewProps) {
   const { user } = useWidgetAuth()
-  const firstName = user?.name?.trim().split(/\s+/)[0]
+  const firstName = firstNameOf(user?.name)
 
   // A recent-conversation resume card is a chat concept — only fetched/shown
   // when chat is part of the support surface. Presence now lives on the support
@@ -102,13 +103,32 @@ export function WidgetOverview({
                 icon={ChatBubbleLeftRightIcon}
                 onClick={onGetHelp}
                 title={
-                  <FormattedMessage id="widget.launcher.action.help" defaultMessage="Get help" />
+                  tabs.chat && !tabs.help ? (
+                    <FormattedMessage
+                      id="widget.launcher.action.support.chatOnly"
+                      defaultMessage="Send us a message"
+                    />
+                  ) : (
+                    <FormattedMessage id="widget.launcher.action.help" defaultMessage="Get help" />
+                  )
                 }
                 subtitle={
-                  <FormattedMessage
-                    id="widget.launcher.action.help.sub"
-                    defaultMessage="Search answers or message us"
-                  />
+                  tabs.help && tabs.chat ? (
+                    <FormattedMessage
+                      id="widget.launcher.action.help.sub"
+                      defaultMessage="Search answers or message us"
+                    />
+                  ) : tabs.help ? (
+                    <FormattedMessage
+                      id="widget.launcher.action.help.sub.helpOnly"
+                      defaultMessage="Search for answers"
+                    />
+                  ) : (
+                    <FormattedMessage
+                      id="widget.launcher.action.help.sub.chatOnly"
+                      defaultMessage="Chat with our team"
+                    />
+                  )
                 }
               />
             )}

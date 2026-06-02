@@ -8,7 +8,6 @@ import {
   XMarkIcon,
   CheckCircleIcon,
   ArrowUturnLeftIcon,
-  ClockIcon,
   EllipsisVerticalIcon,
   TrashIcon,
   ChatBubbleBottomCenterTextIcon,
@@ -36,6 +35,7 @@ import type {
   ChatMessageDTO,
   ConversationDTO,
   ConversationPriority,
+  ConversationStatus,
 } from '@/lib/shared/chat/types'
 import { priorityMeta } from '@/lib/shared/chat/priority-meta'
 import {
@@ -44,7 +44,6 @@ import {
   PriorityMenuItems,
 } from '@/components/admin/chat/priority-control'
 import { AssigneeControl } from '@/components/admin/chat/assignee-control'
-import { LinkedPosts } from '@/components/admin/chat/linked-posts'
 import { ChannelBadge, NoEmailBadge } from '@/components/admin/chat/channel-badge'
 import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
 import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
@@ -54,7 +53,6 @@ import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { ChatAttachmentList } from '@/components/shared/chat-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
-import { ConvertToPostDialog } from '@/components/admin/chat/convert-to-post-dialog'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -96,7 +94,7 @@ function InboxRoute() {
   return <InboxPage />
 }
 
-type StatusFilter = 'open' | 'snoozed' | 'pending' | 'closed'
+type StatusFilter = ConversationStatus
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -270,7 +268,7 @@ function InboxPage() {
           </div>
         </div>
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none px-3 py-2">
-          {(['open', 'snoozed', 'pending', 'closed'] as const).map((s) => (
+          {(['open', 'pending', 'closed'] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -530,7 +528,7 @@ function ChatThread({
   })
 
   const statusMutation = useMutation({
-    mutationFn: (next: 'open' | 'snoozed' | 'closed') =>
+    mutationFn: (next: 'open' | 'closed') =>
       setConversationStatusFn({ data: { conversationId, status: next } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: threadKey })
@@ -578,14 +576,6 @@ function ChatThread({
   const insertCanned = useCallback((body: string) => {
     setReply((r) => (r.trim() ? `${r}\n${body}` : body))
   }, [])
-
-  // Seed the "create post" draft from the conversation transcript.
-  const firstVisitorMessage = messages.find((m) => m.senderType === 'visitor')?.content
-  const convertTitle = (conversation?.subject || firstVisitorMessage || '').slice(0, 200)
-  const convertContent = messages
-    .filter((m) => m.senderType === 'visitor' && m.content)
-    .map((m) => m.content)
-    .join('\n\n')
 
   const onSend = useCallback(() => {
     const text = reply.trim()
@@ -658,11 +648,6 @@ function ChatThread({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <ConvertToPostDialog
-              conversationId={conversationId}
-              defaultTitle={convertTitle}
-              defaultContent={convertContent}
-            />
             {conversation && (
               <>
                 <PriorityControl
@@ -676,17 +661,6 @@ function ChatThread({
                   onChanged={refreshThread}
                 />
               </>
-            )}
-            {!isClosed && (
-              <button
-                type="button"
-                onClick={() => statusMutation.mutate('snoozed')}
-                disabled={statusMutation.isPending}
-                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
-              >
-                <ClockIcon className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline">Snooze</span>
-              </button>
             )}
             <button
               type="button"
@@ -702,7 +676,7 @@ function ChatThread({
               ) : (
                 <>
                   <CheckCircleIcon className="h-3.5 w-3.5" />
-                  <span className="hidden lg:inline">Close</span>
+                  <span className="hidden lg:inline">End chat</span>
                 </>
               )}
             </button>
@@ -1047,9 +1021,6 @@ function VisitorSidebar({
             </p>
           )}
         </div>
-      </div>
-      <div className="flex flex-col gap-3 border-b border-border/50 px-4 py-3">
-        <LinkedPosts conversationId={conversation.id} />
       </div>
       {detail && (
         <ScrollArea className="min-h-0 flex-1">

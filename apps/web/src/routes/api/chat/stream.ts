@@ -176,7 +176,16 @@ export const Route = createFileRoute('/api/chat/stream')({
                   /* ignore */
                 }
               }
-              if (presenceMarked) await clearPresence(me.principalId, isAgentStream)
+              if (presenceMarked) {
+                const wentOffline = await clearPresence(me.principalId, isAgentStream)
+                // When an inbox agent's last stream closes, return their
+                // unanswered conversations to the queue so they aren't stranded.
+                if (wentOffline && isAgentStream) {
+                  const { requeueUnansweredOnAgentOffline } =
+                    await import('@/lib/server/domains/chat/chat.service')
+                  await requeueUnansweredOnAgentOffline(me.principalId)
+                }
+              }
               if (counted) openStreams = Math.max(0, openStreams - 1)
               try {
                 controller.close()

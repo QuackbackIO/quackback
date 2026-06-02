@@ -5,7 +5,11 @@
  */
 import type { ConversationId, ChatMessageId, PrincipalId } from '@quackback/ids'
 
-export type ConversationStatus = 'open' | 'snoozed' | 'pending' | 'closed'
+// Sourced from the DB enum (CONVERSATION_STATUSES) via the browser-safe bridge,
+// so the client type can never drift from the column's allowed values. Imported
+// locally (used below) and re-exported for the module's consumers.
+import type { ConversationStatus } from '@/lib/shared/db-types'
+export type { ConversationStatus }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
 // a centered notice rather than a chat bubble.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isWithinOfficeHours } from '../office-hours'
+import { isWithinOfficeHours, nextOpenAt } from '../office-hours'
 import type { OfficeHoursConfig } from '../types'
 
 /** Mon–Fri 09:00–17:00, weekends closed, in the given timezone. */
@@ -105,5 +105,48 @@ describe('isWithinOfficeHours', () => {
       days: [0, 1, 2, 3, 4, 5, 6].map(() => ({ enabled: true, start: 'oops', end: '17:00' })),
     }
     expect(isWithinOfficeHours(malformed, new Date('2026-01-05T12:00:00Z'))).toBe(false)
+  })
+})
+
+// 2026-06-03 is a Wednesday, 2026-06-05 a Friday, 2026-06-08 a Monday.
+describe('nextOpenAt', () => {
+  it('returns null when disabled or every day is off', () => {
+    expect(nextOpenAt(weekdays9to5('UTC', false), new Date('2026-06-03T07:00:00Z'))).toBeNull()
+    const allOff: OfficeHoursConfig = {
+      enabled: true,
+      timezone: 'UTC',
+      days: [0, 1, 2, 3, 4, 5, 6].map(() => ({ enabled: false, start: '09:00', end: '17:00' })),
+    }
+    expect(nextOpenAt(allOff, new Date('2026-06-03T07:00:00Z'))).toBeNull()
+  })
+
+  it('returns today opening when before the start (UTC)', () => {
+    const at = nextOpenAt(weekdays9to5('UTC'), new Date('2026-06-03T07:00:00Z'))
+    expect(at?.toISOString()).toBe('2026-06-03T09:00:00.000Z')
+  })
+
+  it('skips today once the window has begun → next weekday', () => {
+    // 12:00 is within hours; 18:00 is after — both should point at Thursday.
+    expect(nextOpenAt(weekdays9to5('UTC'), new Date('2026-06-03T12:00:00Z'))?.toISOString()).toBe(
+      '2026-06-04T09:00:00.000Z'
+    )
+    expect(nextOpenAt(weekdays9to5('UTC'), new Date('2026-06-03T18:00:00Z'))?.toISOString()).toBe(
+      '2026-06-04T09:00:00.000Z'
+    )
+  })
+
+  it('jumps the closed weekend to Monday', () => {
+    const at = nextOpenAt(weekdays9to5('UTC'), new Date('2026-06-05T18:00:00Z'))
+    expect(at?.toISOString()).toBe('2026-06-08T09:00:00.000Z')
+  })
+
+  it('resolves the opening instant in the config timezone', () => {
+    // 09:00 in Kolkata (UTC+5:30) is 03:30 UTC; now is 07:30 IST, before open.
+    const at = nextOpenAt(weekdays9to5('Asia/Kolkata'), new Date('2026-06-03T02:00:00Z'))
+    expect(at?.toISOString()).toBe('2026-06-03T03:30:00.000Z')
+  })
+
+  it('returns null for an unknown timezone', () => {
+    expect(nextOpenAt(weekdays9to5('Not/AZone'), new Date('2026-06-03T07:00:00Z'))).toBeNull()
   })
 })

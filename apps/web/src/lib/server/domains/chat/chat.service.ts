@@ -13,6 +13,7 @@ import {
   eq,
   and,
   isNull,
+  inArray,
   conversations,
   chatMessages,
   principal,
@@ -42,6 +43,7 @@ import {
   applyVisitorReopenStatus,
   applyAgentReopenStatus,
   resolvedAtForStatus,
+  shouldRequeueOnAgentOffline,
 } from './chat.lifecycle'
 import {
   publishChatEvent,
@@ -259,6 +261,16 @@ export async function sendVisitorMessage(
         .where(and(eq(principal.id, author.principalId), isNull(principal.contactEmail)))
     }
 
+    // Capture a pre-chat name as the visitor's display name, so agents see who
+    // they're talking to. Only when none is set yet (never overwrite).
+    const captureName = input.visitorName?.trim()
+    if (captureName) {
+      await tx
+        .update(principal)
+        .set({ displayName: captureName })
+        .where(and(eq(principal.id, author.principalId), isNull(principal.displayName)))
+    }
+
     return { conversation: updated, message }
   })
 
@@ -453,7 +465,7 @@ export async function addAgentNote(
   return { conversation: conversationDTO, message: messageDTO }
 }
 
-/** Agent action: set a conversation's status (open / snoozed / pending / closed). */
+/** Agent action: set a conversation's status (open / pending / closed). */
 export async function setConversationStatus(
   conversationId: ConversationId,
   status: ConversationStatus,
@@ -461,7 +473,8 @@ export async function setConversationStatus(
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
-  await loadConversationOr404(conversationId)
+  const existing = await loadConversationOr404(conversationId)
+  const previous = existing.status
   const now = new Date()
   const [updated] = await db
     .update(conversations)
@@ -469,29 +482,25 @@ export async function setConversationStatus(
     .set({ status, resolvedAt: resolvedAtForStatus(status, now), updatedAt: now })
     .where(eq(conversations.id, conversationId))
     .returning()
+  // Mark the lifecycle change in the transcript for both sides (author-less).
+  if (status !== previous) {
+    if (status === 'closed') await emitSystemMessage(conversationId, 'Chat ended')
+    else if (previous === 'closed') await emitSystemMessage(conversationId, 'Chat reopened')
+  }
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
   return updated
 }
 
 /**
- * Record + broadcast a "Conversation assigned to <agent>" status event. The row
- * is attributed to the assigned agent (so it has an author) but carries
- * senderType 'system', so it renders as a centered notice on both sides, never
- * counts as unread, and does not bump the conversation's last-message preview.
- * Best-effort: a failure here must not undo an assignment that already landed.
+ * Insert + broadcast an author-less 'system' status event (assignment, chat
+ * ended/reopened, …). It carries senderType 'system' with no principal, so it
+ * renders as a centered notice on both sides, never counts as unread, and does
+ * not bump the conversation's last-message preview. Best-effort: a failure here
+ * must not undo the action that already landed.
  */
-async function emitAssignmentSystemMessage(
-  conversationId: ConversationId,
-  agentPrincipalId: PrincipalId
-): Promise<void> {
+async function emitSystemMessage(conversationId: ConversationId, content: string): Promise<void> {
   try {
-    const [agent] = await db
-      .select({ displayName: principal.displayName })
-      .from(principal)
-      .where(eq(principal.id, agentPrincipalId))
-      .limit(1)
-    const name = agent?.displayName ?? 'an agent'
     const [message] = await db
       .insert(chatMessages)
       .values({
@@ -499,15 +508,34 @@ async function emitAssignmentSystemMessage(
         // Author-less: a system event isn't sent by a person.
         principalId: null,
         senderType: 'system',
-        content: `Conversation assigned to ${name}`,
+        content,
         isInternal: false,
       })
       .returning()
     const messageDTO = toMessageDTO(message, null)
     publishChatEvent(conversationId, { kind: 'message', conversationId, message: messageDTO })
   } catch (err) {
-    console.warn('[chat:assign] emitAssignmentSystemMessage failed:', (err as Error).message)
+    console.warn('[chat] emitSystemMessage failed:', (err as Error).message)
   }
+}
+
+/** "Conversation assigned to <agent>" status event (best-effort, author-less). */
+async function emitAssignmentSystemMessage(
+  conversationId: ConversationId,
+  agentPrincipalId: PrincipalId
+): Promise<void> {
+  let name = 'an agent'
+  try {
+    const [agent] = await db
+      .select({ displayName: principal.displayName })
+      .from(principal)
+      .where(eq(principal.id, agentPrincipalId))
+      .limit(1)
+    name = agent?.displayName ?? name
+  } catch {
+    // Fall back to the generic name; the notice still posts.
+  }
+  await emitSystemMessage(conversationId, `Conversation assigned to ${name}`)
 }
 
 /** Agent action: (re)assign a conversation, or pass null to unassign. */
@@ -541,6 +569,62 @@ export async function assignConversation(
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId)
   }
   return updated
+}
+
+/**
+ * Return an offline agent's unanswered conversations to the unassigned queue so
+ * they aren't stranded (see shouldRequeueOnAgentOffline for the rule). Called
+ * when an agent's last live stream closes. Best-effort + system-driven (no
+ * actor): a failure here must not break stream teardown, and re-queuing is
+ * idempotent. Re-queued threads stay unassigned until an agent picks them up.
+ */
+export async function requeueUnansweredOnAgentOffline(
+  agentPrincipalId: PrincipalId
+): Promise<void> {
+  try {
+    const assigned = await db
+      .select({ id: conversations.id, status: conversations.status })
+      .from(conversations)
+      .where(eq(conversations.assignedAgentPrincipalId, agentPrincipalId))
+    if (assigned.length === 0) return
+
+    // Which of those threads already have an agent reply (so they stay assigned).
+    const answered = await db
+      .selectDistinct({ id: chatMessages.conversationId })
+      .from(chatMessages)
+      .where(
+        and(
+          inArray(
+            chatMessages.conversationId,
+            assigned.map((c) => c.id)
+          ),
+          eq(chatMessages.senderType, 'agent')
+        )
+      )
+    const answeredIds = new Set(answered.map((r) => r.id))
+
+    const toRequeue = assigned
+      .filter((c) => shouldRequeueOnAgentOffline(c.status, answeredIds.has(c.id)))
+      .map((c) => c.id)
+    if (toRequeue.length === 0) return
+
+    const updated = await db
+      .update(conversations)
+      .set({ assignedAgentPrincipalId: null, updatedAt: new Date() })
+      // Re-check the assignee in the WHERE so a concurrent reassignment wins.
+      .where(
+        and(
+          inArray(conversations.id, toRequeue),
+          eq(conversations.assignedAgentPrincipalId, agentPrincipalId)
+        )
+      )
+      .returning()
+
+    const dtos = await Promise.all(updated.map((c) => conversationToDTO(c, 'agent')))
+    updated.forEach((conversation, i) => publishConversationUpdate(conversation.id, dtos[i]))
+  } catch (err) {
+    console.warn('[chat:routing] requeueUnansweredOnAgentOffline failed:', (err as Error).message)
+  }
 }
 
 /** Agent action: set a conversation's triage priority. */

@@ -6,7 +6,6 @@ import { getMyConversationsFn } from '@/lib/server/functions/chat'
 
 const STATUS_LABEL: Record<string, string> = {
   open: 'Open',
-  snoozed: 'Open',
   pending: 'Awaiting you',
   closed: 'Closed',
 }

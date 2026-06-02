@@ -18,6 +18,7 @@ import { TypingDots } from '@/components/shared/typing-dots'
 import { ChatAttachmentList } from '@/components/shared/chat-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { cn } from '@/lib/shared/utils'
+import { personalizeMessage, firstNameOf } from '@/lib/shared/chat/personalize'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
@@ -49,7 +50,8 @@ interface WidgetLiveChatProps {
 
 export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatProps = {}) {
   const intl = useIntl()
-  const { ensureSession, sessionVersion } = useWidgetAuth()
+  const { user, ensureSession, sessionVersion } = useWidgetAuth()
+  const firstName = firstNameOf(user?.name)
 
   const [loading, setLoading] = useState(true)
   const [conversationId, setConversationId] = useState<ConversationId | null>(null)
@@ -60,11 +62,15 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   const [agentsOnline, setAgentsOnline] = useState(false)
   // null = no office-hours schedule; true/false = the schedule's verdict at load.
   const [withinOfficeHours, setWithinOfficeHours] = useState<boolean | null>(null)
+  // ISO instant the team is next back (only when the schedule says we're closed).
+  const [nextOpenAtIso, setNextOpenAtIso] = useState<string | null>(null)
   const [agentReadAt, setAgentReadAt] = useState<string | null>(null)
   // Pre-chat email capture (anonymous visitors).
   const [preChatMode, setPreChatMode] = useState<'off' | 'optional' | 'required'>('off')
   const [emailKnown, setEmailKnown] = useState(false)
   const [emailInput, setEmailInput] = useState('')
+  // Optional pre-chat name capture (anonymous visitors); shown alongside email.
+  const [nameInput, setNameInput] = useState('')
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the widget never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
@@ -76,6 +82,10 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   const [isReadOnly, setIsReadOnly] = useState(false)
   const [csatRating, setCsatRating] = useState<number | null>(null)
   const [csatSubmitted, setCsatSubmitted] = useState(false)
+  // Local rating selection before the visitor sends it, so they can attach an
+  // optional comment in the same step rather than submitting on first click.
+  const [csatDraftRating, setCsatDraftRating] = useState<number | null>(null)
+  const [csatComment, setCsatComment] = useState('')
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
 
@@ -94,6 +104,8 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     setIsReadOnly(false)
     setCsatRating(null)
     setCsatSubmitted(false)
+    setCsatDraftRating(null)
+    setCsatComment('')
     setHasMoreOlder(false)
     setAgentReadAt(null)
   }, [])
@@ -133,6 +145,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
         setTeamName(res.teamName)
         setAgentsOnline(res.agentsOnline)
         setWithinOfficeHours(res.withinOfficeHours)
+        setNextOpenAtIso(res.nextOpenAt)
         setPreChatMode(res.preChatEmail)
         setCanEmailReply(res.canEmailVisitor)
         setEmailKnown(res.visitorHasEmail)
@@ -165,6 +178,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           if (cancelled) return
           setAgentsOnline(p.agentsOnline)
           setWithinOfficeHours(p.withinOfficeHours)
+          setNextOpenAtIso(p.nextOpenAt)
         })
         .catch(() => {})
     const id = setInterval(poll, 45_000)
@@ -248,11 +262,12 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   })
 
   const submitCsat = useCallback(
-    (rating: number) => {
+    (rating: number, comment: string) => {
       if (!conversationId) return
       setCsatSubmitted(true)
+      const trimmed = comment.trim()
       void submitCsatFn({
-        data: { conversationId, rating },
+        data: { conversationId, rating, comment: trimmed || undefined },
         headers: getWidgetAuthHeaders(),
       }).catch(() => setCsatSubmitted(false))
     },
@@ -312,6 +327,18 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
   // Availability shown to the visitor: a live agent always counts as online;
   // when office hours are configured, the schedule also marks us available.
   const available = chatAvailable(agentsOnline, withinOfficeHours)
+
+  // "Back at" time for the away state, formatted in the visitor's own locale.
+  const reopenLabel = useMemo(() => {
+    if (!nextOpenAtIso) return null
+    const at = new Date(nextOpenAtIso)
+    if (Number.isNaN(at.getTime())) return null
+    return new Intl.DateTimeFormat(intl.locale, {
+      weekday: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(at)
+  }, [nextOpenAtIso, intl.locale])
 
   // Pre-chat email: prompt only before the conversation starts, for anonymous
   // visitors, when configured. 'required' blocks sending until a valid address.
@@ -405,8 +432,9 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           conversationId: conversationId ?? undefined,
           content: text,
           attachments: attachments.length > 0 ? attachments : undefined,
-          // Attach the captured email on the first message only.
+          // Attach the captured name + email on the first message only.
           visitorEmail: needsEmail && emailValid ? emailInput.trim() : undefined,
+          visitorName: needsEmail && nameInput.trim() ? nameInput.trim() : undefined,
         },
         headers: getWidgetAuthHeaders(),
       })
@@ -427,6 +455,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
     needsEmail,
     emailValid,
     emailInput,
+    nameInput,
     conversationId,
     ensureSession,
     appendMessage,
@@ -470,7 +499,7 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           <ChatBubble
             side="agent"
             authorName={teamName ?? undefined}
-            content={welcomeMessage ?? ''}
+            content={personalizeMessage(welcomeMessage ?? '', firstName)}
           />
         )
       case 'message': {
@@ -554,14 +583,41 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
                     <button
                       key={n}
                       type="button"
-                      onClick={() => submitCsat(n)}
-                      className="text-lg leading-none text-muted-foreground/50 hover:text-amber-500 transition-colors"
+                      onClick={() => setCsatDraftRating(n)}
+                      className={cn(
+                        'text-lg leading-none transition-colors hover:text-amber-500',
+                        csatDraftRating != null && n <= csatDraftRating
+                          ? 'text-amber-500'
+                          : 'text-muted-foreground/50'
+                      )}
                       aria-label={`Rate ${n} of 5`}
                     >
                       ★
                     </button>
                   ))}
                 </div>
+                {csatDraftRating != null && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <textarea
+                      value={csatComment}
+                      onChange={(e) => setCsatComment(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder={intl.formatMessage({
+                        id: 'widget.chat.csat.commentPlaceholder',
+                        defaultMessage: 'Add a comment (optional)',
+                      })}
+                      className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => submitCsat(csatDraftRating, csatComment)}
+                      className="self-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <FormattedMessage id="widget.chat.csat.send" defaultMessage="Send feedback" />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -639,16 +695,27 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
           message only when a reply can actually reach them; otherwise a neutral
           "reply here" note. */}
       {showOfflineHint && (
-        <p className="px-4 pt-2 text-[11px] text-muted-foreground/70 text-center">
-          {canEmailReply ? (
-            offlineMessage
-          ) : (
-            <FormattedMessage
-              id="widget.chat.offline.noEmail"
-              defaultMessage="We're away right now — leave a message and we'll reply here when we're back."
-            />
+        <div className="px-4 pt-2 text-center text-[11px] text-muted-foreground/70">
+          <p>
+            {canEmailReply ? (
+              offlineMessage
+            ) : (
+              <FormattedMessage
+                id="widget.chat.offline.noEmail"
+                defaultMessage="We're away right now — leave a message and we'll reply here when we're back."
+              />
+            )}
+          </p>
+          {reopenLabel && (
+            <p className="mt-0.5">
+              <FormattedMessage
+                id="widget.chat.offline.backAt"
+                defaultMessage="Back {when}"
+                values={{ when: reopenLabel }}
+              />
+            </p>
           )}
-        </p>
+        </div>
       )}
 
       {/* Composer — or a "start new" prompt when the surfaced thread is closed (P1.9). */}
@@ -670,47 +737,72 @@ export function WidgetLiveChat({ helpEnabled, onArticleSelect }: WidgetLiveChatP
         </div>
       ) : (
         <div className="border-t border-border/40 p-2 shrink-0">
-          {/* Pre-chat email capture (anonymous visitors). */}
+          {/* Pre-chat capture (anonymous visitors): optional name + email. */}
           {needsEmail && (
-            <div className="px-1 pb-2">
-              <label
-                htmlFor="widget-chat-email"
-                className="mb-1 block text-[11px] font-medium text-muted-foreground"
-              >
-                {preChatMode === 'required' ? (
-                  <FormattedMessage
-                    id="widget.chat.email.required"
-                    defaultMessage="Your email so we can reply"
-                  />
-                ) : (
-                  <FormattedMessage
-                    id="widget.chat.email.optional"
-                    defaultMessage="Your email (optional)"
-                  />
-                )}
-              </label>
-              <input
-                id="widget-chat-email"
-                type="email"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-              />
-              {/* Optional mode: an explicit skip so blank-and-send is a choice,
-                not a silent fallthrough. */}
-              {preChatMode === 'optional' && (
-                <button
-                  type="button"
-                  onClick={() => setEmailKnown(true)}
-                  className="mt-1 text-[11px] text-muted-foreground/70 underline hover:text-foreground"
+            <div className="space-y-2 px-1 pb-2">
+              <div>
+                <label
+                  htmlFor="widget-chat-name"
+                  className="mb-1 block text-[11px] font-medium text-muted-foreground"
                 >
                   <FormattedMessage
-                    id="widget.chat.email.skip"
-                    defaultMessage="Continue without email"
+                    id="widget.chat.name.optional"
+                    defaultMessage="Your name (optional)"
                   />
-                </button>
-              )}
+                </label>
+                <input
+                  id="widget-chat-name"
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  maxLength={120}
+                  placeholder={intl.formatMessage({
+                    id: 'widget.chat.name.placeholder',
+                    defaultMessage: 'Jane Doe',
+                  })}
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="widget-chat-email"
+                  className="mb-1 block text-[11px] font-medium text-muted-foreground"
+                >
+                  {preChatMode === 'required' ? (
+                    <FormattedMessage
+                      id="widget.chat.email.required"
+                      defaultMessage="Your email so we can reply"
+                    />
+                  ) : (
+                    <FormattedMessage
+                      id="widget.chat.email.optional"
+                      defaultMessage="Your email (optional)"
+                    />
+                  )}
+                </label>
+                <input
+                  id="widget-chat-email"
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                {/* Optional mode: an explicit skip so blank-and-send is a choice,
+                  not a silent fallthrough. */}
+                {preChatMode === 'optional' && (
+                  <button
+                    type="button"
+                    onClick={() => setEmailKnown(true)}
+                    className="mt-1 text-[11px] text-muted-foreground/70 underline hover:text-foreground"
+                  >
+                    <FormattedMessage
+                      id="widget.chat.email.skip"
+                      defaultMessage="Continue without email"
+                    />
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {/* Pending attachment previews */}

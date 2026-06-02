@@ -18,6 +18,8 @@ export interface SendVisitorMessageInput {
   attachments?: ChatAttachment[]
   /** Optional pre-chat email; stored on the conversation if not already set. */
   visitorEmail?: string
+  /** Optional pre-chat name; stored as the visitor principal's display name if unset. */
+  visitorName?: string
   /** Channel provenance (e.g. inbound email message-id) persisted on the message. */
   metadata?: ChatMessageMetadata
 }

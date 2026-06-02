@@ -49,12 +49,16 @@ export async function refreshPresence(principalId: PrincipalId, isAgent: boolean
   }
 }
 
-/** Deregister a stream; only clear Redis presence once the last one closes. */
-export async function clearPresence(principalId: PrincipalId, isAgent: boolean): Promise<void> {
+/**
+ * Deregister a stream; only clear Redis presence once the last one closes.
+ * Returns true when this was the principal's last stream (they just went
+ * offline), so callers can react (e.g. re-queue an agent's unanswered chats).
+ */
+export async function clearPresence(principalId: PrincipalId, isAgent: boolean): Promise<boolean> {
   const next = (localStreamCounts.get(principalId) ?? 1) - 1
   if (next > 0) {
     localStreamCounts.set(principalId, next)
-    return
+    return false
   }
   localStreamCounts.delete(principalId)
   try {
@@ -64,6 +68,7 @@ export async function clearPresence(principalId: PrincipalId, isAgent: boolean):
   } catch (err) {
     console.warn('[presence] clearPresence failed:', (err as Error).message)
   }
+  return true
 }
 
 /** Whether a specific principal currently has a live stream. */

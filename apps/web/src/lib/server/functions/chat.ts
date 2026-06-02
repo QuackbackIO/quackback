@@ -16,7 +16,8 @@ import {
   type ChatSenderType,
   type ChatAttachment,
 } from '@/lib/shared/chat/types'
-import { isWithinOfficeHours } from '@/lib/shared/chat/office-hours'
+import { officeHoursSnapshot } from '@/lib/shared/chat/office-hours'
+import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import {
   getOptionalAuth,
   requireAuth,
@@ -40,6 +41,8 @@ const sendMessageSchema = z.object({
   attachments: z.array(attachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional(),
   /** Optional pre-chat email capture (anonymous visitors). */
   visitorEmail: z.string().email().max(320).optional(),
+  /** Optional pre-chat name capture (anonymous visitors). */
+  visitorName: z.string().max(120).optional(),
 })
 
 const conversationIdSchema = z.object({ conversationId: z.string() })
@@ -50,7 +53,7 @@ const listMessagesSchema = z.object({
 })
 
 const listConversationsSchema = z.object({
-  status: z.enum(['open', 'snoozed', 'pending', 'closed']).optional(),
+  status: z.enum(CONVERSATION_STATUSES).optional(),
   priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).optional(),
   // Assignee queue: 'mine' = assigned to the requesting agent, 'unassigned' =
   // no agent yet, 'all'/omitted = no assignee constraint.
@@ -80,7 +83,7 @@ const agentNoteSchema = z.object({
 
 const setStatusSchema = z.object({
   conversationId: z.string(),
-  status: z.enum(['open', 'snoozed', 'pending', 'closed']),
+  status: z.enum(CONVERSATION_STATUSES),
 })
 
 const assignSchema = z.object({
@@ -153,6 +156,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
           content: data.content,
           attachments: data.attachments as ChatAttachment[] | undefined,
           visitorEmail: data.visitorEmail,
+          visitorName: data.visitorName,
         },
         {
           principalId: ctx.principal.id,
@@ -181,10 +185,10 @@ export const getChatPresenceFn = createServerFn({ method: 'GET' }).handler(async
     getLiveChatConfig(),
     isAnyAgentOnline(),
   ])
-  const officeHours = liveChatConfig.officeHours
   return {
     agentsOnline,
-    withinOfficeHours: officeHours?.enabled ? isWithinOfficeHours(officeHours, new Date()) : null,
+    // withinOfficeHours + (when closed) the ISO instant we're next back.
+    ...officeHoursSnapshot(liveChatConfig.officeHours, new Date()),
   }
 })
 
@@ -201,7 +205,6 @@ export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () =>
       getLiveChatConfig(),
       getSettings(),
     ])
-    const officeHours = liveChatConfig.officeHours
     const preChatEmail = liveChatConfig.preChatEmail ?? 'off'
     const emailConfigured = isEmailConfigured()
     const base = {
@@ -212,9 +215,10 @@ export const getMyChatFn = createServerFn({ method: 'GET' }).handler(async () =>
       // when no team name is set.
       teamName: liveChatConfig.teamName?.trim() || appSettings?.name || null,
       preChatEmail,
-      // null = no office-hours schedule configured; the widget falls back to
-      // live agent presence. true/false = the schedule's current verdict.
-      withinOfficeHours: officeHours?.enabled ? isWithinOfficeHours(officeHours, new Date()) : null,
+      // withinOfficeHours: null = no schedule (widget falls back to live agent
+      // presence); true/false = the schedule's verdict. nextOpenAt is the ISO
+      // instant we're next back, set only when the schedule says we're closed.
+      ...officeHoursSnapshot(liveChatConfig.officeHours, new Date()),
       // Whether we already have a contact email — the widget skips the pre-chat
       // prompt when true.
       visitorHasEmail: false,

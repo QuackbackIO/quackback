@@ -61,3 +61,122 @@ export function isWithinOfficeHours(config: OfficeHoursConfig, now: Date): boole
 
   return cur >= start && cur < end
 }
+
+/** Offset (ms) of `tz` from UTC at `at` — positive when east of UTC. */
+function tzOffsetMs(tz: string, at: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(at)
+  const num = (t: string) => Number(parts.find((p) => p.type === t)?.value)
+  let hour = num('hour')
+  if (hour === 24) hour = 0
+  const asUtc = Date.UTC(
+    num('year'),
+    num('month') - 1,
+    num('day'),
+    hour,
+    num('minute'),
+    num('second')
+  )
+  return asUtc - at.getTime()
+}
+
+/**
+ * The UTC instant for a wall-clock time in `tz`. Single-pass DST approximation
+ * (off only inside the ~1h spring-forward gap, which office hours rarely span).
+ */
+function zonedWallClockToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  tz: string
+): Date {
+  const guess = Date.UTC(year, month - 1, day, hour, minute)
+  return new Date(guess - tzOffsetMs(tz, new Date(guess)))
+}
+
+/**
+ * The next instant the office opens, evaluated in the config timezone — used to
+ * tell an away visitor when the team will be back. Returns the earliest opening
+ * strictly after `now` (so it skips today's window once it has started), or
+ * null when there's no opening within a week (disabled, misconfigured, unknown
+ * timezone, or every day off).
+ */
+export function nextOpenAt(config: OfficeHoursConfig | null | undefined, now: Date): Date | null {
+  if (!config?.enabled || !Array.isArray(config.days)) return null
+  const tz = config.timezone || 'UTC'
+
+  let parts: Intl.DateTimeFormatPart[]
+  try {
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'short',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(now)
+  } catch {
+    // Unknown timezone → no reliable answer.
+    return null
+  }
+
+  const value = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  const dayIndex = WEEKDAY_ORDER.indexOf(value('weekday') as (typeof WEEKDAY_ORDER)[number])
+  if (dayIndex < 0) return null
+
+  let hour = Number(value('hour'))
+  if (hour === 24) hour = 0
+  const curMinutes = hour * 60 + Number(value('minute'))
+  const year = Number(value('year'))
+  const month = Number(value('month'))
+  const dayOfMonth = Number(value('day'))
+
+  for (let offset = 0; offset < 7; offset++) {
+    const day = config.days[(dayIndex + offset) % 7]
+    if (!day?.enabled) continue
+    const start = parseHm(day.start)
+    if (Number.isNaN(start)) continue
+    // Today's window has already begun (or passed) — wait for a later day.
+    if (offset === 0 && curMinutes >= start) continue
+    // Date.UTC (inside zonedWallClockToUtc) normalizes the day overflow when
+    // `dayOfMonth + offset` runs past the end of the month.
+    return zonedWallClockToUtc(
+      year,
+      month,
+      dayOfMonth + offset,
+      Math.floor(start / 60),
+      start % 60,
+      tz
+    )
+  }
+  return null
+}
+
+/**
+ * The schedule's view for a chat payload: whether we're open right now, and
+ * (only when the schedule says we're closed) the ISO instant we're next back.
+ * Shared by the presence + chat server fns so the two payloads can't drift.
+ */
+export function officeHoursSnapshot(
+  config: OfficeHoursConfig | null | undefined,
+  now: Date
+): { withinOfficeHours: boolean | null; nextOpenAt: string | null } {
+  const withinOfficeHours = config?.enabled ? isWithinOfficeHours(config, now) : null
+  return {
+    withinOfficeHours,
+    nextOpenAt:
+      withinOfficeHours === false ? (nextOpenAt(config, now)?.toISOString() ?? null) : null,
+  }
+}
