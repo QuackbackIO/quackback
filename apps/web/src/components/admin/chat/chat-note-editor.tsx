@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -20,6 +20,11 @@ interface ChatNoteEditorProps {
   className?: string
 }
 
+/** Imperative handle so the composer's emoji picker can insert into the note. */
+export interface ChatNoteEditorHandle {
+  insertText: (text: string) => void
+}
+
 /**
  * A minimal, isolated TipTap editor for the internal-note composer — just
  * enough to support @-mention chips (reusing the shared mention picker +
@@ -32,65 +37,73 @@ interface ChatNoteEditorProps {
  * picker via hasActiveSuggestion() rather than racing the suggestion plugin's
  * own key handling.
  */
-export function ChatNoteEditor({
-  placeholder,
-  disabled,
-  resetSignal,
-  onChange,
-  onSubmit,
-  className,
-}: ChatNoteEditorProps) {
-  // Keep callbacks fresh without tearing down + rebuilding the editor.
-  const onSubmitRef = useRef(onSubmit)
-  onSubmitRef.current = onSubmit
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
-  // The live TipTap editor, captured on create so the keymap can ask it whether
-  // the @-mention picker is open (matches hasActiveSuggestion's call pattern).
-  const editorRef = useRef<Editor | null>(null)
+export const ChatNoteEditor = forwardRef<ChatNoteEditorHandle, ChatNoteEditorProps>(
+  function ChatNoteEditor(
+    { placeholder, disabled, resetSignal, onChange, onSubmit, className },
+    ref
+  ) {
+    // Keep callbacks fresh without tearing down + rebuilding the editor.
+    const onSubmitRef = useRef(onSubmit)
+    onSubmitRef.current = onSubmit
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
+    // The live TipTap editor, captured on create so the keymap can ask it whether
+    // the @-mention picker is open (matches hasActiveSuggestion's call pattern).
+    const editorRef = useRef<Editor | null>(null)
 
-  const editor = useEditor({
-    editable: !disabled,
-    onCreate: ({ editor }) => {
-      editorRef.current = editor
-    },
-    extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, horizontalRule: false }),
-      Placeholder.configure({
-        placeholder: placeholder ?? 'Add an internal note for your team…',
-        emptyEditorClass: 'is-editor-empty',
+    useImperativeHandle(
+      ref,
+      () => ({
+        insertText: (text: string) => {
+          editorRef.current?.chain().focus().insertContent(text).run()
+        },
       }),
-      TeamMentionExtension,
-    ],
-    editorProps: {
-      attributes: {
-        class:
-          'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none min-h-[1.5rem] py-1',
+      []
+    )
+
+    const editor = useEditor({
+      editable: !disabled,
+      onCreate: ({ editor }) => {
+        editorRef.current = editor
       },
-      handleKeyDown: (_view, event) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
-          // The picker owns Enter while it's open (selects a teammate).
-          if (editorRef.current && hasActiveSuggestion(editorRef.current)) return false
-          event.preventDefault()
-          onSubmitRef.current()
-          return true
-        }
-        return false
+      extensions: [
+        StarterKit.configure({ heading: false, codeBlock: false, horizontalRule: false }),
+        Placeholder.configure({
+          placeholder: placeholder ?? 'Add an internal note for your team…',
+          emptyEditorClass: 'is-editor-empty',
+        }),
+        TeamMentionExtension,
+      ],
+      editorProps: {
+        attributes: {
+          class:
+            'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none min-h-[1.5rem] py-1',
+        },
+        handleKeyDown: (_view, event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            // The picker owns Enter while it's open (selects a teammate).
+            if (editorRef.current && hasActiveSuggestion(editorRef.current)) return false
+            event.preventDefault()
+            onSubmitRef.current()
+            return true
+          }
+          return false
+        },
       },
-    },
-    onUpdate: ({ editor }) => onChangeRef.current(editor.getText().trim(), editor.getJSON()),
-  })
+      onUpdate: ({ editor }) => onChangeRef.current(editor.getText().trim(), editor.getJSON()),
+    })
 
-  // Clear on send (parent bumps resetSignal).
-  useEffect(() => {
-    if (resetSignal > 0) editor?.commands.clearContent()
-  }, [resetSignal, editor])
+    // Clear on send (parent bumps resetSignal).
+    useEffect(() => {
+      if (resetSignal > 0) editor?.commands.clearContent()
+    }, [resetSignal, editor])
 
-  useEffect(() => {
-    editor?.setEditable(!disabled)
-  }, [disabled, editor])
+    useEffect(() => {
+      editor?.setEditable(!disabled)
+    }, [disabled, editor])
 
-  return (
-    <EditorContent editor={editor} className={cn('flex-1 overflow-y-auto max-h-32', className)} />
-  )
-}
+    return (
+      <EditorContent editor={editor} className={cn('flex-1 overflow-y-auto max-h-32', className)} />
+    )
+  }
+)

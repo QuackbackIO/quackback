@@ -45,7 +45,7 @@ import { ConversationTagsEditor } from '@/components/admin/chat/conversation-tag
 import { StatusControl } from '@/components/admin/chat/status-control'
 import { ConversationDetailPanel } from '@/components/admin/chat/conversation-detail-panel'
 import { ConversationListColumn } from '@/components/admin/chat/conversation-list-column'
-import { ChatNoteEditor } from '@/components/admin/chat/chat-note-editor'
+import { ChatNoteEditor, type ChatNoteEditorHandle } from '@/components/admin/chat/chat-note-editor'
 import {
   InboxNavSidebar,
   inboxNavKey,
@@ -471,6 +471,7 @@ function ChatThread({
   } = useChatComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replyComposerRef = useRef<HTMLTextAreaElement>(null)
+  const noteEditorRef = useRef<ChatNoteEditorHandle>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: threadKey,
@@ -925,6 +926,7 @@ function ChatThread({
             />
             {noteMode ? (
               <ChatNoteEditor
+                ref={noteEditorRef}
                 resetSignal={noteResetSignal}
                 disabled={noteMutation.isPending}
                 onChange={(text, doc) => {
@@ -964,12 +966,13 @@ function ChatThread({
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>
-              {!noteMode && (
-                <EmojiPicker
-                  className="size-8"
-                  onSelect={(emoji) => setReply((prev) => prev + emoji)}
-                />
-              )}
+              <EmojiPicker
+                className="size-8"
+                onSelect={(emoji) => {
+                  if (noteMode) noteEditorRef.current?.insertText(emoji)
+                  else setReply((prev) => prev + emoji)
+                }}
+              />
               {!noteMode && cannedReplies.length > 0 && (
                 <Popover>
                   <PopoverTrigger asChild>
