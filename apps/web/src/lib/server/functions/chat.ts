@@ -775,6 +775,18 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
     }
   })
 
+/** The caller's "Saved for later" feed — their flagged messages, newest first. */
+export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  try {
+    const ctx = await requireAuth({ roles: ['admin', 'member'] })
+    const { listFlaggedMessages } = await import('@/lib/server/domains/chat/chat.query')
+    return await listFlaggedMessages(ctx.principal.id)
+  } catch (error) {
+    console.error('[fn:chat] listFlaggedMessagesFn failed:', error)
+    throw error
+  }
+})
+
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .inputValidator(conversationIdSchema)
   .handler(async ({ data }) => {

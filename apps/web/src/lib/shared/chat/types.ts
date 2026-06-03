@@ -112,6 +112,20 @@ export interface AgentChatMessageDTO extends ChatMessageDTO {
   flaggedAt: string | null
 }
 
+/** A flagged ("Saved for later") message for the per-agent saved feed: enough
+ *  to preview it and jump to its conversation. */
+export interface FlaggedMessageDTO {
+  messageId: ChatMessageId
+  conversationId: ConversationId
+  /** Plain-text preview of the flagged message. */
+  preview: string
+  /** Who wrote the flagged message. */
+  authorName: string | null
+  /** The conversation's visitor (so the list reads "in <conversation>"). */
+  conversationLabel: string | null
+  flaggedAt: string
+}
+
 /** A conversation row as surfaced to clients (inbox list + thread header). */
 export interface ConversationDTO {
   id: ConversationId

@@ -32,11 +32,13 @@ import {
 import type { ConversationId, PrincipalId, PostId, ChatTagId, ChatMessageId } from '@quackback/ids'
 import { aggregateReactions } from '@/lib/shared'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { truncate } from '@/lib/shared/utils/string'
 import type {
   ChatAuthorDTO,
   ChatMessageDTO,
   AgentChatMessageDTO,
   MessageReactionCount,
+  FlaggedMessageDTO,
   ConversationDTO,
   ChatTagDTO,
   ChatSenderType,
@@ -145,9 +147,11 @@ async function loadReactionsForMessages(
   return map
 }
 
-/** Batch-load the team flag state (flaggedAt ISO) for a page of messages. */
+/** Batch-load the VIEWING agent's personal flag (flaggedAt ISO) for a page of
+ *  messages — flags are per-agent ("Saved for later"). */
 async function loadFlagsForMessages(
-  messageIds: ChatMessageId[]
+  messageIds: ChatMessageId[],
+  viewerPrincipalId: PrincipalId
 ): Promise<Map<ChatMessageId, string>> {
   const map = new Map<ChatMessageId, string>()
   if (messageIds.length === 0) return map
@@ -157,7 +161,12 @@ async function loadFlagsForMessages(
       flaggedAt: chatMessageFlags.flaggedAt,
     })
     .from(chatMessageFlags)
-    .where(inArray(chatMessageFlags.chatMessageId, messageIds))
+    .where(
+      and(
+        inArray(chatMessageFlags.chatMessageId, messageIds),
+        eq(chatMessageFlags.principalId, viewerPrincipalId)
+      )
+    )
   for (const row of rows) {
     map.set(row.chatMessageId, row.flaggedAt.toISOString())
   }
@@ -178,7 +187,7 @@ export async function enrichMessagesForAgent(
   const ids = messages.map((m) => m.id)
   const [reactions, flags] = await Promise.all([
     loadReactionsForMessages(ids, viewerPrincipalId),
-    loadFlagsForMessages(ids),
+    loadFlagsForMessages(ids, viewerPrincipalId),
   ])
   return messages.map((m) => ({
     ...m,
@@ -195,6 +204,46 @@ export async function enrichMessageForAgent(
 ): Promise<AgentChatMessageDTO> {
   const [one] = await enrichMessagesForAgent([message], viewerPrincipalId)
   return one
+}
+
+/**
+ * The viewing agent's "Saved for later" feed: their flagged messages, newest
+ * flag first, each with a preview + the conversation it belongs to so the list
+ * can link straight to it. Soft-deleted messages are skipped.
+ */
+export async function listFlaggedMessages(
+  viewerPrincipalId: PrincipalId
+): Promise<FlaggedMessageDTO[]> {
+  const rows = await db
+    .select({
+      messageId: chatMessages.id,
+      conversationId: chatMessages.conversationId,
+      content: chatMessages.content,
+      senderType: chatMessages.senderType,
+      authorName: principal.displayName,
+      visitorPrincipalId: conversations.visitorPrincipalId,
+      flaggedAt: chatMessageFlags.flaggedAt,
+    })
+    .from(chatMessageFlags)
+    .innerJoin(
+      chatMessages,
+      and(eq(chatMessages.id, chatMessageFlags.chatMessageId), isNull(chatMessages.deletedAt))
+    )
+    .innerJoin(conversations, eq(conversations.id, chatMessages.conversationId))
+    .leftJoin(principal, eq(principal.id, chatMessages.principalId))
+    .where(eq(chatMessageFlags.principalId, viewerPrincipalId))
+    .orderBy(desc(chatMessageFlags.flaggedAt))
+    .limit(100)
+
+  const visitorNames = await loadAuthors(rows.map((r) => r.visitorPrincipalId))
+  return rows.map((r) => ({
+    messageId: r.messageId,
+    conversationId: r.conversationId,
+    preview: truncate(r.content, 120),
+    authorName: r.authorName ?? (r.senderType === 'agent' ? 'Agent' : 'Visitor'),
+    conversationLabel: visitorNames.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
+    flaggedAt: r.flaggedAt.toISOString(),
+  }))
 }
 
 export function toConversationDTO(

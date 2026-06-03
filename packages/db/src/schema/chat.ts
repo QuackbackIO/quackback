@@ -7,6 +7,7 @@ import {
   jsonb,
   integer,
   boolean,
+  primaryKey,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -232,22 +233,27 @@ export const chatMessageReactions = pgTable(
 )
 
 /**
- * Team-wide "flag" on a chat message — a shared triage marker shown to every
- * agent. `chatMessageId` is the PK, so there is exactly one flag state per
- * message: flagging is idempotent and team-wide, not per-agent. The message FK
- * cascades; `flaggedByPrincipalId` is set-null so the flag survives the flagging
- * agent's deletion as an anonymous team signal. Agent-only.
+ * Per-agent "Saved for later" flag on a chat message. The composite (message,
+ * principal) primary key means each agent flags messages independently — a flag
+ * is a personal triage marker, not a shared team signal. Both FKs cascade.
+ * Agent-only. The (principal, flagged_at DESC) index serves the per-agent feed.
  */
-export const chatMessageFlags = pgTable('chat_message_flags', {
-  chatMessageId: typeIdColumn('chat_msg')('chat_message_id')
-    .primaryKey()
-    .references(() => chatMessages.id, { onDelete: 'cascade' }),
-  flaggedByPrincipalId: typeIdColumnNullable('principal')('flagged_by_principal_id').references(
-    () => principal.id,
-    { onDelete: 'set null' }
-  ),
-  flaggedAt: timestamp('flagged_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export const chatMessageFlags = pgTable(
+  'chat_message_flags',
+  {
+    chatMessageId: typeIdColumn('chat_msg')('chat_message_id')
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+    principalId: typeIdColumn('principal')('principal_id')
+      .notNull()
+      .references(() => principal.id, { onDelete: 'cascade' }),
+    flaggedAt: timestamp('flagged_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.chatMessageId, table.principalId] }),
+    index('chat_message_flags_principal_idx').on(table.principalId, table.flaggedAt.desc()),
+  ]
+)
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({
   messages: many(chatMessages),
@@ -296,8 +302,8 @@ export const chatMessageFlagsRelations = relations(chatMessageFlags, ({ one }) =
     fields: [chatMessageFlags.chatMessageId],
     references: [chatMessages.id],
   }),
-  flaggedBy: one(principal, {
-    fields: [chatMessageFlags.flaggedByPrincipalId],
+  principal: one(principal, {
+    fields: [chatMessageFlags.principalId],
     references: [principal.id],
   }),
 }))
@@ -309,5 +315,5 @@ export const chatMessagesRelations = relations(chatMessages, ({ one, many }) => 
   }),
   mentions: many(chatMessageMentions),
   reactions: many(chatMessageReactions),
-  flag: one(chatMessageFlags),
+  flags: many(chatMessageFlags),
 }))

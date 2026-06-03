@@ -105,9 +105,10 @@ export async function removeMessageReaction(
 }
 
 /**
- * Set the team-wide flag on a message. One row per message (idempotent insert /
- * delete), so flagging is a single shared state — any agent can flag or unflag,
- * and a repeat flag keeps the original flagger.
+ * Set the caller's personal "Saved for later" flag on a message. Per-agent (one
+ * row per (message, agent)), so it's private triage — it does NOT broadcast,
+ * since no other agent's view changes. The acting client updates optimistically
+ * from the returned flag state.
  */
 export async function setMessageFlag(
   messageId: ChatMessageId,
@@ -115,15 +116,28 @@ export async function setMessageFlag(
   actor: Actor
 ): Promise<{ flaggedAt: string | null }> {
   const agentId = requireAgent(actor)
-  const message = await loadActionableMessageOr404(messageId)
+  await loadActionableMessageOr404(messageId)
   if (flagged) {
     await db
       .insert(chatMessageFlags)
-      .values({ chatMessageId: messageId, flaggedByPrincipalId: agentId })
+      .values({ chatMessageId: messageId, principalId: agentId })
       .onConflictDoNothing()
   } else {
-    await db.delete(chatMessageFlags).where(eq(chatMessageFlags.chatMessageId, messageId))
+    await db
+      .delete(chatMessageFlags)
+      .where(
+        and(
+          eq(chatMessageFlags.chatMessageId, messageId),
+          eq(chatMessageFlags.principalId, agentId)
+        )
+      )
   }
-  const { flaggedAt } = await publishMessageUpdated(message, agentId)
-  return { flaggedAt }
+  const [flag] = await db
+    .select({ flaggedAt: chatMessageFlags.flaggedAt })
+    .from(chatMessageFlags)
+    .where(
+      and(eq(chatMessageFlags.chatMessageId, messageId), eq(chatMessageFlags.principalId, agentId))
+    )
+    .limit(1)
+  return { flaggedAt: flag ? flag.flaggedAt.toISOString() : null }
 }

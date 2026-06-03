@@ -729,6 +729,13 @@
       "when": 1781568000000,
       "tag": "0103_chat_message_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1781654400000,
+      "tag": "0104_chat_message_flags_per_agent",
+      "breakpoints": true
     }
   ]
 }

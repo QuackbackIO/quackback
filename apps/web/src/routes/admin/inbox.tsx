@@ -45,6 +45,7 @@ import { ConversationTagsEditor } from '@/components/admin/chat/conversation-tag
 import { StatusControl } from '@/components/admin/chat/status-control'
 import { ConversationDetailPanel } from '@/components/admin/chat/conversation-detail-panel'
 import { ConversationListColumn } from '@/components/admin/chat/conversation-list-column'
+import { SavedMessagesColumn } from '@/components/admin/chat/saved-messages-column'
 import { ChatNoteEditor, type ChatNoteEditorHandle } from '@/components/admin/chat/chat-note-editor'
 import {
   InboxNavSidebar,
@@ -169,10 +170,6 @@ function buildListParams(
 function InboxPage() {
   const queryClient = useQueryClient()
   const navigate = Route.useNavigate()
-  // Message ids with an in-flight flag toggle (populated by the open thread's
-  // flag mutation, read by this page's SSE handler) so a concurrent
-  // message_updated broadcast can't flicker the optimistic flag away.
-  const flagPendingRef = useRef<Set<ChatMessageId>>(new Set())
   const {
     c: urlC,
     view: urlView,
@@ -258,6 +255,9 @@ function InboxPage() {
     [nav, status, priorityFilter, search]
   )
 
+  // The "Saved for later" view shows flagged MESSAGES, not conversations, so the
+  // conversation-list query is idle there.
+  const isSaved = nav.kind === 'view' && nav.view === 'saved'
   const { data: listData, isLoading: listLoading } = useQuery({
     queryKey: listKey,
     queryFn: () =>
@@ -265,6 +265,7 @@ function InboxPage() {
         data: buildListParams(nav, status, priorityFilter, search),
       }),
     refetchInterval: 30_000, // polling fallback if the stream drops
+    enabled: !isSaved,
   })
 
   const conversations = listData?.conversations ?? []
@@ -342,9 +343,7 @@ function InboxPage() {
               ? {
                   ...prev,
                   messages: prev.messages.map((m) =>
-                    m.id === evt.message.id
-                      ? mergeAgentMessage(m, evt.message, flagPendingRef.current.has(m.id))
-                      : m
+                    m.id === evt.message.id ? mergeAgentMessage(m, evt.message) : m
                   ),
                 }
               : prev
@@ -370,22 +369,26 @@ function InboxPage() {
   return (
     <div className="flex h-full">
       <InboxNavSidebar nav={nav} onSelect={setNav} search={searchInput} onSearch={setSearchInput} />
-      <ConversationListColumn
-        nav={nav}
-        onSelectNav={setNav}
-        scopeLabel={scopeLabel}
-        showRefinements={showRefinements}
-        searchInput={searchInput}
-        onSearchInput={setSearchInput}
-        status={status}
-        onStatus={setStatus}
-        priorityFilter={priorityFilter}
-        onPriorityFilter={setPriorityFilter}
-        loading={listLoading}
-        conversations={conversations}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-      />
+      {isSaved ? (
+        <SavedMessagesColumn selectedConversationId={selectedId} onSelect={setSelectedId} />
+      ) : (
+        <ConversationListColumn
+          nav={nav}
+          onSelectNav={setNav}
+          scopeLabel={scopeLabel}
+          showRefinements={showRefinements}
+          searchInput={searchInput}
+          onSearchInput={setSearchInput}
+          status={status}
+          onStatus={setStatus}
+          priorityFilter={priorityFilter}
+          onPriorityFilter={setPriorityFilter}
+          loading={listLoading}
+          conversations={conversations}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
+      )}
 
       {/* Thread */}
       <div className={cn('min-w-0 flex-1', !selectedId && 'hidden md:block')}>
@@ -398,7 +401,6 @@ function InboxPage() {
             onSelectConversation={setSelectedId}
             isVisitorTyping={visitorTyping}
             isOtherAgentTyping={otherAgentTyping}
-            flagPendingRef={flagPendingRef}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">
@@ -432,21 +434,18 @@ function asAgentMessage(m: ChatMessageDTO | AgentChatMessageDTO): AgentChatMessa
 }
 
 /** Apply an incoming message_updated to a cached message: take its reaction
- *  counts + flag state, but keep OUR own hasReacted (the broadcast carries the
- *  acting agent's perspective, not the recipient's). When a local flag toggle is
- *  still in flight (`preserveLocalFlag`), keep the optimistic flaggedAt too — a
- *  concurrent reaction broadcast from another agent carries a pre-write flag
- *  value that would otherwise flicker our pending flag away. */
+ *  counts but keep OUR own hasReacted and OUR own flag — both are viewer-relative
+ *  (reactions per-user, flags per-agent), so the broadcaster's values are not
+ *  ours to apply. */
 function mergeAgentMessage(
   local: AgentChatMessageDTO,
-  incoming: AgentChatMessageDTO,
-  preserveLocalFlag: boolean
+  incoming: AgentChatMessageDTO
 ): AgentChatMessageDTO {
   const localReacted = new Set(local.reactions.filter((r) => r.hasReacted).map((r) => r.emoji))
   return {
     ...incoming,
     reactions: incoming.reactions.map((r) => ({ ...r, hasReacted: localReacted.has(r.emoji) })),
-    flaggedAt: preserveLocalFlag ? local.flaggedAt : incoming.flaggedAt,
+    flaggedAt: local.flaggedAt,
   }
 }
 
@@ -499,7 +498,6 @@ function ChatThread({
   onSelectConversation,
   isVisitorTyping,
   isOtherAgentTyping,
-  flagPendingRef,
 }: {
   conversationId: ConversationId
   onChanged: () => void
@@ -509,9 +507,6 @@ function ChatThread({
   onSelectConversation: (id: ConversationId) => void
   isVisitorTyping: boolean
   isOtherAgentTyping: boolean
-  /** Shared with the parent's SSE handler: message ids with an in-flight flag
-   *  toggle, so a concurrent message_updated broadcast can't flicker the flag. */
-  flagPendingRef: React.MutableRefObject<Set<ChatMessageId>>
 }) {
   const queryClient = useQueryClient()
   const threadKey = ['admin', 'inbox', 'thread', conversationId] as const
@@ -727,12 +722,12 @@ function ChatThread({
     },
   })
 
-  // Toggle the team-wide flag on a message (optimistic).
+  // Toggle the caller's personal "Saved for later" flag on a message
+  // (optimistic; reconciled to the server's flaggedAt; refreshes the saved feed).
   const flagMutation = useMutation({
     mutationFn: (vars: { messageId: ChatMessageId; flagged: boolean }) =>
       setMessageFlagFn({ data: { messageId: vars.messageId, flagged: vars.flagged } }),
     onMutate: (vars) => {
-      flagPendingRef.current.add(vars.messageId)
       queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) =>
         prev
           ? {
@@ -749,11 +744,24 @@ function ChatThread({
           : prev
       )
     },
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) =>
+        prev
+          ? {
+              ...prev,
+              messages: prev.messages.map((m) =>
+                m.id === vars.messageId ? { ...m, flaggedAt: data.flaggedAt } : m
+              ),
+            }
+          : prev
+      )
+      // The "Saved for later" feed changed.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox', 'flagged'] })
+    },
     onError: () => {
       toast.error('Failed to update flag')
       void queryClient.invalidateQueries({ queryKey: threadKey })
     },
-    onSettled: (_r, _e, vars) => flagPendingRef.current.delete(vars.messageId),
   })
 
   // Mark the conversation unread from a message. onChanged refreshes the inbox

@@ -81,6 +81,9 @@ const publicMessage = {
   principalId: 'principal_visitor',
   isInternal: false,
   deletedAt: null,
+  // setMessageFlag re-reads the flag row after writing; give the chain mock a
+  // timestamp so its toISOString() doesn't throw.
+  flaggedAt: new Date(),
 }
 
 beforeEach(() => {
@@ -102,10 +105,10 @@ describe('message reaction/flag publish routing', () => {
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
 
-  it('flags and unflags on the inbox channel only', async () => {
+  it('flags and unflags without broadcasting (a flag is personal)', async () => {
     await setMessageFlag('chat_msg_1' as ChatMessageId, true, agent)
     await setMessageFlag('chat_msg_1' as ChatMessageId, false, agent)
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(2)
+    expect(publishAgentChatEvent).not.toHaveBeenCalled()
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
 })

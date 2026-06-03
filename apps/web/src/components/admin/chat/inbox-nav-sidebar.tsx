@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   UserIcon,
   MagnifyingGlassIcon,
+  FlagIcon,
 } from '@heroicons/react/24/solid'
 import type { ChatTagId } from '@quackback/ids'
 import { fetchChatTagsWithCountsFn } from '@/lib/server/functions/chat-tags'
@@ -28,7 +29,7 @@ import { cn } from '@/lib/shared/utils'
  * header refine WITHIN the selected scope. Carries only ids so it round-trips
  * through the URL; the label is resolved from the fetched tag list.
  */
-export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions'
+export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved'
 export type InboxNavItem = { kind: 'view'; view: InboxView } | { kind: 'tag'; tagId: ChatTagId }
 
 /** Stable identity for query keys + active-state comparison. */
@@ -36,13 +37,15 @@ export function inboxNavKey(nav: InboxNavItem): string {
   return nav.kind === 'tag' ? `tag:${nav.tagId}` : `view:${nav.view}`
 }
 
-// Primary views are assignee-based queues — Mine / Unassigned / All — with the
-// @-mentions feed below them. Status is no longer a view; it's a list filter.
+// Primary views are assignee-based queues — Mine / Unassigned / All — then the
+// @-mentions feed and the personal "Saved for later" feed of flagged messages.
+// Status is no longer a view; it's a list filter.
 export const CONVERSATION_VIEWS = [
   { view: 'mine', label: 'Mine', Icon: UserIcon },
   { view: 'unassigned', label: 'Unassigned', Icon: InboxArrowDownIcon },
   { view: 'all', label: 'All', Icon: InboxIcon },
   { view: 'mentions', label: 'Mentions', Icon: AtSymbolIcon },
+  { view: 'saved', label: 'Saved for later', Icon: FlagIcon },
 ] as const
 
 export type ChatTagWithCount = { id: ChatTagId; name: string; color: string; count: number }
@@ -63,11 +66,13 @@ export function scopeLabelFor(nav: InboxNavItem, tags?: ChatTagWithCount[]): str
   if (nav.kind === 'tag') return tags?.find((t) => t.id === nav.tagId)?.name ?? 'Label'
   return nav.view === 'mentions'
     ? 'Mentions'
-    : nav.view === 'mine'
-      ? 'Mine'
-      : nav.view === 'unassigned'
-        ? 'Unassigned'
-        : 'All conversations'
+    : nav.view === 'saved'
+      ? 'Saved for later'
+      : nav.view === 'mine'
+        ? 'Mine'
+        : nav.view === 'unassigned'
+          ? 'Unassigned'
+          : 'All conversations'
 }
 
 // Mirrors the settings secondary-nav item aesthetic (settings-nav.tsx) so the
