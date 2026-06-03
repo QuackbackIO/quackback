@@ -51,6 +51,11 @@ vi.mock('../chat.query', () => ({
     displayName: null,
     avatarUrl: null,
   })),
+  resolveAuthor: vi.fn(async (a: { principalId: string }) => ({
+    principalId: a.principalId,
+    displayName: null,
+    avatarUrl: null,
+  })),
   loadAuthors: vi.fn(async () => new Map()),
 }))
 

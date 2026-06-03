@@ -55,7 +55,7 @@ import {
 } from '@/lib/server/realtime/chat-channels'
 import { truncate } from '@/lib/shared/utils/string'
 import { notifyVisitorMessage, notifyAgentReply } from './chat.notify'
-import { conversationToDTO, toMessageDTO, authorFromInput } from './chat.query'
+import { conversationToDTO, toMessageDTO, authorFromInput, resolveAuthor } from './chat.query'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { syncChatMessageMentions } from './sync-chat-mentions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -359,7 +359,7 @@ export async function sendAgentMessage(
     return { message, conversation: updated }
   })
 
-  const messageDTO = toMessageDTO(txResult.message, authorFromInput(agent))
+  const messageDTO = toMessageDTO(txResult.message, await resolveAuthor(agent))
   // Agent-side DTO so the inbox keeps agent-only fields; publishConversationUpdate
   // strips them from the visitor's copy.
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
@@ -435,7 +435,7 @@ export async function addAgentNote(
     return inserted
   })
 
-  const messageDTO = toMessageDTO(message, authorFromInput(agent))
+  const messageDTO = toMessageDTO(message, await resolveAuthor(agent))
 
   // Persist @-mentions from the note doc + alert the mentioned teammates BEFORE
   // announcing the note: the inbox event makes every agent's Mentions view

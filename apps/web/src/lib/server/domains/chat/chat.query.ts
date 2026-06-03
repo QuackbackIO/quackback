@@ -98,6 +98,28 @@ export function authorFromInput(input: {
   }
 }
 
+/**
+ * Resolve a send-call author for the returned/broadcast DTO. The avatar comes
+ * from the canonical resolver (loadAuthors: user.image → uploaded image_key →
+ * principal copy) so a just-sent message shows the same avatar a reload would —
+ * the session only carries `user.image`, which is null for uploaded avatars. The
+ * live session display name is preferred; we fall back to the input entirely if
+ * the principal row can't be found.
+ */
+export async function resolveAuthor(input: {
+  principalId: PrincipalId
+  displayName?: string | null
+  avatarUrl?: string | null
+}): Promise<ChatAuthorDTO> {
+  const resolved = (await loadAuthors([input.principalId])).get(input.principalId)
+  if (!resolved) return authorFromInput(input)
+  return {
+    principalId: input.principalId,
+    displayName: input.displayName ?? resolved.displayName,
+    avatarUrl: resolved.avatarUrl ?? input.avatarUrl ?? null,
+  }
+}
+
 export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null): ChatMessageDTO {
   return {
     id: message.id,
