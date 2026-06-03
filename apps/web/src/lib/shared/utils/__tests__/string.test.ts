@@ -14,6 +14,7 @@ import {
   getStatusEmoji,
   slugify,
   contentPreview,
+  safeEmail,
 } from '../string'
 
 describe('getInitials', () => {
@@ -319,5 +320,35 @@ describe('contentPreview', () => {
 
   it('returns full text when under maxLength', () => {
     expect(contentPreview('short', 150)).toBe('short')
+  })
+})
+
+describe('safeEmail', () => {
+  it('obfuscates the local part but keeps the domain', () => {
+    expect(safeEmail('alice@example.com')).toBe('a***@example.com')
+  })
+
+  it('works with single-character local parts', () => {
+    expect(safeEmail('b@short.co')).toBe('b***@short.co')
+  })
+
+  it('handles null', () => {
+    expect(safeEmail(null)).toBe('(no email)')
+  })
+
+  it('handles undefined', () => {
+    expect(safeEmail(undefined)).toBe('(no email)')
+  })
+
+  it('handles strings without @', () => {
+    expect(safeEmail('notanemail')).toBe('n***')
+  })
+
+  it('preserves the full domain including subdomains', () => {
+    expect(safeEmail('user@mail.example.co.uk')).toBe('u***@mail.example.co.uk')
+  })
+
+  it('handles empty string', () => {
+    expect(safeEmail('')).toBe('(no email)')
   })
 })

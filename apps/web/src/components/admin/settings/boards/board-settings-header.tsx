@@ -1,4 +1,9 @@
-import { ChevronDownIcon, CheckIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
+import {
+  ChevronDownIcon,
+  CheckIcon,
+  ChatBubbleLeftIcon,
+  Squares2X2Icon,
+} from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -6,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { PageHeader } from '@/components/shared/page-header'
 import { CreateBoardDialog } from './create-board-dialog'
 import { useBoardSelection } from './use-board-selection'
 
@@ -24,16 +30,18 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
   const { setSelectedBoard } = useBoardSelection()
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-medium text-foreground">Board Settings</h1>
+    <PageHeader
+      icon={Squares2X2Icon}
+      title="Board Settings"
+      description="Configure your feedback board settings and preferences"
+      action={
+        <div className="flex shrink-0 items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2" data-testid="board-switcher">
-                <ChatBubbleLeftIcon className="h-4 w-4" />
-                {currentBoard.name}
-                <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+              <Button variant="outline" className="min-w-0 gap-2" data-testid="board-switcher">
+                <ChatBubbleLeftIcon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{currentBoard.name}</span>
+                <ChevronDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
@@ -50,12 +58,9 @@ export function BoardSettingsHeader({ currentBoard, allBoards }: BoardSettingsHe
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <CreateBoardDialog />
         </div>
-        <CreateBoardDialog />
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Configure your feedback board settings and preferences
-      </p>
-    </div>
+      }
+    />
   )
 }

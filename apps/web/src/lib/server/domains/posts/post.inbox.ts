@@ -12,6 +12,7 @@ import {
   userSegments,
   eq,
   and,
+  ne,
   inArray,
   desc,
   asc,
@@ -60,6 +61,10 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(sql`${posts.deletedAt} >= ${thirtyDaysAgo}`)
   } else {
     conditions.push(isNull(posts.deletedAt))
+    // Pending posts live in the moderation queue, not the inbox. The
+    // deleted view is exempt — a rejected post is a soft-deleted post
+    // and must stay restorable there.
+    conditions.push(ne(posts.moderationState, 'pending'))
   }
 
   // Exclude merged/duplicate posts from inbox listing

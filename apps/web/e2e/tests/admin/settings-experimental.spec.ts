@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin Experimental Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/experimental')
+    await page.goto('/admin/settings/labs')
     await page.waitForLoadState('networkidle')
   })
 
@@ -19,14 +19,18 @@ test.describe('Admin Experimental Settings', () => {
   test('shows Analytics Dashboard feature flag card', async ({ page }) => {
     await expect(page.getByText('Analytics Dashboard')).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText('View feedback trends, top posts, and engagement metrics from the admin panel.')
+      page.getByText(
+        'View feedback trends, top posts, and engagement metrics from the admin panel.'
+      )
     ).toBeVisible()
   })
 
   test('shows Help Center feature flag card', async ({ page }) => {
     await expect(page.getByText('Help Center')).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText('Create and manage a knowledge base with categories and articles for your users.')
+      page.getByText(
+        'Create and manage a knowledge base with categories and articles for your users.'
+      )
     ).toBeVisible()
   })
 
@@ -99,7 +103,9 @@ test.describe('Admin Experimental Settings', () => {
     } else {
       // Fallback: at least the known description text is present
       await expect(
-        page.getByText('View feedback trends, top posts, and engagement metrics from the admin panel.')
+        page.getByText(
+          'View feedback trends, top posts, and engagement metrics from the admin panel.'
+        )
       ).toBeVisible({ timeout: 10000 })
     }
   })

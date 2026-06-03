@@ -13,7 +13,6 @@ import { ModalHeader } from '@/components/shared/modal-header'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
@@ -100,10 +99,7 @@ function PostModalContent({
 
   const post = postQuery.data as PostDetails
 
-  // Feature flags + image upload
-  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
-  const richMediaEnabled = portalConfigQuery.data.features?.richMediaInPosts ?? true
-  const videoEmbedsEnabled = portalConfigQuery.data.features?.videoEmbedsInPosts ?? true
+  // Image upload
   const { upload: uploadImage } = usePostImageUpload()
 
   // Form state - always in edit mode
@@ -377,13 +373,13 @@ function PostModalContent({
                   taskLists: true,
                   blockquotes: true,
                   dividers: true,
-                  images: richMediaEnabled,
-                  tables: richMediaEnabled,
-                  embeds: richMediaEnabled && videoEmbedsEnabled,
+                  images: true,
+                  tables: true,
+                  embeds: true,
                   bubbleMenu: true,
                   slashMenu: true,
                 }}
-                onImageUpload={richMediaEnabled ? uploadImage : undefined}
+                onImageUpload={uploadImage}
               />
 
               {/* AI section — summary + similar posts */}

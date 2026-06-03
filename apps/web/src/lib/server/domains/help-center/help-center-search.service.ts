@@ -11,8 +11,10 @@ import {
   helpCenterArticles,
   helpCenterCategories,
   and,
+  eq,
   isNull,
   isNotNull,
+  lte,
   sql,
 } from '@/lib/server/db'
 import { generateKbEmbedding } from './help-center-embedding.service'
@@ -102,8 +104,15 @@ async function hybridQuery(
     .where(
       and(
         isNotNull(helpCenterArticles.publishedAt),
+        // Hide scheduled-future publish dates and articles under
+        // categories the admin marked private. Single-article lookup
+        // (getPublicArticleBySlug) already does this; search must
+        // match or the slug becomes discoverable via search even when
+        // direct lookup denies.
+        lte(helpCenterArticles.publishedAt, new Date()),
         isNull(helpCenterArticles.deletedAt),
         isNull(helpCenterCategories.deletedAt),
+        eq(helpCenterCategories.isPublic, true),
         sql`(
           ${helpCenterArticles.searchVector} @@ ${tsQuery}
           OR (
@@ -155,8 +164,10 @@ async function keywordOnlyQuery(query: string, limit: number): Promise<HybridSea
     .where(
       and(
         isNotNull(helpCenterArticles.publishedAt),
+        lte(helpCenterArticles.publishedAt, new Date()),
         isNull(helpCenterArticles.deletedAt),
         isNull(helpCenterCategories.deletedAt),
+        eq(helpCenterCategories.isPublic, true),
         sql`${helpCenterArticles.searchVector} @@ ${tsQuery}`
       )
     )

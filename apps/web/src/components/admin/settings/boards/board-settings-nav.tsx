@@ -1,6 +1,7 @@
 import {
   Cog6ToothIcon,
   LockClosedIcon,
+  ShieldCheckIcon,
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/solid'
@@ -10,6 +11,7 @@ import { useBoardSelection, type BoardTab } from './use-board-selection'
 const navItems: { label: string; tab: BoardTab; icon: typeof Cog6ToothIcon }[] = [
   { label: 'General', tab: 'general', icon: Cog6ToothIcon },
   { label: 'Access', tab: 'access', icon: LockClosedIcon },
+  { label: 'Moderation', tab: 'moderation', icon: ShieldCheckIcon },
   { label: 'Import Data', tab: 'import', icon: ArrowUpTrayIcon },
   { label: 'Export Data', tab: 'export', icon: ArrowDownTrayIcon },
 ]
@@ -31,10 +33,10 @@ export function BoardSettingsNav() {
                   type="button"
                   onClick={() => setSelectedTab(item.tab)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors',
+                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     isActive
-                      ? 'bg-secondary text-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                      ? 'bg-muted/80 text-foreground font-medium'
+                      : 'text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground'
                   )}
                 >
                   <Icon className="h-4 w-4" />

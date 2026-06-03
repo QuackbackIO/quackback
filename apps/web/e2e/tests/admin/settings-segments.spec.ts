@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin Segments Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/segments')
+    await page.goto('/admin/settings/people')
     await page.waitForLoadState('networkidle')
   })
 
@@ -11,9 +11,7 @@ test.describe('Admin Segments Settings', () => {
   })
 
   test('shows page description', async ({ page }) => {
-    await expect(
-      page.getByText(/organize users into groups/i)
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/organize users into groups/i)).toBeVisible({ timeout: 10000 })
   })
 
   test('shows "New segment" button', async ({ page }) => {
@@ -38,9 +36,12 @@ test.describe('Admin Segments Settings', () => {
   test('empty state shows create prompt when no segments exist', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    const segmentCount = await page.locator('div[class*="border-b"]').filter({
-      has: page.locator('span.rounded-full.shrink-0'),
-    }).count()
+    const segmentCount = await page
+      .locator('div[class*="border-b"]')
+      .filter({
+        has: page.locator('span.rounded-full.shrink-0'),
+      })
+      .count()
 
     if (segmentCount === 0) {
       await expect(page.getByText(/no segments yet/i)).toBeVisible({ timeout: 10000 })
@@ -263,7 +264,9 @@ test.describe('Admin Segments Settings', () => {
     // Create a segment first if none exist
     const segmentName = `E2E EditTarget ${Date.now()}`
 
-    const segmentRows = page.locator('div').filter({ has: page.locator('span.rounded-full.shrink-0') })
+    const segmentRows = page
+      .locator('div')
+      .filter({ has: page.locator('span.rounded-full.shrink-0') })
 
     if ((await segmentRows.count()) === 0) {
       await page.getByRole('button', { name: /new segment/i }).click()

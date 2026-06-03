@@ -29,6 +29,7 @@ import {
   notInArray as _notInArray,
   isNull as _isNull,
   isNotNull as _isNotNull,
+  exists as _exists,
   sql as _sql,
   desc as _desc,
   asc as _asc,
@@ -54,6 +55,7 @@ export const inArray = _inArray
 export const notInArray = _notInArray
 export const isNull = _isNull
 export const isNotNull = _isNotNull
+export const exists = _exists
 export const sql = _sql
 export const desc = _desc
 export const asc = _asc
@@ -125,6 +127,8 @@ export {
   user,
   userRelations,
   verification,
+  widgetOriginSession,
+  widgetIdentifiedSession,
   // Schema tables - boards
   boards,
   boardsRelations,

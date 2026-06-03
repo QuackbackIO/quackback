@@ -4,6 +4,7 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { safeFetch } from '../../content/ssrf-guard'
 
 /**
  * Save an n8n webhook URL as the integration connection.
@@ -17,7 +18,7 @@ export const saveN8nWebhookFn = createServerFn({ method: 'POST' })
     const auth = await requireAuth({ roles: ['admin'] })
 
     // Test the webhook with a ping
-    const testResponse = await fetch(data.webhookUrl, {
+    const testResponse = await safeFetch(data.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

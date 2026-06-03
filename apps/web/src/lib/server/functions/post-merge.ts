@@ -7,7 +7,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
 import { toIsoString } from '@/lib/shared/utils'
 import {
   mergePost,
@@ -139,17 +139,24 @@ export const getMergedPostsFn = createServerFn({ method: 'GET' })
 
 /**
  * Get merge info for a post (if it has been merged into another).
- * No auth required - used for public portal display.
+ *
+ * Used by the public portal post-detail view. No login required, but the
+ * caller's actor (anonymous when unauthenticated) drives an internal
+ * `canViewBoard` check on the canonical's board — a duplicate's caller
+ * who isn't entitled to see the canonical's board gets `null`, matching
+ * the "doesn't exist" shape used elsewhere to avoid leaking existence.
  */
 export const getPostMergeInfoFn = createServerFn({ method: 'GET' })
   .inputValidator(getPostMergeInfoSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:post-merge] getPostMergeInfoFn: postId=${data.postId}`)
     try {
-      const result = await getPostMergeInfo(data.postId as PostId)
+      const auth = await getOptionalAuth()
+      const actor = await policyActorFromAuth(auth)
+      const result = await getPostMergeInfo(data.postId as PostId, actor)
 
       if (!result) {
-        console.log(`[fn:post-merge] getPostMergeInfoFn: not merged`)
+        console.log(`[fn:post-merge] getPostMergeInfoFn: not merged or audience-denied`)
         return null
       }
 

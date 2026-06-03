@@ -33,7 +33,7 @@ export function TabStrip({ tabs }: TabStripProps) {
             to={tab.to}
             search={tab.search ?? {}}
             className={cn(
-              'relative flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium transition-colors',
+              'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
               'hover:text-foreground',
               isActive ? 'text-foreground' : 'text-muted-foreground/60'
             )}
@@ -41,7 +41,7 @@ export function TabStrip({ tabs }: TabStripProps) {
             {Icon && <Icon className="h-3.5 w-3.5" />}
             {tab.label}
             {tab.badge != null && tab.badge > 0 && (
-              <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold rounded-full bg-primary/15 text-primary">
+              <span className="ml-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-primary/15 text-primary">
                 {formatBadgeCount(tab.badge)}
               </span>
             )}

@@ -1,21 +1,39 @@
 import { db, eq, and, isNull, sql, boards, posts, type Board } from '@/lib/server/db'
+import { getTableColumns } from 'drizzle-orm'
 import type { BoardId } from '@quackback/ids'
-import { NotFoundError, InternalError } from '@/lib/shared/errors'
+import { InternalError } from '@/lib/shared/errors'
 import type { BoardWithStats } from './board.types'
+import { boardViewFilter, postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
-export async function getPublicBoardById(boardId: BoardId): Promise<Board> {
+/**
+ * Fetch a board by id, gated by the actor's view permission.
+ *
+ * Returns `null` when the board doesn't exist OR the actor isn't
+ * allowed to see it under its audience. Don't differentiate the two
+ * cases at the callsite — it'd leak board existence to unauthorized
+ * viewers. The sibling `getPublicBoardBySlug` has the same contract.
+ *
+ * The previous version returned the row unconditionally; every
+ * caller had to remember to run `canViewBoard` themselves. Making
+ * the policy check a property of the function removes the foot-gun.
+ */
+export async function getPublicBoardById(
+  boardId: BoardId,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<Board | null> {
   try {
+    // Filter soft-deleted rows at the SQL level — mirrors the slug
+    // sibling so the two helpers behave the same way. Without this,
+    // createPublicPostFn (which uses this lookup) would happily insert
+    // new posts into a board the admin deleted.
     const board = await db.query.boards.findFirst({
-      where: eq(boards.id, boardId),
+      where: and(eq(boards.id, boardId), isNull(boards.deletedAt)),
     })
 
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${boardId} not found`)
-    }
-
-    return board
+    if (!board) return null
+    const { canViewBoard } = await import('@/lib/server/policy')
+    return canViewBoard(actor, board).allowed ? board : null
   } catch (error) {
-    if (error instanceof NotFoundError) throw error
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to fetch board: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -24,39 +42,43 @@ export async function getPublicBoardById(boardId: BoardId): Promise<Board> {
   }
 }
 
-export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
+/**
+ * List boards the actor is allowed to see, with post counts.
+ *
+ * Composes `policy.boards.boardViewFilter` so the result honours per-board
+ * audience (public / authenticated / team / segments). The legacy
+ * `isPublic = true` filter is gone — it's now derived from audience.
+ *
+ * Defaults to ANONYMOUS_ACTOR for callers that don't yet pass one
+ * (portal anonymous, unauthenticated API). Caller-supplied actors must
+ * be built from the request's auth context (see policy.actorFromAuth
+ * once Task 13 lands).
+ */
+export async function listPublicBoardsWithStats(
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<BoardWithStats[]> {
   try {
-    const result = await db
+    // The post-count join must apply postViewFilter, not just isNull(deletedAt) —
+    // otherwise the count leaks pending/spam/archived posts to non-team users
+    // and disagrees with what the actual post list shows them.
+    const rows = await db
       .select({
-        id: boards.id,
-        slug: boards.slug,
-        name: boards.name,
-        description: boards.description,
-        isPublic: boards.isPublic,
-        settings: boards.settings,
-        createdAt: boards.createdAt,
-        updatedAt: boards.updatedAt,
-        deletedAt: boards.deletedAt,
-        postCount: sql<number>`count(${posts.id})::int`.as('post_count'),
+        ...getTableColumns(boards),
+        postCount: sql<number>`coalesce(count(${posts.id}), 0)::int`.as('post_count'),
       })
       .from(boards)
-      .leftJoin(posts, and(eq(posts.boardId, boards.id), isNull(posts.deletedAt)))
-      .where(and(eq(boards.isPublic, true), isNull(boards.deletedAt)))
+      .leftJoin(
+        posts,
+        and(eq(posts.boardId, boards.id), isNull(posts.deletedAt), postViewFilter(actor))
+      )
+      // boardViewFilter embeds isNull(boards.deletedAt) in every branch — no
+      // outer guard needed here. Callers of postViewFilter still need their
+      // own guard because postViewFilter's team branch skips boardViewFilter.
+      .where(boardViewFilter(actor))
       .groupBy(boards.id)
       .orderBy(boards.name)
 
-    return result.map((row) => ({
-      id: row.id,
-      slug: row.slug,
-      name: row.name,
-      description: row.description,
-      isPublic: row.isPublic,
-      settings: row.settings,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      deletedAt: row.deletedAt,
-      postCount: row.postCount ?? 0,
-    }))
+    return rows
   } catch (error) {
     throw new InternalError(
       'DATABASE_ERROR',
@@ -66,13 +88,20 @@ export async function listPublicBoardsWithStats(): Promise<BoardWithStats[]> {
   }
 }
 
-export async function getPublicBoardBySlug(slug: string): Promise<Board | null> {
+export async function getPublicBoardBySlug(
+  slug: string,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<Board | null> {
   try {
+    // Resolve the board by slug; the audience check happens via
+    // canViewBoard so the caller's perspective drives visibility.
     const board = await db.query.boards.findFirst({
-      where: (boards, { and, eq }) => and(eq(boards.slug, slug), eq(boards.isPublic, true)),
+      where: and(eq(boards.slug, slug), isNull(boards.deletedAt)),
     })
 
-    return board || null
+    if (!board) return null
+    const { canViewBoard } = await import('@/lib/server/policy')
+    return canViewBoard(actor, board).allowed ? board : null
   } catch (error) {
     throw new InternalError(
       'DATABASE_ERROR',
@@ -91,27 +120,6 @@ export async function countBoards(): Promise<number> {
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to count boards: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      error
-    )
-  }
-}
-
-export async function validateBoardExists(boardId: BoardId): Promise<Board> {
-  try {
-    const board = await db.query.boards.findFirst({
-      where: eq(boards.id, boardId),
-    })
-
-    if (!board) {
-      throw new NotFoundError('BOARD_NOT_FOUND', `Board ${boardId} not found`)
-    }
-
-    return board
-  } catch (error) {
-    if (error instanceof NotFoundError) throw error
-    throw new InternalError(
-      'DATABASE_ERROR',
-      `Failed to validate board: ${error instanceof Error ? error.message : 'Unknown error'}`,
       error
     )
   }

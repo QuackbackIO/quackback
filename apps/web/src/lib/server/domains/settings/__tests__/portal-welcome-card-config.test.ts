@@ -63,7 +63,7 @@ describe('PortalWelcomeCard type', () => {
 
 describe('parseJsonConfig deep-merges welcomeCard', () => {
   it('preserves welcomeCard defaults when stored config omits it', () => {
-    const stored = JSON.stringify({ features: { voting: false } })
+    const stored = JSON.stringify({ features: { allowAnonymous: false } })
     const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
     expect(result.welcomeCard).toEqual(DEFAULT_PORTAL_CONFIG.welcomeCard)
   })

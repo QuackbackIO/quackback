@@ -31,7 +31,7 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
 
     const [inv, settings, authConfig] = await Promise.all([
       db.query.invitation.findFirst({
-        where: eq(invitation.id, invitationId as InviteId),
+        where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
         with: { inviter: true },
       }),
       db.query.settings.findFirst(),
@@ -144,16 +144,23 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
       // Atomically claim the invitation with a conditional update to prevent
       // double-accept race conditions (e.g., double-click, network retry).
+      // The `kind='team'` guard ensures portal invites cannot be consumed here.
       const [claimed] = await db
         .update(invitation)
         .set({ status: 'accepted' })
-        .where(and(eq(invitation.id, invitationId as InviteId), eq(invitation.status, 'pending')))
+        .where(
+          and(
+            eq(invitation.id, invitationId as InviteId),
+            eq(invitation.status, 'pending'),
+            eq(invitation.kind, 'team')
+          )
+        )
         .returning()
 
       if (!claimed) {
         // Either doesn't exist, already accepted, cancelled, or expired
         const inv = await db.query.invitation.findFirst({
-          where: eq(invitation.id, invitationId as InviteId),
+          where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
         })
         console.warn(
           `[fn:invitations] acceptInvitationFn: claim failed - inv exists=${!!inv}, status=${inv?.status}`
@@ -279,7 +286,7 @@ export const getInviteBrandingFn = createServerFn({ method: 'GET' })
       db.query.settings.findFirst(),
       db.query.invitation
         .findFirst({
-          where: eq(invitation.id, invitationId as InviteId),
+          where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
           with: { inviter: true },
         })
         .catch(() => null),

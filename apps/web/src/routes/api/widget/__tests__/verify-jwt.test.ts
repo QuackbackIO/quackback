@@ -143,3 +143,48 @@ describe('verifyHS256JWT', () => {
     expect(typeof payload?.exp).toBe('number')
   })
 })
+
+describe('createWidgetIdentityToken — segments claim', () => {
+  it('preserves a non-empty segments array through sign + verify', () => {
+    const token = createWidgetIdentityToken(
+      {
+        id: 'user_seg',
+        email: 'seg@test.com',
+        segments: ['enterprise', 'beta'],
+      },
+      SECRET
+    )
+    const payload = verifyHS256JWT(token, SECRET)
+    expect(payload).not.toBeNull()
+    expect(payload?.segments).toEqual(['enterprise', 'beta'])
+  })
+
+  it('omits segments from the signed payload when undefined (no empty array noise)', () => {
+    const token = createWidgetIdentityToken({ id: 'user_no_seg', email: 'noseg@test.com' }, SECRET)
+    const payload = verifyHS256JWT(token, SECRET)
+    expect(payload).not.toBeNull()
+    expect(payload).not.toHaveProperty('segments')
+  })
+
+  it('omits segments when an empty array is supplied', () => {
+    // The current implementation guards `claims.segments.length > 0` so an
+    // empty supplied array is also dropped. This is intentional: empty list
+    // means "no segments" — same as undefined — so we don't emit a noisy
+    // `segments: []` field in the JWT payload.
+    const token = createWidgetIdentityToken(
+      { id: 'user_empty', email: 'empty@test.com', segments: [] },
+      SECRET
+    )
+    const payload = verifyHS256JWT(token, SECRET)
+    expect(payload).not.toHaveProperty('segments')
+  })
+
+  it('handles single-segment arrays', () => {
+    const token = createWidgetIdentityToken(
+      { id: 'user_one', email: 'one@test.com', segments: ['solo'] },
+      SECRET
+    )
+    const payload = verifyHS256JWT(token, SECRET)
+    expect(payload?.segments).toEqual(['solo'])
+  })
+})

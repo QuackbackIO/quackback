@@ -3,9 +3,8 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
-import { SearchInput } from '@/components/shared/search-input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/shared/utils'
+import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
@@ -143,38 +142,17 @@ export function FeedbackTableView({
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
     { value: 'votes', label: 'Top Votes' },
-  ] as const
+  ]
 
   const headerContent = (
-    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5">
-      {/* Search and Sort Row */}
-      <div className="flex items-center gap-2">
-        <SearchInput
-          value={searchValue}
-          onChange={setSearchValue}
-          placeholder="Search..."
-          data-search-input
-        />
-        <div className="flex items-center gap-1">
-          {sortOptions.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={cn(
-                'px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer',
-                sort === opt.value
-                  ? 'bg-muted text-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-muted/50'
-              )}
-              onClick={() => onFiltersChange({ sort: opt.value })}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {headerAction}
-      </div>
-
+    <AdminListHeader
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      sortOptions={sortOptions}
+      activeSort={sort}
+      onSortChange={(value) => onFiltersChange({ sort: value as InboxFilters['sort'] })}
+      action={headerAction}
+    >
       {/* Active Filters Bar - Always visible */}
       <div className="mt-2">
         <ActiveFiltersBar
@@ -191,7 +169,7 @@ export function FeedbackTableView({
           onToggleSegment={onToggleSegment}
         />
       </div>
-    </div>
+    </AdminListHeader>
   )
 
   // Filter posts by duplicates if active

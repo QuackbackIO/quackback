@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import { Breadcrumbs } from '@/components/ui/breadcrumbs'
+import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
@@ -34,13 +34,9 @@ function SsoRoute() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <Breadcrumbs
-        segments={[
-          { label: 'Settings', to: '/admin/settings' },
-          { label: 'Security', to: '/admin/settings/security/authentication' },
-          { label: 'Single sign-on' },
-        ]}
-      />
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
       <PageHeader
         icon={ShieldCheckIcon}
         title="Single sign-on"

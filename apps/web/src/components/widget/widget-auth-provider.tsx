@@ -62,8 +62,11 @@ interface WidgetAuthProviderProps {
   portalSessionToken?: string | null
   /** When true, inline email capture is disabled and the host app must sign users. */
   hmacRequired?: boolean
-  /** Initial locale from URL param (?locale=fr). SDK postMessage overrides this. */
-  initialLocale?: string | null
+  /** Locale resolved on the server (Accept-Language header + ?locale=
+   *  override). Deriving it from navigator at render time diverges from
+   *  SSR and triggers React hydration error #418 — see issue #133. An SDK
+   *  postMessage (quackback:locale) still overrides it after mount. */
+  initialLocale?: SupportedLocale
   children: ReactNode
 }
 
@@ -81,16 +84,9 @@ export function WidgetAuthProvider({
   const sessionReadyRef = useRef(false)
   const sessionSourceRef = useRef<SessionSource>(null)
 
-  // i18n locale state
-  const [locale, setLocale] = useState<SupportedLocale>(() => {
-    if (initialLocale) {
-      return normalizeLocale(initialLocale) ?? DEFAULT_LOCALE
-    }
-    if (typeof navigator !== 'undefined') {
-      return normalizeLocale(navigator.language) ?? DEFAULT_LOCALE
-    }
-    return DEFAULT_LOCALE
-  })
+  // i18n locale state — seeded from the SSR-resolved prop only, so the
+  // first client render matches the server (see issue #133).
+  const [locale, setLocale] = useState<SupportedLocale>(initialLocale ?? DEFAULT_LOCALE)
   const messages = useIntlSetup(locale)
 
   const sessionVersionRef = useRef(0)

@@ -18,7 +18,7 @@ export function AnalyticsBoardChart({ data }: BoardChartProps) {
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between px-1 text-xs uppercase tracking-wider text-muted-foreground">
         <span>Board</span>
         <span>Posts</span>
       </div>

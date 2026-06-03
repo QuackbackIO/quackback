@@ -87,8 +87,20 @@ async function createAuth() {
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
 
+  // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
+  // OIDC IdPs. Pass it through so `user.locale` populates from sign-in
+  // and the segment evaluator can target on language. Wrapped as a
+  // permissive shape because each provider returns a slightly
+  // different profile envelope.
+  const mapProfileLocale = (profile: unknown): { locale: string | null } => {
+    const p = profile as { locale?: unknown } | null | undefined
+    return {
+      locale: typeof p?.locale === 'string' && p.locale.length > 0 ? p.locale : null,
+    }
+  }
+
   // Build socialProviders config from DB-stored credentials
-  const socialProviders: Record<string, Record<string, string>> = {}
+  const socialProviders: Record<string, Record<string, unknown>> = {}
   const trustedProviders: string[] = []
   const genericOAuthConfigs: Array<{
     providerId: string
@@ -99,6 +111,7 @@ async function createAuth() {
     authorizationUrl?: string
     tokenUrl?: string
     scopes?: string[]
+    mapProfileToUser?: (profile: unknown) => Record<string, unknown>
     // SSO-only: force the IdP account picker so admins notice when
     // they're already signed in as a different identity.
     prompt?:
@@ -200,6 +213,7 @@ async function createAuth() {
         // with this on. Picked up by createAuth() rebuilds via
         // resetAuth() / cross-pod invalidation when admins toggle it.
         disableSignUp: cfg.autoCreateUsers === false,
+        mapProfileToUser: mapProfileLocale,
       })
       trustedProviders.push('sso')
     }
@@ -243,13 +257,15 @@ async function createAuth() {
         ...(creds.authorizationUrl && { authorizationUrl: creds.authorizationUrl }),
         ...(creds.tokenUrl && { tokenUrl: creds.tokenUrl }),
         scopes: scopeStr.split(/\s+/).filter(Boolean),
+        mapProfileToUser: mapProfileLocale,
       })
       trustedProviders.push(provider.id)
     } else {
       // Built-in social providers
-      const providerConfig: Record<string, string> = {
+      const providerConfig: Record<string, unknown> = {
         clientId: creds.clientId,
         clientSecret: creds.clientSecret,
+        mapProfileToUser: mapProfileLocale,
       }
       // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
       for (const field of provider.platformCredentials) {
@@ -320,6 +336,19 @@ async function createAuth() {
         .map((s) => s.trim())
         .filter(Boolean) ?? []),
     ],
+
+    // Tell Better-Auth about non-standard columns on `user` so the
+    // OAuth `mapProfileToUser` return shape is allowed through and
+    // written by drizzleAdapter. We only register `locale` here —
+    // existing custom columns (metadata, isAnonymous, twoFactorEnabled,
+    // imageKey) are written by other code paths (anonymous plugin /
+    // databaseHooks / direct queries) and don't need to round-trip
+    // through Better-Auth's signup validators.
+    user: {
+      additionalFields: {
+        locale: { type: 'string', required: false, input: false },
+      },
+    },
 
     // Password auth — default sign-in method for self-hosted deployments
     emailAndPassword: {
@@ -472,9 +501,13 @@ async function createAuth() {
         expiresIn: 600,
       }),
 
-      // One-time token plugin for cross-domain session transfer (used by /get-started)
+      // One-time token plugin for cross-domain session transfer.
+      // expiresIn is in MINUTES (the plugin multiplies by 60 000 ms internally).
+      // 10 min: the OTT sign-in flow needs more headroom than the default —
+      // the user may take time between clicking the widget CTA and the portal
+      // page loading (slow connection, tab restore, etc.).
       oneTimeToken({
-        expiresIn: 60, // 1 minute - tokens are used immediately after generation
+        expiresIn: 10,
       }),
 
       // JWT plugin — signs access tokens, exposes /api/auth/jwks for verification

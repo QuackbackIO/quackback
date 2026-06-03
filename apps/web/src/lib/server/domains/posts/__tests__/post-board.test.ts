@@ -19,8 +19,10 @@ vi.mock('@/lib/server/db', async () => {
       },
       update: dbUpdate,
     },
-    boards: { id: 'board_id' },
-    eq: vi.fn(),
+    boards: { id: 'board_id', deletedAt: 'deleted_at' },
+    eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
+    and: vi.fn((...args: unknown[]) => ({ op: 'and', args })),
+    isNull: vi.fn((col: unknown) => ({ op: 'isNull', col })),
     posts: { id: 'post_id' },
   }
 })
@@ -74,6 +76,30 @@ describe('changeBoard', () => {
     await expect(changeBoard('post_123' as PostId, 'board_new' as BoardId, actor)).rejects.toThrow(
       'Board with ID board_new not found'
     )
+  })
+
+  it('filters soft-deleted target boards (isNull(deletedAt) in target lookup)', async () => {
+    // Guard: a soft-deleted target board must be treated as not-found.
+    // The DB call uses and(eq(id, ...), isNull(deletedAt)); when the board is
+    // soft-deleted, the query returns undefined and the service throws.
+    mockPostsFindFirst.mockResolvedValue({ id: 'post_123', boardId: 'board_old' })
+    mockBoardsFindFirst
+      .mockResolvedValueOnce({ id: 'board_old', name: 'Old Board', slug: 'old' })
+      .mockResolvedValueOnce(undefined)
+    const { changeBoard } = await import('../post.board')
+    await expect(changeBoard('post_123' as PostId, 'board_new' as BoardId, actor)).rejects.toThrow(
+      'Board with ID board_new not found'
+    )
+
+    // Verify the target-board lookup carries the deletedAt guard.
+    const targetCall = mockBoardsFindFirst.mock.calls[1]?.[0] as { where: unknown } | undefined
+    expect(targetCall?.where).toMatchObject({
+      op: 'and',
+      args: expect.arrayContaining([
+        expect.objectContaining({ op: 'eq' }),
+        expect.objectContaining({ op: 'isNull', col: 'deleted_at' }),
+      ]),
+    })
   })
 
   it('updates boardId and returns updated post', async () => {

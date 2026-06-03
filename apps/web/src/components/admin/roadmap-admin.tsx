@@ -16,6 +16,7 @@ import { RoadmapSidebar } from './roadmap-sidebar'
 import { RoadmapColumn } from './roadmap-column'
 import { RoadmapCardOverlay } from './roadmap-card'
 import { RoadmapFiltersBar } from './roadmap/roadmap-filters-bar'
+import { EmptyState } from '@/components/shared/empty-state'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useRoadmapSelection } from './use-roadmap-selection'
 import { useRoadmapFilters } from './roadmap/use-roadmap-filters'
@@ -158,15 +159,11 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 mx-auto mb-4">
-                <MapIcon className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold">No roadmap selected</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Create or select a roadmap from the sidebar
-              </p>
-            </div>
+            <EmptyState
+              icon={MapIcon}
+              title="No roadmap selected"
+              description="Create or select a roadmap from the sidebar"
+            />
           </div>
         )}
       </main>

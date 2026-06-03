@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 /**
- * <TeamAuthMethodsSection> — smoke test for the extracted component.
- * Renders the three method rows (password, magic-link, 2FA) and
- * reflects the initialConfig prop state into the switches.
+ * <TeamAuthMethodsSection> — smoke test for the post-restructure
+ * component. Now owns only the Team security policy card (2FA toggle);
+ * the Sign-in methods rows moved to <SignInProvidersTab> with a
+ * unified single-toggle-per-provider model. The 2FA toggle wording
+ * also references the Sign-in providers tab as the place to enable
+ * password sign-in when it's disabled.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -34,21 +37,28 @@ function renderWith(config: AuthConfig) {
 }
 
 describe('<TeamAuthMethodsSection>', () => {
-  it('renders rows for password, magic-link, and 2FA', () => {
+  it('renders the Team security policy card with the 2FA row', () => {
     renderWith(baseConfig)
-    // Each row has a label and a description — use getAllByText so
-    // multiple matches (label + description both containing the term) pass.
-    expect(screen.getAllByText(/password/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/magic link/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/team security policy/i)).toBeInTheDocument()
     expect(screen.getAllByText(/2fa/i).length).toBeGreaterThan(0)
   })
 
-  it('reflects the password=false state from initialConfig', () => {
-    renderWith({ ...baseConfig, oauth: { ...baseConfig.oauth, password: false } })
-    // MethodRow renders Switch without an accessible name — find all
-    // switches; the first one corresponds to the Password row.
+  it('does NOT render password or magic-link rows (moved to Sign-in providers tab)', () => {
+    renderWith(baseConfig)
+    expect(screen.queryByText(/^password$/i)).toBeNull()
+    expect(screen.queryByText(/email magic link/i)).toBeNull()
+  })
+
+  it('renders one switch (2FA only) reflecting the twoFactor.required initial state', () => {
+    renderWith({ ...baseConfig, twoFactor: { required: true } })
     const switches = screen.getAllByRole('switch')
-    // Password is first, so switches[0] maps to it.
-    expect(switches[0]).toHaveAttribute('aria-checked', 'false')
+    expect(switches).toHaveLength(1)
+    expect(switches[0]).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('disables the 2FA toggle when password sign-in is off', () => {
+    renderWith({ ...baseConfig, oauth: { ...baseConfig.oauth, password: false } })
+    const switches = screen.getAllByRole('switch')
+    expect(switches[0]).toBeDisabled()
   })
 })

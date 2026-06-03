@@ -4,10 +4,11 @@
  * Handles adding and removing emoji reactions on comments.
  */
 
-import { db, eq, and, comments, commentReactions } from '@/lib/server/db'
+import { db, eq, and, commentReactions } from '@/lib/server/db'
 import { type CommentId, type PrincipalId } from '@quackback/ids'
-import { NotFoundError } from '@/lib/shared/errors'
 import { aggregateReactions } from '@/lib/shared'
+import { type Actor } from '@/lib/server/policy'
+import { assertCommentViewable } from '@/lib/server/domains/posts/post.access'
 import type { ReactionResult } from './comment.types'
 
 /**
@@ -24,24 +25,16 @@ import type { ReactionResult } from './comment.types'
 export async function addReaction(
   commentId: CommentId,
   emoji: string,
-  principalId: PrincipalId
+  principalId: PrincipalId,
+  actor: Actor
 ): Promise<ReactionResult> {
   console.log(`[domain:comments] addReaction: commentId=${commentId}, emoji=${emoji}`)
-  // Verify comment exists with post and board in single query
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
-    with: {
-      post: {
-        with: { board: true },
-      },
-    },
-  })
-  if (!comment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
-  if (!comment.post || !comment.post.board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
+  // Single chokepoint for comment access: audience + moderation +
+  // isPrivate + isNull(deletedAt) on comment/post/board. Previously this
+  // function did its own canViewPost+isPrivate inline but didn't check
+  // any of the deletedAt columns — so a reaction could be added to a
+  // soft-deleted comment / post / board.
+  await assertCommentViewable(commentId, actor)
 
   // Atomically insert reaction (uses unique constraint to prevent duplicates)
   const inserted = await db
@@ -85,24 +78,12 @@ export async function addReaction(
 export async function removeReaction(
   commentId: CommentId,
   emoji: string,
-  principalId: PrincipalId
+  principalId: PrincipalId,
+  actor: Actor
 ): Promise<ReactionResult> {
   console.log(`[domain:comments] removeReaction: commentId=${commentId}, emoji=${emoji}`)
-  // Verify comment exists with post and board in single query
-  const comment = await db.query.comments.findFirst({
-    where: eq(comments.id, commentId),
-    with: {
-      post: {
-        with: { board: true },
-      },
-    },
-  })
-  if (!comment) {
-    throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${commentId} not found`)
-  }
-  if (!comment.post || !comment.post.board) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${comment.postId} not found`)
-  }
+  // Same chokepoint as addReaction — see notes there.
+  await assertCommentViewable(commentId, actor)
 
   // Directly delete (no need to check first - idempotent operation)
   await db

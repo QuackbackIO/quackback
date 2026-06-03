@@ -4,7 +4,7 @@
  * Handles moving a post from one board to another.
  */
 
-import { db, posts, boards, eq } from '@/lib/server/db'
+import { db, posts, boards, eq, and, isNull } from '@/lib/server/db'
 import { type PostId, type BoardId, type UserId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -36,7 +36,9 @@ export async function changeBoard(
 
   const [currentBoard, newBoard] = await Promise.all([
     db.query.boards.findFirst({ where: eq(boards.id, existingPost.boardId) }),
-    db.query.boards.findFirst({ where: eq(boards.id, newBoardId) }),
+    db.query.boards.findFirst({
+      where: and(eq(boards.id, newBoardId), isNull(boards.deletedAt)),
+    }),
   ])
 
   if (!currentBoard) {

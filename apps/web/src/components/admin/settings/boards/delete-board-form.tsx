@@ -77,7 +77,7 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Type <span className="font-mono font-bold">{board.name}</span> to confirm
+                  Type <span className="font-mono font-semibold">{board.name}</span> to confirm
                 </FormLabel>
                 <FormControl>
                   <Input placeholder={board.name} {...field} />
@@ -87,9 +87,11 @@ export function DeleteBoardForm({ board }: DeleteBoardFormProps) {
             )}
           />
 
-          <Button type="submit" variant="destructive" disabled={!canDelete || mutation.isPending}>
-            {mutation.isPending ? 'Deleting...' : 'Delete board'}
-          </Button>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="submit" variant="destructive" disabled={!canDelete || mutation.isPending}>
+              {mutation.isPending ? 'Deleting...' : 'Delete board'}
+            </Button>
+          </div>
         </form>
       </Form>
     </div>

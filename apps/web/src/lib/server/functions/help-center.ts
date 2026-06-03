@@ -11,7 +11,6 @@ import {
   listPublicCategories,
   listPublicCategoryEditors,
   getCategoryById,
-  getCategoryBySlug,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -109,7 +108,12 @@ export const getCategoryFn = createServerFn({ method: 'GET' })
 export const getPublicCategoryBySlugFn = createServerFn({ method: 'GET' })
   .inputValidator(getCategoryBySlugSchema)
   .handler(async ({ data }) => {
-    const category = await getCategoryBySlug(data.slug)
+    // Use the public variant so categories an admin marked private aren't
+    // reachable by direct-slug lookup. The route serves unauthenticated
+    // help-center traffic.
+    const { getPublicCategoryBySlug } =
+      await import('@/lib/server/domains/help-center/help-center.category.service')
+    const category = await getPublicCategoryBySlug(data.slug)
     return serializeCategory(category)
   })
 
@@ -227,7 +231,7 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
 export const createArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(createArticleSchema)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ roles: ['admin', 'member'] })
     const article = await createArticle(
       {
         ...data,
@@ -241,7 +245,7 @@ export const createArticleFn = createServerFn({ method: 'POST' })
 export const updateArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(updateArticleSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ roles: ['admin', 'member'] })
     const article = await updateArticle(data.id as HelpCenterArticleId, {
       ...data,
       contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : data.contentJson,
@@ -252,7 +256,7 @@ export const updateArticleFn = createServerFn({ method: 'POST' })
 export const publishArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(publishArticleSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ roles: ['admin', 'member'] })
     const article = await publishArticle(data.id as HelpCenterArticleId)
     return serializeArticle(article)
   })
@@ -260,7 +264,7 @@ export const publishArticleFn = createServerFn({ method: 'POST' })
 export const unpublishArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(unpublishArticleSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ roles: ['admin', 'member'] })
     const article = await unpublishArticle(data.id as HelpCenterArticleId)
     return serializeArticle(article)
   })
@@ -268,7 +272,8 @@ export const unpublishArticleFn = createServerFn({ method: 'POST' })
 export const deleteArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteArticleSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    // Soft delete (deleteArticle sets deletedAt) — team OK.
+    await requireAuth({ roles: ['admin', 'member'] })
     await deleteArticle(data.id as HelpCenterArticleId)
     return { success: true }
   })

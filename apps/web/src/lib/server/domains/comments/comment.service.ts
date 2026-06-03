@@ -8,22 +8,27 @@ import {
   posts,
   postStatuses,
   type Comment,
+  type ModerationState,
 } from '@/lib/server/db'
 import { type CommentId, type PrincipalId, type StatusId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import {
-  dispatchCommentCreated,
   dispatchCommentUpdated,
   dispatchCommentDeleted,
   dispatchPostStatusChanged,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
+import { dispatchCommentCreatedEvent } from './comment.announce'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CreateCommentInput, CreateCommentResult, UpdateCommentInput } from './comment.types'
+import { canCreateComment } from '@/lib/server/policy/posts'
+import type { Actor } from '@/lib/server/policy/types'
+import { recordAuditEvent } from '@/lib/server/audit/log'
+import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 
 /**
  * Resolve the TipTap doc to store. UI clients send `contentJson` directly
@@ -54,25 +59,48 @@ export async function createComment(
     displayName?: string
     role: 'admin' | 'member' | 'user'
   },
-  options?: { skipDispatch?: boolean }
+  actor: Actor,
+  options?: { skipDispatch?: boolean; headers?: Headers }
 ): Promise<CreateCommentResult> {
   console.log(
     `[domain:comments] createComment: postId=${input.postId}, parentId=${input.parentId ?? 'none'}`
   )
-  // Validate post exists (and is not deleted) and eagerly load board in single query
+  // Validate post exists (and is not deleted) and eagerly load board in single query.
+  // The relational `with: { board: true }` can't push isNull(boards.deletedAt) into
+  // the join, so we filter the soft-deleted case in JS. Surface it as POST_NOT_FOUND
+  // — a public caller doesn't need to distinguish post-not-found from board-deleted.
   const post = await db.query.posts.findFirst({
     where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
     with: { board: true },
   })
-  if (!post || !post.board) {
+  if (!post || !post.board || post.board.deletedAt) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${input.postId} not found`)
   }
   const board = post.board
 
-  // Check if comments are locked (portal users blocked, team members bypass)
-  if (post.isCommentsLocked && author.role === 'user') {
-    throw new ForbiddenError('COMMENTS_LOCKED', 'Comments are locked on this post')
+  // Enforce access-control policy: board audience + post visibility + comments-locked.
+  // Workspace moderation default is the fallback for board-level `inherit`.
+  const portalConfig = await getPortalConfig()
+  const decision = canCreateComment(
+    actor,
+    {
+      moderationState: post.moderationState,
+      principalId: post.principalId,
+      isCommentsLocked: post.isCommentsLocked,
+    },
+    { access: board.access },
+    portalConfig.moderationDefault.requireApproval
+  )
+  if (!decision.allowed) {
+    throw new ForbiddenError('FORBIDDEN', decision.reason)
   }
+  // canCreateComment.requiresApproval is true when the actor is non-team and
+  // the resolved `moderation.comments` rule is `'on'`. Held comments land
+  // with moderationState='pending' so they don't appear publicly until a
+  // moderator approves them via approveCommentFn.
+  const initialModerationState: ModerationState = decision.requiresApproval
+    ? 'pending'
+    : 'published'
 
   // Validate parent comment exists if specified
   let parentIsPrivate = false
@@ -157,6 +185,7 @@ export async function createComment(
           principalId: author.principalId,
           isTeamMember: authorIsTeamMember,
           isPrivate,
+          moderationState: initialModerationState,
           statusChangeFromId: prevStatus?.id ?? null,
           statusChangeToId: newStatus.id,
           ...(input.createdAt && { createdAt: input.createdAt }),
@@ -167,8 +196,15 @@ export async function createComment(
         .update(posts)
         .set({
           statusId: input.statusId as StatusId,
-          // Private comments don't count toward the public comment count
-          ...(isPrivate ? {} : { commentCount: sql`${posts.commentCount} + 1` }),
+          // Private and pending comments don't count toward the public
+          // commentCount. Pending comments are held back from public reads
+          // (see post.public.detail.ts) — `approveCommentFn` re-increments
+          // the count when the comment becomes visible. Rejected (soft-
+          // deleted) pending comments stay uncounted since they never
+          // incremented in the first place.
+          ...(isPrivate || initialModerationState === 'pending'
+            ? {}
+            : { commentCount: sql`${posts.commentCount} + 1` }),
         })
         .where(eq(posts.id, input.postId))
 
@@ -189,12 +225,16 @@ export async function createComment(
           principalId: author.principalId,
           isTeamMember: authorIsTeamMember,
           isPrivate,
+          moderationState: initialModerationState,
           ...(input.createdAt && { createdAt: input.createdAt }),
         })
         .returning()
 
-      // Private comments don't count toward the public comment count
-      if (!isPrivate) {
+      // Private and pending comments don't count toward the public
+      // commentCount. Pending comments are held back from public reads
+      // (see post.public.detail.ts) — `approveCommentFn` re-increments
+      // the count when the comment becomes visible.
+      if (!isPrivate && initialModerationState !== 'pending') {
         await tx
           .update(posts)
           .set({ commentCount: sql`${posts.commentCount} + 1` })
@@ -207,29 +247,42 @@ export async function createComment(
     comment = result
   }
 
-  if (!options?.skipDispatch) {
-    // Auto-subscribe commenter to the post
-    if (author.principalId) {
-      await subscribeToPost(author.principalId, input.postId, 'comment')
-    }
-
-    // Dispatch comment.created event for webhooks, Slack, etc.
-    const actorName = author.displayName ?? author.name
-    await dispatchCommentCreated(
-      buildEventActor(author),
-      {
-        id: comment.id,
-        content: comment.content,
-        authorName: actorName,
-        authorEmail: author.email,
-        isPrivate,
+  if (initialModerationState === 'pending') {
+    // Record audit trail for held comments. Mirrors the post.moderation.held
+    // pattern in post.service.ts so moderators have a uniform timeline.
+    await recordAuditEvent({
+      event: 'comment.moderation.held',
+      actor: {
+        userId: author.userId,
+        email: author.email,
+        role: actor.role,
+        type: actor.principalType,
       },
-      {
-        id: post.id,
-        title: post.title,
-        boardId: board.id,
-        boardSlug: board.slug,
-      }
+      headers: options?.headers,
+      target: { type: 'comment', id: comment.id },
+      after: { moderationState: 'pending' },
+      metadata: { postId: post.id, boardId: board.id, principalType: actor.principalType },
+    })
+  }
+
+  // Auto-subscribe commenter to the post even when held — so the author
+  // receives the approval/rejection notification and any subsequent thread
+  // activity once approved. Mirrors post.service.ts which subscribes
+  // authors of held posts.
+  if (!options?.skipDispatch && author.principalId) {
+    await subscribeToPost(author.principalId, input.postId, 'comment')
+  }
+
+  // External dispatch (webhooks, Slack, @-mention emails) is deferred until
+  // the comment is visible. Held comments fire dispatch only on approval
+  // via approveCommentFn — mirroring the post-moderation flow.
+  if (!options?.skipDispatch && initialModerationState === 'published') {
+    // Dispatch comment.created for webhooks, Slack, etc. Shares the payload
+    // mapping with approveCommentFn's release path via dispatchCommentCreatedEvent.
+    await dispatchCommentCreatedEvent(
+      author,
+      { id: comment.id, content: comment.content, isPrivate },
+      { id: post.id, title: post.title, boardId: board.id, boardSlug: board.slug }
     )
 
     // Dispatch status change event if status was changed
@@ -373,12 +426,6 @@ export async function deleteComment(
     throw new ForbiddenError('UNAUTHORIZED', 'You are not authorized to delete this comment')
   }
 
-  // Only decrement count if comment is not already soft-deleted
-  // (soft-delete already decremented the count)
-  // Private comments never incremented the count, so skip decrement for them
-  const wasActive = !existingComment.deletedAt
-  const shouldDecrement = wasActive && !existingComment.isPrivate
-
   // Atomic transaction: delete comment + conditionally decrement comment count
   await db.transaction(async (tx) => {
     const result = await tx.delete(comments).where(eq(comments.id, id)).returning()
@@ -386,6 +433,14 @@ export async function deleteComment(
       throw new NotFoundError('COMMENT_NOT_FOUND', `Comment with ID ${id} not found`)
     }
 
+    // Decide the decrement from the deleted row's own state (DELETE locks the
+    // row), not the pre-transaction snapshot: a concurrent approval could have
+    // published + counted a previously-pending comment between the read and
+    // here. Skip when already soft-deleted (the soft-delete already decremented)
+    // or when the comment was never counted (private / still-pending).
+    const deleted = result[0]
+    const shouldDecrement =
+      !deleted.deletedAt && !deleted.isPrivate && deleted.moderationState !== 'pending'
     if (shouldDecrement) {
       await tx
         .update(posts)

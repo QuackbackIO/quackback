@@ -2,7 +2,7 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, Tag, TiptapContent } from '@/lib/server/db'
+import type { Post, Board, BoardAccess, Tag, TiptapContent } from '@/lib/server/db'
 import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
@@ -241,6 +241,12 @@ export interface PublicPostDetail {
   authorAvatarUrl: string | null
   createdAt: Date
   board: { id: string; name: string; slug: string }
+  /**
+   * The board's per-action access matrix. Server-only — `fetchPublicPostDetail`
+   * uses it to compute the viewer's `canVote`/`canComment` capability and then
+   * strips it before serializing to the client (segment ids must not leak).
+   */
+  boardAccess: BoardAccess
   tags: Array<{ id: string; name: string; color: string }>
   roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicComment[]

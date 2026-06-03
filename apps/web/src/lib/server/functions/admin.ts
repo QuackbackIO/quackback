@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   generateId,
   type InviteId,
@@ -16,7 +17,7 @@ import {
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, invitation, principal, user, eq, and } from '@/lib/server/db'
+import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -268,8 +269,15 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
     console.log(`[fn:admin] updateMemberRoleFn: principalId=${data.principalId}, role=${data.role}`)
     try {
       const auth = await requireAuth({ roles: ['admin'] })
+      const { actorFromAuth } = await import('@/lib/server/audit/log')
 
-      await updateMemberRole(data.principalId as PrincipalId, data.role, auth.principal.id)
+      await updateMemberRole(
+        data.principalId as PrincipalId,
+        data.role,
+        auth.principal.id,
+        actorFromAuth(auth),
+        getRequestHeaders()
+      )
 
       console.log(`[fn:admin] updateMemberRoleFn: success`)
       return { principalId: data.principalId, role: data.role }
@@ -331,8 +339,14 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
     console.log(`[fn:admin] removeTeamMemberFn: principalId=${data.principalId}`)
     try {
       const auth = await requireAuth({ roles: ['admin'] })
+      const { actorFromAuth } = await import('@/lib/server/audit/log')
 
-      await removeTeamMember(data.principalId as PrincipalId, auth.principal.id)
+      await removeTeamMember(
+        data.principalId as PrincipalId,
+        auth.principal.id,
+        actorFromAuth(auth),
+        getRequestHeaders()
+      )
 
       console.log(`[fn:admin] removeTeamMemberFn: success`)
       return { principalId: data.principalId }
@@ -932,7 +946,11 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       // Parallelize invitation and user validation queries
       const [existingInvitation, existingUser] = await Promise.all([
         db.query.invitation.findFirst({
-          where: and(eq(invitation.email, email), eq(invitation.status, 'pending')),
+          where: and(
+            eq(invitation.email, email),
+            eq(invitation.status, 'pending'),
+            eq(invitation.kind, 'team')
+          ),
         }),
         db.query.user.findFirst({
           where: eq(user.email, email),
@@ -1014,14 +1032,38 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
       const invitationId = data.invitationId as InviteId
 
       const invitationRecord = await db.query.invitation.findFirst({
-        where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
+        where: and(
+          eq(invitation.id, invitationId),
+          eq(invitation.status, 'pending'),
+          eq(invitation.kind, 'team')
+        ),
       })
 
       if (!invitationRecord) {
         throw new Error('Invitation not found')
       }
 
-      await db.update(invitation).set({ status: 'canceled' }).where(eq(invitation.id, invitationId))
+      // TOCTOU pin: status='pending' in the WHERE so a concurrent
+      // accept (Better Auth's magic-link verify) isn't silently
+      // overwritten to 'canceled'. Mirrors the portal-side cancel in
+      // functions/portal-invites.ts:256 which had this pin from day
+      // one. `.returning()` lets us treat zero rows as "lost the race"
+      // so the response doesn't lie about success.
+      const cancelled = await db
+        .update(invitation)
+        .set({ status: 'canceled' })
+        .where(
+          and(
+            eq(invitation.id, invitationId),
+            eq(invitation.kind, 'team'),
+            eq(invitation.status, 'pending')
+          )
+        )
+        .returning({ id: invitation.id })
+
+      if (cancelled.length === 0) {
+        throw new Error('Invitation is no longer pending — refresh and try again')
+      }
 
       console.log(`[fn:admin] cancelInvitationFn: canceled`)
       return { invitationId }
@@ -1044,11 +1086,41 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       const invitationId = data.invitationId as InviteId
 
       const invitationRecord = await db.query.invitation.findFirst({
-        where: and(eq(invitation.id, invitationId), eq(invitation.status, 'pending')),
+        where: and(
+          eq(invitation.id, invitationId),
+          eq(invitation.status, 'pending'),
+          eq(invitation.kind, 'team')
+        ),
       })
 
       if (!invitationRecord) {
         throw new Error('Invitation not found')
+      }
+
+      // Claim-then-send ordering — see resendPortalInviteFn for the
+      // full rationale. Mint the magic link AFTER the UPDATE succeeds
+      // so a concurrent accept/cancel during the SMTP window can't
+      // leak a live link for a row the server now considers terminal.
+      // The UPDATE WHERE pins both status='pending' AND expiresAt > now()
+      // so neither a terminal-state flip nor an expiry that landed
+      // between SELECT and UPDATE can be silently extended.
+      const resendNow = new Date()
+      const freshExpiresAt = new Date(resendNow.getTime() + INVITATION_EXPIRY_MS)
+      const updated = await db
+        .update(invitation)
+        .set({ lastSentAt: resendNow, expiresAt: freshExpiresAt })
+        .where(
+          and(
+            eq(invitation.id, invitationId),
+            eq(invitation.kind, 'team'),
+            eq(invitation.status, 'pending'),
+            gt(invitation.expiresAt, resendNow)
+          )
+        )
+        .returning({ id: invitation.id })
+
+      if (updated.length === 0) {
+        throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
       // Generate new magic link for one-click authentication
@@ -1070,11 +1142,6 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         inviteLink,
         logoUrl,
       })
-
-      await db
-        .update(invitation)
-        .set({ lastSentAt: new Date(), expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS) })
-        .where(eq(invitation.id, invitationId))
 
       console.log(
         `[fn:admin] resendInvitationFn: ${result.sent ? 'resent' : 'regenerated (email not configured)'}`
@@ -1099,15 +1166,21 @@ const segmentByIdSchema = z.object({
 })
 
 // Shared condition schema used by both create and update
-const segmentConditionSchema = z.object({
+export const segmentConditionSchema = z.object({
   attribute: z.enum([
-    'email_domain',
+    'email',
     'email_verified',
     'created_at_days_ago',
     'post_count',
     'vote_count',
     'comment_count',
     'metadata_key',
+    'name',
+    'locale',
+    'country',
+    'last_active_days_ago',
+    'signup_source',
+    'principal_type',
   ]),
   operator: z.enum([
     'eq',
@@ -1157,7 +1230,7 @@ const weightConfigSchema = z.object({
   aggregation: z.enum(['sum', 'average', 'count', 'median']),
 })
 
-const createSegmentSchema = z.object({
+export const createSegmentSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   type: z.enum(['manual', 'dynamic']),
@@ -1181,6 +1254,28 @@ const assignUsersSchema = z.object({
   segmentId: z.string(),
   principalIds: z.array(z.string()).min(1),
 })
+
+/**
+ * Distinct-value typeahead for the segment rule-builder. Returns the
+ * most-common existing values for the given attribute among portal
+ * users, optionally prefix-filtered by `query`. Drives the
+ * SearchableInput in the segment edit dialog so admins see what
+ * values are actually present in their workspace as they type.
+ */
+const fetchSegmentAttributeValuesSchema = z.object({
+  attribute: z.enum(['country', 'locale', 'name', 'email', 'signup_source']),
+  query: z.string().max(200).default(''),
+  limit: z.number().int().min(1).max(50).default(20),
+})
+
+export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
+  .inputValidator(fetchSegmentAttributeValuesSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin', 'member'] })
+    const { getAttributeValueSuggestions } =
+      await import('@/lib/server/domains/segments/segment-attribute-values')
+    return { values: await getAttributeValueSuggestions(data.attribute, data.query, data.limit) }
+  })
 
 /**
  * List all segments with member counts.
@@ -1300,10 +1395,16 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
       `[fn:admin] assignUsersToSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
-      await assignUsersToSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
-      console.log(`[fn:admin] assignUsersToSegmentFn: assigned`)
-      return { segmentId: data.segmentId, assigned: data.principalIds.length }
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const { actorFromAuth } = await import('@/lib/server/audit/log')
+      const { assigned } = await assignUsersToSegment(
+        data.segmentId as SegmentId,
+        data.principalIds as PrincipalId[],
+        actorFromAuth(auth),
+        getRequestHeaders()
+      )
+      console.log(`[fn:admin] assignUsersToSegmentFn: assigned=${assigned}`)
+      return { segmentId: data.segmentId, assigned }
     } catch (error) {
       console.error(`[fn:admin] ❌ assignUsersToSegmentFn failed:`, error)
       throw error
@@ -1320,10 +1421,16 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
       `[fn:admin] removeUsersFromSegmentFn: segmentId=${data.segmentId}, count=${data.principalIds.length}`
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
-      await removeUsersFromSegment(data.segmentId as SegmentId, data.principalIds as PrincipalId[])
-      console.log(`[fn:admin] removeUsersFromSegmentFn: removed`)
-      return { segmentId: data.segmentId, removed: data.principalIds.length }
+      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const { actorFromAuth } = await import('@/lib/server/audit/log')
+      const { removed } = await removeUsersFromSegment(
+        data.segmentId as SegmentId,
+        data.principalIds as PrincipalId[],
+        actorFromAuth(auth),
+        getRequestHeaders()
+      )
+      console.log(`[fn:admin] removeUsersFromSegmentFn: removed=${removed}`)
+      return { segmentId: data.segmentId, removed }
     } catch (error) {
       console.error(`[fn:admin] ❌ removeUsersFromSegmentFn failed:`, error)
       throw error

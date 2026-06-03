@@ -1,4 +1,70 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page, type Locator } from '@playwright/test'
+import { slugify } from '../../../src/lib/shared/utils/string'
+
+/**
+ * Select an access preset and persist it. The save dock is a `fixed bottom-0`
+ * bar that only slides into view (translate-y-0) — and accepts pointer events —
+ * while the form is dirty, so we save only when the click was a real change
+ * (clicking the already-active preset is a no-op and leaves the dock hidden).
+ * State-agnostic: callers don't need to know the board's starting preset.
+ */
+async function setPresetAndSave(page: Page, preset: Locator): Promise<void> {
+  await preset.click()
+  await expect(preset).toHaveAttribute('aria-pressed', 'true')
+
+  const dock = page.locator('[aria-label="Save changes"]')
+  // A real change makes the form dirty and slides the dock into view.
+  await expect(dock).toHaveClass(/translate-y-0/, { timeout: 3000 })
+  await dock.getByRole('button', { name: 'Save changes' }).click()
+  // The dock slides back out (translate-y-full) only after the save round-trips
+  // and the form re-baselines — a reliable "persisted" signal that beats
+  // networkidle, which can resolve in the lull before the mutation fires.
+  await expect(dock).toHaveClass(/translate-y-full/, { timeout: 10000 })
+}
+
+/**
+ * Create a throwaway board (defaults to the Public preset) and land on its
+ * general settings. Tests run fullyParallel against a shared DB, so owning a
+ * uniquely-named board keeps a test from racing others on the shared
+ * redirect-target board.
+ */
+async function createBoard(page: Page, name: string): Promise<void> {
+  await page.goto('/admin/settings/boards')
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'New board' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel('Board name').fill(name)
+  await dialog.getByRole('button', { name: 'Create board' }).click()
+  await expect(dialog).toBeHidden({ timeout: 10000 })
+  // Wait until the page has navigated to the new board (switcher reflects it).
+  await expect(page.getByTestId('board-switcher')).toContainText(name, { timeout: 10000 })
+}
+
+/** Create a throwaway board and open its Access tab, settled on Public. */
+async function createBoardOnAccessTab(page: Page, name: string): Promise<void> {
+  await createBoard(page, name)
+  await page.locator('nav').getByRole('button', { name: 'Access' }).click()
+  await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
+  // New boards default to the Public preset; wait for the matrix to settle on it
+  // (the optimistic insert can briefly show defaults before the refetch lands).
+  await expect(page.getByRole('button', { name: 'Public', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+    { timeout: 10000 }
+  )
+}
+
+/** Delete the board currently open in settings (type-to-confirm danger zone). */
+async function deleteCurrentBoard(page: Page, name: string): Promise<void> {
+  await page.locator('nav').getByRole('button', { name: 'General' }).click()
+  await expect(page.getByText('Danger Zone')).toBeVisible({ timeout: 5000 })
+  await page.getByPlaceholder(name).fill(name)
+  const del = page.getByRole('button', { name: 'Delete board', exact: true })
+  await expect(del).toBeEnabled()
+  await del.click()
+  await expect(page).toHaveURL(/\/admin\/settings\/boards/, { timeout: 10000 })
+}
 
 test.describe('Admin Board Management', () => {
   test.beforeEach(async ({ page }) => {
@@ -58,52 +124,24 @@ test.describe('Admin Board Management', () => {
     }
   })
 
-  test('can change board visibility on Access page', async ({ page }) => {
-    // Navigate to Access settings
-    const accessLink = page.getByRole('link', { name: 'Access' })
-    await accessLink.click()
-    await page.waitForURL(/\/access/)
+  test('can change board access via presets on the Access tab', async ({ page }) => {
+    // Use a throwaway board so the toggle is deterministic (it starts Public).
+    const name = `Access Toggle ${Date.now()}`
+    await createBoardOnAccessTab(page, name)
+    // Access is a settings-nav tab button (not a link); it sets ?tab=access and
+    // shows the per-action access matrix (the public/private radio is gone).
+    await expect(page).toHaveURL(/tab=access/)
 
-    // Find the visibility radio buttons
-    const publicRadio = page.getByRole('radio', { name: 'public' })
-    const privateRadio = page.getByRole('radio', { name: 'private' })
-    await expect(publicRadio).toBeVisible({ timeout: 5000 })
-    await expect(privateRadio).toBeVisible({ timeout: 5000 })
+    // Visibility is chosen via aria-pressed preset toggles (Public / Private);
+    // the board starts Public (asserted in the create helper).
+    const privatePreset = page.getByRole('button', { name: 'Private', exact: true })
+    await expect(privatePreset).toBeVisible()
 
-    // Get current state
-    const wasPublic = await publicRadio.isChecked()
+    // Flip to Private (a guaranteed change) and confirm it persists in-form.
+    await setPresetAndSave(page, privatePreset)
+    await expect(privatePreset).toHaveAttribute('aria-pressed', 'true')
 
-    // Toggle visibility
-    if (wasPublic) {
-      await privateRadio.click()
-    } else {
-      await publicRadio.click()
-    }
-
-    // Save the changes
-    const saveButton = page.getByRole('button', { name: 'Save changes' })
-    await saveButton.click()
-
-    // Wait for mutation to complete (button shows "Saving..." then back to "Save changes")
-    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
-    await expect(saveButton).not.toBeDisabled()
-
-    // Verify the radio state is correct after save
-    if (wasPublic) {
-      await expect(privateRadio).toBeChecked()
-    } else {
-      await expect(publicRadio).toBeChecked()
-    }
-
-    // Toggle back to original state
-    if (wasPublic) {
-      await publicRadio.click()
-    } else {
-      await privateRadio.click()
-    }
-    await saveButton.click()
-    await page.waitForLoadState('networkidle')
+    await deleteCurrentBoard(page, name)
   })
 
   test('shows danger zone with delete option', async ({ page }) => {
@@ -181,77 +219,44 @@ test.describe('Board Access Settings', () => {
     // Wait for the board settings page to fully load (redirects to first board)
     await expect(page.getByText('Board Details')).toBeVisible({ timeout: 10000 })
 
-    // Navigate to Access tab
-    const accessLink = page.getByRole('link', { name: 'Access' })
-    await expect(accessLink).toBeVisible({ timeout: 5000 })
-    await accessLink.click()
-    await page.waitForURL(/\/access/)
-    await page.waitForLoadState('networkidle')
+    // Switch to the Access tab (a settings-nav button; sets ?tab=access).
+    await page.locator('nav').getByRole('button', { name: 'Access' }).click()
+    await expect(page.getByText('Access Control')).toBeVisible({ timeout: 5000 })
   })
 
-  test('displays access settings', async ({ page }) => {
-    // Should show the board visibility options
-    await expect(page.getByText('Board Visibility')).toBeVisible({ timeout: 5000 })
+  test('displays the access matrix with presets and per-action permissions', async ({ page }) => {
+    // Presets replace the old public/private visibility radios.
+    await expect(page.getByRole('button', { name: 'Public', exact: true })).toBeVisible({
+      timeout: 5000,
+    })
+    await expect(page.getByRole('button', { name: 'Private', exact: true })).toBeVisible()
 
-    // Should show both public and private radio options
-    const publicRadio = page.getByRole('radio', { name: 'public' })
-    const privateRadio = page.getByRole('radio', { name: 'private' })
-    await expect(publicRadio).toBeVisible({ timeout: 5000 })
-    await expect(privateRadio).toBeVisible({ timeout: 5000 })
-
-    // Should show descriptive text for each option
-    await expect(page.getByText('Anyone can view this board on your portal')).toBeVisible()
-    await expect(page.getByText('Only team members can view this board')).toBeVisible()
+    // The per-action matrix and the team-bypass note identify the new control.
+    await expect(page.getByText('Per-action permissions')).toBeVisible()
+    await expect(
+      page.getByText('Team members and admins always have full access', { exact: false })
+    ).toBeVisible()
   })
 
-  test('can toggle board visibility between public and private', async ({ page }) => {
-    // Get the radio buttons
-    const publicRadio = page.getByRole('radio', { name: 'public' })
-    const privateRadio = page.getByRole('radio', { name: 'private' })
+  test('toggling a preset persists after save and reload', async ({ page }) => {
+    // Throwaway board (starts Public) so persistence is unambiguous.
+    const name = `Access Persist ${Date.now()}`
+    await createBoardOnAccessTab(page, name)
 
-    // Check current state
-    const wasPublic = await publicRadio.isChecked()
+    const publicPreset = page.getByRole('button', { name: 'Public', exact: true })
+    const privatePreset = page.getByRole('button', { name: 'Private', exact: true })
+    await expect(publicPreset).toHaveAttribute('aria-pressed', 'true')
 
-    // Toggle to the opposite state
-    if (wasPublic) {
-      await privateRadio.click()
-      await expect(privateRadio).toBeChecked()
-      await expect(publicRadio).not.toBeChecked()
-    } else {
-      await publicRadio.click()
-      await expect(publicRadio).toBeChecked()
-      await expect(privateRadio).not.toBeChecked()
-    }
+    // Flip to Private and save.
+    await setPresetAndSave(page, privatePreset)
 
-    // Save the changes
-    const saveButton = page.getByRole('button', { name: 'Save changes' })
-    await saveButton.click()
-
-    // Wait for mutation to complete (button shows "Saving..." then back to "Save changes")
-    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
-    await expect(saveButton).not.toBeDisabled()
-
-    // Verify the change persists after page reload
+    // Reload — the URL keeps ?tab=access — and confirm the saved preset is active.
     await page.reload()
     await page.waitForLoadState('networkidle')
+    await expect(page.getByText('Access Control')).toBeVisible({ timeout: 10000 })
+    await expect(privatePreset).toHaveAttribute('aria-pressed', 'true')
 
-    if (wasPublic) {
-      await expect(privateRadio).toBeChecked()
-    } else {
-      await expect(publicRadio).toBeChecked()
-    }
-
-    // Toggle back to original state to restore
-    if (wasPublic) {
-      await publicRadio.click()
-    } else {
-      await privateRadio.click()
-    }
-    await saveButton.click()
-    // Wait for mutation to complete
-    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({ timeout: 5000 })
+    await deleteCurrentBoard(page, name)
   })
 })
 
@@ -354,9 +359,9 @@ test.describe('Create Board Dialog', () => {
     await page.waitForLoadState('networkidle')
 
     // Wait for page to be ready - either board settings or empty state
-    await expect(
-      page.getByText('Board Details').or(page.getByText('No boards yet'))
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('can open create board dialog', async ({ page }) => {
@@ -379,7 +384,10 @@ test.describe('Create Board Dialog', () => {
     // Check all fields are present (scoped to dialog)
     await expect(dialog.getByLabel('Board name')).toBeVisible()
     await expect(dialog.getByLabel('Description')).toBeVisible()
-    await expect(dialog.getByRole('switch', { name: 'Public board' })).toBeVisible()
+    // Visibility is chosen via Public/Private preset tiles (aria-pressed), which
+    // replaced the old "Public board" switch.
+    await expect(dialog.getByRole('button', { name: 'Public', exact: true })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Private', exact: true })).toBeVisible()
 
     // Check buttons
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeVisible()
@@ -445,9 +453,11 @@ test.describe('Create Board Dialog', () => {
     await dialog.getByLabel('Board name').fill(testBoardName)
     await dialog.getByLabel('Description').fill('Board created by Playwright test')
 
-    // Verify public switch is checked by default
-    const publicSwitch = dialog.getByRole('switch', { name: 'Public board' })
-    await expect(publicSwitch).toBeChecked()
+    // Public preset tile is active by default.
+    await expect(dialog.getByRole('button', { name: 'Public', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
 
     // Create the board
     await dialog.getByRole('button', { name: 'Create board' }).click()
@@ -492,11 +502,13 @@ test.describe('Create Board Dialog', () => {
     await dialog.getByLabel('Board name').fill(testBoardName)
     await dialog.getByLabel('Description').fill('Private board for testing')
 
-    // Toggle public switch off
-    const publicSwitch = dialog.getByRole('switch', { name: 'Public board' })
-    await expect(publicSwitch).toBeChecked() // Should be on by default
-    await publicSwitch.click()
-    await expect(publicSwitch).not.toBeChecked()
+    // Select the Private preset (Public is active by default).
+    const publicTile = dialog.getByRole('button', { name: 'Public', exact: true })
+    const privateTile = dialog.getByRole('button', { name: 'Private', exact: true })
+    await expect(publicTile).toHaveAttribute('aria-pressed', 'true')
+    await privateTile.click()
+    await expect(privateTile).toHaveAttribute('aria-pressed', 'true')
+    await expect(publicTile).toHaveAttribute('aria-pressed', 'false')
 
     // Create the board
     await dialog.getByRole('button', { name: 'Create board' }).click()
@@ -551,9 +563,9 @@ test.describe('Board Settings Tabs', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
-    await expect(
-      page.getByText('Board Details').or(page.getByText('No boards yet'))
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('General tab shows Board Details and Danger Zone cards', async ({ page }) => {
@@ -623,9 +635,10 @@ test.describe('Board Settings Tabs', () => {
     const generalButton = nav.getByRole('button', { name: 'General' })
     if ((await generalButton.count()) === 0) return
 
-    // Active button has bg-secondary class in addition to others
-    const classAttr = await generalButton.getAttribute('class')
-    expect(classAttr).toMatch(/bg-secondary/)
+    // The active nav button is the only one with `font-medium` (inactive buttons
+    // carry `hover:bg-muted/...`, so a bg-* match wouldn't discriminate).
+    // toHaveClass auto-retries, so it tolerates the client re-render.
+    await expect(generalButton).toHaveClass(/font-medium/)
   })
 
   test('active tab button is visually distinct after switching', async ({ page }) => {
@@ -636,14 +649,13 @@ test.describe('Board Settings Tabs', () => {
     await accessButton.click()
     await page.waitForLoadState('networkidle')
 
-    // Access button should now have the active class
-    const classAttr = await accessButton.getAttribute('class')
-    expect(classAttr).toMatch(/bg-secondary/)
+    // Access button should now have the active marker. toHaveClass auto-retries,
+    // so it waits out the client-side re-render after the tab switch.
+    await expect(accessButton).toHaveClass(/font-medium/)
 
     // General button should no longer be active
     const generalButton = nav.getByRole('button', { name: 'General' })
-    const generalClass = await generalButton.getAttribute('class')
-    expect(generalClass).not.toMatch(/bg-secondary/)
+    await expect(generalButton).not.toHaveClass(/font-medium/)
   })
 })
 
@@ -655,9 +667,9 @@ test.describe('Board Slug', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/settings/boards')
     await page.waitForLoadState('networkidle')
-    await expect(
-      page.getByText('Board Details').or(page.getByText('No boards yet'))
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Board Details').or(page.getByText('No boards yet'))).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('Board Details form shows Board name and Description fields', async ({ page }) => {
@@ -681,28 +693,27 @@ test.describe('Board Slug', () => {
   })
 
   test('board switcher shows the current board name after a name edit', async ({ page }) => {
-    const boardNameInput = page.getByRole('textbox', { name: 'Board name', exact: true })
-    if ((await boardNameInput.count()) === 0) return
+    // Own a throwaway board so the rename can't race other parallel tests on the
+    // shared redirect-target board.
+    const createName = `Slug Edit ${Date.now()}`
+    await createBoard(page, createName)
 
-    const originalName = await boardNameInput.inputValue()
-    const updatedName = `Renamed Board ${Date.now()}`
+    const updatedName = `Renamed ${Date.now()}`
+    await page.getByRole('textbox', { name: 'Board name', exact: true }).fill(updatedName)
+    await page.getByRole('button', { name: 'Save changes' }).click()
 
-    await boardNameInput.fill(updatedName)
-    const saveButton = page.getByRole('button', { name: 'Save changes' })
-    await saveButton.click()
+    // Renaming regenerates the slug, orphaning this slug-keyed page once the
+    // server round-trip lands (Board Details unmounts) — a reliable "persisted"
+    // signal. (The switcher can't reflect it in place: the optimistic write
+    // targets the boards list, not the settings query, and the slug change
+    // orphans the page before the refetch arrives.)
+    await expect(page.getByText('Board Details')).toBeHidden({ timeout: 10000 })
 
-    // Wait for save to complete
-    await expect(page.getByRole('button', { name: 'Saving...' })).toBeVisible({ timeout: 2000 })
-    await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible({
-      timeout: 10000,
-    })
-
-    // The board switcher (header) should reflect the new name
-    await expect(page.getByTestId('board-switcher')).toContainText(updatedName, { timeout: 5000 })
-
-    // Restore original name
-    await boardNameInput.fill(originalName)
-    await saveButton.click()
+    // Land on the new slug: a fresh load shows the renamed board in the switcher.
+    await page.goto(`/admin/settings/boards?board=${slugify(updatedName)}`)
     await page.waitForLoadState('networkidle')
+    await expect(page.getByTestId('board-switcher')).toContainText(updatedName, { timeout: 10000 })
+
+    await deleteCurrentBoard(page, updatedName)
   })
 })

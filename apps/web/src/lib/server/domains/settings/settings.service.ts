@@ -764,6 +764,10 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       features: portalConfig.features,
       ...(customProviderNames && { customProviderNames }),
       ...(welcome && { welcomeCard: welcome }),
+      portalAccess: {
+        isPrivate: portalConfig.access?.visibility === 'private',
+        widgetSignIn: portalConfig.access?.widgetSignIn ?? false,
+      },
     }
   } catch (error) {
     console.error(`[domain:settings] getPublicPortalConfig failed:`, error)
@@ -847,6 +851,10 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
           features: portalConfig.features,
           ...(portalCustomNames && { customProviderNames: portalCustomNames }),
           ...(welcome && { welcomeCard: welcome }),
+          portalAccess: {
+            isPrivate: portalConfig.access?.visibility === 'private',
+            widgetSignIn: portalConfig.access?.widgetSignIn ?? false,
+          },
         }
       })(),
       publicWidgetConfig: {

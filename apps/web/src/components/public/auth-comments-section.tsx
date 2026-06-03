@@ -8,6 +8,7 @@ import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session
 import { useCreateComment } from '@/lib/client/mutations'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
+import { resolveCommentingState } from '@/components/public/comment-permission'
 
 interface AuthCommentsSectionProps {
   postId: PostId
@@ -91,18 +92,14 @@ export function AuthCommentsSection({
     },
   })
 
-  // Check if anonymous commenting is enabled in workspace settings
-  const anonymousCommentingEnabled =
-    settings?.publicPortalConfig?.features?.anonymousCommenting ?? false
-
-  // Get user from session (anonymous sessions can comment only if the setting is enabled)
-  const isAnonymous = session?.user?.principalType === 'anonymous'
-  const user = session?.user && (!isAnonymous || anonymousCommentingEnabled) ? session.user : null
-  const isLoggedIn = !!user
-
-  // Can comment if: logged in with server permission, OR anonymous commenting is enabled
-  // (even without a session — the session will be created lazily on comment submit)
-  const allowCommenting = (isLoggedIn && serverAllowCommenting) || anonymousCommentingEnabled
+  // Follow the SERVER-computed permission, which already composes the board's
+  // per-action comment tier with the workspace anonymous master switch for
+  // this viewer. `needsAnonSession` drives the lazy-session path below (no real
+  // user session yet, but commenting is allowed — e.g. an anonymous visitor on
+  // an anonymous-comment board).
+  const { allowCommenting, surfaceSessionUser, needsAnonSession, noAccess } =
+    resolveCommentingState(serverAllowCommenting, session)
+  const user = surfaceSessionUser ? (session?.user ?? null) : null
 
   // User info from session, falling back to server-provided user
   const userData = user
@@ -119,7 +116,7 @@ export function AuthCommentsSection({
 
   // Wrap mutation to lazily create anonymous session before commenting
   const createComment = useMemo(() => {
-    if (!anonymousCommentingEnabled) return baseMutation
+    if (!needsAnonSession) return baseMutation
     return {
       ...baseMutation,
       mutate: (
@@ -141,13 +138,14 @@ export function AuthCommentsSection({
         return baseMutation.mutateAsync(input, options)
       },
     } as typeof baseMutation
-  }, [anonymousCommentingEnabled, baseMutation, ensureAnonSession])
+  }, [needsAnonSession, baseMutation, ensureAnonSession])
 
   return (
     <CommentThread
       postId={postId}
       comments={comments}
       allowCommenting={allowCommenting}
+      noAccess={noAccess}
       user={userData}
       teamBadgeLogoUrl={settings?.brandingData?.logoUrl ?? undefined}
       teamBadgeLabel={settings?.brandingData?.name ?? settings?.name ?? undefined}

@@ -17,7 +17,14 @@ const scheduleDispatch = vi.fn().mockResolvedValue(undefined)
 function createUpdateChain() {
   const chain: Record<string, unknown> = {}
   chain.set = vi.fn(() => chain)
-  chain.where = vi.fn().mockResolvedValue(undefined)
+  // .where() either resolves directly (legacy callers) OR is followed
+  // by .returning() (new mergePost canonicalPostId-pin path). Return a
+  // thenable that yields undefined plus exposes .returning() for the
+  // round-3 add.
+  chain.where = vi.fn(() => ({
+    then: (onFulfilled: (v: void) => void) => Promise.resolve().then(onFulfilled),
+    returning: () => Promise.resolve([{ id: 'post_test_id' }]),
+  }))
   return chain
 }
 
@@ -36,6 +43,18 @@ vi.mock('@/lib/server/db', async () => {
         return createUpdateChain()
       },
       execute: (...args: unknown[]) => mockDbExecute(...args),
+      // Transaction wrapper for mergePost / unmergePost — runs the
+      // callback synchronously against the same mock surface (the
+      // production code only uses tx.update / tx.execute, both of
+      // which forward to db here).
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          update: (..._args: unknown[]) => {
+            mockDbUpdate(..._args)
+            return createUpdateChain()
+          },
+          execute: (...args: unknown[]) => mockDbExecute(...args),
+        }),
     },
     posts: { id: 'post_id', canonicalPostId: 'canonical_post_id' },
     votes: { principalId: 'principal_id', postId: 'post_id' },

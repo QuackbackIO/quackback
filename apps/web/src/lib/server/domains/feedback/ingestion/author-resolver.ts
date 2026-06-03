@@ -5,7 +5,7 @@
  * following the ImportUserResolver pattern.
  */
 
-import { db, eq, user, principal, externalUserMappings } from '@/lib/server/db'
+import { db, eq, sql, user, principal, externalUserMappings } from '@/lib/server/db'
 import { createId, type PrincipalId } from '@quackback/ids'
 import type { FeedbackSourceType } from '@/lib/server/integrations/feedback-source-types'
 
@@ -74,12 +74,16 @@ async function resolveByEmail(
   email: string,
   name?: string
 ): Promise<{ principalId: PrincipalId; created: boolean }> {
-  // Look up existing principal by email
+  // Look up existing principal by email. Lower-fold both sides so a
+  // user signed up via Better-Auth as 'Alice@example.com' is matched
+  // by a follow-up ingest of 'alice@example.com' (we'd otherwise
+  // silently create a duplicate user record). The user_email_lower_idx
+  // functional index keeps this from regressing to a seq scan.
   const existing = await db
     .select({ principalId: principal.id })
     .from(user)
     .innerJoin(principal, eq(principal.userId, user.id))
-    .where(eq(user.email, email))
+    .where(sql`LOWER(${user.email}) = ${email}`)
     .limit(1)
 
   if (existing.length > 0) {

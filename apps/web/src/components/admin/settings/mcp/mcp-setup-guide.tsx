@@ -389,7 +389,7 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
             <p className="text-[11px] text-muted-foreground ml-7">
               Use an{' '}
               <Link
-                to="/admin/settings/api"
+                to="/admin/settings/developers"
                 search={{ tab: 'keys' as const }}
                 className="text-primary hover:underline"
               >

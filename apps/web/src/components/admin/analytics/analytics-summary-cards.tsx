@@ -22,7 +22,7 @@ interface MetricBarProps {
 
 export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }: MetricBarProps) {
   return (
-    <div className="flex divide-x divide-border/50">
+    <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
       {METRICS.map(({ key, label, color }) => {
         const { total } = summary[key]
         const isActive = activeMetric === key
@@ -41,10 +41,8 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
                 : undefined
             }
           >
-            <p className="mb-2 text-[10px] font-medium tracking-widest uppercase text-muted-foreground">
-              {label}
-            </p>
-            <p className="text-[2rem] leading-none font-semibold tabular-nums tracking-tight">
+            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p className="text-2xl sm:text-3xl leading-none font-bold tabular-nums tracking-tight">
               {total.toLocaleString()}
             </p>
             {/* Active indicator */}

@@ -12,6 +12,7 @@ import type { SegmentRules, EvaluationSchedule, SegmentWeightConfig } from '@/li
 export interface Segment {
   id: SegmentId
   name: string
+  slug: string
   description: string | null
   type: 'manual' | 'dynamic'
   color: string

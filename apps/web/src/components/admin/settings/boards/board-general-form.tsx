@@ -79,7 +79,7 @@ export function BoardGeneralForm({ board }: BoardGeneralFormProps) {
           )}
         />
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2 pt-2">
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? 'Saving...' : 'Save changes'}
           </Button>

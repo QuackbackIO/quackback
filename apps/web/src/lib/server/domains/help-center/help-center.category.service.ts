@@ -191,6 +191,26 @@ export async function getCategoryBySlug(slug: string): Promise<HelpCenterCategor
   return category
 }
 
+/**
+ * Public version of getCategoryBySlug: also requires the category to be
+ * marked public. Routes that serve the unauthenticated help-center UI
+ * must use this — otherwise an admin marking a category private hides
+ * it from the nav but not from a direct-slug lookup.
+ */
+export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterCategory> {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(
+      eq(helpCenterCategories.slug, slug),
+      isNull(helpCenterCategories.deletedAt),
+      eq(helpCenterCategories.isPublic, true)
+    ),
+  })
+  if (!category) {
+    throw new NotFoundError('CATEGORY_NOT_FOUND', `Category with slug "${slug}" not found`)
+  }
+  return category
+}
+
 export async function createCategory(input: CreateCategoryInput): Promise<HelpCenterCategory> {
   const name = input.name?.trim()
   if (!name) throw new ValidationError('VALIDATION_ERROR', 'Name is required')

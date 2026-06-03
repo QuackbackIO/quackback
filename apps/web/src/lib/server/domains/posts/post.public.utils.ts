@@ -12,55 +12,23 @@ import {
   postSubscriptions,
 } from '@/lib/server/db'
 import { toUuid, type PostId, type StatusId, type PrincipalId } from '@quackback/ids'
-import type { RoadmapPost, RoadmapPostListResult } from './post.types'
+import type { RoadmapPostListResult } from './post.types'
 import { getExecuteRows } from '@/lib/server/utils'
-
-export async function getPublicRoadmapPosts(statusIds: StatusId[]): Promise<RoadmapPost[]> {
-  if (statusIds.length === 0) {
-    return []
-  }
-
-  const result = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      statusId: posts.statusId,
-      voteCount: posts.voteCount,
-      boardId: boards.id,
-      boardName: boards.name,
-      boardSlug: boards.slug,
-    })
-    .from(posts)
-    .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(
-      and(
-        eq(boards.isPublic, true),
-        inArray(posts.statusId, statusIds),
-        isNull(posts.canonicalPostId),
-        isNull(posts.deletedAt)
-      )
-    )
-    .orderBy(desc(posts.voteCount))
-
-  return result.map((row) => ({
-    id: row.id,
-    title: row.title,
-    statusId: row.statusId,
-    voteCount: row.voteCount,
-    board: {
-      id: row.boardId,
-      name: row.boardName,
-      slug: row.boardSlug,
-    },
-  }))
-}
+import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 export async function getPublicRoadmapPostsPaginated(params: {
   statusId: StatusId
   page?: number
   limit?: number
+  /**
+   * Caller's actor — drives board audience + post moderation filtering.
+   * Defaults to anonymous so unauthenticated public-roadmap loads still
+   * work, but authenticated callers MUST pass their own actor or they
+   * silently lose access to authenticated/team/segment boards.
+   */
+  actor?: Actor
 }): Promise<RoadmapPostListResult> {
-  const { statusId, page = 1, limit = 10 } = params
+  const { statusId, page = 1, limit = 10, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
 
   const result = await db
@@ -77,10 +45,13 @@ export async function getPublicRoadmapPostsPaginated(params: {
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(
       and(
-        eq(boards.isPublic, true),
+        postViewFilter(actor),
         eq(posts.statusId, statusId),
         isNull(posts.canonicalPostId),
-        isNull(posts.deletedAt)
+        isNull(posts.deletedAt),
+        // Soft-delete intent applies to the board too — don't surface
+        // posts whose board has been deleted via the roadmap status view.
+        isNull(boards.deletedAt)
       )
     )
     .orderBy(desc(posts.voteCount))

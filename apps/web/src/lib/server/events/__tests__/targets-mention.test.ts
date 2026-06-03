@@ -33,6 +33,7 @@ vi.mock('@/lib/server/redis', () => ({
 const mockSelect = vi.fn()
 const mockFrom = vi.fn()
 const mockLeftJoin = vi.fn()
+const mockInnerJoin = vi.fn()
 const mockDbWhere = vi.fn()
 const mockLimit = vi.fn()
 const mockFindMany = vi.fn()
@@ -75,6 +76,25 @@ vi.mock('@/lib/server/db', () => ({
   user: {
     id: 'user.id',
     email: 'user.email',
+  },
+  // The new filterSubscribersByPostAudience helper looks up the post +
+  // board to decide which mentioned users may actually receive the
+  // notification. Stub the table refs so the helper can build its SQL.
+  posts: {
+    id: 'posts.id',
+    boardId: 'posts.boardId',
+    moderationState: 'posts.moderationState',
+    principalId: 'posts.principalId',
+    deletedAt: 'posts.deletedAt',
+  },
+  boards: {
+    id: 'boards.id',
+    access: 'boards.access',
+    deletedAt: 'boards.deletedAt',
+  },
+  userSegments: {
+    principalId: 'userSegments.principalId',
+    segmentId: 'userSegments.segmentId',
   },
   eq: vi.fn((a: unknown, b: unknown) => ({ _eq: [a, b] })),
   and: vi.fn((...args: unknown[]) => ({ _and: args })),
@@ -136,12 +156,34 @@ beforeEach(() => {
 /**
  * Wire up the select chain so it returns `rows` for the mention query.
  * The mention query is select().from(principal).leftJoin(user).where(eq).limit(1)
+ *
+ * filterSubscribersByPostAudience also runs a select(...).from(posts)
+ * .innerJoin(boards).where(...).limit(1). Queue a public-audience post
+ * row second so the fast-path triggers and the mentioned principal
+ * passes the audience filter.
  */
 function setupMentionDbChain(rows: unknown[]) {
-  mockLimit.mockResolvedValue(rows)
+  // mockReset (vs clearAllMocks in beforeEach) so leftover
+  // mockResolvedValueOnce queues from prior tests don't carry over.
+  mockLimit.mockReset()
+  mockLimit.mockResolvedValueOnce(rows).mockResolvedValueOnce([
+    {
+      moderationState: 'published',
+      principalId: 'prn_author',
+      access: {
+        view: 'anonymous',
+        vote: 'anonymous',
+        comment: 'anonymous',
+        submit: 'anonymous',
+        segments: { view: [], vote: [], comment: [], submit: [] },
+        moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+      },
+    },
+  ])
   mockDbWhere.mockReturnValue({ limit: mockLimit })
   mockLeftJoin.mockReturnValue({ where: mockDbWhere })
-  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin })
+  mockInnerJoin.mockReturnValue({ where: mockDbWhere })
+  mockFrom.mockReturnValue({ leftJoin: mockLeftJoin, innerJoin: mockInnerJoin })
   mockSelect.mockReturnValue({ from: mockFrom })
 }
 

@@ -19,7 +19,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { SsoRecoveryCodeId } from '@quackback/ids'
-import { and, db, eq, isNull, ssoRecoveryCode, user } from '@/lib/server/db'
+import { and, db, eq, isNull, sql, ssoRecoveryCode, user } from '@/lib/server/db'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { hashRecoveryCode, verifyRecoveryCode } from '@/lib/server/auth/recovery-codes'
 import { mintMagicLinkUrl } from '@/lib/server/auth/magic-link-mint'
@@ -96,8 +96,13 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
       return { ok: false, error: 'rate_limited' }
     }
 
+    // Case-insensitive email lookup. The rate-limit bucket already
+    // keyed on normalizedEmail; using the un-normalised input here let
+    // an admin whose user row stored "Alice@example.com" be locked out
+    // of break-glass when they typed "alice@example.com". LOWER both
+    // sides matches the on-write normalisation Better Auth performs.
     const userRow = await db.query.user.findFirst({
-      where: eq(user.email, data.email),
+      where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
       columns: { id: true, email: true },
     })
 

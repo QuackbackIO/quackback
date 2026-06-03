@@ -9,6 +9,8 @@ export interface WidgetIdentityTokenClaims {
   name?: string
   avatarURL?: string
   avatarUrl?: string
+  /** Segment slugs the customer wants this user enrolled in. */
+  segments?: string[]
 }
 
 function encodeBase64Url(value: string): string {
@@ -41,6 +43,7 @@ export function createWidgetIdentityToken(
         : claims.avatarUrl
           ? { avatarURL: claims.avatarUrl }
           : {}),
+      ...(claims.segments && claims.segments.length > 0 ? { segments: claims.segments } : {}),
       iat: now,
       exp: now + expiresInSeconds,
     },

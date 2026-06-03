@@ -467,8 +467,141 @@
     {
       "idx": 66,
       "version": "7",
+      "when": 1778457600013,
+      "tag": "0066_granular_access_controls",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1778457600014,
+      "tag": "0067_drop_boards_moderation",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1778457600015,
+      "tag": "0068_invitation_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1778457600016,
+      "tag": "0069_widget_origin_session",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1778457600017,
+      "tag": "0070_audit_log_observability",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1778457600018,
+      "tag": "0071_widget_identified_session",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1778457600019,
+      "tag": "0072_user_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1778457600020,
+      "tag": "0073_user_country",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1779062400000,
+      "tag": "0074_user_country_locale_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1779148800000,
+      "tag": "0075_invitation_account_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0076_user_email_lower_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1779321600000,
+      "tag": "0077_sweep_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1779408000000,
+      "tag": "0078_comment_moderation_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
       "when": 1779494400000,
-      "tag": "0066_ticketing_and_authz",
+      "tag": "0079_board_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1779580800000,
+      "tag": "0080_drop_board_audience",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0081_per_action_segments",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1779753600000,
+      "tag": "0082_board_access_vote_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1779840000000,
+      "tag": "0083_board_moderation_tri_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1779926400000,
+      "tag": "0084_workspace_allow_anonymous_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1780012800000,
+      "tag": "0085_ticketing_and_authz",
       "breakpoints": true
     }
   ]

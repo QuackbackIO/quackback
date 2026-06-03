@@ -67,6 +67,15 @@ export interface PublicPostDetailView {
   pinnedCommentId: CommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
+  /**
+   * Server-computed per-board capability for the requesting viewer (composes
+   * the board's vote/comment tier with the workspace anonymous switch). The
+   * widget passes its Bearer identity to fetchPublicPostDetail and refetches on
+   * identify, so these reflect the real viewer. Undefined only on legacy/cached
+   * payloads — consumers should treat undefined as "not allowed".
+   */
+  canVote?: boolean
+  canComment?: boolean
   /** Merge/deduplication: info about canonical post if this is a merged duplicate */
   mergeInfo?: {
     canonicalPostId: string
@@ -131,7 +140,7 @@ export const portalDetailQueries = {
   commentsSectionData: (postId: PostId) =>
     queryOptions({
       queryKey: ['comments-section', postId],
-      queryFn: () => getCommentsSectionDataFn(),
+      queryFn: () => getCommentsSectionDataFn({ data: { postId } }),
       staleTime: 60 * 1000, // 1min
     }),
 

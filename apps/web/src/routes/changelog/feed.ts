@@ -14,11 +14,13 @@ export const Route = createFileRoute('/changelog/feed')({
           { db, changelogEntries, and, desc },
           { publicChangelogConditions },
           { getSettingsBrandingData },
+          { resolvePortalAccessForRequest },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/db'),
           import('@/lib/server/domains/changelog/changelog.public'),
           import('@/lib/server/settings-utils'),
+          import('@/lib/server/functions/portal-access'),
         ])
 
         const baseUrl = config.baseUrl
@@ -27,11 +29,27 @@ export const Route = createFileRoute('/changelog/feed')({
         const branding = await getSettingsBrandingData()
         const siteName = branding?.name || 'Changelog'
 
-        const entries = await db.query.changelogEntries.findMany({
-          where: and(...publicChangelogConditions(new Date())),
-          orderBy: [desc(changelogEntries.publishedAt)],
-          limit: 50,
-        })
+        // Private portals must not expose changelog content via the RSS feed.
+        // Mirror sitemap.xml: a denied caller gets a valid but empty feed.
+        const access = await resolvePortalAccessForRequest()
+
+        const entries = access.granted
+          ? await db.query.changelogEntries.findMany({
+              where: and(...publicChangelogConditions(new Date())),
+              orderBy: [desc(changelogEntries.publishedAt)],
+              limit: 50,
+            })
+          : []
+
+        // Per-caller portal-access decisions can't share a public CDN
+        // cache: a granted caller would seed the cache with content that
+        // every subsequent denied caller would then receive. Use
+        // `private` to keep the response per-browser, and `Vary: Cookie`
+        // so any cookie-aware intermediary keys correctly. Public
+        // portals match `granted=true` for everyone, so the practical
+        // cost (no shared CDN cache) is small — and the alternative is
+        // a real data leak.
+        const cacheControl = 'private, max-age=300'
 
         // Build RSS XML
         const rssXml = buildRssFeed({
@@ -51,7 +69,8 @@ export const Route = createFileRoute('/changelog/feed')({
         return new Response(rssXml, {
           headers: {
             'Content-Type': 'application/rss+xml; charset=utf-8',
-            'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+            'Cache-Control': cacheControl,
+            Vary: 'Cookie',
           },
         })
       },

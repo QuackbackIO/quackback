@@ -75,7 +75,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
        */
       POST: async ({ request }) => {
         try {
-          const authResult = await withApiKeyAuth(request, { role: 'admin' })
+          const authResult = await withApiKeyAuth(request, { role: 'team' })
           // Parse and validate body
           const body = await request.json()
           const parsed = createChangelogSchema.safeParse(body)

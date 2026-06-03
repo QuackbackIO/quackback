@@ -19,6 +19,7 @@ import {
 import { toUuid, type PostId, type StatusId, type TagId, type PrincipalId } from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
+import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 
@@ -91,10 +92,21 @@ interface PostListParams {
   responded?: RespondedFilter
 }
 
-function buildPostFilterConditions(params: PostListParams) {
+function buildPostFilterConditions(params: PostListParams, actor: Actor) {
   const { boardSlug, statusIds, statusSlugs, tagIds, search } = params
+  // postViewFilter handles both the board-audience predicate and the
+  // moderationState gate (e.g. hide 'pending' from non-authors). Compose
+  // alongside the existing soft-delete + canonical-post filters — never
+  // replace them.
+  //
+  // `isNull(boards.deletedAt)` is explicit here (rather than relying on
+  // boardViewFilter) because postViewFilter's team-actor branch skips
+  // boardViewFilter to grant admins visibility into team-only boards.
+  // Soft-deleted boards must still be filtered for everyone — admins
+  // never want stale tombstoned posts in the public portal feed.
   const conditions = [
-    eq(boards.isPublic, true),
+    postViewFilter(actor),
+    isNull(boards.deletedAt),
     isNull(posts.canonicalPostId),
     isNull(posts.deletedAt),
   ]
@@ -157,11 +169,11 @@ function buildPostFilterConditions(params: PostListParams) {
 }
 
 export async function listPublicPostsWithVotesAndAvatars(
-  params: PostListParams & { principalId?: PrincipalId }
+  params: PostListParams & { principalId?: PrincipalId; actor?: Actor }
 ): Promise<{ items: PostWithVotesAndAvatars[]; hasMore: boolean }> {
-  const { sort = 'top', page = 1, limit = 20, principalId } = params
+  const { sort = 'top', page = 1, limit = 20, principalId, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
-  const conditions = buildPostFilterConditions(params)
+  const conditions = buildPostFilterConditions(params, actor)
   const orderBy = getPostSortOrder(sort)
 
   // Only authenticated users can vote, so we only check principal_id
@@ -241,10 +253,12 @@ export async function listPublicPostsWithVotesAndAvatars(
   return { items, hasMore }
 }
 
-export async function listPublicPosts(params: PostListParams): Promise<PublicPostListResult> {
-  const { sort = 'top', page = 1, limit = 20 } = params
+export async function listPublicPosts(
+  params: PostListParams & { actor?: Actor }
+): Promise<PublicPostListResult> {
+  const { sort = 'top', page = 1, limit = 20, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
-  const conditions = buildPostFilterConditions(params)
+  const conditions = buildPostFilterConditions(params, actor)
   const orderBy = getPostSortOrder(sort)
 
   const postsResult = await db

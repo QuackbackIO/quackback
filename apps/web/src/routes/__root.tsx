@@ -13,6 +13,7 @@ import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import appCss from '../globals.css?url'
 import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/bootstrap'
 import type { TenantSettings } from '@/lib/shared/types/settings'
+import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
@@ -76,10 +77,40 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     // oauth callbacks, magic-link landing) skip the inline overlay
     // so suspended owners can still get back in.
 
+    // Redact allowedDomains and widgetSignIn from the portalConfig placed
+    // into the router context. Both fields are server-only policy: the
+    // domain gate now runs server-side via evaluateMyPortalAccessFn.
+    // Nothing on the client legitimately reads them from context —
+    // the admin Security → Portal tab fetches the full config via its own
+    // settingsQueries.portalConfig() query, which is unaffected.
+    //
+    // Two locations are redacted:
+    //   1. settings.portalConfig (parsed PortalConfig object on TenantSettings).
+    //   2. settings.settings.portalConfig (raw DB row JSON string) — child loaders
+    //      that pass `settings` or `settings.settings` into their SSR payload would
+    //      otherwise carry the full access config in the dehydrated context.
+    const redactedSettings: TenantSettings | null = settings
+      ? ({
+          ...settings,
+          // 1. Parsed config on TenantSettings
+          portalConfig: settings.portalConfig?.access
+            ? {
+                ...settings.portalConfig,
+                access: {
+                  // Only expose visibility — keep allowedDomains and widgetSignIn off the wire.
+                  visibility: settings.portalConfig.access.visibility,
+                },
+              }
+            : settings.portalConfig,
+          // 2. Raw DB row — portalConfig column is a JSON string; redact inline.
+          settings: redactSettingsForClient(settings.settings as Record<string, unknown>),
+        } as TenantSettings)
+      : settings
+
     return {
       baseUrl,
       session,
-      settings,
+      settings: redactedSettings,
       userRole,
       themeCookie,
       managedFieldPaths,
@@ -116,19 +147,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       {
         rel: 'stylesheet',
         href: appCss,
-      },
-      {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-      {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossOrigin: 'anonymous',
-      },
-      {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
       },
       {
         rel: 'alternate',

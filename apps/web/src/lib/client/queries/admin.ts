@@ -36,6 +36,7 @@ import { fetchGitHubIntegrationsFn } from '@/lib/server/integrations/github/func
 import { getSsoStatusFn } from '@/lib/server/functions/sso'
 import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
 import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
+import { getModerationStatus } from '@/lib/server/functions/moderation'
 import { fetchApiKeys } from '@/lib/server/functions/api-keys'
 import { fetchWebhooks } from '@/lib/server/functions/webhooks'
 import { fetchRoadmaps } from '@/lib/server/functions/roadmaps'
@@ -474,16 +475,28 @@ export const adminQueries = {
     }),
 
   /**
+   * Moderation status: whether moderation is enabled + pending post count.
+   * Drives the conditional sidebar entry and its backlog badge.
+   */
+  moderationStatus: () =>
+    queryOptions({
+      queryKey: ['admin', 'moderationStatus'],
+      queryFn: () => getModerationStatus(),
+      staleTime: 30 * 1000, // 30s - count changes as posts are approved/rejected
+    }),
+
+  /**
    * Paginated audit-log feed. Filters compose with AND. The query key
    * includes the filters so distinct filter combinations are cached
    * independently.
    */
   auditEvents: (filters: {
     eventType?: string
-    actorUserId?: string
+    actorEmail?: string
     from?: string
     to?: string
     limit?: number
+    excludeEventTypes?: string[]
   }) =>
     queryOptions({
       queryKey: ['admin', 'auditEvents', filters],

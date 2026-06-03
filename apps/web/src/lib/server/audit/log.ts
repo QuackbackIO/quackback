@@ -51,13 +51,56 @@ export type AuditEventType =
   | 'two_factor.reset_by_admin'
   | 'two_factor.enabled'
   | 'two_factor.disabled'
+  // v1 access controls
+  | 'board.access.changed'
+  | 'moderation.default.changed'
+  | 'portal.visibility.changed'
+  | 'portal.allowed_domains.changed'
+  | 'post.moderation.approved'
+  | 'post.moderation.rejected'
+  | 'post.moderation.held'
+  | 'comment.moderation.approved'
+  | 'comment.moderation.rejected'
+  | 'comment.moderation.held'
+  | 'segment.member.added'
+  | 'segment.member.removed'
+  | 'segment.sso_mapping.changed'
+  // v1 portal invites
+  | 'portal.invite.sent'
+  | 'portal.invite.resent'
+  | 'portal.invite.accepted'
+  | 'portal.invite.revoked'
+  | 'portal.invite.link_minted'
+  // Team-kind invitations live in the same `invitation` table as portal
+  // ones but route to admin/member onboarding (not portal access). The
+  // sweep emits a distinct event per kind so audit reviewers and
+  // compliance dashboards don't conflate the two.
+  | 'team.invite.expired'
+  // v1 portal segment allowlist
+  | 'portal.allowed_segments.changed'
+  // v1 portal widget sign-in toggle
+  | 'portal.widget_signin.changed'
+  // v1 widget OTT handoff
+  | 'portal.widget_handshake.consumed'
+  | 'portal.widget_handshake.invalid'
+  // v1 audit-log observability
+  | 'portal.access.denied' // OWASP authz_fail — gate denied an authenticated visitor
+  | 'auth.signin.failed' // OWASP authn_login_fail — twin of auth.signin.success
+  | 'portal.invite.expired' // emitted by the daily sweep for pending invites past their expiry
 
 export type AuditEventOutcome = 'success' | 'failure'
+
+export type AuditActorType = 'user' | 'service' | 'anonymous' | 'system' | 'api_key'
+export type AuditAuthMethod = 'password' | 'sso' | 'magic_link' | 'ott' | 'api_key' | 'session'
 
 export interface AuditActor {
   userId?: UserId | null
   email?: string | null
   role?: string | null
+  /** Denormalised from principal.type at write time. */
+  type?: AuditActorType | null
+  /** Auth method for sign-in events; null for all others. */
+  authMethod?: AuditAuthMethod | null
 }
 
 export interface AuditTarget {
@@ -79,12 +122,38 @@ export interface RecordAuditEventInput {
 
 /** Map a requireAuth() result onto the audit row's denormalised actor fields. */
 export function actorFromAuth(auth: AuthContext): AuditActor {
-  return { userId: auth.user.id, email: auth.user.email, role: auth.principal.role }
+  return {
+    userId: auth.user.id,
+    email: auth.user.email,
+    role: auth.principal.role,
+    type: auth.principal.type as AuditActorType,
+    // authMethod is generally unknowable from a session-cookie context;
+    // sign-in events that DO know the method should set it explicitly.
+  }
+}
+
+/**
+ * Upper bound on the stored request_id. PostgreSQL's btree refuses
+ * index entries above ~2700 bytes; recordAuditEvent's catch swallows
+ * insert failures, so an attacker who can set the x-request-id header
+ * could otherwise silently suppress security events by sending a
+ * multi-KB value. 256 chars is comfortably above every legitimate
+ * correlation-id format (UUIDs, ULIDs, hex hashes, TypeIDs, OpenTelemetry
+ * traceparent payloads) while well below the btree limit.
+ */
+const REQUEST_ID_MAX_LEN = 256
+
+function capRequestId(value: string | null): string | null {
+  if (value === null) return null
+  return value.length > REQUEST_ID_MAX_LEN ? value.slice(0, REQUEST_ID_MAX_LEN) : value
 }
 
 export async function recordAuditEvent(input: RecordAuditEventInput): Promise<void> {
   const ip = input.headers ? getClientIp(input.headers) : null
   const userAgent = input.headers?.get('user-agent') ?? null
+  const requestId = capRequestId(
+    input.headers?.get('x-request-id') ?? input.headers?.get('x-correlation-id') ?? null
+  )
 
   try {
     await db.insert(auditLog).values({
@@ -95,6 +164,9 @@ export async function recordAuditEvent(input: RecordAuditEventInput): Promise<vo
       actorRole: input.actor.role ?? null,
       actorIp: ip === 'unknown' ? null : ip,
       actorUserAgent: userAgent,
+      requestId,
+      actorType: input.actor.type ?? null,
+      authMethod: input.actor.authMethod ?? null,
       targetType: input.target?.type ?? null,
       targetId: input.target?.id ?? null,
       beforeValue: input.before ?? null,
@@ -106,17 +178,6 @@ export async function recordAuditEvent(input: RecordAuditEventInput): Promise<vo
   }
 }
 
-/**
- * Wrap a mutation with success/failure audit-log emission. Records a
- * success row on resolve and a failure row (with `reason` derived from
- * the error's `code` or message) on throw, then rethrows the original
- * error.
- *
- * Use for handlers that need symmetric success/failure trails —
- * setVerifiedDomainEnforcedFn, set/clearSsoClientSecretFn, etc.
- * For success-only audits (admin reset 2FA, generate codes) call
- * `recordAuditEvent` directly after the mutation succeeds.
- */
 /** Cap on the `metadata.reason` extracted from thrown errors. */
 const MAX_REASON_LEN = 200
 
@@ -174,6 +235,12 @@ function extractReason(error: unknown): string {
   return 'UNEXPECTED'
 }
 
+/**
+ * Wrap a mutation with success/failure audit-log emission. Records a
+ * success row on resolve and a failure row (with `reason` derived from
+ * the error's `code` or message) on throw, then rethrows the original
+ * error.
+ */
 export async function withAuditEvent<T>(
   spec: {
     event: AuditEventType

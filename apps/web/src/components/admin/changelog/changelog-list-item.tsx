@@ -39,9 +39,9 @@ interface ChangelogListItemProps {
 }
 
 const STATUS_CONFIG = {
-  draft: { label: 'Draft', color: '#a1a1aa' }, // zinc-400
-  scheduled: { label: 'Scheduled', color: '#3b82f6' }, // blue-500
-  published: { label: 'Published', color: '#22c55e' }, // green-500
+  draft: { label: 'Draft', color: 'var(--muted-foreground)' },
+  scheduled: { label: 'Scheduled', color: '#3b82f6' }, // blue-500 (no semantic blue token)
+  published: { label: 'Published', color: 'var(--success)' },
 } as const
 
 export function ChangelogListItem({

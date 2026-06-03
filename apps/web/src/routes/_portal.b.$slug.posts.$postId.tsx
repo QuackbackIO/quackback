@@ -49,19 +49,22 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
     // Fire non-critical prefetches (don't await - components handle their own loading via Suspense)
     queryClient.prefetchQuery(portalDetailQueries.voteSidebarData(postId))
-    queryClient.prefetchQuery(portalDetailQueries.commentsSectionData(postId))
-    queryClient.prefetchQuery({
-      queryKey: postPermissionsKeys.detail(postId),
-      queryFn: () => getPostPermissionsFn({ data: { postId } }),
-      staleTime: 30_000,
-    })
 
     // Await critical data needed for initial render.
     // votedPosts must be awaited so usePostVote (non-Suspense) has data during SSR.
+    // commentsSectionData and post permissions are warmed here (not fire-and-forget)
+    // so the comments section and edit/delete controls render their real values on
+    // first paint instead of flashing the undefined defaults (canComment/canEdit/canDelete).
     const [post] = await Promise.all([
       queryClient.ensureQueryData(portalDetailQueries.postDetail(postId)),
       queryClient.ensureQueryData(portalQueries.statuses()),
       queryClient.ensureQueryData(portalDetailQueries.votedPosts()),
+      queryClient.ensureQueryData(portalDetailQueries.commentsSectionData(postId)),
+      queryClient.ensureQueryData({
+        queryKey: postPermissionsKeys.detail(postId),
+        queryFn: () => getPostPermissionsFn({ data: { postId } }),
+        staleTime: 30_000,
+      }),
     ])
 
     if (!post || post.board.slug !== slug) {
@@ -104,7 +107,7 @@ export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
 
 function PostDetailPage() {
   const { postId, slug } = Route.useLoaderData()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const { session } = useRouteContext({ from: '__root__' })
 
   const intl = useIntl()
   const [isEditingPost, setIsEditingPost] = useState(false)
@@ -120,9 +123,8 @@ function PostDetailPage() {
     canDelete: false,
   }
 
-  const richMediaEnabled = settings?.publicPortalConfig?.features?.richMediaInPosts ?? true
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
-  const canUploadImages = canEdit && !isAnonymousSession && !!session?.user && richMediaEnabled
+  const canUploadImages = canEdit && !isAnonymousSession && !!session?.user
   const { upload: uploadImage } = usePortalImageUpload()
 
   const {

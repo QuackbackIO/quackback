@@ -16,6 +16,7 @@ export type {
   PortalAuthMethods,
   PortalFeatures,
   PortalConfig,
+  PortalAccessConfig,
   PortalWelcomeCard,
   HeaderDisplayMode,
   ThemeColors,

@@ -117,6 +117,26 @@ export function contentPreview(text: string, maxLength = Infinity): string {
   return stripMarkdownPreview(stripHtml(text), maxLength)
 }
 
+/**
+ * Obfuscate an email address for safe logging.
+ *
+ * Retains the first character of the local part and the full domain so
+ * operators can still triage domain-level issues. Emails are PII under
+ * SOC2/GDPR — unstructured log output (console.log, stderr) is typically
+ * ingested by aggregators and retained, so full addresses must not appear.
+ *
+ * @example
+ * safeEmail('alice@example.com')   // 'a***@example.com'
+ * safeEmail('b@short.co')          // 'b***@short.co'
+ * safeEmail(null)                  // '(no email)'
+ */
+export function safeEmail(email: string | null | undefined): string {
+  if (!email) return '(no email)'
+  const at = email.indexOf('@')
+  if (at <= 0) return `${email.slice(0, 1)}***`
+  return `${email.slice(0, 1)}***@${email.slice(at + 1)}`
+}
+
 export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]*>/g, '') // Remove HTML tags

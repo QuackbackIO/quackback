@@ -21,7 +21,9 @@ import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -33,8 +35,22 @@ import type { AuditEventRow } from '@/lib/server/functions/audit-log'
  * AuditEventType union — sourced from the server to keep the two in
  * lockstep would be neat, but a curated short list is friendlier for
  * the dropdown.
+ *
+ * Shape: `{ label, value, group?, excludeByDefault? }`. Items without a
+ * `group` appear at the top (ungrouped). `excludeByDefault` marks high-
+ * volume events that should not be shown on initial load; honored by any
+ * future multi-select variant of this filter.
  */
-const FILTER_EVENT_TYPES = [
+interface FilterEventOption {
+  label: string
+  value: string
+  group?: string
+  excludeByDefault?: boolean
+}
+
+const WIDGET_ACTIVITY_GROUP = 'Widget activity'
+
+const FILTER_EVENT_TYPES: FilterEventOption[] = [
   { label: 'All events', value: 'all' },
   { label: 'SSO enforcement enabled (domain)', value: 'sso.enforcement.domain.enabled' },
   { label: 'SSO enforcement disabled (domain)', value: 'sso.enforcement.domain.disabled' },
@@ -44,7 +60,41 @@ const FILTER_EVENT_TYPES = [
   { label: 'Email sign-in enabled', value: 'auth.magic_link.enabled' },
   { label: 'Email sign-in disabled', value: 'auth.magic_link.disabled' },
   { label: 'Two-factor reset by admin', value: 'two_factor.reset_by_admin' },
-] as const
+  // Portal events
+  {
+    group: 'Portal',
+    label: 'Allowed domains changed',
+    value: 'portal.allowed_domains.changed',
+  },
+  {
+    group: 'Portal',
+    label: 'Allowed segments changed',
+    value: 'portal.allowed_segments.changed',
+  },
+  { group: 'Portal', label: 'Access denied', value: 'portal.access.denied' },
+  { group: 'Portal', label: 'Invite accepted', value: 'portal.invite.accepted' },
+  { group: 'Portal', label: 'Invite expired', value: 'portal.invite.expired' },
+  { group: 'Portal', label: 'Invite link minted', value: 'portal.invite.link_minted' },
+  { group: 'Portal', label: 'Invite resent', value: 'portal.invite.resent' },
+  { group: 'Portal', label: 'Invite revoked', value: 'portal.invite.revoked' },
+  { group: 'Portal', label: 'Invite sent', value: 'portal.invite.sent' },
+  { group: 'Portal', label: 'Sign-in failed', value: 'auth.signin.failed' },
+  { group: 'Portal', label: 'Visibility changed', value: 'portal.visibility.changed' },
+  { group: 'Portal', label: 'Widget sign-in changed', value: 'portal.widget_signin.changed' },
+  // Widget activity — separated because handshake events are high-volume on active workspaces.
+  // portal.widget_handshake.consumed is flagged excludeByDefault for future multi-select support.
+  {
+    group: WIDGET_ACTIVITY_GROUP,
+    label: 'Handshake consumed',
+    value: 'portal.widget_handshake.consumed',
+    excludeByDefault: true,
+  },
+  {
+    group: WIDGET_ACTIVITY_GROUP,
+    label: 'Handshake invalid',
+    value: 'portal.widget_handshake.invalid',
+  },
+]
 
 const TIME_RANGES = [
   { label: 'Last 7 days', value: '7d' },
@@ -94,16 +144,26 @@ function formatTimestamp(iso: string): { date: string; time: string; full: strin
   }
 }
 
-function rowsToCsv(rows: AuditEventRow[]): string {
+/**
+ * Render the audit-log query result as CSV.
+ *
+ * Exported for testability — the CSV is the operator's primary
+ * offline-forensics tool, so the column set is worth pinning with
+ * unit tests rather than only exercising via the click path.
+ */
+export function rowsToCsv(rows: AuditEventRow[]): string {
   const headers = [
     'occurred_at',
     'event_type',
     'outcome',
     'actor_email',
     'actor_role',
+    'actor_type',
+    'auth_method',
     'actor_ip',
     'target_type',
     'target_id',
+    'request_id',
     'metadata',
   ]
   const escape = (v: unknown): string => {
@@ -120,9 +180,12 @@ function rowsToCsv(rows: AuditEventRow[]): string {
         r.eventOutcome,
         r.actorEmail,
         r.actorRole,
+        r.actorType,
+        r.authMethod,
         r.actorIp,
         r.targetType,
         r.targetId,
+        r.requestId,
         r.metadata,
       ]
         .map(escape)
@@ -133,13 +196,19 @@ function rowsToCsv(rows: AuditEventRow[]): string {
 }
 
 function ActorCell({ row }: { row: AuditEventRow }) {
-  if (!row.actorEmail) return <span className="text-muted-foreground">—</span>
+  // Anonymous + service principals don't have an email — fall back to
+  // actorType so the row isn't a bare em-dash. This is the in-table
+  // surface for the 0070_audit_log_observability migration's
+  // actorType + authMethod columns; request_id stays in the CSV.
+  const primary = row.actorEmail ?? (row.actorType ? `(${row.actorType})` : null)
+  if (!primary) return <span className="text-muted-foreground">—</span>
+  const subtitle = [row.actorRole, row.authMethod].filter(Boolean).join(' · ')
   return (
     <div className="flex flex-col">
-      <span className="truncate">{row.actorEmail}</span>
-      {row.actorRole ? (
+      <span className="truncate">{primary}</span>
+      {subtitle ? (
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {row.actorRole}
+          {subtitle}
         </span>
       ) : null}
     </div>
@@ -194,9 +263,24 @@ export function AuditLogPage() {
   const [eventType, setEventType] = useState<string>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
   const [actorEmailInput, setActorEmailInput] = useState<string>('')
+
   // Debounce so each keystroke doesn't fire a fresh server-fn request.
   // 300ms feels instant without spamming.
   const debouncedActorEmail = useDebouncedValue(actorEmailInput, 300)
+
+  // High-volume events are hidden from the "All events" view by default —
+  // admins who want to see them pick the specific event type from the
+  // dropdown. No separate toggle: the dropdown selection already says
+  // exactly what the admin wants to see.
+  const defaultExcludedEventTypes = useMemo(
+    () => FILTER_EVENT_TYPES.filter((o) => o.excludeByDefault).map((o) => o.value),
+    []
+  )
+
+  const excludeEventTypes = useMemo(
+    () => (eventType === 'all' ? defaultExcludedEventTypes : []),
+    [eventType, defaultExcludedEventTypes]
+  )
 
   const filters = useMemo(
     () => ({
@@ -204,8 +288,9 @@ export function AuditLogPage() {
       actorEmail: debouncedActorEmail.trim() || undefined,
       from: rangeToFromIso(timeRange),
       limit: 200,
+      excludeEventTypes: excludeEventTypes.length > 0 ? excludeEventTypes : undefined,
     }),
-    [eventType, timeRange, debouncedActorEmail]
+    [eventType, timeRange, debouncedActorEmail, excludeEventTypes]
   )
 
   const { data } = useSuspenseQuery(adminQueries.auditEvents(filters))
@@ -220,10 +305,31 @@ export function AuditLogPage() {
               <SelectValue placeholder="Event type" />
             </SelectTrigger>
             <SelectContent>
-              {FILTER_EVENT_TYPES.map((opt) => (
+              {/* Ungrouped items first */}
+              {FILTER_EVENT_TYPES.filter((o) => !o.group).map((opt) => (
                 <SelectItem key={opt.value} value={opt.value} className="text-xs">
                   {opt.label}
                 </SelectItem>
+              ))}
+              {/* Grouped items */}
+              {Array.from(
+                new Set(FILTER_EVENT_TYPES.filter((o) => !!o.group).map((o) => o.group!))
+              ).map((group) => (
+                <SelectGroup key={group}>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground px-2 py-1">
+                    {group}
+                  </SelectLabel>
+                  {group === WIDGET_ACTIVITY_GROUP && (
+                    <p className="px-2 pb-1 text-[10px] text-muted-foreground leading-snug">
+                      High-volume on active workspaces. Pick a specific event to view it.
+                    </p>
+                  )}
+                  {FILTER_EVENT_TYPES.filter((o) => o.group === group).map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>

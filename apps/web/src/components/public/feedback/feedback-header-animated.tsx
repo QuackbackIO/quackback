@@ -23,6 +23,7 @@ import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
 import { signOut } from '@/lib/client/auth-client'
+import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import type { JSONContent } from '@tiptap/react'
 
 interface BoardOption {
@@ -36,6 +37,13 @@ export interface FeedbackHeaderProps {
   boards: BoardOption[]
   defaultBoardId?: string
   user?: { name: string | null; email: string } | null
+  /**
+   * Per-board submit/vote capability for the current viewer, keyed by board id
+   * (server-computed; composes the board's access.submit tier with the
+   * workspace anonymous switch). The submit CTA follows the selected board's
+   * `canSubmit` instead of the workspace-wide flag.
+   */
+  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   onPostCreated?: (postId: string, boardSlug: string) => void
 }
 
@@ -43,19 +51,19 @@ export function FeedbackHeaderAnimated({
   boards,
   defaultBoardId,
   user,
+  boardPermissions,
   onPostCreated,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
   const router = useRouter()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const { session } = useRouteContext({ from: '__root__' })
   const [expanded, setExpanded] = useState(false)
   const [error, setError] = useState('')
   const { openAuthPopover } = useAuthPopover()
 
   const createPost = useCreatePublicPost()
   const ensureAnonSession = useEnsureAnonSession()
-  const anonymousPostingEnabled = settings?.publicPortalConfig?.features?.anonymousPosting ?? false
-  const richMediaEnabled = settings?.publicPortalConfig?.features?.richMediaInPosts ?? true
+  const richMediaEnabled = true
 
   // Identified users post as themselves; anonymous posting is handled separately.
   const isAnonymousSession = session?.user?.principalType === 'anonymous'
@@ -63,8 +71,6 @@ export function FeedbackHeaderAnimated({
     session?.user && !isAnonymousSession
       ? { name: session.user.name, email: session.user.email }
       : user
-  const canPostAnonymously = anonymousPostingEnabled && (!session?.user || isAnonymousSession)
-  const canSubmit = !!effectiveUser || anonymousPostingEnabled
   const canUploadImages = !isAnonymousSession && !!session?.user && richMediaEnabled
 
   const { upload: uploadImage } = usePortalImageUpload()
@@ -86,6 +92,13 @@ export function FeedbackHeaderAnimated({
       setSelectedBoardId(defaultBoardId)
     }
   }, [defaultBoardId])
+
+  // Submit CTA follows the SELECTED board's server-computed capability (which
+  // composes its access.submit tier with the workspace anonymous switch for
+  // this viewer) — not the workspace-wide flag, which would advertise submit
+  // on a board whose tier requires sign-in (Codex #191).
+  const boardCanSubmit = boardPermissions?.[selectedBoardId]?.canSubmit ?? false
+  const { canSubmit, canPostAnonymously, noAccess } = resolveSubmitState(boardCanSubmit, session)
 
   const [title, setTitle] = useState('')
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
@@ -140,18 +153,23 @@ export function FeedbackHeaderAnimated({
       return
     }
 
-    if (!effectiveUser && !anonymousPostingEnabled) {
+    if (!canSubmit) {
       setError(
-        intl.formatMessage({
-          id: 'portal.feedback.header.errorSignIn',
-          defaultMessage: 'Please sign in to submit feedback',
-        })
+        noAccess
+          ? intl.formatMessage({
+              id: 'portal.feedback.header.errorNoAccess',
+              defaultMessage: "You don't have access to post on this board",
+            })
+          : intl.formatMessage({
+              id: 'portal.feedback.header.errorSignIn',
+              defaultMessage: 'Please sign in to submit feedback',
+            })
       )
       return
     }
 
     try {
-      if (!effectiveUser && anonymousPostingEnabled) {
+      if (!effectiveUser && canPostAnonymously) {
         const ok = await ensureAnonSession()
         if (!ok) {
           setError(
@@ -373,7 +391,14 @@ export function FeedbackHeaderAnimated({
               transition={{ duration: 0.2, delay: 0.2 }}
               className="flex items-center justify-between px-4 sm:px-5 py-3 border-t bg-muted/30"
             >
-              {effectiveUser ? (
+              {noAccess ? (
+                <p className="text-xs text-muted-foreground">
+                  <FormattedMessage
+                    id="portal.feedback.header.noAccess"
+                    defaultMessage="You don't have access to post on this board"
+                  />
+                </p>
+              ) : effectiveUser ? (
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
                     id="portal.feedback.header.postingAs"
@@ -433,10 +458,15 @@ export function FeedbackHeaderAnimated({
                   disabled={createPost.isPending || !canSubmit}
                   title={
                     !canSubmit
-                      ? intl.formatMessage({
-                          id: 'portal.feedback.header.submitTooltipSignIn',
-                          defaultMessage: 'Please sign in to submit feedback',
-                        })
+                      ? noAccess
+                        ? intl.formatMessage({
+                            id: 'portal.feedback.header.submitTooltipNoAccess',
+                            defaultMessage: "You don't have access to post on this board",
+                          })
+                        : intl.formatMessage({
+                            id: 'portal.feedback.header.submitTooltipSignIn',
+                            defaultMessage: 'Please sign in to submit feedback',
+                          })
                       : undefined
                   }
                   className="portal-submit-button bg-[var(--portal-button-background)] text-[var(--portal-button-foreground)] hover:bg-[var(--portal-button-background)]/90"

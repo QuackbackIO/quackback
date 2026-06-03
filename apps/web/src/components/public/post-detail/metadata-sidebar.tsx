@@ -462,12 +462,14 @@ export function MetadataSidebar({
                   />
                 </span>
               </div>
-              {/* Portal mode: interactive vote button with auth */}
+              {/* Portal mode: interactive vote button with auth + authz.
+                  Don't structurally disable on !canVote — AuthVoteButton renders
+                  the denied state (sign-in prompt or "no access" tooltip). */}
               <AuthVoteButton
                 postId={postId}
                 voteCount={voteCount}
-                disabled={!canVote}
                 canVote={canVote}
+                isAuthenticated={isMember}
                 compact
               />
             </div>

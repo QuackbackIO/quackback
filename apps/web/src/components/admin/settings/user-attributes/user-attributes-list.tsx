@@ -1,12 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  AdjustmentsHorizontalIcon,
-} from '@heroicons/react/24/solid'
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,7 +21,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { EmptyState } from '@/components/shared/empty-state'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import {
   useCreateUserAttribute,
@@ -35,6 +29,7 @@ import {
 } from '@/lib/client/mutations'
 import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
 import type { UserAttributeId } from '@quackback/ids'
+import { BUILTIN_FIELDS } from '@/lib/shared/segment-builtin-fields'
 
 const ATTRIBUTE_TYPES = [
   { value: 'string', label: 'Text' },
@@ -111,7 +106,7 @@ function AttributeFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit attribute' : 'New user attribute'}</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit attribute' : 'New person attribute'}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -297,6 +292,37 @@ function AttributeRow({
   )
 }
 
+function BuiltinFieldRow({ field }: { field: (typeof BUILTIN_FIELDS)[number] }) {
+  const badgeClass = TYPE_BADGE_COLORS[field.type] ?? ''
+  const typeLabel = ATTRIBUTE_TYPES.find((t) => t.value === field.type)?.label ?? field.type
+
+  return (
+    <div className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-sm text-foreground">{field.label}</span>
+          <code className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+            {field.key}
+          </code>
+          <span
+            className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badgeClass}`}
+          >
+            {typeLabel}
+          </span>
+        </div>
+        {field.description && (
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{field.description}</p>
+        )}
+      </div>
+
+      {/* Right-aligned 'Built-in' marker — occupies the same slot as
+       *  the edit/delete buttons on custom rows so the two row types
+       *  align visually down the right edge. */}
+      <span className="text-xs text-muted-foreground shrink-0 pr-2">Built-in</span>
+    </div>
+  )
+}
+
 interface UserAttributesListProps {
   initialAttributes: UserAttributeItem[]
 }
@@ -358,8 +384,8 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
 
   return (
     <SettingsCard
-      title="User Attributes"
-      description="Define custom attributes that map to fields in user metadata. These appear as segment rule options."
+      title="Person attributes"
+      description="Define custom attributes that map to fields in person metadata. These appear as segment rule options."
       action={
         <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
           <PlusIcon className="h-3.5 w-3.5" />
@@ -367,31 +393,23 @@ export function UserAttributesList({ initialAttributes }: UserAttributesListProp
         </Button>
       }
     >
-      {attributes.length === 0 ? (
-        <EmptyState
-          icon={AdjustmentsHorizontalIcon}
-          title="No attributes yet"
-          description="Add custom user attributes to enable richer segmentation rules."
-          action={
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="h-4 w-4 mr-1.5" />
-              New attribute
-            </Button>
-          }
-          className="py-10"
-        />
-      ) : (
-        <div className="divide-y divide-border/50">
-          {attributes.map((attr) => (
-            <AttributeRow
-              key={attr.id}
-              attribute={attr}
-              onEdit={() => setEditTarget(attr)}
-              onDelete={() => setDeleteTarget(attr)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Built-in + custom rows share one container so they read as
+       *  a single continuous list and `last:border-0` only trims the
+       *  actual last row's divider. The per-row 'Built-in' badge is
+       *  the only marker separating the two groups. */}
+      <div>
+        {BUILTIN_FIELDS.filter((f) => f.group === 'attribute').map((field) => (
+          <BuiltinFieldRow key={field.key} field={field} />
+        ))}
+        {attributes.map((attr) => (
+          <AttributeRow
+            key={attr.id}
+            attribute={attr}
+            onEdit={() => setEditTarget(attr)}
+            onDelete={() => setDeleteTarget(attr)}
+          />
+        ))}
+      </div>
 
       {/* Create dialog */}
       <AttributeFormDialog

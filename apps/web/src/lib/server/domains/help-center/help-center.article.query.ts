@@ -188,6 +188,11 @@ export async function listPublicArticles(params: {
 }
 
 export async function listPublicArticlesForCategory(categoryId: string) {
+  // Join category so we can enforce isPublic + non-deleted on the
+  // category side. Without these checks, an admin marking a category
+  // private only hid it from the public nav — direct category-id
+  // article lookups still returned the children. Also caps published_at
+  // at now() so a scheduled-future article doesn't leak via the list.
   return db
     .select({
       id: helpCenterArticles.id,
@@ -201,12 +206,16 @@ export async function listPublicArticlesForCategory(categoryId: string) {
       authorAvatarUrl: principal.avatarUrl,
     })
     .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
     .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
     .where(
       and(
         eq(helpCenterArticles.categoryId, categoryId as HelpCenterCategoryId),
         isNotNull(helpCenterArticles.publishedAt),
-        isNull(helpCenterArticles.deletedAt)
+        lte(helpCenterArticles.publishedAt, new Date()),
+        isNull(helpCenterArticles.deletedAt),
+        isNull(helpCenterCategories.deletedAt),
+        eq(helpCenterCategories.isPublic, true)
       )
     )
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
@@ -224,11 +233,13 @@ export async function listPublicCategoryEditors(): Promise<
     })
     .from(helpCenterArticles)
     .innerJoin(principal, eq(principal.id, helpCenterArticles.principalId))
-    .where(and(
-      isNotNull(helpCenterArticles.publishedAt),
-      isNull(helpCenterArticles.deletedAt),
-      inArray(principal.role, ['admin', 'member'])
-    ))
+    .where(
+      and(
+        isNotNull(helpCenterArticles.publishedAt),
+        isNull(helpCenterArticles.deletedAt),
+        inArray(principal.role, ['admin', 'member'])
+      )
+    )
     .orderBy(asc(helpCenterArticles.categoryId), desc(helpCenterArticles.publishedAt))
 
   const result: Record<string, Array<{ name: string; avatarUrl: string | null }>> = {}

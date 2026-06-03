@@ -48,7 +48,7 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
   if (operator === 'is_set' || operator === 'is_not_set') {
     const isSet = operator === 'is_set'
     switch (attribute) {
-      case 'email_domain':
+      case 'email':
         return isSet ? sql`u.email IS NOT NULL` : sql`u.email IS NULL`
       case 'email_verified':
         return isSet ? sql`u.email_verified = true` : sql`u.email_verified = false`
@@ -69,6 +69,24 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         return sql`${activityCountSql('votes', false)} ${sql.raw(isSet ? '> 0' : '= 0')}`
       case 'comment_count':
         return sql`${activityCountSql('comments', true)} ${sql.raw(isSet ? '> 0' : '= 0')}`
+      // name is NOT NULL — is_set is always true, is_not_set is never true
+      case 'name':
+        return isSet ? sql`TRUE` : sql`FALSE`
+      case 'locale':
+        return isSet ? sql`u.locale IS NOT NULL` : sql`u.locale IS NULL`
+      case 'country':
+        return isSet ? sql`u.country IS NOT NULL` : sql`u.country IS NULL`
+      case 'last_active_days_ago':
+        return isSet
+          ? sql`EXISTS (SELECT 1 FROM session s WHERE s.user_id = u.id)`
+          : sql`NOT EXISTS (SELECT 1 FROM session s WHERE s.user_id = u.id)`
+      // signup_source falls back to 'email' for users with no account row,
+      // so it's always set — mirror principal_type / name semantics.
+      case 'signup_source':
+        return isSet ? sql`TRUE` : sql`FALSE`
+      // principal.type is always set — is_set is always true, is_not_set is never true
+      case 'principal_type':
+        return isSet ? sql`TRUE` : sql`FALSE`
       default:
         return null
     }
@@ -84,9 +102,9 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
     )
 
     switch (attribute) {
-      case 'email_domain': {
-        const domains = values.map((v) => sql`${String(v).replace(/^@/, '').toLowerCase()}`)
-        return sql`LOWER(SPLIT_PART(u.email, '@', 2)) IN (${sql.join(domains, sql`, `)})`
+      case 'email': {
+        const emails = values.map((v) => sql`${String(v).toLowerCase()}`)
+        return sql`LOWER(u.email) IN (${sql.join(emails, sql`, `)})`
       }
       case 'plan':
         return sql`(u.metadata::jsonb->>'plan') IN (${placeholders})`
@@ -95,6 +113,18 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         if (!key) return null
         return sql`(u.metadata::jsonb->>${key}) IN (${placeholders})`
       }
+      case 'name':
+        return sql`u.name IN (${placeholders})`
+      case 'locale':
+        return sql`u.locale IN (${placeholders})`
+      case 'country': {
+        const codes = values.map((v) => sql`${String(v).toUpperCase()}`)
+        return sql`u.country IN (${sql.join(codes, sql`, `)})`
+      }
+      case 'signup_source':
+        return sql`COALESCE((SELECT a.provider_id FROM account a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1), 'email') IN (${placeholders})`
+      case 'principal_type':
+        return sql`p.type IN (${placeholders})`
       default:
         return null
     }
@@ -104,12 +134,19 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
     case 'email_verified':
       return sql`u.email_verified = ${Boolean(value)}`
 
-    case 'email_domain': {
-      const domain = String(value).replace(/^@/, '')
-      if (operator === 'eq') return sql`u.email ILIKE ${'%@' + domain}`
-      if (operator === 'neq') return sql`u.email NOT ILIKE ${'%@' + domain}`
-      if (operator === 'ends_with') return sql`u.email ILIKE ${'%' + domain}`
-      return null
+    case 'email': {
+      // Email matching is case-insensitive: better-auth and most OAuth
+      // providers normalize on the way in, but human-entered rules
+      // ("email eq Alice@example.com") and pre-normalisation rows would
+      // otherwise silently miss. LOWER both sides for eq/neq/comparators
+      // AND inside stringOperatorSql for contains/starts_with/ends_with.
+      const field = sql`LOWER(u.email)`
+      const lowered = String(value).toLowerCase()
+      const strResult = stringOperatorSql(field, operator, lowered)
+      if (strResult) return strResult
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`${field} ${sql.raw(sqlOp)} ${lowered}`
     }
 
     case 'created_at_days_ago': {
@@ -157,6 +194,79 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       const sqlOp = OPERATOR_SQL[operator]
       if (!sqlOp) return null
       return sql`${activityCountSql('comments', true)} ${sql.raw(sqlOp)} ${Number(value)}`
+    }
+
+    case 'name': {
+      const field = sql`u.name`
+      const strResult = stringOperatorSql(field, operator, value)
+      if (strResult) return strResult
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`${field} ${sql.raw(sqlOp)} ${String(value)}`
+    }
+
+    case 'locale': {
+      const field = sql`u.locale`
+      const strResult = stringOperatorSql(field, operator, value)
+      if (strResult) return strResult
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      // PostgreSQL `NULL != 'x'` is NULL, not TRUE — so a bare neq silently
+      // excludes every locale-unset user. Mirror is_not_set semantics for
+      // 'neq' on this nullable column.
+      if (operator === 'neq') {
+        return sql`(${field} IS NULL OR ${field} != ${String(value)})`
+      }
+      return sql`${field} ${sql.raw(sqlOp)} ${String(value)}`
+    }
+
+    case 'country': {
+      // Country codes are normalized uppercase on write (capture helper) —
+      // uppercase the comparand too so admins typing "us" still match.
+      const field = sql`u.country`
+      const upperValue = String(value).toUpperCase()
+      const strResult = stringOperatorSql(field, operator, upperValue)
+      if (strResult) return strResult
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      // NULL-safe neq: see 'locale' note above. Users with no country set
+      // satisfy "country is not X" because they don't have country=X.
+      if (operator === 'neq') {
+        return sql`(${field} IS NULL OR ${field} != ${upperValue})`
+      }
+      return sql`${field} ${sql.raw(sqlOp)} ${upperValue}`
+    }
+
+    case 'last_active_days_ago': {
+      // "Last active" must reflect actual activity, not just sign-in time.
+      // Better Auth refreshes sessions on activity by bumping updated_at
+      // while leaving created_at at the original sign-in instant — so
+      // MAX(created_at) alone would mark a long-lived active session as
+      // stale. COALESCE(updated_at, created_at) recovers the intended
+      // semantics; created_at is the fallback for rows that pre-date the
+      // updated_at bump.
+      //
+      // EXTRACT returns NULL when the user has no session — NULL fails
+      // every comparison, so users who never signed in correctly do not
+      // match numeric predicates. Use is_set / is_not_set for that
+      // audience.
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`EXTRACT(EPOCH FROM (NOW() - (SELECT MAX(COALESCE(s.updated_at, s.created_at)) FROM session s WHERE s.user_id = u.id))) / 86400 ${sql.raw(sqlOp)} ${Number(value)}`
+    }
+
+    case 'signup_source': {
+      // No account row (magic-link / OTP only sign-ups) → COALESCE to 'email'
+      // so admins can target that cohort explicitly.
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`COALESCE((SELECT a.provider_id FROM account a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1), 'email') ${sql.raw(sqlOp)} ${String(value)}`
+    }
+
+    case 'principal_type': {
+      const sqlOp = OPERATOR_SQL[operator]
+      if (!sqlOp) return null
+      return sql`p.type ${sql.raw(sqlOp)} ${String(value)}`
     }
 
     default:
@@ -253,10 +363,18 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
         .onConflictDoNothing()
     }
     if (toRemove.length > 0) {
+      // Scope to addedBy='dynamic' so we never wipe rows whose source is
+      // manual / sso / api / widget. Without this, a principal who is both
+      // a manual member and a stale dynamic match loses their manual row
+      // on the next sweep — silently locking them out of segment-gated boards.
       await tx
         .delete(userSegments)
         .where(
-          and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, toRemove))
+          and(
+            eq(userSegments.segmentId, segmentId),
+            eq(userSegments.addedBy, 'dynamic'),
+            inArray(userSegments.principalId, toRemove)
+          )
         )
     }
   })

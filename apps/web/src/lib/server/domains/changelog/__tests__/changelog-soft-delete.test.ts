@@ -3,8 +3,8 @@ import type { ChangelogId } from '@quackback/ids'
 
 const mockEntryFindFirst = vi.fn()
 const mockEntryFindMany = vi.fn()
-const mockLinkedPostsFindMany = vi.fn()
 const mockStatusesFindMany = vi.fn()
+const mockSelect = vi.fn()
 
 const mockUpdateSet = vi.fn()
 const mockUpdateWhere = vi.fn()
@@ -23,13 +23,11 @@ vi.mock('@/lib/server/db', () => ({
         findFirst: (...args: unknown[]) => mockEntryFindFirst(...args),
         findMany: (...args: unknown[]) => mockEntryFindMany(...args),
       },
-      changelogEntryPosts: {
-        findMany: (...args: unknown[]) => mockLinkedPostsFindMany(...args),
-      },
       postStatuses: {
         findMany: (...args: unknown[]) => mockStatusesFindMany(...args),
       },
     },
+    select: (...args: unknown[]) => mockSelect(...args),
     update: () => ({
       set: (values: unknown) => {
         mockUpdateSet(values)
@@ -43,7 +41,22 @@ vi.mock('@/lib/server/db', () => ({
     }),
   },
   changelogEntries: changelogEntriesTable,
-  changelogEntryPosts: { changelogEntryId: 'changelog_entry_id' },
+  changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
+  posts: {
+    id: 'posts.id',
+    title: 'posts.title',
+    voteCount: 'posts.voteCount',
+    boardId: 'posts.boardId',
+    statusId: 'posts.statusId',
+    deletedAt: 'posts.deletedAt',
+    moderationState: 'posts.moderationState',
+  },
+  boards: {
+    id: 'boards.id',
+    slug: 'boards.slug',
+    access: 'boards.access',
+    deletedAt: 'boards.deletedAt',
+  },
   postStatuses: { id: 'id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ kind: 'and', args })),
@@ -54,12 +67,30 @@ vi.mock('@/lib/server/db', () => ({
   lte: vi.fn((col, val) => ({ kind: 'lte', col, val })),
   desc: vi.fn((col) => ({ kind: 'desc', col })),
   inArray: vi.fn((col, vals) => ({ kind: 'inArray', col, vals })),
+  sql: Object.assign(
+    vi.fn((strings: TemplateStringsArray, ..._values: unknown[]) => ({
+      kind: 'sql',
+      strings: Array.from(strings),
+    })),
+    { raw: vi.fn() }
+  ),
 }))
+
+// Chainable mock for `db.select().from().innerJoin()...where()` — resolves
+// with the rows you provide when `.where()` is awaited.
+function selectChainResolving(rows: unknown[]): unknown {
+  const chain: Record<string, unknown> = {}
+  chain.from = () => chain
+  chain.innerJoin = () => chain
+  chain.where = () => Promise.resolve(rows)
+  return chain
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockLinkedPostsFindMany.mockResolvedValue([])
   mockStatusesFindMany.mockResolvedValue([])
+  // Default: any `db.select(...)` returns an empty linked-post set.
+  mockSelect.mockImplementation(() => selectChainResolving([]))
 })
 
 describe('getPublicChangelogById', () => {

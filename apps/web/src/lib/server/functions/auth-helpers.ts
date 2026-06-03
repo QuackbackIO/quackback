@@ -312,3 +312,42 @@ export async function requireAuthWithPermissions(): Promise<AuthContextWithPermi
   const set = await loadPermissionSet(auth.principal.id)
   return { ...auth, permissions: set }
 }
+
+// ============================================================================
+// Policy actor resolution
+// ============================================================================
+
+import type { Actor, PrincipalType } from '@/lib/server/policy/types'
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
+import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
+
+/**
+ * Preserve all three principal types. Collapsing 'anonymous' onto 'user'
+ * is a security bug: a Better Auth anonymous session would satisfy
+ * audience.kind='authenticated' and dodge the workspace requireApproval='anonymous'
+ * moderation gate.
+ */
+function normalizePrincipalType(raw: string | null | undefined): PrincipalType {
+  if (raw === 'service') return 'service'
+  if (raw === 'anonymous') return 'anonymous'
+  return 'user'
+}
+
+/**
+ * Build a policy Actor from an AuthContext. Resolves segment memberships
+ * via segmentIdsForPrincipal. Returns ANONYMOUS_ACTOR for null auth.
+ *
+ * NOTE: this is the policy-shaped actor. The audit-log helper has a
+ * separate, synchronous `actorFromAuth` returning the {userId, email,
+ * role} shape — do not confuse them. See audit/log.ts.
+ */
+export async function policyActorFromAuth(auth: AuthContext | null): Promise<Actor> {
+  if (!auth) return ANONYMOUS_ACTOR
+  const segmentIds = await segmentIdsForPrincipal(auth.principal.id)
+  return {
+    principalId: auth.principal.id,
+    role: auth.principal.role,
+    principalType: normalizePrincipalType(auth.principal.type),
+    segmentIds,
+  }
+}

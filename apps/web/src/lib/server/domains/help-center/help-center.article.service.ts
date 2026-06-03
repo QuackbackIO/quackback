@@ -83,14 +83,26 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
 
 export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterArticleWithCategory> {
   const now = new Date()
-  const article = await db.query.helpCenterArticles.findFirst({
-    where: and(
-      eq(helpCenterArticles.slug, slug),
-      isNull(helpCenterArticles.deletedAt),
-      isNotNull(helpCenterArticles.publishedAt),
-      lte(helpCenterArticles.publishedAt, now)
-    ),
-  })
+  // Join the parent category so the public lookup also enforces
+  // category.isPublic. Without that check, an article under a category
+  // an admin had flagged private was still reachable by slug — the
+  // category's intent was respected only in the list/nav UI.
+  const rows = await db
+    .select({ article: helpCenterArticles })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
+    .where(
+      and(
+        eq(helpCenterArticles.slug, slug),
+        isNull(helpCenterArticles.deletedAt),
+        isNotNull(helpCenterArticles.publishedAt),
+        lte(helpCenterArticles.publishedAt, now),
+        isNull(helpCenterCategories.deletedAt),
+        eq(helpCenterCategories.isPublic, true)
+      )
+    )
+    .limit(1)
+  const article = rows[0]?.article
   if (!article) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }

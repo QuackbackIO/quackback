@@ -12,6 +12,12 @@ interface VoteButtonProps {
   disabled?: boolean
   /** Called when unauthenticated user clicks — button looks normal, clicking triggers this */
   onAuthRequired?: () => void
+  /**
+   * Reason a signed-in viewer cannot vote (board tier — authz, not auth). When
+   * set: the button is dimmed, clicking is a no-op, and the reason shows as a
+   * hover tooltip ("You don't have access to vote on this board").
+   */
+  noAccessReason?: string
   /** Async callback before voting (e.g. anonymous sign-in). Return false to cancel. */
   onBeforeVote?: () => Promise<boolean>
   /** Compact horizontal variant for inline use */
@@ -28,6 +34,7 @@ export function VoteButton({
   disabled = false,
   onAuthRequired,
   onBeforeVote,
+  noAccessReason,
   compact = false,
   pill = false,
   readonly = false,
@@ -44,6 +51,9 @@ export function VoteButton({
 
   async function handleClick(): Promise<void> {
     if (disabled) return
+    // Denied by the board tier for a signed-in viewer — the tooltip explains
+    // why; do nothing (never fire a vote the server would reject).
+    if (noAccessReason) return
     if (onAuthRequired) {
       onAuthRequired()
       return
@@ -61,7 +71,7 @@ export function VoteButton({
     handleVote()
   }
 
-  const isInteractive = !readonly && !disabled
+  const isInteractive = !readonly && !disabled && !noAccessReason
 
   const sharedClassName = cn(
     'relative flex items-center justify-center',
@@ -79,7 +89,8 @@ export function VoteButton({
         : 'border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80'),
     (readonly || disabled) && 'border-border/50',
     isInteractive && isPending && 'opacity-70 cursor-wait',
-    disabled && 'cursor-not-allowed opacity-50'
+    disabled && 'cursor-not-allowed opacity-50',
+    !disabled && noAccessReason && 'cursor-not-allowed opacity-60'
   )
 
   const chevron = (
@@ -142,6 +153,8 @@ export function VoteButton({
             )
       }
       aria-pressed={hasVoted}
+      aria-disabled={noAccessReason ? true : undefined}
+      title={noAccessReason}
       className={sharedClassName}
       onClick={handleClick}
       disabled={isPending}

@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Route } from '@/routes/admin/settings.boards.index'
 
-export type BoardTab = 'general' | 'access' | 'import' | 'export'
+export type BoardTab = 'general' | 'access' | 'moderation' | 'import' | 'export'
 
 interface BoardSelectionState {
   selectedBoardSlug: string | null

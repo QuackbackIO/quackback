@@ -13,6 +13,7 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
+import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
@@ -193,6 +194,39 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
       inviteLink,
       logoUrl,
     }),
+  })
+}
+
+// ============================================================================
+// Portal Invite Email
+// ============================================================================
+
+interface SendPortalInviteParams {
+  to: string
+  workspaceName: string
+  inviteLink: string
+  logoUrl?: string
+  personalMessage?: string
+}
+
+export async function sendPortalInviteEmail(params: SendPortalInviteParams): Promise<EmailResult> {
+  const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Portal Invite Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Workspace: ${workspaceName}`)
+    console.log(`│ Invite link: ${inviteLink}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `You've been invited to ${workspaceName}`,
+    react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
   })
 }
 
@@ -665,6 +699,7 @@ export async function sendFeedbackLinkedEmail(
 // ============================================================================
 
 export { InvitationEmail } from './templates/invitation'
+export { PortalInviteEmail } from './templates/portal-invite'
 export { WelcomeEmail } from './templates/welcome'
 export { MagicLinkEmail } from './templates/magic-link'
 export { StatusChangeEmail } from './templates/status-change'

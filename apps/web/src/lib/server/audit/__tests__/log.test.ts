@@ -114,10 +114,99 @@ describe('recordAuditEvent', () => {
     const row = mockInsertValues.mock.calls[0][0]
     expect(row.actorUserId).toBeNull()
   })
+
+  it('populates request_id from x-request-id header', async () => {
+    const headers = new Headers({ 'x-request-id': 'req_abc123' })
+    await recordAuditEvent({
+      event: 'portal.visibility.changed',
+      actor: { userId: 'user_1' as UserId },
+      headers,
+    })
+    const row = mockInsertValues.mock.calls[0][0]
+    expect(row.requestId).toBe('req_abc123')
+  })
+
+  it('falls back to x-correlation-id when x-request-id is absent', async () => {
+    const headers = new Headers({ 'x-correlation-id': 'corr_xyz' })
+    await recordAuditEvent({
+      event: 'portal.visibility.changed',
+      actor: { userId: 'user_1' as UserId },
+      headers,
+    })
+    const row = mockInsertValues.mock.calls[0][0]
+    expect(row.requestId).toBe('corr_xyz')
+  })
+
+  it('populates actor_type and auth_method when provided', async () => {
+    await recordAuditEvent({
+      event: 'auth.signin.success',
+      actor: { userId: 'user_1' as UserId, type: 'user', authMethod: 'sso' },
+    })
+    const row = mockInsertValues.mock.calls[0][0]
+    expect(row.actorType).toBe('user')
+    expect(row.authMethod).toBe('sso')
+  })
+
+  it('leaves request_id null when no headers are provided', async () => {
+    await recordAuditEvent({
+      event: 'portal.visibility.changed',
+      actor: { userId: 'user_1' as UserId },
+    })
+    const row = mockInsertValues.mock.calls[0][0]
+    expect(row.requestId).toBeNull()
+  })
+
+  describe('request_id hardening (DoS resistance)', () => {
+    // The request_id column is indexed (btree, see audit-log schema 0070).
+    // PostgreSQL btree rejects oversized values, and recordAuditEvent
+    // swallows insert failures — so an attacker who can set an arbitrary
+    // x-request-id header (most reverse-proxy setups pass it through)
+    // could cause security events to silently disappear by sending a
+    // multi-KB header on a path that audits failure (e.g. failed sign-in).
+    // Cap the stored value to keep the insert safely under the index limit.
+
+    it('caps a long x-request-id header to a sane length', async () => {
+      const huge = 'x'.repeat(10_000)
+      const headers = new Headers({ 'x-request-id': huge })
+      await recordAuditEvent({
+        event: 'auth.signin.failed',
+        actor: {},
+        headers,
+      })
+      const row = mockInsertValues.mock.calls[0][0]
+      // Stored value must be bounded — pick any reasonable cap.
+      expect(row.requestId.length).toBeLessThanOrEqual(256)
+      expect(row.requestId.length).toBeGreaterThan(0)
+    })
+
+    it('caps a long x-correlation-id header to the same limit', async () => {
+      const huge = 'y'.repeat(5_000)
+      const headers = new Headers({ 'x-correlation-id': huge })
+      await recordAuditEvent({
+        event: 'auth.signin.failed',
+        actor: {},
+        headers,
+      })
+      const row = mockInsertValues.mock.calls[0][0]
+      expect(row.requestId.length).toBeLessThanOrEqual(256)
+    })
+
+    it('preserves short request-ids unchanged', async () => {
+      const normal = 'req_01k9abc123def456ghi789jkl'
+      const headers = new Headers({ 'x-request-id': normal })
+      await recordAuditEvent({
+        event: 'portal.visibility.changed',
+        actor: { userId: 'user_1' as UserId },
+        headers,
+      })
+      const row = mockInsertValues.mock.calls[0][0]
+      expect(row.requestId).toBe(normal)
+    })
+  })
 })
 
 describe('actorFromAuth', () => {
-  it('maps requireAuth output into an AuditActor', () => {
+  it('maps requireAuth output into an AuditActor including type', () => {
     const actor = actorFromAuth({
       user: { id: 'user_admin1' as never, email: 'admin@example.com', name: 'A', image: null },
       principal: { id: 'principal_admin1' as never, role: 'admin', type: 'user' },
@@ -128,6 +217,7 @@ describe('actorFromAuth', () => {
       userId: 'user_admin1',
       email: 'admin@example.com',
       role: 'admin',
+      type: 'user',
     })
   })
 })

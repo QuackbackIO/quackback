@@ -29,11 +29,11 @@ export function ExperimentalSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <div>
-        <h2 className="text-lg font-semibold">Experimental Features</h2>
+        <h2 className="text-lg font-semibold">Labs</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          These features are in development and may change or be removed.
+          Features in development. They may change or be removed.
         </p>
       </div>
 

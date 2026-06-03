@@ -25,6 +25,11 @@ const searchSchema = z.object({
     .default('newest'),
   selected: z.string().optional(),
   segments: z.string().optional(),
+  // When set, /admin/users renders the Invitations view instead of the
+  // signed-up users list. 'pending' is the deep-link target from the
+  // Portal settings page; the view itself lets admins flip between
+  // statuses without leaving the page.
+  invites: z.enum(['pending', 'accepted', 'expired', 'all']).optional(),
 })
 
 type SearchParams = z.infer<typeof searchSchema>

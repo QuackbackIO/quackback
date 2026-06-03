@@ -65,7 +65,7 @@ function DetailSkeleton() {
       </div>
 
       {/* Activity Stats (3-column grid) */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-20 w-full rounded-lg" />
         ))}
@@ -329,7 +329,7 @@ export function UserDetail({
         </div>
 
         {/* Activity Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="text-center p-3 bg-muted/30 rounded-lg">
             <div className="flex items-center justify-center gap-1.5 text-muted-foreground mb-1">
               <DocumentTextIcon className="h-4 w-4" />

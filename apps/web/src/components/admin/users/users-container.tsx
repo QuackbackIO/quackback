@@ -3,7 +3,10 @@ import { UsersLayout } from '@/components/admin/users/users-layout'
 import { UsersSegmentNav } from '@/components/admin/users/users-segment-nav'
 import { UsersList } from '@/components/admin/users/users-list'
 import { UserDetail } from '@/components/admin/users/user-detail'
+import { InvitationsView } from '@/components/admin/users/invitations-view'
 import { useUsersFilters } from '@/components/admin/users/use-users-filters'
+import { usePortalInvites } from '@/components/admin/users/use-portal-invites'
+import { Route as UsersRoute } from '@/routes/admin/users'
 import {
   usePortalUsers,
   useUserDetail,
@@ -40,6 +43,22 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
   // URL-based filter state
   const { filters, setFilters, clearFilters, selectedUserId, setSelectedUserId, hasActiveFilters } =
     useUsersFilters()
+
+  // The `?invites=<status>` param flips the entire main pane to the
+  // Invitations view. Reading it via the route's typed search keeps
+  // navigation in sync with the URL without an effect.
+  const search = UsersRoute.useSearch()
+  const invitesStatus = search.invites
+  const inInvitesMode = !!invitesStatus
+
+  // Total pending-invite count powers the badge on the segment-nav entry.
+  // Pulled at the container level so we don't have to drill into the
+  // invitations view to read it. Gated on admin role — the underlying
+  // server fn requires admin and would 403 on every /admin/users mount
+  // for `member` / `user` roles otherwise.
+  const { pendingCount: invitesPendingCount } = usePortalInvites({
+    enabled: currentMemberRole === 'admin',
+  })
 
   // Server state - Users list (with infinite query for pagination)
   const {
@@ -202,10 +221,14 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             onDeleteSegment={setDeleteTarget}
             onEvaluateSegment={handleEvaluateSegment}
             isEvaluating={evaluatingId}
+            inInvitesMode={inInvitesMode}
+            invitesPendingCount={invitesPendingCount}
           />
         }
       >
-        {selectedUserId ? (
+        {inInvitesMode ? (
+          <InvitationsView status={invitesStatus ?? 'pending'} />
+        ) : selectedUserId ? (
           <UserDetail
             user={selectedUser ?? null}
             isLoading={isLoadingUser}

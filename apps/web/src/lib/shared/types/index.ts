@@ -44,7 +44,7 @@ export type { SubscriptionLevel } from './subscriptions'
 export type { TeamMember } from './principals'
 
 // Board types
-export type { BoardWithStats } from './boards'
+export type { BoardWithStats, PublicBoardWithStats } from './boards'
 
 // Roadmap types
 export type {

@@ -13,7 +13,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { UserId } from '@quackback/ids'
-import { and, auditLog, db, desc, eq, gte, ilike, lte } from '@/lib/server/db'
+import { and, auditLog, db, desc, eq, gte, ilike, lte, notInArray } from '@/lib/server/db'
 import type { SQL } from 'drizzle-orm'
 import type { AuditEventOutcome, JsonValue } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
@@ -37,6 +37,13 @@ const listAuditEventsInput = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   limit: z.number().int().positive().optional(),
+  /**
+   * Event types to exclude from results. Used by the default view to
+   * suppress high-volume events (e.g. portal.widget_handshake.consumed)
+   * unless the user explicitly opts in. Ignored when `eventType` is set
+   * — a deliberate selection always wins.
+   */
+  excludeEventTypes: z.array(z.string()).optional(),
 })
 
 export type AuditEventRow = {
@@ -54,6 +61,14 @@ export type AuditEventRow = {
   beforeValue: JsonValue | null
   afterValue: JsonValue | null
   metadata: JsonValue | null
+  // Observability columns from migration 0070. requestId is indexed —
+  // join point for "show me everything that happened during request X"
+  // forensics. actorType disambiguates user / service / anonymous in
+  // mixed-traffic timelines. authMethod records HOW the actor signed
+  // in (session, api-key, sso, magic-link) when known.
+  requestId: string | null
+  actorType: string | null
+  authMethod: string | null
 }
 
 export const listAuditEventsFn = createServerFn({ method: 'GET' })
@@ -73,6 +88,11 @@ export const listAuditEventsFn = createServerFn({ method: 'GET' })
     }
     if (data.from) conditions.push(gte(auditLog.occurredAt, new Date(data.from)))
     if (data.to) conditions.push(lte(auditLog.occurredAt, new Date(data.to)))
+    // Only apply the exclusion list when no specific eventType is selected — a
+    // deliberate selection always wins over the default-hide behaviour.
+    if (!data.eventType && data.excludeEventTypes && data.excludeEventTypes.length > 0) {
+      conditions.push(notInArray(auditLog.eventType, data.excludeEventTypes))
+    }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
@@ -101,6 +121,9 @@ export const listAuditEventsFn = createServerFn({ method: 'GET' })
       beforeValue: (row.beforeValue as JsonValue | null) ?? null,
       afterValue: (row.afterValue as JsonValue | null) ?? null,
       metadata: (row.metadata as JsonValue | null) ?? null,
+      requestId: row.requestId,
+      actorType: row.actorType,
+      authMethod: row.authMethod,
     }))
 
     return { events, hasMore }

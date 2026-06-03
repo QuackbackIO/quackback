@@ -59,16 +59,10 @@ export function makeAuthConfig(
 }
 
 const PORTAL_FEATURES_DEFAULTS = {
-  publicView: true,
-  submissions: true,
-  comments: true,
-  voting: true,
   allowEditAfterEngagement: false,
   allowDeleteAfterEngagement: false,
   showPublicEditHistory: false,
-  anonymousVoting: true,
-  anonymousCommenting: false,
-  anonymousPosting: false,
+  allowAnonymous: true,
 }
 
 export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSettings {
@@ -77,7 +71,11 @@ export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSetti
     name: 'test',
     slug: 'test',
     authConfig: makeAuthConfig(),
-    portalConfig: { oauth: {}, features: PORTAL_FEATURES_DEFAULTS },
+    portalConfig: {
+      oauth: {},
+      features: PORTAL_FEATURES_DEFAULTS,
+      moderationDefault: { requireApproval: 'none' },
+    },
     brandingConfig: {} as TenantSettings['brandingConfig'],
     developerConfig: {} as TenantSettings['developerConfig'],
     helpCenterConfig: {} as TenantSettings['helpCenterConfig'],

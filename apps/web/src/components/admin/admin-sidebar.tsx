@@ -97,7 +97,7 @@ function NavItem({
           to={href}
           onClick={onClick}
           className={cn(
-            'flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200',
+            'relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200',
             'text-muted-foreground/70 hover:text-foreground hover:bg-muted/50',
             isActive && 'bg-muted/80 text-foreground'
           )}
@@ -266,8 +266,8 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
-                      <button className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <Avatar className="h-7 w-7" src={avatarUrl} name={name} />
+                      <button className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
                       </button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>

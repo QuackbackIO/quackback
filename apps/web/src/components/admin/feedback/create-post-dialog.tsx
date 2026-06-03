@@ -7,8 +7,6 @@ import { createPostSchema } from '@/lib/shared/schemas/posts'
 import { useCreatePost } from '@/lib/client/mutations/posts'
 import type { CreatePostInput } from '@/lib/shared/types'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -66,9 +64,6 @@ export function CreatePostDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
 
-  const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
-  const richMediaEnabled = portalConfigQuery.data.features?.richMediaInPosts ?? true
-  const videoEmbedsEnabled = portalConfigQuery.data.features?.videoEmbedsInPosts ?? true
   const { upload: uploadImage } = usePostImageUpload()
   const [authorPrincipalId, setAuthorPrincipalId] = useState(currentUser.principalId)
   const createPostMutation = useCreatePost()
@@ -210,13 +205,13 @@ export function CreatePostDialog({
                               taskLists: true,
                               blockquotes: true,
                               dividers: true,
-                              images: richMediaEnabled,
-                              tables: richMediaEnabled,
-                              embeds: richMediaEnabled && videoEmbedsEnabled,
+                              images: true,
+                              tables: true,
+                              embeds: true,
                               bubbleMenu: true,
                               slashMenu: true,
                             }}
-                            onImageUpload={richMediaEnabled ? uploadImage : undefined}
+                            onImageUpload={uploadImage}
                           />
                         </FormControl>
                         <FormMessage />

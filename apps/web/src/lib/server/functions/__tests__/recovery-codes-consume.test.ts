@@ -114,6 +114,14 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
   and: vi.fn((...p: unknown[]) => ({ op: 'and', p })),
   isNull: vi.fn((col: unknown) => ({ op: 'isnull', col })),
+  // The lookup switched to `sql\`LOWER(...) = ${normalizedEmail}\`` for
+  // case-insensitive matching — provide a tagged-template stub that
+  // captures the lowered email so the existing findUser mock still gets
+  // called as before.
+  sql: vi.fn((_strings: TemplateStringsArray, ...values: unknown[]) => ({
+    op: 'sql',
+    values,
+  })),
 }))
 
 beforeEach(() => {

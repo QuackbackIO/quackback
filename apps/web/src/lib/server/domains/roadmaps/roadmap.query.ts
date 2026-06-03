@@ -17,12 +17,14 @@ import {
 } from '@/lib/server/db'
 import { type RoadmapId, type PostId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
+import { ANONYMOUS_ACTOR, boardViewFilter, type Actor } from '@/lib/server/policy'
+import type { SQL } from 'drizzle-orm'
 import type { RoadmapPostsListResult, RoadmapPostsQueryOptions } from './roadmap.types'
 
 /** Build filter conditions and sort order for roadmap post queries */
 function buildRoadmapFilterConditions(
   options: RoadmapPostsQueryOptions,
-  baseConditions: ReturnType<typeof eq>[]
+  baseConditions: (SQL | ReturnType<typeof eq>)[]
 ) {
   const conditions = [...baseConditions]
 
@@ -95,6 +97,10 @@ export async function getRoadmapPosts(
   const baseConditions: ReturnType<typeof eq>[] = [
     eq(postRoadmaps.roadmapId, roadmapId),
     isNull(posts.deletedAt),
+    // Hide posts whose board has been soft-deleted. boards is joined in
+    // both queries below so this column is in scope for the count query
+    // as well as the data query.
+    isNull(boards.deletedAt),
   ]
   if (statusId) {
     baseConditions.push(eq(posts.statusId, statusId))
@@ -129,6 +135,7 @@ export async function getRoadmapPosts(
       .select({ count: sql<number>`COUNT(*)` })
       .from(postRoadmaps)
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+      .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions)),
   ])
 
@@ -152,11 +159,21 @@ export async function getRoadmapPosts(
 }
 
 /**
- * Get public roadmap posts (no auth required)
+ * Get public roadmap posts.
+ *
+ * Authorization layers:
+ *   - Only `isPublic` roadmaps are reachable here.
+ *   - Only `moderationState='published'` posts surface (admins on the
+ *     team-facing getRoadmapPosts see pending; this is the public path).
+ *   - `boardViewFilter(actor)` filters posts whose linked board the
+ *     actor isn't allowed to see — without it, a team member who
+ *     linked a post from a team-only or segment-only board to a public
+ *     roadmap would leak its title + vote count to anonymous viewers.
  */
 export async function getPublicRoadmapPosts(
   roadmapId: RoadmapId,
-  options: RoadmapPostsQueryOptions
+  options: RoadmapPostsQueryOptions,
+  actor: Actor = ANONYMOUS_ACTOR
 ): Promise<RoadmapPostsListResult> {
   // Verify roadmap exists and is public
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, roadmapId) })
@@ -169,17 +186,20 @@ export async function getPublicRoadmapPosts(
 
   const { statusId, limit = 20, offset = 0 } = options
 
-  // Build base conditions + filter conditions
-  const baseConditions: ReturnType<typeof eq>[] = [
+  const baseConditions: (SQL | ReturnType<typeof eq>)[] = [
     eq(postRoadmaps.roadmapId, roadmapId),
     isNull(posts.deletedAt),
+    eq(posts.moderationState, 'published'),
+    boardViewFilter(actor),
   ]
   if (statusId) {
     baseConditions.push(eq(posts.statusId, statusId))
   }
   const { conditions, orderBy } = buildRoadmapFilterConditions(options, baseConditions)
 
-  // Run data and count queries in parallel
+  // Run data and count queries in parallel.
+  // Both queries need the boards join so the boardViewFilter SQL can
+  // reference boards.access.
   const [results, countResult] = await Promise.all([
     db
       .select({
@@ -207,6 +227,7 @@ export async function getPublicRoadmapPosts(
       .select({ count: sql<number>`COUNT(*)` })
       .from(postRoadmaps)
       .innerJoin(posts, eq(postRoadmaps.postId, posts.id))
+      .innerJoin(boards, eq(posts.boardId, boards.id))
       .where(and(...conditions)),
   ])
 

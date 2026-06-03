@@ -425,16 +425,31 @@ describe('handleSignInPreCheck — tier-downgrade / missing-secret fail-open', (
 })
 
 describe('handleSignInPreCheck — sign-in rate-limit', () => {
-  it('redirects to /admin/login?error=rate_limited when the limiter blocks', async () => {
+  it('throws a 429 APIError with code=rate_limited when the limiter blocks', async () => {
     mockCheckSignInRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 120 })
     const ctx = ctxFor('/sign-in/email', { email: 'a@b.com' })
-    await expect(handleSignInPreCheck(ctx)).rejects.toThrow(/rate_limited/)
+    // The pre-check must NOT 302-redirect — sign-in submits are XHR, and
+    // redirect-then-detect is more fragile than a direct JSON error. The
+    // auth client surfaces `body.message` as `result.error.message`.
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as { name?: string }).name).toBe('APIError')
+    expect((err as { status?: string }).status).toBe('TOO_MANY_REQUESTS')
+    expect((err as { statusCode?: number }).statusCode).toBe(429)
+    expect((err as { body?: { code?: string; message?: string } }).body?.code).toBe('rate_limited')
+    expect((err as { body?: { message?: string } }).body?.message).toMatch(
+      /too many sign-in attempts/i
+    )
+    // Retry-After must be propagated so future clients can show a countdown.
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBe('120')
+    // Must not have called the redirect helper.
+    expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
   it('emits auth.signin.rate_limited audit row on block', async () => {
     mockCheckSignInRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 120 })
     const ctx = ctxFor('/sign-in/email', { email: 'a@b.com' })
-    await expect(handleSignInPreCheck(ctx)).rejects.toThrow()
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
 
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'auth.signin.rate_limited' })
@@ -447,11 +462,20 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
     // lookups should fire when the limiter blocks.
     mockCheckSignInRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 60 })
     const ctx = ctxFor('/sign-in/email', { email: 'a@b.com' })
-    await expect(handleSignInPreCheck(ctx)).rejects.toThrow()
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
 
     expect(mockGetTenantSettings).not.toHaveBeenCalled()
     expect(mockUserFindFirst).not.toHaveBeenCalled()
     expect(mockPrincipalFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('omits Retry-After header when the limiter did not provide one', async () => {
+    // Defensive: bucketRetryAfter can return undefined in some Redis edge
+    // cases. The header should be omitted entirely (not set to "undefined").
+    mockCheckSignInRateLimit.mockResolvedValueOnce({ allowed: false })
+    const ctx = ctxFor('/sign-in/email', { email: 'a@b.com' })
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBeUndefined()
   })
 
   it('passes when the limiter allows (allowed=true → no redirect)', async () => {
@@ -487,7 +511,9 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
   it('blocks magic-link send when the magic-link limiter caps', async () => {
     mockCheckMagicLinkRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 600 })
     const ctx = ctxFor('/sign-in/magic-link', { email: 'a@b.com' })
-    await expect(handleSignInPreCheck(ctx)).rejects.toThrow(/rate_limited/)
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { body?: { code?: string } }).body?.code).toBe('rate_limited')
+    expect((err as { statusCode?: number }).statusCode).toBe(429)
   })
 
   it('dispatches the credential limiter on /sign-in/email (not the magic-link limiter)', async () => {

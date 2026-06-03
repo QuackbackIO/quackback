@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { z } from 'zod'
 import { ArrowDownTrayIcon, ArrowPathIcon, DocumentArrowDownIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/shared/form-error'
 
 const errorResponseSchema = z.object({
   error: z.string().optional(),
@@ -50,18 +51,8 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-          <ArrowDownTrayIcon className="h-5 w-5 text-green-500" />
-        </div>
-        <div>
-          <h2 className="font-semibold text-foreground">Export to CSV</h2>
-          <p className="text-xs text-muted-foreground">Download all posts from this board</p>
-        </div>
-      </div>
-
-      <div className="bg-muted/50 rounded-lg p-4 mb-4">
+    <div className="space-y-4">
+      <div className="bg-muted/50 rounded-lg p-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <DocumentArrowDownIcon className="h-4 w-4" />
           <span>
@@ -70,21 +61,17 @@ export function BoardExportSection({ boardId }: BoardExportSectionProps) {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-destructive/10 text-destructive text-sm rounded-lg">
-          {error}
-        </div>
-      )}
+      {error && <FormError message={error} />}
 
       <Button onClick={handleExport} disabled={isExporting}>
         {isExporting ? (
           <>
-            <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
+            <ArrowPathIcon className="size-4 animate-spin" />
             Exporting...
           </>
         ) : (
           <>
-            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+            <ArrowDownTrayIcon className="size-4" />
             Export CSV
           </>
         )}

@@ -62,7 +62,7 @@ export function AnalyticsPage() {
         <ScrollArea className="h-full">
           <div className="p-5 space-y-0">
             <div className="pb-4">
-              <span className="inline-block py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="inline-block py-1 text-xs uppercase tracking-wider text-muted-foreground">
                 Sections
               </span>
               <div className="mt-2 space-y-1">
@@ -212,9 +212,9 @@ export function AnalyticsPage() {
 function SectionSkeleton() {
   return (
     <Card className="overflow-hidden py-0 gap-0">
-      <div className="flex divide-x divide-border/50">
+      <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex-1 px-5 py-4">
+          <div key={i} className="px-5 py-4">
             <Skeleton className="mb-2 h-3 w-16" />
             <Skeleton className="h-7 w-20" />
           </div>

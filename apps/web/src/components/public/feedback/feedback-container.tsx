@@ -13,7 +13,7 @@ import {
 } from '@/components/public/feedback/public-filters-bar'
 import { usePublicFilters } from '@/components/public/feedback/use-public-filters'
 import { PostCard } from '@/components/public/post-card'
-import type { BoardWithStats } from '@/lib/shared/types'
+import type { PublicBoardWithStats } from '@/lib/shared/types'
 import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
@@ -28,7 +28,7 @@ import { cn } from '@/lib/shared/utils'
 interface FeedbackContainerProps {
   workspaceName: string
   workspaceSlug: string
-  boards: BoardWithStats[]
+  boards: PublicBoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
   tags: Tag[]
@@ -40,8 +40,12 @@ interface FeedbackContainerProps {
   defaultBoardId?: string
   /** User info if authenticated */
   user?: { name: string | null; email: string } | null
-  /** Whether anonymous voting is enabled (visitors can vote without signing in) */
-  anonymousVotingEnabled?: boolean
+  /**
+   * Per-board submit/vote capability for the current viewer, keyed by board id
+   * (server-computed). Vote permission is per-board, so this one map gates
+   * every card — including infinite-scroll pages — and the submit CTA.
+   */
+  boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   /** Welcome card to render above the post list. Undefined / disabled = hidden. */
   welcomeCard?: PortalWelcomeCardData
 }
@@ -60,7 +64,7 @@ export function FeedbackContainer({
   currentSort = 'trending',
   defaultBoardId,
   user,
-  anonymousVotingEnabled = false,
+  boardPermissions,
   welcomeCard,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
@@ -76,6 +80,11 @@ export function FeedbackContainer({
   const effectiveUser = session?.user
     ? { name: session.user.name, email: session.user.email }
     : user
+  // A real (non-anonymous) signed-in user. Drives the vote button's authz vs
+  // authn copy: a denied real user sees "no access"; a denied anonymous / no-
+  // session viewer gets the sign-in path. Anonymous sessions also populate
+  // session.user, so !!effectiveUser is not the right signal here.
+  const isRealUser = !!session?.user && session.user.principalType !== 'anonymous'
 
   // Current filter values (URL state takes precedence over props)
   const activeBoard = filters.board ?? currentBoard
@@ -220,6 +229,7 @@ export function FeedbackContainer({
             boards={boards}
             defaultBoardId={boardIdForCreate}
             user={effectiveUser}
+            boardPermissions={boardPermissions}
             onPostCreated={handlePostCreated}
           />
 
@@ -290,8 +300,10 @@ export function FeedbackContainer({
                         createdAt={post.createdAt}
                         boardSlug={post.board?.slug || ''}
                         tags={post.tags}
-                        isAuthenticated={!!effectiveUser}
-                        canVote={!!effectiveUser || anonymousVotingEnabled}
+                        isAuthenticated={isRealUser}
+                        canVote={
+                          post.board ? (boardPermissions?.[post.board.id]?.canVote ?? false) : false
+                        }
                         showAvatar={false}
                       />
                     </div>

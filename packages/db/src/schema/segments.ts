@@ -9,7 +9,7 @@
  * are treated as a cached result set, evaluated periodically and synced.
  */
 import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 import type { UserAttributeType, CurrencyCode } from './user-attributes'
@@ -33,7 +33,7 @@ export type SegmentRuleOperator =
   | 'is_not_set'
 
 export type SegmentRuleAttribute =
-  | 'email_domain'
+  | 'email'
   | 'email_verified'
   | 'created_at_days_ago'
   | 'post_count'
@@ -41,6 +41,12 @@ export type SegmentRuleAttribute =
   | 'comment_count'
   | 'plan'
   | 'metadata_key'
+  | 'name'
+  | 'locale'
+  | 'country'
+  | 'last_active_days_ago'
+  | 'signup_source'
+  | 'principal_type'
 
 export interface SegmentCondition {
   attribute: SegmentRuleAttribute
@@ -108,6 +114,13 @@ export const segments = pgTable(
   {
     id: typeIdWithDefault('segment')('id').primaryKey(),
     name: text('name').notNull(),
+    /**
+     * URL-safe stable identifier. Required for new rows; backfilled from
+     * name in migration. Unique across non-deleted rows. Used by the
+     * widget identity-token `segments` claim and the REST
+     * `/api/v1/segments/:slug/members` route.
+     */
+    slug: text('slug').notNull(),
     description: text('description'),
     /** 'manual' | 'dynamic' */
     type: text('type', { enum: ['manual', 'dynamic'] })
@@ -131,6 +144,9 @@ export const segments = pgTable(
   (table) => [
     index('segments_type_idx').on(table.type),
     index('segments_deleted_at_idx').on(table.deletedAt),
+    uniqueIndex('segments_slug_unique')
+      .on(table.slug)
+      .where(sql`deleted_at IS NULL`),
   ]
 )
 
@@ -151,8 +167,15 @@ export const userSegments = pgTable(
     segmentId: typeIdColumn('segment')('segment_id')
       .notNull()
       .references(() => segments.id, { onDelete: 'cascade' }),
-    /** 'manual' = explicitly assigned; 'dynamic' = computed by evaluator */
-    addedBy: text('added_by', { enum: ['manual', 'dynamic'] })
+    /**
+     * Provenance of the membership:
+     * - manual   = admin assigned via admin UI
+     * - dynamic  = computed by the dynamic-segment rules evaluator
+     * - sso      = synced from the IdP "groups" claim at login
+     * - widget   = supplied via signed widget identity token
+     * - api      = supplied via REST API (POST /api/v1/segments/:slug/members)
+     */
+    addedBy: text('added_by', { enum: ['manual', 'dynamic', 'sso', 'widget', 'api'] })
       .notNull()
       .default('manual'),
     addedAt: timestamp('added_at', { withTimezone: true }).defaultNow().notNull(),

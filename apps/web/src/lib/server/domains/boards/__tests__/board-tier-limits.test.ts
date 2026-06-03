@@ -30,6 +30,14 @@ vi.mock('@/lib/server/db', async () => {
     inArray: drizzle.inArray,
     asc: drizzle.asc,
     sql: drizzle.sql,
+    DEFAULT_BOARD_ACCESS: {
+      view: 'anonymous',
+      vote: 'anonymous',
+      comment: 'anonymous',
+      submit: 'anonymous',
+      segments: { view: [], vote: [], comment: [], submit: [] },
+      moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+    },
   }
 })
 

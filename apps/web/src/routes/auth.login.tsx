@@ -1,10 +1,16 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
+import { z } from 'zod'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
+
+const searchSchema = z.object({
+  callbackUrl: z.string().optional(),
+})
 
 /**
  * Portal Login Page — email-first dispatcher. Mirrors `/admin/login`:
@@ -12,19 +18,24 @@ import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
  * everything else falls through to the portal's configured methods.
  */
 export const Route = createFileRoute('/auth/login')({
-  loader: async ({ context }) => {
+  validateSearch: searchSchema,
+  loaderDeps: ({ search }) => ({ callbackUrl: search.callbackUrl }),
+  loader: async ({ context, deps }) => {
     const { settings, queryClient } = context
     if (!settings) {
       throw redirect({ to: '/onboarding' })
     }
     await queryClient.ensureQueryData(settingsQueries.publicPortalConfig())
-    return {}
+
+    const safeCallbackUrl = isSafeCallbackUrl(deps.callbackUrl) ? deps.callbackUrl : '/'
+
+    return { safeCallbackUrl }
   },
   component: LoginPage,
 })
 
 function LoginPage() {
-  Route.useLoaderData()
+  const { safeCallbackUrl } = Route.useLoaderData()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const portalConfig = portalConfigQuery.data
   const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
@@ -47,6 +58,7 @@ function LoginPage() {
           New here?{' '}
           <Link
             to="/auth/signup"
+            search={{ callbackUrl: safeCallbackUrl }}
             className="font-medium text-primary hover:underline underline-offset-4"
           >
             Create an account
@@ -56,7 +68,7 @@ function LoginPage() {
     >
       <PortalAuthForm
         mode="login"
-        callbackUrl="/"
+        callbackUrl={safeCallbackUrl}
         authConfig={authConfig}
         customProviderNames={portalConfig.customProviderNames}
         workspaceName={workspaceName}

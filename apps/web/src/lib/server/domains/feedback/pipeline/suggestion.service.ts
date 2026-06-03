@@ -5,7 +5,17 @@
  * creating a new post from external feedback signals.
  */
 
-import { db, eq, and, feedbackSuggestions, posts, votes, sql } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  boards,
+  feedbackSuggestions,
+  posts,
+  votes,
+  sql,
+} from '@/lib/server/db'
 import type { SQL } from 'drizzle-orm'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -136,6 +146,18 @@ export async function acceptCreateSuggestion(
     throw new ValidationError('VALIDATION_ERROR', 'Board is required to create a post')
   }
 
+  // Precheck: board exists and isn't soft-deleted. Rejects deleted boards before
+  // any subscription/email/activity work runs. The locked recheck inside the
+  // transaction below stays as defense-in-depth against the TOCTOU window between
+  // this read and the insert. Mirrors the createPost pattern (f63a4eac, c1c6d020).
+  const board = await db.query.boards.findFirst({
+    where: and(eq(boards.id, boardId), isNull(boards.deletedAt)),
+    columns: { id: true },
+  })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${boardId} not found`)
+  }
+
   // Get the default status for new posts
   const { postStatuses } = await import('@/lib/server/db')
   const defaultStatus = await db.query.postStatuses.findFirst({
@@ -151,17 +173,33 @@ export async function acceptCreateSuggestion(
   // Use explicit statusId override or fall back to default
   const statusId = (edits?.statusId ?? defaultStatus?.id) as StatusId | undefined
 
-  const [newPost] = await db
-    .insert(posts)
-    .values({
-      title,
-      content: body,
-      boardId,
-      principalId: authorPrincipalId,
-      statusId,
-      voteCount: 1,
-    })
-    .returning({ id: posts.id })
+  // Lock the board row inside a transaction and re-check deletedAt before insert.
+  // An admin could soft-delete the board between the precheck above and the
+  // insert; the FK target row still exists (only deletedAt is set), so without
+  // this recheck the post would land as a child of a deleted board.
+  const newPost = await db.transaction(async (tx) => {
+    const lockedBoard = await tx
+      .select({ id: boards.id })
+      .from(boards)
+      .where(and(eq(boards.id, boardId), isNull(boards.deletedAt)))
+      .for('update')
+    if (lockedBoard.length === 0) {
+      throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${boardId} not found`)
+    }
+
+    const [inserted] = await tx
+      .insert(posts)
+      .values({
+        title,
+        content: body,
+        boardId,
+        principalId: authorPrincipalId,
+        statusId,
+        voteCount: 1,
+      })
+      .returning({ id: posts.id })
+    return inserted
+  })
 
   const newPostId = newPost.id as PostId
 
@@ -275,6 +313,11 @@ export async function acceptVoteSuggestion(
   const externalUrl = suggestion.rawItem?.externalUrl ?? undefined
   const voterName = (suggestion.rawItem?.author as { name?: string } | null)?.name ?? null
 
+  // Accepting a vote suggestion is a team-authority action that attributes a
+  // vote to the feedback author. Like proxy_vote, it routes to addVoteOnBehalf
+  // and intentionally does NOT enforce the board's per-action vote tier on the
+  // target — the tier gates a user self-voting, not a teammate recording
+  // off-portal signal.
   await addVoteOnBehalf(
     targetPostId,
     voterPrincipalId,

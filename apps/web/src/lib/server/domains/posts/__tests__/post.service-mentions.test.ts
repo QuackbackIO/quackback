@@ -70,9 +70,19 @@ vi.mock('@/lib/server/db', async () => {
     db: {
       query: {
         boards: {
-          findFirst: vi
-            .fn()
-            .mockResolvedValue({ id: 'board_b', slug: 'feedback', name: 'Feedback' }),
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'board_b',
+            slug: 'feedback',
+            name: 'Feedback',
+            access: {
+              view: 'anonymous',
+              vote: 'anonymous',
+              comment: 'anonymous',
+              submit: 'anonymous',
+              segments: { view: [], vote: [], comment: [], submit: [] },
+              moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+            },
+          }),
         },
         postStatuses: {
           findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
@@ -93,6 +103,32 @@ vi.mock('@/lib/server/db', async () => {
                 : (table.__name ?? (table as { [k: string]: unknown }).name ?? 'unknown')
             return chain(typeof label === 'string' ? label : 'posts')
           }),
+          // createPost runs SELECT ... FOR UPDATE on the board inside the txn
+          // to close the precheck/insert TOCTOU, then re-runs canCreatePost on
+          // the locked access. Return a live row WITH access so the re-check
+          // passes (anonymous board → anyone can submit).
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn(() => ({
+                for: vi.fn(async () => [
+                  {
+                    access: {
+                      view: 'anonymous',
+                      vote: 'anonymous',
+                      comment: 'anonymous',
+                      submit: 'anonymous',
+                      segments: { view: [], vote: [], comment: [], submit: [] },
+                      moderation: {
+                        anonPosts: 'inherit',
+                        signedPosts: 'inherit',
+                        comments: 'inherit',
+                      },
+                    },
+                  },
+                ]),
+              })),
+            })),
+          })),
         }
         return fn(tx)
       }),
@@ -132,6 +168,7 @@ vi.mock('@/lib/server/db', async () => {
     votes: { __name: 'votes' },
     principal: { id: 'principal_id' },
     eq: vi.fn(),
+    and: vi.fn(),
     inArray: vi.fn(),
     isNull: vi.fn(),
     sql: realSql,
@@ -167,6 +204,10 @@ vi.mock('@/lib/server/content/rehost-images', () => ({
 
 vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn(async () => ({ maxPosts: null, features: {} })),
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn(async () => ({ moderationDefault: { requireApproval: 'none' } })),
 }))
 
 vi.mock('../sync-post-mentions', () => ({

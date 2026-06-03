@@ -8,7 +8,7 @@ import type { BoardId } from '@quackback/ids'
 import type { BoardSettings, SetupState } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
-import { db, settings, eq } from '@/lib/server/db'
+import { db, settings, boards, eq } from '@/lib/server/db'
 import {
   listBoards,
   getBoardById,
@@ -17,6 +17,13 @@ import {
   deleteBoard,
 } from '@/lib/server/domains/boards/board.service'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
+import { boardAccessSchema, boardPresetSchema, accessForPreset } from '@/lib/shared/schemas/boards'
+
+// Re-export for back-compat: existing test imports `boardAccessSchema`
+// from '../boards'. The actual definition lives in @/lib/shared/schemas/boards
+// alongside the other board schemas, keeping it out of the client → server
+// import-protection chain.
+export { boardAccessSchema }
 
 // ============================================
 // Schemas
@@ -28,7 +35,11 @@ const createBoardSchema = z.object({
     .min(1, 'Board name is required')
     .max(100, 'Board name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
-  isPublic: z.boolean().default(true),
+  // Two-preset selector the admin create dialog renders as tiles. Mapped
+  // to a BoardAccess matrix via accessForPreset(). Richer tier choices
+  // (authenticated, segments[], asymmetric matrices) land via
+  // updateBoardAccessFn after the board exists — admin-only, audited.
+  preset: boardPresetSchema.default('public'),
 })
 
 const getBoardSchema = z.object({
@@ -45,7 +56,10 @@ const updateBoardSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
-  isPublic: z.boolean().optional(),
+  // Visibility (access + moderation) is NOT accepted here — those are
+  // policy changes, admin-only via updateBoardAccessFn. If we accepted
+  // access on this team-level path, members could grant/revoke board
+  // visibility despite the access-control split.
   settings: boardSettingsSchema.optional(),
 })
 
@@ -126,13 +140,17 @@ export const fetchBoardFn = createServerFn({ method: 'GET' })
 export const createBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] createBoardFn: name=${data.name}`)
+    console.log(`[fn:boards] createBoardFn: name=${data.name} preset=${data.preset}`)
     await requireAuth({ roles: ['admin', 'member'] })
 
+    // Map the binary preset choice (Public/Private) into a BoardAccess
+    // matrix via the shared helper. For finer-grained access (segments,
+    // asymmetric tiers) the admin uses updateBoardAccessFn after create —
+    // that path is admin-only and audited.
     const board = await createBoard({
       name: data.name,
       description: data.description,
-      isPublic: data.isPublic,
+      access: accessForPreset(data.preset),
     })
     console.log(`[fn:boards] createBoardFn: id=${board.id}`)
     return serializeBoard(board)
@@ -140,6 +158,11 @@ export const createBoardFn = createServerFn({ method: 'POST' })
 
 /**
  * Update an existing board
+ *
+ * Updates name / description / settings only. Board visibility (access)
+ * is a policy change and must go through updateBoardAccessFn (admin-only,
+ * audited). Accepting access here would let member-role callers silently
+ * override a segments or authenticated tier with a bare public/team one.
  */
 export const updateBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(updateBoardSchema)
@@ -150,9 +173,9 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
     const board = await updateBoard(data.id as BoardId, {
       name: data.name,
       description: data.description,
-      isPublic: data.isPublic,
       settings: data.settings as BoardSettings | undefined,
     })
+
     console.log(`[fn:boards] updateBoardFn: updated id=${board.id}`)
     return serializeBoard(board)
   })
@@ -209,7 +232,12 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
       const board = await createBoard({
         name: boardInput.name,
         description: boardInput.description,
-        isPublic: true,
+        // Onboarding-batch boards default to the Public preset
+        // (view=anonymous, vote/comment/submit=authenticated). Admins can
+        // lock them down later via updateBoardAccessFn. Without this the
+        // column default (all 'anonymous') would apply, which is more
+        // permissive than the create-modal's Public tile.
+        access: accessForPreset('public'),
       })
       createdBoards.push(serializeBoard(board))
     }
@@ -250,4 +278,54 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
     }
 
     return { boards: createdBoards, limited }
+  })
+
+// ============================================
+// v1 access controls — board access matrix
+// ============================================
+
+import { isAdmin } from '@/lib/shared/roles'
+import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
+
+const updateBoardAccessSchema = z.object({
+  boardId: z.string(),
+  access: boardAccessSchema,
+})
+
+/**
+ * Update board access policy.
+ *
+ * isAdmin-gated — granting/revoking access is policy-level work. Members can
+ * moderate posts (approve/reject) but not change who sees the board.
+ *
+ * Accepts a per-action tier matrix (BoardAccess). Each call records a
+ * `board.access.changed` audit event capturing the before/after access shape.
+ */
+export const updateBoardAccessFn = createServerFn({ method: 'POST' })
+  .inputValidator(updateBoardAccessSchema.parse)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth()
+    if (!isAdmin(auth.principal.role)) {
+      throw new ForbiddenError('FORBIDDEN', 'Admin only')
+    }
+    const before = await db.query.boards.findFirst({
+      where: eq(boards.id, data.boardId as BoardId),
+    })
+    if (!before) throw new NotFoundError('BOARD_NOT_FOUND', `Board ${data.boardId} not found`)
+
+    await db
+      .update(boards)
+      .set({ access: data.access })
+      .where(eq(boards.id, data.boardId as BoardId))
+
+    await recordAuditEvent({
+      event: 'board.access.changed',
+      actor: actorFromAuth(auth),
+      target: { type: 'board', id: data.boardId },
+      before: { access: before.access },
+      after: { access: data.access },
+    })
+
+    return { ok: true }
   })

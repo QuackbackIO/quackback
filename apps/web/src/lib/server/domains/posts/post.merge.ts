@@ -27,6 +27,12 @@ import { scheduleDispatch } from '@/lib/server/events/scheduler'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { ANONYMOUS_ACTOR, canViewPost, type Actor } from '@/lib/server/policy'
+
+// Drizzle's PgTransaction is structurally compatible with `db` for the
+// subset of operations recalculateCanonicalVoteCount uses (execute +
+// update). Type as a permissive shape so callers can pass either.
+type TransactionalDb = Pick<typeof db, 'execute' | 'update'>
 import {
   dispatchPostMerged,
   dispatchPostUnmerged,
@@ -101,19 +107,37 @@ export async function mergePost(
     )
   }
 
-  // Mark the duplicate post as merged
-  await db
-    .update(posts)
-    .set({
-      canonicalPostId: canonicalPostId,
-      mergedAt: new Date(),
-      mergedByPrincipalId: actorPrincipalId,
-    })
-    .where(eq(posts.id, duplicatePostId))
+  // Atomic merge-link + vote recalc. These two writes must commit
+  // together: if the merge link lands without the recalc, the canonical's
+  // voteCount stays stale until the next vote toggles it; if the recalc
+  // ran without the link, the canonical absorbed votes from a duplicate
+  // that's not actually a duplicate yet. Wrap in a transaction so a
+  // crash between the two leaves a coherent state.
+  //
+  // The UPDATE WHERE pins `canonicalPostId IS NULL` to block a
+  // concurrent merge of the same duplicate to a DIFFERENT canonical
+  // (admin A picks X, admin B picks Y, both pass the pre-check).
+  // `.returning()` lets us detect the lost-race and throw rather than
+  // silently inflating the wrong canonical's vote count.
+  const newVoteCount = await db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(posts)
+      .set({
+        canonicalPostId: canonicalPostId,
+        mergedAt: new Date(),
+        mergedByPrincipalId: actorPrincipalId,
+      })
+      .where(and(eq(posts.id, duplicatePostId), isNull(posts.canonicalPostId)))
+      .returning({ id: posts.id })
 
-  // Recalculate canonical post's vote count and reset merge check in one update
-  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId, {
-    resetMergeCheck: true,
+    if (claimed.length === 0) {
+      throw new ConflictError(
+        'ALREADY_MERGED',
+        'This post was just merged elsewhere — refresh and try again.'
+      )
+    }
+
+    return recalculateCanonicalVoteCount(canonicalPostId, { resetMergeCheck: true }, tx)
   })
 
   // Queue a delayed re-check for additional duplicates (e.g. 3 similar posts where only 1 was caught)
@@ -226,19 +250,22 @@ export async function unmergePost(
 
   const canonicalPostId = post.canonicalPostId as PostId
 
-  // Clear merge fields and reset merge check so the post gets re-evaluated
-  await db
-    .update(posts)
-    .set({
-      canonicalPostId: null,
-      mergedAt: null,
-      mergedByPrincipalId: null,
-      mergeCheckedAt: null,
-    })
-    .where(eq(posts.id, postId))
+  // Symmetric to mergePost: clear-link + canonical-recalc must commit
+  // together so we never leave a canonical with an inflated vote count
+  // for a duplicate that's been unlinked.
+  const newVoteCount = await db.transaction(async (tx) => {
+    await tx
+      .update(posts)
+      .set({
+        canonicalPostId: null,
+        mergedAt: null,
+        mergedByPrincipalId: null,
+        mergeCheckedAt: null,
+      })
+      .where(eq(posts.id, postId))
 
-  // Recalculate canonical post's vote count
-  const newVoteCount = await recalculateCanonicalVoteCount(canonicalPostId)
+    return recalculateCanonicalVoteCount(canonicalPostId, undefined, tx)
+  })
 
   // Look up the canonical post title and board for the activity metadata and event
   const canonicalPost = await db.query.posts.findFirst({
@@ -337,7 +364,10 @@ export async function getMergedPosts(canonicalPostId: PostId): Promise<MergedPos
  * @param postId - The post to check
  * @returns Merge info or null
  */
-export async function getPostMergeInfo(postId: PostId): Promise<PostMergeInfo | null> {
+export async function getPostMergeInfo(
+  postId: PostId,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<PostMergeInfo | null> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     columns: { canonicalPostId: true, mergedAt: true },
@@ -347,18 +377,43 @@ export async function getPostMergeInfo(postId: PostId): Promise<PostMergeInfo | 
     return null
   }
 
+  // Pull the canonical's audience + moderation state + author along
+  // with title/slug so the full canViewPost gate runs in the same
+  // round-trip. The original fix used canViewBoard only — a pending
+  // or spam canonical on a public-audience board still leaked.
+  // Soft-deleted post or board is treated as "doesn't exist".
   const canonicalPost = await db
     .select({
       id: posts.id,
       title: posts.title,
+      moderationState: posts.moderationState,
+      principalId: posts.principalId,
       boardSlug: boards.slug,
+      boardAccess: boards.access,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(eq(posts.id, post.canonicalPostId))
+    .where(
+      and(eq(posts.id, post.canonicalPostId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+    )
     .limit(1)
 
   if (!canonicalPost[0]) {
+    return null
+  }
+
+  // Full post-level gate: audience + moderation state + (for own-pending)
+  // authorship. Denials return null so we don't leak the canonical's
+  // existence to unauthorized viewers.
+  const decision = canViewPost(
+    actor,
+    {
+      moderationState: canonicalPost[0].moderationState,
+      principalId: canonicalPost[0].principalId,
+    },
+    { access: canonicalPost[0].boardAccess }
+  )
+  if (!decision.allowed) {
     return null
   }
 
@@ -449,12 +504,18 @@ export async function previewMergedPost(
  */
 async function recalculateCanonicalVoteCount(
   canonicalPostId: PostId,
-  options?: { resetMergeCheck?: boolean }
+  options?: { resetMergeCheck?: boolean },
+  tx?: TransactionalDb
 ): Promise<number> {
+  // Run via the transaction handle when called from inside mergePost /
+  // unmergePost so the recalc commits atomically with the merge link.
+  // Outside-of-tx callers (the BullMQ merge-recheck handler) fall back
+  // to the global db connection.
+  const conn = tx ?? db
   // Count unique member votes across canonical + all merged duplicates
   // Note: must convert TypeID to raw UUID for use in raw SQL
   const canonicalUuid = toUuid(canonicalPostId)
-  const result = await db.execute<{ unique_voters: number }>(sql`
+  const result = await conn.execute<{ unique_voters: number }>(sql`
     WITH related_post_ids AS (
       SELECT ${canonicalUuid}::uuid AS post_id
       UNION ALL
@@ -471,7 +532,7 @@ async function recalculateCanonicalVoteCount(
   const newCount = rows[0]?.unique_voters ?? 0
 
   // Update the canonical post's vote count (and optionally reset mergeCheckedAt)
-  await db
+  await conn
     .update(posts)
     .set({
       voteCount: newCount,

@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { useRouter, useNavigate } from '@tanstack/react-router'
 import { useForm } from 'react-hook-form'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
-import { createBoardSchema, type CreateBoardOutput } from '@/lib/shared/schemas/boards'
+import {
+  createBoardSchema,
+  type BoardPreset,
+  type CreateBoardOutput,
+} from '@/lib/shared/schemas/boards'
 import { useCreateBoard } from '@/lib/client/mutations'
 import { FormError } from '@/components/shared/form-error'
 import {
@@ -17,17 +21,18 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { PlusIcon } from '@heroicons/react/24/solid'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { GlobeAltIcon, LockClosedIcon, PlusIcon } from '@heroicons/react/24/solid'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { cn } from '@/lib/shared/utils/cn'
 
 interface CreateBoardDialogProps {
   open?: boolean
@@ -46,13 +51,17 @@ export function CreateBoardDialog({
   const router = useRouter()
   const navigate = useNavigate()
   const mutation = useCreateBoard()
+  // "Customize after create" is a UX-only toggle — not part of the
+  // submitted payload. Lives outside the form so it doesn't show up in
+  // the validation schema (or in mutation input).
+  const [customize, setCustomize] = useState(false)
 
   const form = useForm({
     resolver: standardSchemaResolver(createBoardSchema),
     defaultValues: {
       name: '',
       description: '',
-      isPublic: true,
+      preset: 'public' as BoardPreset,
     },
   })
 
@@ -61,10 +70,14 @@ export function CreateBoardDialog({
       onSuccess: (board) => {
         setIsOpen(false)
         form.reset()
+        // When the admin opted in, deep-link straight to the Access tab
+        // for the new board so they can fine-tune the matrix without
+        // hunting through the boards list.
         void navigate({
           to: '/admin/settings/boards',
-          search: { board: board.slug },
+          search: customize ? { board: board.slug, tab: 'access' } : { board: board.slug },
         })
+        setCustomize(false)
         router.invalidate()
       },
     })
@@ -74,6 +87,7 @@ export function CreateBoardDialog({
     setIsOpen(nextOpen)
     if (!nextOpen) {
       form.reset()
+      setCustomize(false)
       mutation.reset()
     }
   }
@@ -137,26 +151,49 @@ export function CreateBoardDialog({
 
               <FormField
                 control={form.control}
-                name="isPublic"
+                name="preset"
                 render={({ field }) => (
-                  <FormItem className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <FormLabel>Public board</FormLabel>
-                      <FormDescription>Anyone can view and submit feedback</FormDescription>
+                  <FormItem>
+                    <FormLabel>Access</FormLabel>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <PresetTile
+                        active={field.value === 'public'}
+                        label="Public"
+                        description="Anyone can view. Sign-in for vote, comment, submit."
+                        icon={<GlobeAltIcon className="h-3.5 w-3.5" />}
+                        onClick={() => field.onChange('public')}
+                      />
+                      <PresetTile
+                        active={field.value === 'private'}
+                        label="Private"
+                        description="Workspace members only. Hidden from the portal."
+                        icon={<LockClosedIcon className="h-3.5 w-3.5" />}
+                        onClick={() => field.onChange('private')}
+                      />
                     </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <Label className="flex items-center gap-2 text-xs font-normal text-muted-foreground cursor-pointer">
+                <Checkbox
+                  checked={customize}
+                  onCheckedChange={(v) => setCustomize(v === true)}
+                  aria-label="Customize access after create"
+                />
+                <span>
+                  Customize access after create
+                  <span className="ml-1">open the Access tab to fine-tune.</span>
+                </span>
+              </Label>
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setIsOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={mutation.isPending}>
+              <Button type="submit" size="sm" disabled={mutation.isPending}>
                 {mutation.isPending ? 'Creating...' : 'Create board'}
               </Button>
             </DialogFooter>
@@ -164,5 +201,41 @@ export function CreateBoardDialog({
         </Form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+interface PresetTileProps {
+  active: boolean
+  label: string
+  description: string
+  icon: React.ReactNode
+  onClick: () => void
+}
+
+/**
+ * Preset selector tile — matches the visual vocabulary of the Access
+ * tab's preset row (board-access-form.tsx → PresetCard) so the two
+ * surfaces feel like the same decision in different contexts.
+ */
+function PresetTile({ active, label, description, icon, onClick }: PresetTileProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        'flex flex-col items-stretch gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        active
+          ? 'border-primary bg-primary/10'
+          : 'border-border bg-muted/30 hover:bg-muted/60 cursor-pointer'
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className={active ? 'text-primary' : 'text-muted-foreground'}>{icon}</span>
+        <span className={cn('text-sm font-semibold', active && 'text-primary')}>{label}</span>
+      </div>
+      <span className="text-xs text-muted-foreground leading-snug">{description}</span>
+    </button>
   )
 }

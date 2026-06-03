@@ -52,7 +52,11 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
         try {
           await withApiKeyAuth(request, { role: 'team' })
 
-          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
+          const entryId = parseTypeId<ChangelogId>(
+            params.entryId,
+            'changelog',
+            'changelog entry ID'
+          )
 
           const entry = await getChangelogById(entryId)
           return successResponse(formatChangelogResponse(entry))
@@ -67,9 +71,13 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       PATCH: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
+          const entryId = parseTypeId<ChangelogId>(
+            params.entryId,
+            'changelog',
+            'changelog entry ID'
+          )
 
           const body = await request.json()
           const parsed = updateChangelogSchema.safeParse(body)
@@ -112,9 +120,14 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
        */
       DELETE: async ({ request, params }) => {
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          // Soft delete (deleteChangelog sets deletedAt) — team OK.
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const entryId = parseTypeId<ChangelogId>(params.entryId, 'changelog', 'changelog entry ID')
+          const entryId = parseTypeId<ChangelogId>(
+            params.entryId,
+            'changelog',
+            'changelog entry ID'
+          )
 
           await deleteChangelog(entryId)
           return noContentResponse()

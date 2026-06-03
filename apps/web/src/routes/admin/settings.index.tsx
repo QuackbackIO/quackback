@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
+import { PageHeader } from '@/components/shared/page-header'
 import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 
@@ -23,12 +24,7 @@ function SettingsIndexPage() {
 
   return (
     <div className="lg:hidden">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Cog6ToothIcon className="h-5 w-5 text-primary" />
-        </div>
-        <h1 className="text-xl font-semibold text-foreground">Settings</h1>
-      </div>
+      <PageHeader icon={Cog6ToothIcon} title="Settings" className="mb-6" />
       <SettingsNav />
     </div>
   )

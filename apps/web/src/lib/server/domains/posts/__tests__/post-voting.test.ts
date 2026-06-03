@@ -49,7 +49,7 @@ vi.mock('@quackback/ids', async (importOriginal) => {
 })
 
 // Import after mocks
-const { removeVote, addVoteOnBehalf } = await import('../post.voting')
+const { removeVote, addVoteOnBehalf, voteOnPost } = await import('../post.voting')
 
 const POST_ID = 'post_01test' as PostId
 const PRINCIPAL_ID = 'principal_01voter' as PrincipalId
@@ -159,5 +159,45 @@ describe('addVoteOnBehalf', () => {
 
     expect(result.voted).toBe(true)
     expect(mockDbExecute).toHaveBeenCalledTimes(1)
+  })
+
+  it('board_check CTE filters soft-deleted boards (deleted_at IS NULL)', async () => {
+    // Guard against accidental regression: addVoteOnBehalf must reject inserts
+    // when the target board has been soft-deleted (board_check returns no row).
+    // We inspect the SQL chunks rather than running against Postgres.
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: false, newly_voted: false, vote_count: 0 },
+    ])
+
+    await expect(addVoteOnBehalf(POST_ID, PRINCIPAL_ID)).rejects.toThrow(/Board not found/)
+    const sqlArg = mockDbExecute.mock.calls[0]?.[0] as { queryChunks?: unknown[] } | undefined
+    const raw = (sqlArg?.queryChunks ?? [])
+      .map((c: unknown) => {
+        const v = (c as { value?: unknown } | null)?.value
+        return Array.isArray(v) ? v.join(' ') : ''
+      })
+      .join(' ')
+    expect(raw).toMatch(/deleted_at\s+IS\s+NULL/i)
+  })
+})
+
+describe('voteOnPost — board_check filters soft-deleted boards', () => {
+  beforeEach(() => {
+    mockDbExecute.mockReset()
+  })
+
+  it('throws BOARD_NOT_FOUND when board_check returns no rows (soft-deleted board)', async () => {
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: false, newly_voted: false, vote_count: 0 },
+    ])
+    await expect(voteOnPost(POST_ID, PRINCIPAL_ID)).rejects.toThrow(/Board not found/)
+    const sqlArg = mockDbExecute.mock.calls[0]?.[0] as { queryChunks?: unknown[] } | undefined
+    const raw = (sqlArg?.queryChunks ?? [])
+      .map((c: unknown) => {
+        const v = (c as { value?: unknown } | null)?.value
+        return Array.isArray(v) ? v.join(' ') : ''
+      })
+      .join(' ')
+    expect(raw).toMatch(/deleted_at\s+IS\s+NULL/i)
   })
 })

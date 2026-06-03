@@ -43,6 +43,22 @@ function createUpdateChain() {
 }
 
 const mockSuggestionFindFirst = vi.fn()
+const mockBoardsFindFirst = vi.fn().mockResolvedValue({ id: 'board_1' })
+
+// Holds the result that the next tx.select(...).for('update') call resolves to.
+// Tests mutate this to simulate "board was soft-deleted between precheck and lock".
+let nextLockedBoardResult: unknown[] = [{ id: 'board_1' }]
+// Holds the result for the next tx.insert(...).returning() call. Tests set this
+// to control the inserted post id (post insert now happens inside the transaction).
+let nextTxInsertPost: unknown[] = [{ id: 'new_post_1' }]
+
+function createTxSelectChain(result: unknown[]) {
+  const chain: Record<string, unknown> = {}
+  chain.from = vi.fn(() => chain)
+  chain.where = vi.fn(() => chain)
+  chain.for = vi.fn().mockResolvedValue(result)
+  return chain
+}
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -53,12 +69,26 @@ vi.mock('@/lib/server/db', () => ({
       postStatuses: {
         findFirst: vi.fn().mockResolvedValue({ id: 'status_default' }),
       },
+      boards: {
+        findFirst: (...args: unknown[]) => mockBoardsFindFirst(...args),
+      },
     },
     insert: vi.fn(() => createInsertChain()),
     update: vi.fn(() => createUpdateChain()),
+    transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx: Record<string, unknown> = {}
+      tx.select = vi.fn(() => createTxSelectChain(nextLockedBoardResult))
+      tx.insert = vi.fn(() => createInsertChain(nextTxInsertPost))
+      return cb(tx)
+    }),
   },
   eq: vi.fn(),
   and: vi.fn(),
+  isNull: vi.fn(),
+  boards: {
+    id: 'id',
+    deletedAt: 'deleted_at',
+  },
   feedbackSuggestions: {
     id: 'id',
     status: 'status',
@@ -103,7 +133,11 @@ describe('suggestion.service', () => {
   beforeEach(() => {
     insertValuesCalls.length = 0
     updateSetCalls.length = 0
+    nextLockedBoardResult = [{ id: 'board_1' }]
+    nextTxInsertPost = [{ id: 'new_post_1' }]
     vi.clearAllMocks()
+    // clearAllMocks resets implementations, so re-establish the default after.
+    mockBoardsFindFirst.mockResolvedValue({ id: 'board_1' })
   })
 
   const rawItemId = 'raw_item_1' as RawFeedbackItemId
@@ -133,13 +167,7 @@ describe('suggestion.service', () => {
 
   describe('acceptCreateSuggestion', () => {
     it('should create post, vote, subscribe and email', async () => {
-      const { db } = await import('@/lib/server/db')
-      // Make insert return the new post ID
-      vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_1' as PostId }]) as unknown as ReturnType<
-          (typeof db)['insert']
-        >
-      )
+      nextTxInsertPost = [{ id: 'new_post_1' as PostId }]
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
         id: 'suggestion_1',
@@ -184,12 +212,7 @@ describe('suggestion.service', () => {
     })
 
     it('should use edits over suggestion defaults', async () => {
-      const { db } = await import('@/lib/server/db')
-      vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_2' as PostId }]) as unknown as ReturnType<
-          (typeof db)['insert']
-        >
-      )
+      nextTxInsertPost = [{ id: 'new_post_2' as PostId }]
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
         id: 'suggestion_1',
@@ -228,12 +251,7 @@ describe('suggestion.service', () => {
     })
 
     it('should not send email when author is the admin', async () => {
-      const { db } = await import('@/lib/server/db')
-      vi.mocked(db.insert).mockReturnValueOnce(
-        createInsertChain([{ id: 'new_post_3' as PostId }]) as unknown as ReturnType<
-          (typeof db)['insert']
-        >
-      )
+      nextTxInsertPost = [{ id: 'new_post_3' as PostId }]
 
       mockSuggestionFindFirst.mockResolvedValueOnce({
         id: 'suggestion_1',
@@ -269,6 +287,58 @@ describe('suggestion.service', () => {
       await expect(
         acceptCreateSuggestion('suggestion_1' as FeedbackSuggestionId, adminPrincipalId)
       ).rejects.toThrow('Board is required')
+    })
+
+    it('should reject acceptance targeting a soft-deleted board (precheck)', async () => {
+      // Simulate: precheck returns no live board (deletedAt filter excludes it).
+      mockBoardsFindFirst.mockResolvedValueOnce(undefined)
+
+      mockSuggestionFindFirst.mockResolvedValueOnce({
+        id: 'suggestion_1',
+        status: 'pending',
+        suggestionType: 'create_post',
+        suggestedTitle: 'Test',
+        suggestedBody: 'Test',
+        boardId,
+        rawItem: { principalId: externalPrincipalId },
+      })
+
+      const { acceptCreateSuggestion } = await import('../suggestion.service')
+      await expect(
+        acceptCreateSuggestion('suggestion_1' as FeedbackSuggestionId, adminPrincipalId)
+      ).rejects.toMatchObject({ code: 'BOARD_NOT_FOUND' })
+
+      // No post insert should have happened.
+      expect(insertValuesCalls.length).toBe(0)
+      // No subscribe/email side effects.
+      expect(mockSubscribeToPost).not.toHaveBeenCalled()
+      expect(mockSendAttributionEmail).not.toHaveBeenCalled()
+    })
+
+    it('should reject when board is soft-deleted between precheck and lock (TOCTOU)', async () => {
+      // Precheck sees a live board, but the locked recheck inside the
+      // transaction returns empty (concurrent soft-delete).
+      mockBoardsFindFirst.mockResolvedValueOnce({ id: 'board_1' })
+      nextLockedBoardResult = []
+
+      mockSuggestionFindFirst.mockResolvedValueOnce({
+        id: 'suggestion_1',
+        status: 'pending',
+        suggestionType: 'create_post',
+        suggestedTitle: 'Test',
+        suggestedBody: 'Test',
+        boardId,
+        rawItem: { principalId: externalPrincipalId },
+      })
+
+      const { acceptCreateSuggestion } = await import('../suggestion.service')
+      await expect(
+        acceptCreateSuggestion('suggestion_1' as FeedbackSuggestionId, adminPrincipalId)
+      ).rejects.toMatchObject({ code: 'BOARD_NOT_FOUND' })
+
+      // No post should have been inserted.
+      expect(insertValuesCalls.length).toBe(0)
+      expect(mockSubscribeToPost).not.toHaveBeenCalled()
     })
   })
 

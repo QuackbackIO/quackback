@@ -23,6 +23,9 @@ vi.mock('@/lib/server/db', () => ({
   principal: { id: 'id', userId: 'user_id' },
   eq: vi.fn(),
 }))
+vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
+  segmentIdsForPrincipal: vi.fn(async () => new Set()),
+}))
 
 import { Route } from '../index'
 

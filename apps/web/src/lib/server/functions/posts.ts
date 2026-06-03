@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   type PostId,
   type BoardId,
@@ -15,7 +16,7 @@ import {
 } from '@quackback/ids'
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, policyActorFromAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getMemberById } from '@/lib/server/domains/principals/principal.service'
@@ -246,6 +247,11 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         : null
 
       // Fetch merge info: merged posts (if canonical) or merge info (if duplicate)
+      // The admin handler is team-gated, so the resolved actor is admin
+      // or member — both pass canViewPost on any audience. Without the
+      // actor though, getPostMergeInfo defaulted to ANONYMOUS_ACTOR and
+      // hid the merge banner for canonicals on restricted-audience boards.
+      const adminMergeActor = await policyActorFromAuth(auth)
       const [mergedPosts, mergeInfo] = await Promise.all([
         getMergedPosts(postId).then((posts) =>
           posts.map((p) => ({
@@ -255,7 +261,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
           }))
         ),
         result.canonicalPostId
-          ? getPostMergeInfo(postId).then((info) =>
+          ? getPostMergeInfo(postId, adminMergeActor).then((info) =>
               info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
             )
           : null,
@@ -320,6 +326,11 @@ export const createPostFn = createServerFn({ method: 'POST' })
     console.log(`[fn:posts] createPostFn: boardId=${data.boardId}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
+      // Caller is always team — the policy gate inside createPost bypasses
+      // approval for team via canCreatePost. We still build the actor to
+      // pass through so audience checks are correct (e.g. a non-team API
+      // path wouldn't get here at all).
+      const actor = await policyActorFromAuth(auth)
 
       // Resolve author: use specified principal or fall back to authenticated user
       let author: {
@@ -327,11 +338,13 @@ export const createPostFn = createServerFn({ method: 'POST' })
         userId?: UserId
         name?: string
         email?: string
+        actor?: typeof actor
       } = {
         principalId: auth.principal.id,
         userId: auth.user.id as UserId,
         name: auth.user.name,
         email: auth.user.email,
+        actor,
       }
 
       if (
@@ -344,6 +357,9 @@ export const createPostFn = createServerFn({ method: 'POST' })
           author = {
             principalId: selectedPrincipal.id,
             name: selectedPrincipal.displayName ?? undefined,
+            // Keep the actor of the *caller* (the admin), not the override
+            // target — policy decisions reflect who's doing the create.
+            actor,
           }
         }
       }
@@ -357,7 +373,8 @@ export const createPostFn = createServerFn({ method: 'POST' })
           statusId: data.statusId as StatusId | undefined,
           tagIds: data.tagIds as TagId[] | undefined,
         },
-        author
+        author,
+        { headers: getRequestHeaders() }
       )
       console.log(`[fn:posts] createPostFn: id=${result.id}`)
 

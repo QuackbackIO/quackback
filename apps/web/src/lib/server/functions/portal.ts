@@ -10,8 +10,15 @@ import {
   type TagId,
   type UserId,
 } from '@quackback/ids'
-import type { BoardSettings } from '@/lib/server/db'
-import { getOptionalAuth, hasAuthCredentials } from './auth-helpers'
+import type { BoardSettings, BoardAccess } from '@/lib/server/db'
+import type { Actor } from '@/lib/server/policy'
+import {
+  getOptionalAuth,
+  hasAuthCredentials,
+  policyActorFromAuth,
+  requireAuth,
+} from './auth-helpers'
+import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { db, principal as principalTable, user as userTable, eq, inArray } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -31,6 +38,7 @@ import { listPublicTags } from '@/lib/server/domains/tags/tag.service'
 import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
+import { resolvePortalAccessForRequest } from './portal-access'
 
 // Schemas
 const sortSchema = z.enum(['top', 'new', 'trending'])
@@ -57,6 +65,42 @@ const fetchPortalDataSchema = z.object({
   responded: z.enum(['responded', 'unresponded']).optional(),
 })
 
+/**
+ * Build the per-board submit/vote capability map for `actor` from already-fetched
+ * boards. Shared by fetchPortalData (feed SSR) and fetchBoardCapabilitiesFn (the
+ * widget's Bearer refetch) so the shape + composition live in one place. The
+ * caller passes `allowAnonymous` (and the boards) so it can parallelize the
+ * settings read with its own queries.
+ */
+async function buildBoardPermissions(
+  actor: Actor,
+  boards: ReadonlyArray<{ id: string; access: BoardAccess }>,
+  allowAnonymous: boolean
+): Promise<Record<string, { canSubmit: boolean; canVote: boolean }>> {
+  const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
+  const map: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+  for (const b of boards) {
+    const caps = boardCapabilitiesForActor(actor, b.access, allowAnonymous)
+    map[b.id] = { canSubmit: caps.canSubmit, canVote: caps.canVote }
+  }
+  return map
+}
+
+/**
+ * Fail-closed workspace anonymous-interaction ceiling for the capability gates.
+ * Reads the RAW config (not getPortalConfig's permissive merged default) so a
+ * missing `features.allowAnonymous` denies — keeping the advertised capability
+ * in lockstep with the fail-closed write gates, so the UI can't out-advertise
+ * what the server permits (#191). Existing tenants carry an explicit value from
+ * migration 0084.
+ */
+async function loadAllowAnonymous(): Promise<boolean> {
+  const { getSettings } = await import('./workspace')
+  const { workspaceAllowsAnonymous } = await import('@/lib/server/domains/settings/settings.types')
+  const settings = await getSettings()
+  return workspaceAllowsAnonymous(settings?.portalConfig)
+}
+
 export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ userId: z.string() }))
   .handler(async ({ data }): Promise<PrincipalId | null> => {
@@ -76,10 +120,35 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
   .inputValidator(fetchPortalDataSchema)
   .handler(async ({ data }) => {
     console.log(`[fn:portal] fetchPortalData: boardSlug=${data.boardSlug}, sort=${data.sort}`)
-    // Run ALL queries in parallel for maximum performance
-    // Member lookup and votes run independently alongside posts/boards/statuses/tags
-    const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts] = await Promise.all(
-      [
+
+    // Outer gate: a private portal serves no boards/posts/statuses/tags to a
+    // caller the portal-access resolver denies. The per-board audience filter
+    // below stays as the inner layer for granted callers.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPortalData: portal access denied, returning empty`)
+      return {
+        boards: [],
+        posts: { items: [], hasMore: false, total: 0 },
+        statuses: [],
+        tags: [],
+        votedPostIds: [],
+        principalId: null,
+      }
+    }
+
+    // Resolve the policy actor from the current session before fanning out the
+    // parallel queries. List helpers default to ANONYMOUS_ACTOR; we pass the
+    // real one so signed-in users and segment members see audience-restricted
+    // boards + their own pending posts.
+    const auth = await getOptionalAuth()
+    const actor = await policyActorFromAuth(auth)
+
+    // Run ALL queries in parallel for maximum performance — including the
+    // (fail-closed) anonymous-ceiling read so buildBoardPermissions doesn't
+    // serialize an extra round-trip onto this (highest-traffic) loader.
+    const [memberResult, boardsRaw, postsResult, statuses, tags, allVotedPosts, allowAnonymous] =
+      await Promise.all([
         // Principal lookup (needed for principalId in response)
         data.userId
           ? db.query.principal.findFirst({
@@ -87,9 +156,10 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
               columns: { id: true },
             })
           : null,
-        listPublicBoardsWithStats(),
+        listPublicBoardsWithStats(actor),
         // Posts WITHOUT embedded vote check (we get votes separately for parallelism)
         listPublicPostsWithVotesAndAvatars({
+          actor,
           boardSlug: data.boardSlug,
           search: data.search,
           statusSlugs: data.statusSlugs,
@@ -107,9 +177,18 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         data.userId
           ? getVotedPostIdsByUserId(data.userId as UserId)
           : Promise.resolve(new Set<PostId>()),
-      ]
-    )
+        loadAllowAnonymous(),
+      ])
     const principalId = memberResult?.id ?? null
+
+    // Per-board submit/vote capability for THIS viewer, composed with the
+    // workspace anonymous switch. The UI uses these booleans to decide whether
+    // to advertise the submit/vote CTAs instead of re-deriving from the
+    // workspace flag and showing an action the per-board tier rejects (#191).
+    // Keyed by board id: vote permission is per-board, so this one map also
+    // covers infinite-scroll feed pages (every post belongs to one of these
+    // boards). Computed in-memory from boardsRaw.access — no extra query.
+    const boardPermissions = await buildBoardPermissions(actor, boardsRaw, allowAnonymous)
 
     // Return ALL voted post IDs (not just page 1) so infinite scroll pages show correct vote state
     const votedPostIds = Array.from(allVotedPosts)
@@ -133,20 +212,42 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
     }
 
     return {
-      boards: boardsRaw.map((b) => ({ ...b, settings: (b.settings ?? {}) as BoardSettings })),
+      // Strip the internal access matrix (segment ids, per-action tiers,
+      // moderation rules) from the client payload — the UI gates via
+      // boardPermissions / boardCapabilitiesForActor and never reads
+      // board.access, so shipping it would leak segmentation structure (#191).
+      boards: boardsRaw.map(({ access: _access, ...b }) => ({
+        ...b,
+        settings: (b.settings ?? {}) as BoardSettings,
+      })),
       posts,
       statuses,
       tags,
       votedPostIds,
       principalId,
+      boardPermissions,
     }
   })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:portal] fetchPublicBoards`)
   try {
-    const boards = await listPublicBoardsWithStats()
-    return boards.map((b) => ({ ...b, settings: (b.settings ?? {}) as BoardSettings }))
+    // Outer gate: private portal + unauthorized caller → no boards.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPublicBoards: portal access denied, returning empty`)
+      return []
+    }
+
+    const auth = await getOptionalAuth()
+    const actor = await policyActorFromAuth(auth)
+    const boards = await listPublicBoardsWithStats(actor)
+    // Strip the internal access matrix (see fetchPortalData) — clients never
+    // read board.access, so it must not reach the public payload (#191).
+    return boards.map(({ access: _access, ...b }) => ({
+      ...b,
+      settings: (b.settings ?? {}) as BoardSettings,
+    }))
   } catch (error) {
     console.error(`[fn:portal] fetchPublicBoards failed:`, error)
     throw error
@@ -158,9 +259,25 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:portal] fetchPublicBoardBySlug: slug=${data.slug}`)
     try {
-      const board = await getPublicBoardBySlug(data.slug)
+      // Outer gate: private portal + unauthorized caller → no board.
+      const access = await resolvePortalAccessForRequest()
+      if (!access.granted) {
+        console.log(`[fn:portal] fetchPublicBoardBySlug: portal access denied, returning null`)
+        return null
+      }
+
+      // Direct-load lookup must honour the request actor — otherwise an
+      // authenticated/segment-member user navigating directly to the slug
+      // is denied a board they can see in the portal list. Without the
+      // actor, the helper defaults to ANONYMOUS_ACTOR and only public
+      // boards round-trip.
+      const auth = await getOptionalAuth()
+      const actor = await policyActorFromAuth(auth)
+      const board = await getPublicBoardBySlug(data.slug, actor)
       if (!board) return null
-      return { ...board, settings: (board.settings ?? {}) as BoardSettings }
+      // Strip the internal access matrix (see fetchPortalData) before serializing.
+      const { access: _access, ...rest } = board
+      return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
     } catch (error) {
       console.error(`[fn:portal] fetchPublicBoardBySlug failed:`, error)
       throw error
@@ -171,13 +288,23 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     console.log(`[fn:portal] fetchPublicPostDetail: postId=${data.postId}`)
-    // Only fetch auth if user has a session cookie (for highlighting own comments)
+
+    // Outer gate: a private portal serves no post detail to a caller the
+    // portal-access resolver denies. The per-board audience check inside
+    // getPublicPostDetail stays as the inner layer for granted callers.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPublicPostDetail: portal access denied, returning null`)
+      return null
+    }
+
+    // The policy actor is the sole input getPublicPostDetail needs:
+    // it drives the visibility check, the principalId-for-own-comments
+    // lookup, and the include-private-comments flag (derived from
+    // isTeamActor). Same resolution path as list reads.
     const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-    const principalId = auth?.principal?.id
-    const isTeamMember = auth?.principal?.role === 'admin' || auth?.principal?.role === 'member'
-    const result = await getPublicPostDetail(data.postId as PostId, principalId, {
-      includePrivateComments: isTeamMember,
-    })
+    const actor = await policyActorFromAuth(auth)
+    const result = await getPublicPostDetail(data.postId as PostId, actor)
 
     if (!result) return null
 
@@ -199,22 +326,48 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       }
     }
 
-    // Fetch merge info for this post
+    // Fetch merge info for this post. Pass the same actor used to gate
+    // the post detail above so the canonical's audience check runs from
+    // the caller's perspective — without it, the canonical's title and
+    // board slug could leak through the merge banner. The workspace anonymous
+    // switch (only needed to ceiling a non-user actor) is fetched alongside so
+    // its DB read overlaps the merge queries instead of running in series.
     const postId = data.postId as PostId
-    const [mergeInfo, mergedPostsList] = await Promise.all([
-      getPostMergeInfo(postId).then((info) =>
+    const needsAnonCeiling = actor.principalType !== 'user'
+    const [mergeInfo, mergedPostsList, allowAnonymous] = await Promise.all([
+      getPostMergeInfo(postId, actor).then((info) =>
         info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
       ),
       getMergedPosts(postId),
+      needsAnonCeiling ? loadAllowAnonymous() : Promise.resolve(false),
     ])
 
+    // Per-board vote/comment capability for THIS viewer. The widget passes its
+    // Bearer identity to this fn and refetches on identify, so `actor` reflects
+    // the real (possibly just-identified) viewer — unlike the home feed, which
+    // only has the anonymous SSR baseline. boardCapabilitiesForActor applies the
+    // per-board tier + the workspace anonymous ceiling (non-user actors only),
+    // so the UI never advertises a vote/comment CTA the board's tier rejects
+    // (#191). canSubmit is unused on the detail view.
+    const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
+    const { canVote, canComment } = boardCapabilitiesForActor(
+      actor,
+      result.boardAccess,
+      allowAnonymous
+    )
+
+    // Drop boardAccess (server-only — used above to compute the booleans) so
+    // the board's segment ids never reach the client.
+    const { boardAccess: _boardAccess, ...serializable } = result
     return {
-      ...result,
+      ...serializable,
       contentJson: result.contentJson ?? {},
       createdAt: toISOString(result.createdAt),
       comments: result.comments.map(serializeComment),
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
+      canVote,
+      canComment,
     }
   })
 
@@ -223,7 +376,16 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     console.log(`[fn:portal] fetchPublicPosts: boardSlug=${data.boardSlug}, sort=${data.sort}`)
     try {
-      const result = await listPublicPosts({ ...data, page: 1, limit: 20 })
+      // Outer gate: private portal + unauthorized caller → no posts.
+      const access = await resolvePortalAccessForRequest()
+      if (!access.granted) {
+        console.log(`[fn:portal] fetchPublicPosts: portal access denied, returning empty`)
+        return { items: [], hasMore: false, total: 0 }
+      }
+
+      const auth = await getOptionalAuth()
+      const actor = await policyActorFromAuth(auth)
+      const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
       return {
         ...result,
         items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
@@ -237,6 +399,13 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:portal] fetchPublicStatuses`)
   try {
+    // Outer gate: a private portal must not expose its status taxonomy to a
+    // denied caller.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPublicStatuses: portal access denied, returning empty`)
+      return []
+    }
     return await listPublicStatuses()
   } catch (error) {
     console.error(`[fn:portal] fetchPublicStatuses failed:`, error)
@@ -247,6 +416,13 @@ export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(asy
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:portal] fetchPublicTags`)
   try {
+    // Outer gate: a private portal must not expose its tag taxonomy to a
+    // denied caller.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPublicTags: portal access denied, returning empty`)
+      return []
+    }
     return await listPublicTags()
   } catch (error) {
     console.error(`[fn:portal] fetchPublicTags failed:`, error)
@@ -322,7 +498,29 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
       `[fn:portal] fetchSubscriptionStatus: principalId=${data.principalId}, postId=${data.postId}`
     )
     try {
-      return await getSubscriptionStatus(data.principalId as PrincipalId, data.postId as PostId)
+      // The route used to accept a client-supplied principalId with no
+      // auth check at all — a textbook IDOR. Lock the lookup to the
+      // caller's own principal unless they're team. Team-role actors
+      // can read any principal's subscription (admin support flow).
+      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const requestedPrincipalId = data.principalId as PrincipalId
+      const isTeam = auth.principal.role === 'admin' || auth.principal.role === 'member'
+      if (!isTeam && requestedPrincipalId !== auth.principal.id) {
+        // 404-shape so denied callers can't probe other users'
+        // subscription state by varying principalId.
+        throw new NotFoundError(
+          'SUBSCRIPTION_NOT_FOUND',
+          `Subscription not found for principal ${requestedPrincipalId}`
+        )
+      }
+      // Audience gate: even the caller themselves shouldn't be able to
+      // read a subscription tied to a post they can't view (the
+      // subscribe path is also gated below, but a stale row from before
+      // an audience change could otherwise leak the post's existence).
+      const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
+      const actor = await policyActorFromAuth(auth)
+      await assertPostViewable(data.postId as PostId, actor)
+      return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
     } catch (error) {
       console.error(`[fn:portal] fetchSubscriptionStatus failed:`, error)
       throw error
@@ -332,6 +530,13 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   console.log(`[fn:portal] fetchPublicRoadmaps`)
   try {
+    // Outer gate: private portal + unauthorized caller → no roadmaps.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      console.log(`[fn:portal] fetchPublicRoadmaps: portal access denied, returning empty`)
+      return []
+    }
+
     const roadmaps = await listPublicRoadmaps()
     return roadmaps.map((r) => ({
       id: r.id,
@@ -368,26 +573,40 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       `[fn:portal] fetchPublicRoadmapPosts: roadmapId=${data.roadmapId}, limit=${data.limit}, offset=${data.offset}`
     )
     try {
-      // Segment filtering requires admin/member role
-      let segmentIds: SegmentId[] | undefined
-      if (data.segmentIds?.length && hasAuthCredentials()) {
-        const auth = await getOptionalAuth()
-        if (auth && isTeamMember(auth.principal.role)) {
-          segmentIds = data.segmentIds as SegmentId[]
-        }
-        // Non-admin callers silently ignore segmentIds
+      // Outer gate: private portal + unauthorized caller → no roadmap posts.
+      const access = await resolvePortalAccessForRequest()
+      if (!access.granted) {
+        console.log(`[fn:portal] fetchPublicRoadmapPosts: portal access denied, returning empty`)
+        return { items: [], hasMore: false, total: 0 }
       }
 
-      const result = await getPublicRoadmapPosts(data.roadmapId as RoadmapId, {
-        statusId: data.statusId as StatusId | undefined,
-        limit: data.limit ?? 20,
-        offset: data.offset ?? 0,
-        search: data.search,
-        boardIds: data.boardIds as BoardId[] | undefined,
-        tagIds: data.tagIds as TagId[] | undefined,
-        segmentIds,
-        sort: data.sort,
-      })
+      // Resolve auth once — used for both the segment-filter gate and
+      // the per-board audience filter on getPublicRoadmapPosts.
+      const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+
+      // Segment filtering requires admin/member role
+      let segmentIds: SegmentId[] | undefined
+      if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
+        segmentIds = data.segmentIds as SegmentId[]
+        // Non-team callers silently ignore segmentIds
+      }
+
+      const actor = await policyActorFromAuth(auth)
+
+      const result = await getPublicRoadmapPosts(
+        data.roadmapId as RoadmapId,
+        {
+          statusId: data.statusId as StatusId | undefined,
+          limit: data.limit ?? 20,
+          offset: data.offset ?? 0,
+          search: data.search,
+          boardIds: data.boardIds as BoardId[] | undefined,
+          tagIds: data.tagIds as TagId[] | undefined,
+          segmentIds,
+          sort: data.sort,
+        },
+        actor
+      )
 
       return {
         ...result,
@@ -410,41 +629,105 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
     }
   })
 
-export const getCommentsSectionDataFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:portal] getCommentsSectionDataFn`)
-  try {
-    // Early bailout: no session cookie = anonymous user (skip DB queries)
-    if (!hasAuthCredentials()) {
-      return {
-        isMember: false,
-        canComment: false,
-        user: undefined,
+const getCommentsSectionDataSchema = z.object({ postId: z.string() })
+
+export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
+  .inputValidator(getCommentsSectionDataSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:portal] getCommentsSectionDataFn: postId=${data.postId}`)
+    const denied = { isMember: false, isTeamMember: false, canComment: false, user: undefined }
+    try {
+      const postId = data.postId as PostId
+
+      // Portal-visibility gate: a caller who can't see the portal must not
+      // learn whether commenting is open. Mirrors getVoteSidebarDataFn.
+      const access = await resolvePortalAccessForRequest()
+      if (!access.granted) return denied
+
+      const ctx = await getOptionalAuth()
+      const actor = await policyActorFromAuth(ctx)
+
+      // Per-post audience gate: a portal-granted caller can still be probing a
+      // post on a team-only / segment-restricted board. NotFound => denial.
+      try {
+        const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
+        await assertPostViewable(postId, actor)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'NotFoundError') return denied
+        throw err
       }
-    }
 
-    const ctx = await getOptionalAuth()
-    const isMember = !!(ctx?.user && ctx?.principal)
-    const isTeamMember =
-      isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
+      // Per-board comment capability for the real actor, composed with the
+      // workspace anonymous ceiling. boardCapabilitiesForActor is the single
+      // source of truth the portal + widget UIs share, so the CTA can't desync
+      // from the server-side canCreateComment gate (it passes a published,
+      // unlocked post internally — assertPostViewable already proved view, and
+      // comments-locked is handled by the component's lockedMessage).
+      const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
+      const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
+      const boardAccess = await loadBoardAccessForPost(postId)
+      if (!boardAccess) return denied
 
-    // Anonymous users can only comment if the setting is enabled
-    let canComment = isMember
-    if (isMember && ctx.principal.type === 'anonymous') {
-      const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-      const config = await getPortalConfig()
-      canComment = config.features.anonymousCommenting
-    }
+      // The workspace anonymous ceiling only applies to non-user actors, so
+      // only real anonymous / no-session viewers need the (uncached) config
+      // read — a user actor's canComment is gated purely by the per-board tier,
+      // making allowAnonymous irrelevant. Keep the read lazy + conditional
+      // rather than eager so a user actor's path never depends on it.
+      let allowAnonymous = false
+      if (actor.principalType !== 'user') {
+        allowAnonymous = await loadAllowAnonymous()
+      }
+      const canComment = boardCapabilitiesForActor(actor, boardAccess, allowAnonymous).canComment
 
-    return {
-      isMember,
-      isTeamMember,
-      canComment,
-      user: isMember
-        ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
-        : undefined,
+      const isMember = !!(ctx?.user && ctx?.principal)
+      const isTeamMember =
+        isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
+
+      return {
+        isMember,
+        isTeamMember,
+        canComment,
+        user: isMember
+          ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
+          : undefined,
+      }
+    } catch (error) {
+      console.error(`[fn:portal] getCommentsSectionDataFn failed:`, error)
+      throw error
     }
-  } catch (error) {
-    console.error(`[fn:portal] getCommentsSectionDataFn failed:`, error)
-    throw error
-  }
+  })
+
+/**
+ * Per-board submit/vote capability map for the request actor.
+ *
+ * Same shape and computation as fetchPortalData.boardPermissions, but split out
+ * so the widget can REFETCH it for the real (Bearer) identity. The widget feed
+ * is seeded at SSR from the anonymous baseline (no Bearer at loader time); after
+ * the visitor identifies it re-queries this with its Bearer token (keyed on
+ * sessionVersion), so the feed gates votes/submission per the actual actor
+ * instead of OR-ing in a blanket `isIdentified` — which would advertise CTAs on
+ * segments/team boards the actor cannot act on (Codex #191 follow-up).
+ *
+ * Declared at the end of the module on purpose: the gate test maps portal
+ * handlers by declaration order, so new server fns append here to avoid
+ * shifting existing indices.
+ */
+export const fetchBoardCapabilitiesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  console.log(`[fn:portal] fetchBoardCapabilitiesFn`)
+  const empty: Record<string, { canSubmit: boolean; canVote: boolean }> = {}
+
+  // Same portal-visibility + per-board gates as fetchPortalData.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) return empty
+
+  const auth = await getOptionalAuth()
+  const actor = await policyActorFromAuth(auth)
+
+  // Settings read overlaps the board query — only one DB round-trip is on the
+  // critical path for this refetch-on-identify endpoint.
+  const [boards, allowAnonymous] = await Promise.all([
+    listPublicBoardsWithStats(actor),
+    loadAllowAnonymous(),
+  ])
+  return buildBoardPermissions(actor, boards, allowAnonymous)
 })

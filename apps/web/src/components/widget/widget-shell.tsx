@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
   XMarkIcon,
   LightBulbIcon,
   NewspaperIcon,
   BookOpenIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
-import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-auth'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
 
 export type WidgetTab = 'feedback' | 'changelog' | 'help'
@@ -36,12 +38,29 @@ const TAB_CONFIG: {
   { tab: 'help', icon: BookOpenIcon, labelId: 'widget.shell.tab.help', defaultLabel: 'Help' },
 ]
 
+interface PortalAccessProps {
+  /** Whether the portal is set to private visibility. */
+  isPrivate: boolean
+  /** Whether widget sign-in is enabled on this portal. */
+  widgetSignIn: boolean
+}
+
 interface WidgetShellProps {
   orgSlug: string
   activeTab: WidgetTab
   onTabChange: (tab: WidgetTab) => void
   onBack?: () => void
   enabledTabs?: { feedback?: boolean; changelog?: boolean; help?: boolean }
+  /** Portal access config used to decide whether to show the "Go to portal" CTA. */
+  portalAccess?: PortalAccessProps
+  /**
+   * The portal's own origin (e.g. "https://feedback.example.com"), resolved
+   * server-side from BASE_URL. Used for the widget-handoff URL so the CTA
+   * always points at the portal host, not at the widget iframe's origin (which
+   * may differ in self-hosted setups where the widget is served from a
+   * separate domain).
+   */
+  portalOrigin?: string
   children: ReactNode
 }
 
@@ -51,6 +70,8 @@ export function WidgetShell({
   onTabChange,
   onBack,
   enabledTabs = { feedback: true, changelog: false, help: false },
+  portalAccess,
+  portalOrigin,
   children,
 }: WidgetShellProps) {
   const intl = useIntl()
@@ -58,7 +79,7 @@ export function WidgetShell({
     Boolean
   ).length
   const showTabBar = enabledCount > 1
-  const { user, closeWidget } = useWidgetAuth()
+  const { user, isIdentified, hmacRequired, closeWidget } = useWidgetAuth()
   const isNative =
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('source') === 'native'
@@ -93,6 +114,31 @@ export function WidgetShell({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [closeWidget])
 
+  // "Go to portal" CTA — shown only when ALL three conditions hold:
+  //   1. The visitor is HMAC-verified (hmacRequired=true and they are identified)
+  //   2. The portal is private
+  //   3. widgetSignIn is enabled
+  const showPortalCta =
+    hmacRequired &&
+    isIdentified &&
+    (portalAccess?.isPrivate ?? false) &&
+    (portalAccess?.widgetSignIn ?? false)
+  const [portalCtaError, setPortalCtaError] = useState(false)
+  const handleGoToPortal = useCallback(async () => {
+    setPortalCtaError(false)
+    const ott = await generateOneTimeToken()
+    if (!ott) {
+      setPortalCtaError(true)
+      return
+    }
+    // Prefer the server-resolved portal origin so the handoff URL targets the
+    // portal host — not the widget iframe's origin, which may differ in
+    // self-hosted setups where the widget is served from a separate domain.
+    const origin = portalOrigin || window.location.origin
+    const portalUrl = `${origin}/auth/widget-handoff?ott=${encodeURIComponent(ott)}`
+    sendToHost({ type: 'quackback:navigate', url: portalUrl })
+  }, [])
+
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-x-hidden">
       <div className="flex items-center justify-between px-3 pt-2 pb-0.5 shrink-0">
@@ -125,6 +171,20 @@ export function WidgetShell({
           )}
         </div>
         <div className="flex items-center gap-1">
+          {showPortalCta && (
+            <button
+              type="button"
+              onClick={handleGoToPortal}
+              className="flex items-center gap-1 px-2 h-7 rounded-md text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+              aria-label={intl.formatMessage({
+                id: 'widget.shell.aria.goToPortal',
+                defaultMessage: 'Go to portal',
+              })}
+            >
+              <FormattedMessage id="widget.shell.goToPortal" defaultMessage="Portal" />
+              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
           {user && <UserAvatarPopover user={user} />}
           {showCloseButton && (
             <button
@@ -141,6 +201,15 @@ export function WidgetShell({
           )}
         </div>
       </div>
+
+      {portalCtaError && (
+        <p className="px-3 pb-1 text-[11px] text-destructive">
+          <FormattedMessage
+            id="widget.shell.goToPortal.error"
+            defaultMessage="Couldn't generate sign-in link, please try again"
+          />
+        </p>
+      )}
 
       <div className="flex-1 overflow-hidden min-h-0">{children}</div>
 

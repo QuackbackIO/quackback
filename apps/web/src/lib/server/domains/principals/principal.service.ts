@@ -23,6 +23,7 @@ import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, isAdmin } from '@/lib/shared/roles'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
+import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
 
 // Re-export types for backwards compatibility
@@ -214,7 +215,9 @@ export async function countMembers(): Promise<number> {
 export async function updateMemberRole(
   principalId: PrincipalId,
   newRole: 'admin' | 'member',
-  actingPrincipalId: PrincipalId
+  actingPrincipalId: PrincipalId,
+  actor: AuditActor | null = null,
+  headers?: Headers
 ): Promise<void> {
   // Cannot modify own role
   if (principalId === actingPrincipalId) {
@@ -248,10 +251,27 @@ export async function updateMemberRole(
       }
     }
 
+    const previousRole = targetMember.role
+
     // Update the role
     await db.update(principal).set({ role: newRole }).where(eq(principal.id, principalId))
     if (targetMember.userId) {
       await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
+    }
+
+    // Audit the role change. Already audited from the SSO/JIT path
+    // (`auth/hooks.ts` emits user.role.changed there). Admin manual
+    // role flips need the same coverage or the audit log doesn't tell
+    // the full story of who got which role.
+    if (actor) {
+      await recordAuditEvent({
+        event: 'user.role.changed',
+        actor,
+        headers,
+        target: { type: 'principal', id: principalId },
+        before: { role: previousRole },
+        after: { role: newRole },
+      })
     }
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
@@ -270,7 +290,9 @@ export async function updateMemberRole(
  */
 export async function removeTeamMember(
   principalId: PrincipalId,
-  actingPrincipalId: PrincipalId
+  actingPrincipalId: PrincipalId,
+  actor: AuditActor | null = null,
+  headers?: Headers
 ): Promise<void> {
   // Cannot remove self
   if (principalId === actingPrincipalId) {
@@ -304,10 +326,27 @@ export async function removeTeamMember(
       }
     }
 
+    const previousRole = targetMember.role
+
     // Convert to portal user by setting role to 'user'
     await db.update(principal).set({ role: 'user' }).where(eq(principal.id, principalId))
     if (targetMember.userId) {
       await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
+    }
+
+    // Audit the removal. The audit-event taxonomy already reserves
+    // `user.removed` for this exact action (audit/log.ts); without an
+    // emission the event was a dead literal and the team can't see
+    // who lost which role.
+    if (actor) {
+      await recordAuditEvent({
+        event: 'user.removed',
+        actor,
+        headers,
+        target: { type: 'principal', id: principalId },
+        before: { role: previousRole },
+        after: { role: 'user' },
+      })
     }
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {

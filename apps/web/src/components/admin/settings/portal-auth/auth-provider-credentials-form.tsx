@@ -11,6 +11,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { OIDC_PRESETS, detectOidcProvider } from '@/lib/shared/oidc-presets'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 
 interface AuthProviderCredentialsFormProps {
@@ -183,22 +191,74 @@ export function AuthProviderCredentialsForm({
     )
   }
 
-  const renderField = (field: PlatformCredentialField) => (
-    <div key={field.key}>
-      <Label htmlFor={`auth-cred-${field.key}`} className="text-sm font-medium">
-        {field.label}
-      </Label>
-      <Input
-        id={`auth-cred-${field.key}`}
-        type={field.sensitive ? 'password' : 'text'}
-        placeholder={field.placeholder ?? ''}
-        value={values[field.key] ?? ''}
-        onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-        className="mt-1"
-      />
-      {field.helpText && <p className="mt-1 text-xs text-muted-foreground">{field.helpText}</p>}
-    </div>
-  )
+  const renderField = (field: PlatformCredentialField) => {
+    // For the discoveryUrl field on the custom-oidc provider, add a preset
+    // picker above the input and a detected-provider hint below it.
+    if (field.key === 'discoveryUrl' && providerId === 'custom-oidc') {
+      const currentValue = values[field.key] ?? ''
+      const detected = detectOidcProvider(currentValue)
+      return (
+        <div key={field.key} className="space-y-1.5">
+          <Label htmlFor={`auth-cred-${field.key}`} className="text-sm font-medium">
+            {field.label}
+          </Label>
+          {/* Preset picker */}
+          <Select
+            value=""
+            onValueChange={(v) => {
+              const preset = OIDC_PRESETS.find((p) => p.id === v)
+              if (preset?.issuerTemplate) {
+                setValues((prev) => ({ ...prev, [field.key]: preset.issuerTemplate! }))
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-48 text-xs">
+              <SelectValue placeholder="Pick a preset…" />
+            </SelectTrigger>
+            <SelectContent>
+              {OIDC_PRESETS.map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-xs">
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            id={`auth-cred-${field.key}`}
+            type="text"
+            placeholder={field.placeholder ?? ''}
+            value={currentValue}
+            onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+          />
+          {detected && (
+            <p className="text-xs text-muted-foreground">
+              Detected: <span className="font-medium text-foreground">{detected.label}</span>
+            </p>
+          )}
+          {!detected && field.helpText && (
+            <p className="text-xs text-muted-foreground">{field.helpText}</p>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div key={field.key}>
+        <Label htmlFor={`auth-cred-${field.key}`} className="text-sm font-medium">
+          {field.label}
+        </Label>
+        <Input
+          id={`auth-cred-${field.key}`}
+          type={field.sensitive ? 'password' : 'text'}
+          placeholder={field.placeholder ?? ''}
+          value={values[field.key] ?? ''}
+          onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+          className="mt-1"
+        />
+        {field.helpText && <p className="mt-1 text-xs text-muted-foreground">{field.helpText}</p>}
+      </div>
+    )
+  }
 
   // Show input form when not configured or editing
   return (

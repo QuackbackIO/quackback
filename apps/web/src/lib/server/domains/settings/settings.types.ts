@@ -177,30 +177,32 @@ export interface PortalAuthMethods {
  * Portal feature toggles
  */
 export interface PortalFeatures {
-  /** Whether unauthenticated users can view the portal */
-  publicView: boolean
-  /** Whether portal users can submit new posts */
-  submissions: boolean
-  /** Whether portal users can comment on posts */
-  comments: boolean
-  /** Whether portal users can vote on posts */
-  voting: boolean
-  /** Whether unauthenticated visitors can vote without signing in */
-  anonymousVoting: boolean
-  /** Whether unauthenticated visitors can comment without signing in */
-  anonymousCommenting: boolean
-  /** Whether unauthenticated visitors can create posts without signing in */
-  anonymousPosting: boolean
+  /**
+   * Workspace-wide master switch for anonymous interaction. When `false`,
+   * every board's vote/comment/submit action requires sign-in regardless
+   * of its per-board `access` tier — the BoardAccessForm renders the
+   * "Anyone" cells as disabled and the server's vote/comment/post
+   * handlers refuse anonymous principals up-front. The previous trio of
+   * per-action toggles (`anonymousVoting`/`anonymousCommenting`/
+   * `anonymousPosting`) was collapsed into this single flag by migration
+   * 0084; per-board tiers carry whatever finer-grained restrictions the
+   * admin had set under the old shape.
+   */
+  allowAnonymous: boolean
   /** Allow users to edit posts even after receiving votes/comments */
   allowEditAfterEngagement: boolean
   /** Allow users to delete posts even after receiving votes/comments */
   allowDeleteAfterEngagement: boolean
   /** Show public edit history on posts */
   showPublicEditHistory: boolean
-  /** Whether rich media (images, tables, embeds) is enabled in the admin post editor */
-  richMediaInPosts?: boolean
-  /** Whether YouTube/video embeds are enabled in the admin post editor (only applies when richMediaInPosts is true) */
-  videoEmbedsInPosts?: boolean
+}
+
+/**
+ * Workspace-wide post-approval policy. Applies to every board — there is
+ * no per-board override.
+ */
+export interface ModerationDefault {
+  requireApproval: 'none' | 'anonymous' | 'authenticated' | 'all'
 }
 
 /**
@@ -224,6 +226,24 @@ export interface PortalWelcomeCard {
 export const PORTAL_WELCOME_CARD_TITLE_MAX = 120
 
 /**
+ * Portal-level access control settings.
+ *
+ * `allowedDomains`, `widgetSignIn`, and `allowedSegmentIds` are server-only
+ * policy. They are read by `evaluateMyPortalAccessFn` server-side and never
+ * serialized into the router context or any client payload. The router context
+ * carries only `visibility` from this shape (redacted in `__root.tsx`).
+ */
+export interface PortalAccessConfig {
+  visibility: 'public' | 'private'
+  /** Email domains whose verified users are automatically granted access. */
+  allowedDomains: string[]
+  /** Whether widget-authenticated users may access a private portal. */
+  widgetSignIn: boolean
+  /** Server-only policy. Segments whose members can access a private portal. */
+  allowedSegmentIds: string[]
+}
+
+/**
  * Portal configuration
  * Controls the public feedback portal behavior
  */
@@ -234,6 +254,10 @@ export interface PortalConfig {
   features: PortalFeatures
   /** Welcome card on the portal index. Optional — absent = disabled. */
   welcomeCard?: PortalWelcomeCard
+  /** Workspace-wide approval policy; applies to every board. */
+  moderationDefault: ModerationDefault
+  /** Portal-level access control (visibility gate). */
+  access?: PortalAccessConfig
 }
 
 /**
@@ -247,22 +271,47 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     github: true,
   },
   features: {
-    publicView: true,
-    submissions: true,
-    comments: true,
-    voting: true,
     allowEditAfterEngagement: false,
     allowDeleteAfterEngagement: false,
     showPublicEditHistory: false,
-    anonymousVoting: true,
-    anonymousCommenting: false,
-    anonymousPosting: false,
+    allowAnonymous: true,
   },
   welcomeCard: {
     enabled: false,
     title: '',
     body: { type: 'doc', content: [{ type: 'paragraph' }] },
   },
+  moderationDefault: { requireApproval: 'none' },
+  access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
+}
+
+/**
+ * Fail-closed read of the workspace anonymous-interaction ceiling from a raw
+ * (un-merged) `settings.portalConfig`. Only an explicitly-enabled flag permits
+ * anonymous vote / comment / submit; a missing flag DENIES — the security gate
+ * must not inherit `getPortalConfig`'s permissive merged default. Existing
+ * tenants carry an explicit value from migration 0084, and the per-board tier
+ * is the inner gate. This is the single source of truth for every anonymous
+ * write/read gate so they cannot drift.
+ */
+export function workspaceAllowsAnonymous(
+  portalConfig: string | Record<string, unknown> | null | undefined
+): boolean {
+  let parsed: unknown = portalConfig
+  if (typeof portalConfig === 'string') {
+    // A corrupt / empty-string portal_config (a live pre-0084 state — see the
+    // migration) must DENY, not throw a 500. Mirrors parseJsonOrNull; the gate
+    // stays fail-closed on unparseable config.
+    try {
+      parsed = JSON.parse(portalConfig)
+    } catch {
+      return false
+    }
+  }
+  return (
+    (parsed as { features?: { allowAnonymous?: boolean } } | null | undefined)?.features
+      ?.allowAnonymous === true
+  )
 }
 
 // =============================================================================
@@ -502,6 +551,8 @@ export interface UpdatePortalConfigInput {
   oauth?: Partial<PortalAuthMethods>
   features?: Partial<PortalFeatures>
   welcomeCard?: Partial<PortalWelcomeCard>
+  moderationDefault?: ModerationDefault
+  access?: Partial<PortalAccessConfig>
 }
 
 // =============================================================================
@@ -526,6 +577,12 @@ export interface PublicPortalConfig {
   customProviderNames?: Record<string, string>
   /** Welcome card on the portal index. Absent / disabled = nothing rendered. */
   welcomeCard?: PortalWelcomeCard
+  /**
+   * Client-safe access control indicator. `isPrivate` and `widgetSignIn`
+   * are exposed so the widget can decide whether to show the "Go to portal"
+   * CTA. `allowedDomains` remains server-only.
+   */
+  portalAccess?: { isPrivate: boolean; widgetSignIn: boolean }
 }
 
 // =============================================================================

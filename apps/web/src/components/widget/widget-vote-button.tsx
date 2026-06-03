@@ -13,6 +13,12 @@ interface WidgetVoteButtonProps {
   onBeforeVote?: () => Promise<boolean>
   /** Called when an unauthenticated user clicks to vote (e.g. open portal). */
   onAuthRequired?: () => void
+  /**
+   * Reason an identified viewer cannot vote (board tier — authz, not auth).
+   * When set: the button is dimmed, clicking is a no-op, and the reason shows
+   * as a hover tooltip. Takes precedence over onAuthRequired.
+   */
+  noAccessReason?: string
   /** Compact horizontal variant */
   compact?: boolean
 }
@@ -22,6 +28,7 @@ export function WidgetVoteButton({
   voteCount: initialVoteCount,
   onBeforeVote,
   onAuthRequired,
+  noAccessReason,
   compact = false,
 }: WidgetVoteButtonProps) {
   const intl = useIntl()
@@ -35,6 +42,9 @@ export function WidgetVoteButton({
   const isHandlingRef = useRef(false)
 
   const handleClick = useCallback(async () => {
+    // Denied by the board tier for an identified viewer — the tooltip explains;
+    // do nothing (never fire a vote the server would reject).
+    if (noAccessReason) return
     if (onAuthRequired) {
       onAuthRequired()
       return
@@ -50,7 +60,7 @@ export function WidgetVoteButton({
       }
     }
     handleVote()
-  }, [onAuthRequired, onBeforeVote, isPending, handleVote])
+  }, [noAccessReason, onAuthRequired, onBeforeVote, isPending, handleVote])
 
   const ariaLabel = hasVoted
     ? intl.formatMessage(
@@ -73,16 +83,24 @@ export function WidgetVoteButton({
       type="button"
       aria-label={ariaLabel}
       aria-pressed={hasVoted}
+      aria-disabled={noAccessReason ? true : undefined}
+      title={noAccessReason}
       onClick={handleClick}
       disabled={isPending}
       className={cn(
         'relative flex items-center justify-center border rounded-md',
         compact ? 'flex-row gap-1 py-1.5 px-2.5 text-xs' : 'flex-col w-12 py-2 gap-0.5',
-        'group transition-colors duration-200 cursor-pointer',
+        'group transition-colors duration-200',
+        !noAccessReason && 'cursor-pointer',
         hasVoted
           ? 'border-post-card-voted/60 bg-post-card-voted/15 text-post-card-voted'
-          : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80',
-        isPending && 'opacity-70 cursor-wait'
+          : 'bg-muted/40 text-muted-foreground border-border/50',
+        // Hover affordances only when the button is actionable (not denied).
+        !hasVoted &&
+          !noAccessReason &&
+          'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+        isPending && 'opacity-70 cursor-wait',
+        noAccessReason && 'cursor-not-allowed opacity-60'
       )}
     >
       <ChevronUpIcon
@@ -90,7 +108,7 @@ export function WidgetVoteButton({
           compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
           'transition-transform duration-200',
           hasVoted && 'fill-post-card-voted',
-          !isPending && 'group-hover:-translate-y-0.5'
+          !isPending && !noAccessReason && 'group-hover:-translate-y-0.5'
         )}
       />
       <span

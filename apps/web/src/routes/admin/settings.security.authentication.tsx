@@ -10,7 +10,14 @@ import { AuthSettings, type AuthTab } from '@/components/admin/settings/security
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
-  tab: z.enum(['team', 'portal']).optional(),
+  // The Security/authentication page splits by CONCERN, not by surface:
+  //   - portal-access: who can view the portal (visibility, domains,
+  //                    invites, segments, widget sign-in)
+  //   - team-access:   team-admin access policy (2FA, SSO summary)
+  //   - sign-in:       authentication methods for both surfaces in one
+  //                    place (password + magic link + social + custom OIDC),
+  //                    with per-surface toggles inline.
+  tab: z.enum(['portal-access', 'team-access', 'sign-in']).optional(),
 })
 
 export const Route = createFileRoute('/admin/settings/security/authentication')({
@@ -38,7 +45,7 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
 
 function AuthenticationPage() {
   const search = Route.useSearch()
-  const tab: AuthTab = search.tab ?? 'team'
+  const tab: AuthTab = search.tab ?? 'portal-access'
 
   const authConfigQuery = useSuspenseQuery(settingsQueries.authConfig())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
@@ -67,6 +74,7 @@ function AuthenticationPage() {
         tab={tab}
         teamAuthConfig={authConfigQuery.data}
         portalOauth={portalOauth}
+        portalConfig={portalConfigQuery.data}
         credentialStatus={credentialStatusQuery.data}
         customOidcProviderTier={customOidcProviderTier}
       />

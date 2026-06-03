@@ -1,13 +1,23 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { ArrowRightOnRectangleIcon, GlobeAltIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TeamAuthMethodsSection } from './team-auth-methods-section'
 import { PortalAuthTab } from './portal-auth-tab'
+import { SignInProvidersTab } from './sign-in-providers-tab'
 import { SsoPageCallout } from './sso-page-callout'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import type { AuthConfig, PortalAuthMethods } from '@/lib/shared/types/settings'
+import type { AuthConfig, PortalAuthMethods, PortalConfig } from '@/lib/shared/types/settings'
 
-export type AuthTab = 'team' | 'portal'
+/**
+ * The Security/authentication page tabs split by concern, not by surface:
+ *  - `portal-access` — who can view the portal (visibility, domains, invites, segments, widget)
+ *  - `team-access`   — team admin access policy (2FA, SSO summary card)
+ *  - `sign-in`       — authentication providers for both surfaces in one place
+ *                       (password, magic link, social, custom OIDC) with
+ *                       per-surface toggles inline.
+ */
+export type AuthTab = 'portal-access' | 'team-access' | 'sign-in'
 
 interface AuthSettingsProps {
   /** Current selected tab. URL-driven via `?tab=` so the choice is
@@ -17,28 +27,26 @@ interface AuthSettingsProps {
   teamAuthConfig: AuthConfig
   /** Portal-side oauth/methods from settings.portalConfig.oauth. */
   portalOauth: PortalAuthMethods
+  /** Full portal config — needed for the visibility card inside PortalAuthTab. */
+  portalConfig: PortalConfig
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
-  /** Tier flag for portal custom OIDC — passed through to <PortalAuthTab>. */
+  /** Tier flag for portal custom OIDC — passed through to <SignInProvidersTab>. */
   customOidcProviderTier: boolean
 }
 
 /**
  * Unified Authentication settings page.
  *
- * Two audience-scoped tabs (Team and Portal) sit on top of the same
- * provider catalog and `platform_credentials` rows. Selecting a tab
- * shows the per-audience methods + per-audience OAuth toggles. SSO
- * configuration has moved to the dedicated /sso page.
- *
- * The selected tab is stored in `?tab=`. Sidebar entries from both
- * "Security" and "End Users" point at the same route with different
- * default tabs, so muscle memory from either nav location lands the
- * admin on the right view.
+ * Three concern-scoped tabs sit on top of the same provider catalog and
+ * `platform_credentials` rows. Selecting a tab shows the cards for that
+ * concern; surface scope is communicated within the cards themselves
+ * (e.g. per-surface toggles on the Sign-in tab).
  */
 export function AuthSettings({
   tab,
   teamAuthConfig,
   portalOauth,
+  portalConfig,
   credentialStatus,
   customOidcProviderTier,
 }: AuthSettingsProps) {
@@ -53,28 +61,47 @@ export function AuthSettings({
       onValueChange={(next) => {
         // URL-driven tab state. `replace: true` so the back button
         // doesn't accumulate per-click history entries within the page.
+        // Callback form preserves any other search params on the URL;
+        // a literal `{ tab }` would silently strip them, breaking any
+        // future deep-link that adds a sibling param like `?highlight=`.
         const nextTab = next as AuthTab
         void navigate({
           to: '/admin/settings/security/authentication',
-          search: { tab: nextTab },
+          search: (prev) => ({ ...prev, tab: nextTab }),
           replace: true,
         })
       }}
       className="space-y-6"
     >
-      <TabsList className="border-b border-border/50">
-        <TabsTrigger value="team">Team</TabsTrigger>
-        <TabsTrigger value="portal">Portal</TabsTrigger>
+      <TabsList>
+        <TabsTrigger value="portal-access">
+          <GlobeAltIcon />
+          Portal access
+        </TabsTrigger>
+        <TabsTrigger value="team-access">
+          <ShieldCheckIcon />
+          Team access
+        </TabsTrigger>
+        <TabsTrigger value="sign-in">
+          <ArrowRightOnRectangleIcon />
+          Sign-in providers
+        </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="team" className="space-y-6">
+      <TabsContent value="portal-access">
+        <PortalAuthTab portalConfig={portalConfig} />
+      </TabsContent>
+
+      <TabsContent value="team-access" className="space-y-6">
         <TeamAuthMethodsSection initialConfig={teamAuthConfig} />
         <AuthSettingsSsoCallout teamAuthConfig={teamAuthConfig} />
       </TabsContent>
 
-      <TabsContent value="portal">
-        <PortalAuthTab
-          initialOauth={portalOauth}
+      <TabsContent value="sign-in">
+        <SignInProvidersTab
+          initialTeamAuthConfig={teamAuthConfig}
+          initialPortalOauth={portalOauth}
+          portalConfig={portalConfig}
           credentialStatus={credentialStatus}
           customOidcProviderTier={customOidcProviderTier}
         />

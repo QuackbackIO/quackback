@@ -8,10 +8,23 @@
  * rather than loading all users into memory.
  */
 
-import { db, eq, and, inArray, isNull, sql, asc, segments, userSegments } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  inArray,
+  isNull,
+  sql,
+  asc,
+  segments,
+  userSegments,
+  principal as principalTable,
+} from '@/lib/server/db'
 import type { SegmentId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
+import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
+import { slugify } from '@/lib/shared/utils/string'
 import type {
   Segment,
   SegmentWithCount,
@@ -28,6 +41,7 @@ import type { EvaluationSchedule, SegmentRules, SegmentWeightConfig } from '@/li
 function rowToSegment(row: {
   id: string
   name: string
+  slug: string
   description: string | null
   type: string
   color: string
@@ -40,6 +54,7 @@ function rowToSegment(row: {
   return {
     id: row.id as SegmentId,
     name: row.name,
+    slug: row.slug,
     description: row.description,
     type: row.type as 'manual' | 'dynamic',
     color: row.color,
@@ -48,6 +63,29 @@ function rowToSegment(row: {
     weightConfig: (row.weightConfig as SegmentWeightConfig) ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  }
+}
+
+/**
+ * Build a unique segment slug from a display name. Probes the DB for
+ * collisions and appends a numeric suffix until a free slug is found.
+ *
+ * `excludeId` lets `updateSegment` regenerate a slug without colliding
+ * with the segment it's currently renaming (the row's own slug would
+ * otherwise count as a collision and force a `-2` suffix).
+ */
+async function uniqueSegmentSlug(name: string, excludeId?: SegmentId): Promise<string> {
+  const base = slugify(name) || 'segment'
+  let candidate = base
+  let counter = 2
+  while (true) {
+    const collision = await db.query.segments.findFirst({
+      where: and(eq(segments.slug, candidate), isNull(segments.deletedAt)),
+      columns: { id: true },
+    })
+    if (!collision || (excludeId && collision.id === excludeId)) return candidate
+    candidate = `${base}-${counter}`
+    counter++
   }
 }
 
@@ -72,6 +110,7 @@ export async function listSegments(): Promise<SegmentWithCount[]> {
     .select({
       id: segments.id,
       name: segments.name,
+      slug: segments.slug,
       description: segments.description,
       type: segments.type,
       color: segments.color,
@@ -119,12 +158,14 @@ export async function createSegment(input: CreateSegmentInput): Promise<Segment>
   }
 
   const id = createId('segment') as SegmentId
+  const slug = await uniqueSegmentSlug(input.name.trim())
 
   const [row] = await db
     .insert(segments)
     .values({
       id,
       name: input.name.trim(),
+      slug,
       description: input.description?.trim() || null,
       type: input.type,
       color: input.color ?? '#6b7280',
@@ -150,7 +191,20 @@ export async function updateSegment(
   }
 
   const updates: Partial<typeof segments.$inferInsert> = {}
-  if (input.name !== undefined) updates.name = input.name.trim()
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim()
+    updates.name = trimmed
+    // Regenerate the slug whenever the display name moves. Widget JWTs and
+    // REST callers address segments by slug, so leaving the slug pinned to
+    // the original name silently breaks every tooltip / integration that
+    // derived its slug from the current display name. uniqueSegmentSlug
+    // excludes the row being renamed so a no-op rename ("X" → "X") doesn't
+    // force a `-2` suffix.
+    const nextSlug = await uniqueSegmentSlug(trimmed, segmentId)
+    if (nextSlug !== existing.slug) {
+      updates.slug = nextSlug
+    }
+  }
   if (input.description !== undefined) updates.description = input.description
   if (input.color !== undefined) updates.color = input.color
   if (input.rules !== undefined) updates.rules = input.rules
@@ -193,12 +247,23 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
 // ============================================
 
 /**
- * Assign users to a manual segment (bulk). Idempotent — existing members are skipped.
+ * Assign users to a manual segment (bulk). Idempotent under the source-
+ * priority guard: existing rows with a stickier source (manual=manual) stay
+ * untouched, but a row currently held by sso/widget/dynamic is *promoted*
+ * to manual so a later SSO-claim drop can't silently revoke the admin's
+ * assignment.
+ *
+ * Routes through `addMember` so audit, priority, and source provenance
+ * stay consistent with the four ingestion paths. The previous
+ * `onConflictDoNothing` insert left sso-sourced rows reachable by
+ * `reconcileSsoMemberships` deletion — see segment-membership.service.ts.
  */
 export async function assignUsersToSegment(
   segmentId: SegmentId,
-  principalIds: PrincipalId[]
-): Promise<void> {
+  principalIds: PrincipalId[],
+  actor: AuditActor | null = null,
+  headers?: Headers
+): Promise<{ assigned: number }> {
   const segment = await getSegment(segmentId)
   if (!segment) {
     throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
@@ -209,18 +274,34 @@ export async function assignUsersToSegment(
       'Cannot manually assign users to a dynamic segment'
     )
   }
-  if (principalIds.length === 0) return
+  if (principalIds.length === 0) return { assigned: 0 }
 
-  await db
-    .insert(userSegments)
-    .values(
-      principalIds.map((pid) => ({
-        principalId: pid,
-        segmentId,
-        addedBy: 'manual' as const,
-      }))
-    )
-    .onConflictDoNothing()
+  // Validate principal ids up-front so one missing id doesn't FK-violate
+  // mid-loop and abort the bulk. The REST endpoint has this; the admin
+  // UI path used to throw on the first bad id (UX surprise where ~half
+  // the click "succeeded" but the rest silently didn't).
+  const validatedRows = await db
+    .select({ id: principalTable.id })
+    .from(principalTable)
+    .where(inArray(principalTable.id, principalIds))
+  const validIds = new Set(validatedRows.map((r) => String(r.id)))
+  const known = principalIds.filter((id) => validIds.has(id))
+  if (known.length === 0) return { assigned: 0 }
+
+  const { addMember } = await import('./segment-membership.service')
+  for (const principalId of known) {
+    await addMember({
+      principalId,
+      segmentId,
+      source: 'manual',
+      // Pass the caller's actor so admin-triggered bulk adds emit
+      // segment.member.added audit rows. System / unauthenticated
+      // callers pass null and the audit no-ops by design.
+      actor,
+      headers,
+    })
+  }
+  return { assigned: known.length }
 }
 
 /**
@@ -228,8 +309,10 @@ export async function assignUsersToSegment(
  */
 export async function removeUsersFromSegment(
   segmentId: SegmentId,
-  principalIds: PrincipalId[]
-): Promise<void> {
+  principalIds: PrincipalId[],
+  actor: AuditActor | null = null,
+  headers?: Headers
+): Promise<{ removed: number }> {
   const segment = await getSegment(segmentId)
   if (!segment) {
     throw new NotFoundError('SEGMENT_NOT_FOUND', `Segment ${segmentId} not found`)
@@ -240,13 +323,33 @@ export async function removeUsersFromSegment(
       'Cannot manually remove users from a dynamic segment'
     )
   }
-  if (principalIds.length === 0) return
+  if (principalIds.length === 0) return { removed: 0 }
 
-  await db
+  // The previous implementation skipped removeMember for the bulk path
+  // and went straight to a single DELETE — which meant every admin
+  // bulk-remove was invisible in the audit log, while the sibling
+  // assignUsersToSegment path correctly emits one audit row per add.
+  // Returning() lets us tell the audit row exactly which principals
+  // were actually removed (the inArray may not match every id).
+  const removedRows = await db
     .delete(userSegments)
     .where(
       and(eq(userSegments.segmentId, segmentId), inArray(userSegments.principalId, principalIds))
     )
+    .returning({ principalId: userSegments.principalId })
+
+  if (actor && removedRows.length > 0) {
+    for (const row of removedRows) {
+      await recordAuditEvent({
+        event: 'segment.member.removed',
+        actor,
+        headers,
+        target: { type: 'segment', id: segmentId },
+        metadata: { principalId: row.principalId, source: 'manual-bulk' },
+      })
+    }
+  }
+  return { removed: removedRows.length }
 }
 
 // ============================================

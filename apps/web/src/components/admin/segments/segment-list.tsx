@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { SegmentFormDialog } from '@/components/admin/segments/segment-form'
 import type { SegmentFormValues, RuleCondition } from '@/components/admin/segments/segment-form'
 import {
@@ -58,10 +59,14 @@ function SegmentRow({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm text-foreground truncate">{segment.name}</span>
-            {segment.type === 'dynamic' && (
+            {segment.type === 'dynamic' ? (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
                 <BoltIcon className="h-2.5 w-2.5" />
-                Auto
+                Dynamic
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                Manual
               </Badge>
             )}
           </div>
@@ -72,8 +77,11 @@ function SegmentRow({
       </div>
 
       {/* Member count */}
-      <span className="text-sm text-muted-foreground shrink-0 tabular-nums">
-        {segment.memberCount} {segment.memberCount === 1 ? 'user' : 'users'}
+      <span
+        className="text-sm text-muted-foreground shrink-0 tabular-nums cursor-help"
+        title="Counts people only. Team members and admins are excluded from segments."
+      >
+        {segment.memberCount} {segment.memberCount === 1 ? 'person' : 'people'}
       </span>
 
       {/* Actions */}
@@ -191,39 +199,51 @@ export function SegmentList() {
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />
-        ))}
-      </div>
+      <SettingsCard
+        title="Segments"
+        description="Organize people into groups for filtering and analysis. Manual segments are assigned by hand; dynamic segments update automatically based on rules."
+      >
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-12 bg-muted/30 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      </SettingsCard>
     )
   }
 
-  return (
-    <div className="space-y-4">
-      {/* Header actions */}
-      <div className="flex items-center justify-end gap-2">
-        {dynamicSegments.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={() => evaluateAll.mutate()}
-            disabled={evaluateAll.isPending}
-          >
-            <ArrowPathIcon
-              className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`}
-            />
-            Re-evaluate all
-          </Button>
-        )}
-        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="h-3.5 w-3.5" />
-          New segment
+  // Header actions — Re-evaluate (when applicable) + New segment.
+  // Surface them via the SettingsCard `action` slot to match the
+  // user-attributes layout (header-level controls, no separate row).
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      {dynamicSegments.length > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => evaluateAll.mutate()}
+          disabled={evaluateAll.isPending}
+        >
+          <ArrowPathIcon className={`h-3.5 w-3.5 ${evaluateAll.isPending ? 'animate-spin' : ''}`} />
+          Re-evaluate all
         </Button>
-      </div>
+      )}
+      <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+        <PlusIcon className="h-3.5 w-3.5" />
+        New segment
+      </Button>
+    </div>
+  )
 
-      {/* List */}
+  return (
+    <SettingsCard
+      title="Segments"
+      description="Organize people into groups for filtering and analysis. Manual segments are assigned by hand; dynamic segments update automatically based on rules."
+      action={headerActions}
+    >
+      {/* Rows render directly into the SettingsCard — no nested
+       *  border/card wrapper (was double-cardboxing the list). */}
       {!segments || segments.length === 0 ? (
         <EmptyState
           icon={TagIcon}
@@ -238,19 +258,17 @@ export function SegmentList() {
           className="py-12"
         />
       ) : (
-        <div className="border border-border/50 rounded-xl overflow-hidden bg-card shadow-sm">
-          <div className="px-4">
-            {segments.map((seg) => (
-              <SegmentRow
-                key={seg.id}
-                segment={seg}
-                onEdit={() => setEditTarget(seg)}
-                onDelete={() => setDeleteTarget(seg)}
-                onEvaluate={() => handleEvaluate(seg.id as SegmentId)}
-                isEvaluating={evaluatingId === seg.id}
-              />
-            ))}
-          </div>
+        <div>
+          {segments.map((seg) => (
+            <SegmentRow
+              key={seg.id}
+              segment={seg}
+              onEdit={() => setEditTarget(seg)}
+              onDelete={() => setDeleteTarget(seg)}
+              onEvaluate={() => handleEvaluate(seg.id as SegmentId)}
+              isEvaluating={evaluatingId === seg.id}
+            />
+          ))}
         </div>
       )}
 
@@ -301,6 +319,6 @@ export function SegmentList() {
         isPending={deleteSegment.isPending}
         onConfirm={handleDelete}
       />
-    </div>
+    </SettingsCard>
   )
 }

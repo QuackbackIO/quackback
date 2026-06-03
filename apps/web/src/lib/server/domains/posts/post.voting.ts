@@ -73,6 +73,7 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     board_check AS (
       SELECT 1 FROM ${boards}
       WHERE id = (SELECT board_id FROM post_check)
+        AND deleted_at IS NULL
     ),
     existing AS (
       SELECT id FROM ${votes}
@@ -193,6 +194,7 @@ export async function addVoteOnBehalf(
     board_check AS (
       SELECT 1 FROM ${boards}
       WHERE id = (SELECT board_id FROM post_check)
+        AND deleted_at IS NULL
     ),
     inserted AS (
       INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, added_by_principal_id, created_at, updated_at)

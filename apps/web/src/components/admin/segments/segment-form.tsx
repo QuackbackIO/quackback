@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,30 +24,24 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
 import type { SegmentId } from '@quackback/ids'
+import {
+  BUILTIN_FIELDS,
+  BUILTIN_FIELD_MAP,
+  DEFAULT_OPERATORS,
+  getFieldOperators,
+} from '@/lib/shared/segment-builtin-fields'
+import type { FieldOperator } from '@/lib/shared/segment-builtin-fields'
+import { SearchableInput } from '@/components/ui/searchable-input'
+import { fetchSegmentAttributeValuesFn } from '@/lib/server/functions/admin'
+
+// Attributes with DB-backed value typeahead. Matches SEARCHABLE_ATTRIBUTES
+// in segment-attribute-values.ts; kept duplicated here to avoid pulling
+// a server-only module into the client bundle.
+const SEARCHABLE_VALUE_ATTRIBUTES = new Set(['country', 'locale', 'name', 'email', 'signup_source'])
 
 export const CUSTOM_ATTR_PREFIX = '__custom__'
 
-type RuleAttribute =
-  | 'email_domain'
-  | 'email_verified'
-  | 'created_at_days_ago'
-  | 'post_count'
-  | 'vote_count'
-  | 'comment_count'
-  | 'metadata_key'
-
-type RuleOperator =
-  | 'eq'
-  | 'neq'
-  | 'lt'
-  | 'lte'
-  | 'gt'
-  | 'gte'
-  | 'contains'
-  | 'starts_with'
-  | 'ends_with'
-  | 'is_set'
-  | 'is_not_set'
+type RuleOperator = FieldOperator
 
 export interface RuleCondition {
   attribute: string
@@ -65,52 +59,15 @@ export interface CustomAttrDef {
   description?: string | null
 }
 
-const BUILT_IN_ATTRIBUTE_OPTIONS: { value: RuleAttribute; label: string }[] = [
-  { value: 'email_domain', label: 'Email Domain' },
-  { value: 'email_verified', label: 'Email Verified' },
-  { value: 'created_at_days_ago', label: 'Days Since Joined' },
-  { value: 'post_count', label: 'Post Count' },
-  { value: 'vote_count', label: 'Vote Count' },
-  { value: 'comment_count', label: 'Comment Count' },
-  { value: 'metadata_key', label: 'Custom Metadata Key' },
-]
-
+/** Operators for custom attributes and the metadata_key escape hatch */
 const CUSTOM_ATTR_OPERATORS: Record<
   'string' | 'number' | 'boolean' | 'date' | 'currency',
   { value: RuleOperator; label: string }[]
 > = {
-  string: [
-    { value: 'eq', label: 'equals' },
-    { value: 'neq', label: 'not equals' },
-    { value: 'contains', label: 'contains' },
-    { value: 'starts_with', label: 'starts with' },
-    { value: 'ends_with', label: 'ends with' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-  number: [
-    { value: 'gt', label: 'greater than' },
-    { value: 'gte', label: 'at least' },
-    { value: 'lt', label: 'less than' },
-    { value: 'lte', label: 'at most' },
-    { value: 'eq', label: 'equals' },
-    { value: 'neq', label: 'not equals' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-  boolean: [
-    { value: 'eq', label: 'is' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-  date: [
-    { value: 'gt', label: 'before (days ago)' },
-    { value: 'lt', label: 'after (days ago)' },
-    { value: 'gte', label: 'at least (days ago)' },
-    { value: 'lte', label: 'at most (days ago)' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
+  string: [...DEFAULT_OPERATORS.string] as { value: RuleOperator; label: string }[],
+  number: [...DEFAULT_OPERATORS.number] as { value: RuleOperator; label: string }[],
+  boolean: [...DEFAULT_OPERATORS.boolean] as { value: RuleOperator; label: string }[],
+  date: [...DEFAULT_OPERATORS.date] as { value: RuleOperator; label: string }[],
   currency: [
     { value: 'gt', label: 'greater than' },
     { value: 'gte', label: 'at least' },
@@ -123,65 +80,42 @@ const CUSTOM_ATTR_OPERATORS: Record<
   ],
 }
 
-const OPERATOR_OPTIONS: Record<RuleAttribute, { value: RuleOperator; label: string }[]> = {
-  email_domain: [
-    { value: 'eq', label: 'equals' },
-    { value: 'neq', label: 'not equals' },
-    { value: 'ends_with', label: 'ends with' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-  email_verified: [
-    { value: 'eq', label: 'is' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-  created_at_days_ago: [
-    { value: 'gt', label: 'more than (days ago)' },
-    { value: 'lt', label: 'less than (days ago)' },
-    { value: 'gte', label: 'at least (days ago)' },
-    { value: 'lte', label: 'at most (days ago)' },
-  ],
-  post_count: [
-    { value: 'gt', label: 'greater than' },
-    { value: 'gte', label: 'at least' },
-    { value: 'lt', label: 'less than' },
-    { value: 'lte', label: 'at most' },
-    { value: 'eq', label: 'equals' },
-    { value: 'is_set', label: 'has any' },
-    { value: 'is_not_set', label: 'has none' },
-  ],
-  vote_count: [
-    { value: 'gt', label: 'greater than' },
-    { value: 'gte', label: 'at least' },
-    { value: 'lt', label: 'less than' },
-    { value: 'lte', label: 'at most' },
-    { value: 'eq', label: 'equals' },
-    { value: 'is_set', label: 'has any' },
-    { value: 'is_not_set', label: 'has none' },
-  ],
-  comment_count: [
-    { value: 'gt', label: 'greater than' },
-    { value: 'gte', label: 'at least' },
-    { value: 'lt', label: 'less than' },
-    { value: 'lte', label: 'at most' },
-    { value: 'eq', label: 'equals' },
-    { value: 'is_set', label: 'has any' },
-    { value: 'is_not_set', label: 'has none' },
-  ],
-  metadata_key: [
-    { value: 'eq', label: 'equals' },
-    { value: 'neq', label: 'not equals' },
-    { value: 'contains', label: 'contains' },
-    { value: 'is_set', label: 'is set' },
-    { value: 'is_not_set', label: 'is not set' },
-  ],
-}
+/** Operators for the metadata_key (Custom Metadata Key) escape hatch */
+const METADATA_KEY_OPERATORS: { value: RuleOperator; label: string }[] = [
+  { value: 'eq', label: 'equals' },
+  { value: 'neq', label: 'not equals' },
+  { value: 'contains', label: 'contains' },
+  { value: 'is_set', label: 'is set' },
+  { value: 'is_not_set', label: 'is not set' },
+]
 
 function getCustomAttrKey(attribute: string): string | null {
   return attribute.startsWith(CUSTOM_ATTR_PREFIX)
     ? attribute.slice(CUSTOM_ATTR_PREFIX.length)
     : null
+}
+
+/** Resolve operator list for any attribute string (built-in, custom, or metadata_key) */
+function getOperatorsForAttribute(
+  attribute: string,
+  customAttributes?: CustomAttrDef[]
+): { value: RuleOperator; label: string }[] {
+  if (attribute === 'metadata_key') return METADATA_KEY_OPERATORS
+  const customKey = getCustomAttrKey(attribute)
+  if (customKey !== null) {
+    const def = customAttributes?.find((a) => a.key === customKey)
+    return def ? CUSTOM_ATTR_OPERATORS[def.type] : CUSTOM_ATTR_OPERATORS.string
+  }
+  const field = BUILTIN_FIELD_MAP.get(attribute)
+  if (field) return [...getFieldOperators(field)] as { value: RuleOperator; label: string }[]
+  // Unknown attribute from a saved rule: fall back to a minimal set so it
+  // renders without crashing rather than offering operators that may not apply.
+  return [
+    { value: 'eq', label: 'equals' },
+    { value: 'neq', label: 'not equals' },
+    { value: 'is_set', label: 'is set' },
+    { value: 'is_not_set', label: 'is not set' },
+  ]
 }
 
 function RuleConditionRow({
@@ -196,40 +130,39 @@ function RuleConditionRow({
   customAttributes?: CustomAttrDef[]
 }) {
   const customAttrKey = getCustomAttrKey(condition.attribute)
-  const isCustomAttr = customAttrKey !== null
   const customAttrDef = customAttrKey
     ? (customAttributes?.find((a) => a.key === customAttrKey) ?? null)
     : null
+  const builtinField = BUILTIN_FIELD_MAP.get(condition.attribute)
 
-  const operators = isCustomAttr
-    ? customAttrDef
-      ? CUSTOM_ATTR_OPERATORS[customAttrDef.type]
-      : CUSTOM_ATTR_OPERATORS.string
-    : (OPERATOR_OPTIONS[condition.attribute as RuleAttribute] ?? [])
+  const operators = getOperatorsForAttribute(condition.attribute, customAttributes)
 
-  const isNumericBuiltIn = [
-    'created_at_days_ago',
-    'post_count',
-    'vote_count',
-    'comment_count',
-  ].includes(condition.attribute)
+  // Value input type classification
+  const isNumericBuiltIn = builtinField?.type === 'number'
   const isCustomNumeric = customAttrDef?.type === 'number' || customAttrDef?.type === 'currency'
   const isCustomDate = customAttrDef?.type === 'date'
   const isNumeric = isNumericBuiltIn || isCustomNumeric || isCustomDate
 
-  const isBooleanBuiltIn = condition.attribute === 'email_verified'
+  const isBooleanBuiltIn = builtinField?.type === 'boolean'
   const isCustomBoolean = customAttrDef?.type === 'boolean'
   const isBoolean = isBooleanBuiltIn || isCustomBoolean
+
+  // Enum fields with a fixed set of allowed values (e.g. principal_type)
+  const allowedValues = builtinField?.allowedValues
+  // DB-backed value typeahead — skipped for substring operators (the
+  // user is searching for a fragment, not picking an exact value) and
+  // for the enum-style allowedValues path which uses a strict Select.
+  const isSubstringOp =
+    condition.operator === 'contains' ||
+    condition.operator === 'starts_with' ||
+    condition.operator === 'ends_with'
+  const useSearchableInput =
+    !isSubstringOp && !allowedValues && SEARCHABLE_VALUE_ATTRIBUTES.has(condition.attribute)
 
   const isPresenceOp = condition.operator === 'is_set' || condition.operator === 'is_not_set'
 
   const getFirstOperator = (attr: string): RuleOperator => {
-    const key = getCustomAttrKey(attr)
-    if (key) {
-      const def = customAttributes?.find((a) => a.key === key)
-      return (def ? CUSTOM_ATTR_OPERATORS[def.type][0]?.value : 'eq') as RuleOperator
-    }
-    return (OPERATOR_OPTIONS[attr as RuleAttribute]?.[0]?.value ?? 'eq') as RuleOperator
+    return (getOperatorsForAttribute(attr, customAttributes)[0]?.value ?? 'eq') as RuleOperator
   }
 
   return (
@@ -251,13 +184,35 @@ function RuleConditionRow({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectGroup>
-            {BUILT_IN_ATTRIBUTE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
+          {(
+            [
+              { group: 'attribute', label: 'Built-in fields' },
+              { group: 'account', label: 'Account' },
+              { group: 'activity', label: 'Activity' },
+            ] as const
+          ).map(({ group, label }, i) => {
+            const fields = BUILTIN_FIELDS.filter((f) => f.group === group)
+            return (
+              <React.Fragment key={group}>
+                {i > 0 && <SelectSeparator />}
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] uppercase tracking-wider px-2 py-1.5">
+                    {label}
+                  </SelectLabel>
+                  {fields.map((field) => (
+                    <SelectItem key={field.key} value={field.key} className="text-xs">
+                      {field.label}
+                    </SelectItem>
+                  ))}
+                  {group === 'attribute' && (
+                    <SelectItem value="metadata_key" className="text-xs">
+                      Custom Metadata Key
+                    </SelectItem>
+                  )}
+                </SelectGroup>
+              </React.Fragment>
+            )
+          })}
           {customAttributes && customAttributes.length > 0 && (
             <>
               <SelectSeparator />
@@ -306,7 +261,24 @@ function RuleConditionRow({
         />
       )}
 
-      {!isPresenceOp && isBoolean && (
+      {!isPresenceOp && allowedValues && allowedValues.length > 0 && (
+        <Select
+          value={condition.value || String(allowedValues[0])}
+          onValueChange={(val) => onChange({ ...condition, value: val })}
+        >
+          <SelectTrigger className="h-8 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {allowedValues.map((v) => (
+              <SelectItem key={v} value={v} className="text-xs">
+                {v}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {!isPresenceOp && !allowedValues && isBoolean && (
         <Select
           value={condition.value || 'true'}
           onValueChange={(val) => onChange({ ...condition, value: val })}
@@ -324,7 +296,33 @@ function RuleConditionRow({
           </SelectContent>
         </Select>
       )}
-      {!isPresenceOp && !isBoolean && (
+      {!isPresenceOp && !allowedValues && !isBoolean && useSearchableInput && (
+        <SearchableInput
+          className="flex-1"
+          value={condition.value}
+          onChange={(v) => onChange({ ...condition, value: v })}
+          placeholder="Type to search"
+          fetchOptions={async (query) => {
+            const res = await fetchSegmentAttributeValuesFn({
+              data: {
+                attribute: condition.attribute as
+                  | 'country'
+                  | 'locale'
+                  | 'name'
+                  | 'email'
+                  | 'signup_source',
+                query,
+                limit: 20,
+              },
+            })
+            return res.values.map((v) => ({
+              value: v.value,
+              meta: `${v.count} ${v.count === 1 ? 'person' : 'people'}`,
+            }))
+          }}
+        />
+      )}
+      {!isPresenceOp && !allowedValues && !isBoolean && !useSearchableInput && (
         <Input
           className="h-8 text-xs flex-1"
           type={isNumeric ? 'number' : 'text'}
@@ -363,7 +361,9 @@ function RuleBuilder({
   customAttributes?: CustomAttrDef[]
 }) {
   const handleAdd = () => {
-    onConditionsChange([...conditions, { attribute: 'email_domain', operator: 'eq', value: '' }])
+    const firstField = BUILTIN_FIELDS[0]
+    const firstOp = (getFieldOperators(firstField)[0]?.value ?? 'eq') as RuleOperator
+    onConditionsChange([...conditions, { attribute: firstField.key, operator: firstOp, value: '' }])
   }
 
   const handleChange = (idx: number, updated: RuleCondition) => {
@@ -382,7 +382,7 @@ function RuleBuilder({
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Users must match</span>
         <Select value={match} onValueChange={(v) => onMatchChange(v as 'all' | 'any')}>
-          <SelectTrigger className="h-7 w-[60px] text-xs">
+          <SelectTrigger className="h-7 w-20 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -547,6 +547,10 @@ export function SegmentFormDialog({
               <p className="text-xs text-muted-foreground">
                 Define conditions to automatically match users. Membership is refreshed when you
                 trigger evaluation.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Heads up: segments only include people in your audience. Your team and admins won't
+                show up here, even if they match the rules.
               </p>
               <RuleBuilder
                 match={ruleMatch}

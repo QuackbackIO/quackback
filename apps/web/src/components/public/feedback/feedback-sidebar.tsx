@@ -1,10 +1,10 @@
 import { ListBulletIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
-import type { BoardWithStats } from '@/lib/shared/types'
+import type { PublicBoardWithStats } from '@/lib/shared/types'
 
 interface FeedbackSidebarProps {
-  boards: BoardWithStats[]
+  boards: PublicBoardWithStats[]
   currentBoard?: string
   onBoardChange: (board: string | undefined) => void
   workspaceSlug?: string

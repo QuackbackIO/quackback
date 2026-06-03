@@ -1,11 +1,15 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
+/* Self-hosted Inter (variable, wght 100..900). Bundled from npm so no
+   fonts.googleapis.com <link> exists for a CDN (Cloudflare Fonts) to
+   rewrite — see the widget hydration / CDN-rewrite notes. */
+@import "@fontsource-variable/inter/index.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-family-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-family-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ==============================================
@@ -54,7 +58,7 @@
     --sidebar-accent-foreground: oklch(0.145 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.886 0.176 86);
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
     --font-serif: ui-serif, Georgia, Cambria, serif;
     --font-mono: ui-monospace, SFMono-Regular, monospace;
     --radius: 0.625rem;
@@ -274,19 +278,22 @@
   }
 }
 
-/* Interactive elements cursor - prevent flickering */
-a,
+/* Interactive elements — pointer cursor for native controls.
+   Kept narrow on purpose: no [tabindex] or [data-radix-collection-item]
+   (those match whole card containers, not just clickable elements).
+   <a> is omitted — user-agent already gives it cursor: pointer. */
 button,
 [role="button"],
 input[type="submit"],
 input[type="button"],
 input[type="reset"],
-label[for],
-select,
-[tabindex]:not([tabindex="-1"]):not(.ProseMirror),
-[data-radix-collection-item],
+select {
+  cursor: pointer;
+}
+
+/* Utility class for manual cursor overrides */
 .cursor-pointer {
-  cursor: pointer !important;
+  cursor: pointer;
 }
 
 /* Ensure SVGs in buttons don't cause cursor flickering */

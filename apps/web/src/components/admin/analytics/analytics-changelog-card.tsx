@@ -16,7 +16,7 @@ export function AnalyticsChangelogCard({ topEntries, totalViews }: ChangelogCard
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
+      <div className="mb-1 flex items-center justify-between px-1 text-xs uppercase tracking-wider text-muted-foreground">
         <span>Entry</span>
         <span>Views</span>
       </div>

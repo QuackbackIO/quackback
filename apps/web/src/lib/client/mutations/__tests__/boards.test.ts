@@ -86,7 +86,11 @@ describe('board mutations cache invalidation', () => {
   it('useCreateBoard.onMutate generates correct optimistic slug', async () => {
     const { useCreateBoard } = await import('../boards')
     const mutation = useCreateBoard() as {
-      onMutate?: (input: { name: string; description?: string; isPublic?: boolean }) => void
+      onMutate?: (input: {
+        name: string
+        description?: string
+        preset?: 'public' | 'private'
+      }) => void
     }
 
     await mutation.onMutate?.({ name: 'Feature Requests' })
@@ -104,13 +108,23 @@ describe('board mutations cache invalidation', () => {
     expect(result[0]).toMatchObject({
       name: 'Feature Requests',
       slug: 'feature-requests',
+      access: expect.objectContaining({
+        view: 'anonymous',
+        vote: 'authenticated',
+        comment: 'authenticated',
+        submit: 'authenticated',
+      }),
     })
   })
 
   it('useCreateBoard.onMutate handles Cyrillic names in optimistic slug', async () => {
     const { useCreateBoard } = await import('../boards')
     const mutation = useCreateBoard() as {
-      onMutate?: (input: { name: string; description?: string; isPublic?: boolean }) => void
+      onMutate?: (input: {
+        name: string
+        description?: string
+        preset?: 'public' | 'private'
+      }) => void
     }
 
     await mutation.onMutate?.({ name: 'Кириллица' })

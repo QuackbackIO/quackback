@@ -1,14 +1,30 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
+import { z } from 'zod'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
+import { resolveLocale } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
+import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 
 const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
   setResponseHeader('X-Frame-Options', 'ALLOWALL')
 })
+
+/**
+ * Resolve the widget locale on the server so SSR and hydration agree.
+ * The `?locale=` search param wins over the Accept-Language header; both
+ * are read server-side because navigator/URL access during render would
+ * diverge from SSR and trigger React hydration error #418 (issue #133).
+ */
+const getWidgetLocale = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ explicitLocale: z.string().optional() }))
+  .handler(async ({ data }) => {
+    const acceptLanguage = getRequestHeaders().get('accept-language')
+    return resolveLocale(acceptLanguage, data.explicitLocale)
+  })
 
 /** Extract the signed session cookie for direct widget session reuse (same-origin only). */
 export const getPortalSessionToken = createServerFn({ method: 'GET' }).handler(async () => {
@@ -17,7 +33,18 @@ export const getPortalSessionToken = createServerFn({ method: 'GET' }).handler(a
 })
 
 export const Route = createFileRoute('/widget')({
-  loader: async ({ context }) => {
+  // Render the widget on the client only. The iframe gets zero SEO value
+  // from SSR, and skipping SSR HTML means there's no hydration step for a
+  // CDN script-rewriter (Cloudflare Rocket Loader, Mirage, etc.) to break —
+  // it makes the widget CDN-rewrite-proof for self-hosters on any CDN.
+  // 'data-only' (not false): the loader must still run on the server so
+  // setIframeHeaders() can set frame-ancestors/X-Frame-Options on the
+  // document response, and the locale is resolved from Accept-Language.
+  ssr: 'data-only',
+  validateSearch: (search: Record<string, unknown>): { locale?: string } => ({
+    locale: typeof search.locale === 'string' ? search.locale : undefined,
+  }),
+  loader: async ({ context, location }) => {
     const { settings, session } = context
 
     const org = settings?.settings
@@ -55,8 +82,13 @@ export const Route = createFileRoute('/widget')({
     // HTML is safe: cross-origin parent pages cannot read iframe content.
     const portalSessionToken = session?.user ? await getPortalSessionToken() : null
 
+    // location.search isn't generically typed inside the loader — cast to
+    // the validateSearch shape, matching the pattern in _portal/index.tsx.
+    const { locale: explicitLocale } = location.search as { locale?: string }
+    const locale = await getWidgetLocale({ data: { explicitLocale } })
+
     return {
-      org,
+      org: redactSettingsForClient(org),
       brandingData,
       themeMode,
       themeStyles,
@@ -65,6 +97,7 @@ export const Route = createFileRoute('/widget')({
       portalUser,
       portalSessionToken,
       hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
+      locale,
     }
   },
   head: () => ({ meta: [] }),
@@ -72,19 +105,22 @@ export const Route = createFileRoute('/widget')({
 })
 
 function WidgetLayout() {
-  const { themeStyles, customCss, googleFontsUrl, portalUser, portalSessionToken, hmacRequired } =
-    Route.useLoaderData()
-
-  // Read initial locale from URL param (?locale=fr)
-  const initialLocale =
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('locale') : null
+  const {
+    themeStyles,
+    customCss,
+    googleFontsUrl,
+    portalUser,
+    portalSessionToken,
+    hmacRequired,
+    locale,
+  } = Route.useLoaderData()
 
   return (
     <WidgetAuthProvider
       portalUser={portalUser}
       portalSessionToken={portalSessionToken}
       hmacRequired={hmacRequired}
-      initialLocale={initialLocale}
+      initialLocale={locale}
     >
       {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}

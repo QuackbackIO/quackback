@@ -189,7 +189,7 @@ function BrandingPage() {
     <>
       <link rel="stylesheet" href={ALL_FONTS_URL} />
 
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-5xl">
         <div className="lg:hidden">
           <BackLink to="/admin/settings">Settings</BackLink>
         </div>
@@ -203,9 +203,9 @@ function BrandingPage() {
         <BrandingLayout>
           <BrandingControlsPanel>
             {/* Identity Section */}
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Identity</h3>
+                <h2 className="text-base font-semibold text-foreground">Identity</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   How your brand appears in the portal header
                 </p>
@@ -239,9 +239,9 @@ function BrandingPage() {
             </div>
 
             {/* Theme Mode Section */}
-            <div className="p-5 space-y-4 border-t border-border">
+            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Theme Mode</h3>
+                <h2 className="text-base font-semibold text-foreground">Theme Mode</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Control how light/dark mode works for portal visitors
                 </p>
@@ -260,9 +260,9 @@ function BrandingPage() {
             </div>
 
             {/* Theme Preset Section */}
-            <div className="p-5 space-y-4 border-t border-border">
+            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Theme</h3>
+                <h2 className="text-base font-semibold text-foreground">Theme</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Choose a preset to set your portal's color palette
                 </p>
@@ -278,7 +278,7 @@ function BrandingPage() {
                       key={presetId}
                       onClick={() => state.setPreset(presetId)}
                       className={cn(
-                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors',
+                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
                         isActive
                           ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
                           : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
@@ -288,8 +288,8 @@ function BrandingPage() {
                         className="h-5 w-5 rounded-full border border-border/50"
                         style={{ backgroundColor: preset.color }}
                       />
-                      <span className="truncate">{preset.name}</span>
-                      <span className="text-[10px] text-muted-foreground truncate">
+                      <span className="w-full truncate">{preset.name}</span>
+                      <span className="w-full text-xs text-muted-foreground leading-tight">
                         {preset.description}
                       </span>
                     </button>
@@ -299,9 +299,9 @@ function BrandingPage() {
             </div>
 
             {/* Typography Section */}
-            <div className="p-5 space-y-4 border-t border-border">
+            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Typography</h3>
+                <h2 className="text-base font-semibold text-foreground">Typography</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
               </div>
 
@@ -355,9 +355,9 @@ function BrandingPage() {
             </div>
 
             {/* CSS Editor Section */}
-            <div className="p-5 space-y-4 border-t border-border">
+            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
               <div>
-                <h3 className="text-sm font-medium text-foreground">Theme CSS</h3>
+                <h2 className="text-base font-semibold text-foreground">Theme CSS</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Your full theme stylesheet. Design at{' '}
                   <a
@@ -396,7 +396,7 @@ function BrandingPage() {
             </div>
 
             {/* Save Button */}
-            <div className="p-5 border-t border-border">
+            <div className="p-4 sm:p-6 border-t border-border">
               <Button onClick={state.saveTheme} disabled={state.isSaving} className="w-full h-10">
                 {state.isSaving ? (
                   <>

@@ -421,7 +421,6 @@ async function seed() {
         slug: b.slug,
         name: b.name,
         description: b.description,
-        isPublic: true,
         createdAt: randomDate(60),
       })
       boardIds.push(boardId)
@@ -670,6 +669,7 @@ async function seed() {
       {
         id: generateId('segment'),
         name: 'New Users',
+        slug: 'new-users',
         description: 'Users who joined within the last 7 days',
         type: 'dynamic',
         color: '#3b82f6',
@@ -678,6 +678,7 @@ async function seed() {
       {
         id: generateId('segment'),
         name: 'Active Users',
+        slug: 'active-users',
         description: 'Users with at least one post, comment, or vote',
         type: 'dynamic',
         color: '#10b981',
@@ -740,7 +741,7 @@ async function seed() {
 
     // Raw feedback items - realistic variety of states and sources
     const rawItemPresets: Array<{
-      sourceId: typeof widgetSourceId
+      sourceId: typeof quackbackSourceId
       sourceType: string
       author: RawFeedbackAuthor
       content: RawFeedbackContent

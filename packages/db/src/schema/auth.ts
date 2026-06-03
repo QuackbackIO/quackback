@@ -43,6 +43,14 @@ export const user = pgTable(
       .notNull(),
     // General user metadata (JSON)
     metadata: text('metadata'),
+    // BCP-47 locale claim from OIDC (e.g. "en", "en-US"); NULL for
+    // sign-up paths that don't carry one (magic-link, password).
+    locale: text('locale'),
+    // ISO-3166-1 alpha-2 country code captured from CDN-injected
+    // headers (CF-IPCountry, X-Vercel-IP-Country, Fly-Client-IP-Country,
+    // X-Country-Code) on session creation. NULL when no header is
+    // present — local dev or deployments without a geo-aware proxy.
+    country: text('country'),
     // Anonymous user flag (Better Auth anonymous plugin)
     isAnonymous: boolean('is_anonymous').default(false).notNull(),
     // Better-Auth twoFactor plugin — flips true once the user verifies
@@ -55,6 +63,21 @@ export const user = pgTable(
     uniqueIndex('user_email_idx')
       .on(table.email)
       .where(sql`email IS NOT NULL`),
+    // Functional index on LOWER(email) — backs the case-insensitive
+    // lookups in recovery-codes-consume.ts, segment.evaluation.ts, and
+    // routes/api/widget/identify.ts. Without it those queries seq-scan.
+    index('user_email_lower_idx')
+      .on(sql`LOWER(${table.email})`)
+      .where(sql`email IS NOT NULL`),
+    // Partial b-tree on country / locale — both are referenced by the
+    // dynamic-segment evaluator (IN / ILIKE predicates) and the column
+    // is sparse, so partial indexes keep the on-disk footprint small.
+    index('user_country_idx')
+      .on(table.country)
+      .where(sql`country IS NOT NULL`),
+    index('user_locale_idx')
+      .on(table.locale)
+      .where(sql`locale IS NOT NULL`),
   ]
 )
 
@@ -128,7 +151,14 @@ export const account = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index('account_userId_idx').on(table.userId)]
+  (table) => [
+    index('account_userId_idx').on(table.userId),
+    // Backs the segment evaluator's signup_source lookup:
+    // `SELECT provider_id FROM account WHERE user_id = $1 ORDER BY
+    // created_at ASC LIMIT 1`. Without the composite the ORDER BY
+    // requires a sort even though the WHERE is index-satisfied.
+    index('account_userId_createdAt_idx').on(table.userId, table.createdAt),
+  ]
 )
 
 export const verification = pgTable(
@@ -188,7 +218,7 @@ export const settings = pgTable('settings', {
   authConfig: text('auth_config'),
   /**
    * Portal configuration (JSON)
-   * Structure: { oauth: { google, github }, features: { publicView, submissions, comments, voting } }
+   * Structure: { oauth: { google, github }, features: { submissions, comments, voting } }
    */
   portalConfig: text('portal_config'),
   /**
@@ -350,7 +380,7 @@ export const principal = pgTable(
     // Unified roles: 'admin' | 'member' | 'user'
     // 'user' role = portal users (public portal access only, no admin dashboard)
     role: text('role').default('member').notNull(),
-    // Principal type: 'user' (human) or 'service' (integration/API key)
+    // Principal type: 'user' (human), 'anonymous' (unidentified visitor), or 'service' (integration/API key)
     type: text('type').default('user').notNull(),
     // Display name — always populated (humans synced from user.name, service principals set on creation)
     displayName: text('display_name'),
@@ -394,6 +424,16 @@ export const invitation = pgTable(
     name: text('name'),
     role: text('role'),
     status: text('status').default('pending').notNull(),
+    /**
+     * Discriminates team invitations from portal-access invitations.
+     * 'team'   — sent via the team/members settings page (original behaviour).
+     * 'portal' — sent via the portal-access settings page to grant a specific
+     *            person access to a private portal.
+     *
+     * Every query against this table MUST filter on `kind` so that a portal
+     * invite for an email never leaks into the team-invite UI and vice versa.
+     */
+    kind: text('kind').$type<'team' | 'portal'>().notNull().default('team'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
@@ -403,8 +443,18 @@ export const invitation = pgTable(
   },
   (table) => [
     index('invitation_email_idx').on(table.email),
-    // Index for duplicate invitation checks
+    // Index for duplicate invitation checks (legacy — kept for backward compatibility)
     index('invitation_email_status_idx').on(table.email, table.status),
+    // Composite index for kind-discriminated lookup paths
+    index('invitation_email_kind_status_idx').on(table.email, table.kind, table.status),
+    // Backs the daily invite-sweep: `kind IN (...) AND status='pending'
+    // AND expires_at < now()`. The existing email-leading indexes can't
+    // serve this query — sweep would seq-scan as the table grows.
+    // Partial-on-pending keeps the index footprint small (terminal
+    // rows dominate over time).
+    index('invitation_pending_expires_idx')
+      .on(table.kind, table.expiresAt)
+      .where(sql`status = 'pending'`),
   ]
 )
 
@@ -616,3 +666,53 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
     references: [user.id],
   }),
 }))
+
+/**
+ * Widget origin session marker table.
+ *
+ * Records sessions that were created via the widget OTT handoff route
+ * (`/auth/widget-handoff?ott=...`). The portal access evaluator requires
+ * a row here before granting the `widget` reason — prevents any
+ * self-registered portal user from sneaking in via that grant branch.
+ *
+ * PK on session_id is the lookup key (one row per session at most).
+ * Index on user_id supports cleanup of orphaned rows when a user's
+ * sessions expire.
+ */
+export const widgetOriginSession = pgTable(
+  'widget_origin_session',
+  {
+    sessionId: text('session_id').primaryKey(),
+    userId: text('user_id').notNull(),
+    markedAt: timestamp('marked_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('widget_origin_session_user_id_idx').on(table.userId)]
+)
+
+/**
+ * Widget identification provenance table.
+ *
+ * Records, for each session minted by `/api/widget/identify`, whether
+ * the identity claim was HMAC-verified (verified-token path) or
+ * unverified (email-capture path). The handoff route reads this to
+ * decide whether to insert a `widget_origin_session` marker — only
+ * HMAC-verified sessions are allowed to upgrade into the widget
+ * portal-access grant.
+ *
+ * Without this row, the portal gate would only know the workspace's
+ * *current* `identifyVerificationEnabled` setting, not whether the
+ * specific session was ever HMAC-verified — letting a session created
+ * during an unverified window keep portal access after the admin turns
+ * verification on, and letting any BA session that minted a generic
+ * OTT walk through the handoff.
+ *
+ * Upsert semantics: re-identifying the same session demotes (or
+ * promotes) hmac_verified to reflect the latest identify path. A
+ * session that loses HMAC verification on re-identify must lose the
+ * trust it carries.
+ */
+export const widgetIdentifiedSession = pgTable('widget_identified_session', {
+  sessionId: text('session_id').primaryKey(),
+  hmacVerified: boolean('hmac_verified').notNull(),
+  identifiedAt: timestamp('identified_at', { withTimezone: true }).defaultNow().notNull(),
+})

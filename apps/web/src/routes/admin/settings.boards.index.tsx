@@ -4,6 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { Squares2X2Icon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
@@ -14,6 +15,7 @@ import { BoardSettingsHeader } from '@/components/admin/settings/boards/board-se
 import { BoardSettingsNav } from '@/components/admin/settings/boards/board-settings-nav'
 import { BoardGeneralForm } from '@/components/admin/settings/boards/board-general-form'
 import { BoardAccessForm } from '@/components/admin/settings/boards/board-access-form'
+import { BoardModerationForm } from '@/components/admin/settings/boards/board-moderation-form'
 import { BoardImportSection } from '@/components/admin/settings/boards/board-import-section'
 import { BoardExportSection } from '@/components/admin/settings/boards/board-export-section'
 import { DeleteBoardForm } from '@/components/admin/settings/boards/delete-board-form'
@@ -29,19 +31,26 @@ interface BoardForSettings {
   name: string
   slug: string
   description: string | null
-  isPublic: boolean
+  access: import('@/lib/shared/db-types').BoardAccess
 }
 
 const searchSchema = z.object({
   board: z.string().optional(),
-  tab: z.enum(['general', 'access', 'import', 'export']).optional(),
+  tab: z.enum(['general', 'access', 'moderation', 'import', 'export']).optional(),
 })
 
 export const Route = createFileRoute('/admin/settings/boards/')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
     const { queryClient } = context
-    await queryClient.ensureQueryData(adminQueries.boardsForSettings())
+    // Warm both queries the board forms read so they render with real data
+    // on first paint (no flash). portalConfig backs the Moderation tab's
+    // inherit-from-workspace pills and the Access tab's workspace ceiling;
+    // without prefetch the moderation pills flicker Off -> the real default.
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.boardsForSettings()),
+      queryClient.ensureQueryData(settingsQueries.portalConfig()),
+    ])
     return {}
   },
   component: BoardsSettingsPage,
@@ -71,16 +80,16 @@ function BoardsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl mx-auto w-full">
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
       <BoardSettingsHeader currentBoard={currentBoard} allBoards={boards} />
 
-      <div className="flex flex-col lg:flex-row gap-8">
+      <div className="flex flex-col lg:flex-row gap-6">
         <BoardSettingsNav />
 
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 min-w-0 space-y-6">
           <BoardTabContent board={currentBoard} tab={selectedTab} />
         </div>
       </div>
@@ -97,13 +106,13 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
   switch (tab) {
     case 'general':
       return (
-        <div className="space-y-8">
+        <div className="space-y-6">
           <SettingsCard title="Board Details">
-            <BoardGeneralForm board={board} />
+            <BoardGeneralForm key={board.id} board={board} />
           </SettingsCard>
 
           <SettingsCard title="Danger Zone" variant="danger">
-            <DeleteBoardForm board={board} />
+            <DeleteBoardForm key={board.id} board={board} />
           </SettingsCard>
         </div>
       )
@@ -111,34 +120,32 @@ function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
     case 'access':
       return (
         <SettingsCard title="Access Control">
-          <BoardAccessForm board={board} />
+          <BoardAccessForm key={board.id} board={board} />
+        </SettingsCard>
+      )
+
+    case 'moderation':
+      return (
+        <SettingsCard title="Moderation">
+          <BoardModerationForm key={board.id} board={board} />
         </SettingsCard>
       )
 
     case 'import':
       return (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold">Import Data</h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Import posts from a CSV file into this board
-            </p>
-          </div>
+        <SettingsCard
+          title="Import Data"
+          description="Import posts from a CSV file into this board"
+        >
           <BoardImportSection boardId={board.id} />
-        </div>
+        </SettingsCard>
       )
 
     case 'export':
       return (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold">Export Data</h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Download all posts from this board as CSV
-            </p>
-          </div>
+        <SettingsCard title="Export Data" description="Download all posts from this board as CSV">
           <BoardExportSection boardId={board.id} />
-        </div>
+        </SettingsCard>
       )
   }
 }
@@ -152,7 +159,7 @@ function EmptyBoardsState() {
         description="Configure your feedback board settings and preferences"
       />
 
-      <div className="rounded-xl border border-border/50 bg-card p-8 shadow-sm">
+      <div className="rounded-xl border border-border/50 bg-card p-4 sm:p-6 shadow-sm">
         <EmptyState
           icon={ChatBubbleLeftIcon}
           title="No boards yet"

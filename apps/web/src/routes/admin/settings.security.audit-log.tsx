@@ -28,7 +28,7 @@ export const Route = createFileRoute('/admin/settings/security/audit-log')({
 
 function AuditLogRoute() {
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>

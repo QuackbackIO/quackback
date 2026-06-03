@@ -3,14 +3,14 @@ import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
   UsersIcon,
+  UserGroupIcon,
   Squares2X2Icon,
   PaintBrushIcon,
   PuzzlePieceIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  KeyIcon,
   ChatBubbleLeftRightIcon,
-  AdjustmentsHorizontalIcon,
+  CommandLineIcon,
   ShieldCheckIcon,
   DocumentTextIcon,
   BeakerIcon,
@@ -55,8 +55,8 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
           to: '/admin/settings/security/audit-log',
           icon: DocumentTextIcon,
         },
-        { label: 'API', to: '/admin/settings/api', icon: KeyIcon },
-        { label: 'Experimental', to: '/admin/settings/experimental', icon: BeakerIcon },
+        { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
+        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
       ],
     },
     {
@@ -103,7 +103,7 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
         { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
         { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
         { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
-        { label: 'Permissions', to: '/admin/settings/permissions', icon: ShieldCheckIcon },
+        { label: 'Moderation', to: '/admin/settings/moderation', icon: ShieldCheckIcon },
       ],
     },
   ]
@@ -116,14 +116,8 @@ export function buildNavSections(flags?: { helpCenter?: boolean }): NavSection[]
   }
 
   sections.push({
-    label: 'End Users',
-    items: [
-      {
-        label: 'User Attributes',
-        to: '/admin/settings/user-attributes',
-        icon: AdjustmentsHorizontalIcon,
-      },
-    ],
+    label: 'Customers',
+    items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
   })
 
   return sections

@@ -70,7 +70,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         try {
           await withApiKeyAuth(request, { role: 'team' })
 
-          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+          const articleId = parseTypeId<HelpCenterArticleId>(
+            params.articleId,
+            'article',
+            'article ID'
+          )
 
           const article = await getArticleById(articleId)
           return successResponse(formatArticle(article))
@@ -85,7 +89,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         try {
           await withApiKeyAuth(request, { role: 'team' })
 
-          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+          const articleId = parseTypeId<HelpCenterArticleId>(
+            params.articleId,
+            'article',
+            'article ID'
+          )
 
           const body = await request.json()
           const parsed = updateArticleBody.safeParse(body)
@@ -137,9 +145,14 @@ export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')(
         if (!(await isFeatureEnabled('helpCenter'))) return notFoundResponse('Knowledge base')
 
         try {
-          await withApiKeyAuth(request, { role: 'admin' })
+          // Soft delete (deleteArticle sets deletedAt) — team OK.
+          await withApiKeyAuth(request, { role: 'team' })
 
-          const articleId = parseTypeId<HelpCenterArticleId>(params.articleId, 'article', 'article ID')
+          const articleId = parseTypeId<HelpCenterArticleId>(
+            params.articleId,
+            'article',
+            'article ID'
+          )
 
           await deleteArticle(articleId)
           return noContentResponse()

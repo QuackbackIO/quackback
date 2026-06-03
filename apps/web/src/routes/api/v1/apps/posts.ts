@@ -5,6 +5,7 @@ import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId, PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 const createPostSchema = z.object({
   boardId: z.string().min(1, 'Board ID is required'),
@@ -34,7 +35,8 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
 
       POST: async ({ request }) => {
         try {
-          const { principalId } = await withApiKeyAuth(request, { role: 'team' })
+          const apiAuth = await withApiKeyAuth(request, { role: 'team' })
+          const { principalId } = apiAuth
 
           const body = await request.json()
           const parsed = createPostSchema.safeParse(body)
@@ -67,6 +69,18 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
             with: { user: { columns: { id: true, name: true, email: true } } },
           })
 
+          // Apps integration: actor reflects the integration API key (always
+          // team via withApiKeyAuth above), so the moderation gate inside
+          // createPost will bypass approval — apps tickets are trusted
+          // internal flow.
+          const callerSegmentIds = await segmentIdsForPrincipal(authorPrincipalId)
+          const actor = {
+            principalId: authorPrincipalId,
+            role: apiAuth.role,
+            principalType: 'service' as const,
+            segmentIds: callerSegmentIds,
+          }
+
           const result = await createPost(
             {
               boardId,
@@ -79,7 +93,9 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
               displayName: principalRecord?.displayName ?? undefined,
               name: principalRecord?.user?.name,
               email: principalRecord?.user?.email ?? undefined,
-            }
+              actor,
+            },
+            { headers: request.headers }
           )
 
           // If link info provided, link ticket to the newly created post

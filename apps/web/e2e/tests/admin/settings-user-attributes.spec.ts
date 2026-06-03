@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Admin User Attributes Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/admin/settings/user-attributes')
+    await page.goto('/admin/settings/people')
     await page.waitForLoadState('networkidle')
   })
 
@@ -11,9 +11,9 @@ test.describe('Admin User Attributes Settings', () => {
   })
 
   test('shows page description', async ({ page }) => {
-    await expect(
-      page.getByText(/define custom attributes/i).first()
-    ).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/define custom attributes/i).first()).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('shows "New attribute" button or empty state action', async ({ page }) => {
@@ -27,9 +27,12 @@ test.describe('Admin User Attributes Settings', () => {
   test('empty state shows when no attributes exist', async ({ page }) => {
     await page.waitForTimeout(500)
 
-    const attrRows = page.locator('div').filter({ has: page.locator('code') }).filter({
-      hasText: /text|number|boolean|date|currency/i,
-    })
+    const attrRows = page
+      .locator('div')
+      .filter({ has: page.locator('code') })
+      .filter({
+        hasText: /text|number|boolean|date|currency/i,
+      })
 
     if ((await attrRows.count()) === 0) {
       const emptyTitle = page.getByText(/no attributes yet/i)
@@ -50,9 +53,12 @@ test.describe('Admin User Attributes Settings', () => {
       await expect(attrRows.first().locator('code').first()).toBeVisible()
 
       // Each row should have a type badge (Text | Number | Boolean | Date | Currency)
-      const typeBadge = attrRows.first().locator('span').filter({
-        hasText: /^(Text|Number|Boolean|Date|Currency)/,
-      })
+      const typeBadge = attrRows
+        .first()
+        .locator('span')
+        .filter({
+          hasText: /^(Text|Number|Boolean|Date|Currency)/,
+        })
       if ((await typeBadge.count()) > 0) {
         await expect(typeBadge.first()).toBeVisible()
       }
@@ -118,7 +124,9 @@ test.describe('Admin User Attributes Settings', () => {
     }
 
     // Options should be visible
-    const optionContainer = page.locator('[role="listbox"]').or(page.locator('[data-radix-select-content]'))
+    const optionContainer = page
+      .locator('[role="listbox"]')
+      .or(page.locator('[data-radix-select-content]'))
     if ((await optionContainer.count()) > 0) {
       await expect(optionContainer.getByText('Text')).toBeVisible()
       await expect(optionContainer.getByText('Number')).toBeVisible()

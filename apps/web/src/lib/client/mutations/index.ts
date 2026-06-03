@@ -30,7 +30,7 @@ export {
 } from './portal-posts'
 
 // Board mutations
-export { useCreateBoard, useUpdateBoard, useDeleteBoard } from './boards'
+export { useCreateBoard, useUpdateBoard, useUpdateBoardAccess, useDeleteBoard } from './boards'
 
 // Portal comment mutations
 export {

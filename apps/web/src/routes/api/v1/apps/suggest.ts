@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { fromUuid } from '@quackback/ids'
+import { fromUuid, type SegmentId } from '@quackback/ids'
 import { db, posts, boards } from '@/lib/server/db'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
+import type { Actor } from '@/lib/server/policy'
 
 export const Route = createFileRoute('/api/v1/apps/suggest')({
   server: {
@@ -13,13 +14,24 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
 
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { role: 'team' })
+          const auth = await withApiKeyAuth(request, { role: 'team' })
           const url = new URL(request.url)
           const text = url.searchParams.get('text')?.trim()
           const limit = Math.min(Number(url.searchParams.get('limit')) || 5, 20)
 
           if (!text) {
             return badRequestResponse('text parameter is required')
+          }
+
+          // Team-level actor so the suggest fallback uses
+          // postViewFilter with team scope (otherwise the call
+          // defaults to ANONYMOUS_ACTOR and team callers see only
+          // public-board posts — wrong direction).
+          const actor: Actor = {
+            principalId: auth.principalId,
+            role: auth.role,
+            principalType: 'service',
+            segmentIds: new Set<SegmentId>(),
           }
 
           const { generateEmbedding } =
@@ -35,6 +47,7 @@ export const Route = createFileRoute('/api/v1/apps/suggest')({
               sort: 'top',
               limit,
               page: 1,
+              actor,
             })
             const resultPosts = result.items.map((p) => ({
               id: p.id,

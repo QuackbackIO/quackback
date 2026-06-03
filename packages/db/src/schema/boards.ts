@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, boolean, jsonb, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
-import type { BoardSettings } from '../types'
+import { type BoardSettings, type BoardAccess, DEFAULT_BOARD_ACCESS } from '../types'
 
 export const boards = pgTable(
   'boards',
@@ -10,7 +10,10 @@ export const boards = pgTable(
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
-    isPublic: boolean('is_public').default(true).notNull(),
+    // v1 access controls — per-action tier matrix. Replaces the legacy
+    // `audience` jsonb column (dropped in migration 0080) and the older
+    // `is_public` boolean before that.
+    access: jsonb('access').$type<BoardAccess>().default(DEFAULT_BOARD_ACCESS).notNull(),
     settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -19,7 +22,6 @@ export const boards = pgTable(
   },
   (table) => [
     // Note: boards_slug_unique constraint already provides uniqueness; no separate index needed
-    index('boards_is_public_idx').on(table.isPublic),
     index('boards_deleted_at_idx').on(table.deletedAt),
   ]
 )

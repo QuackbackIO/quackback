@@ -46,7 +46,11 @@ interface PostCardProps {
   tags: { id: string; name: string; color?: string }[]
 
   // Portal mode props
-  /** Whether the user is authenticated (shows login dialog on vote if false) */
+  /**
+   * Whether the viewer is a signed-in real (non-anonymous) user. A denied vote
+   * for a real user shows the "no access" tooltip; for an anonymous/no-session
+   * viewer it opens the login dialog.
+   */
   isAuthenticated?: boolean
   /** Whether the user can vote (true if authenticated or anonymous voting enabled) */
   canVote?: boolean
@@ -134,8 +138,13 @@ export function PostCard({
 
   async function handleVoteClick(e: React.MouseEvent): Promise<void> {
     e.stopPropagation()
-    if (!isAuthenticated && !canVote) {
+    if (!canVote) {
       e.preventDefault()
+      // Signed in but denied by the board's vote tier (segments/team) — an
+      // authorization failure, not authentication. The button's tooltip
+      // explains; do nothing (never fire a vote the server would reject).
+      if (isAuthenticated) return
+      // Anonymous on a board that requires sign-in.
       authPopover?.openAuthPopover({ mode: 'login' })
       return
     }
@@ -176,11 +185,23 @@ export function PostCard({
     }
   }
 
+  // Signed-in viewer denied by the board's vote tier (authz): dim + tooltip,
+  // no sign-in prompt. Anonymous denial is handled by the click → login path.
+  const voteNoAccess = isAuthenticated && !canVote
+  const voteNoAccessMsg = voteNoAccess
+    ? intl.formatMessage({
+        id: 'portal.vote.noAccess',
+        defaultMessage: "You don't have access to vote on this board",
+      })
+    : undefined
+
   // Vote button - always interactive
   const voteButton = (
     <button
       type="button"
       data-testid="vote-button"
+      title={voteNoAccessMsg}
+      aria-disabled={voteNoAccess || undefined}
       aria-label={
         currentHasVoted
           ? intl.formatMessage(
@@ -207,15 +228,20 @@ export function PostCard({
         'w-12 py-2 gap-0.5',
         currentHasVoted
           ? 'post-card__vote--voted text-post-card-voted border-post-card-voted/60 bg-post-card-voted/15'
-          : 'bg-muted/40 text-muted-foreground border-border/50 hover:border-border hover:bg-muted/60 hover:text-foreground/80',
-        (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait'
+          : 'bg-muted/40 text-muted-foreground border-border/50',
+        // Hover affordances only when the button is actionable (not denied).
+        !currentHasVoted &&
+          !voteNoAccess &&
+          'hover:border-border hover:bg-muted/60 hover:text-foreground/80',
+        (isVotePending || isAnonSigningIn) && 'opacity-70 cursor-wait',
+        voteNoAccess && 'cursor-not-allowed opacity-60'
       )}
     >
       <ChevronUpIcon
         className={cn(
           'transition-transform duration-200 h-4 w-4',
           currentHasVoted && 'fill-post-card-voted',
-          !isVotePending && 'group-hover/vote:-translate-y-0.5'
+          !isVotePending && !voteNoAccess && 'group-hover/vote:-translate-y-0.5'
         )}
       />
       <span

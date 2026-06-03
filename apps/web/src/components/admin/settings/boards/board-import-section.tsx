@@ -114,7 +114,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
   }
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card shadow-sm p-6">
+    <>
       {state === 'idle' && (
         <>
           <div
@@ -134,15 +134,17 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
               <div className="flex items-center justify-center gap-2">
                 <DocumentTextIcon className="h-5 w-5 text-primary" />
                 <span className="text-sm font-medium">{selectedFile.name}</span>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Remove file"
                   onClick={(e) => {
                     e.stopPropagation()
                     setSelectedFile(null)
                   }}
-                  className="p-1 hover:bg-muted rounded"
                 >
                   <XMarkIcon className="h-4 w-4 text-muted-foreground" />
-                </button>
+                </Button>
               </div>
             ) : (
               <>
@@ -164,13 +166,13 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
             </div>
           )}
 
-          <div className="mt-4 flex items-center gap-2">
-            <Button onClick={handleImport} disabled={!selectedFile}>
-              <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
+            <Button onClick={handleImport} disabled={!selectedFile} className="w-full sm:w-auto">
+              <ArrowUpTrayIcon className="size-4" />
               Import Data
             </Button>
-            <Button variant="outline" onClick={downloadTemplate}>
-              <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+            <Button variant="outline" onClick={downloadTemplate} className="w-full sm:w-auto">
+              <ArrowDownTrayIcon className="size-4" />
               Download Template
             </Button>
           </div>
@@ -188,7 +190,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
 
       {state === 'completed' && result && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3 text-green-600">
+          <div className="flex items-center gap-3 text-primary">
             <CheckCircleIcon className="h-5 w-5" />
             <span className="font-medium">Import Complete</span>
           </div>
@@ -197,7 +199,7 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
               <span className="font-medium">{result.imported}</span> posts imported
             </p>
             {result.skipped > 0 && (
-              <p className="text-amber-600">
+              <p className="text-muted-foreground">
                 <span className="font-medium">{result.skipped}</span> rows skipped
               </p>
             )}
@@ -238,6 +240,6 @@ export function BoardImportSection({ boardId }: BoardImportSectionProps) {
           </Button>
         </div>
       )}
-    </div>
+    </>
   )
 }

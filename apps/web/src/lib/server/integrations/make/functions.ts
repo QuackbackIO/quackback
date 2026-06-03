@@ -4,6 +4,7 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { safeFetch } from '../../content/ssrf-guard'
 
 /**
  * Save a Make webhook URL as the integration connection.
@@ -16,8 +17,13 @@ export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin'] })
 
+    const hostname = new URL(data.webhookUrl).hostname
+    if (!hostname.endsWith('.make.com') && !hostname.endsWith('.integromat.com')) {
+      throw new Error('Webhook URL must be a Make (make.com) URL')
+    }
+
     // Test the webhook with a ping
-    const testResponse = await fetch(data.webhookUrl, {
+    const testResponse = await safeFetch(data.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

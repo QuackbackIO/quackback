@@ -10,12 +10,14 @@ import {
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import type { BoardId } from '@quackback/ids'
 
-// Input validation schema
+// Input validation schema — `audience` and `access` are intentionally
+// excluded. Visibility is a policy-level setting changed only via
+// updateBoardAccessFn (admin-only, audited). Accepting it here would let a
+// member-role API key silently flip board visibility without an audit event.
 const updateBoardSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   slug: z.string().min(1).max(100).optional(),
   description: z.string().max(500).nullable().optional(),
-  isPublic: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/api/v1/boards/$boardId')({
@@ -31,7 +33,8 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
 
           const boardId = parseTypeId<BoardId>(params.boardId, 'board', 'board ID')
 
-          const { getBoardById } = await import('@/lib/server/domains/boards/board.service')
+          const { getBoardById, accessToAudience } =
+            await import('@/lib/server/domains/boards/board.service')
 
           const board = await getBoardById(boardId)
 
@@ -40,7 +43,8 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             name: board.name,
             slug: board.slug,
             description: board.description,
-            isPublic: board.isPublic,
+            // Legacy contract: synthesised from board.access for back-compat.
+            audience: accessToAudience(board.access),
             settings: board.settings,
             createdAt: board.createdAt.toISOString(),
             updatedAt: board.updatedAt.toISOString(),
@@ -69,13 +73,13 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             })
           }
 
-          const { updateBoard } = await import('@/lib/server/domains/boards/board.service')
+          const { updateBoard, accessToAudience } =
+            await import('@/lib/server/domains/boards/board.service')
 
           const board = await updateBoard(boardId, {
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
-            isPublic: parsed.data.isPublic,
           })
 
           return successResponse({
@@ -83,7 +87,8 @@ export const Route = createFileRoute('/api/v1/boards/$boardId')({
             name: board.name,
             slug: board.slug,
             description: board.description,
-            isPublic: board.isPublic,
+            // Legacy contract: synthesised from board.access for back-compat.
+            audience: accessToAudience(board.access),
             settings: board.settings,
             createdAt: board.createdAt.toISOString(),
             updatedAt: board.updatedAt.toISOString(),

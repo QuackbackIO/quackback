@@ -6,6 +6,7 @@
 import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
+import { safeFetch } from '../../content/ssrf-guard'
 import { buildMakePayload } from './message'
 
 export interface MakeTarget {
@@ -45,7 +46,7 @@ export const makeHook: HookHandler = {
     const payload = buildMakePayload(event, rootUrl)
 
     try {
-      const response = await fetch(webhookUrl, {
+      const response = await safeFetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -5,7 +5,8 @@
  * TipTap doc instead of parsing markdown on every render.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
+import type { CommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
 
 const insertedComments: Record<string, unknown>[] = []
 const insertedEditHistory: Record<string, unknown>[] = []
@@ -67,7 +68,20 @@ vi.mock('@/lib/server/db', async () => {
             boardId: 'board_b',
             statusId: 'status_open',
             isCommentsLocked: false,
-            board: { id: 'board_b', slug: 'b' },
+            moderationState: 'published',
+            principalId: null,
+            board: {
+              id: 'board_b',
+              slug: 'b',
+              access: {
+                view: 'anonymous',
+                vote: 'anonymous',
+                comment: 'anonymous',
+                submit: 'anonymous',
+                segments: { view: [], vote: [], comment: [], submit: [] },
+                moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+              },
+            },
           }),
         },
         comments: {
@@ -115,6 +129,20 @@ vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchCommentUpdated: vi.fn(),
   buildEventActor: vi.fn(() => ({})),
 }))
+// canCreateComment now consults workspace requireApproval for board-level
+// `inherit`. Default to 'none' so inherit → no approval needed.
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  getPortalConfig: vi.fn().mockResolvedValue({
+    moderationDefault: { requireApproval: 'none' },
+  }),
+}))
+
+const portalActor: Actor = {
+  principalId: 'principal_a' as unknown as PrincipalId,
+  role: 'user',
+  principalType: 'user',
+  segmentIds: new Set<SegmentId>(),
+}
 
 describe('createComment contentJson dual-write', () => {
   beforeEach(() => {
@@ -128,6 +156,7 @@ describe('createComment contentJson dual-write', () => {
     await createComment(
       { postId: 'post_p' as unknown as PostId, content: '**bold** body' },
       { principalId: 'principal_a' as unknown as PrincipalId, role: 'user' },
+      portalActor,
       { skipDispatch: true }
     )
     expect(insertedComments[0]).toMatchObject({ content: '**bold** body' })
@@ -153,6 +182,7 @@ describe('createComment contentJson dual-write', () => {
         contentJson: providedJson,
       },
       { principalId: 'principal_a' as unknown as PrincipalId, role: 'user' },
+      portalActor,
       { skipDispatch: true }
     )
     expect(insertedComments[0].contentJson).toEqual(providedJson)

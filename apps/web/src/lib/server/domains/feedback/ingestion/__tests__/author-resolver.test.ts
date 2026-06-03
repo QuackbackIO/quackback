@@ -10,11 +10,15 @@ const mockSelect = vi.fn()
 const mockInsertValues = vi.fn()
 const mockFindFirstExternalMapping = vi.fn()
 
+const mockWhereCalls: unknown[] = []
 function createSelectChain(rows: unknown[] = []) {
   const chain: Record<string, unknown> = {}
   chain.from = vi.fn(() => chain)
   chain.innerJoin = vi.fn(() => chain)
-  chain.where = vi.fn(() => chain)
+  chain.where = vi.fn((cond: unknown) => {
+    mockWhereCalls.push(cond)
+    return chain
+  })
   chain.limit = vi.fn().mockResolvedValue(rows)
   return chain
 }
@@ -39,7 +43,15 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
   },
-  eq: vi.fn(),
+  eq: vi.fn((col: unknown, val: unknown) => ({ kind: 'eq', col, val })),
+  // sql tagged template — the LOWER(email) lookup uses it. Return a
+  // tagged marker so tests can assert it was used (instead of a raw
+  // case-sensitive eq).
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    kind: 'sql',
+    raw: strings.join(' '),
+    values,
+  })),
   user: { email: 'email' },
   principal: { id: 'principal_id', userId: 'user_id' },
   externalUserMappings: {},
@@ -104,6 +116,27 @@ describe('resolveAuthorPrincipal', () => {
 
     // The select chain was called, meaning email resolution was attempted
     expect(mockSelect).toHaveBeenCalled()
+  })
+
+  it('matches users whose stored email differs only in case (LOWER(email))', async () => {
+    // Regression: the email-lookup used `eq(user.email, email)`. Users
+    // signed up via Better-Auth with mixed-case emails (e.g.
+    // 'Alice@example.com'); a follow-up feedback ingest with
+    // 'alice@example.com' missed and created a duplicate user record.
+    // The query must lower-fold both sides — the LOWER(user.email)
+    // functional index (migration 0076) supports this without a seq
+    // scan.
+    mockWhereCalls.length = 0
+    mockSelect.mockReturnValue(createSelectChain([{ principalId: 'principal_existing' }]))
+
+    await resolveAuthorPrincipal({ email: 'alice@example.com' }, 'intercom')
+
+    // The first where() call must be a sql LOWER(...) marker, not a
+    // raw eq(user.email, ...). Case-sensitive eq would miss
+    // `Alice@example.com` rows and silently create duplicate users.
+    const firstCond = mockWhereCalls[0] as { kind?: string; raw?: string }
+    expect(firstCond.kind).toBe('sql')
+    expect(firstCond.raw?.toLowerCase()).toContain('lower(')
   })
 
   it('resolves by external ID when mapping exists', async () => {

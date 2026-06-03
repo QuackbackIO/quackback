@@ -40,6 +40,13 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     console.log(`[fn:subscriptions] fetchSubscriptionStatus: postId=${data.postId}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      // Same gate as the write paths below. Without it, an authenticated
+      // portal user could probe any postId to confirm existence and
+      // learn their prior subscription level on team-only / segment-
+      // restricted boards. The round-2 fix patched a same-named
+      // function in functions/portal.ts; this is the one the
+      // subscription-bell UI actually imports.
+      await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { getSubscriptionStatus } =
         await import('@/lib/server/domains/subscriptions/subscription.service')
@@ -52,6 +59,26 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
     }
   })
 
+// Helper: portal + per-post audience gate shared by all three write paths.
+// Without it, an authenticated portal user could subscribe to a team-only
+// post by id and start receiving notifications whose body embeds the
+// post title and comment previews — a fan-out leak of audience-restricted
+// content. Same shape as the gates on createCommentFn / toggleVoteFn.
+async function gateSubscriptionWrite(
+  postId: PostId,
+  auth: Awaited<ReturnType<typeof requireAuth>>
+) {
+  const { resolvePortalAccessForRequest } = await import('./portal-access')
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    throw new Error('Portal access required')
+  }
+  const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
+  const { policyActorFromAuth } = await import('./auth-helpers')
+  const actor = await policyActorFromAuth(auth)
+  await assertPostViewable(postId, actor)
+}
+
 // Write Operations
 export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .inputValidator(subscribeToPostSchema)
@@ -59,6 +86,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
     console.log(`[fn:subscriptions] subscribeToPostFn: postId=${data.postId}, level=${data.level}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { subscribeToPost } =
         await import('@/lib/server/domains/subscriptions/subscription.service')
@@ -79,6 +107,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
     console.log(`[fn:subscriptions] unsubscribeFromPostFn: postId=${data.postId}`)
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { unsubscribeFromPost } =
         await import('@/lib/server/domains/subscriptions/subscription.service')
@@ -99,6 +128,7 @@ export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
     )
     try {
       const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { updateSubscriptionLevel } =
         await import('@/lib/server/domains/subscriptions/subscription.service')

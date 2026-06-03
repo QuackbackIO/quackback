@@ -1,3 +1,4 @@
+import { useIntl } from 'react-intl'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { VoteButton } from './vote-button'
@@ -10,6 +11,8 @@ interface AuthVoteButtonProps {
   disabled?: boolean
   /** Whether the current user can vote (anonymous voting enabled or logged in) */
   canVote?: boolean
+  /** Whether the viewer is a signed-in real user (drives authz vs authn copy) */
+  isAuthenticated?: boolean
   /** Compact horizontal variant for inline use */
   compact?: boolean
   /** Pill variant — vertical, self-stretches to parent height */
@@ -17,9 +20,11 @@ interface AuthVoteButtonProps {
 }
 
 /**
- * VoteButton wrapper that handles authentication.
+ * VoteButton wrapper that handles authentication AND authorization.
  * - canVote=true: silently signs in anonymously before the vote fires
- * - canVote=false, disabled=false: button looks normal, clicking opens login dialog
+ * - canVote=false, signed out: button looks normal, clicking opens login dialog
+ * - canVote=false, signed in: denied by the board tier (authz) — dimmed with a
+ *   "You don't have access to vote on this board" tooltip, no sign-in prompt
  * - disabled=true: button is visually disabled (e.g. merged post)
  */
 export function AuthVoteButton({
@@ -27,9 +32,11 @@ export function AuthVoteButton({
   voteCount,
   disabled = false,
   canVote = false,
+  isAuthenticated = false,
   compact = false,
   pill = false,
 }: AuthVoteButtonProps): React.ReactElement {
+  const intl = useIntl()
   const { openAuthPopover } = useAuthPopover()
   const ensureAnonSession = useEnsureAnonSession()
 
@@ -37,8 +44,17 @@ export function AuthVoteButton({
     openAuthPopover({ mode: 'login' })
   }
 
-  // Needs login: not structurally disabled, but user can't vote yet
-  const needsAuth = !disabled && !canVote
+  const denied = !disabled && !canVote
+  // Signed in but denied = authorization failure (board tier); otherwise the
+  // denial is resolved by signing in.
+  const needsAuth = denied && !isAuthenticated
+  const noAccessReason =
+    denied && isAuthenticated
+      ? intl.formatMessage({
+          id: 'portal.vote.noAccess',
+          defaultMessage: "You don't have access to vote on this board",
+        })
+      : undefined
 
   return (
     <VoteButton
@@ -46,6 +62,7 @@ export function AuthVoteButton({
       voteCount={voteCount}
       disabled={disabled}
       onAuthRequired={needsAuth ? handleAuthRequired : undefined}
+      noAccessReason={noAccessReason}
       onBeforeVote={canVote ? ensureAnonSession : undefined}
       compact={compact}
       pill={pill}

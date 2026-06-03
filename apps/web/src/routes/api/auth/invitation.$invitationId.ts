@@ -28,9 +28,11 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
             return Response.json({ error: 'App not configured' }, { status: 500 })
           }
 
-          // Find the invitation
+          // Find the invitation — kind='team' prevents a portal invite
+          // from surfacing on the team signup page.
+          const { and } = await import('@/lib/server/db')
           const inv = await db.query.invitation.findFirst({
-            where: eq(invitation.id, invitationId),
+            where: and(eq(invitation.id, invitationId), eq(invitation.kind, 'team')),
             with: {
               inviter: true,
             },

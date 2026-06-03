@@ -20,14 +20,14 @@ describe('buildNavSections', () => {
     expect(labels).toContain('Help Center')
   })
 
-  it('places Help Center between Feedback and End Users', () => {
+  it('places Help Center between Feedback and Customers', () => {
     const sections = buildNavSections({ helpCenter: true })
     const labels = sections.map((s) => s.label)
     const feedbackIdx = labels.indexOf('Feedback')
     const helpCenterIdx = labels.indexOf('Help Center')
-    const endUsersIdx = labels.indexOf('End Users')
+    const customersIdx = labels.indexOf('Customers')
     expect(helpCenterIdx).toBeGreaterThan(feedbackIdx)
-    expect(helpCenterIdx).toBeLessThan(endUsersIdx)
+    expect(helpCenterIdx).toBeLessThan(customersIdx)
   })
 
   it('has Help Center item', () => {
@@ -88,17 +88,17 @@ describe('buildNavSections', () => {
       'Customization',
       'Feedback',
       'Help Center',
-      'End Users',
+      'Customers',
     ])
   })
 
   it('has the expected section order without helpCenter', () => {
     const sections = buildNavSections()
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'End Users'])
+    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Customers'])
   })
 
-  it('Administration contains Members, Integrations, Security, Audit log, API, Experimental in that order', () => {
+  it('Administration contains Members, Integrations, Security, Audit log, Developers, Labs in that order', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
     expect(administration.items.map((i) => i.label)).toEqual([
@@ -106,8 +106,8 @@ describe('buildNavSections', () => {
       'Integrations',
       'Security',
       'Audit log',
-      'API',
-      'Experimental',
+      'Developers',
+      'Labs',
     ])
   })
 
@@ -139,18 +139,25 @@ describe('buildNavSections', () => {
     expect(integrations.to).toBe('/admin/settings/integrations')
   })
 
-  it('API points at the combined api URL', () => {
+  it('Developers points at the developers URL', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
-    const api = administration.items.find((i) => i.label === 'API')!
-    expect(api.to).toBe('/admin/settings/api')
+    const developers = administration.items.find((i) => i.label === 'Developers')!
+    expect(developers.to).toBe('/admin/settings/developers')
   })
 
-  it('Experimental points at the experimental URL', () => {
+  it('Labs points at the labs URL', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
-    const experimental = administration.items.find((i) => i.label === 'Experimental')!
-    expect(experimental.to).toBe('/admin/settings/experimental')
+    const labs = administration.items.find((i) => i.label === 'Labs')!
+    expect(labs.to).toBe('/admin/settings/labs')
+  })
+
+  it('does not have a standalone Access item in the Feedback section', () => {
+    const sections = buildNavSections()
+    const feedback = sections.find((s) => s.label === 'Feedback')!
+    const accessItem = feedback.items.find((i) => i.label === 'Access')
+    expect(accessItem).toBeUndefined()
   })
 
   it('does NOT list standalone API Keys, Webhooks, or MCP entries anywhere', () => {
@@ -161,13 +168,13 @@ describe('buildNavSections', () => {
     expect(allItems).not.toContain('MCP Server')
   })
 
-  it('does NOT duplicate Security/Authentication under End Users', () => {
+  it('does NOT duplicate Security/Authentication under Customers', () => {
     const sections = buildNavSections()
-    const endUsers = sections.find((s) => s.label === 'End Users')!
-    const dupes = endUsers.items.filter(
+    const customers = sections.find((s) => s.label === 'Customers')!
+    const dupes = customers.items.filter(
       (i) => i.label === 'Authentication' || i.label === 'Security'
     )
     expect(dupes).toHaveLength(0)
-    expect(endUsers.items.map((i) => i.label)).toEqual(['User Attributes'])
+    expect(customers.items.map((i) => i.label)).toEqual(['People'])
   })
 })

@@ -105,6 +105,35 @@ describe('Widget Identify — custom attributes from JWT claims', () => {
       expect(RESERVED_JWT_CLAIMS).toContain('avatarURL')
       expect(RESERVED_JWT_CLAIMS).toContain('avatarUrl')
     })
+
+    it('includes "segments" — access-controls claim, not a user attribute', () => {
+      // If 'segments' weren't reserved it would be treated as a user
+      // attribute (validateAndCoerceAttributes), silently fail validation,
+      // and never reach the segment-membership service. Worse, a user
+      // could define a custom attribute called 'segments' that collides
+      // with the access-control claim.
+      expect(RESERVED_JWT_CLAIMS).toContain('segments')
+    })
+  })
+
+  describe('segments claim handling', () => {
+    it('extractCustomClaims strips segments from custom-attribute pipeline', () => {
+      const payload = {
+        sub: 'user_1',
+        email: 'test@example.com',
+        segments: ['enterprise', 'beta'],
+        plan: 'pro',
+      }
+      const custom = extractCustomClaims(payload)
+      expect(custom).toEqual({ plan: 'pro' })
+      expect(custom).not.toHaveProperty('segments')
+    })
+
+    it('treats empty segments array as reserved (still stripped)', () => {
+      const payload = { sub: 'u', email: 'e@x', segments: [], plan: 'free' }
+      const custom = extractCustomClaims(payload)
+      expect(custom).toEqual({ plan: 'free' })
+    })
   })
 })
 

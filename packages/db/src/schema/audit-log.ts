@@ -29,6 +29,12 @@ export const auditLog = pgTable(
     actorRole: text('actor_role'),
     actorIp: text('actor_ip'),
     actorUserAgent: text('actor_user_agent'),
+    /** Correlation handle — value of x-request-id / x-correlation-id header, if present. */
+    requestId: text('request_id'),
+    /** Denormalised principal type at write time ('user' | 'service' | 'anonymous' | 'system' | 'api_key'). */
+    actorType: text('actor_type'),
+    /** Auth method used for sign-in events ('password' | 'sso' | 'magic_link' | 'ott' | 'api_key' | 'session'). */
+    authMethod: text('auth_method'),
     /** Dotted taxonomy — see `AuditEventType`. */
     eventType: text('event_type').notNull(),
     /** 'success' | 'failure'. */
@@ -44,5 +50,6 @@ export const auditLog = pgTable(
     index('audit_log_occurred_at_idx').on(table.occurredAt),
     index('audit_log_actor_user_id_occurred_at_idx').on(table.actorUserId, table.occurredAt),
     index('audit_log_event_type_occurred_at_idx').on(table.eventType, table.occurredAt),
+    index('audit_log_request_id_idx').on(table.requestId),
   ]
 )

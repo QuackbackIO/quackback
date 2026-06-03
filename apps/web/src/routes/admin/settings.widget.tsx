@@ -8,7 +8,6 @@ import {
   CheckIcon,
   EyeIcon,
   EyeSlashIcon,
-  ExclamationTriangleIcon,
 } from '@heroicons/react/24/solid'
 import {
   HighlightedCode,
@@ -18,6 +17,7 @@ import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { WarningBox } from '@/components/shared/warning-box'
 import {
   BrandingLayout,
   BrandingControlsPanel,
@@ -287,7 +287,7 @@ function WidgetAppearanceControls({
               <Label htmlFor="tab-feedback" className="text-xs font-medium cursor-pointer">
                 Feedback
               </Label>
-              <p className="text-[11px] text-muted-foreground">Search, vote, and submit ideas</p>
+              <p className="text-xs text-muted-foreground">Search, vote, and submit ideas</p>
             </div>
             <div className="flex items-center gap-2">
               <InlineSpinner visible={savingField === 'tab-feedback'} />
@@ -312,7 +312,7 @@ function WidgetAppearanceControls({
               <Label htmlFor="tab-changelog" className="text-xs font-medium cursor-pointer">
                 Changelog
               </Label>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Show product updates and shipped features
               </p>
             </div>
@@ -724,26 +724,26 @@ function WidgetInstallation({
           {/* Step 1 */}
           <div className="p-5 space-y-1">
             <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold shrink-0">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
                 1
               </span>
               <span className="text-xs font-medium text-foreground">Add the script</span>
             </div>
-            <p className="text-[11px] text-muted-foreground ml-7">
-              Paste before the closing <code className="text-[11px]">&lt;/body&gt;</code> tag
+            <p className="text-xs text-muted-foreground ml-7">
+              Paste before the closing <code className="text-xs">&lt;/body&gt;</code> tag
             </p>
           </div>
 
           {/* Step 2 */}
           <div className="flex-1 p-5 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold shrink-0">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
                 2
               </span>
               <div>
                 <span className="text-xs font-medium text-foreground">Identify users</span>
-                <p className="text-[11px] text-muted-foreground">
-                  Generate a signed <code className="text-[11px]">ssoToken</code> on your backend
+                <p className="text-xs text-muted-foreground">
+                  Generate a signed <code className="text-xs">ssoToken</code> on your backend
                 </p>
               </div>
             </div>
@@ -754,7 +754,7 @@ function WidgetInstallation({
                   <span className="text-xs font-medium text-foreground">
                     Verified identity only
                   </span>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Disable inline email capture and require your app to sign each user
                   </p>
                 </div>
@@ -769,10 +769,17 @@ function WidgetInstallation({
                 </div>
               </div>
 
+              {!verifiedIdentityOnly && (
+                <p className="text-xs text-muted-foreground bg-muted/40 border border-border/50 rounded px-2 py-1.5 leading-relaxed">
+                  Without verification, anyone with a customer&apos;s email can post as them. Team
+                  accounts are always protected.
+                </p>
+              )}
+
               <div className="space-y-2.5">
                 {/* Framework */}
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Backend framework</Label>
+                  <Label className="text-xs text-muted-foreground">Backend framework</Label>
                   <Select value={framework} onValueChange={setFramework}>
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
@@ -789,10 +796,10 @@ function WidgetInstallation({
 
                 {/* Secret */}
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground">Widget secret</Label>
+                  <Label className="text-xs text-muted-foreground">Widget secret</Label>
                   {currentSecret ? (
                     <div className="flex items-center gap-1">
-                      <code className="flex-1 text-[10px] font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1 truncate">
+                      <code className="flex-1 text-xs font-mono text-foreground bg-muted/30 border border-border/50 rounded px-2 py-1 truncate">
                         {secretVisible ? currentSecret : maskedSecret}
                       </code>
                       <Button
@@ -821,14 +828,14 @@ function WidgetInstallation({
                       </Button>
                     </div>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground italic">
+                    <p className="text-xs text-muted-foreground italic">
                       Click regenerate to create a secret
                     </p>
                   )}
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-[11px]"
+                    className="h-7 text-xs"
                     onClick={handleRegenerate}
                     disabled={regenerating}
                   >
@@ -844,10 +851,7 @@ function WidgetInstallation({
                 </div>
 
                 {/* Security note */}
-                <p className="flex items-start gap-1.5 text-[10px] text-yellow-600 dark:text-yellow-500">
-                  <ExclamationTriangleIcon className="h-3 w-3 shrink-0 mt-px" />
-                  Keep this secret server-side only
-                </p>
+                <WarningBox variant="warning" title="Keep this secret server-side only" />
               </div>
             </div>
           </div>
