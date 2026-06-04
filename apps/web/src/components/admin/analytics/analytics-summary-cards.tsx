@@ -4,10 +4,10 @@ import { TrendDelta } from './analytics-trend'
 export type MetricKey = 'posts' | 'votes' | 'comments' | 'users'
 
 export const METRICS: Array<{ key: MetricKey; label: string; color: string }> = [
-  { key: 'posts', label: 'Posts', color: 'var(--chart-1)' },
-  { key: 'votes', label: 'Votes', color: 'var(--chart-2)' },
-  { key: 'comments', label: 'Comments', color: 'var(--chart-3)' },
-  { key: 'users', label: 'Users', color: 'var(--chart-4)' },
+  { key: 'posts', label: 'Posts', color: 'var(--metric-posts)' },
+  { key: 'votes', label: 'Votes', color: 'var(--metric-votes)' },
+  { key: 'comments', label: 'Comments', color: 'var(--metric-comments)' },
+  { key: 'users', label: 'Users', color: 'var(--metric-users)' },
 ]
 
 interface MetricBarProps {
@@ -38,19 +38,24 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
             )}
             style={
               isActive
-                ? { backgroundColor: `color-mix(in srgb, ${color} 6%, transparent)` }
+                ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
                 : undefined
             }
           >
-            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p
+              className="mb-2 text-xs uppercase tracking-wider text-muted-foreground"
+              style={isActive ? { color } : undefined}
+            >
+              {label}
+            </p>
             <p className="text-2xl sm:text-3xl leading-none font-bold tabular-nums tracking-tight">
               {total.toLocaleString()}
             </p>
             <TrendDelta value={delta} className="mt-1.5" />
-            {/* Active indicator */}
+            {/* Active indicator — full-strength metric color, clearly visible */}
             <div
               className={cn(
-                'absolute bottom-0 left-0 right-0 h-[3px] transition-opacity duration-150',
+                'absolute inset-x-0 bottom-0 h-[3px] transition-opacity duration-150',
                 isActive ? 'opacity-100' : 'opacity-0'
               )}
               style={{ background: color }}
