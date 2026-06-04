@@ -1,4 +1,6 @@
 import { Link } from '@tanstack/react-router'
+import { AnalyticsBarList } from './analytics-bar-list'
+import { AnalyticsEmpty } from './analytics-empty'
 
 interface TopPostsProps {
   posts: Array<{
@@ -14,44 +16,25 @@ interface TopPostsProps {
 
 export function AnalyticsTopPosts({ posts }: TopPostsProps) {
   if (posts.length === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        No posts in this period
-      </div>
-    )
+    return <AnalyticsEmpty message="No posts in this period" />
   }
 
-  const maxVotes = Math.max(...posts.map((p) => p.voteCount), 1)
-
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-xs uppercase tracking-wider text-muted-foreground">
-        <span>Post</span>
-        <span>Votes</span>
-      </div>
-      <div className="flex flex-col">
-        {posts.map((post) => {
-          const pct = (post.voteCount / maxVotes) * 100
-          return (
-            <div key={post.postId} className="relative flex items-center overflow-hidden py-2">
-              <div
-                className="absolute inset-y-0 left-0 rounded-sm bg-foreground/[0.06]"
-                style={{ width: `${pct}%` }}
-              />
-              <Link
-                to="/admin/feedback"
-                search={{ post: post.postId }}
-                className="relative flex-1 truncate px-1 text-sm hover:text-primary transition-colors"
-              >
-                {post.title}
-              </Link>
-              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                {post.voteCount}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <AnalyticsBarList
+      header={{ label: 'Post', value: 'Votes' }}
+      rows={posts.map((post) => ({
+        key: post.postId,
+        value: post.voteCount,
+        label: (
+          <Link
+            to="/admin/feedback"
+            search={{ post: post.postId }}
+            className="block truncate transition-colors hover:text-primary"
+          >
+            {post.title}
+          </Link>
+        ),
+      }))}
+    />
   )
 }

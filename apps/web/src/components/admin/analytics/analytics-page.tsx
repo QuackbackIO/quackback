@@ -159,7 +159,7 @@ export function AnalyticsPage() {
 
                 {section === 'feedback' && (
                   <div className="flex flex-col gap-6">
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
                       <Card>
                         <CardHeader>
                           <CardTitle>Status distribution</CardTitle>
@@ -174,7 +174,7 @@ export function AnalyticsPage() {
                         <CardHeader>
                           <CardTitle>Boards</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="max-h-[320px] overflow-y-auto scrollbar-thin">
                           <AnalyticsBoardChart data={data.boardBreakdown} />
                         </CardContent>
                       </Card>

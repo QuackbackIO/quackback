@@ -1,4 +1,6 @@
 import { Avatar } from '@/components/ui/avatar'
+import { AnalyticsBarList } from './analytics-bar-list'
+import { AnalyticsEmpty } from './analytics-empty'
 
 interface TopContributorsProps {
   contributors: Array<{
@@ -14,48 +16,24 @@ interface TopContributorsProps {
 
 export function AnalyticsTopContributors({ contributors }: TopContributorsProps) {
   if (contributors.length === 0) {
-    return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        No contributor activity in this period
-      </div>
-    )
+    return <AnalyticsEmpty message="No contributor activity in this period" />
   }
 
-  const maxTotal = Math.max(...contributors.map((c) => c.total), 1)
-
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between px-1 text-xs uppercase tracking-wider text-muted-foreground">
-        <span>Contributor</span>
-        <span>Activity</span>
-      </div>
-      <div className="flex flex-col">
-        {contributors.map((c) => {
-          const pct = (c.total / maxTotal) * 100
-          return (
-            <div
-              key={c.principalId}
-              className="relative flex items-center gap-2.5 overflow-hidden py-2"
-            >
-              <div
-                className="absolute inset-y-0 left-0 rounded-sm bg-foreground/[0.06]"
-                style={{ width: `${pct}%` }}
-              />
-              <Avatar
-                src={c.avatarUrl}
-                name={c.displayName}
-                className="relative size-5 shrink-0 text-[10px]"
-              />
-              <span className="relative flex-1 truncate text-sm">
-                {c.displayName ?? 'Anonymous'}
-              </span>
-              <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                {c.total}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <AnalyticsBarList
+      header={{ label: 'Contributor', value: 'Activity' }}
+      rows={contributors.map((c) => ({
+        key: c.principalId,
+        value: c.total,
+        leading: (
+          <Avatar
+            src={c.avatarUrl}
+            name={c.displayName}
+            className="relative size-5 shrink-0 text-[10px]"
+          />
+        ),
+        label: <span className="block truncate">{c.displayName ?? 'Anonymous'}</span>,
+      }))}
+    />
   )
 }
