@@ -1,4 +1,5 @@
 import { cn } from '@/lib/shared/utils'
+import { TrendDelta } from './analytics-trend'
 
 export type MetricKey = 'posts' | 'votes' | 'comments' | 'users'
 
@@ -24,7 +25,7 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
       {METRICS.map(({ key, label, color }) => {
-        const { total } = summary[key]
+        const { total, delta } = summary[key]
         const isActive = activeMetric === key
         return (
           <button
@@ -45,6 +46,7 @@ export function AnalyticsSummaryCards({ summary, activeMetric, onMetricChange }:
             <p className="text-2xl sm:text-3xl leading-none font-bold tabular-nums tracking-tight">
               {total.toLocaleString()}
             </p>
+            <TrendDelta value={delta} className="mt-1.5" />
             {/* Active indicator */}
             <div
               className={cn(

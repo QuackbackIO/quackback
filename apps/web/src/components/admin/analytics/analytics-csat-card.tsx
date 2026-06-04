@@ -1,4 +1,4 @@
-import { cn } from '@/lib/shared/utils'
+import { TrendDelta } from './analytics-trend'
 
 interface CsatData {
   avgRating: number
@@ -72,17 +72,7 @@ function Stat({
         {value}
         {suffix && <span className="text-sm font-medium text-muted-foreground">{suffix}</span>}
       </p>
-      {delta !== undefined && delta !== 0 && (
-        <p
-          className={cn(
-            'mt-1 text-xs font-medium',
-            delta > 0 ? 'text-emerald-600' : 'text-red-600'
-          )}
-        >
-          {delta > 0 ? '+' : ''}
-          {delta}% vs prev
-        </p>
-      )}
+      {delta !== undefined && <TrendDelta value={delta} suffix="vs prev" className="mt-1" />}
     </div>
   )
 }
