@@ -10,13 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
-import {
-  ChartBarIcon,
-  InboxIcon,
-  DocumentTextIcon,
-  UsersIcon,
-  ChatBubbleLeftRightIcon,
-} from '@heroicons/react/24/solid'
+import { ChartBarIcon } from '@heroicons/react/24/solid'
+import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
+import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, METRICS, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
@@ -38,8 +34,6 @@ function ChartSkeleton({ className }: { className?: string }) {
   return <div className={cn('w-full rounded-md bg-muted/50 animate-pulse', className)} />
 }
 
-type Section = 'overview' | 'feedback' | 'support' | 'changelog' | 'users'
-
 const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
   { value: '7d', label: '7d' },
   { value: '30d', label: '30d' },
@@ -47,20 +41,14 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
   { value: '12m', label: '12m' },
 ]
 
-const navItems: Array<{ key: Section; label: string; icon: React.ElementType }> = [
-  { key: 'overview', label: 'Overview', icon: ChartBarIcon },
-  { key: 'feedback', label: 'Feedback', icon: InboxIcon },
-  { key: 'support', label: 'Support', icon: ChatBubbleLeftRightIcon },
-  { key: 'changelog', label: 'Changelog', icon: DocumentTextIcon },
-  { key: 'users', label: 'Users', icon: UsersIcon },
-]
-
 export function AnalyticsPage() {
   const { settings } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
   // The Support section reports CSAT metrics, so hide it unless the experimental
   // Support Inbox flag is on — same gate as the inbox itself.
-  const sections = navItems.filter((i) => i.key !== 'support' || (flags?.supportInbox ?? false))
+  const sections = SECTION_NAV_ITEMS.filter(
+    (i) => i.key !== 'support' || (flags?.supportInbox ?? false)
+  )
 
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
   const [section, setSection] = useState<Section>('overview')
@@ -112,29 +100,35 @@ export function AnalyticsPage() {
       <main className="flex-1 min-w-0 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="mx-auto w-full max-w-4xl px-6 pt-4 pb-6 flex flex-col gap-4">
-            {/* Header: period selector + last updated */}
-            <div className="flex items-center justify-end gap-3">
-              {data?.computedAt && (
-                <p className="text-sm text-muted-foreground">
-                  Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
-                </p>
-              )}
-              <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
-                {periods.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setPeriod(value)}
-                    className={cn(
-                      'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                      period === value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {/* Header: mobile title + section switcher (left) · updated + period (right) */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 lg:hidden">
+                <h1 className="text-base font-semibold">Analytics</h1>
+                <AnalyticsSectionSelect items={sections} value={section} onChange={setSection} />
+              </div>
+              <div className="ml-auto flex items-center gap-3">
+                {data?.computedAt && (
+                  <p className="hidden text-sm text-muted-foreground sm:block">
+                    Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
+                  </p>
+                )}
+                <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
+                  {periods.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPeriod(value)}
+                      className={cn(
+                        'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                        period === value
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
