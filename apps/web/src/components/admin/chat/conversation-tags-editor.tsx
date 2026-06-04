@@ -87,6 +87,10 @@ export function ConversationTagsEditor({
   const [editingId, setEditingId] = useState<ChatTagId | null>(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState<string>(DEFAULT_TAG_COLOR)
+  // Two-step guard for the destructive delete: deleting a label removes it from
+  // EVERY conversation org-wide, so the trash action asks to confirm first
+  // (distinct from the per-conversation chip remove).
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const threadKey = ['admin', 'inbox', 'thread', conversationId] as const
 
@@ -168,6 +172,7 @@ export function ConversationTagsEditor({
     setEditingId(tag.id)
     setEditName(tag.name)
     setEditColor(tag.color)
+    setConfirmDelete(false)
   }
 
   return (
@@ -182,6 +187,7 @@ export function ConversationTagsEditor({
           if (!o) {
             setQuery('')
             setEditingId(null)
+            setConfirmDelete(false)
             setCreateColor(DEFAULT_TAG_COLOR)
           }
         }}
@@ -225,13 +231,33 @@ export function ConversationTagsEditor({
                         <ColorSwatches value={editColor} onChange={setEditColor} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <button
-                          type="button"
-                          onClick={() => deleteMut.mutate(t.id)}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-destructive hover:bg-destructive/10"
-                        >
-                          <TrashIcon className="h-3 w-3" /> Delete
-                        </button>
+                        {confirmDelete ? (
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <span className="text-muted-foreground">Delete everywhere?</span>
+                            <button
+                              type="button"
+                              onClick={() => deleteMut.mutate(t.id)}
+                              className="rounded px-1.5 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDelete(false)}
+                              className="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-muted/60"
+                            >
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(true)}
+                            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] text-destructive hover:bg-destructive/10"
+                          >
+                            <TrashIcon className="h-3 w-3" /> Delete
+                          </button>
+                        )}
                         <div className="flex items-center gap-1">
                           <button
                             type="button"

@@ -27,6 +27,7 @@ import {
   chatMessageReactions,
   chatMessageFlags,
   userSegments,
+  segments,
   type Conversation,
   type ChatMessage,
 } from '@/lib/server/db'
@@ -691,7 +692,16 @@ export async function listConversationsForAgent(
               db
                 .select({ principalId: userSegments.principalId })
                 .from(userSegments)
-                .where(inArray(userSegments.segmentId, filter.segmentIds))
+                .innerJoin(segments, eq(userSegments.segmentId, segments.id))
+                .where(
+                  and(
+                    inArray(userSegments.segmentId, filter.segmentIds),
+                    // Exclude soft-deleted segments — mirrors the tag filter's
+                    // deleted-tag guard so a stale `?segment=` to a removed
+                    // segment can't still match conversations.
+                    isNull(segments.deletedAt)
+                  )
+                )
             )
           : undefined,
         // Mentions view: conversations carrying an internal note that @-mentions

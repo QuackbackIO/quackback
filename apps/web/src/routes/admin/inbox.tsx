@@ -262,14 +262,6 @@ function InboxPage() {
     (id: ConversationId | null) => updateSearch({ c: id ?? undefined, m: undefined }),
     [updateSearch]
   )
-  // Keep the active scope's memory in sync with what's open (covers list clicks,
-  // deep-linked `?c=`, and explicit close) so it's already current the moment you
-  // switch away. Closing a conversation forgets it for that scope.
-  useEffect(() => {
-    const key = inboxNavKey(nav)
-    if (selectedId) scopeMemory.current.set(key, selectedId)
-    else scopeMemory.current.delete(key)
-  }, [nav, selectedId])
   // Open a conversation AND deep-link a specific message (the "Saved for later"
   // feed): the thread scrolls to it and flashes it on arrival.
   const targetMessageId = (urlM as ChatMessageId | undefined) ?? null
@@ -321,6 +313,37 @@ function InboxPage() {
   })
 
   const conversations = listData?.conversations ?? []
+
+  // Keep the active scope's memory in sync with what's open, so it's current the
+  // moment you switch away. Only remember a conversation that's actually IN this
+  // scope's list — a cross-scope deep-link (`?c=X` paired with an unrelated
+  // `?tag=`) must not pollute the scope's memory and resurface out of scope.
+  // (A conversation below the first page simply isn't remembered — recent ones
+  // dominate.) Closing a conversation forgets it for the scope.
+  useEffect(() => {
+    const key = inboxNavKey(nav)
+    if (selectedId && conversations.some((c) => c.id === selectedId)) {
+      scopeMemory.current.set(key, selectedId)
+    } else if (!selectedId) {
+      scopeMemory.current.delete(key)
+    }
+  }, [nav, selectedId, conversations])
+
+  // If the active tag/segment scope no longer exists (deleted here or by another
+  // agent, or a stale deep-link to a removed id), fall back to the default view
+  // instead of stranding the user on an empty, unlabelled scope. Guarded on the
+  // option list having loaded so a valid scope isn't reset mid-fetch.
+  useEffect(() => {
+    if (nav.kind === 'tag' && navTags && !navTags.some((t) => t.id === nav.tagId)) {
+      updateSearch({ tag: undefined })
+    } else if (
+      nav.kind === 'segment' &&
+      navSegments &&
+      !navSegments.some((s) => s.id === nav.segmentId)
+    ) {
+      updateSearch({ segment: undefined })
+    }
+  }, [nav, navTags, navSegments, updateSearch])
 
   // Live updates for the whole inbox over one cookie-authenticated stream.
   const refreshInbox = useCallback(() => {
@@ -407,17 +430,17 @@ function InboxPage() {
             prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== evt.messageId) } : prev
         )
       } else if (evt.kind === 'conversation' && evt.conversation.id === selectedId) {
-        // Keep the open thread's status/assignment in sync with changes made by
-        // another agent — but keep OUR locally-written tags. Tag mutations are
-        // authoritative on the editing client and have no broadcast channel, so a
-        // foreign metadata event (whose tag-load may predate our just-applied
-        // tag) must not clobber them back to a stale list.
+        // Keep the open thread in sync with changes another agent made. The agent
+        // DTO carries fresh tags too, so a foreign label change propagates here —
+        // tag mutations have no dedicated broadcast, so they ride on the next
+        // conversation event. Adopting it wholesale can briefly overwrite a tag
+        // THIS client just applied locally if a foreign metadata event interleaves;
+        // we accept that narrow, self-healing race rather than leave other agents'
+        // labels invisible until reload (reliable sync would need a tag broadcast).
         queryClient.setQueryData(
           ['admin', 'inbox', 'thread', selectedId],
           (prev: ThreadCache | undefined) =>
-            prev
-              ? { ...prev, conversation: { ...evt.conversation, tags: prev.conversation.tags } }
-              : prev
+            prev ? { ...prev, conversation: evt.conversation } : prev
         )
       }
     },

@@ -55,6 +55,7 @@ vi.mock('@/lib/server/db', () => {
     chatMessages: { __name: 'chat_messages' },
     chatMessageMentions: { __name: 'chat_message_mentions' },
     userSegments: { __name: 'user_segments' },
+    segments: { __name: 'segments' },
     // SQL helpers — no-op stubs; inArray records its second arg for assertions.
     eq: vi.fn(),
     and: vi.fn(),
