@@ -14,14 +14,35 @@ on:
         required: false
         default: ''
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
+  # Build each architecture on its OWN native runner — free arm64 hosted
+  # runners (ubuntu-24.04-arm) are GA for public repos — in parallel, pushing
+  # each as an untagged per-arch image BY DIGEST. Native beats QEMU here: the
+  # image runs `bun install` plus two Vite/TanStack production builds, which are
+  # far too slow under arm64 emulation (and risk job timeouts).
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-      id-token: write # keyless cosign signing via GitHub OIDC
     steps:
+      - name: Prepare platform pair
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v6
         with:
           # On workflow_dispatch, build the requested sha/ref (re-release of an
@@ -30,16 +51,74 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      - name: Resolve lowercase image ref
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       - uses: docker/login-action@v4
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          platforms: ${{ matrix.platform }}
+          # No tags here — the manifest list (and its tags) is assembled in the
+          # merge job; each leg pushes an untagged per-arch image by digest.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # Per-arch cache scope so the two runners don't clobber each other.
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Assemble the multi-arch manifest list (OCI image index) from the per-arch
+  # digests, apply the real tags, then keyless-sign the index digest.
+  merge:
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing via GitHub OIDC
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Resolve lowercase image ref
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/metadata-action@v6
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
             type=semver,pattern={{version}}
@@ -47,28 +126,30 @@ jobs:
             type=raw,value=${{ github.event.inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' }}
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' }}
 
-      - uses: docker/build-push-action@v7
-        id: build
-        with:
-          context: .
-          file: ./apps/web/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
 
-      # Keyless cosign signature over the pushed digest, required by the
-      # cluster's Kyverno verify-images ClusterPolicy (keyless, GitHub OIDC
-      # issuer + QuackbackIO workflow subject). github.repository is a
-      # trusted GitHub-set slug; lowercased because OCI refs must be lower.
+      - name: Capture image index digest
+        id: index
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign image (keyless)
+      # Keyless cosign signature over the pushed index digest, required by the
+      # cluster's Kyverno verify-images ClusterPolicy (keyless, GitHub OIDC
+      # issuer + QuackbackIO workflow subject). --recursive signs the OCI index
+      # AND each per-arch child manifest, so policy can verify either the index
+      # or a resolved per-arch digest.
+      - name: Sign image index (keyless)
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          REPO: ${{ github.repository }}
-        run: |
-          IMAGE="ghcr.io/$(printf '%s' "$REPO" | tr '[:upper:]' '[:lower:]')"
-          cosign sign --yes "${IMAGE}@${DIGEST}"
+          IMAGE_DIGEST: ${{ steps.index.outputs.digest }}
+        run: cosign sign --yes --recursive "${IMAGE}@${IMAGE_DIGEST}"

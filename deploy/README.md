@@ -24,18 +24,20 @@ docker run -d \
   -e DATABASE_URL="postgresql://user:pass@host:5432/quackback" \
   -e SECRET_KEY="your-secret-32-chars-minimum" \
   -e BASE_URL="https://your-domain.com" \
-  ghcr.io/quackbackhq/quackback:latest
+  ghcr.io/quackbackio/quackback:latest
 ```
 
 ### With Docker Compose
 
 ```bash
-git clone https://github.com/quackbackhq/quackback.git
+git clone https://github.com/quackbackio/quackback.git
 cd quackback
-cp .env.example .env
-# Edit .env with your settings
-docker compose up -d
+cp .env.prod.example .env
+# Edit .env with your settings (generate secrets with: openssl rand -base64 32)
+docker compose -f docker-compose.prod.yml up -d
 ```
+
+> The root `docker-compose.yml` is for **local development only** (datastores, no app service). Use `docker-compose.prod.yml` to self-host — it bundles the app plus Postgres, Dragonfly, and MinIO with hardened defaults.
 
 See the [Self-Hosted Guide](./self-hosted/README.md) for complete documentation.
 

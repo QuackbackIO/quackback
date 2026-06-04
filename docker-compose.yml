@@ -1,3 +1,16 @@
+# ============================================================================
+# DEVELOPMENT infrastructure only — Postgres, MinIO, Dragonfly, Mailpit.
+# Started by `bun run setup` / `bun run dev`; the app itself runs on the host
+# via `bun run dev`, so there is NO app service here.
+#
+# This file uses insecure defaults (postgres/password, minioadmin), publishes
+# datastore ports on localhost, and makes the upload bucket world-readable —
+# all fine for local development, NOT safe on an internet-facing host.
+#
+# To self-host Quackback, use docker-compose.prod.yml instead (app included,
+# hardened defaults). See the self-hosting docs.
+# ============================================================================
+
 services:
   postgres:
     build:

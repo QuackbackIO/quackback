@@ -22,21 +22,23 @@ Deploy Quackback on your own infrastructure with full control over your data.
 
 ```bash
 # Clone the repository
-git clone https://github.com/quackbackhq/quackback.git
+git clone https://github.com/quackbackio/quackback.git
 cd quackback
 
 # Copy and configure environment
-cp .env.example .env
-# Edit .env with your settings (see Environment Variables below)
+cp .env.prod.example .env
+# Edit .env — fill in every value (generate secrets with: openssl rand -base64 32)
 
-# Start the application
-docker compose up -d
+# Start the application (app + Postgres + Dragonfly + MinIO)
+docker compose -f docker-compose.prod.yml up -d
 
 # View logs
-docker compose logs -f
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 Open http://localhost:3000 to access Quackback.
+
+> The root `docker-compose.yml` is **development infrastructure only** (no app service, insecure defaults, world-readable bucket). Always use `docker-compose.prod.yml` for self-hosting.
 
 ### Using Docker Run
 
@@ -47,7 +49,7 @@ docker run -d \
   -e DATABASE_URL="postgresql://user:pass@host:5432/quackback" \
   -e SECRET_KEY="your-secret-key-at-least-32-chars" \
   -e BASE_URL="https://your-domain.com" \
-  ghcr.io/quackbackhq/quackback:latest
+  ghcr.io/quackbackio/quackback:latest
 ```
 
 ---
@@ -67,13 +69,13 @@ Images are published to GitHub Container Registry:
 
 ```bash
 # Pull latest community edition
-docker pull ghcr.io/quackbackhq/quackback:latest
+docker pull ghcr.io/quackbackio/quackback:latest
 
 # Pull specific version
-docker pull ghcr.io/quackbackhq/quackback:v1.0.0
+docker pull ghcr.io/quackbackio/quackback:v1.0.0
 
 # Pull enterprise edition
-docker pull ghcr.io/quackbackhq/quackback:latest-enterprise
+docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 ```
 
 ---
@@ -90,12 +92,12 @@ docker pull ghcr.io/quackbackhq/quackback:latest-enterprise
 
 ### Optional
 
-| Variable         | Description             | Default      |
-| ---------------- | ----------------------- | ------------ |
-| `PORT`           | Server port             | `3000`       |
-| `NODE_ENV`       | Environment             | `production` |
-| `RESEND_API_KEY` | Email service (Resend)  | -            |
-| `EMAIL_FROM`     | From address for emails | -            |
+| Variable               | Description             | Default      |
+| ---------------------- | ----------------------- | ------------ |
+| `PORT`                 | Server port             | `3000`       |
+| `NODE_ENV`             | Environment             | `production` |
+| `EMAIL_RESEND_API_KEY` | Email service (Resend)  | -            |
+| `EMAIL_FROM`           | From address for emails | -            |
 
 ### Integrations (Optional)
 
@@ -168,7 +170,7 @@ pg_restore -d quackback quackback_backup.dump
 
 ```bash
 # Clone repository
-git clone https://github.com/quackbackhq/quackback.git
+git clone https://github.com/quackbackio/quackback.git
 cd quackback
 
 # Install dependencies
@@ -248,7 +250,7 @@ feedback.yourcompany.com {
 # docker-compose.yml with Traefik labels
 services:
   quackback:
-    image: ghcr.io/quackbackhq/quackback:latest
+    image: ghcr.io/quackbackio/quackback:latest
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.quackback.rule=Host(`feedback.yourcompany.com`)'
@@ -274,7 +276,7 @@ docker run -d \
   -e DATABASE_URL="postgresql://..." \
   -e SECRET_KEY="..." \
   -e QUACKBACK_LICENSE_KEY="your-license-key" \
-  ghcr.io/quackbackhq/quackback:latest-enterprise
+  ghcr.io/quackbackio/quackback:latest-enterprise
 ```
 
 ### Obtaining a License
@@ -288,13 +290,16 @@ Contact sales@quackback.io for enterprise licensing information.
 ### Docker Compose
 
 ```bash
-# Pull latest image
-docker compose pull
+# 1. Back up your database first
+docker compose -f docker-compose.prod.yml exec postgres \
+  pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > backup-$(date +%Y%m%d).dump
 
-# Restart with new image
-docker compose up -d
+# 2. Pull the latest source + image (bump QUACKBACK_TAG in .env to pin a version)
+git pull
+docker compose -f docker-compose.prod.yml pull
 
-# Migrations run automatically on startup
+# 3. Restart — migrations run automatically on startup
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### Docker Run
@@ -305,7 +310,7 @@ docker stop quackback
 docker rm quackback
 
 # Pull new image
-docker pull ghcr.io/quackbackhq/quackback:latest
+docker pull ghcr.io/quackbackio/quackback:latest
 
 # Start new container (same run command as before)
 docker run -d --name quackback ...
@@ -418,5 +423,5 @@ Coming soon:
 ## Support
 
 - **Documentation**: https://docs.quackback.io
-- **GitHub Issues**: https://github.com/quackbackhq/quackback/issues
+- **GitHub Issues**: https://github.com/quackbackio/quackback/issues
 - **Discord**: https://discord.gg/quackback

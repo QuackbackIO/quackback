@@ -1,0 +1,153 @@
+# ============================================================================
+# Quackback — production stack (self-hosting)
+# ============================================================================
+# A self-contained, single-host deployment: the Quackback app plus its
+# datastores (PostgreSQL + Dragonfly + MinIO). Unlike the dev docker-compose.yml,
+# this file is safe to run on a server:
+#   - the app is the ONLY service with a published host port
+#   - datastores are reachable only on the internal compose network
+#   - every secret is required via ${VAR:?...} — the stack refuses to start
+#     half-configured instead of falling back to insecure defaults
+#   - the upload bucket is PRIVATE (served through the app at /api/storage)
+#
+# Quick start:
+#   git clone https://github.com/QuackbackIO/quackback.git && cd quackback
+#   cp .env.prod.example .env      # then fill in every value
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Migrations run automatically on app startup. Upgrade with:
+#   git pull && docker compose -f docker-compose.prod.yml pull && \
+#     docker compose -f docker-compose.prod.yml up -d
+# (back up your database first — see the self-hosting docs).
+#
+# For an external Postgres / Redis / S3 instead of the bundled datastores,
+# point the URLs at your managed services and remove the services you no longer
+# need. To scale beyond one host, use managed datastores + the `docker run`
+# path; this compose is single-node by design.
+# ============================================================================
+
+services:
+  app:
+    image: ghcr.io/quackbackio/quackback:${QUACKBACK_TAG:-latest}
+    container_name: quackback-app
+    restart: unless-stopped
+    init: true
+    # Carries BASE_URL, SECRET_KEY, email settings, S3_BUCKET/S3_REGION, etc.
+    env_file: .env
+    # Internal wiring is fixed here (derived from the secrets in .env) so a
+    # self-hoster can't point these at the wrong host — these override env_file.
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-quackback}
+      REDIS_URL: redis://dragonfly:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-quackback}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      S3_FORCE_PATH_STYLE: 'true'
+      # MinIO has no public port, so the browser can't reach it directly:
+      # serve uploads through the app's /api/storage proxy.
+      S3_PROXY: 'true'
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Use Bun (always in the image) so we don't depend on curl/wget. The
+      # container listens on 3000 regardless of the published APP_PORT.
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    container_name: quackback-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-quackback}
+    # No host port — Postgres is reachable only on the internal network.
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./docker/postgres/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql
+    # pg_cron is required for scheduled analytics/materialized-view refreshes.
+    command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=${POSTGRES_DB:-quackback} -c max_connections=200
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.27.1
+    container_name: quackback-dragonfly
+    restart: unless-stopped
+    # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
+    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
+    # No host port — reachable only on the internal network.
+    volumes:
+      - dragonfly_data:/data
+    ulimits:
+      memlock: -1
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:${MINIO_IMAGE_TAG:-latest}
+    container_name: quackback-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    # No host port — object storage is internal; uploads are served via the app.
+    command: server /data
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Creates the upload bucket on first start. Unlike the dev stack it does NOT
+  # set a public download policy — the bucket stays private and is served
+  # through the app's /api/storage proxy (S3_PROXY=true above).
+  minio-init:
+    image: minio/mc:${MC_IMAGE_TAG:-latest}
+    container_name: quackback-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      S3_BUCKET: ${S3_BUCKET:-quackback}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/\"$$S3_BUCKET\"
+      "
+    restart: 'no'
+
+volumes:
+  postgres_data:
+  minio_data:
+  dragonfly_data:
