@@ -25,7 +25,7 @@ export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: Acti
 
   if (dailyStats.length === 0) {
     return (
-      <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-[clamp(300px,46vh,520px)] items-center justify-center text-sm text-muted-foreground">
         No data for this period
       </div>
     )
@@ -35,9 +35,15 @@ export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: Acti
     <ChartContainer
       key={activeMetric}
       config={chartConfig}
-      className="aspect-auto h-[260px] w-full"
+      className="aspect-auto h-[clamp(300px,46vh,520px)] w-full"
     >
       <AreaChart data={dailyStats} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <defs>
+          <linearGradient id={`fill-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={`var(--color-${activeMetric})`} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={`var(--color-${activeMetric})`} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
         <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.4} />
         <XAxis
           dataKey="date"
@@ -63,9 +69,8 @@ export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: Acti
           type="monotone"
           dataKey={activeMetric}
           stroke={`var(--color-${activeMetric})`}
-          fill={`var(--color-${activeMetric})`}
-          fillOpacity={0.15}
-          strokeWidth={1.5}
+          fill={`url(#fill-${activeMetric})`}
+          strokeWidth={2}
           dot={false}
           activeDot={{ r: 3, strokeWidth: 0 }}
         />

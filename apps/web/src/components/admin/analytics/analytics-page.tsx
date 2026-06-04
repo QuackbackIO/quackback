@@ -144,7 +144,9 @@ export function AnalyticsPage() {
                       onMetricChange={setActiveMetric}
                     />
                     <div className="border-t border-border/50 px-6 pt-7 pb-6">
-                      <Suspense fallback={<ChartSkeleton className="h-[260px]" />}>
+                      <Suspense
+                        fallback={<ChartSkeleton className="h-[clamp(300px,46vh,520px)]" />}
+                      >
                         <AnalyticsActivityChart
                           dailyStats={data.dailyStats}
                           activeMetric={activeMetric}
@@ -246,7 +248,7 @@ function SectionSkeleton() {
         ))}
       </div>
       <div className="border-t border-border/50 px-6 pt-7 pb-6">
-        <Skeleton className="h-[280px] w-full rounded-lg" />
+        <Skeleton className="h-[clamp(300px,46vh,520px)] w-full rounded-lg" />
       </div>
     </Card>
   )
