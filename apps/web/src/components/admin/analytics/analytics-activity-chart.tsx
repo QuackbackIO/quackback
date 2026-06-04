@@ -20,7 +20,8 @@ function formatDate(dateStr: string) {
 
 export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: ActivityChartProps) {
   const chartConfig: ChartConfig = {
-    [activeMetric]: { label: activeMetric, color },
+    // Capitalize the metric key so the tooltip reads "Posts", not "posts".
+    [activeMetric]: { label: activeMetric[0].toUpperCase() + activeMetric.slice(1), color },
   }
 
   if (dailyStats.length === 0) {
