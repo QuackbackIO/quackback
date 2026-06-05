@@ -1,4 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { ChangelogEntryCard } from './changelog-entry-card'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -6,6 +7,7 @@ import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
 
 export function ChangelogListPublic() {
+  const intl = useIntl()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
     publicChangelogQueries.list()
   )
@@ -15,7 +17,9 @@ export function ChangelogListPublic() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="text-muted-foreground">Loading changelog...</div>
+        <div className="text-muted-foreground">
+          <FormattedMessage id="portal.changelog.loading" defaultMessage="Loading changelog..." />
+        </div>
       </div>
     )
   }
@@ -24,8 +28,14 @@ export function ChangelogListPublic() {
     return (
       <EmptyState
         icon={DocumentTextIcon}
-        title="No updates yet"
-        description="Check back soon for the latest product updates and shipped features."
+        title={intl.formatMessage({
+          id: 'portal.changelog.empty.title',
+          defaultMessage: 'No updates yet',
+        })}
+        description={intl.formatMessage({
+          id: 'portal.changelog.empty.description',
+          defaultMessage: 'Check back soon for the latest product updates and shipped features.',
+        })}
       />
     )
   }
@@ -53,7 +63,11 @@ export function ChangelogListPublic() {
       {hasNextPage && (
         <div className="flex justify-center pt-8">
           <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-            {isFetchingNextPage ? 'Loading...' : 'Load more'}
+            {isFetchingNextPage ? (
+              <FormattedMessage id="portal.changelog.loadingMore" defaultMessage="Loading..." />
+            ) : (
+              <FormattedMessage id="portal.changelog.loadMore" defaultMessage="Load more" />
+            )}
           </Button>
         </div>
       )}
