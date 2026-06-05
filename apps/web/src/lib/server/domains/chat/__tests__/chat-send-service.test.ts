@@ -30,6 +30,12 @@ vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishConversationUpdate: vi.fn(),
 }))
 
+// Auto-routing dynamically imports ./routing. Make it always hand back an agent
+// so a new conversation gets claimed and the assigned webhook can fire.
+vi.mock('../routing', () => ({
+  routeConversation: vi.fn(async () => ({ assignedPrincipalId: 'principal_agent' })),
+}))
+
 // config getters validate the full env (absent in tests); provide just what the
 // attachment URL check reads.
 vi.mock('@/lib/server/config', () => ({
@@ -120,8 +126,11 @@ vi.mock('@/lib/server/db', () => {
       update: vi.fn((table: { __name?: string }) => chain(table?.__name ?? 'unknown')),
     },
     eq: vi.fn(),
+    and: vi.fn(),
+    isNull: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
     chatMessages: { __name: 'chat_messages', id: 'id' },
+    principal: { __name: 'principal', id: 'id', displayName: 'display_name' },
   }
 })
 
@@ -186,6 +195,16 @@ describe('sendVisitorMessage first-message conversation creation', () => {
     // Fire-and-forget after the commit: a created conversation gets both events.
     expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
     expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits conversation.assigned when a new conversation is auto-routed', async () => {
+    await sendVisitorMessage({ content: 'Hello there' }, { principalId: visitor }, visitorActor)
+    // Auto-routing claims the unassigned conversation, so the assigned webhook
+    // fires with a system actor and no previous assignee.
+    expect(emit.emitConversationAssigned).toHaveBeenCalledTimes(1)
+    const [actor, , previousAgentPrincipalId] = emit.emitConversationAssigned.mock.calls[0]
+    expect(actor).toMatchObject({ principalId: null, principalType: 'service' })
+    expect(previousAgentPrincipalId).toBeNull()
   })
 })
 

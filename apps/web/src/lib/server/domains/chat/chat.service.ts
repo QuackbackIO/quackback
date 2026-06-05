@@ -22,7 +22,7 @@ import {
 } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { ChatAttachment } from '@/lib/server/db'
-import type { ConversationId, ChatMessageId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, ChatMessageId, PrincipalId, SegmentId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { config } from '@/lib/server/config'
 import {
@@ -76,6 +76,16 @@ import type {
   SendVisitorMessageResult,
   SendAgentMessageResult,
 } from './chat.types'
+
+/** Actor for system-initiated events (auto-routing): no principal, service type. */
+function systemActor(): Actor {
+  return {
+    principalId: null,
+    role: null,
+    principalType: 'service',
+    segmentIds: new Set<SegmentId>(),
+  }
+}
 
 const PREVIEW_LENGTH = 120
 // Matches the 5 MB cap enforced by the upload endpoints.
@@ -604,6 +614,7 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
   publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
+  void emitConversationAssigned(systemActor(), assigned, null)
   return assignedPrincipalId
 }
 
@@ -833,12 +844,7 @@ export async function recordCsat(
   // the visitor).
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
-  // The widget submits rating + optional comment as two separate POSTs; only
-  // emit the webhook on the first one (when no rating existed yet) so a single
-  // CSAT can't produce two distinct csat_submitted events.
-  if (conversation.csatRating === null) {
-    void emitConversationCsatSubmitted(actor, updated)
-  }
+  void emitConversationCsatSubmitted(actor, updated)
 }
 
 /** Broadcast an ephemeral typing signal (never persisted). */

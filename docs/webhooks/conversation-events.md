@@ -11,14 +11,17 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 | `conversation.status_changed`   | A conversation moves between `open`/`pending`/`closed`.                                                  |
 | `conversation.assigned`         | A conversation is assigned to or unassigned from an agent (includes auto-routing).                       |
 | `conversation.priority_changed` | A conversation's priority changes.                                                                       |
-| `conversation.csat_submitted`   | A visitor submits a satisfaction rating.                                                                 |
+| `conversation.csat_submitted`   | A visitor records or updates their satisfaction rating or comment.                                       |
 | `message.created`               | A visitor or agent sends a public message.                                                               |
 | `message.note_created`          | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it. |
 | `message.deleted`               | A public message is soft-deleted.                                                                        |
 
 Internal-note deletions are not emitted. System messages (e.g. "chat ended") are
 represented by `conversation.*` events, not `message.created`. Anonymous visitors'
-emails are never included (synthetic addresses are stripped to `null`).
+emails are never included (synthetic addresses are stripped to `null`). Because a
+visitor can submit a rating and a comment separately, `conversation.csat_submitted`
+may fire more than once for one conversation; each payload carries the current CSAT
+snapshot, so treat it as an upsert keyed on the conversation rather than counting events.
 
 ## Payload envelope
 
