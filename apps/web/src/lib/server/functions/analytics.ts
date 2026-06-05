@@ -201,10 +201,41 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       total: r.total,
     }))
 
+    // Aggregate over ALL contributors in the period (topContributors above is
+    // capped at 5), so the Users section can show an honest headline: how many
+    // people contributed and how much activity in total.
+    const contributorAggRows = (await db.execute(sql`
+      SELECT
+        COUNT(*)::int as "contributorCount",
+        COALESCE(SUM(activity), 0)::int as "totalActivity"
+      FROM (
+        SELECT acts.principal_id, COUNT(*)::int as activity
+        FROM (
+          SELECT principal_id FROM posts
+            WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
+          UNION ALL
+          SELECT principal_id FROM votes
+            WHERE created_at >= ${sinceIso}::timestamptz
+          UNION ALL
+          SELECT principal_id FROM comments
+            WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
+        ) acts
+        JOIN principal p ON p.id = acts.principal_id
+          AND p.type != 'anonymous' AND p.role = 'user'
+        GROUP BY acts.principal_id
+      ) per_principal
+    `)) as unknown as Array<{ contributorCount: number; totalActivity: number }>
+
+    const contributorCount = contributorAggRows[0]?.contributorCount ?? 0
+    const totalActivity = contributorAggRows[0]?.totalActivity ?? 0
+
     // -- Changelog stats (single transaction to keep totalViews consistent with topEntries) --
     const [changelogResult, topChangelogEntries] = await db.transaction(async (tx) => {
       const totals = await tx
-        .select({ totalViews: sum(changelogEntries.viewCount) })
+        .select({
+          totalViews: sum(changelogEntries.viewCount),
+          entryCount: sql<number>`count(*)::int`,
+        })
         .from(changelogEntries)
         .where(isNull(changelogEntries.deletedAt))
       const top = await tx
@@ -221,6 +252,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     })
 
     const totalViews = Number(changelogResult[0]?.totalViews ?? 0)
+    const changelogEntryCount = Number(changelogResult[0]?.entryCount ?? 0)
 
     // -- CSAT (live query; chat volume is low, no materialized view needed) --
     // Pull rated conversations across current + previous window in one go, then
@@ -266,6 +298,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       boardBreakdown,
       topPosts,
       topContributors,
+      contributorCount,
+      totalActivity,
       csat: {
         avgRating: csatSummary.avgRating,
         avgRatingDelta: delta(csatSummary.avgRating, prevAvg),
@@ -275,6 +309,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       },
       changelog: {
         totalViews,
+        entryCount: changelogEntryCount,
         totalReactions: 0,
         topEntries: topChangelogEntries.map((e) => ({
           id: e.id,

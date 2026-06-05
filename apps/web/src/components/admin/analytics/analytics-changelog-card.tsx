@@ -3,28 +3,22 @@ import { AnalyticsEmpty } from './analytics-empty'
 
 interface ChangelogCardProps {
   topEntries: Array<{ id: string; title: string; viewCount: number }>
-  totalViews: number
 }
 
-export function AnalyticsChangelogCard({ topEntries, totalViews }: ChangelogCardProps) {
+export function AnalyticsChangelogCard({ topEntries }: ChangelogCardProps) {
   if (topEntries.length === 0) {
     return <AnalyticsEmpty message="No changelog entries yet" />
   }
 
   return (
-    <div>
-      <AnalyticsBarList
-        header={{ label: 'Entry', value: 'Views' }}
-        rows={topEntries.map((entry) => ({
-          key: entry.id,
-          label: entry.title,
-          value: entry.viewCount,
-          display: entry.viewCount.toLocaleString(),
-        }))}
-      />
-      <p className="mt-3 text-right text-xs text-muted-foreground">
-        {totalViews.toLocaleString()} total views
-      </p>
-    </div>
+    <AnalyticsBarList
+      header={{ label: 'Entry', value: 'Views' }}
+      rows={topEntries.map((entry) => ({
+        key: entry.id,
+        label: entry.title,
+        value: entry.viewCount,
+        display: entry.viewCount.toLocaleString(),
+      }))}
+    />
   )
 }

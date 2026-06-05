@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -15,11 +15,13 @@ import { CHART_HEIGHT_CLASS } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
+import { AnalyticsStatRow, type AnalyticsStatProps } from './analytics-stat-row'
+import { AnalyticsEmpty } from './analytics-empty'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
 import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
-import { AnalyticsCsatCard } from './analytics-csat-card'
+import { AnalyticsCsatDistribution } from './analytics-csat-card'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
 // primitives that wrap it. Analytics is admin-gated and rarely the first
@@ -33,6 +35,22 @@ const AnalyticsStatusChart = lazy(() =>
 
 function ChartSkeleton({ className }: { className?: string }) {
   return <div className={cn('w-full rounded-md bg-muted/50 animate-pulse', className)} />
+}
+
+/** A section card matching the Overview: a divided headline stat row, then the
+ *  section's visual beneath a hairline divider. */
+function StatSection({ stats, children }: { stats: AnalyticsStatProps[]; children: ReactNode }) {
+  return (
+    <Card className="overflow-hidden py-0 gap-0">
+      <AnalyticsStatRow stats={stats} />
+      <div className="border-t border-border/50 px-6 py-6">{children}</div>
+    </Card>
+  )
+}
+
+/** Integer average, guarding divide-by-zero, with thousands separators. */
+function avgPerItem(total: number, count: number): string {
+  return count > 0 ? Math.round(total / count).toLocaleString() : '0'
 }
 
 const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
@@ -155,17 +173,30 @@ export function AnalyticsPage() {
 
                 {section === 'feedback' && (
                   <div className="flex flex-col gap-6">
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Posts',
+                          value: data.summary.posts.total.toLocaleString(),
+                          delta: data.summary.posts.delta,
+                        },
+                        {
+                          label: 'Votes',
+                          value: data.summary.votes.total.toLocaleString(),
+                          delta: data.summary.votes.delta,
+                        },
+                        {
+                          label: 'Comments',
+                          value: data.summary.comments.total.toLocaleString(),
+                          delta: data.summary.comments.delta,
+                        },
+                      ]}
+                    >
+                      <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
+                        <AnalyticsStatusChart data={data.statusDistribution} />
+                      </Suspense>
+                    </StatSection>
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Status distribution</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
-                            <AnalyticsStatusChart data={data.statusDistribution} />
-                          </Suspense>
-                        </CardContent>
-                      </Card>
                       <Card>
                         <CardHeader>
                           <CardTitle>Boards</CardTitle>
@@ -174,54 +205,71 @@ export function AnalyticsPage() {
                           <AnalyticsBoardChart data={data.boardBreakdown} />
                         </CardContent>
                       </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Top posts</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <AnalyticsTopPosts posts={data.topPosts} />
+                        </CardContent>
+                      </Card>
                     </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Top posts</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <AnalyticsTopPosts posts={data.topPosts} />
-                      </CardContent>
-                    </Card>
                   </div>
                 )}
 
-                {section === 'support' && (
-                  <div className="flex flex-col gap-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Customer satisfaction (CSAT)</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <AnalyticsCsatCard csat={data.csat} />
-                      </CardContent>
+                {section === 'support' &&
+                  (data.csat.responseCount === 0 ? (
+                    <Card className="overflow-hidden">
+                      <AnalyticsEmpty message="No CSAT responses for this period" />
                     </Card>
-                  </div>
-                )}
+                  ) : (
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Avg rating',
+                          value: data.csat.avgRating.toFixed(1),
+                          suffix: '/ 5',
+                          delta: data.csat.avgRatingDelta,
+                        },
+                        { label: 'Responses', value: data.csat.responseCount.toLocaleString() },
+                        { label: 'Response rate', value: `${data.csat.responseRate}%` },
+                      ]}
+                    >
+                      <AnalyticsCsatDistribution distribution={data.csat.distribution} />
+                    </StatSection>
+                  ))}
 
                 {section === 'changelog' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Changelog views</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <AnalyticsChangelogCard
-                        topEntries={data.changelog.topEntries}
-                        totalViews={data.changelog.totalViews}
-                      />
-                    </CardContent>
-                  </Card>
+                  <StatSection
+                    stats={[
+                      {
+                        label: 'Total views',
+                        value: data.changelog.totalViews.toLocaleString(),
+                      },
+                      { label: 'Entries', value: data.changelog.entryCount.toLocaleString() },
+                      {
+                        label: 'Avg / entry',
+                        value: avgPerItem(data.changelog.totalViews, data.changelog.entryCount),
+                      },
+                    ]}
+                  >
+                    <AnalyticsChangelogCard topEntries={data.changelog.topEntries} />
+                  </StatSection>
                 )}
 
                 {section === 'users' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Top contributors</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <AnalyticsTopContributors contributors={data.topContributors} />
-                    </CardContent>
-                  </Card>
+                  <StatSection
+                    stats={[
+                      { label: 'Contributors', value: data.contributorCount.toLocaleString() },
+                      { label: 'Total activity', value: data.totalActivity.toLocaleString() },
+                      {
+                        label: 'Avg / contributor',
+                        value: avgPerItem(data.totalActivity, data.contributorCount),
+                      },
+                    ]}
+                  >
+                    <AnalyticsTopContributors contributors={data.topContributors} />
+                  </StatSection>
                 )}
               </>
             )}

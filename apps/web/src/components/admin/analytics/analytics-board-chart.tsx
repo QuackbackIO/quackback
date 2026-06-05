@@ -16,8 +16,9 @@ export function AnalyticsBoardChart({ data }: BoardChartProps) {
   return (
     <AnalyticsBarList
       header={{ label: 'Board', value: 'Posts' }}
-      rows={sorted.map((item) => ({
-        key: item.board,
+      rows={sorted.map((item, i) => ({
+        // Board names aren't guaranteed unique, so disambiguate with the index.
+        key: `${item.board}-${i}`,
         label: item.board,
         value: item.count,
       }))}
