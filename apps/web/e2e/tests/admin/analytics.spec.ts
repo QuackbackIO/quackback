@@ -105,10 +105,10 @@ test.describe('Admin Analytics — Section Navigation', () => {
       await feedbackBtn.first().click()
       await page.waitForTimeout(300)
 
-      // Status distribution and Boards cards should appear
-      const statusCard = page.getByText('Status distribution')
+      // The Feedback section shows the status legend and the Boards card.
+      const legend = page.getByText('Open')
       const boardsCard = page.getByText('Boards')
-      const hasContent = (await statusCard.count()) > 0 || (await boardsCard.count()) > 0
+      const hasContent = (await legend.count()) > 0 || (await boardsCard.count()) > 0
       expect(hasContent).toBe(true)
     }
   })
@@ -120,9 +120,10 @@ test.describe('Admin Analytics — Section Navigation', () => {
       await changelogBtn.first().click()
       await page.waitForTimeout(300)
 
-      const changelogViews = page.getByText('Changelog views')
-      if ((await changelogViews.count()) > 0) {
-        await expect(changelogViews.first()).toBeVisible()
+      // The Changelog section's stat row shows "Total views".
+      const totalViews = page.getByText('Total views')
+      if ((await totalViews.count()) > 0) {
+        await expect(totalViews.first()).toBeVisible()
       }
     }
   })
@@ -134,9 +135,10 @@ test.describe('Admin Analytics — Section Navigation', () => {
       await usersBtn.first().click()
       await page.waitForTimeout(300)
 
-      const topContributors = page.getByText('Top contributors')
-      if ((await topContributors.count()) > 0) {
-        await expect(topContributors.first()).toBeVisible()
+      // The Users section's stat row shows "Contributors".
+      const contributors = page.getByText('Contributors')
+      if ((await contributors.count()) > 0) {
+        await expect(contributors.first()).toBeVisible()
       }
     }
   })

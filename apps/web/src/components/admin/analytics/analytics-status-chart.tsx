@@ -47,16 +47,17 @@ export function AnalyticsStatusChart({ data }: StatusChartProps) {
           // a resize. Draw it at full size immediately.
           isAnimationActive={false}
         >
-          {sorted.map((entry) => (
-            <Cell key={entry.status} fill={entry.color} />
+          {sorted.map((entry, i) => (
+            // Status display names aren't guaranteed unique, so disambiguate.
+            <Cell key={`${entry.status}-${i}`} fill={entry.color} />
           ))}
         </Pie>
       </PieChart>
       <div className="flex flex-1 flex-col gap-2">
-        {sorted.map((item) => {
+        {sorted.map((item, i) => {
           const pct = total > 0 ? Math.round((item.count / total) * 100) : 0
           return (
-            <div key={item.status} className="flex items-center gap-2 text-sm">
+            <div key={`${item.status}-${i}`} className="flex items-center gap-2 text-sm">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.color }} />
               <span className="flex-1 truncate text-muted-foreground">{item.status}</span>
               <span className="font-medium">{pct}%</span>
