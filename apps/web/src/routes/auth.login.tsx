@@ -1,10 +1,13 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { z } from 'zod'
+import { FormattedMessage } from 'react-intl'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { getPortalLocaleFn } from '@/lib/server/functions/locale'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
@@ -28,14 +31,15 @@ export const Route = createFileRoute('/auth/login')({
     await queryClient.ensureQueryData(settingsQueries.publicPortalConfig())
 
     const safeCallbackUrl = isSafeCallbackUrl(deps.callbackUrl) ? deps.callbackUrl : '/'
+    const locale = await getPortalLocaleFn()
 
-    return { safeCallbackUrl }
+    return { safeCallbackUrl, locale }
   },
   component: LoginPage,
 })
 
 function LoginPage() {
-  const { safeCallbackUrl } = Route.useLoaderData()
+  const { safeCallbackUrl, locale } = Route.useLoaderData()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const portalConfig = portalConfigQuery.data
   const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
@@ -46,33 +50,47 @@ function LoginPage() {
   const workspaceName = ctx.settings?.brandingData?.name
 
   return (
-    <PortalAuthShell
-      heading="Welcome back"
-      subheading={
-        workspaceName
-          ? `Sign in to keep voting and tracking what ${workspaceName} ships.`
-          : 'Sign in to vote and comment on feedback.'
-      }
-      footer={
-        <p className="text-center text-sm text-muted-foreground">
-          New here?{' '}
-          <Link
-            to="/auth/signup"
-            search={{ callbackUrl: safeCallbackUrl }}
-            className="font-medium text-primary hover:underline underline-offset-4"
-          >
-            Create an account
-          </Link>
-        </p>
-      }
-    >
-      <PortalAuthForm
-        mode="login"
-        callbackUrl={safeCallbackUrl}
-        authConfig={authConfig}
-        customProviderNames={portalConfig.customProviderNames}
-        workspaceName={workspaceName}
-      />
-    </PortalAuthShell>
+    <PortalIntlProvider locale={locale}>
+      <PortalAuthShell
+        heading={<FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />}
+        subheading={
+          workspaceName ? (
+            <FormattedMessage
+              id="portal.auth.login.subheadingNamed"
+              defaultMessage="Sign in to keep voting and tracking what {workspace} ships."
+              values={{ workspace: workspaceName }}
+            />
+          ) : (
+            <FormattedMessage
+              id="portal.auth.login.tagline"
+              defaultMessage="Sign in to vote and comment on feedback."
+            />
+          )
+        }
+        footer={
+          <p className="text-center text-sm text-muted-foreground">
+            <FormattedMessage id="portal.auth.switch.newHere" defaultMessage="New here?" />{' '}
+            <Link
+              to="/auth/signup"
+              search={{ callbackUrl: safeCallbackUrl }}
+              className="font-medium text-primary hover:underline underline-offset-4"
+            >
+              <FormattedMessage
+                id="portal.auth.switch.createAccount"
+                defaultMessage="Create an account"
+              />
+            </Link>
+          </p>
+        }
+      >
+        <PortalAuthForm
+          mode="login"
+          callbackUrl={safeCallbackUrl}
+          authConfig={authConfig}
+          customProviderNames={portalConfig.customProviderNames}
+          workspaceName={workspaceName}
+        />
+      </PortalAuthShell>
+    </PortalIntlProvider>
   )
 }

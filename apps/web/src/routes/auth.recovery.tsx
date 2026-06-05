@@ -1,6 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { getPortalLocaleFn } from '@/lib/server/functions/locale'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -13,10 +16,22 @@ import { consumeRecoveryCodeFn } from '@/lib/server/functions/recovery-codes-con
  * better-auth's standard verify endpoint.
  */
 export const Route = createFileRoute('/auth/recovery')({
+  loader: async () => ({ locale: await getPortalLocaleFn() }),
   component: RecoveryPage,
 })
 
 function RecoveryPage() {
+  const { locale } = Route.useLoaderData()
+
+  return (
+    <PortalIntlProvider locale={locale}>
+      <RecoveryContent />
+    </PortalIntlProvider>
+  )
+}
+
+function RecoveryContent() {
+  const intl = useIntl()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -32,9 +47,19 @@ function RecoveryPage() {
         window.location.href = result.redirectUrl
         return
       }
-      setError("Email or recovery code doesn't match. Try another code.")
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.recovery.mismatch',
+          defaultMessage: "Email or recovery code doesn't match. Try another code.",
+        })
+      )
     } catch {
-      setError('Something went wrong. Try again in a moment.')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.recovery.genericError',
+          defaultMessage: 'Something went wrong. Try again in a moment.',
+        })
+      )
     } finally {
       setSubmitting(false)
     }
@@ -42,12 +67,21 @@ function RecoveryPage() {
 
   return (
     <PortalAuthShell
-      heading="Use a recovery code"
-      subheading="When SSO is unavailable, sign in with one of the codes you saved when SSO was set up."
+      heading={
+        <FormattedMessage id="portal.auth.recovery.heading" defaultMessage="Use a recovery code" />
+      }
+      subheading={
+        <FormattedMessage
+          id="portal.auth.recovery.subheading"
+          defaultMessage="When SSO is unavailable, sign in with one of the codes you saved when SSO was set up."
+        />
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">
+            <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
+          </Label>
           <Input
             id="email"
             type="email"
@@ -59,7 +93,9 @@ function RecoveryPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="code">Recovery code</Label>
+          <Label htmlFor="code">
+            <FormattedMessage id="portal.auth.recovery.codeLabel" defaultMessage="Recovery code" />
+          </Label>
           <Input
             id="code"
             type="text"
@@ -72,7 +108,10 @@ function RecoveryPage() {
             disabled={submitting}
           />
           <p className="text-xs text-muted-foreground">
-            Codes are case-insensitive and dashes are optional.
+            <FormattedMessage
+              id="portal.auth.recovery.codeHint"
+              defaultMessage="Codes are case-insensitive and dashes are optional."
+            />
           </p>
         </div>
 
@@ -83,7 +122,11 @@ function RecoveryPage() {
         ) : null}
 
         <Button type="submit" disabled={submitting} className="w-full">
-          {submitting ? 'Signing in…' : 'Sign in'}
+          {submitting ? (
+            <FormattedMessage id="portal.auth.recovery.signingIn" defaultMessage="Signing in…" />
+          ) : (
+            <FormattedMessage id="portal.auth.signIn" defaultMessage="Sign in" />
+          )}
         </Button>
       </form>
     </PortalAuthShell>

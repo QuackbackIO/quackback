@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
@@ -89,7 +90,19 @@ function OAuthButton({
       disabled={disabled}
     >
       {loading ? <ArrowPathIcon className="h-5 w-5 animate-spin" /> : icon}
-      {mode === 'login' ? 'Sign in' : 'Sign up'} with {label}
+      {mode === 'login' ? (
+        <FormattedMessage
+          id="portal.auth.oauth.signInWith"
+          defaultMessage="Sign in with {provider}"
+          values={{ provider: label }}
+        />
+      ) : (
+        <FormattedMessage
+          id="portal.auth.oauth.signUpWith"
+          defaultMessage="Sign up with {provider}"
+          values={{ provider: label }}
+        />
+      )}
     </Button>
   )
 }
@@ -123,6 +136,7 @@ export function PortalAuthFormInline({
   onModeSwitch,
   onContextChange,
 }: PortalAuthFormInlineProps) {
+  const intl = useIntl()
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
   const openSignup = authConfig?.openSignup
@@ -189,10 +203,21 @@ export function PortalAuthFormInline({
           setView({ stage: 'methods-step', step: methodsDefaultStep })
         } else {
           const data = (await response.json()) as { error?: string }
-          setError(data.error || 'Invalid or expired invitation')
+          setError(
+            data.error ||
+              intl.formatMessage({
+                id: 'portal.auth.error.invitationInvalid',
+                defaultMessage: 'Invalid or expired invitation',
+              })
+          )
         }
       } catch {
-        setError('Failed to load invitation')
+        setError(
+          intl.formatMessage({
+            id: 'portal.auth.error.invitationLoadFailed',
+            defaultMessage: 'Failed to load invitation',
+          })
+        )
       } finally {
         setLoadingInvitation(false)
       }
@@ -222,7 +247,12 @@ export function PortalAuthFormInline({
     setError('')
     const trimmed = email.trim()
     if (!trimmed) {
-      setError('Email is required')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.emailRequired',
+          defaultMessage: 'Email is required',
+        })
+      )
       return
     }
 
@@ -251,7 +281,13 @@ export function PortalAuthFormInline({
       }
       setView({ stage: 'methods-step', step: methodsDefaultStep })
     } catch (err) {
-      setError((err as Error).message || 'Something went wrong. Please try again.')
+      setError(
+        (err as Error).message ||
+          intl.formatMessage({
+            id: 'portal.auth.error.generic',
+            defaultMessage: 'Something went wrong. Please try again.',
+          })
+      )
     } finally {
       setLoadingAction((prev) => (prev === 'continue' ? null : prev))
     }
@@ -263,15 +299,30 @@ export function PortalAuthFormInline({
     setError('')
 
     if (!email.trim()) {
-      setError('Email is required')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.emailRequired',
+          defaultMessage: 'Email is required',
+        })
+      )
       return
     }
     if (!password) {
-      setError('Password is required')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.passwordRequired',
+          defaultMessage: 'Password is required',
+        })
+      )
       return
     }
     if (mode === 'signup' && password.length < 8) {
-      setError('Password must be at least 8 characters')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.passwordTooShort',
+          defaultMessage: 'Password must be at least 8 characters',
+        })
+      )
       return
     }
 
@@ -284,7 +335,13 @@ export function PortalAuthFormInline({
           password,
         })
         if (result.error) {
-          throw new Error(result.error.message || 'Failed to create account')
+          throw new Error(
+            result.error.message ||
+              intl.formatMessage({
+                id: 'portal.auth.error.createAccountFailed',
+                defaultMessage: 'Failed to create account',
+              })
+          )
         }
       } else {
         // Stash the current page so the twoFactor client can splice it
@@ -298,13 +355,26 @@ export function PortalAuthFormInline({
           password,
         })
         if (result.error) {
-          throw new Error(result.error.message || 'Invalid email or password')
+          throw new Error(
+            result.error.message ||
+              intl.formatMessage({
+                id: 'portal.auth.error.invalidCredentials',
+                defaultMessage: 'Invalid email or password',
+              })
+          )
         }
       }
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.error.authFailed',
+              defaultMessage: 'Authentication failed',
+            })
+      )
       setLoadingAction(null)
     }
   }
@@ -324,7 +394,12 @@ export function PortalAuthFormInline({
     setError('')
 
     if (!email.trim()) {
-      setError('Email is required')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.emailRequired',
+          defaultMessage: 'Email is required',
+        })
+      )
       return
     }
 
@@ -335,11 +410,24 @@ export function PortalAuthFormInline({
         redirectTo: '/auth/reset-password',
       })
       if (result.error) {
-        throw new Error(result.error.message || 'Failed to send reset link')
+        throw new Error(
+          result.error.message ||
+            intl.formatMessage({
+              id: 'portal.auth.error.resetLinkFailed',
+              defaultMessage: 'Failed to send reset link',
+            })
+        )
       }
       setView({ stage: 'methods-step', step: 'reset' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset link')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.error.resetLinkFailed',
+              defaultMessage: 'Failed to send reset link',
+            })
+      )
     } finally {
       setLoadingAction(null)
     }
@@ -349,7 +437,12 @@ export function PortalAuthFormInline({
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) {
-      setError('Email is required')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.emailRequired',
+          defaultMessage: 'Email is required',
+        })
+      )
       return
     }
     requestSigninEmail()
@@ -407,12 +500,24 @@ export function PortalAuthFormInline({
         popup.location.href = url
       } else {
         popup.close()
-        setError('Failed to initiate sign in')
+        setError(
+          intl.formatMessage({
+            id: 'portal.auth.error.initiateSignInFailed',
+            defaultMessage: 'Failed to initiate sign in',
+          })
+        )
         setLoadingAction(null)
       }
     } catch (err) {
       popup.close()
-      setError(err instanceof Error ? err.message : 'Failed to initiate sign in')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.error.initiateSignInFailed',
+              defaultMessage: 'Failed to initiate sign in',
+            })
+      )
       setLoadingAction(null)
     }
   }
@@ -450,11 +555,14 @@ export function PortalAuthFormInline({
         <Alert variant="destructive">
           <InformationCircleIcon className="h-4 w-4" />
           <AlertDescription>
-            Popup was blocked by your browser. Please allow popups for this site and try again.
+            <FormattedMessage
+              id="portal.auth.popupBlocked"
+              defaultMessage="Popup was blocked by your browser. Please allow popups for this site and try again."
+            />
           </AlertDescription>
         </Alert>
         <Button onClick={() => setPopupBlocked(false)} variant="outline" className="w-full">
-          Try again
+          <FormattedMessage id="portal.auth.tryAgain" defaultMessage="Try again" />
         </Button>
       </div>
     )
@@ -465,11 +573,26 @@ export function PortalAuthFormInline({
       <div className="flex items-start gap-3">
         <EnvelopeIcon className="h-5 w-5 text-primary mt-0.5" />
         <div>
-          <p className="font-medium text-foreground">You&apos;ve been invited!</p>
+          <p className="font-medium text-foreground">
+            <FormattedMessage id="portal.auth.invite.title" defaultMessage="You've been invited!" />
+          </p>
           <p className="text-sm text-muted-foreground mt-1">
-            Create your account to join{' '}
-            <span className="font-medium text-foreground">{invitation.workspaceName}</span>
-            {invitation.inviterName && <> (invited by {invitation.inviterName})</>}
+            <FormattedMessage
+              id="portal.auth.invite.body"
+              defaultMessage="Create your account to join {workspace}"
+              values={{
+                workspace: (
+                  <span className="font-medium text-foreground">{invitation.workspaceName}</span>
+                ),
+              }}
+            />
+            {invitation.inviterName && (
+              <FormattedMessage
+                id="portal.auth.invite.invitedBy"
+                defaultMessage=" (invited by {inviter})"
+                values={{ inviter: invitation.inviterName }}
+              />
+            )}
           </p>
         </div>
       </div>
@@ -505,7 +628,9 @@ export function PortalAuthFormInline({
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">or</span>
+                <span className="bg-background px-2 text-muted-foreground">
+                  <FormattedMessage id="portal.auth.dividerOr" defaultMessage="or" />
+                </span>
               </div>
             </div>
           </>
@@ -515,14 +640,17 @@ export function PortalAuthFormInline({
           {error && <FormError message={error} />}
           <div className="space-y-2">
             <label htmlFor="inline-email" className="text-sm font-medium">
-              Email
+              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
             </label>
             <Input
               id="inline-email"
               type="email"
               autoComplete="email"
               autoFocus
-              placeholder="you@example.com"
+              placeholder={intl.formatMessage({
+                id: 'portal.auth.email.placeholder',
+                defaultMessage: 'you@example.com',
+              })}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loadingAction !== null}
@@ -537,7 +665,9 @@ export function PortalAuthFormInline({
             {loadingAction === 'continue' ? (
               <ArrowPathIcon className="h-4 w-4 animate-spin" />
             ) : (
-              <>Continue &rarr;</>
+              <>
+                <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" /> &rarr;
+              </>
             )}
           </Button>
         </form>
@@ -546,24 +676,30 @@ export function PortalAuthFormInline({
           <p className="text-center text-sm text-muted-foreground">
             {mode === 'login' ? (
               <>
-                New here?{' '}
+                <FormattedMessage id="portal.auth.switch.newHere" defaultMessage="New here?" />{' '}
                 <button
                   type="button"
                   onClick={() => onModeSwitch('signup')}
                   className="text-primary hover:underline font-medium"
                 >
-                  Create an account
+                  <FormattedMessage
+                    id="portal.auth.switch.createAccount"
+                    defaultMessage="Create an account"
+                  />
                 </button>
               </>
             ) : (
               <>
-                Have an account?{' '}
+                <FormattedMessage
+                  id="portal.auth.switch.haveAccount"
+                  defaultMessage="Have an account?"
+                />{' '}
                 <button
                   type="button"
                   onClick={() => onModeSwitch('login')}
                   className="text-primary hover:underline font-medium"
                 >
-                  Sign in
+                  <FormattedMessage id="portal.auth.switch.signIn" defaultMessage="Sign in" />
                 </button>
               </>
             )}
@@ -580,7 +716,9 @@ export function PortalAuthFormInline({
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
         <ArrowPathIcon className="h-6 w-6 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Signing you in&hellip;</p>
+        <p className="text-sm text-muted-foreground">
+          <FormattedMessage id="portal.auth.sso.redirecting" defaultMessage="Signing you in…" />
+        </p>
       </div>
     )
   }
@@ -596,12 +734,18 @@ export function PortalAuthFormInline({
           <ShieldCheckIcon className="mx-auto h-8 w-8 text-primary" />
           <p className="text-sm text-muted-foreground">
             {workspaceName ? (
-              <>
-                <span className="font-medium text-foreground">{workspaceName}</span> uses single
-                sign-on for your team domain.
-              </>
+              <FormattedMessage
+                id="portal.auth.sso.usesSSONamed"
+                defaultMessage="{workspace} uses single sign-on for your team domain."
+                values={{
+                  workspace: <span className="font-medium text-foreground">{workspaceName}</span>,
+                }}
+              />
             ) : (
-              <>Your team domain uses single sign-on.</>
+              <FormattedMessage
+                id="portal.auth.sso.usesSSO"
+                defaultMessage="Your team domain uses single sign-on."
+              />
             )}
           </p>
         </div>
@@ -616,7 +760,13 @@ export function PortalAuthFormInline({
               setView({ stage: 'sso-redirecting' })
               await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
             } catch (err) {
-              setError((err as Error).message || 'Could not start SSO sign-in.')
+              setError(
+                (err as Error).message ||
+                  intl.formatMessage({
+                    id: 'portal.auth.error.ssoStartFailed',
+                    defaultMessage: 'Could not start SSO sign-in.',
+                  })
+              )
               setView({ stage: 'sso-default' })
               setLoadingAction(null)
             }
@@ -628,7 +778,7 @@ export function PortalAuthFormInline({
           ) : (
             <>
               <ShieldCheckIcon className="mr-2 h-4 w-4" />
-              Continue with SSO
+              <FormattedMessage id="portal.auth.sso.continue" defaultMessage="Continue with SSO" />
             </>
           )}
         </Button>
@@ -641,7 +791,7 @@ export function PortalAuthFormInline({
           className="block w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
           disabled={loadingAction !== null}
         >
-          Sign in another way
+          <FormattedMessage id="portal.auth.sso.another" defaultMessage="Sign in another way" />
         </button>
       </div>
     )
@@ -670,16 +820,23 @@ export function PortalAuthFormInline({
       <div className="space-y-4">
         <BackToEmailLink onClick={backToEmail} />
         <div className="space-y-2 text-center">
-          <h2 className="text-lg font-semibold">No account found</h2>
+          <h2 className="text-lg font-semibold">
+            <FormattedMessage id="portal.auth.noAccount.title" defaultMessage="No account found" />
+          </h2>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{email}</span> doesn&apos;t have an
-            account on this workspace, and new sign-ups are off. Ask your workspace admin to invite
-            you.
+            <FormattedMessage
+              id="portal.auth.noAccount.body"
+              defaultMessage="{email} doesn't have an account on this workspace, and new sign-ups are off. Ask your workspace admin to invite you."
+              values={{ email: <span className="font-medium text-foreground">{email}</span> }}
+            />
           </p>
         </div>
         {onModeSwitch && (
           <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
+            <FormattedMessage
+              id="portal.auth.noAccount.haveAccount"
+              defaultMessage="Already have an account?"
+            />{' '}
             <button
               type="button"
               onClick={() => {
@@ -688,7 +845,7 @@ export function PortalAuthFormInline({
               }}
               className="text-primary hover:underline font-medium"
             >
-              Sign in
+              <FormattedMessage id="portal.auth.signIn" defaultMessage="Sign in" />
             </button>
           </p>
         )}
@@ -711,7 +868,14 @@ export function PortalAuthFormInline({
           {showBack && <BackToEmailLink onClick={backToEmail} />}
           <div className="space-y-1 text-center">
             <h2 className="text-lg font-semibold">
-              {mode === 'login' ? 'Welcome back' : 'Create your account'}
+              {mode === 'login' ? (
+                <FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />
+              ) : (
+                <FormattedMessage
+                  id="portal.auth.createYourAccount"
+                  defaultMessage="Create your account"
+                />
+              )}
             </h2>
             {email && <p className="text-sm text-muted-foreground break-all">{email}</p>}
           </div>
@@ -726,12 +890,15 @@ export function PortalAuthFormInline({
           {mode === 'signup' && (
             <div className="space-y-2">
               <label htmlFor="inline-name" className="text-sm font-medium">
-                Name
+                <FormattedMessage id="portal.auth.name.label" defaultMessage="Name" />
               </label>
               <Input
                 id="inline-name"
                 type="text"
-                placeholder="Jane Doe"
+                placeholder={intl.formatMessage({
+                  id: 'portal.auth.name.placeholder',
+                  defaultMessage: 'Jane Doe',
+                })}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={loadingAction !== null}
@@ -745,12 +912,19 @@ export function PortalAuthFormInline({
 
           <div className="space-y-2">
             <label htmlFor="inline-password" className="text-sm font-medium">
-              Password
+              <FormattedMessage id="portal.auth.password.label" defaultMessage="Password" />
             </label>
             <Input
               id="inline-password"
               type="password"
-              placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
+              placeholder={
+                mode === 'signup'
+                  ? intl.formatMessage({
+                      id: 'portal.auth.password.placeholderSignup',
+                      defaultMessage: 'At least 8 characters',
+                    })
+                  : '••••••••'
+              }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loadingAction !== null}
@@ -769,7 +943,10 @@ export function PortalAuthFormInline({
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Forgot password?
+                <FormattedMessage
+                  id="portal.auth.forgotPassword"
+                  defaultMessage="Forgot password?"
+                />
               </button>
             </div>
           )}
@@ -778,13 +955,20 @@ export function PortalAuthFormInline({
             {loadingAction === 'password' && (
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
             )}
-            {loadingAction === 'password'
-              ? mode === 'signup'
-                ? 'Creating account...'
-                : 'Signing in...'
-              : mode === 'signup'
-                ? 'Create account'
-                : 'Sign in'}
+            {loadingAction === 'password' ? (
+              mode === 'signup' ? (
+                <FormattedMessage
+                  id="portal.auth.creatingAccount"
+                  defaultMessage="Creating account..."
+                />
+              ) : (
+                <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
+              )
+            ) : mode === 'signup' ? (
+              <FormattedMessage id="portal.auth.createAccount" defaultMessage="Create account" />
+            ) : (
+              <FormattedMessage id="portal.auth.signIn" defaultMessage="Sign in" />
+            )}
           </Button>
 
           {magicLinkEnabled && (
@@ -797,7 +981,10 @@ export function PortalAuthFormInline({
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Email me a sign-in link instead
+                <FormattedMessage
+                  id="portal.auth.emailLinkInstead"
+                  defaultMessage="Email me a sign-in link instead"
+                />
               </button>
             </div>
           )}
@@ -815,10 +1002,13 @@ export function PortalAuthFormInline({
             {loadingAction === 'email' ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Sending email…
+                <FormattedMessage id="portal.auth.sendingEmail" defaultMessage="Sending email…" />
               </>
             ) : (
-              'Continue with email'
+              <FormattedMessage
+                id="portal.auth.continueWithEmail"
+                defaultMessage="Continue with email"
+              />
             )}
           </Button>
 
@@ -832,7 +1022,10 @@ export function PortalAuthFormInline({
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
-                Use password instead
+                <FormattedMessage
+                  id="portal.auth.usePasswordInstead"
+                  defaultMessage="Use password instead"
+                />
               </button>
             </div>
           )}
@@ -863,13 +1056,21 @@ export function PortalAuthFormInline({
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
-            Back
+            <FormattedMessage id="portal.auth.back" defaultMessage="Back" />
           </button>
 
           <div className="text-center">
-            <h2 className="text-lg font-semibold">Reset your password</h2>
+            <h2 className="text-lg font-semibold">
+              <FormattedMessage
+                id="portal.auth.forgot.title"
+                defaultMessage="Reset your password"
+              />
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Enter your email and we&apos;ll send you a link to reset your password.
+              <FormattedMessage
+                id="portal.auth.forgot.description"
+                defaultMessage="Enter your email and we'll send you a link to reset your password."
+              />
             </p>
           </div>
 
@@ -877,12 +1078,15 @@ export function PortalAuthFormInline({
 
           <div className="space-y-2">
             <label htmlFor="inline-forgot-email" className="text-sm font-medium">
-              Email
+              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
             </label>
             <Input
               id="inline-forgot-email"
               type="email"
-              placeholder="you@example.com"
+              placeholder={intl.formatMessage({
+                id: 'portal.auth.email.placeholder',
+                defaultMessage: 'you@example.com',
+              })}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loadingAction !== null}
@@ -898,10 +1102,13 @@ export function PortalAuthFormInline({
             {loadingAction === 'forgot' ? (
               <>
                 <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                Sending link...
+                <FormattedMessage
+                  id="portal.auth.forgot.sending"
+                  defaultMessage="Sending link..."
+                />
               </>
             ) : (
-              'Send reset link'
+              <FormattedMessage id="portal.auth.forgot.send" defaultMessage="Send reset link" />
             )}
           </Button>
         </form>
@@ -915,16 +1122,20 @@ export function PortalAuthFormInline({
             className="flex items-center text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
-            Back
+            <FormattedMessage id="portal.auth.back" defaultMessage="Back" />
           </button>
 
           <div className="text-center space-y-3">
             <EnvelopeIcon className="h-10 w-10 text-primary mx-auto" />
-            <h2 className="text-lg font-semibold">Check your email</h2>
+            <h2 className="text-lg font-semibold">
+              <FormattedMessage id="portal.auth.reset.title" defaultMessage="Check your email" />
+            </h2>
             <p className="text-sm text-muted-foreground">
-              We sent a password reset link to{' '}
-              <span className="font-medium text-foreground">{email}</span>. The link expires in 24
-              hours.
+              <FormattedMessage
+                id="portal.auth.reset.description"
+                defaultMessage="We sent a password reset link to {email}. The link expires in 24 hours."
+                values={{ email: <span className="font-medium text-foreground">{email}</span> }}
+              />
             </p>
           </div>
         </div>
@@ -943,7 +1154,7 @@ function BackToEmailLink({ onClick }: { onClick: () => void }) {
       className="flex items-center text-sm text-muted-foreground hover:text-foreground"
     >
       <ArrowLeftIcon className="mr-1 h-4 w-4" />
-      Use a different email
+      <FormattedMessage id="portal.auth.useDifferentEmail" defaultMessage="Use a different email" />
     </button>
   )
 }

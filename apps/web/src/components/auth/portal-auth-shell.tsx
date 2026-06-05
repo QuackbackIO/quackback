@@ -5,7 +5,7 @@ import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import type { BrandingConfig } from '@/lib/server/domains/settings/settings.types'
 
 interface PortalAuthShellProps {
-  heading: string
+  heading: React.ReactNode
   subheading?: React.ReactNode
   children: React.ReactNode
   footer?: React.ReactNode

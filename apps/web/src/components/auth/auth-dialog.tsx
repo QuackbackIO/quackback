@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import {
   Dialog,
   DialogContent,
@@ -75,34 +76,66 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
 function headerForStep(
   mode: 'login' | 'signup',
   ctx: FormContext
-): { title: string; description: React.ReactNode } {
+): { title: React.ReactNode; description: React.ReactNode } {
   if (ctx.step === 'code') {
     return {
-      title: mode === 'signup' ? 'Almost there' : 'Check your email',
+      title:
+        mode === 'signup' ? (
+          <FormattedMessage id="portal.auth.dialog.codeSignupTitle" defaultMessage="Almost there" />
+        ) : (
+          <FormattedMessage id="portal.auth.otp.title" defaultMessage="Check your email" />
+        ),
       description: (
-        <>
-          We sent a 6-digit code to <strong className="text-foreground">{ctx.email}</strong>.
-        </>
+        <FormattedMessage
+          id="portal.auth.otp.description"
+          defaultMessage="We sent a 6-digit code to {email}."
+          values={{ email: <strong className="text-foreground">{ctx.email}</strong> }}
+        />
       ),
     }
   }
   if (ctx.step === 'forgot') {
     return {
-      title: 'Reset your password',
-      description: "Enter your email and we'll send you a reset link.",
+      title: (
+        <FormattedMessage id="portal.auth.forgot.title" defaultMessage="Reset your password" />
+      ),
+      description: (
+        <FormattedMessage
+          id="portal.auth.dialog.forgotDescription"
+          defaultMessage="Enter your email and we'll send you a reset link."
+        />
+      ),
     }
   }
   if (ctx.step === 'reset') {
     return {
-      title: 'Check your email',
-      description: 'We sent you a password reset link.',
+      title: <FormattedMessage id="portal.auth.reset.title" defaultMessage="Check your email" />,
+      description: (
+        <FormattedMessage
+          id="portal.auth.dialog.resetDescription"
+          defaultMessage="We sent you a password reset link."
+        />
+      ),
     }
   }
   return {
-    title: mode === 'login' ? 'Welcome back' : 'Create an account',
+    title:
+      mode === 'login' ? (
+        <FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />
+      ) : (
+        <FormattedMessage id="portal.auth.dialog.signupTitle" defaultMessage="Create an account" />
+      ),
     description:
-      mode === 'login'
-        ? 'Sign in to vote and comment on feedback.'
-        : 'Sign up to vote and comment on feedback.',
+      mode === 'login' ? (
+        <FormattedMessage
+          id="portal.auth.login.tagline"
+          defaultMessage="Sign in to vote and comment on feedback."
+        />
+      ) : (
+        <FormattedMessage
+          id="portal.auth.signup.tagline"
+          defaultMessage="Sign up to vote and comment on feedback."
+        />
+      ),
   }
 }
