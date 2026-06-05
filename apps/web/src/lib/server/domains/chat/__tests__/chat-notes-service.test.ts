@@ -14,6 +14,19 @@ const publishChatEvent = vi.fn()
 const publishAgentChatEvent = vi.fn()
 const syncChatMessageMentions = vi.fn()
 
+// Hoisted so the (also-hoisted) vi.mock factory can reference the spy bag.
+const emit = vi.hoisted(() => ({
+  emitConversationCreated: vi.fn(),
+  emitMessageCreated: vi.fn(),
+  emitMessageNoteCreated: vi.fn(),
+  emitMessageDeleted: vi.fn(),
+  emitConversationStatusChanged: vi.fn(),
+  emitConversationAssigned: vi.fn(),
+  emitConversationPriorityChanged: vi.fn(),
+  emitConversationCsatSubmitted: vi.fn(),
+}))
+vi.mock('../chat.webhooks', () => emit)
+
 vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishChatEvent: (...args: unknown[]) => publishChatEvent(...args),
   publishAgentChatEvent: (...args: unknown[]) => publishAgentChatEvent(...args),
@@ -158,6 +171,13 @@ describe('addAgentNote', () => {
     expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
     // The visitor's conversation channel must never receive an internal note.
     expect(publishChatEvent).not.toHaveBeenCalled()
+  })
+
+  it('emits the note_created webhook, not the public message_created one', async () => {
+    await addAgentNote(conversationId, 'internal', agent, agentActor)
+    expect(emit.emitMessageNoteCreated).toHaveBeenCalledTimes(1)
+    // A note is internal: the public message.created webhook must never fire.
+    expect(emit.emitMessageCreated).not.toHaveBeenCalled()
   })
 
   it('extracts @mentions from the note doc and hands the principal ids to the sync', async () => {

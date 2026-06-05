@@ -10,6 +10,20 @@ import { ValidationError } from '@/lib/shared/errors'
 const insertedConversations: Record<string, unknown>[] = []
 const insertedMessages: Record<string, unknown>[] = []
 
+// vi.mock factories are hoisted above imports, so build the spy bag via
+// vi.hoisted so the factory below can close over it.
+const emit = vi.hoisted(() => ({
+  emitConversationCreated: vi.fn(),
+  emitMessageCreated: vi.fn(),
+  emitMessageNoteCreated: vi.fn(),
+  emitMessageDeleted: vi.fn(),
+  emitConversationStatusChanged: vi.fn(),
+  emitConversationAssigned: vi.fn(),
+  emitConversationPriorityChanged: vi.fn(),
+  emitConversationCsatSubmitted: vi.fn(),
+}))
+vi.mock('../chat.webhooks', () => emit)
+
 vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishChatEvent: vi.fn(),
   publishAgentChatEvent: vi.fn(),
@@ -165,6 +179,13 @@ describe('sendVisitorMessage first-message conversation creation', () => {
       principalId: visitor,
       content: 'Hello there',
     })
+  })
+
+  it('emits conversation.created + message.created webhooks for a first message', async () => {
+    await sendVisitorMessage({ content: 'Hello there' }, { principalId: visitor }, visitorActor)
+    // Fire-and-forget after the commit: a created conversation gets both events.
+    expect(emit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    expect(emit.emitMessageCreated).toHaveBeenCalledTimes(1)
   })
 })
 

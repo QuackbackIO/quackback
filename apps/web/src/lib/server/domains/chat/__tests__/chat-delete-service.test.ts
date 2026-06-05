@@ -12,6 +12,19 @@ const publishAgentChatEvent = vi.fn()
 // The message row the initial SELECT resolves to (set per test).
 let messageRow: Record<string, unknown> | null = null
 
+// Hoisted so the (also-hoisted) vi.mock factory can reference the spy bag.
+const emit = vi.hoisted(() => ({
+  emitConversationCreated: vi.fn(),
+  emitMessageCreated: vi.fn(),
+  emitMessageNoteCreated: vi.fn(),
+  emitMessageDeleted: vi.fn(),
+  emitConversationStatusChanged: vi.fn(),
+  emitConversationAssigned: vi.fn(),
+  emitConversationPriorityChanged: vi.fn(),
+  emitConversationCsatSubmitted: vi.fn(),
+}))
+vi.mock('../chat.webhooks', () => emit)
+
 vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishChatEvent: (...a: unknown[]) => publishChatEvent(...a),
   publishAgentChatEvent: (...a: unknown[]) => publishAgentChatEvent(...a),
@@ -93,6 +106,8 @@ describe('deleteChatMessage publish routing', () => {
     await deleteChatMessage('chat_msg_1' as ChatMessageId, agentActor)
     expect(publishChatEvent).toHaveBeenCalledTimes(1)
     expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    // A public deletion fires the public message.deleted webhook.
+    expect(emit.emitMessageDeleted).toHaveBeenCalledTimes(1)
   })
 
   it('keeps an internal-note deletion on the agent inbox channel only', async () => {
@@ -107,5 +122,7 @@ describe('deleteChatMessage publish routing', () => {
     await deleteChatMessage('chat_msg_note' as ChatMessageId, agentActor)
     expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
     expect(publishChatEvent).not.toHaveBeenCalled()
+    // The note never reached the visitor, so its deletion fires no public webhook.
+    expect(emit.emitMessageDeleted).not.toHaveBeenCalled()
   })
 })
