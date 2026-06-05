@@ -37,7 +37,7 @@ cp .env.prod.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-> The root `docker-compose.yml` is for **local development only** (datastores, no app service). Use `docker-compose.prod.yml` to self-host — it bundles the app plus Postgres, Dragonfly, and MinIO with hardened defaults.
+> The root `docker-compose.yml` is for **local development only** (datastores, no app service). Use `docker-compose.prod.yml` to self-host — it bundles the app plus Postgres, Dragonfly, and MinIO with hardened defaults. The matching published Postgres image is `ghcr.io/quackbackio/quackback-postgres`.
 
 See the [Self-Hosted Guide](./self-hosted/README.md) for complete documentation.
 

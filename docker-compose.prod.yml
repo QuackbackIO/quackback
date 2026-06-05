@@ -72,9 +72,7 @@ services:
       start_period: 40s
 
   postgres:
-    build:
-      context: ./docker/postgres
-      dockerfile: Dockerfile
+    image: ghcr.io/quackbackio/quackback-postgres:${QUACKBACK_POSTGRES_TAG:-latest}
     container_name: quackback-db
     restart: unless-stopped
     environment:
@@ -84,7 +82,6 @@ services:
     # No host port — Postgres is reachable only on the internal network.
     volumes:
       - postgres_data:/var/lib/postgresql
-      - ./docker/postgres/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql
     # pg_cron is required for scheduled analytics/materialized-view refreshes.
     command: postgres -c shared_preload_libraries=pg_cron -c cron.database_name=${POSTGRES_DB:-quackback} -c max_connections=200
     healthcheck:

@@ -9,3 +9,5 @@ RUN apt-get update \
 
 # Add pg_cron to shared_preload_libraries
 RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
+
+COPY init-pgcron.sql /docker-entrypoint-initdb.d/init-pgcron.sql

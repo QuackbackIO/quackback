@@ -78,6 +78,12 @@ docker pull ghcr.io/quackbackio/quackback:v1.0.0
 docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 ```
 
+The Docker workflow also publishes `ghcr.io/quackbackio/quackback-postgres`
+with the same branch, release, and manual tags as the app image. It is built
+from `docker/postgres/Dockerfile` and includes PostgreSQL 18 with `pg_cron` and
+`pgvector`. `docker-compose.prod.yml` uses `QUACKBACK_POSTGRES_TAG` so the
+database image can be pinned independently from `QUACKBACK_TAG`.
+
 ---
 
 ## Environment Variables
@@ -122,7 +128,15 @@ docker pull ghcr.io/quackbackio/quackback:latest-enterprise
 
 ## Database Setup
 
-Quackback requires PostgreSQL 13+.
+Quackback requires PostgreSQL 13+. The bundled Docker Postgres image includes
+`pgvector` for vector columns and `pg_cron` for scheduled jobs.
+
+For an external database, make sure `pgvector` is available before running
+migrations:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
 
 ### Create Database
 
@@ -294,7 +308,8 @@ Contact sales@quackback.io for enterprise licensing information.
 docker compose -f docker-compose.prod.yml exec postgres \
   pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > backup-$(date +%Y%m%d).dump
 
-# 2. Pull the latest source + image (bump QUACKBACK_TAG in .env to pin a version)
+# 2. Pull the latest source + images
+#    Bump QUACKBACK_TAG and/or QUACKBACK_POSTGRES_TAG in .env to pin versions.
 git pull
 docker compose -f docker-compose.prod.yml pull
 

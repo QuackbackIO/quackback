@@ -17,6 +17,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  POSTGRES_IMAGE_NAME: ${{ github.repository }}-postgres
 
 jobs:
   # Build each architecture on its OWN native runner — free arm64 hosted
@@ -129,9 +130,17 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${IMAGE}@sha256:%s " *)
+          tag_args=()
+          while IFS= read -r tag; do
+            tag_args+=("-t" "$tag")
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          image_args=()
+          for digest in *; do
+            image_args+=("${IMAGE}@sha256:${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${image_args[@]}"
 
       - name: Capture image index digest
         id: index
@@ -150,6 +159,132 @@ jobs:
       # AND each per-arch child manifest, so policy can verify either the index
       # or a resolved per-arch digest.
       - name: Sign image index (keyless)
+        env:
+          IMAGE_DIGEST: ${{ steps.index.outputs.digest }}
+        run: cosign sign --yes --recursive "${IMAGE}@${IMAGE_DIGEST}"
+
+  build-postgres:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Prepare platform pair
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.sha || github.ref }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Resolve lowercase Postgres image ref
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$POSTGRES_IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Postgres by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./docker/postgres
+          file: ./docker/postgres/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=postgres-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=postgres-${{ env.PLATFORM_PAIR }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: postgres-digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-postgres:
+    runs-on: ubuntu-latest
+    needs: [build-postgres]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: postgres-digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Resolve lowercase Postgres image ref
+        run: echo "IMAGE=${REGISTRY}/$(printf '%s' "$POSTGRES_IMAGE_NAME" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ github.event.inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' }}
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' }}
+
+      - name: Create Postgres manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          tag_args=()
+          while IFS= read -r tag; do
+            tag_args+=("-t" "$tag")
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+
+          image_args=()
+          for digest in *; do
+            image_args+=("${IMAGE}@sha256:${digest}")
+          done
+
+          docker buildx imagetools create "${tag_args[@]}" "${image_args[@]}"
+
+      - name: Capture Postgres image index digest
+        id: index
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign Postgres image index (keyless)
         env:
           IMAGE_DIGEST: ${{ steps.index.outputs.digest }}
         run: cosign sign --yes --recursive "${IMAGE}@${IMAGE_DIGEST}"
