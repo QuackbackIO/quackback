@@ -6,7 +6,6 @@ import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/ana
 import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
@@ -23,6 +22,7 @@ import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
 import { AnalyticsSignupSources } from './analytics-signup-sources'
 import { AnalyticsCsatDistribution } from './analytics-csat-card'
+import { ChartSkeleton, StatusChartSkeleton, SectionSkeleton } from './analytics-skeletons'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
 // primitives that wrap it. Analytics is admin-gated and rarely the first
@@ -33,10 +33,6 @@ const AnalyticsActivityChart = lazy(() =>
 const AnalyticsStatusChart = lazy(() =>
   import('./analytics-status-chart').then((m) => ({ default: m.AnalyticsStatusChart }))
 )
-
-function ChartSkeleton({ className }: { className?: string }) {
-  return <div className={cn('w-full rounded-md bg-muted/50 animate-pulse', className)} />
-}
 
 /** A section card matching the Overview: a divided headline stat row, then the
  *  section's visual beneath a hairline divider. */
@@ -159,7 +155,7 @@ export function AnalyticsPage() {
             </div>
 
             {isLoading ? (
-              <SectionSkeleton />
+              <SectionSkeleton section={section} />
             ) : !data ? null : (
               <>
                 {section === 'overview' && (
@@ -205,7 +201,7 @@ export function AnalyticsPage() {
                         },
                       ]}
                     >
-                      <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
+                      <Suspense fallback={<StatusChartSkeleton />}>
                         <AnalyticsStatusChart data={data.statusDistribution} />
                       </Suspense>
                     </StatSection>
@@ -222,7 +218,7 @@ export function AnalyticsPage() {
                         <CardHeader>
                           <CardTitle>Top posts</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="max-h-[320px] overflow-y-auto scrollbar-thin">
                           <AnalyticsTopPosts posts={data.topPosts} />
                         </CardContent>
                       </Card>
@@ -307,23 +303,5 @@ export function AnalyticsPage() {
         </ScrollArea>
       </main>
     </div>
-  )
-}
-
-function SectionSkeleton() {
-  return (
-    <Card className="overflow-hidden py-0 gap-0">
-      <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-border/50">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="px-5 py-4">
-            <Skeleton className="mb-2 h-3 w-16" />
-            <Skeleton className="h-7 w-20" />
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-border/50 px-6 pt-7 pb-6">
-        <Skeleton className={cn(CHART_HEIGHT_CLASS, 'w-full rounded-lg')} />
-      </div>
-    </Card>
   )
 }

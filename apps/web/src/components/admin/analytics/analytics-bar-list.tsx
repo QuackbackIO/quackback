@@ -33,8 +33,11 @@ export function AnalyticsBarList({ header, rows }: AnalyticsBarListProps) {
           const pct = (row.value / max) * 100
           return (
             <div key={row.key} className="relative flex items-center gap-2.5 overflow-hidden py-2">
+              {/* Inset top/bottom and rounded so each row reads as its own pill.
+                  Full-height bars touch and fuse into one jagged block when
+                  values cluster, which looks like a rendering glitch. */}
               <div
-                className="absolute inset-y-0 left-0 rounded-sm bg-foreground/[0.06]"
+                className="absolute inset-y-1 left-0 rounded-md bg-foreground/[0.07]"
                 style={{ width: `${pct}%` }}
                 aria-hidden
               />
