@@ -44,7 +44,9 @@ function AnalyticsStat({ label, value, suffix, delta, caption }: AnalyticsStatPr
   )
 }
 
-const COLS: Record<number, string> = {
+/** Responsive column classes by stat count, shared with the loading skeleton so
+ *  the placeholder grid matches the real one. */
+export const COLS: Record<number, string> = {
   2: 'grid-cols-2',
   3: 'grid-cols-3',
   4: 'grid-cols-2 sm:grid-cols-4',

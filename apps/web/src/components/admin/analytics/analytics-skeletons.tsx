@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/shared/utils'
 import { CHART_HEIGHT_CLASS } from './analytics-constants'
+import { COLS } from './analytics-stat-row'
 import type { Section } from './analytics-sections'
 
 /** A plain pulsing block sized by the caller. Used for the hero activity chart,
@@ -33,12 +34,7 @@ export function StatusChartSkeleton() {
 /** Divided headline-stat tiles, matching AnalyticsStatRow's responsive columns. */
 function StatRowSkeleton({ cols }: { cols: 3 | 4 }) {
   return (
-    <div
-      className={cn(
-        'grid divide-x divide-border/50',
-        cols === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'
-      )}
-    >
+    <div className={cn('grid divide-x divide-border/50', COLS[cols])}>
       {Array.from({ length: cols }).map((_, i) => (
         <div key={i} className="px-5 py-4">
           <Skeleton className="mb-2 h-3 w-16" />

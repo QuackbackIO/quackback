@@ -87,12 +87,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       // Followers: distinct people watching at least one live post. A demand
       // signal; current total, not period-scoped. Excludes subscriptions to
       // soft-deleted posts (consistent with the rest of this file).
-      db.execute(sql`
+      db.execute<{ followers: number }>(sql`
         SELECT COUNT(DISTINCT psub.principal_id)::int AS followers
         FROM post_subscriptions psub
         JOIN posts p ON p.id = psub.post_id
         WHERE p.deleted_at IS NULL
-      `) as unknown as Promise<Array<{ followers: number }>>,
+      `),
 
       // Median time-to-resolution (days) for posts that first reached a terminal
       // status within the period. Status changes land in post_activity as a
@@ -100,7 +100,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       // comment table is unioned as well so historical comment-carried status
       // changes (recorded before comment.service emitted activity) are still
       // counted; MIN keeps the first transition per post regardless of source.
-      db.execute(sql`
+      db.execute<{ medianDays: number | null }>(sql`
         WITH transitions AS (
           SELECT pa.post_id, pa.created_at
           FROM post_activity pa
@@ -124,7 +124,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         FROM first_resolution fr
         JOIN posts p ON p.id = fr.post_id
         WHERE fr.resolved_at >= ${sinceIso}::timestamptz AND p.deleted_at IS NULL
-      `) as unknown as Promise<Array<{ medianDays: number | null }>>,
+      `),
 
       // Top posts (pre-materialized per period).
       db
@@ -136,7 +136,16 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       // Top 5 contributors + period-wide count in one pass. The window aggregate
       // runs over every contributor that passes WHERE (before ORDER BY/LIMIT), so
       // each of the top-5 rows also carries the full contributor count.
-      db.execute(sql`
+      db.execute<{
+        principalId: string
+        displayName: string | null
+        avatarUrl: string | null
+        posts: number
+        votes: number
+        comments: number
+        total: number
+        contributorCount: number
+      }>(sql`
         SELECT
           p.id as "principalId",
           p.display_name as "displayName",
@@ -171,7 +180,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       // Signups by source: acquisition channel of portal users who signed up in
       // the period. A user's source is their earliest account's provider (the
       // account_userId_createdAt index supports exactly this lookup).
-      db.execute(sql`
+      db.execute<{ source: string; count: number }>(sql`
         SELECT
           CASE
             WHEN src.provider IS NULL OR src.provider = 'credential' THEN 'Email'
@@ -191,29 +200,29 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
           AND p.type != 'anonymous' AND p.role = 'user'
         GROUP BY 1
         ORDER BY count DESC
-      `) as unknown as Promise<Array<{ source: string; count: number }>>,
+      `),
 
       // Active users: distinct portal users with a session active in the period
       // (session.updated_at is refreshed on activity). A truer engagement signal
       // than "contributors", which only counts people who posted/voted/commented.
-      db.execute(sql`
+      db.execute<{ activeUsers: number }>(sql`
         SELECT COUNT(DISTINCT p.id)::int AS "activeUsers"
         FROM session s
         JOIN principal p ON p.user_id = s.user_id
         WHERE s.updated_at >= ${sinceIso}::timestamptz
           AND p.type != 'anonymous' AND p.role = 'user'
-      `) as unknown as Promise<Array<{ activeUsers: number }>>,
+      `),
 
       // Verified rate: share of portal users who confirmed their email. An
       // activation-health snapshot (all-time, not period-scoped).
-      db.execute(sql`
+      db.execute<{ verifiedCount: number; userCount: number }>(sql`
         SELECT
           COUNT(*) FILTER (WHERE u.email_verified)::int AS "verifiedCount",
           COUNT(*)::int AS "userCount"
         FROM principal p
         JOIN "user" u ON u.id = p.user_id
         WHERE p.type != 'anonymous' AND p.role = 'user'
-      `) as unknown as Promise<Array<{ verifiedCount: number; userCount: number }>>,
+      `),
 
       // Changelog stats, in one transaction so totalViews stays consistent with
       // the top-entries snapshot.
@@ -361,18 +370,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     }))
 
     // -- Top 5 contributors + period-wide count (window aggregate) --
-    const rawContributors = contributorRows as unknown as Array<{
-      principalId: string
-      displayName: string | null
-      avatarUrl: string | null
-      posts: number
-      votes: number
-      comments: number
-      total: number
-      contributorCount: number
-    }>
-
-    const topContributors = rawContributors.map((r) => ({
+    const topContributors = contributorRows.map((r) => ({
       principalId: r.principalId,
       displayName: r.displayName,
       avatarUrl: r.avatarUrl,
@@ -384,7 +382,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
 
     // The window aggregate is identical on every row; read it off the first
     // (0 contributors → no rows → fall back to 0).
-    const contributorCount = rawContributors[0]?.contributorCount ?? 0
+    const contributorCount = contributorRows[0]?.contributorCount ?? 0
 
     const { activeUsers } = activeUsersRows[0] ?? { activeUsers: 0 }
 
