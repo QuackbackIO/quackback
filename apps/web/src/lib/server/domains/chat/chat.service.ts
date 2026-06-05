@@ -1056,6 +1056,10 @@ export async function recordCsat(
   // supplied, so a rating-only call can never null a comment that the follow-up
   // already saved (or that arrives in either order).
   const trimmedComment = comment?.trim() ? comment.trim().slice(0, 2000) : undefined
+  // A survey is a single satisfaction submission even though it arrives as two
+  // calls — fire the public webhook only on the first, so integrations don't
+  // double-count or re-trigger automations when the visitor adds a comment.
+  const isFirstSubmission = conversation.csatRating == null
   const [updated] = await db
     .update(conversations)
     .set({
@@ -1067,10 +1071,10 @@ export async function recordCsat(
     .where(eq(conversations.id, conversationId))
     .returning()
   // Surface the rating to the agent inbox live (agent-only fields stripped for
-  // the visitor).
+  // the visitor). This fires on every call so a follow-up comment still lands.
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
-  void emitConversationCsatSubmitted(actor, updated)
+  if (isFirstSubmission) void emitConversationCsatSubmitted(actor, updated)
 }
 
 /**
