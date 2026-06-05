@@ -27,9 +27,15 @@ export function AnalyticsStatusChart({ data }: StatusChartProps) {
           cursor={false}
           content={({ active, payload }) =>
             active && payload && payload.length ? (
-              <div className="rounded-md border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-md">
+              // Mirror shadcn ChartTooltipContent (used by the activity chart):
+              // color dot + label + value, rounded-lg / shadow-xl.
+              <div className="flex items-center gap-1.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{ background: (payload[0]?.payload as { color?: string })?.color }}
+                />
                 <span className="font-medium">{payload[0]?.name}</span>
-                <span className="ml-2 tabular-nums text-muted-foreground">{payload[0]?.value}</span>
+                <span className="ml-1 tabular-nums text-muted-foreground">{payload[0]?.value}</span>
               </div>
             ) : null
           }

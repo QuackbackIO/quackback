@@ -147,8 +147,11 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       statusName: r.statusName,
     }))
 
-    // -- Top 5 contributors (live query, small result set) --
-    // Use ISO string to ensure PostgreSQL receives a valid timestamptz literal
+    // -- Top 5 contributors + period-wide totals (one pass) --
+    // Use ISO string to ensure PostgreSQL receives a valid timestamptz literal.
+    // The window aggregates run over every contributor that passes WHERE (before
+    // ORDER BY/LIMIT), so each of the top-5 rows also carries the full
+    // contributor count and total activity — no second scan needed.
     const sinceIso = start.toISOString()
     const contributorRows = await db.execute(sql`
       SELECT
@@ -158,7 +161,9 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         COALESCE(post_counts.cnt, 0)::int as posts,
         COALESCE(vote_counts.cnt, 0)::int as votes,
         COALESCE(comment_counts.cnt, 0)::int as comments,
-        (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0))::int as total
+        (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0))::int as total,
+        (COUNT(*) OVER ())::int as "contributorCount",
+        (SUM(COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0)) OVER ())::int as "totalActivity"
       FROM principal p
       LEFT JOIN (
         SELECT principal_id as pid, COUNT(*)::int as cnt
@@ -181,17 +186,19 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       LIMIT 5
     `)
 
-    const topContributors = (
-      contributorRows as unknown as Array<{
-        principalId: string
-        displayName: string | null
-        avatarUrl: string | null
-        posts: number
-        votes: number
-        comments: number
-        total: number
-      }>
-    ).map((r) => ({
+    const rawContributors = contributorRows as unknown as Array<{
+      principalId: string
+      displayName: string | null
+      avatarUrl: string | null
+      posts: number
+      votes: number
+      comments: number
+      total: number
+      contributorCount: number
+      totalActivity: number
+    }>
+
+    const topContributors = rawContributors.map((r) => ({
       principalId: r.principalId,
       displayName: r.displayName,
       avatarUrl: r.avatarUrl,
@@ -201,33 +208,10 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       total: r.total,
     }))
 
-    // Aggregate over ALL contributors in the period (topContributors above is
-    // capped at 5), so the Users section can show an honest headline: how many
-    // people contributed and how much activity in total.
-    const contributorAggRows = (await db.execute(sql`
-      SELECT
-        COUNT(*)::int as "contributorCount",
-        COALESCE(SUM(activity), 0)::int as "totalActivity"
-      FROM (
-        SELECT acts.principal_id, COUNT(*)::int as activity
-        FROM (
-          SELECT principal_id FROM posts
-            WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
-          UNION ALL
-          SELECT principal_id FROM votes
-            WHERE created_at >= ${sinceIso}::timestamptz
-          UNION ALL
-          SELECT principal_id FROM comments
-            WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
-        ) acts
-        JOIN principal p ON p.id = acts.principal_id
-          AND p.type != 'anonymous' AND p.role = 'user'
-        GROUP BY acts.principal_id
-      ) per_principal
-    `)) as unknown as Array<{ contributorCount: number; totalActivity: number }>
-
-    const contributorCount = contributorAggRows[0]?.contributorCount ?? 0
-    const totalActivity = contributorAggRows[0]?.totalActivity ?? 0
+    // The window aggregates are identical on every row; read them off the first
+    // (0 contributors → no rows → fall back to 0).
+    const contributorCount = rawContributors[0]?.contributorCount ?? 0
+    const totalActivity = rawContributors[0]?.totalActivity ?? 0
 
     // -- Changelog stats (single transaction to keep totalViews consistent with topEntries) --
     const [changelogResult, topChangelogEntries] = await db.transaction(async (tx) => {
