@@ -274,12 +274,9 @@ export function AnalyticsPage() {
                           value: data.summary.users.total.toLocaleString(),
                           delta: data.summary.users.delta,
                         },
+                        { label: 'Active users', value: data.activeUsers.toLocaleString() },
+                        { label: 'Verified', value: `${data.verifiedRate}%` },
                         { label: 'Contributors', value: data.contributorCount.toLocaleString() },
-                        { label: 'Total activity', value: data.totalActivity.toLocaleString() },
-                        {
-                          label: 'Avg / contributor',
-                          value: avgPerItem(data.totalActivity, data.contributorCount),
-                        },
                       ]}
                     >
                       <AnalyticsTopContributors contributors={data.topContributors} />

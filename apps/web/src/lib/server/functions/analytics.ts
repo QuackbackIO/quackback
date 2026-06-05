@@ -288,6 +288,30 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
 
     const signupsBySource = signupSourceRows.map((r) => ({ source: r.source, count: r.count }))
 
+    // -- Active users: distinct portal users with a session active in the period
+    // (session.updated_at is refreshed on activity). A truer engagement signal
+    // than "contributors", which only counts people who posted/voted/commented. --
+    const [{ activeUsers } = { activeUsers: 0 }] = (await db.execute(sql`
+      SELECT COUNT(DISTINCT p.id)::int AS "activeUsers"
+      FROM session s
+      JOIN principal p ON p.user_id = s.user_id
+      WHERE s.updated_at >= ${sinceIso}::timestamptz
+        AND p.type != 'anonymous' AND p.role = 'user'
+    `)) as unknown as Array<{ activeUsers: number }>
+
+    // -- Verified rate: share of portal users who confirmed their email. An
+    // activation-health snapshot (all-time, not period-scoped). --
+    const [{ verifiedCount = 0, userCount = 0 } = {}] = (await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE u.email_verified)::int AS "verifiedCount",
+        COUNT(*)::int AS "userCount"
+      FROM principal p
+      JOIN "user" u ON u.id = p.user_id
+      WHERE p.type != 'anonymous' AND p.role = 'user'
+    `)) as unknown as Array<{ verifiedCount: number; userCount: number }>
+
+    const verifiedRate = userCount > 0 ? Math.round((verifiedCount / userCount) * 100) : 0
+
     // -- Changelog stats (single transaction to keep totalViews consistent with topEntries) --
     const [changelogResult, topChangelogEntries] = await db.transaction(async (tx) => {
       const totals = await tx
@@ -368,6 +392,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       topContributors,
       contributorCount,
       totalActivity,
+      activeUsers,
+      verifiedRate,
       signupsBySource,
       csat: {
         avgRating: csatSummary.avgRating,
