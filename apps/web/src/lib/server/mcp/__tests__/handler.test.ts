@@ -282,6 +282,17 @@ vi.mock('@/lib/server/domains/principals/principal.service', () => ({
     .mockResolvedValue([{ id: 'principal_test', name: 'Jane', role: 'admin' }]),
 }))
 
+vi.mock('@/lib/server/domains/chat/chat.query', () => ({
+  listConversationsForAgent: vi.fn(),
+  listMessages: vi.fn(),
+  conversationToDTO: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/chat/chat.service', () => ({
+  assertConversationViewable: vi.fn(),
+  sendAgentMessage: vi.fn(),
+  setConversationStatus: vi.fn(),
+}))
+
 // ── Test Constants ─────────────────────────────────────────────────────────────
 
 const MOCK_MEMBER_ID = 'principal_01h455vb4pex5vsknk084sn02r' as PrincipalId
@@ -635,7 +646,11 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unmerge_post')
       expect(toolNames).toContain('delete_post')
       expect(toolNames).toContain('restore_post')
-      expect(toolNames).toHaveLength(27)
+      expect(toolNames).toContain('list_conversations')
+      expect(toolNames).toContain('get_conversation')
+      expect(toolNames).toContain('reply_to_conversation')
+      expect(toolNames).toContain('set_conversation_status')
+      expect(toolNames).toHaveLength(31)
     })
 
     it('should handle resources/list request', async () => {
@@ -2233,6 +2248,181 @@ describe('MCP HTTP Handler', () => {
       expect(response.status).toBe(200)
       const contentType = response.headers.get('content-type')
       expect(contentType).toContain('application/json')
+    })
+  })
+
+  // ===========================================================================
+  // Chat tools
+  // ===========================================================================
+
+  describe('chat tools', () => {
+    it('list_conversations returns conversations for a team API key', async () => {
+      const handle = await initializeSession()
+      const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
+      vi.mocked(listConversationsForAgent).mockResolvedValue({
+        conversations: [
+          {
+            id: 'conversation_1',
+            status: 'open',
+            priority: 'none',
+            channel: 'live_chat',
+            subject: 'Hi',
+            lastMessagePreview: 'Hi',
+            lastMessageAt: '2026-06-05T00:00:00.000Z',
+            createdAt: '2026-06-05T00:00:00.000Z',
+            visitor: { principalId: 'principal_v', displayName: null, avatarUrl: null },
+            assignedAgent: null,
+            unreadCount: 0,
+            visitorLastReadAt: null,
+            agentLastReadAt: null,
+            csatRating: null,
+            visitorEmail: null,
+            resolvedAt: null,
+            tags: [],
+          },
+        ],
+        hasMore: false,
+        nextCursor: null,
+      } as never)
+
+      const res = await handle(
+        mcpRequest(jsonRpcRequest('tools/call', { name: 'list_conversations', arguments: {} }))
+      )
+      const body = (await res.json()) as { result: { content: Array<{ text: string }> } }
+      expect(body.result.content[0].text).toContain('conversation_1')
+      expect(vi.mocked(listConversationsForAgent)).toHaveBeenCalled()
+    })
+
+    it('get_conversation excludes internal notes by default', async () => {
+      const handle = await initializeSession()
+      const { assertConversationViewable } = await import('@/lib/server/domains/chat/chat.service')
+      const { conversationToDTO, listMessages } =
+        await import('@/lib/server/domains/chat/chat.query')
+      vi.mocked(assertConversationViewable).mockResolvedValue({ id: 'conversation_1' } as never)
+      vi.mocked(conversationToDTO).mockResolvedValue({
+        id: 'conversation_1',
+        status: 'open',
+        priority: 'none',
+        channel: 'live_chat',
+        subject: null,
+        lastMessageAt: '2026-06-05T00:00:00.000Z',
+        createdAt: '2026-06-05T00:00:00.000Z',
+        visitor: { principalId: 'principal_v', displayName: null, avatarUrl: null },
+        assignedAgent: null,
+        unreadCount: 0,
+        visitorLastReadAt: null,
+        agentLastReadAt: null,
+        csatRating: null,
+        visitorEmail: null,
+        resolvedAt: null,
+        tags: [],
+      } as never)
+      vi.mocked(listMessages).mockResolvedValue({
+        messages: [],
+        hasMore: false,
+        nextCursor: null,
+      } as never)
+
+      await handle(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'get_conversation',
+            arguments: { conversationId: 'conversation_1' },
+          })
+        )
+      )
+      expect(vi.mocked(listMessages)).toHaveBeenCalledWith(
+        'conversation_1',
+        expect.objectContaining({ includeInternal: false })
+      )
+    })
+
+    it('reply_to_conversation calls sendAgentMessage with the caller as the agent', async () => {
+      const handle = await initializeSession()
+      const { sendAgentMessage } = await import('@/lib/server/domains/chat/chat.service')
+      vi.mocked(sendAgentMessage).mockResolvedValue({
+        message: {
+          id: 'chat_msg_1',
+          conversationId: 'conversation_1',
+          createdAt: '2026-06-05T00:00:00.000Z',
+        },
+        conversation: { id: 'conversation_1', status: 'open' },
+      } as never)
+
+      await handle(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'reply_to_conversation',
+            arguments: { conversationId: 'conversation_1', content: 'On it!' },
+          })
+        )
+      )
+      expect(vi.mocked(sendAgentMessage)).toHaveBeenCalledWith(
+        'conversation_1',
+        'On it!',
+        expect.objectContaining({ principalId: expect.any(String) }),
+        expect.objectContaining({ role: 'admin' })
+      )
+    })
+
+    it('set_conversation_status transitions the conversation', async () => {
+      const handle = await initializeSession()
+      const { setConversationStatus } = await import('@/lib/server/domains/chat/chat.service')
+      vi.mocked(setConversationStatus).mockResolvedValue({
+        id: 'conversation_1',
+        status: 'closed',
+      } as never)
+
+      await handle(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'set_conversation_status',
+            arguments: { conversationId: 'conversation_1', status: 'closed' },
+          })
+        )
+      )
+      expect(vi.mocked(setConversationStatus)).toHaveBeenCalledWith(
+        'conversation_1',
+        'closed',
+        expect.any(Object)
+      )
+    })
+
+    it('should deny reply_to_conversation when write:chat scope missing', async () => {
+      // Mirror the existing scope-denial tests: use initializeOAuthSession with limited scopes
+      async function initializeOAuthSession(scopes: string[]) {
+        await setupValidOAuth({ scopes })
+        const { handleMcpRequest } = await import('../handler')
+        await handleMcpRequest(
+          oauthRequest(
+            jsonRpcRequest('initialize', {
+              protocolVersion: '2025-03-26',
+              capabilities: {},
+              clientInfo: { name: 'test', version: '1.0' },
+            })
+          )
+        )
+        await setupValidOAuth({ scopes })
+        return handleMcpRequest
+      }
+
+      const handleMcpRequest = await initializeOAuthSession(['read:chat'])
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'reply_to_conversation',
+            arguments: { conversationId: 'conversation_1', content: 'Hi' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('write:chat')
     })
   })
 
