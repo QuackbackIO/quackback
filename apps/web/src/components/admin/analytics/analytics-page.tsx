@@ -54,6 +54,14 @@ function avgPerItem(total: number, count: number): string {
   return count > 0 ? Math.round(total / count).toLocaleString() : '0'
 }
 
+/** Format a median resolution time (in days) as a stat value + unit suffix.
+ *  null (nothing resolved in the period) renders as an em dash. */
+function formatResolveTime(days: number | null): { value: string; suffix?: string } {
+  if (days == null) return { value: '—' }
+  if (days < 1) return { value: '<1', suffix: 'day' }
+  return { value: days < 10 ? days.toFixed(1) : Math.round(days).toString(), suffix: 'days' }
+}
+
 const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
   { value: '7d', label: '7d' },
   { value: '30d', label: '30d' },
@@ -182,6 +190,10 @@ export function AnalyticsPage() {
                           delta: data.summary.posts.delta,
                         },
                         { label: 'Resolved', value: `${data.resolutionRate}%` },
+                        {
+                          label: 'Median resolve',
+                          ...formatResolveTime(data.medianResolutionDays),
+                        },
                         { label: 'Followers', value: data.followers.toLocaleString() },
                       ]}
                     >

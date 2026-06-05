@@ -43,6 +43,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
 
     const startStr = toIsoDateOnly(start)
     const previousStartStr = toIsoDateOnly(previousStart)
+    // Full-precision period start for timestamptz comparisons in raw SQL.
+    const sinceIso = start.toISOString()
 
     // -- Fetch daily stats for current and previous periods --
     const allRows = await db
@@ -148,6 +150,36 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       .select({ followers: sql<number>`count(*)::int` })
       .from(postSubscriptions)
 
+    // -- Median time-to-resolution (days) for posts that first reached a terminal
+    // status within the period. Status changes are recorded two ways — as a
+    // post_activity 'status.changed' (linked by status name) or as a comment
+    // carrying status_change_to_id — so union both, take the first terminal
+    // transition per post, and take the median of (resolved_at - created_at). --
+    const ttrRows = (await db.execute(sql`
+      WITH transitions AS (
+        SELECT pa.post_id, pa.created_at
+        FROM post_activity pa
+        JOIN post_statuses ps ON ps.name = (pa.metadata->>'toName')
+        WHERE pa.type = 'status.changed' AND ps.category IN ('complete', 'closed')
+        UNION ALL
+        SELECT c.post_id, c.created_at
+        FROM comments c
+        JOIN post_statuses ps ON ps.id = c.status_change_to_id
+        WHERE c.deleted_at IS NULL AND ps.category IN ('complete', 'closed')
+      ),
+      first_resolution AS (
+        SELECT post_id, MIN(created_at) AS resolved_at FROM transitions GROUP BY post_id
+      )
+      SELECT percentile_cont(0.5) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (fr.resolved_at - p.created_at)) / 86400.0
+      )::float AS "medianDays"
+      FROM first_resolution fr
+      JOIN posts p ON p.id = fr.post_id
+      WHERE fr.resolved_at >= ${sinceIso}::timestamptz AND p.deleted_at IS NULL
+    `)) as unknown as Array<{ medianDays: number | null }>
+
+    const medianResolutionDays = ttrRows[0]?.medianDays ?? null
+
     // -- Top posts --
     const topPostRows = await db
       .select()
@@ -166,11 +198,9 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     }))
 
     // -- Top 5 contributors + period-wide totals (one pass) --
-    // Use ISO string to ensure PostgreSQL receives a valid timestamptz literal.
     // The window aggregates run over every contributor that passes WHERE (before
     // ORDER BY/LIMIT), so each of the top-5 rows also carries the full
     // contributor count and total activity — no second scan needed.
-    const sinceIso = start.toISOString()
     const contributorRows = await db.execute(sql`
       SELECT
         p.id as "principalId",
@@ -331,6 +361,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       dailyStats,
       statusDistribution,
       resolutionRate,
+      medianResolutionDays,
       followers,
       boardBreakdown,
       topPosts,
