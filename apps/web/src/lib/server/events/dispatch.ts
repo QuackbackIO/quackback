@@ -8,7 +8,14 @@
 
 import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
 
-import type { EventActor, EventData, EventPostRef } from './types.js'
+import type {
+  EventActor,
+  EventConversationData,
+  EventConversationRef,
+  EventData,
+  EventMessageData,
+  EventPostRef,
+} from './types.js'
 import { realEmail } from '@/lib/shared/anonymous-email'
 
 // Re-export EventActor for API routes that need to construct actor objects
@@ -280,5 +287,105 @@ export async function dispatchChangelogPublished(
         linkedPostCount: changelog.linkedPostCount,
       },
     },
+  })
+}
+
+export async function dispatchConversationCreated(
+  actor: EventActor,
+  conversation: EventConversationData
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.created',
+    data: { conversation },
+  })
+}
+
+export async function dispatchConversationStatusChanged(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  previousStatus: string,
+  newStatus: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.status_changed',
+    data: { conversation, previousStatus, newStatus },
+  })
+}
+
+export async function dispatchConversationAssigned(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  assignedAgentPrincipalId: string | null,
+  previousAgentPrincipalId: string | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.assigned',
+    data: { conversation, assignedAgentPrincipalId, previousAgentPrincipalId },
+  })
+}
+
+export async function dispatchConversationPriorityChanged(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  previousPriority: string,
+  newPriority: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.priority_changed',
+    data: { conversation, previousPriority, newPriority },
+  })
+}
+
+export async function dispatchConversationCsatSubmitted(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  rating: number,
+  comment: string | null,
+  submittedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.csat_submitted',
+    data: { conversation, rating, comment, submittedAt },
+  })
+}
+
+export async function dispatchMessageCreated(
+  actor: EventActor,
+  message: EventMessageData,
+  conversation: EventConversationRef
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'message.created',
+    data: { message, conversation },
+  })
+}
+
+export async function dispatchMessageNoteCreated(
+  actor: EventActor,
+  message: EventMessageData,
+  conversation: EventConversationRef
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'message.note_created',
+    data: { message, conversation },
+  })
+}
+
+export async function dispatchMessageDeleted(
+  actor: EventActor,
+  message: { id: string; conversationId: string },
+  conversation: EventConversationRef
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'message.deleted',
+    data: { message, conversation },
   })
 }
