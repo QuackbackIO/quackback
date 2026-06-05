@@ -218,7 +218,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       const totals = await tx
         .select({
           totalViews: sum(changelogEntries.viewCount),
-          entryCount: sql<number>`count(*)::int`,
+          // All-time published entries (drafts excluded) — the denominator for
+          // "avg views / entry".
+          publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
+          // Entries published within the selected period — responds to the
+          // period selector.
+          publishedInPeriod: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} >= ${start.toISOString()}::timestamptz AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
         })
         .from(changelogEntries)
         .where(isNull(changelogEntries.deletedAt))
@@ -236,7 +241,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     })
 
     const totalViews = Number(changelogResult[0]?.totalViews ?? 0)
-    const changelogEntryCount = Number(changelogResult[0]?.entryCount ?? 0)
+    const changelogPublishedCount = Number(changelogResult[0]?.publishedCount ?? 0)
+    const changelogPublishedInPeriod = Number(changelogResult[0]?.publishedInPeriod ?? 0)
 
     // -- CSAT (live query; chat volume is low, no materialized view needed) --
     // Pull rated conversations across current + previous window in one go, then
@@ -293,8 +299,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       },
       changelog: {
         totalViews,
-        entryCount: changelogEntryCount,
-        totalReactions: 0,
+        publishedCount: changelogPublishedCount,
+        publishedInPeriod: changelogPublishedInPeriod,
         topEntries: topChangelogEntries.map((e) => ({
           id: e.id,
           title: e.title,

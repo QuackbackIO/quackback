@@ -54,6 +54,13 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     )
   }
 
+  // Record the view (fire-and-forget — must never block or fail the read).
+  // Same approach help-center articles use for their view counter.
+  db.update(changelogEntries)
+    .set({ viewCount: sql`${changelogEntries.viewCount} + 1` })
+    .where(eq(changelogEntries.id, id))
+    .catch(() => {})
+
   // Get linked posts with board slugs and status. Visibility predicates
   // run in SQL, not in JS, so we never fetch rows we'd just throw away.
   // Four independent guards, all on the WHERE clause:

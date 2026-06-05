@@ -37,8 +37,15 @@ vi.mock('@/lib/server/db', () => ({
       },
     },
     select: (...args: unknown[]) => mockSelect(...args),
+    // getPublicChangelogById records a view via a fire-and-forget update.
+    update: () => ({ set: () => ({ where: () => ({ catch: () => {} }) }) }),
   },
-  changelogEntries: { id: 'id', publishedAt: 'published_at', deletedAt: 'deleted_at' },
+  changelogEntries: {
+    id: 'id',
+    publishedAt: 'published_at',
+    deletedAt: 'deleted_at',
+    viewCount: 'view_count',
+  },
   changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
   posts: {
     id: 'posts.id',

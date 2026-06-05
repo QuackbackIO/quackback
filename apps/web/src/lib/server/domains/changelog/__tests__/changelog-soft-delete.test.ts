@@ -34,7 +34,9 @@ vi.mock('@/lib/server/db', () => ({
         return {
           where: (...args: unknown[]) => {
             mockUpdateWhere(...args)
-            return { returning: () => mockUpdateReturning() }
+            // `.returning()` for soft-delete writes; `.catch()` for the
+            // fire-and-forget view-count increment in getPublicChangelogById.
+            return { returning: () => mockUpdateReturning(), catch: () => {} }
           },
         }
       },

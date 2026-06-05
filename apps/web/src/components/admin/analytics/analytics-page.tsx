@@ -243,13 +243,16 @@ export function AnalyticsPage() {
                   <StatSection
                     stats={[
                       {
+                        label: 'Published',
+                        value: data.changelog.publishedInPeriod.toLocaleString(),
+                      },
+                      {
                         label: 'Total views',
                         value: data.changelog.totalViews.toLocaleString(),
                       },
-                      { label: 'Entries', value: data.changelog.entryCount.toLocaleString() },
                       {
                         label: 'Avg / entry',
-                        value: avgPerItem(data.changelog.totalViews, data.changelog.entryCount),
+                        value: avgPerItem(data.changelog.totalViews, data.changelog.publishedCount),
                       },
                     ]}
                   >
