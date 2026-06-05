@@ -93,6 +93,9 @@ export async function changeStatus(
       fromName: previousStatusName,
       fromColor: prevStatus?.color ?? null,
       toName: newStatus.name,
+      // Stable identifier (names are editable) so analytics can match the
+      // target status by slug even after a rename.
+      toSlug: newStatus.slug,
       toColor: newStatus.color ?? null,
     },
   })

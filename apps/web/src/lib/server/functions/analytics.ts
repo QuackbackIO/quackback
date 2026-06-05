@@ -20,7 +20,6 @@ import {
   analyticsDailyStats,
   analyticsTopPosts,
   postStatuses,
-  postSubscriptions,
   changelogEntries,
   conversations,
   boards,
@@ -144,11 +143,15 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       }))
       .sort((a, b) => b.count - a.count)
 
-    // -- Followers: how many people subscribe to (watch) posts. A demand signal:
-    // one row per principal per post. Current total, not period-scoped. --
-    const [{ followers } = { followers: 0 }] = await db
-      .select({ followers: sql<number>`count(*)::int` })
-      .from(postSubscriptions)
+    // -- Followers: distinct people watching at least one live post. A demand
+    // signal; current total, not period-scoped. Excludes subscriptions to
+    // soft-deleted posts (consistent with the rest of this file). --
+    const [{ followers } = { followers: 0 }] = (await db.execute(sql`
+      SELECT COUNT(DISTINCT psub.principal_id)::int AS followers
+      FROM post_subscriptions psub
+      JOIN posts p ON p.id = psub.post_id
+      WHERE p.deleted_at IS NULL
+    `)) as unknown as Array<{ followers: number }>
 
     // -- Median time-to-resolution (days) for posts that first reached a terminal
     // status within the period. Status changes are recorded two ways — as a
@@ -159,7 +162,10 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       WITH transitions AS (
         SELECT pa.post_id, pa.created_at
         FROM post_activity pa
-        JOIN post_statuses ps ON ps.name = (pa.metadata->>'toName')
+        JOIN post_statuses ps ON (
+          ps.slug = (pa.metadata->>'toSlug')
+          OR (pa.metadata->>'toSlug' IS NULL AND ps.name = (pa.metadata->>'toName'))
+        )
         WHERE pa.type = 'status.changed' AND ps.category IN ('complete', 'closed')
         UNION ALL
         SELECT c.post_id, c.created_at
@@ -210,8 +216,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         COALESCE(vote_counts.cnt, 0)::int as votes,
         COALESCE(comment_counts.cnt, 0)::int as comments,
         (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0))::int as total,
-        (COUNT(*) OVER ())::int as "contributorCount",
-        (SUM(COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0)) OVER ())::int as "totalActivity"
+        (COUNT(*) OVER ())::int as "contributorCount"
       FROM principal p
       LEFT JOIN (
         SELECT principal_id as pid, COUNT(*)::int as cnt
@@ -243,7 +248,6 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       comments: number
       total: number
       contributorCount: number
-      totalActivity: number
     }>
 
     const topContributors = rawContributors.map((r) => ({
@@ -256,15 +260,14 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       total: r.total,
     }))
 
-    // The window aggregates are identical on every row; read them off the first
+    // The window aggregate is identical on every row; read it off the first
     // (0 contributors → no rows → fall back to 0).
     const contributorCount = rawContributors[0]?.contributorCount ?? 0
-    const totalActivity = rawContributors[0]?.totalActivity ?? 0
 
     // -- Signups by source: acquisition channel of portal users who signed up in
     // the period. A user's source is their earliest account's provider (the
     // account_userId_createdAt index supports exactly this lookup). --
-    const signupSourceRows = (await db.execute(sql`
+    const signupsBySource = (await db.execute(sql`
       SELECT
         CASE
           WHEN src.provider IS NULL OR src.provider = 'credential' THEN 'Email'
@@ -285,8 +288,6 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       GROUP BY 1
       ORDER BY count DESC
     `)) as unknown as Array<{ source: string; count: number }>
-
-    const signupsBySource = signupSourceRows.map((r) => ({ source: r.source, count: r.count }))
 
     // -- Active users: distinct portal users with a session active in the period
     // (session.updated_at is refreshed on activity). A truer engagement signal
@@ -391,7 +392,6 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       topPosts,
       topContributors,
       contributorCount,
-      totalActivity,
       activeUsers,
       verifiedRate,
       signupsBySource,
