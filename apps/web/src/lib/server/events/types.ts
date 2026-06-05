@@ -19,6 +19,14 @@ export const EVENT_TYPES = [
   'comment.updated',
   'comment.deleted',
   'changelog.published',
+  'conversation.created',
+  'conversation.status_changed',
+  'conversation.assigned',
+  'conversation.priority_changed',
+  'conversation.csat_submitted',
+  'message.created',
+  'message.note_created',
+  'message.deleted',
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
@@ -149,6 +157,72 @@ export interface ChangelogPublishedPayload {
   }
 }
 
+// Conversation / message events
+export interface EventConversationRef {
+  id: string
+  status: 'open' | 'pending' | 'closed'
+  channel: 'live_chat' | 'email' | 'web_form'
+  priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
+}
+
+export interface EventConversationData extends EventConversationRef {
+  subject: string | null
+  visitorPrincipalId: string
+  visitorEmail: string | null // realEmail() — null for anonymous visitors
+  assignedAgentPrincipalId: string | null
+  createdAt: string
+  lastMessageAt: string
+  resolvedAt: string | null
+}
+
+export interface EventMessageData {
+  id: string
+  conversationId: string
+  senderType: 'visitor' | 'agent'
+  authorPrincipalId: string | null
+  authorName: string | null
+  authorEmail: string | null // realEmail()
+  content: string
+  createdAt: string
+}
+
+export interface ConversationCreatedPayload {
+  conversation: EventConversationData
+}
+export interface ConversationStatusChangedPayload {
+  conversation: EventConversationRef
+  previousStatus: string
+  newStatus: string
+}
+export interface ConversationAssignedPayload {
+  conversation: EventConversationRef
+  assignedAgentPrincipalId: string | null
+  previousAgentPrincipalId: string | null
+}
+export interface ConversationPriorityChangedPayload {
+  conversation: EventConversationRef
+  previousPriority: string
+  newPriority: string
+}
+export interface ConversationCsatSubmittedPayload {
+  conversation: EventConversationRef
+  rating: number
+  comment: string | null
+  submittedAt: string
+}
+export interface MessageCreatedPayload {
+  message: EventMessageData
+  conversation: EventConversationRef
+}
+export interface MessageNoteCreatedPayload {
+  message: EventMessageData
+  conversation: EventConversationRef
+}
+export interface MessageDeletedPayload {
+  message: { id: string; conversationId: string }
+  conversation: EventConversationRef
+}
+
 // ============================================================================
 // Event Data (Discriminated Union)
 // ============================================================================
@@ -208,6 +282,31 @@ export interface PostMentionedEvent extends EventBase<'post.mentioned'> {
   data: EventPostMentionedData
 }
 
+export interface ConversationCreatedEvent extends EventBase<'conversation.created'> {
+  data: ConversationCreatedPayload
+}
+export interface ConversationStatusChangedEvent extends EventBase<'conversation.status_changed'> {
+  data: ConversationStatusChangedPayload
+}
+export interface ConversationAssignedEvent extends EventBase<'conversation.assigned'> {
+  data: ConversationAssignedPayload
+}
+export interface ConversationPriorityChangedEvent extends EventBase<'conversation.priority_changed'> {
+  data: ConversationPriorityChangedPayload
+}
+export interface ConversationCsatSubmittedEvent extends EventBase<'conversation.csat_submitted'> {
+  data: ConversationCsatSubmittedPayload
+}
+export interface MessageCreatedEvent extends EventBase<'message.created'> {
+  data: MessageCreatedPayload
+}
+export interface MessageNoteCreatedEvent extends EventBase<'message.note_created'> {
+  data: MessageNoteCreatedPayload
+}
+export interface MessageDeletedEvent extends EventBase<'message.deleted'> {
+  data: MessageDeletedPayload
+}
+
 /**
  * Event data - discriminated union of all event types.
  *
@@ -230,3 +329,11 @@ export type EventData =
   | CommentUpdatedEvent
   | CommentDeletedEvent
   | ChangelogPublishedEvent
+  | ConversationCreatedEvent
+  | ConversationStatusChangedEvent
+  | ConversationAssignedEvent
+  | ConversationPriorityChangedEvent
+  | ConversationCsatSubmittedEvent
+  | MessageCreatedEvent
+  | MessageNoteCreatedEvent
+  | MessageDeletedEvent
