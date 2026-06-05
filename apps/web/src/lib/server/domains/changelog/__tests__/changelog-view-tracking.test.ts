@@ -47,9 +47,12 @@ vi.mock('@/lib/server/db', () => ({
   postStatuses: { id: 'id' },
   eq: vi.fn((col, val) => ({ kind: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ kind: 'and', args })),
+  or: vi.fn((...args: unknown[]) => ({ kind: 'or', args })),
   isNull: vi.fn((col) => ({ kind: 'isNull', col })),
   isNotNull: vi.fn((col) => ({ kind: 'isNotNull', col })),
+  lt: vi.fn((col, val) => ({ kind: 'lt', col, val })),
   lte: vi.fn((col, val) => ({ kind: 'lte', col, val })),
+  desc: vi.fn((col) => ({ kind: 'desc', col })),
   inArray: vi.fn((col, vals) => ({ kind: 'inArray', col, vals })),
   sql: Object.assign(
     vi.fn((strings: TemplateStringsArray) => ({ kind: 'sql', strings: Array.from(strings) })),

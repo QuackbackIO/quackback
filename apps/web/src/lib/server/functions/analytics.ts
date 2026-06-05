@@ -13,9 +13,9 @@ import {
   eq,
   and,
   gte,
+  lte,
   isNull,
   isNotNull,
-  sum,
   desc,
   analyticsDailyStats,
   analyticsTopPosts,
@@ -229,7 +229,11 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       db.transaction(async (tx) => {
         const totals = await tx
           .select({
-            totalViews: sum(changelogEntries.viewCount),
+            // Views of published entries only, so the total and the "avg / entry"
+            // denominator share one scope. An entry unpublished after accruing
+            // public views would otherwise inflate the total against a count that
+            // excludes it.
+            totalViews: sql<number>`COALESCE(sum(${changelogEntries.viewCount}) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz), 0)::int`,
             // All-time published entries (drafts excluded) — the denominator for
             // "avg views / entry".
             publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
@@ -246,7 +250,15 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
             viewCount: changelogEntries.viewCount,
           })
           .from(changelogEntries)
-          .where(isNull(changelogEntries.deletedAt))
+          // Published entries only — a draft (incl. one unpublished after it was
+          // live) must not surface in the public top-entries list.
+          .where(
+            and(
+              isNull(changelogEntries.deletedAt),
+              isNotNull(changelogEntries.publishedAt),
+              lte(changelogEntries.publishedAt, now)
+            )
+          )
           .orderBy(desc(changelogEntries.viewCount))
           .limit(5)
         return [totals, top] as const
