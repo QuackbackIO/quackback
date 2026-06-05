@@ -45,13 +45,226 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     // Full-precision period start for timestamptz comparisons in raw SQL.
     const sinceIso = start.toISOString()
 
-    // -- Fetch daily stats for current and previous periods --
-    const allRows = await db
-      .select()
-      .from(analyticsDailyStats)
-      .where(gte(analyticsDailyStats.date, previousStartStr))
-      .orderBy(analyticsDailyStats.date)
+    // -- Every query below depends only on the pure date/period values above,
+    // never on another query's result, so they all run concurrently. The whole
+    // batch resolves in the time of the slowest single query instead of the sum;
+    // the derivations that combine the results happen in memory once it lands. --
+    const [
+      allRows,
+      statusColors,
+      allBoards,
+      followersRows,
+      ttrRows,
+      topPostRows,
+      contributorRows,
+      signupsBySource,
+      activeUsersRows,
+      verifiedRows,
+      [changelogResult, topChangelogEntries],
+      csatRows,
+      closedRows,
+    ] = await Promise.all([
+      // Daily stats for current + previous periods (one scan, split in memory).
+      db
+        .select()
+        .from(analyticsDailyStats)
+        .where(gte(analyticsDailyStats.date, previousStartStr))
+        .orderBy(analyticsDailyStats.date),
 
+      // Status metadata (name, color, category) for the distribution + resolution.
+      db
+        .select({
+          slug: postStatuses.slug,
+          name: postStatuses.name,
+          color: postStatuses.color,
+          category: postStatuses.category,
+        })
+        .from(postStatuses),
+
+      // Board names for the board breakdown.
+      db.select({ id: boards.id, name: boards.name }).from(boards),
+
+      // Followers: distinct people watching at least one live post. A demand
+      // signal; current total, not period-scoped. Excludes subscriptions to
+      // soft-deleted posts (consistent with the rest of this file).
+      db.execute(sql`
+        SELECT COUNT(DISTINCT psub.principal_id)::int AS followers
+        FROM post_subscriptions psub
+        JOIN posts p ON p.id = psub.post_id
+        WHERE p.deleted_at IS NULL
+      `) as unknown as Promise<Array<{ followers: number }>>,
+
+      // Median time-to-resolution (days) for posts that first reached a terminal
+      // status within the period. Status changes land in post_activity as a
+      // 'status.changed' row (matched by slug, or by name for legacy rows). The
+      // comment table is unioned as well so historical comment-carried status
+      // changes (recorded before comment.service emitted activity) are still
+      // counted; MIN keeps the first transition per post regardless of source.
+      db.execute(sql`
+        WITH transitions AS (
+          SELECT pa.post_id, pa.created_at
+          FROM post_activity pa
+          JOIN post_statuses ps ON (
+            ps.slug = (pa.metadata->>'toSlug')
+            OR (pa.metadata->>'toSlug' IS NULL AND ps.name = (pa.metadata->>'toName'))
+          )
+          WHERE pa.type = 'status.changed' AND ps.category IN ('complete', 'closed')
+          UNION ALL
+          SELECT c.post_id, c.created_at
+          FROM comments c
+          JOIN post_statuses ps ON ps.id = c.status_change_to_id
+          WHERE c.deleted_at IS NULL AND ps.category IN ('complete', 'closed')
+        ),
+        first_resolution AS (
+          SELECT post_id, MIN(created_at) AS resolved_at FROM transitions GROUP BY post_id
+        )
+        SELECT percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY EXTRACT(EPOCH FROM (fr.resolved_at - p.created_at)) / 86400.0
+        )::float AS "medianDays"
+        FROM first_resolution fr
+        JOIN posts p ON p.id = fr.post_id
+        WHERE fr.resolved_at >= ${sinceIso}::timestamptz AND p.deleted_at IS NULL
+      `) as unknown as Promise<Array<{ medianDays: number | null }>>,
+
+      // Top posts (pre-materialized per period).
+      db
+        .select()
+        .from(analyticsTopPosts)
+        .where(eq(analyticsTopPosts.period, period))
+        .orderBy(analyticsTopPosts.rank),
+
+      // Top 5 contributors + period-wide count in one pass. The window aggregate
+      // runs over every contributor that passes WHERE (before ORDER BY/LIMIT), so
+      // each of the top-5 rows also carries the full contributor count.
+      db.execute(sql`
+        SELECT
+          p.id as "principalId",
+          p.display_name as "displayName",
+          p.avatar_url as "avatarUrl",
+          COALESCE(post_counts.cnt, 0)::int as posts,
+          COALESCE(vote_counts.cnt, 0)::int as votes,
+          COALESCE(comment_counts.cnt, 0)::int as comments,
+          (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0))::int as total,
+          (COUNT(*) OVER ())::int as "contributorCount"
+        FROM principal p
+        LEFT JOIN (
+          SELECT principal_id as pid, COUNT(*)::int as cnt
+          FROM posts WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
+          GROUP BY principal_id
+        ) post_counts ON post_counts.pid = p.id
+        LEFT JOIN (
+          SELECT principal_id as pid, COUNT(*)::int as cnt
+          FROM votes WHERE created_at >= ${sinceIso}::timestamptz
+          GROUP BY principal_id
+        ) vote_counts ON vote_counts.pid = p.id
+        LEFT JOIN (
+          SELECT principal_id as pid, COUNT(*)::int as cnt
+          FROM comments WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
+          GROUP BY principal_id
+        ) comment_counts ON comment_counts.pid = p.id
+        WHERE p.type != 'anonymous' AND p.role = 'user'
+          AND (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0)) > 0
+        ORDER BY total DESC
+        LIMIT 5
+      `),
+
+      // Signups by source: acquisition channel of portal users who signed up in
+      // the period. A user's source is their earliest account's provider (the
+      // account_userId_createdAt index supports exactly this lookup).
+      db.execute(sql`
+        SELECT
+          CASE
+            WHEN src.provider IS NULL OR src.provider = 'credential' THEN 'Email'
+            WHEN src.provider = 'sso' THEN 'SSO'
+            ELSE INITCAP(src.provider)
+          END as source,
+          COUNT(*)::int as count
+        FROM principal p
+        LEFT JOIN LATERAL (
+          SELECT a.provider_id as provider
+          FROM account a
+          WHERE a.user_id = p.user_id
+          ORDER BY a.created_at ASC
+          LIMIT 1
+        ) src ON true
+        WHERE p.created_at >= ${sinceIso}::timestamptz
+          AND p.type != 'anonymous' AND p.role = 'user'
+        GROUP BY 1
+        ORDER BY count DESC
+      `) as unknown as Promise<Array<{ source: string; count: number }>>,
+
+      // Active users: distinct portal users with a session active in the period
+      // (session.updated_at is refreshed on activity). A truer engagement signal
+      // than "contributors", which only counts people who posted/voted/commented.
+      db.execute(sql`
+        SELECT COUNT(DISTINCT p.id)::int AS "activeUsers"
+        FROM session s
+        JOIN principal p ON p.user_id = s.user_id
+        WHERE s.updated_at >= ${sinceIso}::timestamptz
+          AND p.type != 'anonymous' AND p.role = 'user'
+      `) as unknown as Promise<Array<{ activeUsers: number }>>,
+
+      // Verified rate: share of portal users who confirmed their email. An
+      // activation-health snapshot (all-time, not period-scoped).
+      db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE u.email_verified)::int AS "verifiedCount",
+          COUNT(*)::int AS "userCount"
+        FROM principal p
+        JOIN "user" u ON u.id = p.user_id
+        WHERE p.type != 'anonymous' AND p.role = 'user'
+      `) as unknown as Promise<Array<{ verifiedCount: number; userCount: number }>>,
+
+      // Changelog stats, in one transaction so totalViews stays consistent with
+      // the top-entries snapshot.
+      db.transaction(async (tx) => {
+        const totals = await tx
+          .select({
+            totalViews: sum(changelogEntries.viewCount),
+            // All-time published entries (drafts excluded) — the denominator for
+            // "avg views / entry".
+            publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
+            // Entries published within the selected period — responds to the
+            // period selector.
+            publishedInPeriod: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} >= ${start.toISOString()}::timestamptz AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
+          })
+          .from(changelogEntries)
+          .where(isNull(changelogEntries.deletedAt))
+        const top = await tx
+          .select({
+            id: changelogEntries.id,
+            title: changelogEntries.title,
+            viewCount: changelogEntries.viewCount,
+          })
+          .from(changelogEntries)
+          .where(isNull(changelogEntries.deletedAt))
+          .orderBy(desc(changelogEntries.viewCount))
+          .limit(5)
+        return [totals, top] as const
+      }),
+
+      // CSAT (live query; chat volume is low, no materialized view needed). Pull
+      // rated conversations across current + previous window in one go, then
+      // split for the trend + period-over-period delta below.
+      db
+        .select({ rating: conversations.csatRating, ratedAt: conversations.csatSubmittedAt })
+        .from(conversations)
+        .where(
+          and(
+            isNotNull(conversations.csatRating),
+            gte(conversations.csatSubmittedAt, previousStart)
+          )
+        ),
+
+      // Closed-conversation count = the response-rate denominator (a closed
+      // thread is the chance to be rated).
+      db
+        .select({ closedCount: sql<number>`count(*)::int` })
+        .from(conversations)
+        .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start))),
+    ])
+
+    // -- Period split for the daily-stats rollup --
     const currentRows = allRows.filter((r) => r.date >= startStr)
     const previousRows = allRows.filter((r) => r.date >= previousStartStr && r.date < startStr)
 
@@ -93,15 +306,6 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     }))
 
     // -- Status distribution from latest day's snapshot --
-    const statusColors = await db
-      .select({
-        slug: postStatuses.slug,
-        name: postStatuses.name,
-        color: postStatuses.color,
-        category: postStatuses.category,
-      })
-      .from(postStatuses)
-
     const statusMap = new Map(statusColors.map((s) => [s.slug, { name: s.name, color: s.color }]))
 
     const latestRow = currentRows.length > 0 ? currentRows[currentRows.length - 1] : null
@@ -132,8 +336,6 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       }
     }
 
-    // Resolve board names
-    const allBoards = await db.select({ id: boards.id, name: boards.name }).from(boards)
     const boardNameMap = new Map(allBoards.map((b) => [b.id, b.name]))
 
     const boardBreakdown = Array.from(boardTotals.entries())
@@ -143,56 +345,11 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       }))
       .sort((a, b) => b.count - a.count)
 
-    // -- Followers: distinct people watching at least one live post. A demand
-    // signal; current total, not period-scoped. Excludes subscriptions to
-    // soft-deleted posts (consistent with the rest of this file). --
-    const [{ followers } = { followers: 0 }] = (await db.execute(sql`
-      SELECT COUNT(DISTINCT psub.principal_id)::int AS followers
-      FROM post_subscriptions psub
-      JOIN posts p ON p.id = psub.post_id
-      WHERE p.deleted_at IS NULL
-    `)) as unknown as Array<{ followers: number }>
-
-    // -- Median time-to-resolution (days) for posts that first reached a terminal
-    // status within the period. Status changes are recorded two ways — as a
-    // post_activity 'status.changed' (linked by status name) or as a comment
-    // carrying status_change_to_id — so union both, take the first terminal
-    // transition per post, and take the median of (resolved_at - created_at). --
-    const ttrRows = (await db.execute(sql`
-      WITH transitions AS (
-        SELECT pa.post_id, pa.created_at
-        FROM post_activity pa
-        JOIN post_statuses ps ON (
-          ps.slug = (pa.metadata->>'toSlug')
-          OR (pa.metadata->>'toSlug' IS NULL AND ps.name = (pa.metadata->>'toName'))
-        )
-        WHERE pa.type = 'status.changed' AND ps.category IN ('complete', 'closed')
-        UNION ALL
-        SELECT c.post_id, c.created_at
-        FROM comments c
-        JOIN post_statuses ps ON ps.id = c.status_change_to_id
-        WHERE c.deleted_at IS NULL AND ps.category IN ('complete', 'closed')
-      ),
-      first_resolution AS (
-        SELECT post_id, MIN(created_at) AS resolved_at FROM transitions GROUP BY post_id
-      )
-      SELECT percentile_cont(0.5) WITHIN GROUP (
-        ORDER BY EXTRACT(EPOCH FROM (fr.resolved_at - p.created_at)) / 86400.0
-      )::float AS "medianDays"
-      FROM first_resolution fr
-      JOIN posts p ON p.id = fr.post_id
-      WHERE fr.resolved_at >= ${sinceIso}::timestamptz AND p.deleted_at IS NULL
-    `)) as unknown as Array<{ medianDays: number | null }>
+    const { followers } = followersRows[0] ?? { followers: 0 }
 
     const medianResolutionDays = ttrRows[0]?.medianDays ?? null
 
     // -- Top posts --
-    const topPostRows = await db
-      .select()
-      .from(analyticsTopPosts)
-      .where(eq(analyticsTopPosts.period, period))
-      .orderBy(analyticsTopPosts.rank)
-
     const topPosts = topPostRows.map((r) => ({
       rank: r.rank,
       postId: r.postId,
@@ -203,42 +360,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       statusName: r.statusName,
     }))
 
-    // -- Top 5 contributors + period-wide totals (one pass) --
-    // The window aggregates run over every contributor that passes WHERE (before
-    // ORDER BY/LIMIT), so each of the top-5 rows also carries the full
-    // contributor count and total activity — no second scan needed.
-    const contributorRows = await db.execute(sql`
-      SELECT
-        p.id as "principalId",
-        p.display_name as "displayName",
-        p.avatar_url as "avatarUrl",
-        COALESCE(post_counts.cnt, 0)::int as posts,
-        COALESCE(vote_counts.cnt, 0)::int as votes,
-        COALESCE(comment_counts.cnt, 0)::int as comments,
-        (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0))::int as total,
-        (COUNT(*) OVER ())::int as "contributorCount"
-      FROM principal p
-      LEFT JOIN (
-        SELECT principal_id as pid, COUNT(*)::int as cnt
-        FROM posts WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
-        GROUP BY principal_id
-      ) post_counts ON post_counts.pid = p.id
-      LEFT JOIN (
-        SELECT principal_id as pid, COUNT(*)::int as cnt
-        FROM votes WHERE created_at >= ${sinceIso}::timestamptz
-        GROUP BY principal_id
-      ) vote_counts ON vote_counts.pid = p.id
-      LEFT JOIN (
-        SELECT principal_id as pid, COUNT(*)::int as cnt
-        FROM comments WHERE created_at >= ${sinceIso}::timestamptz AND deleted_at IS NULL
-        GROUP BY principal_id
-      ) comment_counts ON comment_counts.pid = p.id
-      WHERE p.type != 'anonymous' AND p.role = 'user'
-        AND (COALESCE(post_counts.cnt, 0) + COALESCE(vote_counts.cnt, 0) + COALESCE(comment_counts.cnt, 0)) > 0
-      ORDER BY total DESC
-      LIMIT 5
-    `)
-
+    // -- Top 5 contributors + period-wide count (window aggregate) --
     const rawContributors = contributorRows as unknown as Array<{
       principalId: string
       displayName: string | null
@@ -264,96 +386,16 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     // (0 contributors → no rows → fall back to 0).
     const contributorCount = rawContributors[0]?.contributorCount ?? 0
 
-    // -- Signups by source: acquisition channel of portal users who signed up in
-    // the period. A user's source is their earliest account's provider (the
-    // account_userId_createdAt index supports exactly this lookup). --
-    const signupsBySource = (await db.execute(sql`
-      SELECT
-        CASE
-          WHEN src.provider IS NULL OR src.provider = 'credential' THEN 'Email'
-          WHEN src.provider = 'sso' THEN 'SSO'
-          ELSE INITCAP(src.provider)
-        END as source,
-        COUNT(*)::int as count
-      FROM principal p
-      LEFT JOIN LATERAL (
-        SELECT a.provider_id as provider
-        FROM account a
-        WHERE a.user_id = p.user_id
-        ORDER BY a.created_at ASC
-        LIMIT 1
-      ) src ON true
-      WHERE p.created_at >= ${sinceIso}::timestamptz
-        AND p.type != 'anonymous' AND p.role = 'user'
-      GROUP BY 1
-      ORDER BY count DESC
-    `)) as unknown as Array<{ source: string; count: number }>
+    const { activeUsers } = activeUsersRows[0] ?? { activeUsers: 0 }
 
-    // -- Active users: distinct portal users with a session active in the period
-    // (session.updated_at is refreshed on activity). A truer engagement signal
-    // than "contributors", which only counts people who posted/voted/commented. --
-    const [{ activeUsers } = { activeUsers: 0 }] = (await db.execute(sql`
-      SELECT COUNT(DISTINCT p.id)::int AS "activeUsers"
-      FROM session s
-      JOIN principal p ON p.user_id = s.user_id
-      WHERE s.updated_at >= ${sinceIso}::timestamptz
-        AND p.type != 'anonymous' AND p.role = 'user'
-    `)) as unknown as Array<{ activeUsers: number }>
-
-    // -- Verified rate: share of portal users who confirmed their email. An
-    // activation-health snapshot (all-time, not period-scoped). --
-    const [{ verifiedCount = 0, userCount = 0 } = {}] = (await db.execute(sql`
-      SELECT
-        COUNT(*) FILTER (WHERE u.email_verified)::int AS "verifiedCount",
-        COUNT(*)::int AS "userCount"
-      FROM principal p
-      JOIN "user" u ON u.id = p.user_id
-      WHERE p.type != 'anonymous' AND p.role = 'user'
-    `)) as unknown as Array<{ verifiedCount: number; userCount: number }>
-
+    const { verifiedCount = 0, userCount = 0 } = verifiedRows[0] ?? {}
     const verifiedRate = userCount > 0 ? Math.round((verifiedCount / userCount) * 100) : 0
-
-    // -- Changelog stats (single transaction to keep totalViews consistent with topEntries) --
-    const [changelogResult, topChangelogEntries] = await db.transaction(async (tx) => {
-      const totals = await tx
-        .select({
-          totalViews: sum(changelogEntries.viewCount),
-          // All-time published entries (drafts excluded) — the denominator for
-          // "avg views / entry".
-          publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
-          // Entries published within the selected period — responds to the
-          // period selector.
-          publishedInPeriod: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} >= ${start.toISOString()}::timestamptz AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
-        })
-        .from(changelogEntries)
-        .where(isNull(changelogEntries.deletedAt))
-      const top = await tx
-        .select({
-          id: changelogEntries.id,
-          title: changelogEntries.title,
-          viewCount: changelogEntries.viewCount,
-        })
-        .from(changelogEntries)
-        .where(isNull(changelogEntries.deletedAt))
-        .orderBy(desc(changelogEntries.viewCount))
-        .limit(5)
-      return [totals, top] as const
-    })
 
     const totalViews = Number(changelogResult[0]?.totalViews ?? 0)
     const changelogPublishedCount = Number(changelogResult[0]?.publishedCount ?? 0)
     const changelogPublishedInPeriod = Number(changelogResult[0]?.publishedInPeriod ?? 0)
 
-    // -- CSAT (live query; chat volume is low, no materialized view needed) --
-    // Pull rated conversations across current + previous window in one go, then
-    // split for the trend + period-over-period delta.
-    const csatRows = await db
-      .select({ rating: conversations.csatRating, ratedAt: conversations.csatSubmittedAt })
-      .from(conversations)
-      .where(
-        and(isNotNull(conversations.csatRating), gte(conversations.csatSubmittedAt, previousStart))
-      )
-
+    // -- CSAT: split the rated window for the trend + period-over-period delta --
     const ratedAtOrNow = (r: { ratedAt: Date | null }) => r.ratedAt ?? now
     const csatCurrentRows = csatRows
       .filter((r) => ratedAtOrNow(r) >= start)
@@ -365,12 +407,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const csatSummary = summarizeCsat(csatCurrentRows)
     const prevAvg = summarizeCsat(csatPreviousRows).avgRating
 
-    // Response rate = ratings collected / conversations closed in the period
-    // (a closed thread is the chance to be rated).
-    const [{ closedCount } = { closedCount: 0 }] = await db
-      .select({ closedCount: sql<number>`count(*)::int` })
-      .from(conversations)
-      .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start)))
+    // Response rate = ratings collected / conversations closed in the period.
+    const { closedCount } = closedRows[0] ?? { closedCount: 0 }
     // Cap at 100: the rated-window (csatSubmittedAt) and closed-window
     // (resolvedAt) can drift at the period edge, so the ratio can exceed 1.
     const responseRate =
