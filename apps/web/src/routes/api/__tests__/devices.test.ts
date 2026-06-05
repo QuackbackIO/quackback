@@ -82,10 +82,19 @@ describe('DELETE /api/devices', () => {
     expect(unregisterDevice).not.toHaveBeenCalled()
   })
 
-  it('unregisters the token', async () => {
+  it('403s when the user has no principal', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_1' } })
+    findFirst.mockResolvedValue(undefined)
+    const res = await handleUnregisterDevice(del({ token: 'tok-1' }))
+    expect(res.status).toBe(403)
+    expect(unregisterDevice).not.toHaveBeenCalled()
+  })
+
+  it('unregisters the token scoped to the resolved principal', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } })
+    findFirst.mockResolvedValue({ id: 'principal_1' })
     const res = await handleUnregisterDevice(del({ token: 'tok-1' }))
     expect(res.status).toBe(204)
-    expect(unregisterDevice).toHaveBeenCalledWith('tok-1')
+    expect(unregisterDevice).toHaveBeenCalledWith({ principalId: 'principal_1', token: 'tok-1' })
   })
 })

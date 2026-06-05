@@ -13,8 +13,9 @@ vi.mock('@/lib/server/db', () => ({
     delete: (...a: unknown[]) => del(...a),
   },
   // Stand-ins so target/column references are identity-comparable in asserts.
-  pushDevices: { token: 'pushDevices.token' },
+  pushDevices: { token: 'pushDevices.token', principalId: 'pushDevices.principalId' },
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
+  and: (...conds: unknown[]) => ({ __and: conds }),
 }))
 
 import { registerDevice, unregisterDevice } from '../push-device.service'
@@ -44,10 +45,15 @@ describe('registerDevice', () => {
 })
 
 describe('unregisterDevice', () => {
-  it('deletes the row matching the token', async () => {
-    await unregisterDevice('tok-1')
+  it('deletes only the caller-owned row matching the token (scoped by principal)', async () => {
+    await unregisterDevice({ principalId: PRINCIPAL, token: 'tok-1' })
 
     expect(del).toHaveBeenCalledOnce()
-    expect(where).toHaveBeenCalledWith({ __eq: ['pushDevices.token', 'tok-1'] })
+    expect(where).toHaveBeenCalledWith({
+      __and: [
+        { __eq: ['pushDevices.token', 'tok-1'] },
+        { __eq: ['pushDevices.principalId', PRINCIPAL] },
+      ],
+    })
   })
 })

@@ -56,7 +56,17 @@ export async function handleUnregisterDevice(request: Request): Promise<Response
     return Response.json({ error: 'Missing token' }, { status: 400 })
   }
 
-  await unregisterDevice(token)
+  const p = await db.query.principal.findFirst({
+    where: eq(principal.userId, session.user.id),
+    columns: { id: true },
+  })
+  if (!p) {
+    return Response.json({ error: 'No principal for user' }, { status: 403 })
+  }
+
+  // Scope the delete to the caller's principal so an agent can only unregister
+  // their own device, never another's by token alone (IDOR guard).
+  await unregisterDevice({ principalId: p.id, token })
   return new Response(null, { status: 204 })
 }
 
