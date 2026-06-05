@@ -137,6 +137,9 @@ export const session = pgTable(
     // but still reads every row's created_at. With this, the planner
     // can do an index-only scan and stop at the first row per group.
     index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+    // Range-scan support for the active-users analytics query, which counts
+    // distinct users whose session.updated_at falls within the period.
+    index('session_updatedAt_idx').on(table.updatedAt),
   ]
 )
 

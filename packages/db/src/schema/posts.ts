@@ -275,6 +275,12 @@ export const comments = pgTable(
     // Composite index for comment listings
     index('comments_post_created_at_idx').on(table.postId, table.createdAt),
     index('comments_moderation_state_idx').on(table.moderationState),
+    // Partial index for the time-to-resolution analytics query, which joins
+    // comments to post_statuses via status_change_to_id. The column is NULL on
+    // ordinary comments, so the partial keeps the index to the sparse rows.
+    index('comments_status_change_to_id_idx')
+      .on(table.statusChangeToId)
+      .where(sql`status_change_to_id IS NOT NULL`),
   ]
 )
 
