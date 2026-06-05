@@ -91,6 +91,8 @@ export type UnsubTokenId = TypeId<'unsub_token'>
 /** In-app notification ID - e.g., notification_01h455vb4pex5vsknk084sn02q */
 export type NotificationId = TypeId<'notification'>
 
+export type PushDeviceId = TypeId<'push_device'>
+
 /** Post edit history ID - e.g., post_edit_01h455vb4pex5vsknk084sn02q */
 export type PostEditId = TypeId<'post_edit'>
 
@@ -269,6 +271,7 @@ export interface EntityIdMap {
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId
   notification: NotificationId
+  push_device: PushDeviceId
   workspace: WorkspaceId
   user: UserId
   principal: PrincipalId

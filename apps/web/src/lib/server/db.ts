@@ -265,6 +265,8 @@ export {
   helpCenterArticlesRelations,
   helpCenterArticleFeedback,
   helpCenterArticleFeedbackRelations,
+  // Schema tables - push devices
+  pushDevices,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

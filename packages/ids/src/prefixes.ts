@@ -53,6 +53,9 @@ export const ID_PREFIXES = {
   unsub_token: 'unsub_token',
   notification: 'notification',
 
+  // Push devices (mobile agent app — APNs/FCM token registry)
+  push_device: 'push_device',
+
   // Users
   segment: 'segment',
   user_attr: 'user_attr',
