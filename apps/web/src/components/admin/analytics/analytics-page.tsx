@@ -189,12 +189,20 @@ export function AnalyticsPage() {
                           value: data.summary.posts.total.toLocaleString(),
                           delta: data.summary.posts.delta,
                         },
-                        { label: 'Resolved', value: `${data.resolutionRate}%` },
+                        {
+                          label: 'Resolved',
+                          value: `${data.resolutionRate}%`,
+                          caption: 'current',
+                        },
                         {
                           label: 'Median resolve',
                           ...formatResolveTime(data.medianResolutionDays),
                         },
-                        { label: 'Followers', value: data.followers.toLocaleString() },
+                        {
+                          label: 'Followers',
+                          value: data.followers.toLocaleString(),
+                          caption: 'current',
+                        },
                       ]}
                     >
                       <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
@@ -254,10 +262,12 @@ export function AnalyticsPage() {
                       {
                         label: 'Total views',
                         value: data.changelog.totalViews.toLocaleString(),
+                        caption: 'all time',
                       },
                       {
                         label: 'Avg / entry',
                         value: avgPerItem(data.changelog.totalViews, data.changelog.publishedCount),
+                        caption: 'all time',
                       },
                     ]}
                   >
@@ -275,7 +285,7 @@ export function AnalyticsPage() {
                           delta: data.summary.users.delta,
                         },
                         { label: 'Active users', value: data.activeUsers.toLocaleString() },
-                        { label: 'Verified', value: `${data.verifiedRate}%` },
+                        { label: 'Verified', value: `${data.verifiedRate}%`, caption: 'all time' },
                         { label: 'Contributors', value: data.contributorCount.toLocaleString() },
                       ]}
                     >

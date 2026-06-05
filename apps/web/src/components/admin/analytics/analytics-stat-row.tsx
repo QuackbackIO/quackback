@@ -9,12 +9,19 @@ export interface AnalyticsStatProps {
   suffix?: string
   /** Period-over-period percent change; omit when not computed. */
   delta?: number
+  /**
+   * Short temporal-scope note (e.g. "current", "all time") shown in the same
+   * line as the delta. Use only for snapshot or all-time stats that sit beside
+   * period-scoped ones, to flag that they ignore the period selector. A delta
+   * takes precedence when both are set (snapshot stats never carry a delta).
+   */
+  caption?: string
 }
 
 /** A single headline stat, styled to match the Overview metric tiles
  *  (uppercase label, large tabular number) but static — these report, they
  *  don't drive a chart, so there's no hover/active affordance. */
-function AnalyticsStat({ label, value, suffix, delta }: AnalyticsStatProps) {
+function AnalyticsStat({ label, value, suffix, delta, caption }: AnalyticsStatProps) {
   return (
     <div className="px-5 py-4">
       <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
@@ -22,10 +29,14 @@ function AnalyticsStat({ label, value, suffix, delta }: AnalyticsStatProps) {
         {value}
         {suffix && <span className="text-base font-medium text-muted-foreground">{suffix}</span>}
       </p>
-      {/* Reserve the delta line even when absent so every stat row is the same
-          height across sections. */}
+      {/* The delta line is always present (a delta, a scope caption, or an empty
+          spacer) so every stat tile in a row is the same height. */}
       {delta !== undefined ? (
         <TrendDelta value={delta} suffix="vs prev" className="mt-1.5" />
+      ) : caption ? (
+        <p className="mt-1.5 flex h-4 items-center text-xs leading-none text-muted-foreground">
+          {caption}
+        </p>
       ) : (
         <div className="mt-1.5 h-4" aria-hidden />
       )}

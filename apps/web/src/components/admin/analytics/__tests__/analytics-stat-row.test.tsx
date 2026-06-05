@@ -29,4 +29,23 @@ describe('<AnalyticsStatRow>', () => {
     render(<AnalyticsStatRow stats={[{ label: 'Entries', value: '12' }]} />)
     expect(screen.queryByText(/%/)).toBeNull()
   })
+
+  it('shows a scope caption for a snapshot stat with no delta', () => {
+    render(<AnalyticsStatRow stats={[{ label: 'Followers', value: '4', caption: 'current' }]} />)
+    expect(screen.getByText('current')).toBeInTheDocument()
+  })
+
+  it('renders no caption when none is given', () => {
+    render(<AnalyticsStatRow stats={[{ label: 'Active users', value: '5' }]} />)
+    expect(screen.queryByText('current')).toBeNull()
+    expect(screen.queryByText('all time')).toBeNull()
+  })
+
+  it('prefers the delta over a caption when both are present', () => {
+    render(
+      <AnalyticsStatRow stats={[{ label: 'Posts', value: '14', delta: 12, caption: 'current' }]} />
+    )
+    expect(screen.getByText(/\+12%/)).toBeInTheDocument()
+    expect(screen.queryByText('current')).toBeNull()
+  })
 })
