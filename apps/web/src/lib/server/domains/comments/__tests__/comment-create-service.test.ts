@@ -3,7 +3,7 @@
  * The import handler's override flips this when authorPrincipalId is given.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { CommentId, PostId, PrincipalId, SegmentId, StatusId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const insertedComments: Record<string, unknown>[] = []
@@ -108,6 +108,9 @@ vi.mock('@/lib/server/events/dispatch', () => ({
 }))
 vi.mock('@/lib/server/audit/log', () => ({
   recordAuditEvent: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/activity/activity.service', () => ({
+  createActivity: vi.fn(),
 }))
 
 // canCreateComment now consults the workspace requireApproval default as
@@ -306,6 +309,81 @@ describe('createComment — board.access.moderation.comments holds for review', 
       portalActor
     )
     expect(vi.mocked(subscribeToPost)).toHaveBeenCalled()
+  })
+})
+
+describe('createComment — records a status.changed activity for the audit log', () => {
+  beforeEach(() => {
+    insertedComments.length = 0
+    vi.clearAllMocks()
+  })
+
+  it('records status.changed (with toSlug) when a team member changes status via a comment', async () => {
+    const { db } = await import('@/lib/server/db')
+    // Promise.all fetches new status first, then the post's current status.
+    vi.mocked(db.query.postStatuses.findFirst)
+      .mockResolvedValueOnce({
+        id: 'status_closed',
+        name: 'Closed',
+        slug: 'closed',
+        color: '#111',
+        category: 'closed',
+        position: 5,
+        showOnRoadmap: false,
+        isDefault: false,
+        createdAt: new Date(),
+        deletedAt: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'status_open',
+        name: 'Open',
+        slug: 'open',
+        color: '#888',
+        category: 'active',
+        position: 0,
+        showOnRoadmap: true,
+        isDefault: true,
+        createdAt: new Date(),
+        deletedAt: null,
+      })
+
+    const { createActivity } = await import('@/lib/server/domains/activity/activity.service')
+    const { createComment } = await import('../comment.service')
+    await createComment(
+      {
+        postId: 'post_p' as unknown as PostId,
+        content: 'Closing this out',
+        statusId: 'status_closed' as unknown as StatusId,
+      },
+      { principalId: 'principal_admin' as unknown as PrincipalId, role: 'admin' },
+      teamActor,
+      { skipDispatch: true }
+    )
+
+    expect(vi.mocked(createActivity)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        postId: 'post_p',
+        principalId: 'principal_admin',
+        type: 'status.changed',
+        metadata: expect.objectContaining({
+          fromName: 'Open',
+          toName: 'Closed',
+          toSlug: 'closed',
+        }),
+      })
+    )
+  })
+
+  it('does NOT record a status.changed activity for an ordinary comment', async () => {
+    const { createActivity } = await import('@/lib/server/domains/activity/activity.service')
+    const { createComment } = await import('../comment.service')
+    await createComment(
+      { postId: 'post_p' as unknown as PostId, content: 'Just a comment' },
+      { principalId: 'principal_admin' as unknown as PrincipalId, role: 'admin' },
+      teamActor,
+      { skipDispatch: true }
+    )
+    expect(vi.mocked(createActivity)).not.toHaveBeenCalled()
   })
 })
 

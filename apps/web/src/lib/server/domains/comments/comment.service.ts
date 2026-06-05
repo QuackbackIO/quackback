@@ -29,6 +29,7 @@ import { canCreateComment } from '@/lib/server/policy/posts'
 import type { Actor } from '@/lib/server/policy/types'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import { createActivity } from '@/lib/server/domains/activity/activity.service'
 
 /**
  * Resolve the TipTap doc to store. UI clients send `contentJson` directly
@@ -212,6 +213,26 @@ export async function createComment(
     })
 
     comment = result
+
+    // Mirror the status transition into the post_activity log, exactly as the
+    // direct status-change paths (post.status.ts, post.service.ts) do. Without
+    // this the audit timeline silently omits status changes made through a
+    // comment, and analytics has to union the comments table to find them.
+    // Fire-and-forget, like the other paths; the status was already committed.
+    createActivity({
+      postId: input.postId,
+      principalId: author.principalId,
+      type: 'status.changed',
+      metadata: {
+        fromName: previousStatusName,
+        fromColor: prevStatus?.color ?? null,
+        toName: newStatus.name,
+        // Stable identifier (names are editable) so analytics can match the
+        // target status by slug even after a rename.
+        toSlug: newStatus.slug,
+        toColor: newStatus.color ?? null,
+      },
+    })
   } else {
     // Atomic transaction: insert comment + conditionally increment comment count
     const result = await db.transaction(async (tx) => {
