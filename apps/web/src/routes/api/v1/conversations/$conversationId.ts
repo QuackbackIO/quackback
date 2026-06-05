@@ -3,7 +3,7 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { serializeConversation } from './serialize'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, SegmentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/$conversationId')({
   server: {
@@ -21,16 +21,13 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId')({
           const { assertConversationViewable } =
             await import('@/lib/server/domains/chat/chat.service')
           const { conversationToDTO } = await import('@/lib/server/domains/chat/chat.query')
-          const { segmentIdsForPrincipal } =
-            await import('@/lib/server/domains/segments/segment-membership.service')
 
-          // Team-role API keys are service principals; canViewConversation allows
-          // any team actor (role-based), so segments only matter for non-team callers.
+          // team-role API key: canViewConversation short-circuits on role; segments unused
           const actor = {
             principalId: auth.principalId,
             role: auth.role,
             principalType: 'service' as const,
-            segmentIds: await segmentIdsForPrincipal(auth.principalId),
+            segmentIds: new Set<SegmentId>(),
           }
 
           const conversation = await assertConversationViewable(conversationId, actor)

@@ -74,6 +74,7 @@ import {
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getTypeIdPrefix, isTypeId, isValidTypeId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { CONVERSATION_STATUSES } from '@/lib/shared/db-types'
 import { truncate } from '@/lib/shared/utils/string'
 import {
   listArticles,
@@ -107,6 +108,7 @@ import type {
   HelpCenterArticleId,
   HelpCenterCategoryId,
   ConversationId,
+  SegmentId,
 } from '@quackback/ids'
 
 // ============================================================================
@@ -1996,7 +1998,7 @@ Examples:
 - Open conversations: list_conversations({ status: "open" })
 - A specific agent's queue: list_conversations({ assignedAgentPrincipalId: "principal_01abc..." })`,
     {
-      status: z.enum(['open', 'pending', 'closed']).optional().describe('Filter by status'),
+      status: z.enum(CONVERSATION_STATUSES).optional().describe('Filter by status'),
       priority: z
         .enum(['none', 'low', 'medium', 'high', 'urgent'])
         .optional()
@@ -2078,20 +2080,23 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
           await import('@/lib/server/domains/chat/chat.service')
         const { listMessages, conversationToDTO } =
           await import('@/lib/server/domains/chat/chat.query')
+        // team-role API key: canViewConversation short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
           role: auth.role,
           principalType: auth.userId ? ('user' as const) : ('service' as const),
-          segmentIds: await segmentIdsForPrincipal(auth.principalId),
+          segmentIds: new Set<SegmentId>(),
         }
         const conversationId = args.conversationId as ConversationId
         const conversation = await assertConversationViewable(conversationId, actor)
-        const dto = await conversationToDTO(conversation, 'agent')
-        const page = await listMessages(conversationId, {
-          before: args.cursor,
-          includeInternal: args.includeInternal ?? false,
-          limit: 30,
-        })
+        const [dto, page] = await Promise.all([
+          conversationToDTO(conversation, 'agent'),
+          listMessages(conversationId, {
+            before: args.cursor,
+            includeInternal: args.includeInternal ?? false,
+            limit: 30,
+          }),
+        ])
         return jsonResult({
           conversation: {
             id: dto.id,
@@ -2139,11 +2144,12 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
       if (denied) return denied
       try {
         const { sendAgentMessage } = await import('@/lib/server/domains/chat/chat.service')
+        // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
           role: auth.role,
           principalType: auth.userId ? ('user' as const) : ('service' as const),
-          segmentIds: await segmentIdsForPrincipal(auth.principalId),
+          segmentIds: new Set<SegmentId>(),
         }
         const agent = { principalId: auth.principalId, displayName: auth.name, email: auth.email }
         const result = await sendAgentMessage(
@@ -2172,7 +2178,7 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
 Example: set_conversation_status({ conversationId: "conversation_01abc...", status: "closed" })`,
     {
       conversationId: z.string().describe('Conversation TypeID'),
-      status: z.enum(['open', 'pending', 'closed']).describe('New status'),
+      status: z.enum(CONVERSATION_STATUSES).describe('New status'),
     },
     { ...WRITE, idempotentHint: true },
     async (args: {
@@ -2183,11 +2189,12 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
       if (denied) return denied
       try {
         const { setConversationStatus } = await import('@/lib/server/domains/chat/chat.service')
+        // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
           role: auth.role,
           principalType: auth.userId ? ('user' as const) : ('service' as const),
-          segmentIds: await segmentIdsForPrincipal(auth.principalId),
+          segmentIds: new Set<SegmentId>(),
         }
         const updated = await setConversationStatus(
           args.conversationId as ConversationId,

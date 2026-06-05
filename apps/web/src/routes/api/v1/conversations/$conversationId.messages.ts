@@ -3,7 +3,7 @@ import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { serializeMessage } from './serialize'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, SegmentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/$conversationId/messages')({
   server: {
@@ -29,14 +29,13 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
           const { assertConversationViewable } =
             await import('@/lib/server/domains/chat/chat.service')
           const { listMessages } = await import('@/lib/server/domains/chat/chat.query')
-          const { segmentIdsForPrincipal } =
-            await import('@/lib/server/domains/segments/segment-membership.service')
 
+          // team-role API key: canViewConversation short-circuits on role; segments unused
           const actor = {
             principalId: auth.principalId,
             role: auth.role,
             principalType: 'service' as const,
-            segmentIds: await segmentIdsForPrincipal(auth.principalId),
+            segmentIds: new Set<SegmentId>(),
           }
 
           // 404 if the conversation doesn't exist or isn't viewable (before listing messages).

@@ -2,10 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { serializeConversation } from './serialize'
-import type { ConversationStatus } from '@/lib/server/db'
+import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-
-type Priority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 
 export const Route = createFileRoute('/api/v1/conversations/')({
   server: {
@@ -22,7 +20,8 @@ export const Route = createFileRoute('/api/v1/conversations/')({
             Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
           )
           const status = (url.searchParams.get('status') as ConversationStatus | null) ?? undefined
-          const priority = (url.searchParams.get('priority') as Priority | null) ?? undefined
+          const priority =
+            (url.searchParams.get('priority') as ConversationPriority | null) ?? undefined
           const assignedAgentPrincipalId =
             (url.searchParams.get('assignedAgentPrincipalId') as PrincipalId | null) ?? undefined
 
