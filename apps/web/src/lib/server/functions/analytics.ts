@@ -20,12 +20,14 @@ import {
   analyticsDailyStats,
   analyticsTopPosts,
   postStatuses,
+  postSubscriptions,
   changelogEntries,
   conversations,
   boards,
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
+import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
@@ -91,7 +93,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
 
     // -- Status distribution from latest day's snapshot --
     const statusColors = await db
-      .select({ slug: postStatuses.slug, name: postStatuses.name, color: postStatuses.color })
+      .select({
+        slug: postStatuses.slug,
+        name: postStatuses.name,
+        color: postStatuses.color,
+        category: postStatuses.category,
+      })
       .from(postStatuses)
 
     const statusMap = new Map(statusColors.map((s) => [s.slug, { name: s.name, color: s.color }]))
@@ -108,6 +115,11 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         })
       }
     }
+
+    // Resolution = current posts in a terminal status (complete/closed) — a
+    // snapshot of backlog health, derived from the same status snapshot.
+    const categoryBySlug = new Map(statusColors.map((s) => [s.slug, s.category]))
+    const { resolutionRate } = computeResolutionRate(latestRow?.postsByStatus ?? {}, categoryBySlug)
 
     // -- Board breakdown: sum postsByBoard across date range --
     const boardTotals = new Map<string, number>()
@@ -129,6 +141,12 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         count,
       }))
       .sort((a, b) => b.count - a.count)
+
+    // -- Followers: how many people subscribe to (watch) posts. A demand signal:
+    // one row per principal per post. Current total, not period-scoped. --
+    const [{ followers } = { followers: 0 }] = await db
+      .select({ followers: sql<number>`count(*)::int` })
+      .from(postSubscriptions)
 
     // -- Top posts --
     const topPostRows = await db
@@ -285,6 +303,8 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       summary,
       dailyStats,
       statusDistribution,
+      resolutionRate,
+      followers,
       boardBreakdown,
       topPosts,
       topContributors,

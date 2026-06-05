@@ -180,16 +180,8 @@ export function AnalyticsPage() {
                           value: data.summary.posts.total.toLocaleString(),
                           delta: data.summary.posts.delta,
                         },
-                        {
-                          label: 'Votes',
-                          value: data.summary.votes.total.toLocaleString(),
-                          delta: data.summary.votes.delta,
-                        },
-                        {
-                          label: 'Comments',
-                          value: data.summary.comments.total.toLocaleString(),
-                          delta: data.summary.comments.delta,
-                        },
+                        { label: 'Resolved', value: `${data.resolutionRate}%` },
+                        { label: 'Followers', value: data.followers.toLocaleString() },
                       ]}
                     >
                       <Suspense fallback={<ChartSkeleton className="h-[250px]" />}>
