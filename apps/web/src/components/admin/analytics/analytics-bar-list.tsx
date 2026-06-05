@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 export interface BarListRow {
   key: string
-  /** Text or a node (e.g. a <Link>). Provide your own `truncate` on nodes. */
+  /** Text or a node (e.g. a <Link>); the list truncates it to a single line. */
   label: ReactNode
   /** Drives bar width, relative to the max in the set. */
   value: number
@@ -39,7 +39,7 @@ export function AnalyticsBarList({ header, rows }: AnalyticsBarListProps) {
                 aria-hidden
               />
               {row.leading}
-              <div className="relative min-w-0 flex-1 px-1 text-sm">{row.label}</div>
+              <div className="relative min-w-0 flex-1 truncate px-1 text-sm">{row.label}</div>
               <span className="relative ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
                 {row.display ?? row.value.toLocaleString()}
               </span>

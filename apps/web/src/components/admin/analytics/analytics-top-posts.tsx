@@ -29,7 +29,7 @@ export function AnalyticsTopPosts({ posts }: TopPostsProps) {
           <Link
             to="/admin/feedback"
             search={{ post: post.postId }}
-            className="block truncate transition-colors hover:text-primary"
+            className="transition-colors hover:text-primary"
           >
             {post.title}
           </Link>

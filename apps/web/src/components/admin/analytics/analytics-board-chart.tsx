@@ -18,7 +18,7 @@ export function AnalyticsBoardChart({ data }: BoardChartProps) {
       header={{ label: 'Board', value: 'Posts' }}
       rows={sorted.map((item) => ({
         key: item.board,
-        label: <span className="block truncate">{item.board}</span>,
+        label: item.board,
         value: item.count,
       }))}
     />

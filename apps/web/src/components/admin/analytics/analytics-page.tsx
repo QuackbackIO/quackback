@@ -11,9 +11,10 @@ import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon } from '@heroicons/react/24/solid'
+import { CHART_HEIGHT_CLASS } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
-import { AnalyticsSummaryCards, METRICS, type MetricKey } from './analytics-summary-cards'
+import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
 import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
 import { AnalyticsTopPosts } from './analytics-top-posts'
@@ -58,8 +59,6 @@ export function AnalyticsPage() {
     ...analyticsQueries.data(period),
     placeholderData: keepPreviousData,
   })
-
-  const activeColor = METRICS.find((m) => m.key === activeMetric)?.color ?? 'var(--metric-posts)'
 
   return (
     <div className="flex h-full bg-background">
@@ -144,13 +143,10 @@ export function AnalyticsPage() {
                       onMetricChange={setActiveMetric}
                     />
                     <div className="border-t border-border/50 px-6 pt-7 pb-6">
-                      <Suspense
-                        fallback={<ChartSkeleton className="h-[clamp(300px,46vh,520px)]" />}
-                      >
+                      <Suspense fallback={<ChartSkeleton className={CHART_HEIGHT_CLASS} />}>
                         <AnalyticsActivityChart
                           dailyStats={data.dailyStats}
                           activeMetric={activeMetric}
-                          color={activeColor}
                         />
                       </Suspense>
                     </div>
@@ -248,7 +244,7 @@ function SectionSkeleton() {
         ))}
       </div>
       <div className="border-t border-border/50 px-6 pt-7 pb-6">
-        <Skeleton className="h-[clamp(300px,46vh,520px)] w-full rounded-lg" />
+        <Skeleton className={cn(CHART_HEIGHT_CLASS, 'w-full rounded-lg')} />
       </div>
     </Card>
   )

@@ -5,12 +5,13 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { cn } from '@/lib/shared/utils'
+import { CHART_HEIGHT_CLASS } from './analytics-constants'
 import type { MetricKey } from './analytics-summary-cards'
 
 interface ActivityChartProps {
   dailyStats: Array<{ date: string; posts: number; votes: number; comments: number; users: number }>
   activeMetric: MetricKey
-  color: string
 }
 
 function formatDate(dateStr: string) {
@@ -18,15 +19,25 @@ function formatDate(dateStr: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: ActivityChartProps) {
+export function AnalyticsActivityChart({ dailyStats, activeMetric }: ActivityChartProps) {
   const chartConfig: ChartConfig = {
-    // Capitalize the metric key so the tooltip reads "Posts", not "posts".
-    [activeMetric]: { label: activeMetric[0].toUpperCase() + activeMetric.slice(1), color },
+    // Capitalize the metric key so the tooltip reads "Posts", not "posts". The
+    // color comes straight from the metric token; ChartContainer turns it into
+    // the `--color-${activeMetric}` var the Area and gradient read below.
+    [activeMetric]: {
+      label: activeMetric[0].toUpperCase() + activeMetric.slice(1),
+      color: `var(--metric-${activeMetric})`,
+    },
   }
 
   if (dailyStats.length === 0) {
     return (
-      <div className="flex h-[clamp(300px,46vh,520px)] items-center justify-center text-sm text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-sm text-muted-foreground',
+          CHART_HEIGHT_CLASS
+        )}
+      >
         No data for this period
       </div>
     )
@@ -36,7 +47,7 @@ export function AnalyticsActivityChart({ dailyStats, activeMetric, color }: Acti
     <ChartContainer
       key={activeMetric}
       config={chartConfig}
-      className="aspect-auto h-[clamp(300px,46vh,520px)] w-full"
+      className={cn('aspect-auto w-full', CHART_HEIGHT_CLASS)}
     >
       <AreaChart data={dailyStats} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
         <defs>

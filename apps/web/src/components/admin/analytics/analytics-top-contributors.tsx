@@ -32,7 +32,7 @@ export function AnalyticsTopContributors({ contributors }: TopContributorsProps)
             className="relative size-5 shrink-0 text-[10px]"
           />
         ),
-        label: <span className="block truncate">{c.displayName ?? 'Anonymous'}</span>,
+        label: c.displayName ?? 'Anonymous',
       }))}
     />
   )

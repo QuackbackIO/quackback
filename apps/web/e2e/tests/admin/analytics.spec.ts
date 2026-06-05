@@ -25,8 +25,6 @@ test.describe('Admin Analytics — Period Selector', () => {
   })
 
   test('period selector buttons are present when analytics enabled', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     // Wait for the skeleton to resolve
     await page.waitForTimeout(500)
 
@@ -39,8 +37,6 @@ test.describe('Admin Analytics — Period Selector', () => {
   })
 
   test('can switch to 7d period', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const btn7d = page.getByRole('button', { name: '7d' })
     if ((await btn7d.count()) > 0) {
       await btn7d.click()
@@ -51,8 +47,6 @@ test.describe('Admin Analytics — Period Selector', () => {
   })
 
   test('can switch to 30d period', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const btn30d = page.getByRole('button', { name: '30d' })
     if ((await btn30d.count()) > 0) {
       await btn30d.click()
@@ -62,8 +56,6 @@ test.describe('Admin Analytics — Period Selector', () => {
   })
 
   test('can switch to 90d period', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const btn90d = page.getByRole('button', { name: '90d' })
     if ((await btn90d.count()) > 0) {
       await btn90d.click()
@@ -73,8 +65,6 @@ test.describe('Admin Analytics — Period Selector', () => {
   })
 
   test('can switch to 12m period', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const btn12m = page.getByRole('button', { name: '12m' })
     if ((await btn12m.count()) > 0) {
       await btn12m.click()
@@ -91,8 +81,6 @@ test.describe('Admin Analytics — Section Navigation', () => {
   })
 
   test('left sidebar shows section nav on large screens', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     // The analytics sidebar contains Overview, Feedback, Changelog, Users buttons
     const overviewBtn = page.getByRole('button', { name: 'Overview' })
     if ((await overviewBtn.count()) > 0) {
@@ -101,8 +89,6 @@ test.describe('Admin Analytics — Section Navigation', () => {
   })
 
   test('Overview section is selected by default', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     // "Sections" heading appears in the left sidebar
     const sectionsLabel = page.getByText('Sections', { exact: false })
     if ((await sectionsLabel.count()) > 0) {
@@ -111,8 +97,6 @@ test.describe('Admin Analytics — Section Navigation', () => {
   })
 
   test('can navigate to Feedback section', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     // There are two "Feedback" elements: sidebar nav button + main nav link
     // The sidebar nav button is inside the analytics aside
     const feedbackBtn = page.locator('aside button').filter({ hasText: 'Feedback' })
@@ -130,8 +114,6 @@ test.describe('Admin Analytics — Section Navigation', () => {
   })
 
   test('can navigate to Changelog section', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const changelogBtn = page.locator('aside button').filter({ hasText: 'Changelog' })
 
     if ((await changelogBtn.count()) > 0) {
@@ -146,8 +128,6 @@ test.describe('Admin Analytics — Section Navigation', () => {
   })
 
   test('can navigate to Users section', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     const usersBtn = page.locator('aside button').filter({ hasText: 'Users' })
 
     if ((await usersBtn.count()) > 0) {
@@ -169,8 +149,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows Posts metric card when data available', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForLoadState('networkidle')
     // Give Suspense a moment to resolve
     await page.waitForTimeout(1000)
@@ -182,8 +160,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows Votes metric card when data available', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1000)
 
     const votesCard = page.getByRole('button', { name: /votes/i })
@@ -193,8 +169,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows Comments metric card when data available', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1000)
 
     const commentsCard = page.getByRole('button', { name: /comments/i })
@@ -204,8 +178,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows Users metric card when data available', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1000)
 
     // "Users" appears both in sidebar nav and metric card; use the button role to
@@ -217,8 +189,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('can click Posts metric to set it as active', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1000)
 
     const postsBtn = page.getByRole('button', { name: /^posts$/i })
@@ -230,8 +200,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows activity chart area after data loads', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1500)
 
     // The chart is rendered inside a Card; an SVG (recharts) will be present
@@ -242,8 +210,6 @@ test.describe('Admin Analytics — Metrics Cards', () => {
   })
 
   test('shows last updated timestamp when data is present', async ({ page }) => {
-    if (!page.url().includes('/admin/analytics')) return
-
     await page.waitForTimeout(1500)
 
     const updated = page.getByText(/updated .* ago/)

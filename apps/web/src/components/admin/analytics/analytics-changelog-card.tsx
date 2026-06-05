@@ -17,7 +17,7 @@ export function AnalyticsChangelogCard({ topEntries, totalViews }: ChangelogCard
         header={{ label: 'Entry', value: 'Views' }}
         rows={topEntries.map((entry) => ({
           key: entry.id,
-          label: <span className="block truncate">{entry.title}</span>,
+          label: entry.title,
           value: entry.viewCount,
           display: entry.viewCount.toLocaleString(),
         }))}
