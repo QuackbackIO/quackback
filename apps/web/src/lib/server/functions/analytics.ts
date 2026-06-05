@@ -231,6 +231,33 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const contributorCount = rawContributors[0]?.contributorCount ?? 0
     const totalActivity = rawContributors[0]?.totalActivity ?? 0
 
+    // -- Signups by source: acquisition channel of portal users who signed up in
+    // the period. A user's source is their earliest account's provider (the
+    // account_userId_createdAt index supports exactly this lookup). --
+    const signupSourceRows = (await db.execute(sql`
+      SELECT
+        CASE
+          WHEN src.provider IS NULL OR src.provider = 'credential' THEN 'Email'
+          WHEN src.provider = 'sso' THEN 'SSO'
+          ELSE INITCAP(src.provider)
+        END as source,
+        COUNT(*)::int as count
+      FROM principal p
+      LEFT JOIN LATERAL (
+        SELECT a.provider_id as provider
+        FROM account a
+        WHERE a.user_id = p.user_id
+        ORDER BY a.created_at ASC
+        LIMIT 1
+      ) src ON true
+      WHERE p.created_at >= ${sinceIso}::timestamptz
+        AND p.type != 'anonymous' AND p.role = 'user'
+      GROUP BY 1
+      ORDER BY count DESC
+    `)) as unknown as Array<{ source: string; count: number }>
+
+    const signupsBySource = signupSourceRows.map((r) => ({ source: r.source, count: r.count }))
+
     // -- Changelog stats (single transaction to keep totalViews consistent with topEntries) --
     const [changelogResult, topChangelogEntries] = await db.transaction(async (tx) => {
       const totals = await tx
@@ -310,6 +337,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       topContributors,
       contributorCount,
       totalActivity,
+      signupsBySource,
       csat: {
         avgRating: csatSummary.avgRating,
         avgRatingDelta: delta(csatSummary.avgRating, prevAvg),

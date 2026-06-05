@@ -21,6 +21,7 @@ import { AnalyticsBoardChart } from './analytics-board-chart'
 import { AnalyticsChangelogCard } from './analytics-changelog-card'
 import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
+import { AnalyticsSignupSources } from './analytics-signup-sources'
 import { AnalyticsCsatDistribution } from './analytics-csat-card'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
@@ -253,23 +254,33 @@ export function AnalyticsPage() {
                 )}
 
                 {section === 'users' && (
-                  <StatSection
-                    stats={[
-                      {
-                        label: 'Signups',
-                        value: data.summary.users.total.toLocaleString(),
-                        delta: data.summary.users.delta,
-                      },
-                      { label: 'Contributors', value: data.contributorCount.toLocaleString() },
-                      { label: 'Total activity', value: data.totalActivity.toLocaleString() },
-                      {
-                        label: 'Avg / contributor',
-                        value: avgPerItem(data.totalActivity, data.contributorCount),
-                      },
-                    ]}
-                  >
-                    <AnalyticsTopContributors contributors={data.topContributors} />
-                  </StatSection>
+                  <div className="flex flex-col gap-6">
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Signups',
+                          value: data.summary.users.total.toLocaleString(),
+                          delta: data.summary.users.delta,
+                        },
+                        { label: 'Contributors', value: data.contributorCount.toLocaleString() },
+                        { label: 'Total activity', value: data.totalActivity.toLocaleString() },
+                        {
+                          label: 'Avg / contributor',
+                          value: avgPerItem(data.totalActivity, data.contributorCount),
+                        },
+                      ]}
+                    >
+                      <AnalyticsTopContributors contributors={data.topContributors} />
+                    </StatSection>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Signups by source</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AnalyticsSignupSources sources={data.signupsBySource} />
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
               </>
             )}
