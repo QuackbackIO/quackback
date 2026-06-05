@@ -33,12 +33,14 @@ function jsonRpcError(status: number, message: string): Response {
   )
 }
 
-const ALL_SCOPES: McpScope[] = [
+export const ALL_SCOPES: McpScope[] = [
   'read:feedback',
   'write:feedback',
   'write:changelog',
   'read:help-center',
   'write:help-center',
+  'read:chat',
+  'write:chat',
 ]
 
 const API_KEY_PREFIX = 'qb_'
@@ -130,10 +132,10 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
         headers['WWW-Authenticate'] =
           `Bearer resource_metadata="${config.baseUrl}/.well-known/oauth-protected-resource"`
       }
-      return new Response(
-        JSON.stringify({ error: err.message }),
-        { status: err.statusCode, headers }
-      )
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: err.statusCode,
+        headers,
+      })
     }
 
     const principalRecord = await db.query.principal.findFirst({
