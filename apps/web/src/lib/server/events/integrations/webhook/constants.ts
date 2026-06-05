@@ -77,6 +77,46 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'Changelog Published',
     description: 'When a changelog entry is published',
   },
+  {
+    id: 'conversation.created',
+    label: 'Conversation Created',
+    description: 'When a visitor starts a new conversation',
+  },
+  {
+    id: 'conversation.status_changed',
+    label: 'Conversation Status Changed',
+    description: 'When a conversation moves between open, pending, and closed',
+  },
+  {
+    id: 'conversation.assigned',
+    label: 'Conversation Assigned',
+    description: 'When a conversation is assigned to (or unassigned from) an agent',
+  },
+  {
+    id: 'conversation.priority_changed',
+    label: 'Conversation Priority Changed',
+    description: 'When a conversation priority is changed',
+  },
+  {
+    id: 'conversation.csat_submitted',
+    label: 'CSAT Submitted',
+    description: 'When a visitor submits a satisfaction rating',
+  },
+  {
+    id: 'message.created',
+    label: 'New Message',
+    description: 'When a visitor or agent sends a public message',
+  },
+  {
+    id: 'message.note_created',
+    label: 'Internal Note Added',
+    description: 'When an agent adds an internal note (private content — opt-in)',
+  },
+  {
+    id: 'message.deleted',
+    label: 'Message Deleted',
+    description: 'When a public message is deleted',
+  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================
