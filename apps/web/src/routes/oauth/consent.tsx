@@ -72,6 +72,12 @@ function groupScopes(scopes: string[]): ScopeGroup[] {
       label: 'Help Center',
       description: 'Categories and articles',
     },
+    {
+      read: 'read:chat',
+      write: 'write:chat',
+      label: 'Conversations',
+      description: 'Support inbox conversations and messages',
+    },
   ]
 
   return groups

@@ -2424,6 +2424,48 @@ describe('MCP HTTP Handler', () => {
       expect(body.result.isError).toBe(true)
       expect(body.result.content[0].text).toContain('write:chat')
     })
+
+    it('should deny list_conversations for OAuth portal user (role enforcement)', async () => {
+      // Mirror the triage_post role-denial test: a non-team (role: 'user')
+      // principal must be rejected by requireTeamRole even with read:chat.
+      const { getDeveloperConfig } = await import('@/lib/server/domains/settings/settings.service')
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+      await setupValidOAuth({ role: 'user', scopes: ['read:chat'] })
+      const { handleMcpRequest } = await import('../handler')
+      await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('initialize', {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1.0' },
+          })
+        )
+      )
+      await setupValidOAuth({ role: 'user', scopes: ['read:chat'] })
+      vi.mocked(getDeveloperConfig).mockResolvedValueOnce({
+        mcpEnabled: true,
+        mcpPortalAccessEnabled: true,
+      })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'list_conversations',
+            arguments: {},
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError: boolean; content: Array<{ text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('team member')
+    })
   })
 
   // ===========================================================================

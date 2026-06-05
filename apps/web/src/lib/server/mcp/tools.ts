@@ -2060,11 +2060,16 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
         .optional()
         .default(false)
         .describe('Include agent-only internal notes'),
+      cursor: z
+        .string()
+        .optional()
+        .describe('Cursor from a previous get_conversation response to fetch older messages'),
     },
     READ_ONLY,
     async (args: {
       conversationId: string
       includeInternal?: boolean
+      cursor?: string
     }): Promise<CallToolResult> => {
       const denied = requireScope(auth, 'read:chat') ?? requireTeamRole(auth)
       if (denied) return denied
@@ -2083,6 +2088,7 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
         const conversation = await assertConversationViewable(conversationId, actor)
         const dto = await conversationToDTO(conversation, 'agent')
         const page = await listMessages(conversationId, {
+          before: args.cursor,
           includeInternal: args.includeInternal ?? false,
           limit: 30,
         })

@@ -510,6 +510,8 @@ async function createAuth() {
           'write:changelog',
           'read:help-center',
           'write:help-center',
+          'read:chat',
+          'write:chat',
         ],
 
         // Default scopes for dynamically registered clients
@@ -523,6 +525,8 @@ async function createAuth() {
           'write:changelog',
           'read:help-center',
           'write:help-center',
+          'read:chat',
+          'write:chat',
         ],
 
         // MCP endpoint is a valid token audience

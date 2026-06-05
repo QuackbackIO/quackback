@@ -56,7 +56,7 @@ const ConversationSchema = z.object({
 
 // Message schema (GET /conversations/:id/messages)
 const MessageSchema = z.object({
-  id: TypeIdSchema.meta({ example: 'chat_message_01h455vb4pex5vsknk084sn02q' }),
+  id: TypeIdSchema.meta({ example: 'chat_msg_01h455vb4pex5vsknk084sn02q' }),
   conversationId: TypeIdSchema.meta({ example: 'conversation_01h455vb4pex5vsknk084sn02q' }),
   senderType: z.enum(['visitor', 'agent', 'system']).meta({
     description: 'Who sent the message',
