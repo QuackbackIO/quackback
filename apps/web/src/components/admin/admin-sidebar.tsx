@@ -116,7 +116,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const { session, settings } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const flags = settings?.featureFlags as
-    | { analytics?: boolean; helpCenter?: boolean; supportInbox?: boolean }
+    | { helpCenter?: boolean; supportInbox?: boolean }
     | undefined
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
@@ -125,7 +125,6 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const orgName = branding?.name ?? 'Quackback'
 
   const filteredNavItems = navItems.filter((item) => {
-    if (item.href === '/admin/analytics') return flags?.analytics ?? false
     if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
     if (item.href === '/admin/inbox') return flags?.supportInbox ?? false
     return true

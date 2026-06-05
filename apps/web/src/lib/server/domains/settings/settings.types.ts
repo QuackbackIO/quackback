@@ -718,8 +718,6 @@ export interface TenantSettings {
  * enable it via migration. Eventually remove the flag entirely.
  */
 export interface FeatureFlags {
-  /** Analytics dashboard in admin panel */
-  analytics: boolean
   /** Help center knowledge base */
   helpCenter: boolean
   /** AI-powered feedback extraction from external sources */
@@ -729,7 +727,6 @@ export interface FeatureFlags {
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  analytics: false,
   helpCenter: false,
   aiFeedbackExtraction: false,
   supportInbox: false,
@@ -742,10 +739,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
   keyof FeatureFlags,
   { label: string; description: string }
 > = {
-  analytics: {
-    label: 'Analytics Dashboard',
-    description: 'View feedback trends, top posts, and engagement metrics from the admin panel.',
-  },
   helpCenter: {
     label: 'Help Center',
     description: 'Publish a searchable help center so customers can find answers on their own.',
@@ -778,9 +771,8 @@ export const LAB_SECTIONS: Array<{
     flags: ['supportInbox', 'helpCenter'],
   },
   {
-    title: 'Insights',
-    description:
-      'Understand your feedback faster, with usage analytics and AI that sorts it for you.',
-    flags: ['analytics', 'aiFeedbackExtraction'],
+    title: 'Feedback',
+    description: 'Understand your feedback faster, with AI that sorts and categorizes it for you.',
+    flags: ['aiFeedbackExtraction'],
   },
 ]

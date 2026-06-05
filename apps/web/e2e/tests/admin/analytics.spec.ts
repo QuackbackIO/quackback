@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-// Analytics is behind a feature flag. When the flag is off the route redirects
-// to /admin/feedback. All tests guard for both states.
+// Analytics is GA (no longer behind a feature flag); the route always renders.
+// A few assertions stay defensive in case the page is still hydrating.
 
 test.describe('Admin Analytics Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -9,21 +9,11 @@ test.describe('Admin Analytics Page', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test('page loads without error', async ({ page }) => {
-    // Either renders analytics or redirects to feedback — both are valid
-    const url = page.url()
-    expect(url).toMatch(/\/admin\/(analytics|feedback)/)
+  test('page loads on the analytics route', async ({ page }) => {
+    await expect(page).toHaveURL(/\/admin\/analytics/)
   })
 
-  test('shows analytics content or redirects when flag is off', async ({ page }) => {
-    const isOnAnalytics = page.url().includes('/admin/analytics')
-    if (!isOnAnalytics) {
-      // Flag is disabled — redirect to feedback is expected behaviour
-      await expect(page).toHaveURL(/\/admin\/feedback/)
-      return
-    }
-
-    // Flag is enabled — some content should be visible
+  test('shows analytics content', async ({ page }) => {
     await expect(page.locator('main, [class*="flex"]').first()).toBeVisible({ timeout: 10000 })
   })
 })
@@ -125,9 +115,7 @@ test.describe('Admin Analytics — Section Navigation', () => {
 
     // There are two "Feedback" elements: sidebar nav button + main nav link
     // The sidebar nav button is inside the analytics aside
-    const feedbackBtn = page
-      .locator('aside button')
-      .filter({ hasText: 'Feedback' })
+    const feedbackBtn = page.locator('aside button').filter({ hasText: 'Feedback' })
 
     if ((await feedbackBtn.count()) > 0) {
       await feedbackBtn.first().click()
@@ -136,8 +124,7 @@ test.describe('Admin Analytics — Section Navigation', () => {
       // Status distribution and Boards cards should appear
       const statusCard = page.getByText('Status distribution')
       const boardsCard = page.getByText('Boards')
-      const hasContent =
-        (await statusCard.count()) > 0 || (await boardsCard.count()) > 0
+      const hasContent = (await statusCard.count()) > 0 || (await boardsCard.count()) > 0
       expect(hasContent).toBe(true)
     }
   })
@@ -145,9 +132,7 @@ test.describe('Admin Analytics — Section Navigation', () => {
   test('can navigate to Changelog section', async ({ page }) => {
     if (!page.url().includes('/admin/analytics')) return
 
-    const changelogBtn = page
-      .locator('aside button')
-      .filter({ hasText: 'Changelog' })
+    const changelogBtn = page.locator('aside button').filter({ hasText: 'Changelog' })
 
     if ((await changelogBtn.count()) > 0) {
       await changelogBtn.first().click()
@@ -163,9 +148,7 @@ test.describe('Admin Analytics — Section Navigation', () => {
   test('can navigate to Users section', async ({ page }) => {
     if (!page.url().includes('/admin/analytics')) return
 
-    const usersBtn = page
-      .locator('aside button')
-      .filter({ hasText: 'Users' })
+    const usersBtn = page.locator('aside button').filter({ hasText: 'Users' })
 
     if ((await usersBtn.count()) > 0) {
       await usersBtn.first().click()

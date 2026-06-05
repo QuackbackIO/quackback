@@ -1,7 +1,7 @@
 /**
  * Regression: `updateFeatureFlagsFn` shipped with zero auth check —
- * any unauthenticated RPC call could flip `helpCenter`, `analytics`,
- * and `aiFeedbackExtraction`. Flipping `helpCenter` exposes a public
+ * any unauthenticated RPC call could flip `helpCenter` and
+ * `aiFeedbackExtraction`. Flipping `helpCenter` exposes a public
  * subdomain; flipping `aiFeedbackExtraction` routes customer feedback
  * through an LLM. Both must be admin-only.
  *
@@ -45,7 +45,7 @@ let updateFeatureFlagsHandler: AnyHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ analytics: true })
+  hoisted.mockUpdateFeatureFlags.mockResolvedValue({ aiFeedbackExtraction: true })
   if (handlers.length === 0) await import('../feature-flags')
   updateFeatureFlagsHandler = handlers[0]
 })
@@ -54,7 +54,9 @@ describe('updateFeatureFlagsFn — admin gate', () => {
   it('requires admin auth (G12)', async () => {
     hoisted.mockRequireAuth.mockRejectedValueOnce(new Error('Authentication required'))
 
-    await expect(updateFeatureFlagsHandler({ data: { analytics: true } })).rejects.toThrow(/auth/i)
+    await expect(
+      updateFeatureFlagsHandler({ data: { aiFeedbackExtraction: true } })
+    ).rejects.toThrow(/auth/i)
 
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith(
       expect.objectContaining({ roles: expect.arrayContaining(['admin']) })
@@ -76,8 +78,8 @@ describe('updateFeatureFlagsFn — admin gate', () => {
       principal: { id: 'prn_admin', role: 'admin' },
     })
 
-    await updateFeatureFlagsHandler({ data: { analytics: true } })
+    await updateFeatureFlagsHandler({ data: { aiFeedbackExtraction: true } })
 
-    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ analytics: true })
+    expect(hoisted.mockUpdateFeatureFlags).toHaveBeenCalledWith({ aiFeedbackExtraction: true })
   })
 })

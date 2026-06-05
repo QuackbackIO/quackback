@@ -55,9 +55,9 @@ describe('updateFeatureFlags — per-key managed-paths gate', () => {
 
   it('asserts every input key, prefixed with features.', async () => {
     hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
-    await updateFeatureFlags({ analytics: true, helpCenter: false })
+    await updateFeatureFlags({ aiFeedbackExtraction: true, helpCenter: false })
     const calls = hoisted.mockAssertNotManaged.mock.calls.map((c) => c[0])
-    expect(calls).toContain('features.analytics')
+    expect(calls).toContain('features.aiFeedbackExtraction')
     expect(calls).toContain('features.helpCenter')
   })
 
@@ -67,15 +67,15 @@ describe('updateFeatureFlags — per-key managed-paths gate', () => {
         throw new ForbiddenError('FIELD_MANAGED', `Field "${path}" is managed`)
       }
     })
-    await expect(updateFeatureFlags({ analytics: true, helpCenter: false })).rejects.toBeInstanceOf(
-      ForbiddenError
-    )
+    await expect(
+      updateFeatureFlags({ aiFeedbackExtraction: true, helpCenter: false })
+    ).rejects.toBeInstanceOf(ForbiddenError)
     expect(hoisted.mockDbUpdate).not.toHaveBeenCalled()
   })
 
   it('writes through when no input key is locked', async () => {
     hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
-    const result = await updateFeatureFlags({ analytics: true })
-    expect(result.analytics).toBe(true)
+    const result = await updateFeatureFlags({ aiFeedbackExtraction: true })
+    expect(result.aiFeedbackExtraction).toBe(true)
   })
 })

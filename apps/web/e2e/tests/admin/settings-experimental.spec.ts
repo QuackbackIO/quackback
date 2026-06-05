@@ -16,64 +16,55 @@ test.describe('Admin Experimental Settings', () => {
     ).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows Analytics Dashboard feature flag card', async ({ page }) => {
-    await expect(page.getByText('Analytics Dashboard')).toBeVisible({ timeout: 10000 })
-    await expect(
-      page.getByText(
-        'View feedback trends, top posts, and engagement metrics from the admin panel.'
-      )
-    ).toBeVisible()
-  })
-
   test('shows Help Center feature flag card', async ({ page }) => {
     await expect(page.getByText('Help Center')).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText(
-        'Create and manage a knowledge base with categories and articles for your users.'
-      )
+      page.getByText('Publish a searchable help center so customers can find answers on their own.')
     ).toBeVisible()
   })
 
   test('shows AI Feedback Extraction feature flag card', async ({ page }) => {
     await expect(page.getByText('AI Feedback Extraction')).toBeVisible({ timeout: 10000 })
     await expect(
-      page.getByText(
-        'Automatically extract and categorize feedback from connected sources using large language models.'
-      )
+      page.getByText('Automatically pull in and categorize feedback from your connected sources.')
     ).toBeVisible()
   })
 
+  test('shows Conversations feature flag card', async ({ page }) => {
+    await expect(page.getByText('Conversations')).toBeVisible({ timeout: 10000 })
+  })
+
   test('each feature flag card has a toggle switch', async ({ page }) => {
-    const analyticsSwitch = page.locator('#flag-analytics')
     const helpCenterSwitch = page.locator('#flag-helpCenter')
     const aiFeedbackSwitch = page.locator('#flag-aiFeedbackExtraction')
+    const conversationsSwitch = page.locator('#flag-supportInbox')
 
-    await expect(analyticsSwitch).toBeVisible({ timeout: 10000 })
-    await expect(helpCenterSwitch).toBeVisible()
+    await expect(helpCenterSwitch).toBeVisible({ timeout: 10000 })
     await expect(aiFeedbackSwitch).toBeVisible()
+    await expect(conversationsSwitch).toBeVisible()
   })
 
   test('feature flag switches are interactive (not disabled)', async ({ page }) => {
-    const analyticsSwitch = page.locator('#flag-analytics')
-    await expect(analyticsSwitch).toBeVisible({ timeout: 10000 })
-    await expect(analyticsSwitch).toBeEnabled()
+    const helpCenterSwitch = page.locator('#flag-helpCenter')
+    await expect(helpCenterSwitch).toBeVisible({ timeout: 10000 })
+    await expect(helpCenterSwitch).toBeEnabled()
   })
 
-  test('can toggle Analytics Dashboard flag on and off', async ({ page }) => {
-    const analyticsSwitch = page.locator('#flag-analytics')
-    await expect(analyticsSwitch).toBeVisible({ timeout: 10000 })
+  test('can toggle a feature flag on and off', async ({ page }) => {
+    const helpCenterSwitch = page.locator('#flag-helpCenter')
+    await expect(helpCenterSwitch).toBeVisible({ timeout: 10000 })
 
-    const wasChecked = await analyticsSwitch.isChecked()
+    const wasChecked = await helpCenterSwitch.isChecked()
 
-    await analyticsSwitch.click()
+    await helpCenterSwitch.click()
     // Page reloads on mutation success — wait for it to settle
     await page.waitForLoadState('networkidle')
     await page.waitForLoadState('networkidle')
 
     // Toggle it back to restore state
-    const analyticsAfterReload = page.locator('#flag-analytics')
-    await expect(analyticsAfterReload).toBeVisible({ timeout: 10000 })
-    const nowChecked = await analyticsAfterReload.isChecked()
+    const helpCenterAfterReload = page.locator('#flag-helpCenter')
+    await expect(helpCenterAfterReload).toBeVisible({ timeout: 10000 })
+    const nowChecked = await helpCenterAfterReload.isChecked()
 
     if (nowChecked === wasChecked) {
       // Toggle did not flip — that is unexpected but not worth failing
@@ -81,18 +72,18 @@ test.describe('Admin Experimental Settings', () => {
     }
 
     // Restore original state
-    await analyticsAfterReload.click()
+    await helpCenterAfterReload.click()
     await page.waitForLoadState('networkidle')
     await page.waitForLoadState('networkidle')
   })
 
   test('flag label is clickable (htmlFor association with switch)', async ({ page }) => {
-    // Labels are associated via htmlFor="flag-analytics"
-    const analyticsLabel = page.locator('label[for="flag-analytics"]')
-    await expect(analyticsLabel).toBeVisible({ timeout: 10000 })
-
+    // Labels are associated via htmlFor="flag-helpCenter"
     const helpCenterLabel = page.locator('label[for="flag-helpCenter"]')
-    await expect(helpCenterLabel).toBeVisible()
+    await expect(helpCenterLabel).toBeVisible({ timeout: 10000 })
+
+    const aiFeedbackLabel = page.locator('label[for="flag-aiFeedbackExtraction"]')
+    await expect(aiFeedbackLabel).toBeVisible()
   })
 
   test('feature flag descriptions are rendered below their labels', async ({ page }) => {
@@ -101,17 +92,18 @@ test.describe('Admin Experimental Settings', () => {
     if ((await descriptions.count()) > 0) {
       await expect(descriptions.first()).toBeVisible({ timeout: 10000 })
     } else {
-      // Fallback: at least the known description text is present
+      // Fallback: at least one known description text is present
       await expect(
         page.getByText(
-          'View feedback trends, top posts, and engagement metrics from the admin panel.'
+          'Publish a searchable help center so customers can find answers on their own.'
         )
       ).toBeVisible({ timeout: 10000 })
     }
   })
 
-  test('page shows at least three feature flag cards', async ({ page }) => {
-    // There are three flags: analytics, helpCenter, aiFeedbackExtraction
+  test('page shows three feature flag cards', async ({ page }) => {
+    // The three labs flags: helpCenter, aiFeedbackExtraction, supportInbox.
+    // (Analytics graduated to GA and is no longer a flag.)
     const switches = page.locator('button[role="switch"]')
     await expect(switches).toHaveCount(3, { timeout: 10000 })
   })
