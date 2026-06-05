@@ -1,7 +1,7 @@
 /**
  * MCP Tools for Quackback
  *
- * 27 tools calling domain services directly (no HTTP self-loop):
+ * 31 tools calling domain services directly (no HTTP self-loop):
  * - search: Unified search across posts, changelogs, and articles
  * - get_details: Get full details for any entity by TypeID
  * - triage_post: Update post status, tags, and owner
@@ -29,6 +29,10 @@
  * - update_article: Update or publish/unpublish an article
  * - delete_article: Soft-delete an article
  * - manage_category: Create, update, or delete a help center category
+ * - list_conversations: List support-inbox conversations
+ * - get_conversation: Get a conversation and its messages
+ * - reply_to_conversation: Send an agent reply in a conversation
+ * - set_conversation_status: Change a conversation's status
  */
 
 import { z } from 'zod'
