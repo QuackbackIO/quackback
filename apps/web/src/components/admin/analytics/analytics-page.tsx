@@ -255,6 +255,11 @@ export function AnalyticsPage() {
                 {section === 'users' && (
                   <StatSection
                     stats={[
+                      {
+                        label: 'Signups',
+                        value: data.summary.users.total.toLocaleString(),
+                        delta: data.summary.users.delta,
+                      },
                       { label: 'Contributors', value: data.contributorCount.toLocaleString() },
                       { label: 'Total activity', value: data.totalActivity.toLocaleString() },
                       {
