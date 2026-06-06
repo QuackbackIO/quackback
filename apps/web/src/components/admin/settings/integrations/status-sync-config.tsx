@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowPathIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
+import { CopyButton } from '@/components/shared/copy-button'
 import {
   Select,
   SelectContent,
@@ -52,7 +52,6 @@ export function StatusSyncConfig({
   const webhookSecret = config.webhookSecret as string | undefined
 
   const [mappings, setMappings] = useState<Record<string, string | null>>(existingMappings)
-  const [copied, setCopied] = useState(false)
 
   const statusesQuery = useSuspenseQuery(adminQueries.statuses())
   const quackbackStatuses = statusesQuery.data
@@ -82,14 +81,6 @@ export function StatusSyncConfig({
     ? `${window.location.origin}/api/integrations/${integrationType}/webhook`
     : null
 
-  const handleCopyUrl = () => {
-    if (webhookUrl) {
-      navigator.clipboard.writeText(webhookUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   return (
     <div className="space-y-6 border-t border-border/50 pt-6">
       <div className="flex items-center justify-between">
@@ -111,23 +102,23 @@ export function StatusSyncConfig({
       </div>
 
       {statusSyncEnabled && isManual && webhookUrl && (
-        <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-2">
-          <p className="text-sm font-medium">Webhook URL</p>
-          <p className="text-xs text-muted-foreground">
-            Copy this URL into your {integrationType.replace('_', ' ')} webhook settings.
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">
-              {webhookUrl}
-            </code>
-            <Button variant="outline" size="sm" onClick={handleCopyUrl} className="shrink-0">
-              {copied ? (
-                <CheckIcon className="h-4 w-4" />
-              ) : (
-                <ClipboardDocumentIcon className="h-4 w-4" />
-              )}
-            </Button>
+        <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Webhook URL</p>
+            <p className="text-xs text-muted-foreground">
+              Copy this URL into your {integrationType.replace('_', ' ')} webhook settings.
+            </p>
+            <CopyableValue value={webhookUrl} />
           </div>
+          {webhookSecret && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Signing secret</p>
+              <p className="text-xs text-muted-foreground">
+                Paste this as the webhook payload secret so status updates can be verified.
+              </p>
+              <CopyableValue value={webhookSecret} />
+            </div>
+          )}
         </div>
       )}
 
@@ -187,6 +178,16 @@ export function StatusSyncConfig({
             'Failed to save changes'}
         </div>
       )}
+    </div>
+  )
+}
+
+/** A read-only value shown in a code block with a copy-to-clipboard button. */
+function CopyableValue({ value }: { value: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all">{value}</code>
+      <CopyButton value={value} variant="outline" size="sm" />
     </div>
   )
 }
