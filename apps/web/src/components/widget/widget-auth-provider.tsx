@@ -25,6 +25,7 @@ import { resolveIdentifyAction, type SessionSource } from './identify-precedence
 import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shared/widget/types'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
+import { onIntlError } from '@/lib/client/intl-error'
 import { createWidgetIdentifyTokenFn } from '@/lib/server/functions/widget'
 
 interface WidgetUser {
@@ -432,7 +433,12 @@ export function WidgetAuthProvider({
   )
 
   return (
-    <IntlProvider locale={locale} messages={messages} defaultLocale={DEFAULT_LOCALE}>
+    <IntlProvider
+      locale={locale}
+      messages={messages}
+      defaultLocale={DEFAULT_LOCALE}
+      onError={onIntlError}
+    >
       <WidgetAuthContext.Provider value={contextValue}>{children}</WidgetAuthContext.Provider>
     </IntlProvider>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
@@ -114,7 +115,10 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
     <div className="space-y-3">
       {popupBlocked && (
         <p className="text-sm text-destructive text-center">
-          Popup blocked. Please allow popups for this site.
+          <FormattedMessage
+            id="portal.auth.oauth.popupBlockedShort"
+            defaultMessage="Popup blocked. Please allow popups for this site."
+          />
         </p>
       )}
       {providers.map((provider) => {
@@ -129,7 +133,15 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
             disabled={loadingProvider !== null}
           >
             {IconComponent && <IconComponent className="mr-2 h-4 w-4" />}
-            {loadingProvider === provider.id ? 'Signing in...' : `Continue with ${provider.name}`}
+            {loadingProvider === provider.id ? (
+              <FormattedMessage id="portal.auth.oauth.signingIn" defaultMessage="Signing in..." />
+            ) : (
+              <FormattedMessage
+                id="portal.auth.oauth.continueWith"
+                defaultMessage="Continue with {provider}"
+                values={{ provider: provider.name }}
+              />
+            )}
           </Button>
         )
       })}

@@ -1,26 +1,46 @@
-import { createFileRoute, Link, useSearch } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
+import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
 import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/client/auth-client'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { getPortalLocaleFn } from '@/lib/server/functions/locale'
 
 export const Route = createFileRoute('/auth/reset-password')({
   validateSearch: (search: Record<string, unknown>) => ({
     token: (search.token as string) || '',
     error: (search.error as string) || '',
   }),
+  loader: async () => ({ locale: await getPortalLocaleFn() }),
   component: ResetPasswordPage,
 })
 
 function ResetPasswordPage() {
-  const { token, error: urlError } = useSearch({ from: '/auth/reset-password' })
+  const { locale } = Route.useLoaderData()
+  const { token, error: urlError } = Route.useSearch()
+
+  return (
+    <PortalIntlProvider locale={locale}>
+      <ResetPasswordContent token={token} urlError={urlError} />
+    </PortalIntlProvider>
+  )
+}
+
+function ResetPasswordContent({ token, urlError }: { token: string; urlError: string }) {
+  const intl = useIntl()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState(
-    urlError === 'INVALID_TOKEN' ? 'This reset link is invalid or has expired.' : ''
+    urlError === 'INVALID_TOKEN'
+      ? intl.formatMessage({
+          id: 'portal.auth.resetPassword.invalidLink',
+          defaultMessage: 'This reset link is invalid or has expired.',
+        })
+      : ''
   )
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -30,15 +50,30 @@ function ResetPasswordPage() {
     setError('')
 
     if (!token) {
-      setError('Missing reset token. Please use the link from your email.')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.resetPassword.missingToken',
+          defaultMessage: 'Missing reset token. Please use the link from your email.',
+        })
+      )
       return
     }
     if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.error.passwordTooShort',
+          defaultMessage: 'Password must be at least 8 characters',
+        })
+      )
       return
     }
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(
+        intl.formatMessage({
+          id: 'portal.auth.resetPassword.passwordsDoNotMatch',
+          defaultMessage: 'Passwords do not match',
+        })
+      )
       return
     }
 
@@ -49,11 +84,24 @@ function ResetPasswordPage() {
         token,
       })
       if (result.error) {
-        throw new Error(result.error.message || 'Failed to reset password')
+        throw new Error(
+          result.error.message ||
+            intl.formatMessage({
+              id: 'portal.auth.resetPassword.failed',
+              defaultMessage: 'Failed to reset password',
+            })
+        )
       }
       setSuccess(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password')
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'portal.auth.resetPassword.failed',
+              defaultMessage: 'Failed to reset password',
+            })
+      )
     } finally {
       setLoading(false)
     }
@@ -62,13 +110,25 @@ function ResetPasswordPage() {
   if (success) {
     return (
       <PortalAuthShell
-        heading="Password reset"
-        subheading="Your password has been updated successfully."
+        heading={
+          <FormattedMessage
+            id="portal.auth.resetPassword.successHeading"
+            defaultMessage="Password reset"
+          />
+        }
+        subheading={
+          <FormattedMessage
+            id="portal.auth.resetPassword.successSubheading"
+            defaultMessage="Your password has been updated successfully."
+          />
+        }
       >
         <div className="flex flex-col items-center gap-6">
           <CheckCircleIcon className="h-12 w-12 text-green-600 dark:text-green-400" />
           <Link to="/auth/login" className="w-full">
-            <Button className="w-full">Sign in</Button>
+            <Button className="w-full">
+              <FormattedMessage id="portal.auth.signIn" defaultMessage="Sign in" />
+            </Button>
           </Link>
         </div>
       </PortalAuthShell>
@@ -77,15 +137,28 @@ function ResetPasswordPage() {
 
   return (
     <PortalAuthShell
-      heading="Set a new password"
-      subheading="Enter your new password below."
+      heading={
+        <FormattedMessage
+          id="portal.auth.resetPassword.heading"
+          defaultMessage="Set a new password"
+        />
+      }
+      subheading={
+        <FormattedMessage
+          id="portal.auth.resetPassword.subheading"
+          defaultMessage="Enter your new password below."
+        />
+      }
       footer={
         <p className="text-center text-sm text-muted-foreground">
           <Link
             to="/auth/login"
             className="font-medium text-primary hover:underline underline-offset-4"
           >
-            Back to sign in
+            <FormattedMessage
+              id="portal.auth.resetPassword.backToSignIn"
+              defaultMessage="Back to sign in"
+            />
           </Link>
         </p>
       }
@@ -95,12 +168,18 @@ function ResetPasswordPage() {
 
         <div className="space-y-2">
           <label htmlFor="new-password" className="text-sm font-medium">
-            New password
+            <FormattedMessage
+              id="portal.auth.resetPassword.newPasswordLabel"
+              defaultMessage="New password"
+            />
           </label>
           <Input
             id="new-password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder={intl.formatMessage({
+              id: 'portal.auth.password.placeholderSignup',
+              defaultMessage: 'At least 8 characters',
+            })}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={loading || !token}
@@ -111,12 +190,18 @@ function ResetPasswordPage() {
 
         <div className="space-y-2">
           <label htmlFor="confirm-password" className="text-sm font-medium">
-            Confirm password
+            <FormattedMessage
+              id="portal.auth.resetPassword.confirmPasswordLabel"
+              defaultMessage="Confirm password"
+            />
           </label>
           <Input
             id="confirm-password"
             type="password"
-            placeholder="Re-enter your password"
+            placeholder={intl.formatMessage({
+              id: 'portal.auth.resetPassword.confirmPasswordPlaceholder',
+              defaultMessage: 'Re-enter your password',
+            })}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={loading || !token}
@@ -132,10 +217,16 @@ function ResetPasswordPage() {
           {loading ? (
             <>
               <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-              Resetting password...
+              <FormattedMessage
+                id="portal.auth.resetPassword.resetting"
+                defaultMessage="Resetting password..."
+              />
             </>
           ) : (
-            'Reset password'
+            <FormattedMessage
+              id="portal.auth.resetPassword.submit"
+              defaultMessage="Reset password"
+            />
           )}
         </Button>
       </form>
