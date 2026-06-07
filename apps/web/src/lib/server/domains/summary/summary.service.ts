@@ -189,7 +189,10 @@ let _sweepInProgress = false
  * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
  */
 export async function refreshStaleSummaries(): Promise<void> {
-  if (!getOpenAI()) return
+  // Fast-path skip when AI is off OR the summary model is unset/disabled —
+  // otherwise the sweep would query a batch and per-post no-op until the
+  // circuit breaker trips.
+  if (!getOpenAI() || !getChatModel('summary')) return
   if (_sweepInProgress) return
   _sweepInProgress = true
   try {
