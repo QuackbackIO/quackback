@@ -103,6 +103,11 @@ export function logStartupBanner(): void {
 
   console.log(lines.join('\n'))
 
+  // Surface half-configured AI loudly instead of failing silently (see #180).
+  import('@/lib/server/domains/ai/config')
+    .then(({ validateAiConfig }) => validateAiConfig())
+    .catch((err) => console.error('[Startup] AI config validation failed:', err))
+
   // Wire SIGTERM/SIGINT once — the rest of this function spawns
   // long-lived workers + sweepers, so register the drain handler before
   // any of them start so a fast Ctrl-C in dev still gets a clean exit.
