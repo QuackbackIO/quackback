@@ -43,6 +43,16 @@ describe('buildCardView', () => {
       boardSlug: 'features',
     })
   })
+  it('builds a draft_post view (published → postTitle from the post map)', () => {
+    expect(
+      buildCardView(draft({ status: 'published', postId: 'post_5' }) as any, boards, posts)
+    ).toEqual({
+      type: 'draft_post',
+      boardName: 'Feature Requests',
+      boardSlug: 'features',
+      postTitle: 'Dark mode',
+    })
+  })
   it('builds a post_ref view from the post map', () => {
     expect(buildCardView(ref('post_5') as any, boards, posts)).toEqual({
       type: 'post_ref',

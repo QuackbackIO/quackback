@@ -70,7 +70,9 @@ export function DraftPostCardAdmin({
           <span>Draft feedback post</span>
           <DraftStatusChip status={card.status} />
         </div>
-        <p className="mt-1 text-sm font-medium text-foreground">{card.title}</p>
+        <p className="mt-1 text-sm font-medium text-foreground">
+          {card.status === 'published' && cardView.postTitle ? cardView.postTitle : card.title}
+        </p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">in {cardView.boardName}</p>
         {card.status === 'published' && card.postId && (
           <Link to="/admin/feedback" search={{ post: card.postId }} className={linkCls}>
