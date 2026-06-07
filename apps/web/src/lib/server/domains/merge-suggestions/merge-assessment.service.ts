@@ -5,7 +5,6 @@
  */
 
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
-import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
@@ -53,13 +52,13 @@ const CONFIDENCE_THRESHOLD = 0.75
  */
 export async function assessMergeCandidates(
   sourcePost: PostInfo,
-  candidates: MergeCandidate[]
+  candidates: MergeCandidate[],
+  model: string
 ): Promise<MergeAssessment[]> {
   await enforceAiTokenBudget()
 
   const openai = getOpenAI()
-  const model = getChatModel('merge')
-  if (!openai || !model || candidates.length === 0) return []
+  if (!openai || candidates.length === 0) return []
 
   const userPrompt = buildPrompt(sourcePost, candidates)
 

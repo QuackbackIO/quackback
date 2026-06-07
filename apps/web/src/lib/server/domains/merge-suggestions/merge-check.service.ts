@@ -42,6 +42,10 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
     return
   }
 
+  // Bail early if AI is not configured — skip the candidate search entirely
+  const model = getChatModel('merge')
+  if (!getOpenAI() || !model) return
+
   // Step 1: Hybrid search (pass already-fetched post to avoid redundant DB query)
   const candidates = await findMergeCandidates(postId, {
     sourcePost: { title: post.title, embedding: post.embedding },
@@ -56,7 +60,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
   // Step 2: LLM verification
   const assessments = await assessMergeCandidates(
     { id: post.id, title: post.title, content: post.content },
-    candidates
+    candidates,
+    model
   )
 
   console.log(`[MergeSuggestion] LLM confirmed ${assessments.length} duplicates for post ${postId}`)
@@ -97,7 +102,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       hybridScore: bestCandidate.hybridScore,
       llmConfidence: bestAssessment.confidence,
       llmReasoning: bestAssessment.reasoning,
-      llmModel: getChatModel('merge') ?? 'unknown',
+      llmModel: model,
     })
   }
 

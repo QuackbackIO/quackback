@@ -17,11 +17,6 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   stripCodeFences: vi.fn((text: string) => text),
 }))
 
-vi.mock('@/lib/server/domains/ai/models', () => ({
-  getChatModel: () => 'test-model',
-  getEmbeddingModel: () => 'test-embedding-model',
-}))
-
 vi.mock('@/lib/server/domains/ai/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) =>
     fn().then((result: unknown) => ({ result, retryCount: 0 }))
@@ -112,7 +107,7 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(1)
       expect(results[0].candidatePostId).toBe('post_cand1')
@@ -141,7 +136,7 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(1)
       expect(results[0].candidatePostId).toBe('post_cand1')
@@ -166,7 +161,7 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(0)
     })
@@ -190,14 +185,14 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(0)
     })
 
     it('should return empty for empty candidates', async () => {
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, [])
+      const results = await assessMergeCandidates(sourcePost, [], 'test-model')
 
       expect(results).toHaveLength(0)
       expect(mockCreate).not.toHaveBeenCalled()
@@ -209,7 +204,7 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(0)
     })
@@ -220,7 +215,7 @@ describe('merge-assessment.service', () => {
       })
 
       const { assessMergeCandidates } = await import('../merge-assessment.service')
-      const results = await assessMergeCandidates(sourcePost, candidates)
+      const results = await assessMergeCandidates(sourcePost, candidates, 'test-model')
 
       expect(results).toHaveLength(0)
     })

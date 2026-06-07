@@ -83,7 +83,6 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 
 vi.mock('@/lib/server/domains/ai/models', () => ({
   getChatModel: () => 'test-model',
-  getEmbeddingModel: () => 'test-embedding-model',
 }))
 
 describe('merge-check.service', () => {

@@ -72,6 +72,10 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn(() => ({})),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+}))
+
 function makeStalePost(id: string): { id: PostId } {
   return { id: id as PostId }
 }
