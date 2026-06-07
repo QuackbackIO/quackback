@@ -8,7 +8,12 @@ import type { ConversationId, ChatMessageId, ChatTagId, PrincipalId } from '@qua
 // Sourced from the DB enum (CONVERSATION_STATUSES) via the browser-safe bridge,
 // so the client type can never drift from the column's allowed values. Imported
 // locally (used below) and re-exported for the module's consumers.
-import type { ConversationStatus, ChatSystemEvent, TiptapContent } from '@/lib/shared/db-types'
+import type {
+  ConversationStatus,
+  ChatSystemEvent,
+  TiptapContent,
+  ChatCard,
+} from '@/lib/shared/db-types'
 export type { ConversationStatus, ChatSystemEvent }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
@@ -83,6 +88,8 @@ export interface ChatMessageDTO {
   /** Structured event for a 'system' message, so clients can localize it; null
    *  for ordinary messages (and legacy system rows, which fall back to content). */
   systemEvent: ChatSystemEvent | null
+  /** A draft-post or embedded-post card carried on this message; null otherwise. */
+  card: ChatCard | null
 }
 
 /** One emoji reaction bucket on a message. `hasReacted` is viewer-relative
@@ -185,6 +192,12 @@ export type ChatStreamEvent =
   // Carries the enriched AgentChatMessageDTO and is published on the inbox
   // channel ONLY (publishAgentChatEvent) — it never reaches the visitor.
   | { kind: 'message_updated'; conversationId: ConversationId; message: AgentChatMessageDTO }
+  | {
+      kind: 'card_updated'
+      conversationId: ConversationId
+      messageId: ChatMessageId
+      card: ChatCard
+    }
 
 /** Hard caps shared by client + server validation. */
 export const MAX_CHAT_MESSAGE_LENGTH = 4000

@@ -142,6 +142,7 @@ export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null)
     contentJson: message.contentJson ?? null,
     viaEmail: message.metadata?.source === 'email',
     systemEvent: message.metadata?.systemEvent ?? null,
+    card: message.metadata?.card ?? null,
   }
 }
 
