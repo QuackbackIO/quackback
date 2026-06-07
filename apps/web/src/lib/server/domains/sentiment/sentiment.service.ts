@@ -58,7 +58,7 @@ function isValidSentiment(value: unknown): value is Sentiment {
 }
 
 /**
- * Analyze sentiment using OpenAI google/gemini-3.1-flash-lite-preview.
+ * Analyze sentiment using the configured chat model.
  */
 export async function analyzeSentiment(
   title: string,
