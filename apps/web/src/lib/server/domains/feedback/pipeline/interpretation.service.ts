@@ -13,6 +13,7 @@
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, rawFeedbackItems } from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { embedSignal, findSimilarPosts, findSimilarPendingSuggestions } from './embedding.service'
@@ -21,8 +22,6 @@ import { logPipelineEvent } from './pipeline-log'
 import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
 import type { SuggestionGenerationResult } from '../types'
 import type { FeedbackSignalId, RawFeedbackItemId, BoardId, PostId } from '@quackback/ids'
-
-const SUGGESTION_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 /** Above this threshold, the primary suggestion is vote_on_post. */
 const VOTE_SUGGESTION_THRESHOLD = 0.8
@@ -259,6 +258,7 @@ async function generateSuggestion(opts: {
   similarPosts?: Array<{ postId: string; title: string; similarity: number; voteCount: number }>
 }): Promise<void> {
   const openai = getOpenAI()
+  const model = getChatModel('interpretation')
 
   // Load boards for the prompt
   const { boards: _boards } = await import('@/lib/server/db')
@@ -277,7 +277,7 @@ async function generateSuggestion(opts: {
   let boardId = (validUserBoardId ?? allBoards[0]?.id) as BoardId | undefined
   let usedFallback = true
 
-  if (openai) {
+  if (openai && model) {
     const prompt = buildSuggestionPrompt({
       signal: opts.signal,
       sourceContent: opts.sourceContent,
@@ -289,7 +289,7 @@ async function generateSuggestion(opts: {
         {
           pipelineStep: 'suggestion',
           callType: 'chat_completion',
-          model: SUGGESTION_MODEL,
+          model,
           rawFeedbackItemId: opts.rawFeedbackItemId,
           signalId: opts.signalId,
           metadata: { suggestionType: opts.type },
@@ -297,7 +297,7 @@ async function generateSuggestion(opts: {
         () =>
           withRetry(() =>
             openai.chat.completions.create({
-              model: SUGGESTION_MODEL,
+              model,
               messages: [{ role: 'user', content: prompt }],
               response_format: { type: 'json_object' },
               temperature: 0.3,
