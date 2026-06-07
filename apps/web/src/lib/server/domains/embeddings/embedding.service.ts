@@ -1,17 +1,17 @@
 /**
  * Embedding service for semantic similarity search.
  *
- * Generates embeddings using OpenAI text-embedding-3-small.
+ * Generates embeddings using the configured embedding model.
  * Used for finding similar posts and duplicate detection.
  */
 
 import { db, posts, eq, and, isNull, sql, desc, ne } from '@/lib/server/db'
 import type { PostId, BoardId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 
-export const EMBEDDING_MODEL = 'openai/text-embedding-3-small'
 const EMBEDDING_DIMENSIONS = 1536
 
 /**
@@ -28,9 +28,10 @@ export async function generateEmbedding(
   }
 ): Promise<number[] | null> {
   const openai = getOpenAI()
-  if (!openai) return null
+  const model = getEmbeddingModel()
+  if (!openai || !model) return null
 
-  // Truncate to avoid token limits (8191 tokens for text-embedding-3-small)
+  // Truncate to avoid token limits for the configured model
   const truncated = text.slice(0, 8000)
 
   try {
@@ -39,7 +40,7 @@ export async function generateEmbedding(
         {
           pipelineStep: logContext.pipelineStep,
           callType: 'embedding',
-          model: EMBEDDING_MODEL,
+          model,
           postId: logContext.postId,
           rawFeedbackItemId: logContext.rawFeedbackItemId,
           signalId: logContext.signalId,
@@ -47,7 +48,7 @@ export async function generateEmbedding(
         () =>
           withRetry(() =>
             openai.embeddings.create({
-              model: EMBEDDING_MODEL,
+              model,
               input: truncated,
               dimensions: EMBEDDING_DIMENSIONS,
             })
@@ -62,7 +63,7 @@ export async function generateEmbedding(
 
     const { result: response } = await withRetry(() =>
       openai.embeddings.create({
-        model: EMBEDDING_MODEL,
+        model,
         input: truncated,
         dimensions: EMBEDDING_DIMENSIONS,
       })
@@ -139,7 +140,7 @@ export async function savePostEmbedding(postId: PostId, embedding: number[]): Pr
     .update(posts)
     .set({
       embedding: sql<number[]>`${vectorStr}::vector`,
-      embeddingModel: EMBEDDING_MODEL,
+      embeddingModel: getEmbeddingModel() ?? 'unknown',
       embeddingUpdatedAt: new Date(),
       mergeCheckedAt: null,
     })

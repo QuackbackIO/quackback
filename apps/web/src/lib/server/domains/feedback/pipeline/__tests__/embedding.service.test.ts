@@ -53,7 +53,11 @@ const mockGenerateEmbedding = vi.fn()
 
 vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
   generateEmbedding: (...args: unknown[]) => mockGenerateEmbedding(...args),
-  EMBEDDING_MODEL: 'openai/text-embedding-3-small',
+}))
+
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+  getEmbeddingModel: () => 'test-embedding-model',
 }))
 
 describe('embedding.service', () => {
