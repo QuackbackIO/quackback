@@ -28,7 +28,7 @@ export interface ConvertChatToPostResult {
   boardSlug: string | null
 }
 
-export async function convertConversationToPost(
+export async function createPostFromConversation(
   input: ConvertChatToPostInput,
   ctx: { agentActor: Actor; agentPrincipalId: PrincipalId }
 ): Promise<ConvertChatToPostResult> {

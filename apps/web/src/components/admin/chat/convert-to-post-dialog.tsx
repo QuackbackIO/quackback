@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowTopRightOnSquareIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { BoardId, ConversationId, PostId } from '@quackback/ids'
-import { convertChatToPostFn } from '@/lib/server/functions/chat'
+import { createPostFromConversationFn } from '@/lib/server/functions/chat'
 import { findSimilarPostsFn } from '@/lib/server/functions/public-posts'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
@@ -71,7 +71,7 @@ export function ConvertToPostDialog({
 
   const convert = useMutation({
     mutationFn: (vars: { asUpvoteOfPostId?: PostId }) =>
-      convertChatToPostFn({
+      createPostFromConversationFn({
         data: {
           conversationId,
           boardId: boardId as BoardId,

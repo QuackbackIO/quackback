@@ -1,5 +1,5 @@
 /**
- * convertConversationToPost — turning a live-chat conversation into feedback.
+ * createPostFromConversation — turning a live-chat conversation into feedback.
  * Covers the agent authorization guard, the not-found conversation chokepoint,
  * the create-new-post path (seeded from the transcript + visitor attribution),
  * the upvote-existing path (records a vote, no post created), the title
@@ -58,7 +58,7 @@ vi.mock('@/lib/server/db', () => {
   }
 })
 
-import { convertConversationToPost } from '../chat.convert'
+import { createPostFromConversation } from '../chat.convert'
 
 const conversationId = 'conversation_1' as ConversationId
 const boardId = 'board_1' as BoardId
@@ -94,7 +94,7 @@ beforeEach(() => {
   addVoteOnBehalf.mockResolvedValue(undefined)
 })
 
-describe('convertConversationToPost authorization guard', () => {
+describe('createPostFromConversation authorization guard', () => {
   it('rejects a non-agent actor with ForbiddenError and never touches the conversation', async () => {
     canActAsAgent.mockReturnValue({
       allowed: false,
@@ -102,7 +102,7 @@ describe('convertConversationToPost authorization guard', () => {
     })
 
     await expect(
-      convertConversationToPost({ conversationId, boardId, title: 'x' }, ctx)
+      createPostFromConversation({ conversationId, boardId, title: 'x' }, ctx)
     ).rejects.toBeInstanceOf(ForbiddenError)
 
     expect(assertConversationViewable).not.toHaveBeenCalled()
@@ -113,17 +113,17 @@ describe('convertConversationToPost authorization guard', () => {
   it('surfaces the policy reason on the ForbiddenError', async () => {
     canActAsAgent.mockReturnValue({ allowed: false, reason: 'nope' })
     await expect(
-      convertConversationToPost({ conversationId, boardId, title: 'x' }, ctx)
+      createPostFromConversation({ conversationId, boardId, title: 'x' }, ctx)
     ).rejects.toThrow('nope')
   })
 })
 
-describe('convertConversationToPost conversation resolution', () => {
+describe('createPostFromConversation conversation resolution', () => {
   it('propagates a not-found conversation from the access chokepoint', async () => {
     assertConversationViewable.mockRejectedValue(new Error('Conversation not found'))
 
     await expect(
-      convertConversationToPost({ conversationId, boardId, title: 'x' }, ctx)
+      createPostFromConversation({ conversationId, boardId, title: 'x' }, ctx)
     ).rejects.toThrow('Conversation not found')
 
     expect(createPost).not.toHaveBeenCalled()
@@ -131,23 +131,23 @@ describe('convertConversationToPost conversation resolution', () => {
   })
 })
 
-describe('convertConversationToPost create-new path', () => {
+describe('createPostFromConversation create-new path', () => {
   it('requires a title, throwing ValidationError when absent', async () => {
     await expect(
-      convertConversationToPost({ conversationId, boardId }, ctx)
+      createPostFromConversation({ conversationId, boardId }, ctx)
     ).rejects.toBeInstanceOf(ValidationError)
     expect(createPost).not.toHaveBeenCalled()
   })
 
   it('treats a whitespace-only title as missing', async () => {
     await expect(
-      convertConversationToPost({ conversationId, boardId, title: '   ' }, ctx)
+      createPostFromConversation({ conversationId, boardId, title: '   ' }, ctx)
     ).rejects.toBeInstanceOf(ValidationError)
     expect(createPost).not.toHaveBeenCalled()
   })
 
   it('creates a post attributed to the visitor, seeded with the live_chat source metadata', async () => {
-    const result = await convertConversationToPost(
+    const result = await createPostFromConversation(
       { conversationId, boardId, title: '  Add dark mode  ', content: 'from the transcript' },
       ctx
     )
@@ -172,7 +172,7 @@ describe('convertConversationToPost create-new path', () => {
   })
 
   it('links the new post back to the conversation via post_external_links (idempotent)', async () => {
-    await convertConversationToPost({ conversationId, boardId, title: 'Add dark mode' }, ctx)
+    await createPostFromConversation({ conversationId, boardId, title: 'Add dark mode' }, ctx)
 
     expect(insertedLinks).toHaveLength(1)
     expect(insertedLinks[0]).toMatchObject({
@@ -187,16 +187,16 @@ describe('convertConversationToPost create-new path', () => {
 
   it('records a null externalDisplayId when the conversation has no subject', async () => {
     assertConversationViewable.mockResolvedValue(freshConversation({ subject: undefined }))
-    await convertConversationToPost({ conversationId, boardId, title: 'Add dark mode' }, ctx)
+    await createPostFromConversation({ conversationId, boardId, title: 'Add dark mode' }, ctx)
     expect(insertedLinks[0].externalDisplayId).toBeNull()
   })
 })
 
-describe('convertConversationToPost upvote-existing path', () => {
+describe('createPostFromConversation upvote-existing path', () => {
   const existingPostId = 'post_existing' as PostId
 
   it('records a vote on behalf of the visitor instead of creating a post', async () => {
-    const result = await convertConversationToPost(
+    const result = await createPostFromConversation(
       { conversationId, boardId, asUpvoteOfPostId: existingPostId },
       ctx
     )
@@ -221,7 +221,7 @@ describe('convertConversationToPost upvote-existing path', () => {
   })
 
   it('still links the existing post to the conversation, ignoring any title', async () => {
-    await convertConversationToPost(
+    await createPostFromConversation(
       { conversationId, boardId, asUpvoteOfPostId: existingPostId, title: 'ignored' },
       ctx
     )

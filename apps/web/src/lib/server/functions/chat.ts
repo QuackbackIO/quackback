@@ -640,15 +640,15 @@ const convertSchema = z.object({
   asUpvoteOfPostId: z.string().optional(),
 })
 
-/** Convert a conversation into a feedback post (create new, or upvote existing). */
-export const convertChatToPostFn = createServerFn({ method: 'POST' })
+/** Create a feedback post from a conversation (create new, or upvote existing). */
+export const createPostFromConversationFn = createServerFn({ method: 'POST' })
   .inputValidator(convertSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
       const actor = await policyActorFromAuth(ctx)
-      const { convertConversationToPost } = await import('@/lib/server/domains/chat/chat.convert')
-      return await convertConversationToPost(
+      const { createPostFromConversation } = await import('@/lib/server/domains/chat/chat.convert')
+      return await createPostFromConversation(
         {
           conversationId: data.conversationId as ConversationId,
           boardId: data.boardId as BoardId,
@@ -659,7 +659,7 @@ export const convertChatToPostFn = createServerFn({ method: 'POST' })
         { agentActor: actor, agentPrincipalId: ctx.principal.id }
       )
     } catch (error) {
-      console.error('[fn:chat] convertChatToPostFn failed:', error)
+      console.error('[fn:chat] createPostFromConversationFn failed:', error)
       throw error
     }
   })
