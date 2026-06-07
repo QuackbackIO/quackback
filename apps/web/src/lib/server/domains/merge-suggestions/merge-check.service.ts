@@ -6,6 +6,7 @@
 
 import { db, posts, and, isNull, isNotNull, desc, eq, notInArray } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
@@ -96,7 +97,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       hybridScore: bestCandidate.hybridScore,
       llmConfidence: bestAssessment.confidence,
       llmReasoning: bestAssessment.reasoning,
-      llmModel: 'google/gemini-3.1-flash-lite-preview',
+      llmModel: getChatModel('merge') ?? 'unknown',
     })
   }
 

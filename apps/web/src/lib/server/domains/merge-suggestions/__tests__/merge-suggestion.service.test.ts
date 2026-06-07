@@ -102,6 +102,11 @@ vi.mock('@/lib/server/domains/posts/post.merge', () => ({
   mergePost: (...args: unknown[]) => mockMergePost(...args),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+  getEmbeddingModel: () => 'test-embedding-model',
+}))
+
 describe('merge-suggestion.service', () => {
   beforeEach(() => {
     insertValuesCalls.length = 0
@@ -126,7 +131,7 @@ describe('merge-suggestion.service', () => {
         hybridScore: 0.93,
         llmConfidence: 0.9,
         llmReasoning: 'Both request dark mode',
-        llmModel: 'google/gemini-3.1-flash-lite-preview',
+        llmModel: 'test-model',
       })
 
       expect(insertValuesCalls).toHaveLength(1)

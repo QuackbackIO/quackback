@@ -5,13 +5,12 @@
  */
 
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
-
-const ASSESSMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform used by product managers.
 You will be given a reference post and one or more posts to compare. For each comparison post, determine whether it is truly a DUPLICATE of the reference — meaning they request the exact same thing, just worded differently.
@@ -59,13 +58,14 @@ export async function assessMergeCandidates(
   await enforceAiTokenBudget()
 
   const openai = getOpenAI()
-  if (!openai || candidates.length === 0) return []
+  const model = getChatModel('merge')
+  if (!openai || !model || candidates.length === 0) return []
 
   const userPrompt = buildPrompt(sourcePost, candidates)
 
   const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
-      model: ASSESSMENT_MODEL,
+      model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
