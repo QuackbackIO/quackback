@@ -84,6 +84,11 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   stripCodeFences: vi.fn((s: string) => s.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, '')),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+  getEmbeddingModel: () => 'test-embedding-model',
+}))
+
 vi.mock('@/lib/server/domains/ai/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) =>
     fn().then((result: unknown) => ({ result, retryCount: 0 }))

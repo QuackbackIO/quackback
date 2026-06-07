@@ -8,6 +8,7 @@
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, rawFeedbackItems, feedbackSignals, sql } from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { buildExtractionPrompt } from './prompts/extraction.prompt'
@@ -17,7 +18,6 @@ import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
 import type { ExtractionResult, RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
 import type { RawFeedbackItemId } from '@quackback/ids'
 
-const EXTRACTION_MODEL = 'google/gemini-3.1-flash-lite-preview'
 const EXTRACTION_PROMPT_VERSION = 'v1'
 
 /**
@@ -26,8 +26,9 @@ const EXTRACTION_PROMPT_VERSION = 'v1'
  */
 export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void> {
   const openai = getOpenAI()
-  if (!openai) {
-    throw new UnrecoverableError('OpenAI not configured')
+  const model = getChatModel('extraction')
+  if (!openai || !model) {
+    throw new UnrecoverableError('Extraction model not configured')
   }
 
   const item = await db.query.rawFeedbackItems.findFirst({
@@ -128,14 +129,14 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
       {
         pipelineStep: 'extraction',
         callType: 'chat_completion',
-        model: EXTRACTION_MODEL,
+        model,
         rawFeedbackItemId: rawItemId,
         metadata: { promptVersion: EXTRACTION_PROMPT_VERSION },
       },
       () =>
         withRetry(() =>
           openai.chat.completions.create({
-            model: EXTRACTION_MODEL,
+            model,
             messages: [{ role: 'user', content: prompt }],
             response_format: { type: 'json_object' },
             temperature: 0.1,
@@ -200,7 +201,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
                 ? Math.max(0, Math.min(1, s.confidence))
                 : 0.5,
             processingState: 'pending_interpretation' as const,
-            extractionModel: EXTRACTION_MODEL,
+            extractionModel: model,
             extractionPromptVersion: EXTRACTION_PROMPT_VERSION,
           }))
         )
@@ -218,7 +219,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
         signalsCapped,
         signalTypes: allSignalTypes,
         confidences: allConfidences,
-        model: EXTRACTION_MODEL,
+        model,
         promptVersion: EXTRACTION_PROMPT_VERSION,
       },
     })
