@@ -116,7 +116,7 @@ let _sweepInProgress = false
  * Mirrors the refreshStaleSummaries pattern from summary.service.ts.
  */
 export async function sweepMergeSuggestions(): Promise<void> {
-  if (!getOpenAI()) return
+  if (!getOpenAI() || !getChatModel('merge')) return
   if (_sweepInProgress) return
   _sweepInProgress = true
 

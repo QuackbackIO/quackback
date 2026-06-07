@@ -73,7 +73,7 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
 }))
 
 vi.mock('@/lib/server/domains/ai/models', () => ({
-  getChatModel: () => 'test-model',
+  getChatModel: vi.fn(() => 'test-model'),
 }))
 
 function makeStalePost(id: string): { id: PostId } {
@@ -120,6 +120,19 @@ describe('sweepMergeSuggestions — circuit breaker (#180)', () => {
         hybridScore: 0.92,
       },
     ])
+  })
+
+  it('no-ops when the merge model is null (client present, model disabled)', async () => {
+    // Simulate: embeddings on, chat model off — getOpenAI() is non-null but
+    // getChatModel('merge') returns null. The sweep must return before querying
+    // for stale posts, so mockLimit is never called.
+    const { getChatModel } = await import('@/lib/server/domains/ai/models')
+    vi.mocked(getChatModel).mockReturnValueOnce(null)
+
+    const { sweepMergeSuggestions } = await import('../merge-check.service')
+    await sweepMergeSuggestions()
+
+    expect(mockLimit).not.toHaveBeenCalled()
   })
 
   it('terminates instead of looping forever when every assessment fails', async () => {
