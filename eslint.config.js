@@ -23,6 +23,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/build/**",
       "**/.agents/**",
+      "**/.claude/**",
       "**/*.config.js",
       "**/*.config.mjs",
       "**/next-env.d.ts",
