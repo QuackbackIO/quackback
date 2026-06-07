@@ -73,7 +73,7 @@ export function AdminBubble({
   if (message.card) {
     return (
       <div className="py-1">
-        <DraftPostCardAdmin card={message.card} />
+        <DraftPostCardAdmin card={message.card} cardView={message.cardView} />
       </div>
     )
   }

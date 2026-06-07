@@ -20,6 +20,7 @@ import {
   sql,
   posts,
   boards,
+  postStatuses,
   postExternalLinks,
   chatTags,
   conversationTags,
@@ -35,10 +36,14 @@ import type {
   ConversationId,
   PrincipalId,
   PostId,
+  BoardId,
   ChatTagId,
   ChatMessageId,
   SegmentId,
 } from '@quackback/ids'
+import type { ChatCard } from '@/lib/shared/db-types'
+import { collectCardRefs, buildCardView } from './chat.card-view'
+import type { BoardRow, PostRow } from './chat.card-view'
 import { aggregateReactions } from '@/lib/shared'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { truncate } from '@/lib/shared/utils/string'
@@ -205,11 +210,60 @@ async function loadFlagsForMessages(
   return map
 }
 
+/** Batch-load the boards referenced by draft-post cards, keyed by id. Empty
+ *  input → empty map with no query (drizzle `inArray` rejects an empty list). */
+async function loadBoardsForCards(boardIds: string[]): Promise<Map<string, BoardRow>> {
+  const map = new Map<string, BoardRow>()
+  if (boardIds.length === 0) return map
+  const rows = await db
+    .select({ id: boards.id, name: boards.name, slug: boards.slug })
+    .from(boards)
+    .where(and(inArray(boards.id, boardIds as BoardId[]), isNull(boards.deletedAt)))
+  for (const r of rows) map.set(r.id, { name: r.name, slug: r.slug })
+  return map
+}
+
+/** Batch-load the posts referenced by post_ref / published draft cards, keyed by
+ *  id, with their board + (workspace-customizable) status resolved via join.
+ *  Empty input → empty map with no query. */
+async function loadPostsForCards(postIds: string[]): Promise<Map<string, PostRow>> {
+  const map = new Map<string, PostRow>()
+  if (postIds.length === 0) return map
+  const rows = await db
+    .select({
+      id: posts.id,
+      title: posts.title,
+      voteCount: posts.voteCount,
+      statusName: postStatuses.name,
+      statusColor: postStatuses.color,
+      boardSlug: boards.slug,
+      boardName: boards.name,
+    })
+    .from(posts)
+    .innerJoin(boards, eq(boards.id, posts.boardId))
+    .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
+    .where(
+      and(inArray(posts.id, postIds as PostId[]), isNull(posts.deletedAt), isNull(boards.deletedAt))
+    )
+  for (const r of rows) {
+    map.set(r.id, {
+      title: r.title,
+      voteCount: r.voteCount,
+      statusName: r.statusName ?? null,
+      statusColor: r.statusColor ?? null,
+      boardSlug: r.boardSlug,
+      boardName: r.boardName,
+    })
+  }
+  return map
+}
+
 /**
- * Attach the agent-only reaction + flag fields to a page of base message DTOs.
- * This is the ONLY place those fields are added — the shared `toMessageDTO`
- * stays clean, so no visitor-facing path can leak them (a visitor function
- * returning ChatMessageDTO[] simply never has them). Agent paths call this after
+ * Attach the agent-only reaction + flag fields to a page of base message DTOs,
+ * plus the display-ready `cardView` for any message carrying a card. This is the
+ * ONLY place those fields are added — the shared `toMessageDTO` stays clean, so
+ * no visitor-facing path can leak them (a visitor function returning
+ * ChatMessageDTO[] simply never has them). Agent paths call this after
  * listMessages to upgrade to AgentChatMessageDTO[].
  */
 export async function enrichMessagesForAgent(
@@ -217,14 +271,22 @@ export async function enrichMessagesForAgent(
   viewerPrincipalId: PrincipalId
 ): Promise<AgentChatMessageDTO[]> {
   const ids = messages.map((m) => m.id)
-  const [reactions, flags] = await Promise.all([
+  // Resolve the board/post ids the page's cards reference so each card can show
+  // names instead of raw ids. The loaders no-op on empty sets, so a page with no
+  // cards issues no extra queries.
+  const cards = messages.map((m) => m.card).filter((c): c is ChatCard => c !== null)
+  const { boardIds, postIds } = collectCardRefs(cards)
+  const [reactions, flags, boardMap, postMap] = await Promise.all([
     loadReactionsForMessages(ids, viewerPrincipalId),
     loadFlagsForMessages(ids, viewerPrincipalId),
+    loadBoardsForCards([...boardIds]),
+    loadPostsForCards([...postIds]),
   ])
   return messages.map((m) => ({
     ...m,
     reactions: reactions.get(m.id) ?? [],
     flaggedAt: flags.get(m.id) ?? null,
+    cardView: m.card ? buildCardView(m.card, boardMap, postMap) : null,
   }))
 }
 

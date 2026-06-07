@@ -502,6 +502,7 @@ function asAgentMessage(m: ChatMessageDTO | AgentChatMessageDTO): AgentChatMessa
     ...m,
     reactions: 'reactions' in m ? m.reactions : [],
     flaggedAt: 'flaggedAt' in m ? m.flaggedAt : null,
+    cardView: 'cardView' in m ? m.cardView : null,
   }
 }
 
