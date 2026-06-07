@@ -28,10 +28,14 @@ export function resolveModel(
   override: string | undefined,
   roleDefault: string | undefined
 ): string | null {
-  if (override !== undefined) {
-    return DISABLED_VALUES.has(override.trim().toLowerCase()) ? null : override
-  }
-  return roleDefault ?? null
+  // Per-feature override wins over the role default. The disable sentinel and
+  // trimming apply to whichever value is effective — so AI_CHAT_MODEL=off (a
+  // role default) and AI_EMBEDDING_MODEL=off both disable, not just per-feature
+  // overrides.
+  const effective = override ?? roleDefault
+  if (effective === undefined) return null
+  const trimmed = effective.trim()
+  return DISABLED_VALUES.has(trimmed.toLowerCase()) ? null : trimmed
 }
 
 /** Effective chat model for a feature, or null when the feature is disabled. */

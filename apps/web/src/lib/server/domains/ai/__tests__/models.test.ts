@@ -30,4 +30,14 @@ describe('resolveModel', () => {
       'google/gemini-3.1-flash-lite-preview'
     )
   })
+
+  it('treats an off/none/false role default as disabled too', () => {
+    expect(resolveModel(undefined, 'off')).toBeNull()
+    expect(resolveModel(undefined, 'none')).toBeNull()
+    expect(resolveModel(undefined, 'false')).toBeNull()
+  })
+
+  it('trims a non-sentinel value', () => {
+    expect(resolveModel('  gpt-4o-mini  ', undefined)).toBe('gpt-4o-mini')
+  })
 })

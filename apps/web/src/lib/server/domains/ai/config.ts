@@ -60,7 +60,9 @@ export function collectAiConfigWarnings(snap: AiConfigSnapshot): string[] {
       'AI disabled: OPENAI_API_KEY is set but OPENAI_BASE_URL is empty. Set OPENAI_BASE_URL to your provider or gateway endpoint.'
     )
   }
-  // Client configured but no models → every feature is off.
+  // Note: this checks role defaults only; a config that sets just a per-feature
+  // override (e.g. AI_SUMMARY_MODEL) without a role default will still log this,
+  // even though that one feature is enabled. Logs-only, so acceptable.
   if (snap.apiKey && snap.baseUrl && !snap.chatModel && !snap.embeddingModel) {
     warnings.push(
       'AI endpoint configured but no models set; all AI features are disabled. Set AI_CHAT_MODEL and/or AI_EMBEDDING_MODEL.'
