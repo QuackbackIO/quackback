@@ -493,6 +493,75 @@ export const deleteChatMessageFn = createServerFn({ method: 'POST' })
     }
   })
 
+/** Visitor publishes a proposed draft post (may short-circuit on duplicate). */
+export const publishDraftPostFn = createServerFn({ method: 'POST' })
+  .inputValidator(
+    z.object({
+      messageId: z.string(),
+      title: z.string().min(1).max(200),
+      content: z.string().max(10000).default(''),
+      boardId: z.string(),
+      skipDedupe: z.boolean().optional(),
+    })
+  )
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await assertVisitorChatAccess(ctx.principal.role)
+      const actor = await policyActorFromAuth(ctx)
+      const { publishProposedPost } = await import('@/lib/server/domains/chat/chat.draft-post')
+      return await publishProposedPost(
+        {
+          messageId: data.messageId as ChatMessageId,
+          title: data.title,
+          content: data.content,
+          boardId: data.boardId as BoardId,
+          skipDedupe: data.skipDedupe,
+        },
+        actor
+      )
+    } catch (error) {
+      console.error('[fn:chat] publishDraftPostFn failed:', error)
+      throw error
+    }
+  })
+
+/** Visitor dismisses a proposed draft post. */
+export const dismissDraftPostFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ messageId: z.string() }))
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await assertVisitorChatAccess(ctx.principal.role)
+      const actor = await policyActorFromAuth(ctx)
+      const { dismissProposedPost } = await import('@/lib/server/domains/chat/chat.draft-post')
+      await dismissProposedPost({ messageId: data.messageId as ChatMessageId }, actor)
+      return { ok: true }
+    } catch (error) {
+      console.error('[fn:chat] dismissDraftPostFn failed:', error)
+      throw error
+    }
+  })
+
+/** Visitor upvotes a post shared into chat via a post_ref card. */
+export const upvotePostFromChatFn = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ messageId: z.string(), postId: z.string() }))
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await assertVisitorChatAccess(ctx.principal.role)
+      const actor = await policyActorFromAuth(ctx)
+      const { upvotePostFromChat } = await import('@/lib/server/domains/chat/chat.draft-post')
+      return await upvotePostFromChat(
+        { messageId: data.messageId as ChatMessageId, postId: data.postId as PostId },
+        actor
+      )
+    } catch (error) {
+      console.error('[fn:chat] upvotePostFromChatFn failed:', error)
+      throw error
+    }
+  })
+
 // ── Agent functions ──────────────────────────────────────────────────────
 
 /** Saved replies for the agent composer (team-gated; agent-only, not public). */
