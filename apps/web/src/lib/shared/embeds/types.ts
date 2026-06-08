@@ -8,16 +8,29 @@
  * existence.
  */
 
-/** A resolved feedback-post embed. */
+/** A tag chip on a post embed. */
+export interface EmbedTag {
+  id: string
+  name: string
+  color: string | null
+}
+
+/** A resolved feedback-post embed — a viewer-safe slice for a miniature post card. */
 export interface EmbedPostPreview {
   kind: 'post'
   postId: string
   title: string
+  /** Short plain-text preview of the body (already truncated server-side). */
+  excerpt: string | null
   voteCount: number
   statusName: string | null
   statusColor: string | null
   boardName: string
   boardSlug: string
+  tags: EmbedTag[]
+  authorName: string | null
+  authorAvatarUrl: string | null
+  createdAt: string | null
 }
 
 /** A resolved (published) changelog-entry embed. */

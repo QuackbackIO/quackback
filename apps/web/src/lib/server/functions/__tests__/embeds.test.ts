@@ -20,9 +20,14 @@ const sid = (s: string) => s as StatusId
 const POST_DETAIL = {
   id: 'post_01ktjwt5tyf6br9mw521h13n6n',
   title: 'Dark mode',
+  content: 'A native solution would be much appreciated.',
   voteCount: 42,
   statusId: sid('status_01abc'),
   board: { name: 'Features', slug: 'features' },
+  tags: [{ id: 'tag_1', name: 'Feature', color: '#6366f1' }],
+  authorName: 'Marcus Garcia',
+  authorAvatarUrl: null,
+  createdAt: new Date('2026-01-02T03:04:05.000Z'),
 }
 const STATUSES = [
   { id: sid('status_01abc'), name: 'Planned', color: '#3b82f6' },
@@ -35,11 +40,16 @@ describe('projectPostPreview', () => {
       kind: 'post',
       postId: 'post_01ktjwt5tyf6br9mw521h13n6n',
       title: 'Dark mode',
+      excerpt: 'A native solution would be much appreciated.',
       voteCount: 42,
       statusName: 'Planned',
       statusColor: '#3b82f6',
       boardName: 'Features',
       boardSlug: 'features',
+      tags: [{ id: 'tag_1', name: 'Feature', color: '#6366f1' }],
+      authorName: 'Marcus Garcia',
+      authorAvatarUrl: null,
+      createdAt: '2026-01-02T03:04:05.000Z',
     })
   })
   it('nulls the status fields when the post has no status', () => {

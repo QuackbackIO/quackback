@@ -20,18 +20,24 @@ import type {
   EmbedChangelogPreview,
 } from '@/lib/shared/embeds/types'
 import { toIsoStringOrNull } from '@/lib/shared/utils/date'
+import { contentPreview } from '@/lib/shared/utils/string'
 
 // ---------------------------------------------------------------------------
 // Pure projection + resolve core (no server deps — unit-tested in isolation)
 // ---------------------------------------------------------------------------
 
-/** Minimal slice of a public post detail the post card needs. */
+/** Minimal slice of a public post detail the miniature post card needs. */
 type PostDetailInput = {
   id: string
   title: string
+  content: string | null
   voteCount: number
   statusId: StatusId | null
   board: { name: string; slug: string }
+  tags: { id: string; name: string; color: string | null }[]
+  authorName: string | null
+  authorAvatarUrl: string | null
+  createdAt: Date | string | null
 }
 
 /** Minimal slice of a public status (the post carries only `statusId`). */
@@ -64,11 +70,16 @@ export function projectPostPreview(
     kind: 'post',
     postId: detail.id,
     title: detail.title,
+    excerpt: detail.content ? contentPreview(detail.content, 160) || null : null,
     voteCount: detail.voteCount,
     statusName: status?.name ?? null,
     statusColor: status?.color ?? null,
     boardName: detail.board.name,
     boardSlug: detail.board.slug,
+    tags: detail.tags.map((t) => ({ id: t.id, name: t.name, color: t.color ?? null })),
+    authorName: detail.authorName,
+    authorAvatarUrl: detail.authorAvatarUrl,
+    createdAt: toIsoStringOrNull(detail.createdAt),
   }
 }
 
