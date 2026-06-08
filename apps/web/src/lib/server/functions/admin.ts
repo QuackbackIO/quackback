@@ -119,6 +119,24 @@ const portalUserByIdSchema = z.object({
   principalId: z.string(),
 })
 
+const DEFAULT_INVITATION_MAGIC_LINK_TTL_SECONDS = 24 * 60 * 60
+
+function getInvitationMagicLinkTtlSeconds(): number {
+  const rawValue = process.env.INVITATION_MAGIC_LINK_TTL_SECONDS?.trim()
+
+  if (!rawValue) {
+    return DEFAULT_INVITATION_MAGIC_LINK_TTL_SECONDS
+  }
+
+  const parsedValue = Number(rawValue)
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return DEFAULT_INVITATION_MAGIC_LINK_TTL_SECONDS
+  }
+
+  return parsedValue
+}
+
 /**
  * Fetch inbox posts with filters for admin feedback view
  */
@@ -928,7 +946,7 @@ async function generateInvitationMagicLink(
     email,
     callbackPath,
     portalUrl,
-    expiresInSeconds: Number(process.env.INVITATION_MAGIC_LINK_TTL_SECONDS ?? 24 * 60 * 60),
+    expiresInSeconds: getInvitationMagicLinkTtlSeconds(),
   })
 }
 
