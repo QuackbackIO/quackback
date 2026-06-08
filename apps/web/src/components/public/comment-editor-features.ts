@@ -23,4 +23,6 @@ export const COMMENT_EDITOR_FEATURES: EditorFeatures = {
   codeBlocks: false,
   dividers: false,
   embeds: false,
+  // Pasting a Quackback post/changelog link becomes a live embed card.
+  quackbackEmbeds: true,
 }

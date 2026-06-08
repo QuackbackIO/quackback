@@ -372,7 +372,7 @@ export function FeedbackHeaderAnimated({
                 })}
                 minHeight="150px"
                 borderless
-                features={{ images: canUploadImages }}
+                features={{ images: canUploadImages, quackbackEmbeds: true }}
                 onImageUpload={canUploadImages ? uploadImage : undefined}
               />
             </motion.div>

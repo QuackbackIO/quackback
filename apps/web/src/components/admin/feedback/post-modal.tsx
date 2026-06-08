@@ -376,6 +376,7 @@ function PostModalContent({
                   images: true,
                   tables: true,
                   embeds: true,
+                  quackbackEmbeds: true,
                   bubbleMenu: true,
                   slashMenu: true,
                 }}

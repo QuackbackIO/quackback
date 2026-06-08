@@ -661,6 +661,7 @@ export function WidgetHomeAnimated({
                         tables: true,
                         images: canUploadImages,
                         embeds: true,
+                        quackbackEmbeds: true,
                         bubbleMenu: true,
                         slashMenu: true,
                       }}

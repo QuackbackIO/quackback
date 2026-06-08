@@ -86,6 +86,7 @@ const DEFAULT_USER_EDITOR_FEATURES: EditorFeatures = {
   tables: false,
   dividers: true,
   embeds: false,
+  quackbackEmbeds: true,
 }
 
 export function PostContentSection({

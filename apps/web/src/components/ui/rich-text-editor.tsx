@@ -22,6 +22,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
 import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
+import { QuackbackEmbed } from './quackback-embed-extension'
 import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
@@ -144,6 +145,9 @@ export function buildExtensions(
       },
       allowBase64: false,
     }),
+    // Always register so saved embed nodes round-trip in any editor; paste rules
+    // only fire when quackbackEmbeds is enabled for this editor.
+    QuackbackEmbed.configure({ enablePaste: !!features.quackbackEmbeds }),
     ...(features.codeBlocks
       ? [
           CodeBlockLowlight.configure({
@@ -279,6 +283,10 @@ export interface EditorFeatures {
   dividers?: boolean
   /** Enable YouTube/Figma/Loom embeds */
   embeds?: boolean
+  /** Enable pasting Quackback post/changelog URLs as live embed cards.
+   * Independent of `embeds` — the embed node is always in the schema (so saved
+   * embeds render everywhere); this flag only turns on the paste-to-embed rule. */
+  quackbackEmbeds?: boolean
   /** Enable `:` emoji picker (default: true). Uses TipTap's Unicode emoji
    * set; emojis are inserted as nodes and serialize to native Unicode
    * characters in markdown. */
@@ -1086,6 +1094,7 @@ function RichTextEditorBase({
       features.taskLists,
       features.tables,
       features.embeds,
+      features.quackbackEmbeds,
       features.slashMenu,
       features.emojiPicker,
       features.enterAsHardBreak,
@@ -1420,6 +1429,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.taskLists === nf.taskLists &&
     pf.tables === nf.tables &&
     pf.embeds === nf.embeds &&
+    pf.quackbackEmbeds === nf.quackbackEmbeds &&
     pf.slashMenu === nf.slashMenu &&
     pf.emojiPicker === nf.emojiPicker &&
     pf.enterAsHardBreak === nf.enterAsHardBreak &&

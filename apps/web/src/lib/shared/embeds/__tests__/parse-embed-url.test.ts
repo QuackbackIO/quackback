@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseEmbedUrl } from '../parse-embed-url'
+import { parseEmbedUrl, POST_URL_PASTE_RE, CHANGELOG_URL_PASTE_RE } from '../parse-embed-url'
 
 // Real, round-trip-valid TypeIDs. The changelog prefix is `changelog_`
 // (per @quackback/ids ID_PREFIXES), not `clog_`, and isValidTypeId rejects
@@ -32,5 +32,27 @@ describe('parseEmbedUrl', () => {
     expect(parseEmbedUrl('https://youtube.com/watch?v=abc')).toBeNull()
     expect(parseEmbedUrl('https://acme.quackback.io/?board=features')).toBeNull()
     expect(parseEmbedUrl('not a url')).toBeNull()
+  })
+})
+
+describe('paste regexes', () => {
+  // The regexes carry the global flag (required by nodePasteRule), so a fresh
+  // match per assertion avoids lastIndex statefulness biting us.
+  it('POST_URL_PASTE_RE captures the post id from a full url', () => {
+    const m = new RegExp(POST_URL_PASTE_RE).exec(
+      `https://acme.quackback.io/b/features/posts/${POST_ID}`
+    )
+    expect(m?.[1]).toBe(POST_ID)
+  })
+  it('CHANGELOG_URL_PASTE_RE captures the changelog id from a full url', () => {
+    const m = new RegExp(CHANGELOG_URL_PASTE_RE).exec(
+      `https://acme.quackback.io/changelog/${CHANGELOG_ID}`
+    )
+    expect(m?.[1]).toBe(CHANGELOG_ID)
+  })
+  it('neither paste regex matches a foreign url', () => {
+    const foreign = 'https://youtube.com/watch?v=abc'
+    expect(new RegExp(POST_URL_PASTE_RE).test(foreign)).toBe(false)
+    expect(new RegExp(CHANGELOG_URL_PASTE_RE).test(foreign)).toBe(false)
   })
 })

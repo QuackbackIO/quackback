@@ -16,6 +16,15 @@ export type EmbedRef = { kind: 'post' | 'changelog'; id: string }
 const POST_PATH = /^\/b\/[^/]+\/posts\/(post_[0-9a-z]+)$/i
 const CHANGELOG_PATH = /^\/changelog\/(changelog_[0-9a-z]+)$/i
 
+// Full-URL matchers for paste rules (TipTap's `nodePasteRule` runs these against
+// the whole pasted text, not just a pathname). They mirror the same `post_` /
+// `changelog_` prefixes as the path regexes above — kept here so the editor node
+// and the parser share a single prefix source. The captured group is the TypeID;
+// the global flag is required by `nodePasteRule`. Validity (charset + round-trip)
+// is enforced downstream, so these stay deliberately permissive.
+export const POST_URL_PASTE_RE = /https?:\/\/[^\s]+\/b\/[^/\s]+\/posts\/(post_[0-9a-z]+)\b/gi
+export const CHANGELOG_URL_PASTE_RE = /https?:\/\/[^\s]+\/changelog\/(changelog_[0-9a-z]+)\b/gi
+
 /**
  * Parse a Quackback URL into a typed embed reference, or `null` when the URL
  * is malformed, points elsewhere, or carries an id that isn't a valid TypeID
