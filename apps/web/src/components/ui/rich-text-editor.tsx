@@ -2339,6 +2339,18 @@ export function generateContentHTML(content: JSONContent): string {
         return `<span data-type="emoji"${dataNameAttr}>${escaped}</span>`
       }
 
+      case 'quackbackEmbed': {
+        // Atom block. Saved content isn't rendered through a live editor on
+        // display surfaces, so we emit a static placeholder div that survives
+        // DOMPurify; EmbedHydration portals a live card into it client-side.
+        // A missing/foreign kind or id renders nothing — the embed degrades to
+        // empty rather than breaking the page.
+        const kind = String(node.attrs?.kind ?? '')
+        const id = String(node.attrs?.id ?? '')
+        if ((kind !== 'post' && kind !== 'changelog') || !id) return ''
+        return `<div data-quackback-embed="1" data-kind="${escapeHtmlAttr(kind)}" data-id="${escapeHtmlAttr(id)}" class="quackback-embed-placeholder"></div>`
+      }
+
       default:
         // For unknown nodes, try to render their content
         return node.content?.map(renderNode).join('') ?? ''
@@ -2402,6 +2414,9 @@ const DOMPURIFY_CONFIG = {
     'data-name',
     'data-principal-id',
     'data-display-name',
+    'data-quackback-embed',
+    'data-kind',
+    'data-id',
   ],
   ALLOW_DATA_ATTR: false,
   ADD_TAGS: ['iframe'],

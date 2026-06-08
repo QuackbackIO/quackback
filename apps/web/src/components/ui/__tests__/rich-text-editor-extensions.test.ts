@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import type { EditorFeatures } from '../rich-text-editor'
-import { buildExtensions, hasActiveSuggestion } from '../rich-text-editor'
+import { buildExtensions, generateContentHTML, hasActiveSuggestion } from '../rich-text-editor'
 
 // Full widget feature set (worst-case for duplicates)
 const WIDGET_FEATURES: EditorFeatures = {
@@ -257,5 +257,46 @@ describe('value sync skip optimization', () => {
 
     expect(setContent).toHaveBeenCalledOnce()
     expect(setContent).toHaveBeenCalledWith(newValue)
+  })
+})
+
+describe('generateContentHTML — quackbackEmbed nodes', () => {
+  const POST_ID = 'post_01ktjwt5tyf6br9mw521h13n6n'
+  const CHANGELOG_ID = 'changelog_01ktjwt5tyf6br9mwcz1vskk44'
+
+  it('serializes a valid post embed to a placeholder div with data attrs', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: POST_ID } }],
+    })
+    expect(html).toContain('data-quackback-embed="1"')
+    expect(html).toContain('data-kind="post"')
+    expect(html).toContain(`data-id="${POST_ID}"`)
+    expect(html).toContain('class="quackback-embed-placeholder"')
+  })
+
+  it('serializes a valid changelog embed to a placeholder div', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'changelog', id: CHANGELOG_ID } }],
+    })
+    expect(html).toContain('data-kind="changelog"')
+    expect(html).toContain(`data-id="${CHANGELOG_ID}"`)
+  })
+
+  it('renders nothing for an embed with a bad kind', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'board', id: POST_ID } }],
+    })
+    expect(html).not.toContain('data-quackback-embed')
+  })
+
+  it('renders nothing for an embed missing its id', () => {
+    const html = generateContentHTML({
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'post' } }],
+    })
+    expect(html).not.toContain('data-quackback-embed')
   })
 })

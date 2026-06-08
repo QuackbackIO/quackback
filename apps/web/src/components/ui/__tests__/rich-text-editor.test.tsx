@@ -89,3 +89,22 @@ describe('RichTextContent — mention chip survives DOMPurify', () => {
     expect(chip!.textContent).toBe('@X')
   })
 })
+
+describe('RichTextContent — embed placeholder survives DOMPurify', () => {
+  it('retains data-quackback-embed/kind/id after sanitization', () => {
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'quackbackEmbed',
+          attrs: { kind: 'post', id: 'post_01ktjwt5tyf6br9mw521h13n6n' },
+        },
+      ],
+    }
+    const { container } = render(<RichTextContent content={doc} />)
+    const placeholder = container.querySelector('[data-quackback-embed]') as HTMLElement | null
+    expect(placeholder).not.toBeNull()
+    expect(placeholder!.getAttribute('data-kind')).toBe('post')
+    expect(placeholder!.getAttribute('data-id')).toBe('post_01ktjwt5tyf6br9mw521h13n6n')
+  })
+})

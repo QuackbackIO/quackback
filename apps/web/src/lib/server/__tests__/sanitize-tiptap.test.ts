@@ -553,4 +553,82 @@ describe('sanitizeTiptapContent', () => {
     const emojiNode = paragraph.content!.find((n) => n.type === 'emoji')
     expect(emojiNode!.attrs).toEqual({ emoji: '😄' })
   })
+
+  // ============================================
+  // Quackback link embed sanitization
+  // ============================================
+
+  // Real, round-trip-valid TypeIDs (same fixtures as the parse-embed-url test).
+  const EMBED_POST_ID = 'post_01ktjwt5tyf6br9mw521h13n6n'
+  const EMBED_CHANGELOG_ID = 'changelog_01ktjwt5tyf6br9mwcz1vskk44'
+
+  it('preserves a valid post embed node with kind/id attrs', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: EMBED_POST_ID } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'quackbackEmbed')
+    expect(node).toBeDefined()
+    expect(node!.attrs).toEqual({ kind: 'post', id: EMBED_POST_ID })
+  })
+
+  it('preserves a valid changelog embed node with kind/id attrs', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'changelog', id: EMBED_CHANGELOG_ID } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'quackbackEmbed')
+    expect(node).toBeDefined()
+    expect(node!.attrs).toEqual({ kind: 'changelog', id: EMBED_CHANGELOG_ID })
+  })
+
+  it('drops unknown attrs from a valid embed node', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'quackbackEmbed',
+          attrs: { kind: 'post', id: EMBED_POST_ID, onclick: 'alert(1)', class: 'evil' },
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'quackbackEmbed')
+    expect(node!.attrs).toEqual({ kind: 'post', id: EMBED_POST_ID })
+  })
+
+  it('neutralizes an embed with an invalid kind (strips attrs so it cannot render)', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'board', id: EMBED_POST_ID } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content?.find((n) => n.type === 'quackbackEmbed')
+    // Atom node may survive in the schema, but with no attrs the serializer
+    // renders nothing — a malformed embed can never display.
+    expect(node?.attrs).toBeUndefined()
+  })
+
+  it('neutralizes an embed whose id is not a valid TypeID', () => {
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: 'not-a-real-id' } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content?.find((n) => n.type === 'quackbackEmbed')
+    expect(node?.attrs).toBeUndefined()
+  })
+
+  it('neutralizes an embed whose id is a TypeID of the wrong kind', () => {
+    // A changelog id labelled kind:'post' must not survive.
+    const input = {
+      type: 'doc',
+      content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: EMBED_CHANGELOG_ID } }],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content?.find((n) => n.type === 'quackbackEmbed')
+    expect(node?.attrs).toBeUndefined()
+  })
 })

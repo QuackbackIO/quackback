@@ -10,6 +10,7 @@
  * - Layer 2: DOMPurify on HTML output at render time
  */
 
+import { isValidTypeId } from '@quackback/ids'
 import { sanitizeUrl, sanitizeImageUrl, safePositiveInt } from '@/lib/shared/utils/sanitize'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
@@ -37,6 +38,7 @@ const ALLOWED_NODE_TYPES = new Set([
   'tableCell',
   'emoji',
   'mention',
+  'quackbackEmbed',
 ])
 
 // Mark types that match the TipTap editor extensions
@@ -158,6 +160,20 @@ function sanitizeAttrs(
       const label = typeof attrs.label === 'string' ? attrs.label.slice(0, 200) : ''
       if (!id) return undefined
       return { id, label }
+    }
+
+    case 'quackbackEmbed': {
+      // A Quackback link embed carries only `{ kind, id }`. `kind` must be one
+      // of the two embeddable entity types and `id` must be a real TypeID of
+      // that kind (charset + round-trip verified). Anything else strips the
+      // attrs → the atom node survives but the serializer renders nothing, so a
+      // malformed or foreign embed can never display.
+      const kind = attrs.kind
+      const id = typeof attrs.id === 'string' ? attrs.id : ''
+      if ((kind !== 'post' && kind !== 'changelog') || !isValidTypeId(id, kind)) {
+        return undefined
+      }
+      return { kind, id }
     }
 
     // Nodes with no meaningful attrs to sanitize
