@@ -28,7 +28,8 @@ function QuackbackEmbedNodeView({ node, selected }: ReactNodeViewProps) {
       )}
       contentEditable={false}
     >
-      {kind && id ? <QuackbackEmbedCard kind={kind} id={id} /> : null}
+      {/* Inert preview while composing — no live voting, no navigation. */}
+      {kind && id ? <QuackbackEmbedCard kind={kind} id={id} interactive={false} /> : null}
     </NodeViewWrapper>
   )
 }
