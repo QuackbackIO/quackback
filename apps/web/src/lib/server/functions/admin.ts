@@ -924,7 +924,12 @@ async function generateInvitationMagicLink(
   // Invitations reuse the same path for success + error so an
   // expired/consumed link sends the recipient back to the same
   // invitation page (with its own expired-state copy).
-  return mintMagicLinkUrl({ email, callbackPath, portalUrl })
+  return mintMagicLinkUrl({
+    email,
+    callbackPath,
+    portalUrl,
+    expiresInSeconds: Number(process.env.INVITATION_MAGIC_LINK_TTL_SECONDS ?? 24 * 60 * 60),
+  })
 }
 
 /**
