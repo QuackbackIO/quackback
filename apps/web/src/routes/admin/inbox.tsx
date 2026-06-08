@@ -45,6 +45,7 @@ import { ConvertToPostDialog } from '@/components/admin/chat/convert-to-post-dia
 import { SharePostDialog } from '@/components/admin/chat/share-post-dialog'
 import { ConversationListColumn } from '@/components/admin/chat/conversation-list-column'
 import { SavedMessagesColumn } from '@/components/admin/chat/saved-messages-column'
+import { SuggestedResources } from '@/components/admin/chat/suggested-resources'
 import { ChatNoteEditor, type ChatNoteEditorHandle } from '@/components/admin/chat/chat-note-editor'
 import {
   ChatRichComposer,
@@ -1159,6 +1160,13 @@ function ChatThread({
             )}
           </div>
         </ScrollArea>
+
+        {/* Agent-only suggested resources — above the composer so the agent
+            can share a resource without leaving the reply flow. */}
+        <SuggestedResources
+          conversationId={conversationId}
+          latestVisitorMessageId={lastVisitorMessage?.id ?? null}
+        />
 
         {/* Composer */}
         <div className="border-t border-border/50 p-3">

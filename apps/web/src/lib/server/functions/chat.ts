@@ -751,6 +751,34 @@ export const sharePostFn = createServerFn({ method: 'POST' })
     }
   })
 
+const shareArticleSchema = z.object({
+  conversationId: z.string(),
+  articleSlug: z.string(),
+})
+
+/** Agent action: embed a help-center article into the conversation (visitor sees the article card). */
+export const shareArticleFn = createServerFn({ method: 'POST' })
+  .inputValidator(shareArticleSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { shareArticle } = await import('@/lib/server/domains/chat/chat.cards')
+      const agent = agentFromCtx(ctx)
+      const r = await shareArticle(
+        {
+          conversationId: data.conversationId as ConversationId,
+          slug: data.articleSlug,
+        },
+        { agentActor: actor, agentPrincipalId: ctx.principal.id, agent }
+      )
+      return { messageId: r.message.id }
+    } catch (error) {
+      console.error('[fn:chat] shareArticleFn failed:', error)
+      throw error
+    }
+  })
+
 export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(setStatusSchema)
   .handler(async ({ data }) => {

@@ -1,11 +1,13 @@
 /**
- * Post-in-chat sends. An agent can surface an existing post inside a conversation:
+ * In-chat card sends. An agent can surface existing content inside a conversation:
  *   - sharePost: send an agent message whose body is a quackbackEmbed of the post,
  *     which renders the live embed card the visitor can view and upvote.
+ *   - shareArticle: same for a help-center article, using the article slug.
  *
- * suggestPost is the agent-only sibling: instead of a visitor-facing embed, it
- * leaves an INTERNAL note nudging the team to track a resolved conversation as a
- * post — never broadcast to the visitor.
+ * Both use embedDoc() to build the embed-only TipTap doc. suggestPost is the
+ * agent-only sibling: instead of a visitor-facing embed, it leaves an INTERNAL
+ * note nudging the team to track a resolved conversation as a post — never
+ * broadcast to the visitor.
  */
 import { db, conversations, chatMessages, eq } from '@/lib/server/db'
 import type { ConversationId, PostId, BoardId, PrincipalId, ChatMessageId } from '@quackback/ids'
@@ -23,10 +25,16 @@ export interface CardAgentCtx {
   agent: ChatAuthorInput
 }
 
-/** A single-node doc that embeds an existing post — renders the live embed card
- *  on every display surface (inbox + widget) via the shared embed hydration. */
+/** A single-node doc carrying a quackbackEmbed of any supported kind.
+ *  Renders the live embed card on every display surface (inbox + widget)
+ *  via the shared embed hydration. */
+export function embedDoc(kind: 'post' | 'article', id: string): TiptapContent {
+  return { type: 'doc', content: [{ type: 'quackbackEmbed', attrs: { kind, id } }] }
+}
+
+/** Embed doc for a feedback post (thin wrapper over {@link embedDoc}). */
 export function postEmbedDoc(postId: PostId): TiptapContent {
-  return { type: 'doc', content: [{ type: 'quackbackEmbed', attrs: { kind: 'post', id: postId } }] }
+  return embedDoc('post', postId)
 }
 
 /**
@@ -48,6 +56,27 @@ export async function sharePost(
     ctx.agentActor,
     undefined,
     postEmbedDoc(input.postId)
+  )
+}
+
+/**
+ * Agent shares (embeds) a help-center article into the conversation. Mirrors
+ * sharePost but uses the article's slug as the embed id. The embed resolver
+ * viewer-scopes the article card at render time, so a private article degrades
+ * to "unavailable" rather than leaking to the visitor.
+ */
+export async function shareArticle(
+  input: { conversationId: ConversationId; slug: string },
+  ctx: CardAgentCtx
+): Promise<SendAgentMessageResult> {
+  const { sendAgentMessage } = await import('./chat.service')
+  return sendAgentMessage(
+    input.conversationId,
+    '',
+    ctx.agent,
+    ctx.agentActor,
+    undefined,
+    embedDoc('article', input.slug)
   )
 }
 

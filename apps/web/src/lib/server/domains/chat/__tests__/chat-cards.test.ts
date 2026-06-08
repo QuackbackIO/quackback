@@ -130,7 +130,7 @@ vi.mock('@/lib/server/db', () => {
   }
 })
 
-import { sharePost } from '../chat.cards'
+import { embedDoc, sharePost, shareArticle } from '../chat.cards'
 
 const conversationId = 'conversation_1' as ConversationId
 const postId = 'post_1' as PostId
@@ -159,10 +159,28 @@ beforeEach(() => {
 })
 
 /** Find the quackbackEmbed node in a sanitized doc, if any. */
-function embedNode(doc: unknown): { type: string } | undefined {
-  const content = (doc as { content?: Array<{ type: string }> } | null)?.content
+function embedNode(doc: unknown): { type: string; attrs?: Record<string, unknown> } | undefined {
+  const content = (
+    doc as { content?: Array<{ type: string; attrs?: Record<string, unknown> }> } | null
+  )?.content
   return content?.find((n) => n.type === 'quackbackEmbed')
 }
+
+describe('embedDoc', () => {
+  it('builds a post embed doc', () => {
+    const doc = embedDoc('post', 'post_1')
+    const node = embedNode(doc)
+    expect(node).toBeTruthy()
+    expect(node?.attrs).toMatchObject({ kind: 'post', id: 'post_1' })
+  })
+
+  it('builds an article embed doc', () => {
+    const doc = embedDoc('article', 'my-article-slug')
+    const node = embedNode(doc)
+    expect(node).toBeTruthy()
+    expect(node?.attrs).toMatchObject({ kind: 'article', id: 'my-article-slug' })
+  })
+})
 
 describe('sharePost', () => {
   it('sends an embed-only agent message carrying a quackbackEmbed post node', async () => {
@@ -182,6 +200,30 @@ describe('sharePost', () => {
   it('refuses a non-agent actor before any write', async () => {
     await expect(
       sharePost({ conversationId, postId }, { agentActor: visitorActor, agentPrincipalId, agent })
+    ).rejects.toBeInstanceOf(ForbiddenError)
+    expect(insertedMessages).toHaveLength(0)
+  })
+})
+
+describe('shareArticle', () => {
+  it('sends an embed-only agent message carrying a quackbackEmbed article node', async () => {
+    const r = await shareArticle(
+      { conversationId, slug: 'getting-started' },
+      { agentActor, agentPrincipalId, agent }
+    )
+    expect(r.message.senderType).toBe('agent')
+    const node = embedNode(r.message.contentJson)
+    expect(node).toBeTruthy()
+    expect(node?.attrs).toMatchObject({ kind: 'article', id: 'getting-started' })
+    expect(insertedMessages[0]).toMatchObject({ senderType: 'agent', content: '' })
+  })
+
+  it('refuses a non-agent actor before any write', async () => {
+    await expect(
+      shareArticle(
+        { conversationId, slug: 'getting-started' },
+        { agentActor: visitorActor, agentPrincipalId, agent }
+      )
     ).rejects.toBeInstanceOf(ForbiddenError)
     expect(insertedMessages).toHaveLength(0)
   })
