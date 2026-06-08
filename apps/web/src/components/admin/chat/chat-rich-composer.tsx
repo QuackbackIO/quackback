@@ -6,6 +6,7 @@ import type { Editor, JSONContent } from '@tiptap/core'
 import { QuackbackEmbed } from '@/components/ui/quackback-embed-extension'
 import { ChatImage } from '@/components/ui/chat-image-node'
 import { hasActiveSuggestion } from '@/components/ui/rich-text-editor'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 
 interface ChatRichComposerProps {
@@ -178,8 +179,17 @@ export const ChatRichComposer = forwardRef<ChatRichComposerHandle, ChatRichCompo
       editor?.setEditable(!disabled)
     }, [disabled, editor])
 
+    // The editor grows with its content up to a cap, then scrolls inside a
+    // styled ScrollArea (a thin overlay scrollbar, matching the main rich-text
+    // editor) instead of the browser's chunky native one. The cap lives on the
+    // scroll viewport so the bar tracks the editor, not the outer flex box.
     return (
-      <EditorContent editor={editor} className={cn('flex-1 overflow-y-auto max-h-32', className)} />
+      <ScrollArea
+        className={cn('flex-1 [&_[data-slot=scroll-area-viewport]]:max-h-32', className)}
+        scrollBarClassName="w-1.5"
+      >
+        <EditorContent editor={editor} />
+      </ScrollArea>
     )
   }
 )
