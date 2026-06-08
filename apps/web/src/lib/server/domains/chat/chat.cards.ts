@@ -31,7 +31,7 @@ import { emitMessageCreated } from './chat.webhooks'
 import { addVoteOnBehalf } from '@/lib/server/domains/posts/post.voting'
 import type { ChatAuthorInput, SendAgentMessageResult } from './chat.types'
 
-export interface DraftPostAgentCtx {
+export interface CardAgentCtx {
   agentActor: Actor
   agentPrincipalId: PrincipalId
   agent: ChatAuthorInput
@@ -45,7 +45,7 @@ async function insertCardMessage(
   conversationId: ConversationId,
   content: string,
   card: ChatCard,
-  ctx: DraftPostAgentCtx
+  ctx: CardAgentCtx
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(ctx.agentActor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -108,7 +108,7 @@ export function dropPostRefCard(
   conversationId: ConversationId,
   postId: PostId,
   content: string,
-  ctx: DraftPostAgentCtx
+  ctx: CardAgentCtx
 ): Promise<SendAgentMessageResult> {
   const card: ChatCard = { type: 'post_ref', postId }
   return insertCardMessage(conversationId, content, card, ctx)
@@ -117,7 +117,7 @@ export function dropPostRefCard(
 /** Agent shares (embeds) an existing post into the conversation. */
 export function sharePost(
   input: { conversationId: ConversationId; postId: PostId },
-  ctx: DraftPostAgentCtx
+  ctx: CardAgentCtx
 ): Promise<SendAgentMessageResult> {
   return dropPostRefCard(input.conversationId, input.postId, `🔼 Shared a related idea`, ctx)
 }
@@ -132,7 +132,7 @@ export function sharePost(
  */
 export async function suggestPost(
   input: { conversationId: ConversationId; boardId: BoardId; title: string; content: string },
-  ctx: DraftPostAgentCtx
+  ctx: CardAgentCtx
 ): Promise<{ messageId: ChatMessageId }> {
   const decision = canActAsAgent(ctx.agentActor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)

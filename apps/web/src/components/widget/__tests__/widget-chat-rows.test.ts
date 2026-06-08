@@ -81,10 +81,10 @@ describe('buildChatRows', () => {
     ).toEqual(['post_ref'])
   })
 
-  it('renders nothing for a message carrying an unknown/legacy card', () => {
+  it('renders a plain message row for a message carrying an unknown card type', () => {
     const m = msg({ card: { type: 'legacy_card' } as any })
     const rows = buildChatRows({ ...base, messages: [m] })
-    expect(rows.filter((r) => 'message' in r && (r as any).message?.id === m.id)).toEqual([])
+    expect(rows.filter((r) => r.type === 'message' && r.key === m.id)).toHaveLength(1)
   })
 
   it('emits a normal message row when there is no card', () => {

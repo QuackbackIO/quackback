@@ -146,11 +146,11 @@ export function ConvertToPostDialog({
       captureVisitorContactEmailFn({ data: { conversationId, email } }),
   })
 
-  const emailLooksValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
-  // Capture the typed email if it looks valid; a no-op otherwise (non-blocking).
+  // Capture the typed email if non-empty; a no-op otherwise (non-blocking).
+  // The server normalises + ignores anything that isn't plausibly an address.
   const maybeCaptureEmail = () => {
-    const email = captureEmail.trim()
-    if (showEmailCapture && emailLooksValid(email)) captureContact.mutate(email)
+    const trimmed = captureEmail.trim()
+    if (showEmailCapture && trimmed) captureContact.mutate(trimmed)
   }
 
   const busy = convert.isPending || share.isPending

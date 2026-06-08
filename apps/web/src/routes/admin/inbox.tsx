@@ -411,9 +411,8 @@ function InboxPage() {
               : prev
         )
       } else if (evt.kind === 'card_updated' && evt.conversationId === selectedId) {
-        // A draft-post / post_ref card changed state (the visitor published or
-        // dismissed it) — patch the card on the matching message so the agent's
-        // read-only view updates live.
+        // A post_ref card changed (e.g. its vote count) — patch it onto the
+        // matching message so the agent view updates live.
         queryClient.setQueryData(
           ['admin', 'inbox', 'thread', selectedId],
           (prev: ThreadCache | undefined) =>
