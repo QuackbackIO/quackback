@@ -115,7 +115,7 @@ export function AdminBubble({
   const authorName = message.author?.displayName ?? (isAgent ? 'Agent' : 'Visitor')
   const isFlagged = message.flaggedAt !== null
   const toolbarPinned = emojiOpen || menuOpen
-  // "Track as post" quick actions only apply to a visitor's own message (not
+  // "Track as feedback" quick actions only apply to a visitor's own message (not
   // agent replies or internal notes) and only when the host wired them up.
   const showTrackActions =
     message.senderType === 'visitor' && !isNote && !!(onTrackAsPost || onSharePost)
@@ -192,7 +192,7 @@ export function AdminBubble({
                   onClick={() => onTrackSuggestion(suggestion)}
                   className="ml-auto inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
-                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as post
+                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
                 </button>
               </div>
             )}
@@ -325,7 +325,7 @@ export function AdminBubble({
                 )}
                 {onTrackAsPost && (
                   <DropdownMenuItem onClick={onTrackAsPost}>
-                    <AdjustmentsHorizontalIcon className="h-4 w-4" /> Track as post…
+                    <AdjustmentsHorizontalIcon className="h-4 w-4" /> Track as feedback…
                   </DropdownMenuItem>
                 )}
               </>

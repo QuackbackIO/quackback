@@ -43,6 +43,7 @@ import { ConversationTagsEditor } from '@/components/admin/chat/conversation-tag
 import { StatusControl } from '@/components/admin/chat/status-control'
 import { ConversationDetailPanel } from '@/components/admin/chat/conversation-detail-panel'
 import { ConvertToPostDialog } from '@/components/admin/chat/convert-to-post-dialog'
+import { EndConversationDialog } from '@/components/admin/chat/end-conversation-dialog'
 import { SharePostDialog } from '@/components/admin/chat/share-post-dialog'
 import { ConversationListColumn } from '@/components/admin/chat/conversation-list-column'
 import { SavedMessagesColumn } from '@/components/admin/chat/saved-messages-column'
@@ -634,10 +635,16 @@ function ChatThread({
   // on a settled URL rather than every keystroke.
   const debouncedComposerText = useDebouncedValue(noteMode ? noteText : replyText, 500)
 
-  // Per-message "Track as post" quick actions: the message driving the
+  // Per-message "Track as feedback" quick actions: the message driving the
   // (controlled) track dialog and the share-post picker, respectively.
   const [suggestMsg, setSuggestMsg] = useState<AgentChatMessageDTO | null>(null)
   const [shareMsg, setShareMsg] = useState<AgentChatMessageDTO | null>(null)
+  // Conversation-level "Track as feedback" (from the detail panel): opens the
+  // same convert dialog seeded with the conversation subject + first visitor
+  // message, alongside the per-message `suggestMsg` path.
+  const [trackConvo, setTrackConvo] = useState(false)
+  // The end-conversation reason dialog (opened from the detail panel).
+  const [endDialogOpen, setEndDialogOpen] = useState(false)
   // An AI "Track as post" suggestion the agent accepted from a note chip: seeds
   // the same (controlled) convert dialog with the suggested board/title/content.
   const [suggestionSeed, setSuggestionSeed] = useState<{
@@ -725,6 +732,14 @@ function ChatThread({
   const lastVisitorMessage = reversedMessages.find((m) => m.senderType === 'visitor')
   const convertDefaultTitle = conversation?.subject ?? ''
   const convertDefaultContent = lastVisitorMessage?.content ?? ''
+  // Conversation-level "Track as feedback" seeds from the FIRST visitor message
+  // (the original ask) rather than the latest one — that's the request worth
+  // capturing as a post. Title falls back to a preview of it when there's no
+  // subject.
+  const firstVisitorMessage = messages.find((m) => m.senderType === 'visitor')
+  const trackConvoTitle =
+    conversation?.subject ?? firstVisitorMessage?.content.trim().slice(0, 200) ?? ''
+  const trackConvoContent = firstVisitorMessage?.content ?? ''
 
   // The conversation DTO carries no principal type, so treat "no captured
   // contact email on file" as the anonymous-visitor signal — exactly when the
@@ -1192,10 +1207,11 @@ function ChatThread({
               </p>
             </div>
           </div>
-          {/* Convert/draft dialog has a single always-visible mount (not
-              duplicated into the detail panel like the triage controls). */}
+          {/* Conversation-level track entry for narrow viewports: at xl+ the
+              detail panel's bottom "Track as feedback" button takes over, so this
+              header trigger mirrors the triage controls' xl:hidden fallback. */}
           {conversation && (
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
               <ConvertToPostDialog
                 conversationId={conversationId}
                 defaultTitle={convertDefaultTitle}
@@ -1206,20 +1222,25 @@ function ChatThread({
               />
             </div>
           )}
-          {/* Per-message "Suggest as post" quick actions: one controlled dialog
-              driven by either a thread message the agent picked or an AI
-              "Track as post" suggestion the agent accepted from a note chip. */}
+          {/* One controlled convert dialog, driven by: a per-message pick
+              (suggestMsg), an AI suggestion accepted from a note chip
+              (suggestionSeed), or the conversation-level "Track as feedback"
+              button in the detail panel (trackConvo). The conversation-level path
+              seeds the subject + first visitor message. */}
           <ConvertToPostDialog
-            open={!!suggestMsg || !!suggestionSeed}
+            open={!!suggestMsg || !!suggestionSeed || trackConvo}
             onOpenChange={(o) => {
               if (!o) {
                 setSuggestMsg(null)
                 setSuggestionSeed(null)
+                setTrackConvo(false)
               }
             }}
             conversationId={conversationId}
-            defaultTitle={suggestionSeed?.title ?? suggestMsg?.content.trim().slice(0, 200) ?? ''}
-            defaultContent={suggestionSeed?.content ?? suggestMsg?.content ?? ''}
+            defaultTitle={
+              suggestionSeed?.title ?? suggestMsg?.content.trim().slice(0, 200) ?? trackConvoTitle
+            }
+            defaultContent={suggestionSeed?.content ?? suggestMsg?.content ?? trackConvoContent}
             defaultBoardId={suggestionSeed?.boardId}
             visitorIsAnonymous={visitorIsAnonymous}
             visitorContactEmail={visitorContactEmail}
@@ -1232,6 +1253,12 @@ function ChatThread({
             }}
             conversationId={conversationId}
             onShared={refreshThread}
+          />
+          <EndConversationDialog
+            open={endDialogOpen}
+            onOpenChange={setEndDialogOpen}
+            conversationId={conversationId}
+            onEnded={refreshThread}
           />
           {/* Triage controls live in the detail panel at xl+; below that
               (panel hidden) they stay in the header. */}
@@ -1484,6 +1511,8 @@ function ChatThread({
           conversation={conversation}
           onChanged={refreshThread}
           onSelectConversation={onSelectConversation}
+          onEndConversation={() => setEndDialogOpen(true)}
+          onTrackAsFeedback={() => setTrackConvo(true)}
         />
       )}
     </div>

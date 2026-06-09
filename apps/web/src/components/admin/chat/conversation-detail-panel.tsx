@@ -2,8 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import {
+  ArrowTopRightOnSquareIcon,
   CalendarIcon,
   CheckBadgeIcon,
+  CheckCircleIcon,
   FaceSmileIcon,
   FlagIcon,
   InboxArrowDownIcon,
@@ -12,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import type { Channel, ConversationDTO } from '@/lib/shared/chat/types'
+import { CONVERSATION_END_REASON_LABELS } from '@/lib/shared/chat/types'
 import { listConversationsForUserFn } from '@/lib/server/functions/chat'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
@@ -21,6 +24,7 @@ import { ConversationTagsEditor } from './conversation-tags-editor'
 import { StatusControl } from './status-control'
 import { NoEmailBadge } from './channel-badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 
@@ -85,10 +89,16 @@ export function ConversationDetailPanel({
   conversation,
   onChanged,
   onSelectConversation,
+  onEndConversation,
+  onTrackAsFeedback,
 }: {
   conversation: ConversationDTO
   onChanged: () => void
   onSelectConversation: (id: ConversationId) => void
+  /** Open the end-conversation reason dialog. */
+  onEndConversation: () => void
+  /** Open the (conversation-level) track-as-feedback dialog. */
+  onTrackAsFeedback: () => void
 }) {
   const visitorPrincipalId = conversation.visitor.principalId
   const name = conversation.visitor.displayName ?? 'Visitor'
@@ -119,6 +129,12 @@ export function ConversationDetailPanel({
   const convoCount = history?.conversations.length ?? 0
   const convoMore = history?.hasMore ?? false
   const firstSeen = detail?.createdAt ?? conversation.createdAt
+  const isClosed = conversation.status === 'closed'
+  // A closed thread shows its outcome in place of the End button (only when a
+  // reason was actually recorded — pre-feature closes have none).
+  const endReasonLabel = conversation.endReason
+    ? CONVERSATION_END_REASON_LABELS[conversation.endReason]
+    : null
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col xl:flex">
@@ -223,6 +239,26 @@ export function ConversationDetailPanel({
               <span className="text-sm text-muted-foreground">Manage</span>
             </div>
             <div className="border-t border-border/30" />
+            {/* End conversation — prominent, near the top of Manage. Once closed,
+                the End button is replaced by the recorded outcome. */}
+            {isClosed ? (
+              endReasonLabel && (
+                <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                  <CheckCircleIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">Ended:</span>
+                  <span className="font-medium text-foreground">{endReasonLabel}</span>
+                </div>
+              )
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={onEndConversation}
+              >
+                <CheckCircleIcon className="h-4 w-4" /> End conversation
+              </Button>
+            )}
             <Row label="Status">
               <StatusControl
                 conversationId={conversation.id}
@@ -293,6 +329,14 @@ export function ConversationDetailPanel({
               ))}
             </div>
           )}
+
+          {/* Track as feedback — conversation-level, pinned to the bottom of the
+              panel (below Previous conversations) so it reads as a wrap-up action. */}
+          <div className="border-t border-border/30 pt-4">
+            <Button type="button" variant="outline" className="w-full" onClick={onTrackAsFeedback}>
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" /> Track as feedback
+            </Button>
+          </div>
         </div>
       </ScrollArea>
     </aside>

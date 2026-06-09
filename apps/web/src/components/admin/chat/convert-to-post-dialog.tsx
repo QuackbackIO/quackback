@@ -165,7 +165,7 @@ export function ConvertToPostDialog({
             type="button"
             className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
           >
-            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as post
+            <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
           </button>
         </DialogTrigger>
       )}
@@ -285,7 +285,7 @@ export function ConvertToPostDialog({
               convert.mutate({})
             }}
           >
-            Track as post
+            Track as feedback
           </Button>
         </DialogFooter>
       </DialogContent>
