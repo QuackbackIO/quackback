@@ -85,10 +85,10 @@ export function ZoomableImage({
       <Dialog open={open} onOpenChange={setOpen}>
         {/* No visible header — just the image with the built-in corner X and a
             zoom control bar below. The title stays for screen readers only. */}
-        <DialogContent className="max-w-4xl gap-2 p-2">
+        <DialogContent className="w-[92vw] max-w-[1400px] gap-2 p-3">
           <DialogTitle className="sr-only">{alt || 'Image preview'}</DialogTitle>
           <div
-            className="relative flex max-h-[80vh] items-center justify-center overflow-hidden rounded-md bg-muted/20"
+            className="relative flex max-h-[82vh] min-h-[55vh] flex-1 items-center justify-center overflow-hidden rounded-md bg-muted/20"
             style={{
               cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'default',
               touchAction: 'none',
@@ -104,7 +104,7 @@ export function ZoomableImage({
               alt={alt ?? ''}
               draggable={false}
               className={cn(
-                'max-h-[80vh] w-auto max-w-full select-none object-contain',
+                'max-h-[82vh] w-auto max-w-full select-none object-contain',
                 !dragging && 'transition-transform duration-150'
               )}
               style={{
