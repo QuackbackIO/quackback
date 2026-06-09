@@ -124,7 +124,7 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
         return {
           configured: false as const,
           fields: null,
-          managed: arePlatformCredentialsManaged(),
+          managed: arePlatformCredentialsManaged(data.integrationType),
         }
       }
 
@@ -144,7 +144,11 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
         }
       }
 
-      return { configured: true as const, fields: masked, managed: arePlatformCredentialsManaged() }
+      return {
+        configured: true as const,
+        fields: masked,
+        managed: arePlatformCredentialsManaged(data.integrationType),
+      }
     } catch (error) {
       console.error(`[fn:platform-credentials] fetchPlatformCredentialsMaskedFn failed:`, error)
       throw error

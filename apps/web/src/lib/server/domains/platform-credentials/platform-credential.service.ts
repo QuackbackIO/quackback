@@ -40,16 +40,34 @@ export class PlatformCredentialsManagedError extends Error {
 let _dbSource: DbCredentialSource | undefined
 let _envSource: EnvCredentialSource | undefined
 
-/** The active credential source, selected by config.platformCredentialsSource. */
-function credentialSource(): CredentialSource {
-  if (config.platformCredentialsSource === 'env') {
-    return (_envSource ??= new EnvCredentialSource())
-  }
+function dbSource(): DbCredentialSource {
   return (_dbSource ??= new DbCredentialSource())
 }
 
-/** Whether platform credentials are platform-managed (cloud) and not editable here. */
-export function arePlatformCredentialsManaged(): boolean {
+/** The active source for *integration* credentials, per config.platformCredentialsSource. */
+function activeSource(): CredentialSource {
+  if (config.platformCredentialsSource === 'env') {
+    return (_envSource ??= new EnvCredentialSource())
+  }
+  return dbSource()
+}
+
+// Social-login / SSO credentials (auth_*) share this table but are a separate
+// concern: they are per-tenant, DB-managed (the control plane seeds auth_sso), and
+// the env source has no knowledge of them. They are ALWAYS DB-backed regardless of
+// PLATFORM_CREDENTIALS_SOURCE — the env switch governs only the 24 integrations.
+const AUTH_CREDENTIAL_PREFIX = 'auth_'
+
+function sourceForType(integrationType: string): CredentialSource {
+  return integrationType.startsWith(AUTH_CREDENTIAL_PREFIX) ? dbSource() : activeSource()
+}
+
+/**
+ * Whether platform credentials for this type are platform-managed (cloud) and not
+ * editable here. auth_* credentials are never platform-managed (always DB-editable).
+ */
+export function arePlatformCredentialsManaged(integrationType?: string): boolean {
+  if (integrationType?.startsWith(AUTH_CREDENTIAL_PREFIX)) return false
   return config.platformCredentialsSource === 'env'
 }
 
@@ -62,7 +80,7 @@ export async function savePlatformCredentials({
   credentials,
   principalId,
 }: SavePlatformCredentialsInput): Promise<void> {
-  if (arePlatformCredentialsManaged()) throw new PlatformCredentialsManagedError()
+  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
 
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
@@ -112,7 +130,7 @@ export async function savePlatformCredentials({
 export async function getPlatformCredentials(
   integrationType: string
 ): Promise<Record<string, string> | null> {
-  return credentialSource().get(integrationType)
+  return sourceForType(integrationType).get(integrationType)
 }
 
 /**
@@ -120,7 +138,7 @@ export async function getPlatformCredentials(
  * Lightweight check — no decryption.
  */
 export async function hasPlatformCredentials(integrationType: string): Promise<boolean> {
-  return credentialSource().has(integrationType)
+  return sourceForType(integrationType).has(integrationType)
 }
 
 /**
@@ -134,7 +152,16 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
   const cached = await cacheGet<string[]>(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
   if (cached) return new Set(cached)
 
-  const types = await credentialSource().listConfigured()
+  const types = await activeSource().listConfigured()
+  // auth_* credentials are always DB-backed (the env source can't enumerate them),
+  // so in env mode union them in — otherwise SSO / social-login registration in
+  // getRegisteredAuthProviders would report every auth_* provider as unconfigured.
+  if (config.platformCredentialsSource === 'env') {
+    const dbTypes = await dbSource().listConfigured()
+    for (const t of dbTypes) {
+      if (t.startsWith(AUTH_CREDENTIAL_PREFIX) && !types.includes(t)) types.push(t)
+    }
+  }
   await cacheSet(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES, types, 3600)
   return new Set(types)
 }
@@ -143,7 +170,7 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
  * Delete platform credentials for an integration type. Refused in managed-cloud mode.
  */
 export async function deletePlatformCredentials(integrationType: string): Promise<void> {
-  if (arePlatformCredentialsManaged()) throw new PlatformCredentialsManagedError()
+  if (arePlatformCredentialsManaged(integrationType)) throw new PlatformCredentialsManagedError()
 
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
   const { resetAuth } = await import('@/lib/server/auth')
