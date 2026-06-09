@@ -10,6 +10,7 @@ import {
   savePlatformCredentials,
   deletePlatformCredentials,
   getPlatformCredentials,
+  arePlatformCredentialsManaged,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import type { PlatformCredentialField } from '@/lib/server/integrations/types'
 
@@ -120,7 +121,11 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
       const credentials = await getPlatformCredentials(data.integrationType)
 
       if (!credentials) {
-        return { configured: false as const, fields: null }
+        return {
+          configured: false as const,
+          fields: null,
+          managed: arePlatformCredentialsManaged(),
+        }
       }
 
       // Build a map of field definitions for lookup
@@ -139,7 +144,7 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
         }
       }
 
-      return { configured: true as const, fields: masked }
+      return { configured: true as const, fields: masked, managed: arePlatformCredentialsManaged() }
     } catch (error) {
       console.error(`[fn:platform-credentials] fetchPlatformCredentialsMaskedFn failed:`, error)
       throw error
