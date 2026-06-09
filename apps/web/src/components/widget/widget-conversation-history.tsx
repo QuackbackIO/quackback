@@ -13,10 +13,11 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 /**
- * Read-only list of the visitor's earlier conversations (excludes the active
- * one, which the resume card handles). Surfaces history after an anonymous
- * visitor identifies and their prior threads merge onto the account (P2.4).
- * Renders nothing when there's no prior history.
+ * List of the visitor's earlier conversations (excludes the active one, which
+ * the resume card handles); tapping a row opens that thread via onSelect.
+ * Surfaces history after an anonymous visitor identifies and their prior
+ * threads merge onto the account (P2.4). Renders nothing when there's no
+ * prior history.
  */
 export function WidgetConversationHistory({
   activeId,

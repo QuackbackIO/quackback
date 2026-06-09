@@ -443,6 +443,9 @@ export function WidgetLiveChat({
         headers: getWidgetAuthHeaders(),
       })
       setConversationId(res.conversation.id as ConversationId)
+      // Adopt the server's status so a reply that reopens a closed thread clears
+      // the "closed / reply to reopen" hint (and its CSAT prompt) immediately.
+      setConversationStatus(res.conversation.status)
       appendMessage(res.message)
       if (needsEmail && emailValid) setEmailKnown(true)
     } catch {
