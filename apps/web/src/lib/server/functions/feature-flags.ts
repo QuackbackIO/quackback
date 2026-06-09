@@ -14,6 +14,7 @@ export const updateFeatureFlagsFn = createServerFn({ method: 'POST' })
       helpCenter: z.boolean().optional(),
       aiFeedbackExtraction: z.boolean().optional(),
       supportInbox: z.boolean().optional(),
+      linkPreviews: z.boolean().optional(),
     })
   )
   .handler(async ({ data }): Promise<FeatureFlags> => {

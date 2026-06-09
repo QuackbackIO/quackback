@@ -724,12 +724,15 @@ export interface FeatureFlags {
   aiFeedbackExtraction: boolean
   /** Support inbox: live-chat widget channel + unified admin inbox */
   supportInbox: boolean
+  /** External link preview cards in chat (OG unfurling) */
+  linkPreviews: boolean
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   helpCenter: false,
   aiFeedbackExtraction: false,
   supportInbox: false,
+  linkPreviews: false,
 }
 
 /**
@@ -752,6 +755,10 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Let visitors start a live chat from the widget; messages land in a shared inbox your team works from.',
   },
+  linkPreviews: {
+    label: 'Link Previews',
+    description: 'Show Open Graph preview cards below external links shared in chat.',
+  },
 }
 
 /**
@@ -768,7 +775,7 @@ export const LAB_SECTIONS: Array<{
   {
     title: 'Support',
     description: 'Support your customers with live chat and a self-serve help center.',
-    flags: ['supportInbox', 'helpCenter'],
+    flags: ['supportInbox', 'helpCenter', 'linkPreviews'],
   },
   {
     title: 'Feedback',
