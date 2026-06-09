@@ -57,9 +57,14 @@ vi.mock('@/lib/server/integrations/encryption', () => ({
   decryptPlatformCredentials: vi.fn(() => ({ clientId: 'db-id', clientSecret: 'db-secret' })),
 }))
 
-// EnvCredentialSource.listConfigured() enumerates the integration registry.
+// EnvCredentialSource enumerates the registry and reads each provider's required
+// platform-credential fields (slack needs clientId + clientSecret here).
 vi.mock('@/lib/server/integrations', () => ({
   listIntegrationTypes: () => ['slack', 'discord', 'linear'],
+  getIntegration: (type: string) =>
+    type === 'slack'
+      ? { platformCredentials: [{ key: 'clientId' }, { key: 'clientSecret' }] }
+      : undefined,
 }))
 
 vi.mock('@/lib/server/auth/config-version', () => ({ bumpAuthConfigVersionInTx: vi.fn() }))
@@ -98,8 +103,9 @@ describe('platform credential source wiring — env (managed cloud)', () => {
     expect(mockFindFirst).not.toHaveBeenCalled()
   })
 
-  it('hasPlatformCredentials reflects env presence', async () => {
+  it('hasPlatformCredentials is true only when fully configured', async () => {
     process.env.INTEGRATION_SLACK_CLIENT_ID = 'envid'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 'envsec'
     const { hasPlatformCredentials } = await import('../platform-credential.service')
     expect(await hasPlatformCredentials('slack')).toBe(true)
     expect(await hasPlatformCredentials('discord')).toBe(false)
@@ -151,6 +157,7 @@ describe('platform credential source wiring — env (managed cloud)', () => {
 
   it('getConfiguredIntegrationTypes unions env integrations with DB auth_* types', async () => {
     process.env.INTEGRATION_SLACK_CLIENT_ID = 'id'
+    process.env.INTEGRATION_SLACK_CLIENT_SECRET = 's'
     mockFindMany.mockResolvedValue([
       { integrationType: 'auth_sso' },
       { integrationType: 'auth_github' },

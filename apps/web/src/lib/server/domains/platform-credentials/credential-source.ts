@@ -79,17 +79,30 @@ async function defaultKnownTypes(): Promise<string[]> {
   return listIntegrationTypes()
 }
 
+/** The platform-credential field keys a provider declares (all are required). */
+async function defaultRequiredFields(integrationType: string): Promise<string[]> {
+  const mod = await import('@/lib/server/integrations')
+  return mod.getIntegration?.(integrationType)?.platformCredentials?.map((f) => f.key) ?? []
+}
+
 /**
  * Managed-cloud source: shared OAuth-app credentials from
  * INTEGRATION_<PROVIDER>_<FIELD> env (projected from OpenBao via ESO).
  *
- * `env` and `knownTypes` are injectable for testing; in production they default to
- * process.env and the integration registry's type list.
+ * Reports an integration as configured only when EVERY field the provider declares
+ * in `platformCredentials` is present (fail closed) — matching the DB write
+ * validation in functions/platform-credentials.ts. This prevents a partially
+ * populated OpenBao path from looking configured and then failing mid-OAuth (e.g.
+ * clientId present but clientSecret/signingSecret missing).
+ *
+ * `env`, `knownTypes` and `requiredFields` are injectable for testing; in production
+ * they default to process.env and the integration registry.
  */
 export class EnvCredentialSource implements CredentialSource {
   constructor(
     private readonly env: Record<string, string | undefined> = process.env,
-    private readonly knownTypes: () => Promise<string[]> = defaultKnownTypes
+    private readonly knownTypes: () => Promise<string[]> = defaultKnownTypes,
+    private readonly requiredFields: (type: string) => Promise<string[]> = defaultRequiredFields
   ) {}
 
   private read(integrationType: string): Record<string, string> {
@@ -103,17 +116,31 @@ export class EnvCredentialSource implements CredentialSource {
     return out
   }
 
-  async get(integrationType: string): Promise<Record<string, string> | null> {
+  /** The creds for a type, or null unless every declared field is present (fail closed). */
+  private async complete(integrationType: string): Promise<Record<string, string> | null> {
     const creds = this.read(integrationType)
-    return Object.keys(creds).length > 0 ? creds : null
+    if (Object.keys(creds).length === 0) return null
+    const required = await this.requiredFields(integrationType)
+    for (const key of required) {
+      if (!creds[key]) return null
+    }
+    return creds
+  }
+
+  async get(integrationType: string): Promise<Record<string, string> | null> {
+    return this.complete(integrationType)
   }
 
   async has(integrationType: string): Promise<boolean> {
-    return Object.keys(this.read(integrationType)).length > 0
+    return (await this.complete(integrationType)) !== null
   }
 
   async listConfigured(): Promise<string[]> {
     const types = await this.knownTypes()
-    return types.filter((t) => Object.keys(this.read(t)).length > 0)
+    const out: string[] = []
+    for (const t of types) {
+      if (await this.complete(t)) out.push(t)
+    }
+    return out
   }
 }
