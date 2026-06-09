@@ -23,7 +23,7 @@ export interface AuthProviderDefinition {
   platformCredentials: PlatformCredentialField[]
 }
 
-const AUTH_CREDENTIAL_PREFIX = 'auth_'
+export const AUTH_CREDENTIAL_PREFIX = 'auth_'
 
 function baseCredentials(providerName: string, helpUrl?: string): PlatformCredentialField[] {
   return [

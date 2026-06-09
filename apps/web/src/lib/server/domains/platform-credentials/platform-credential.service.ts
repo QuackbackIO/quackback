@@ -18,6 +18,7 @@ import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { config } from '@/lib/server/config'
 import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
+import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 
 interface SavePlatformCredentialsInput {
   integrationType: string
@@ -56,10 +57,12 @@ function activeSource(): CredentialSource {
 // concern: they are per-tenant, DB-managed (the control plane seeds auth_sso), and
 // the env source has no knowledge of them. They are ALWAYS DB-backed regardless of
 // PLATFORM_CREDENTIALS_SOURCE — the env switch governs only the 24 integrations.
-const AUTH_CREDENTIAL_PREFIX = 'auth_'
+function isAuthCredentialType(integrationType: string): boolean {
+  return integrationType.startsWith(AUTH_CREDENTIAL_PREFIX)
+}
 
 function sourceForType(integrationType: string): CredentialSource {
-  return integrationType.startsWith(AUTH_CREDENTIAL_PREFIX) ? dbSource() : activeSource()
+  return isAuthCredentialType(integrationType) ? dbSource() : activeSource()
 }
 
 /**
@@ -67,7 +70,7 @@ function sourceForType(integrationType: string): CredentialSource {
  * editable here. auth_* credentials are never platform-managed (always DB-editable).
  */
 export function arePlatformCredentialsManaged(integrationType?: string): boolean {
-  if (integrationType?.startsWith(AUTH_CREDENTIAL_PREFIX)) return false
+  if (integrationType && isAuthCredentialType(integrationType)) return false
   return config.platformCredentialsSource === 'env'
 }
 
@@ -169,7 +172,7 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
   if (config.platformCredentialsSource === 'env') {
     const dbTypes = await dbSource().listConfigured()
     for (const t of dbTypes) {
-      if (t.startsWith(AUTH_CREDENTIAL_PREFIX) && !types.includes(t)) types.push(t)
+      if (isAuthCredentialType(t) && !types.includes(t)) types.push(t)
     }
   }
   await cacheSet(configuredTypesCacheKey(), types, 3600)
