@@ -1,6 +1,7 @@
 import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ChatBubbleLeftRightIcon,
   PaperAirplaneIcon,
@@ -8,6 +9,7 @@ import {
   ChatBubbleBottomCenterTextIcon,
   PencilSquareIcon,
   ChevronLeftIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { isValidTypeId } from '@quackback/ids'
@@ -67,6 +69,7 @@ import {
   type StatusFilter,
 } from '@/lib/client/chat/inbox-scope'
 import { chatInboxQueries } from '@/lib/client/queries/chat-inbox'
+import { buildAdminChatRows, type AdminChatRow } from '@/lib/client/chat/admin-chat-rows'
 import type { JSONContent } from '@tiptap/core'
 import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
 import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
@@ -738,39 +741,68 @@ function ChatThread({
     new Date(conversation.visitorLastReadAt).getTime() >=
       new Date(lastAgentMessage.createdAt).getTime()
 
-  // Keyed on the newest id (not length) so prepending older messages doesn't
-  // yank the view to the bottom. Skipped while a jump is pending so it doesn't
-  // fight the scroll-to-target (the ref read avoids re-firing when it resolves).
-  useEffect(() => {
-    if (pendingTargetRef.current) return
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages.at(-1)?.id, isLoading, isVisitorTyping])
+  // Flatten the thread into virtualized rows (load-older → messages w/ unread
+  // divider → empty → seen → typing). anchorTo:'end' + followOnAppend keep the
+  // view pinned to the newest message and stick to the bottom as messages stream
+  // in; getItemKey (message id) lets the virtualizer hold the viewport when older
+  // history is prepended, and measureElement re-pins after late-loading images
+  // grow a row (replacing the old one-shot scroll + ResizeObserver pinning).
+  const rows = useMemo(
+    () =>
+      buildAdminChatRows({
+        messages,
+        hasMoreOlder,
+        firstUnreadId,
+        showSeen: lastAgentSeen && !isVisitorTyping,
+        showTyping: isVisitorTyping,
+      }),
+    [messages, hasMoreOlder, firstUnreadId, lastAgentSeen, isVisitorTyping]
+  )
 
-  // Keep the thread pinned to the bottom as late-loading content (image
-  // attachments that decode after the message renders) grows it — the one-shot
-  // scroll above fires before images have height. A ResizeObserver re-pins on
-  // any content-height change while the viewer is already at the bottom, so an
-  // image never lands below the fold; a scrolled-up reader and message-jumps are
-  // left alone.
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,
+    getItemKey: (index) => rows[index].key,
+    anchorTo: 'end',
+    followOnAppend: true,
+    overscan: 6,
+  })
+
+  // Land on the newest message once the thread has loaded. The component is keyed
+  // on conversationId, so this fires per thread. A pending `?m=` jump owns the
+  // scroll, so consume the one-shot without scrolling to the bottom in that case.
+  const didInitialScroll = useRef(false)
+  useLayoutEffect(() => {
+    if (isLoading || didInitialScroll.current || rows.length === 0) return
+    didInitialScroll.current = true
+    if (pendingTargetRef.current) return
+    virtualizer.scrollToEnd()
+  }, [isLoading, rows.length, virtualizer])
+
+  // After our own send, jump to the freshly-appended message — followOnAppend
+  // only auto-follows when already at the bottom, so an agent who replied while
+  // scrolled up still lands on their message. Deferred to a layout effect so the
+  // new row exists in `rows` before we scroll (onSuccess appends it this tick,
+  // when rows.length is still stale).
+  const pendingOwnSendScroll = useRef(false)
+  useLayoutEffect(() => {
+    if (!pendingOwnSendScroll.current || rows.length === 0) return
+    pendingOwnSendScroll.current = false
+    virtualizer.scrollToIndex(rows.length - 1, { align: 'end' })
+  }, [rows.length, virtualizer])
+
+  // Scroll-to-bottom pill state. `atEnd` reads the live virtualizer offset, which
+  // lags one frame behind a programmatic/follow scroll — so to flag "new messages
+  // below" we compare against the PREVIOUS render's at-end state (wasAtEndRef),
+  // not the live value (which momentarily reads false right after any append).
+  const atEnd = virtualizer.isAtEnd()
+  const [hasNewBelow, setHasNewBelow] = useState(false)
+  const wasAtEndRef = useRef(true)
   useEffect(() => {
-    const viewport = scrollRef.current
-    const content = viewport?.firstElementChild
-    if (!viewport || !content) return
-    let pinned = true
-    const onScroll = () => {
-      pinned = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80
-    }
-    viewport.addEventListener('scroll', onScroll, { passive: true })
-    const ro = new ResizeObserver(() => {
-      if (pinned && !pendingTargetRef.current) viewport.scrollTop = viewport.scrollHeight
-    })
-    ro.observe(content)
-    return () => {
-      viewport.removeEventListener('scroll', onScroll)
-      ro.disconnect()
-    }
-  }, [conversationId])
+    if (atEnd) setHasNewBelow(false)
+    wasAtEndRef.current = atEnd
+  }, [atEnd])
 
   // Re-arm the jump whenever the URL target changes (e.g. clicking another
   // "Saved for later" message while this conversation is already open).
@@ -779,16 +811,15 @@ function ChatThread({
     jumpPagesRef.current = 0
   }, [targetMessageId])
 
-  // Resolve a pending jump: once the target message is loaded, scroll it to
-  // center and flash it; otherwise pull older pages (capped) until it appears
-  // or we run out. Giving up clears pendingTarget so normal scrolling resumes.
+  // Resolve a pending jump: once the target message is loaded, center it via the
+  // virtualizer and flash it (scrollToIndex self-corrects as off-screen rows are
+  // measured); otherwise pull older pages (capped) until it appears or we run
+  // out. Giving up clears pendingTarget so normal scrolling resumes.
   useEffect(() => {
     if (!pendingTarget || isLoading) return
-    if (messages.some((m) => m.id === pendingTarget)) {
-      const el = scrollRef.current?.querySelector(
-        `[data-message-id="${CSS.escape(pendingTarget)}"]`
-      )
-      el?.scrollIntoView({ block: 'center' })
+    const index = rows.findIndex((r) => r.type === 'message' && r.message.id === pendingTarget)
+    if (index >= 0) {
+      virtualizer.scrollToIndex(index, { align: 'center' })
       setHighlightId(pendingTarget)
       setPendingTarget(null)
       return
@@ -799,7 +830,7 @@ function ChatThread({
     } else if (!hasMoreOlder || jumpPagesRef.current >= MAX_JUMP_PAGES) {
       setPendingTarget(null)
     }
-  }, [pendingTarget, messages, isLoading, hasMoreOlder, loadingOlder])
+  }, [pendingTarget, rows, isLoading, hasMoreOlder, loadingOlder, virtualizer])
 
   // Clear the flash once it has played through.
   useEffect(() => {
@@ -819,6 +850,18 @@ function ChatThread({
       .then(() => onChanged())
       .catch(() => {})
   }, [conversationId, lastMessageId, isLoading, onChanged])
+
+  // Surface the "new messages" pill when a message lands while the agent was
+  // scrolled up. We gate on wasAtEndRef (the PREVIOUS render's at-end state)
+  // rather than the live isAtEnd — appending grows the total size, so the live
+  // value reads false for a frame even when followOnAppend re-pins us.
+  const prevLastIdRef = useRef(lastMessageId)
+  useEffect(() => {
+    if (lastMessageId && lastMessageId !== prevLastIdRef.current && !wasAtEndRef.current) {
+      setHasNewBelow(true)
+    }
+    prevLastIdRef.current = lastMessageId
+  }, [lastMessageId])
 
   // Merge a freshly-sent message into the thread cache (dedup by id).
   const appendToThread = (res: { conversation: ConversationDTO; message: ChatMessageDTO }) => {
@@ -850,6 +893,9 @@ function ChatThread({
       }),
     onSuccess: (res) => {
       clearAttachments()
+      // Our own send always lands at the bottom (followOnAppend only follows
+      // when already at end); the layout effect scrolls once the row exists.
+      pendingOwnSendScroll.current = true
       appendToThread(res)
     },
     onError: () => toast.error('Failed to send message'),
@@ -871,6 +917,7 @@ function ChatThread({
       }),
     onSuccess: (res) => {
       clearAttachments()
+      pendingOwnSendScroll.current = true
       appendToThread(res)
     },
     onError: () => toast.error('Failed to add note'),
@@ -1041,6 +1088,59 @@ function ChatThread({
     setReplyResetSignal((n) => n + 1)
   }, [replyText, noteText, noteMode, noteMutation, pendingAttachments, uploading, sendMutation])
 
+  // Render one virtualized row. AdminBubble keeps all its behaviors (and its
+  // data-message-id root); the affordance rows mirror the old inline markup.
+  const renderRow = (row: AdminChatRow) => {
+    switch (row.type) {
+      case 'load-older':
+        return (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadOlder()}
+              disabled={loadingOlder}
+              className="rounded-full border border-border/60 px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+            >
+              {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+            </button>
+          </div>
+        )
+      case 'unread':
+        return <UnreadDivider />
+      case 'message': {
+        const m = row.message
+        return (
+          <AdminBubble
+            message={m}
+            highlighted={m.id === highlightId}
+            onOpenPost={openPost}
+            onDelete={() => deleteMutation.mutate(m.id)}
+            onToggleReaction={(emoji, hasReacted) =>
+              reactionMutation.mutate({ messageId: m.id, emoji, hasReacted })
+            }
+            onToggleFlag={(next) => flagMutation.mutate({ messageId: m.id, flagged: next })}
+            onMarkUnread={() => markUnreadMutation.mutate(m.id)}
+            onSharePost={() => setShareMsg(m)}
+            onTrackAsPost={() => setSuggestMsg(m)}
+            onTrackSuggestion={(s) => setSuggestionSeed(s)}
+            linkPreviews={linkPreviewsEnabled}
+          />
+        )
+      }
+      case 'empty':
+        return <p className="py-8 text-center text-sm text-muted-foreground">No messages yet</p>
+      case 'seen':
+        return <p className="pe-1 text-end text-[10px] text-muted-foreground/50">Seen</p>
+      case 'typing':
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+            <TypingDots />
+            <span>{conversation?.visitor.displayName ?? 'Visitor'} is typing…</span>
+          </div>
+        )
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -1163,55 +1263,56 @@ function ChatThread({
           </div>
         )}
 
-        {/* Messages — min-h-0 so this scrolls and the composer stays pinned. */}
-        <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef}>
-          <div className="flex flex-col gap-3 px-5 py-4">
-            {hasMoreOlder && (
-              <button
-                type="button"
-                onClick={() => void loadOlder()}
-                disabled={loadingOlder}
-                className="mx-auto rounded-full border border-border/60 px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
-              >
-                {loadingOlder ? 'Loading…' : 'Load earlier messages'}
-              </button>
-            )}
-            {messages.map((m) => (
-              <div key={m.id}>
-                {m.id === firstUnreadId && <UnreadDivider />}
-                <AdminBubble
-                  message={m}
-                  highlighted={m.id === highlightId}
-                  onOpenPost={openPost}
-                  onDelete={() => deleteMutation.mutate(m.id)}
-                  onToggleReaction={(emoji, hasReacted) =>
-                    reactionMutation.mutate({ messageId: m.id, emoji, hasReacted })
-                  }
-                  onToggleFlag={(next) => flagMutation.mutate({ messageId: m.id, flagged: next })}
-                  onMarkUnread={() => markUnreadMutation.mutate(m.id)}
-                  onSharePost={() => setShareMsg(m)}
-                  onTrackAsPost={() => setSuggestMsg(m)}
-                  onTrackSuggestion={(s) => setSuggestionSeed(s)}
-                  linkPreviews={linkPreviewsEnabled}
-                />
-              </div>
-            ))}
-            {messages.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">No messages yet</p>
-            )}
+        {/* Messages — min-h-0 so this scrolls and the composer stays pinned. The
+            thread is virtualized (TanStack Virtual chat pattern): each row is
+            absolutely positioned at its measured offset within a spacer sized to
+            the total height. The wrapper is `relative` so the scroll-to-bottom
+            pill can float over the thread. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef}>
+            <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+              {virtualizer.getVirtualItems().map((vi) => (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  className="absolute inset-x-0 top-0"
+                  style={{ transform: `translateY(${vi.start}px)` }}
+                >
+                  <div className="px-5 py-1.5">{renderRow(rows[vi.index])}</div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
 
-            {lastAgentSeen && !isVisitorTyping && (
-              <p className="-mt-1.5 pe-1 text-end text-[10px] text-muted-foreground/50">Seen</p>
-            )}
-
-            {isVisitorTyping && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
-                <TypingDots />
-                <span>{conversation?.visitor.displayName ?? 'Visitor'} is typing…</span>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+          {/* Scroll-to-bottom pill: shown when scrolled up off the newest
+              message; highlighted (primary + dot) when a message arrived while
+              the agent was away from the bottom. */}
+          {!atEnd && (
+            <button
+              type="button"
+              onClick={() => {
+                setHasNewBelow(false)
+                virtualizer.scrollToIndex(rows.length - 1, { align: 'end', behavior: 'smooth' })
+              }}
+              className={cn(
+                'absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md transition-colors',
+                hasNewBelow
+                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+              aria-label={hasNewBelow ? 'New messages — jump to latest' : 'Jump to latest'}
+            >
+              {hasNewBelow && (
+                <>
+                  <span className="size-1.5 rounded-full bg-primary-foreground" />
+                  <span>New messages</span>
+                </>
+              )}
+              <ChevronDownIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         {/* Composer */}
         <div className="border-t border-border/50 p-3">
