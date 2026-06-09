@@ -56,6 +56,11 @@ export function getIntegration(type: string): IntegrationDefinition | undefined 
   return registry.get(type)
 }
 
+/** The full list of registered integration type ids (e.g. 'slack', 'azure-devops'). */
+export function listIntegrationTypes(): string[] {
+  return [...registry.keys()]
+}
+
 export async function getIntegrationCatalog(): Promise<IntegrationCatalogEntry[]> {
   const { getConfiguredIntegrationTypes } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
