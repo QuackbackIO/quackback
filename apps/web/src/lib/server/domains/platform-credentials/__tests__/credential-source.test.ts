@@ -92,4 +92,25 @@ describe('EnvCredentialSource', () => {
     }).listConfigured()
     expect([...result].sort()).toEqual(['slack'])
   })
+
+  it('get() returns null for a provider that declares no platform-credential fields', async () => {
+    // A webhook-only provider isn't configurable via env, even with a stray var.
+    const s = new EnvCredentialSource(
+      { INTEGRATION_WEBHOOKY_FOO: 'x' },
+      async () => ['webhooky'],
+      async () => []
+    )
+    expect(await s.get('webhooky')).toBeNull()
+    expect(await s.listConfigured()).toEqual([])
+  })
+
+  it('get() ignores whitespace-only values (matches DB trim validation)', async () => {
+    expect(
+      await src({
+        INTEGRATION_SLACK_CLIENT_ID: 'id',
+        INTEGRATION_SLACK_CLIENT_SECRET: '   ',
+        INTEGRATION_SLACK_SIGNING_SECRET: 'sig',
+      }).get('slack')
+    ).toBeNull()
+  })
 })

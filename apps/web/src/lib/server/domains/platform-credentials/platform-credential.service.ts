@@ -116,7 +116,7 @@ export async function savePlatformCredentials({
   // One Redis round-trip drops both keys (TENANT_SETTINGS for the
   // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
   // configured-types Set hit by getRegisteredAuthProviders).
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, configuredTypesCacheKey())
 }
 
 /**
@@ -148,8 +148,18 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
  * miss. Only the integration-type *names* are cached (no secret material),
  * and save/delete flows invalidate the key.
  */
+// In env mode the configured-type set is computed from env (not the DB) and no
+// integration write-path invalidates it, so key it separately from db mode —
+// otherwise a stale db-mode list (often empty) would be served to env pods after a
+// db→env cutover for up to the TTL. db mode keeps the original key (self-host unchanged).
+function configuredTypesCacheKey(): string {
+  return config.platformCredentialsSource === 'env'
+    ? `${CACHE_KEYS.PLATFORM_INTEGRATION_TYPES}:env`
+    : CACHE_KEYS.PLATFORM_INTEGRATION_TYPES
+}
+
 export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
-  const cached = await cacheGet<string[]>(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  const cached = await cacheGet<string[]>(configuredTypesCacheKey())
   if (cached) return new Set(cached)
 
   const types = await activeSource().listConfigured()
@@ -162,7 +172,7 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
       if (t.startsWith(AUTH_CREDENTIAL_PREFIX) && !types.includes(t)) types.push(t)
     }
   }
-  await cacheSet(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES, types, 3600)
+  await cacheSet(configuredTypesCacheKey(), types, 3600)
   return new Set(types)
 }
 
@@ -181,5 +191,5 @@ export async function deletePlatformCredentials(integrationType: string): Promis
     await bumpAuthConfigVersionInTx(tx)
   })
   resetAuth()
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, configuredTypesCacheKey())
 }

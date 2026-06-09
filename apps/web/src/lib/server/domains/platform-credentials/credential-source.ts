@@ -61,7 +61,7 @@ export class DbCredentialSource implements CredentialSource {
 
 const ENV_PREFIX = 'INTEGRATION_'
 
-/** INTEGRATION_<TYPE>_  — e.g. 'azure-devops' -> 'INTEGRATION_AZURE_DEVOPS_'. */
+/** INTEGRATION_<TYPE>_  — e.g. 'azure_devops' -> 'INTEGRATION_AZURE_DEVOPS_'. Any hyphen in an id is normalized to '_'. */
 function envPrefix(integrationType: string): string {
   return `${ENV_PREFIX}${integrationType.toUpperCase().replace(/-/g, '_')}_`
 }
@@ -109,8 +109,11 @@ export class EnvCredentialSource implements CredentialSource {
     const prefix = envPrefix(integrationType)
     const out: Record<string, string> = {}
     for (const [key, value] of Object.entries(this.env)) {
-      if (value && key.startsWith(prefix) && key.length > prefix.length) {
-        out[fieldFromEnvKey(prefix, key)] = value
+      // Trim to match the DB write validation (functions/platform-credentials.ts
+      // stores value.trim()), so a whitespace-only var counts as absent.
+      const v = value?.trim()
+      if (v && key.startsWith(prefix) && key.length > prefix.length) {
+        out[fieldFromEnvKey(prefix, key)] = v
       }
     }
     return out
@@ -118,9 +121,11 @@ export class EnvCredentialSource implements CredentialSource {
 
   /** The creds for a type, or null unless every declared field is present (fail closed). */
   private async complete(integrationType: string): Promise<Record<string, string> | null> {
-    const creds = this.read(integrationType)
-    if (Object.keys(creds).length === 0) return null
     const required = await this.requiredFields(integrationType)
+    // A provider that declares no platform-credential fields is not configurable via
+    // env — return null rather than reporting it configured off a stray INTEGRATION_* var.
+    if (required.length === 0) return null
+    const creds = this.read(integrationType)
     for (const key of required) {
       if (!creds[key]) return null
     }

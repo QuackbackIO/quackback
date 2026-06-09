@@ -23,6 +23,7 @@ export function PlatformCredentialsForm({
   const credentialsQuery = useSuspenseQuery(adminQueries.platformCredentials(integrationType))
   const isConfigured = credentialsQuery.data.configured
   const maskedFields = credentialsQuery.data.fields
+  const isManaged = credentialsQuery.data.managed
 
   const [isEditing, setIsEditing] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
@@ -65,6 +66,29 @@ export function PlatformCredentialsForm({
   }
 
   const allFieldsFilled = fields.every((f) => values[f.key]?.trim())
+
+  // Managed cloud: credentials are platform-provided and not editable per-tenant.
+  if (isManaged) {
+    return (
+      <div className="space-y-4">
+        {isConfigured && (
+          <div className="space-y-3">
+            {fields.map((field) => (
+              <div key={field.key}>
+                <Label className="text-sm font-medium text-muted-foreground">{field.label}</Label>
+                <div className="mt-1 rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-sm font-mono text-muted-foreground">
+                  {maskedFields?.[field.key] ?? '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground">
+          These credentials are managed by the platform and can’t be edited here.
+        </p>
+      </div>
+    )
+  }
 
   // Show masked values when configured and not editing
   if (isConfigured && !isEditing) {
