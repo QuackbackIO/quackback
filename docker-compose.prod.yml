@@ -98,7 +98,8 @@ services:
     container_name: quackback-dragonfly
     restart: unless-stopped
     # BullMQ requires cluster_mode=emulated + lock_on_hashtags for Lua script compatibility.
-    command: dragonfly --cluster_mode=emulated --lock_on_hashtags
+    # Persist to the dragonfly_data volume so OAuth sessions + BullMQ jobs survive restarts.
+    command: dragonfly --cluster_mode=emulated --lock_on_hashtags --dir /data --dbfilename dump --snapshot_cron "*/5 * * * *"
     # No host port — reachable only on the internal network.
     volumes:
       - dragonfly_data:/data
