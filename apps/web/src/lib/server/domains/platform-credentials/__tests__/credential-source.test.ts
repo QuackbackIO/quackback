@@ -113,4 +113,15 @@ describe('EnvCredentialSource', () => {
       }).get('slack')
     ).toBeNull()
   })
+
+  it('get() returns only declared fields, dropping undeclared INTEGRATION_ vars', async () => {
+    expect(
+      await src({
+        INTEGRATION_SLACK_CLIENT_ID: 'id',
+        INTEGRATION_SLACK_CLIENT_SECRET: 'sec',
+        INTEGRATION_SLACK_SIGNING_SECRET: 'sig',
+        INTEGRATION_SLACK_EXTRA: 'leak', // undeclared — must not be returned
+      }).get('slack')
+    ).toEqual({ clientId: 'id', clientSecret: 'sec', signingSecret: 'sig' })
+  })
 })

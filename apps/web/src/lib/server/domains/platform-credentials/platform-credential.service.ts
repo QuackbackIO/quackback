@@ -119,7 +119,7 @@ export async function savePlatformCredentials({
   // One Redis round-trip drops both keys (TENANT_SETTINGS for the
   // version-check fallback, PLATFORM_INTEGRATION_TYPES for the cached
   // configured-types Set hit by getRegisteredAuthProviders).
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, configuredTypesCacheKey())
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }
 
 /**
@@ -151,31 +151,30 @@ export async function hasPlatformCredentials(integrationType: string): Promise<b
  * miss. Only the integration-type *names* are cached (no secret material),
  * and save/delete flows invalidate the key.
  */
-// In env mode the configured-type set is computed from env (not the DB) and no
-// integration write-path invalidates it, so key it separately from db mode —
-// otherwise a stale db-mode list (often empty) would be served to env pods after a
-// db→env cutover for up to the TTL. db mode keeps the original key (self-host unchanged).
-function configuredTypesCacheKey(): string {
-  return config.platformCredentialsSource === 'env'
-    ? `${CACHE_KEYS.PLATFORM_INTEGRATION_TYPES}:env`
-    : CACHE_KEYS.PLATFORM_INTEGRATION_TYPES
-}
-
 export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
-  const cached = await cacheGet<string[]>(configuredTypesCacheKey())
-  if (cached) return new Set(cached)
-
-  const types = await activeSource().listConfigured()
-  // auth_* credentials are always DB-backed (the env source can't enumerate them),
-  // so in env mode union them in — otherwise SSO / social-login registration in
-  // getRegisteredAuthProviders would report every auth_* provider as unconfigured.
+  // env mode: derive from the pod's current env on every call. There is no write
+  // path to invalidate a Redis entry in env mode, so caching would serve a stale set
+  // for up to the TTL after OpenBao/ESO changes the managed credentials (e.g. an empty
+  // list from before a provider was added, or a removed one). The cost is an env scan
+  // plus one auth_* DB lookup — cheap, and already gated by the getTenantSettings
+  // cache upstream.
   if (config.platformCredentialsSource === 'env') {
+    const types = await activeSource().listConfigured()
+    // auth_* credentials are always DB-backed (the env source can't enumerate them);
+    // union them in so SSO / social-login registration still resolves.
     const dbTypes = await dbSource().listConfigured()
     for (const t of dbTypes) {
       if (isAuthCredentialType(t) && !types.includes(t)) types.push(t)
     }
+    return new Set(types)
   }
-  await cacheSet(configuredTypesCacheKey(), types, 3600)
+
+  // db mode (self-host): unchanged. The DB set only changes via save/delete, which
+  // invalidate this cache key.
+  const cached = await cacheGet<string[]>(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
+  if (cached) return new Set(cached)
+  const types = await dbSource().listConfigured()
+  await cacheSet(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES, types, 3600)
   return new Set(types)
 }
 
@@ -194,5 +193,5 @@ export async function deletePlatformCredentials(integrationType: string): Promis
     await bumpAuthConfigVersionInTx(tx)
   })
   resetAuth()
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, configuredTypesCacheKey())
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
 }

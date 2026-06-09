@@ -126,10 +126,14 @@ export class EnvCredentialSource implements CredentialSource {
     // env — return null rather than reporting it configured off a stray INTEGRATION_* var.
     if (required.length === 0) return null
     const creds = this.read(integrationType)
+    // Return ONLY the declared fields (like the DB save path, which strips extras), so
+    // an undeclared INTEGRATION_<TYPE>_* var can never leak through the masked admin API.
+    const out: Record<string, string> = {}
     for (const key of required) {
       if (!creds[key]) return null
+      out[key] = creds[key]
     }
-    return creds
+    return out
   }
 
   async get(integrationType: string): Promise<Record<string, string> | null> {
