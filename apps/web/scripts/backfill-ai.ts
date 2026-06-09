@@ -9,10 +9,15 @@
  *   bun scripts/backfill-ai.ts --embeddings # Only process embeddings
  *   bun scripts/backfill-ai.ts --limit=100  # Limit number of posts
  *
- * Environment:
- *   OPENAI_API_KEY     - Required. OpenAI API key.
- *   OPENAI_BASE_URL    - Optional. Custom base URL (e.g., Cloudflare AI Gateway).
- *   DATABASE_URL       - Required. PostgreSQL connection string.
+ * Environment: runs against the app's environment (load the app .env or run
+ * where the app env is present). AI follows the app's central config:
+ *   OPENAI_API_KEY + OPENAI_BASE_URL  - Required (AI is off without BOTH, #180).
+ *   AI_SENTIMENT_MODEL / AI_CHAT_MODEL - chat model for sentiment (off → skipped).
+ *   AI_EMBEDDING_MODEL                 - embedding model (off → skipped).
+ *   DATABASE_URL                       - PostgreSQL connection string.
+ *
+ * Managed cloud: run from a checkout against the tenant DATABASE_URL (the slim
+ * runtime image ships only the bundled app, not scripts/src).
  */
 
 // Load .env if available (optional - can also pass env vars directly)
@@ -23,12 +28,13 @@ try {
   // dotenv not available, rely on environment variables
 }
 
-import OpenAI from 'openai'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { eq, and, isNull, sql, count } from 'drizzle-orm'
 import { posts, postSentiment, postTags, tags } from '@quackback/db/schema'
 import { generateId, type PostId } from '@quackback/ids'
+import { getOpenAI } from '../src/lib/server/domains/ai/config'
+import { getChatModel, getEmbeddingModel } from '../src/lib/server/domains/ai/models'
 
 // Configuration
 const BATCH_SIZE = 10
@@ -55,18 +61,23 @@ if (!process.env.DATABASE_URL) {
   process.exit(1)
 }
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY environment variable is required')
-  process.exit(1)
-}
-
-// Initialize clients
+// Initialize clients. AI follows the app's central config (one client for
+// chat + embeddings; both OPENAI_API_KEY and OPENAI_BASE_URL required, #180).
 const client = postgres(process.env.DATABASE_URL)
 const db = drizzle(client)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-})
+const openai = getOpenAI()
+if (!openai) {
+  console.error('❌ AI is not configured: set OPENAI_API_KEY and OPENAI_BASE_URL (see #180).')
+  process.exit(1)
+}
+const sentimentModel = getChatModel('sentiment')
+const embeddingModel = getEmbeddingModel()
+if (!sentimentModel && !embeddingModel) {
+  console.error(
+    '❌ No AI models configured: set AI_CHAT_MODEL/AI_SENTIMENT_MODEL and/or AI_EMBEDDING_MODEL.'
+  )
+  process.exit(1)
+}
 
 // Retry helper
 async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
@@ -105,15 +116,16 @@ async function analyzeSentiment(
   inputTokens?: number
   outputTokens?: number
 } | null> {
-  // Truncate long content to avoid token limits (gpt-5-nano has ~4k context)
+  // Truncate long content to keep within small-model context windows
   const truncatedContent = (content || '(no content)').slice(0, 3000)
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`
 
   try {
-    // gpt-5-nano uses reasoning tokens (~200) before outputting, so we need more headroom
+    // Headroom above the app's quality-gate budget: some models spend
+    // reasoning tokens before output.
     const response = await withRetry(() =>
       openai.chat.completions.create({
-        model: 'gpt-5-nano',
+        model: sentimentModel!,
         max_completion_tokens: 1000,
         messages: [
           { role: 'system', content: SENTIMENT_PROMPT },
@@ -143,8 +155,8 @@ async function analyzeSentiment(
   }
 }
 
-// Embedding generation
-const EMBEDDING_MODEL = 'text-embedding-3-small'
+// Embedding generation — model from central config; 1536 matches the app's
+// pgvector(1536) columns and the dimensions used at creation time.
 const EMBEDDING_DIMENSIONS = 1536
 
 async function generateEmbedding(text: string): Promise<number[] | null> {
@@ -153,7 +165,7 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
   try {
     const response = await withRetry(() =>
       openai.embeddings.create({
-        model: EMBEDDING_MODEL,
+        model: embeddingModel!,
         input: truncated,
         dimensions: EMBEDDING_DIMENSIONS,
       })
@@ -252,7 +264,7 @@ async function saveSentiment(
       postId,
       sentiment: result.sentiment,
       confidence: result.confidence,
-      model: 'gpt-5-nano',
+      model: sentimentModel!,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
     })
@@ -261,7 +273,7 @@ async function saveSentiment(
       set: {
         sentiment: result.sentiment,
         confidence: result.confidence,
-        model: 'gpt-5-nano',
+        model: sentimentModel!,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         processedAt: new Date(),
@@ -453,10 +465,18 @@ async function main() {
   console.log('🦆 Quackback AI Backfill\n')
   console.log('Configuration:')
   console.log(`  Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE'}`)
-  console.log(`  Sentiment: ${embeddingsOnly ? 'Skip' : 'Process'}`)
-  console.log(`  Embeddings: ${sentimentOnly ? 'Skip' : 'Process'}`)
+  // A phase runs only when its model is configured (central config, #206)
+  // AND the matching CLI filter allows it.
+  const runSentiment = !embeddingsOnly && sentimentModel !== null
+  const runEmbeddings = !sentimentOnly && embeddingModel !== null
+  console.log(
+    `  Sentiment: ${runSentiment ? `Process (${sentimentModel})` : embeddingsOnly ? 'Skip (--embeddings)' : 'Skip (no sentiment/chat model configured)'}`
+  )
+  console.log(
+    `  Embeddings: ${runEmbeddings ? `Process (${embeddingModel})` : sentimentOnly ? 'Skip (--sentiment)' : 'Skip (no embedding model configured)'}`
+  )
   console.log(`  Limit: ${limit ?? 'All posts'}`)
-  console.log(`  OpenAI Base URL: ${process.env.OPENAI_BASE_URL || 'default'}`)
+  console.log(`  OpenAI Base URL: ${process.env.OPENAI_BASE_URL}`)
 
   const results: {
     sentiment?: { processed: number; failed: number; skipped: number }
@@ -464,12 +484,12 @@ async function main() {
   } = {}
 
   // Process sentiment
-  if (!embeddingsOnly) {
+  if (runSentiment) {
     results.sentiment = await backfillSentiment(limit)
   }
 
   // Process embeddings
-  if (!sentimentOnly) {
+  if (runEmbeddings) {
     results.embeddings = await backfillEmbeddings(limit)
   }
 

@@ -54,17 +54,19 @@ const createdPostIds: string[] = []
 const createdRawItemIds: string[] = []
 const createdVoteIds: string[] = []
 
-/** Generate an embedding for text via the configured OpenAI-compatible API. */
+/** Generate an embedding via the app's central AI config (#206) — same
+ *  client, model and dimensions (pgvector(1536)) as the runtime pipeline. */
 async function getEmbedding(text: string): Promise<number[] | null> {
   try {
-    const OpenAI = (await import('openai')).default
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: process.env.OPENAI_BASE_URL,
-    })
+    const { getOpenAI } = await import('../src/lib/server/domains/ai/config')
+    const { getEmbeddingModel } = await import('../src/lib/server/domains/ai/models')
+    const openai = getOpenAI()
+    const model = getEmbeddingModel()
+    if (!openai || !model) return null
     const resp = await openai.embeddings.create({
-      model: 'openai/text-embedding-3-small',
+      model,
       input: text.slice(0, 8000),
+      dimensions: 1536,
     })
     return resp.data[0]?.embedding ?? null
   } catch {

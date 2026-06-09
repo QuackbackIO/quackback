@@ -26,12 +26,13 @@ try {
   // dotenv not available
 }
 
-import OpenAI from 'openai'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { eq, and, or, isNull, desc, sql, count } from 'drizzle-orm'
 import { posts, mergeSuggestions } from '@quackback/db/schema'
 import { toUuid, type PostId } from '@quackback/ids'
+import { getOpenAI } from '../src/lib/server/domains/ai/config'
+import { getChatModel } from '../src/lib/server/domains/ai/models'
 
 // ============================================
 // Configuration
@@ -46,7 +47,6 @@ const LLM_CONFIDENCE_THRESHOLD = 0.75
 const CANDIDATE_LIMIT = 5
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
-const ASSESSMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 // Parse CLI arguments
 const args = process.argv.slice(2)
@@ -60,17 +60,19 @@ if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL environment variable is required')
   process.exit(1)
 }
-if (!process.env.OPENAI_API_KEY) {
-  console.error('OPENAI_API_KEY environment variable is required')
-  process.exit(1)
-}
-
 const client = postgres(process.env.DATABASE_URL)
 const db = drizzle(client)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-})
+// AI follows the app's central config (#206): one client, model per role.
+const openai = getOpenAI()
+if (!openai) {
+  console.error('AI is not configured: set OPENAI_API_KEY and OPENAI_BASE_URL (see #180).')
+  process.exit(1)
+}
+const ASSESSMENT_MODEL = getChatModel('merge')
+if (!ASSESSMENT_MODEL) {
+  console.error('Merge assessment is disabled: set AI_MERGE_MODEL or AI_CHAT_MODEL.')
+  process.exit(1)
+}
 
 // ============================================
 // Helpers
