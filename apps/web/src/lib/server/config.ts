@@ -290,6 +290,15 @@ export const config = {
     return process.env.HELP_CENTER_DEV === 'true'
   },
 
+  // Platform (OAuth-app) credential source.
+  //   'db'  (default) — self-host: the integration_platform_credentials table + admin UI.
+  //   'env' — managed cloud: shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
+  //           (projected from OpenBao via ESO), like the CP's own STRIPE_SECRET_KEY.
+  // Direct process.env read (like helpCenterDev) so it works without a full config load.
+  get platformCredentialsSource(): 'db' | 'env' {
+    return process.env.PLATFORM_CREDENTIALS_SOURCE === 'env' ? 'env' : 'db'
+  },
+
   // Convenience
   get isDev() {
     return this.nodeEnv === 'development'

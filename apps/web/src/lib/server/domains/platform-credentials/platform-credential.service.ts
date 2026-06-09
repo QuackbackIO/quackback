@@ -4,15 +4,20 @@
  * Manages OAuth app credentials (client ID, client secret, bot tokens) that
  * enable integrations at the platform level. These are separate from per-instance
  * tokens stored in the integrations table.
+ *
+ * Reads are delegated to a CredentialSource chosen by config.platformCredentialsSource:
+ * - 'db'  (self-host, default): the integration_platform_credentials table + admin UI.
+ * - 'env' (managed cloud): shared app creds from INTEGRATION_<PROVIDER>_<FIELD> env
+ *   (projected from OpenBao via ESO). In 'env' mode writes are refused — the
+ *   credentials are platform-managed, not editable per-tenant.
  */
 
 import { generateId, type PrincipalId } from '@quackback/ids'
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
-import {
-  encryptPlatformCredentials,
-  decryptPlatformCredentials,
-} from '@/lib/server/integrations/encryption'
+import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption'
+import { config } from '@/lib/server/config'
+import { DbCredentialSource, EnvCredentialSource, type CredentialSource } from './credential-source'
 
 interface SavePlatformCredentialsInput {
   integrationType: string
@@ -21,14 +26,44 @@ interface SavePlatformCredentialsInput {
 }
 
 /**
+ * Thrown when a write is attempted while credentials are platform-managed
+ * (config.platformCredentialsSource === 'env'). Callers should surface this as a
+ * "managed by the platform" state rather than an error.
+ */
+export class PlatformCredentialsManagedError extends Error {
+  constructor() {
+    super('Platform credentials are managed by the platform and cannot be edited here.')
+    this.name = 'PlatformCredentialsManagedError'
+  }
+}
+
+let _dbSource: DbCredentialSource | undefined
+let _envSource: EnvCredentialSource | undefined
+
+/** The active credential source, selected by config.platformCredentialsSource. */
+function credentialSource(): CredentialSource {
+  if (config.platformCredentialsSource === 'env') {
+    return (_envSource ??= new EnvCredentialSource())
+  }
+  return (_dbSource ??= new DbCredentialSource())
+}
+
+/** Whether platform credentials are platform-managed (cloud) and not editable here. */
+export function arePlatformCredentialsManaged(): boolean {
+  return config.platformCredentialsSource === 'env'
+}
+
+/**
  * Save (upsert) platform credentials for an integration type.
- * Encrypts all credential values before storing.
+ * Encrypts all credential values before storing. Refused in managed-cloud mode.
  */
 export async function savePlatformCredentials({
   integrationType,
   credentials,
   principalId,
 }: SavePlatformCredentialsInput): Promise<void> {
+  if (arePlatformCredentialsManaged()) throw new PlatformCredentialsManagedError()
+
   const encrypted = encryptPlatformCredentials(credentials)
   const now = new Date()
 
@@ -77,21 +112,7 @@ export async function savePlatformCredentials({
 export async function getPlatformCredentials(
   integrationType: string
 ): Promise<Record<string, string> | null> {
-  const row = await db.query.integrationPlatformCredentials.findFirst({
-    where: eq(integrationPlatformCredentials.integrationType, integrationType),
-    columns: { secrets: true },
-  })
-
-  if (!row) return null
-  try {
-    return decryptPlatformCredentials<Record<string, string>>(row.secrets)
-  } catch (error) {
-    console.error(
-      `[PlatformCredentials] Failed to decrypt credentials for ${integrationType}:`,
-      error
-    )
-    return null
-  }
+  return credentialSource().get(integrationType)
 }
 
 /**
@@ -99,11 +120,7 @@ export async function getPlatformCredentials(
  * Lightweight check — no decryption.
  */
 export async function hasPlatformCredentials(integrationType: string): Promise<boolean> {
-  const row = await db.query.integrationPlatformCredentials.findFirst({
-    where: eq(integrationPlatformCredentials.integrationType, integrationType),
-    columns: { id: true },
-  })
-  return !!row
+  return credentialSource().has(integrationType)
 }
 
 /**
@@ -117,18 +134,17 @@ export async function getConfiguredIntegrationTypes(): Promise<Set<string>> {
   const cached = await cacheGet<string[]>(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES)
   if (cached) return new Set(cached)
 
-  const rows = await db.query.integrationPlatformCredentials.findMany({
-    columns: { integrationType: true },
-  })
-  const types = rows.map((r) => r.integrationType)
+  const types = await credentialSource().listConfigured()
   await cacheSet(CACHE_KEYS.PLATFORM_INTEGRATION_TYPES, types, 3600)
   return new Set(types)
 }
 
 /**
- * Delete platform credentials for an integration type.
+ * Delete platform credentials for an integration type. Refused in managed-cloud mode.
  */
 export async function deletePlatformCredentials(integrationType: string): Promise<void> {
+  if (arePlatformCredentialsManaged()) throw new PlatformCredentialsManagedError()
+
   const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
   const { resetAuth } = await import('@/lib/server/auth')
   await db.transaction(async (tx) => {
