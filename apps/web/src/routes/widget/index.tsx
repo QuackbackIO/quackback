@@ -24,6 +24,8 @@ import { WidgetHelp } from '@/components/widget/widget-help'
 import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
 import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
 import { WidgetLiveChat } from '@/components/widget/widget-live-chat'
+import type { ConversationId } from '@quackback/ids'
+import { WidgetMessagesSection } from '@/components/widget/widget-messages-section'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
@@ -198,6 +200,12 @@ function WidgetPage() {
   const [activeTab, setActiveTab] = useState<WidgetTab>(
     resumeConversationId && tabs.chat ? 'help' : initialTab
   )
+  // Which thread the chat view opens: an id, 'new', or null (active/default).
+  // Seeded from the ?c= deep link so it opens that exact thread.
+  const [chatTarget, setChatTarget] = useState<ConversationId | 'new' | null>(
+    resumeConversationId ? (resumeConversationId as ConversationId) : null
+  )
+
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
@@ -214,6 +222,12 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
+  const openChat = useCallback((target?: ConversationId | 'new') => {
+    setChatTarget(target ?? null)
+    setActiveTab('help')
+    setView('chat')
+  }, [])
+
   // Listen for quackback:open messages from the SDK
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -229,8 +243,7 @@ function WidgetPage() {
         setActiveTab('help')
         setView(supportRootView(tabs))
       } else if ((opts.view === 'chat' || opts.view === 'live-chat') && tabs.chat) {
-        setActiveTab('help')
-        setView('chat')
+        openChat()
       } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
         setActiveTab('home')
         setView('overview')
@@ -238,7 +251,7 @@ function WidgetPage() {
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [tabs])
+  }, [tabs, openChat])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
     setCreatedPosts((prev) => [
@@ -282,15 +295,14 @@ function WidgetPage() {
       return
     }
     if (view === 'chat') {
-      // Chat is reached from within the support surface, so back returns to the
-      // help articles (this path is only wired when help is enabled — a
-      // chat-only support surface treats chat as its root, with no back).
-      setView('help')
+      // Chat is opened from the support surface; back returns to its root
+      // (help articles, or the messages list for a chat-only widget).
+      setView(supportRootView(tabs))
       return
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory])
+  }, [view, selectedCategory, tabs])
 
   const handleTabChange = useCallback(
     (tab: WidgetTab) => {
@@ -336,16 +348,13 @@ function WidgetPage() {
     setView('help-detail')
   }, [])
 
-  // Root views have no back arrow. Chat is a root only when it is the entire
-  // support surface (help disabled); when help is on, chat sits above the help
-  // articles and backs out to them.
-  const chatIsRoot = view === 'chat' && !tabs.help
+  // Root views have no back arrow. 'messages' is the chat-only support root.
   const shellOnBack =
     view !== 'overview' &&
     view !== 'feedback' &&
     view !== 'changelog' &&
     view !== 'help' &&
-    !chatIsRoot
+    view !== 'messages'
       ? handleBack
       : undefined
 
@@ -364,10 +373,7 @@ function WidgetPage() {
           tabs={tabs}
           onLeaveFeedback={() => handleTabChange('feedback')}
           onGetHelp={() => handleTabChange('help')}
-          onResumeChat={() => {
-            setActiveTab('help')
-            setView('chat')
-          }}
+          onResumeChat={() => openChat()}
           onSeeChangelog={() => handleTabChange('changelog')}
           onOpenChangelogEntry={(id) => {
             setActiveTab('changelog')
@@ -379,7 +385,18 @@ function WidgetPage() {
       {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
 
       {view === 'chat' && (
-        <WidgetLiveChat helpEnabled={tabs.help} onArticleSelect={handleHelpArticleSelect} />
+        <WidgetLiveChat
+          key={chatTarget ?? 'active'}
+          helpEnabled={tabs.help}
+          onArticleSelect={handleHelpArticleSelect}
+          conversationTarget={chatTarget === null ? undefined : chatTarget}
+        />
+      )}
+
+      {view === 'messages' && (
+        <div className="flex h-full flex-col overflow-y-auto px-3 pb-3">
+          <WidgetMessagesSection onOpenChat={openChat} />
+        </div>
       )}
 
       {view === 'changelog-detail' && selectedChangelogId && (
@@ -390,7 +407,7 @@ function WidgetPage() {
         <WidgetHelp
           onArticleSelect={handleHelpArticleSelect}
           onCategorySelect={handleHelpCategorySelect}
-          onOpenChat={tabs.chat ? () => setView('chat') : undefined}
+          onOpenChat={tabs.chat ? () => openChat() : undefined}
         />
       )}
 
