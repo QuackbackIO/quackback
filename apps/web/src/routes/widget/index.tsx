@@ -132,6 +132,8 @@ export const Route = createFileRoute('/widget/')({
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
       imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
+      linkPreviews:
+        (settings?.featureFlags as { linkPreviews?: boolean } | undefined)?.linkPreviews ?? false,
       defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
       portalAccess: {
         isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
@@ -164,6 +166,7 @@ function WidgetPage() {
     boardPermissions,
     tabs,
     imageUploadsInWidget,
+    linkPreviews,
     defaultBoard,
     portalAccess,
     portalOrigin,
@@ -390,6 +393,7 @@ function WidgetPage() {
           helpEnabled={tabs.help}
           onArticleSelect={handleHelpArticleSelect}
           conversationTarget={chatTarget === null ? undefined : chatTarget}
+          linkPreviews={linkPreviews}
         />
       )}
 

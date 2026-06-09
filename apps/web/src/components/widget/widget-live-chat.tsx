@@ -26,6 +26,7 @@ import {
 } from '@/components/admin/chat/chat-rich-composer'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
+import { LinkPreviews } from '@/components/shared/link-preview-card'
 import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { ChatAttachment, ChatMessageDTO } from '@/lib/shared/chat/types'
@@ -62,12 +63,15 @@ interface WidgetLiveChatProps {
   /** Which thread to open: an id opens that thread, 'new' starts a fresh one,
    *  undefined resumes the visitor's active/most-recent thread. */
   conversationTarget?: ConversationId | 'new'
+  /** When true, render link preview cards below message bubbles. */
+  linkPreviews?: boolean
 }
 
 export function WidgetLiveChat({
   helpEnabled,
   onArticleSelect,
   conversationTarget,
+  linkPreviews = false,
 }: WidgetLiveChatProps = {}) {
   const intl = useIntl()
   const queryClient = useQueryClient()
@@ -515,6 +519,8 @@ export function WidgetLiveChat({
             contentJson={m.contentJson}
             attachments={m.attachments}
             time={formatTime(m.createdAt)}
+            linkPreviews={linkPreviews}
+            getAuthHeaders={getWidgetAuthHeaders}
           />
         )
       }
@@ -886,6 +892,8 @@ interface ChatBubbleProps {
   authorAvatar?: string | null
   attachments?: ChatAttachment[]
   time?: string
+  linkPreviews?: boolean
+  getAuthHeaders?: () => Record<string, string>
 }
 
 /**
@@ -900,6 +908,8 @@ function ChatBubble({
   authorAvatar,
   attachments,
   time,
+  linkPreviews = false,
+  getAuthHeaders,
 }: ChatBubbleProps) {
   return (
     <div className="flex gap-2.5">
@@ -937,6 +947,13 @@ function ChatBubble({
           )
         )}
         {attachments && attachments.length > 0 && <ChatAttachmentList attachments={attachments} />}
+        {linkPreviews && (
+          <LinkPreviews
+            content={content}
+            contentJson={contentJson}
+            getAuthHeaders={getAuthHeaders}
+          />
+        )}
       </div>
     </div>
   )

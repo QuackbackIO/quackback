@@ -19,6 +19,7 @@ import { NoteContent } from './note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/chat/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
+import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   DropdownMenu,
@@ -69,6 +70,8 @@ interface AdminBubbleProps {
   onOpenPost?: (postId: string) => void
   /** Briefly flash this row (deep-link / "Saved for later" jump target). */
   highlighted?: boolean
+  /** When true, render external link preview cards below non-note messages. */
+  linkPreviews?: boolean
 }
 
 export function AdminBubble({
@@ -82,6 +85,7 @@ export function AdminBubble({
   onTrackSuggestion,
   onOpenPost,
   highlighted = false,
+  linkPreviews = false,
 }: AdminBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
@@ -214,6 +218,9 @@ export function AdminBubble({
           )
         )}
         {message.attachments.length > 0 && <ChatAttachmentList attachments={message.attachments} />}
+        {linkPreviews && !isNote && (
+          <LinkPreviews content={message.content} contentJson={message.contentJson} />
+        )}
         {message.reactions.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {message.reactions.map((r) => (

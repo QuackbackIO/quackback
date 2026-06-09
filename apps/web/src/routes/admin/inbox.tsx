@@ -593,8 +593,10 @@ function ChatThread({
   const navigate = Route.useNavigate()
   const threadKey = ['admin', 'inbox', 'thread', conversationId] as const
   // The current agent's display name, for attributing optimistic reactions.
-  const { session } = useRouteContext({ from: '__root__' })
+  const { session, settings } = useRouteContext({ from: '__root__' })
   const myName = session?.user?.name ?? 'You'
+  const linkPreviewsEnabled =
+    (settings?.featureFlags as FeatureFlags | undefined)?.linkPreviews ?? false
 
   // Open an embedded post (clicked in a chat message) in the in-place `?post=`
   // modal the admin layout mounts — route-bound + search-only, so it stays on
@@ -1140,6 +1142,7 @@ function ChatThread({
                   onSharePost={() => setShareMsg(m)}
                   onTrackAsPost={() => setSuggestMsg(m)}
                   onTrackSuggestion={(s) => setSuggestionSeed(s)}
+                  linkPreviews={linkPreviewsEnabled}
                 />
               </div>
             ))}
