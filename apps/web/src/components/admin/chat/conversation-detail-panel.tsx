@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import {
   CalendarIcon,
+  CheckBadgeIcon,
   FaceSmileIcon,
   FlagIcon,
   InboxArrowDownIcon,
@@ -109,13 +111,111 @@ export function ConversationDetailPanel({
 
   const email = detail?.email ?? conversation.visitorEmail
   const previous = (history?.conversations ?? []).filter((c) => c.id !== conversation.id)
+  // `detail` is non-null only for identified portal users, so it doubles as the
+  // identified-vs-anonymous signal (anonymous visitors aren't portal users).
+  const isIdentified = !!detail
+  // Total threads for this visitor (the history page includes the current one);
+  // append "+" when there are more than one page.
+  const convoCount = history?.conversations.length ?? 0
+  const convoMore = history?.hasMore ?? false
+  const firstSeen = detail?.createdAt ?? conversation.createdAt
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col xl:flex">
       <ScrollArea className="min-h-0 flex-1">
         <div className="m-3 space-y-5 rounded-xl border border-border/20 bg-card p-4 shadow-sm">
+          {/* Contact — surfaced first so an agent sees who they're talking to
+              before the management controls. Links into the admin user profile
+              for identified visitors (anonymous ones aren't portal users). */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <Avatar
+                src={conversation.visitor.avatarUrl}
+                name={name}
+                className="size-9 shrink-0 text-sm"
+              />
+              <div className="min-w-0">
+                {isIdentified ? (
+                  <Link
+                    to="/admin/users"
+                    search={{ selected: visitorPrincipalId }}
+                    className="flex items-center gap-1 text-sm font-medium hover:underline"
+                  >
+                    <span className="truncate">{name}</span>
+                    {detail?.emailVerified && (
+                      <CheckBadgeIcon
+                        className="h-3.5 w-3.5 shrink-0 text-primary"
+                        title="Verified email"
+                      />
+                    )}
+                  </Link>
+                ) : (
+                  <p className="truncate text-sm font-medium">{name}</p>
+                )}
+                {email ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {email}
+                    {!detail?.email && conversation.visitorEmail && (
+                      <span className="ml-1 text-muted-foreground/50">(in chat)</span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Anonymous <NoEmailBadge />
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Segments (identified visitors only). */}
+            {detail && detail.segments.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {detail.segments.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                    style={{ backgroundColor: `${s.color}1a`, color: s.color }}
+                  >
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Portal activity (identified visitors only). */}
+            {detail && (
+              <div className="grid grid-cols-3 gap-1 text-center">
+                {[
+                  { label: 'Posts', value: detail.postCount },
+                  { label: 'Comments', value: detail.commentCount },
+                  { label: 'Votes', value: detail.voteCount },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-md bg-muted/40 py-1.5">
+                    <p className="text-sm font-semibold">{s.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Conversation count + first-seen, available for anyone. */}
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Conversations</span>
+                <span className="font-medium text-foreground">
+                  {convoCount}
+                  {convoMore ? '+' : ''}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">First seen</span>
+                <span className="font-medium text-foreground">{formatDate(firstSeen)}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Manage */}
-          <div className="space-y-4">
+          <div className="space-y-4 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Manage</span>
             </div>
@@ -165,46 +265,6 @@ export function ConversationDetailPanel({
                   </span>
                 </span>
               </Row>
-            )}
-          </div>
-
-          {/* Contact */}
-          <div className="space-y-3 border-t border-border/30 pt-4">
-            <div className="flex items-center gap-2.5">
-              <Avatar
-                src={conversation.visitor.avatarUrl}
-                name={name}
-                className="size-9 shrink-0 text-sm"
-              />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{name}</p>
-                {email ? (
-                  <p className="truncate text-xs text-muted-foreground">
-                    {email}
-                    {!detail?.email && conversation.visitorEmail && (
-                      <span className="ml-1 text-muted-foreground/50">(in chat)</span>
-                    )}
-                  </p>
-                ) : (
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    Anonymous <NoEmailBadge />
-                  </p>
-                )}
-              </div>
-            </div>
-            {detail && (
-              <div className="grid grid-cols-3 gap-1 text-center">
-                {[
-                  { label: 'Posts', value: detail.postCount },
-                  { label: 'Comments', value: detail.commentCount },
-                  { label: 'Votes', value: detail.voteCount },
-                ].map((s) => (
-                  <div key={s.label} className="rounded-md bg-muted/40 py-1.5">
-                    <p className="text-sm font-semibold">{s.value}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
 
