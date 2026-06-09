@@ -98,6 +98,14 @@ const configSchema = z.object({
   // AI (optional)
   openaiApiKey: z.string().optional(),
   openaiBaseUrl: z.string().optional(),
+  aiChatModel: z.string().optional(),
+  aiEmbeddingModel: z.string().optional(),
+  aiSummaryModel: z.string().optional(),
+  aiSentimentModel: z.string().optional(),
+  aiExtractionModel: z.string().optional(),
+  aiQualityGateModel: z.string().optional(),
+  aiInterpretationModel: z.string().optional(),
+  aiMergeModel: z.string().optional(),
 
   // Telemetry (optional)
   disableTelemetry: envBoolean,
@@ -150,6 +158,14 @@ function buildConfigFromEnv(): unknown {
     // AI
     openaiApiKey: env('OPENAI_API_KEY'),
     openaiBaseUrl: env('OPENAI_BASE_URL'),
+    aiChatModel: env('AI_CHAT_MODEL'),
+    aiEmbeddingModel: env('AI_EMBEDDING_MODEL'),
+    aiSummaryModel: env('AI_SUMMARY_MODEL'),
+    aiSentimentModel: env('AI_SENTIMENT_MODEL'),
+    aiExtractionModel: env('AI_EXTRACTION_MODEL'),
+    aiQualityGateModel: env('AI_QUALITY_GATE_MODEL'),
+    aiInterpretationModel: env('AI_INTERPRETATION_MODEL'),
+    aiMergeModel: env('AI_MERGE_MODEL'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -278,6 +294,30 @@ export const config = {
   },
   get openaiBaseUrl() {
     return loadConfig().openaiBaseUrl
+  },
+  get aiChatModel() {
+    return loadConfig().aiChatModel
+  },
+  get aiEmbeddingModel() {
+    return loadConfig().aiEmbeddingModel
+  },
+  get aiSummaryModel() {
+    return loadConfig().aiSummaryModel
+  },
+  get aiSentimentModel() {
+    return loadConfig().aiSentimentModel
+  },
+  get aiExtractionModel() {
+    return loadConfig().aiExtractionModel
+  },
+  get aiQualityGateModel() {
+    return loadConfig().aiQualityGateModel
+  },
+  get aiInterpretationModel() {
+    return loadConfig().aiInterpretationModel
+  },
+  get aiMergeModel() {
+    return loadConfig().aiMergeModel
   },
 
   // Telemetry

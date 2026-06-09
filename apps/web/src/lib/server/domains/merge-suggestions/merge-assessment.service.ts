@@ -11,8 +11,6 @@ import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
 
-const ASSESSMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
-
 const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform used by product managers.
 You will be given a reference post and one or more posts to compare. For each comparison post, determine whether it is truly a DUPLICATE of the reference — meaning they request the exact same thing, just worded differently.
 
@@ -54,7 +52,8 @@ const CONFIDENCE_THRESHOLD = 0.75
  */
 export async function assessMergeCandidates(
   sourcePost: PostInfo,
-  candidates: MergeCandidate[]
+  candidates: MergeCandidate[],
+  model: string
 ): Promise<MergeAssessment[]> {
   await enforceAiTokenBudget()
 
@@ -65,7 +64,7 @@ export async function assessMergeCandidates(
 
   const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
-      model: ASSESSMENT_MODEL,
+      model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },

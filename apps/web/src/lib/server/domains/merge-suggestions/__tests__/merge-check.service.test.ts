@@ -81,6 +81,10 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   getOpenAI: vi.fn(() => ({})),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+}))
+
 describe('merge-check.service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -219,7 +223,7 @@ describe('merge-check.service', () => {
           hybridScore: 0.93,
           llmConfidence: 0.9,
           llmReasoning: 'Both about dark mode',
-          llmModel: 'google/gemini-3.1-flash-lite-preview',
+          llmModel: 'test-model',
         })
       )
     })

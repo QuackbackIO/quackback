@@ -14,6 +14,11 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   stripCodeFences: vi.fn((s: string) => s),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: () => 'test-model',
+  getEmbeddingModel: () => 'test-embedding-model',
+}))
+
 vi.mock('@/lib/server/db', () => ({
   db: { query: { posts: { findFirst: vi.fn() } } },
   posts: { id: 'p' },

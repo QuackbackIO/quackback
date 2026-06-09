@@ -2,13 +2,13 @@
  * Help Center Embedding Service
  *
  * Generates embeddings for knowledge base articles using the same
- * OpenAI text-embedding-3-small model as the feedback pipeline.
+ * configured embedding model as the feedback pipeline.
  */
 
 import { db, helpCenterArticles, eq, sql } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
-import { EMBEDDING_MODEL } from '@/lib/server/domains/embeddings/embedding.service'
 import type { HelpCenterArticleId } from '@quackback/ids'
 
 const KB_EMBEDDING_DIMENSIONS = 1536
@@ -27,16 +27,17 @@ export function formatArticleText(title: string, content: string, categoryName?:
 }
 
 /**
- * Generate embedding for text using OpenAI text-embedding-3-small.
+ * Generate embedding for text using the configured embedding model.
  */
 export async function generateKbEmbedding(text: string): Promise<number[] | null> {
   const openai = getOpenAI()
-  if (!openai) return null
+  const model = getEmbeddingModel()
+  if (!openai || !model) return null
 
   try {
     const { result: response } = await withRetry(() =>
       openai.embeddings.create({
-        model: EMBEDDING_MODEL,
+        model,
         input: text,
         dimensions: KB_EMBEDDING_DIMENSIONS,
       })
@@ -66,7 +67,7 @@ export async function generateArticleEmbedding(
     .update(helpCenterArticles)
     .set({
       embedding: sql`${vectorStr}::vector`,
-      embeddingModel: EMBEDDING_MODEL,
+      embeddingModel: getEmbeddingModel() ?? 'unknown',
       embeddingUpdatedAt: new Date(),
     })
     .where(eq(helpCenterArticles.id, articleId as HelpCenterArticleId))

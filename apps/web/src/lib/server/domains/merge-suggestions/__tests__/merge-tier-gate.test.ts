@@ -29,11 +29,13 @@ describe('assessMergeCandidates — token budget gate', () => {
   it('throws TierLimitError when budget exceeded', async () => {
     vi.mocked(getTierLimits).mockResolvedValue({ ...OSS_TIER_LIMITS, aiTokensPerMonth: 0 })
     vi.mocked(aiTokensThisMonth).mockResolvedValue(0)
-    await expect(assessMergeCandidates(sourcePost, [])).rejects.toBeInstanceOf(TierLimitError)
+    await expect(assessMergeCandidates(sourcePost, [], 'test-model')).rejects.toBeInstanceOf(
+      TierLimitError
+    )
   })
 
   it('does not throw when below budget', async () => {
     vi.mocked(getTierLimits).mockResolvedValue(OSS_TIER_LIMITS)
-    await expect(assessMergeCandidates(sourcePost, [])).resolves.toEqual([])
+    await expect(assessMergeCandidates(sourcePost, [], 'test-model')).resolves.toEqual([])
   })
 })

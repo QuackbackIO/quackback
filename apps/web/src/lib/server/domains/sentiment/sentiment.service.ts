@@ -2,17 +2,16 @@
  * Sentiment analysis service.
  *
  * Analyzes customer feedback to classify sentiment as positive, neutral, or negative.
- * Uses OpenAI google/gemini-3.1-flash-lite-preview via Cloudflare AI Gateway.
+ * Uses the configured chat model via the configured provider or gateway endpoint.
  */
 
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
-
-const SENTIMENT_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
@@ -59,7 +58,7 @@ function isValidSentiment(value: unknown): value is Sentiment {
 }
 
 /**
- * Analyze sentiment using OpenAI google/gemini-3.1-flash-lite-preview.
+ * Analyze sentiment using the configured chat model.
  */
 export async function analyzeSentiment(
   title: string,
@@ -69,7 +68,8 @@ export async function analyzeSentiment(
   await enforceAiTokenBudget()
 
   const openai = getOpenAI()
-  if (!openai) return null
+  const model = getChatModel('sentiment')
+  if (!openai || !model) return null
 
   const truncatedContent = (content || '(no content)').slice(0, MAX_CONTENT_LENGTH)
   const text = `Title: ${title}\n\nContent: ${truncatedContent}`
@@ -79,13 +79,13 @@ export async function analyzeSentiment(
       {
         pipelineStep: 'sentiment',
         callType: 'chat_completion',
-        model: SENTIMENT_MODEL,
+        model,
         postId,
       },
       () =>
         withRetry(() =>
           openai.chat.completions.create({
-            model: SENTIMENT_MODEL,
+            model,
             max_completion_tokens: 1000,
             messages: [
               { role: 'system', content: SENTIMENT_PROMPT },
@@ -110,7 +110,7 @@ export async function analyzeSentiment(
     return {
       sentiment: parsed.sentiment,
       confidence: parsed.confidence,
-      model: SENTIMENT_MODEL,
+      model,
       inputTokens: response.usage?.prompt_tokens,
       outputTokens: response.usage?.completion_tokens,
     }

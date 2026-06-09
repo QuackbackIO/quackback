@@ -19,11 +19,10 @@ import {
   notInArray,
 } from '@/lib/server/db'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
-
-const SUMMARY_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 const SYSTEM_PROMPT = `You are a product feedback analyst writing post briefs for a PM's triage queue.
 Your job is to surface what matters for prioritization, not restate the obvious.
@@ -69,7 +68,8 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   await enforceAiTokenBudget()
 
   const openai = getOpenAI()
-  if (!openai) return
+  const model = getChatModel('summary')
+  if (!openai || !model) return
 
   // Fetch post (include existing summary for continuity on updates)
   const post = await db.query.posts.findFirst({
@@ -121,7 +121,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
   const { result: completion } = await withRetry(() =>
     openai.chat.completions.create({
-      model: SUMMARY_MODEL,
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: input },
@@ -166,7 +166,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     .update(posts)
     .set({
       summaryJson,
-      summaryModel: SUMMARY_MODEL,
+      summaryModel: model,
       summaryUpdatedAt: new Date(),
       summaryCommentCount: postComments.length,
     })
@@ -189,7 +189,10 @@ let _sweepInProgress = false
  * the sweep needs an attempted-set, circuit breaker, and reentrancy guard.
  */
 export async function refreshStaleSummaries(): Promise<void> {
-  if (!getOpenAI()) return
+  // Fast-path skip when AI is off OR the summary model is unset/disabled —
+  // otherwise the sweep would query a batch and per-post no-op until the
+  // circuit breaker trips.
+  if (!getOpenAI() || !getChatModel('summary')) return
   if (_sweepInProgress) return
   _sweepInProgress = true
   try {

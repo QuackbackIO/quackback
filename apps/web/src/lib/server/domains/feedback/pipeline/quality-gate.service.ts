@@ -13,12 +13,11 @@
  */
 
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { buildQualityGatePrompt } from './prompts/quality-gate.prompt'
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
-
-const QUALITY_GATE_MODEL = 'google/gemini-3.1-flash-lite-preview'
 
 /** Sources where users intentionally submit feedback — high baseline intent. */
 const HIGH_INTENT_SOURCES = new Set(['api', 'quackback'])
@@ -73,7 +72,8 @@ export async function shouldExtract(item: {
 
   // Tier 3: LLM gate
   const openai = getOpenAI()
-  if (!openai) {
+  const model = getChatModel('qualityGate')
+  if (!openai || !model) {
     // AI not configured — fall back to permissive behavior
     return {
       extract: words >= 15,
@@ -91,7 +91,7 @@ export async function shouldExtract(item: {
       {
         pipelineStep: 'quality_gate',
         callType: 'chat_completion',
-        model: QUALITY_GATE_MODEL,
+        model,
         rawFeedbackItemId: item.rawFeedbackItemId,
         metadata: { promptVersion: 'v1', isChannelMonitor, temperature: 0 },
       },
@@ -99,7 +99,7 @@ export async function shouldExtract(item: {
         withRetry(
           () =>
             openai.chat.completions.create({
-              model: QUALITY_GATE_MODEL,
+              model,
               messages: [{ role: 'user', content: prompt }],
               response_format: { type: 'json_object' },
               temperature: 0,

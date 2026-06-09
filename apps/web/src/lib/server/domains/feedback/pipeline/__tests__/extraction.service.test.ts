@@ -84,6 +84,11 @@ vi.mock('@/lib/server/domains/ai/config', () => ({
   stripCodeFences: vi.fn((s: string) => s.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, '')),
 }))
 
+vi.mock('@/lib/server/domains/ai/models', () => ({
+  getChatModel: vi.fn(() => 'test-model'),
+  getEmbeddingModel: vi.fn(() => 'test-embedding-model'),
+}))
+
 vi.mock('@/lib/server/domains/ai/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) =>
     fn().then((result: unknown) => ({ result, retryCount: 0 }))
@@ -387,5 +392,16 @@ describe('extraction.service', () => {
 
     const { extractSignals } = await import('../extraction.service')
     await expect(extractSignals(rawItemId)).rejects.toThrow('not configured')
+  })
+
+  it('should throw UnrecoverableError when client is present but extraction model is null', async () => {
+    // Client is non-null (default mock returns mockOpenAI) but the model is
+    // disabled — e.g. AI_EXTRACTION_MODEL=off. The service must reject before
+    // touching the DB.
+    const { getChatModel } = await import('@/lib/server/domains/ai/models')
+    vi.mocked(getChatModel).mockReturnValueOnce(null)
+
+    const { extractSignals } = await import('../extraction.service')
+    await expect(extractSignals(rawItemId)).rejects.toThrow('Extraction model not configured')
   })
 })

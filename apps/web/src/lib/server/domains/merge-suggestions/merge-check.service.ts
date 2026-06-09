@@ -6,6 +6,7 @@
 
 import { db, posts, and, isNull, isNotNull, desc, eq, notInArray } from '@/lib/server/db'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getChatModel } from '@/lib/server/domains/ai/models'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
@@ -41,6 +42,10 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
     return
   }
 
+  // Bail early if AI is not configured — skip the candidate search entirely
+  const model = getChatModel('merge')
+  if (!getOpenAI() || !model) return
+
   // Step 1: Hybrid search (pass already-fetched post to avoid redundant DB query)
   const candidates = await findMergeCandidates(postId, {
     sourcePost: { title: post.title, embedding: post.embedding },
@@ -55,7 +60,8 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
   // Step 2: LLM verification
   const assessments = await assessMergeCandidates(
     { id: post.id, title: post.title, content: post.content },
-    candidates
+    candidates,
+    model
   )
 
   console.log(`[MergeSuggestion] LLM confirmed ${assessments.length} duplicates for post ${postId}`)
@@ -96,7 +102,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
       hybridScore: bestCandidate.hybridScore,
       llmConfidence: bestAssessment.confidence,
       llmReasoning: bestAssessment.reasoning,
-      llmModel: 'google/gemini-3.1-flash-lite-preview',
+      llmModel: model,
     })
   }
 
@@ -110,7 +116,7 @@ let _sweepInProgress = false
  * Mirrors the refreshStaleSummaries pattern from summary.service.ts.
  */
 export async function sweepMergeSuggestions(): Promise<void> {
-  if (!getOpenAI()) return
+  if (!getOpenAI() || !getChatModel('merge')) return
   if (_sweepInProgress) return
   _sweepInProgress = true
 

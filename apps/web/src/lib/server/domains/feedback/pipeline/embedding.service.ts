@@ -8,10 +8,8 @@
 import { UnrecoverableError } from 'bullmq'
 import { db, eq, feedbackSignals, sql } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
-import {
-  generateEmbedding,
-  EMBEDDING_MODEL,
-} from '@/lib/server/domains/embeddings/embedding.service'
+import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
+import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { toUuid, type FeedbackSignalId } from '@quackback/ids'
 
 /**
@@ -56,7 +54,7 @@ export async function embedSignal(
     .update(feedbackSignals)
     .set({
       embedding: sql<number[]>`${vectorStr}::vector`,
-      embeddingModel: EMBEDDING_MODEL,
+      embeddingModel: getEmbeddingModel() ?? 'unknown',
       embeddingUpdatedAt: new Date(),
       updatedAt: new Date(),
     })
