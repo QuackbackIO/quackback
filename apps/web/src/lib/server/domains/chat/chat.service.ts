@@ -39,6 +39,8 @@ import {
   type ChatSenderType,
   type ConversationStatus,
   type ConversationPriority,
+  type ConversationEndReason,
+  type ConversationDTO,
 } from '@/lib/shared/chat/types'
 import {
   applyVisitorReopenStatus,
@@ -580,6 +582,54 @@ export async function setConversationStatus(
     void emitConversationStatusChanged(actor, updated, previous)
   }
   return updated
+}
+
+/** Max length of the optional free-text end-note (mirrors csatComment). */
+const MAX_END_NOTE_LENGTH = 2000
+
+/**
+ * Agent action: end a conversation with a reason + optional note. Closes the
+ * thread (status='closed', stamps resolvedAt) and records WHY, so resolution-
+ * rate reporting has a real outcome to count. Mirrors the close path in
+ * setConversationStatus — posts the 'Chat ended' system notice (only on a real
+ * close, so re-ending an already-closed thread doesn't spam it) and publishes
+ * the conversation update so the widget reflects the close over SSE. Returns the
+ * updated agent-side DTO so the caller can show the outcome without a refetch.
+ */
+export async function endConversation(
+  conversationId: ConversationId,
+  reason: ConversationEndReason,
+  note: string | null | undefined,
+  actor: Actor
+): Promise<ConversationDTO> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  const existing = await loadConversationOr404(conversationId)
+  const previous = existing.status
+  const now = new Date()
+  const endNote = note?.trim() ? note.trim().slice(0, MAX_END_NOTE_LENGTH) : null
+  const [updated] = await db
+    .update(conversations)
+    .set({
+      status: 'closed',
+      resolvedAt: now,
+      endReason: reason,
+      endNote,
+      updatedAt: now,
+    })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  // Mark the close in the transcript for both sides — but only on a real
+  // open/pending → closed transition, mirroring setConversationStatus.
+  if (previous !== 'closed') {
+    await emitSystemMessage(conversationId, 'Chat ended', { kind: 'chat_ended' })
+  }
+  const dto = await conversationToDTO(updated, 'agent')
+  publishConversationUpdate(conversationId, dto)
+  if (previous !== 'closed') {
+    void emitConversationStatusChanged(actor, updated, previous)
+  }
+  return dto
 }
 
 /**

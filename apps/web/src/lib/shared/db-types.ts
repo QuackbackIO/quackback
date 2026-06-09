@@ -23,8 +23,14 @@ export {
   DEFAULT_BOARD_ACCESS,
   MODERATION_RULE_VALUES,
   CONVERSATION_STATUSES,
+  CONVERSATION_END_REASONS,
 } from '@quackback/db/types'
-export type { AccessTier, BoardAccess, ModerationRuleValue } from '@quackback/db/types'
+export type {
+  AccessTier,
+  BoardAccess,
+  ModerationRuleValue,
+  ConversationEndReason,
+} from '@quackback/db/types'
 
 // Schema types needed by client components (type-only = no side effects)
 export type {

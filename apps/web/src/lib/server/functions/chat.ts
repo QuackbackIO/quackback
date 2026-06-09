@@ -27,7 +27,11 @@ import {
 import { officeHoursSnapshot } from '@/lib/shared/chat/office-hours'
 import type { ChatPresence } from '@/lib/shared/chat/presence'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { CONVERSATION_STATUSES, REACTION_EMOJIS } from '@/lib/shared/db-types'
+import {
+  CONVERSATION_STATUSES,
+  CONVERSATION_END_REASONS,
+  REACTION_EMOJIS,
+} from '@/lib/shared/db-types'
 import {
   getOptionalAuth,
   requireAuth,
@@ -111,6 +115,12 @@ const agentNoteSchema = z.object({
 const setStatusSchema = z.object({
   conversationId: z.string(),
   status: z.enum(CONVERSATION_STATUSES),
+})
+
+const endConversationSchema = z.object({
+  conversationId: z.string(),
+  reason: z.enum(CONVERSATION_END_REASONS),
+  note: z.string().max(2000).optional(),
 })
 
 const assignSchema = z.object({
@@ -799,6 +809,26 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
       return { ok: true }
     } catch (error) {
       console.error('[fn:chat] setConversationStatusFn failed:', error)
+      throw error
+    }
+  })
+
+/** Agent action: end a conversation with a reason (+ optional note). */
+export const endConversationFn = createServerFn({ method: 'POST' })
+  .inputValidator(endConversationSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const actor = await policyActorFromAuth(ctx)
+      const { endConversation } = await import('@/lib/server/domains/chat/chat.service')
+      return await endConversation(
+        data.conversationId as ConversationId,
+        data.reason,
+        data.note,
+        actor
+      )
+    } catch (error) {
+      console.error('[fn:chat] endConversationFn failed:', error)
       throw error
     }
   })

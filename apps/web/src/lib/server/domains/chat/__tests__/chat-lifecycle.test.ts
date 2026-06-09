@@ -5,7 +5,9 @@ import {
   resolvedAtForStatus,
   shouldRequeueOnAgentOffline,
   unreadWatermarkFromAnchor,
+  resolvedConversationRate,
 } from '../chat.lifecycle'
+import { CONVERSATION_END_REASONS } from '@/lib/shared/chat/types'
 
 describe('unreadWatermarkFromAnchor', () => {
   const anchor = new Date('2026-06-03T12:00:00.000Z')
@@ -68,5 +70,42 @@ describe('shouldRequeueOnAgentOffline', () => {
   it('never re-queues a closed or pending conversation', () => {
     expect(shouldRequeueOnAgentOffline('closed', false)).toBe(false)
     expect(shouldRequeueOnAgentOffline('pending', false)).toBe(false)
+  })
+})
+
+describe('CONVERSATION_END_REASONS', () => {
+  it('is the settled taxonomy in order', () => {
+    expect(CONVERSATION_END_REASONS).toEqual([
+      'resolved',
+      'tracked_as_feedback',
+      'duplicate',
+      'no_response',
+      'spam',
+      'other',
+    ])
+  })
+})
+
+describe('resolvedConversationRate', () => {
+  it('counts resolved + tracked_as_feedback as resolved', () => {
+    // 2 resolved of 4 in the denominator → 0.5.
+    expect(
+      resolvedConversationRate(['resolved', 'tracked_as_feedback', 'duplicate', 'no_response'])
+    ).toBe(0.5)
+  })
+
+  it('excludes spam from the denominator entirely', () => {
+    // Spam is dropped; the lone 'resolved' is 1/1.
+    expect(resolvedConversationRate(['resolved', 'spam', 'spam'])).toBe(1)
+  })
+
+  it('counts a null (no recorded reason) ending toward the denominator but not resolved', () => {
+    // 1 resolved of 2 ended (the null still counts as ended) → 0.5.
+    expect(resolvedConversationRate(['resolved', null])).toBe(0.5)
+  })
+
+  it('returns 0 for an empty batch (or one of only spam)', () => {
+    expect(resolvedConversationRate([])).toBe(0)
+    expect(resolvedConversationRate(['spam'])).toBe(0)
   })
 })

@@ -65,6 +65,12 @@ export const conversations = pgTable(
     // When the conversation was resolved/closed (set on close, cleared on
     // reopen). Drives resolution reporting and the resolved-vs-active split.
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    // Why the conversation was ended + an optional free-text note. The taxonomy
+    // is enforced at the app layer (CONVERSATION_END_REASONS). Stored to power
+    // resolution-rate reporting: resolved-rate = count(end_reason IN
+    // ('resolved','tracked_as_feedback')) / count(all ended EXCLUDING 'spam').
+    endReason: text('end_reason'),
+    endNote: text('end_note'),
     // Optional contact email captured from an anonymous visitor for offline
     // follow-up. Agent-only; the principal itself stays anonymous.
     visitorEmail: text('visitor_email'),

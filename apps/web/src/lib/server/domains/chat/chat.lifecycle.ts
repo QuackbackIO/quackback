@@ -1,4 +1,4 @@
-import type { ConversationStatus } from '@/lib/shared/chat/types'
+import type { ConversationStatus, ConversationEndReason } from '@/lib/shared/chat/types'
 
 /**
  * Conversation status transitions, kept pure so they're unit-tested directly.
@@ -57,4 +57,32 @@ export function unreadWatermarkFromAnchor(
   if (currentAgentLastReadAt === null) return null
   const candidate = new Date(anchorCreatedAt.getTime() - 1)
   return candidate < currentAgentLastReadAt ? candidate : currentAgentLastReadAt
+}
+
+/** End reasons that count as a real resolution for the resolved-rate numerator. */
+const RESOLVED_END_REASONS: ReadonlySet<ConversationEndReason> = new Set([
+  'resolved',
+  'tracked_as_feedback',
+])
+
+/**
+ * Resolved-rate over a batch of ended conversations: the fraction that reached a
+ * real resolution. 'resolved' and 'tracked_as_feedback' both count as resolved;
+ * 'spam' is dropped from the denominator entirely (it never represented a real
+ * request). An ended conversation with no recorded reason (null) still counts in
+ * the denominator — it was ended, just not resolved. Pure so the future
+ * analytics surface can compute the rate from counts without a DB round-trip;
+ * returns 0 for an empty denominator.
+ */
+export function resolvedConversationRate(
+  endReasons: ReadonlyArray<ConversationEndReason | null>
+): number {
+  let resolved = 0
+  let denominator = 0
+  for (const reason of endReasons) {
+    if (reason === 'spam') continue
+    denominator += 1
+    if (reason && RESOLVED_END_REASONS.has(reason)) resolved += 1
+  }
+  return denominator === 0 ? 0 : resolved / denominator
 }

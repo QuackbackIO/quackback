@@ -94,6 +94,6 @@ export function publishConversationUpdate(
   publish(CHAT_INBOX_CHANNEL, { kind: 'conversation', conversation: agentDto })
   publish(conversationChannel(conversationId), {
     kind: 'conversation',
-    conversation: { ...agentDto, visitorEmail: null, tags: [] },
+    conversation: { ...agentDto, visitorEmail: null, tags: [], endNote: null },
   })
 }

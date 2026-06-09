@@ -297,6 +297,21 @@ export type NewCommentReaction = InferInsertModel<typeof commentReactions>
 export const CONVERSATION_STATUSES = ['open', 'pending', 'closed'] as const
 export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number]
 
+// Why a conversation was ended (conversations.end_reason). A plain-text column
+// whose allowed values live here as the single source of truth for validation
+// + the end-conversation UI. Resolution-rate (for later analytics) =
+// count(end_reason IN ('resolved','tracked_as_feedback')) / count(all ended
+// EXCLUDING 'spam').
+export const CONVERSATION_END_REASONS = [
+  'resolved',
+  'tracked_as_feedback',
+  'duplicate',
+  'no_response',
+  'spam',
+  'other',
+] as const
+export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
+
 // Per-agent manual availability (principal.chat_availability). 'online' = route
 // chats to me when connected; 'away' = connected but opted out of routing.
 export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const

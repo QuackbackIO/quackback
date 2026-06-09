@@ -53,6 +53,7 @@ import type {
   ChatTagDTO,
   ChatSenderType,
   ConversationStatus,
+  ConversationEndReason,
 } from '@/lib/shared/chat/types'
 
 const MESSAGE_PAGE_SIZE = 30
@@ -298,7 +299,9 @@ export function toConversationDTO(
   // Agent-only field; callers pass null on visitor-facing paths.
   visitorEmail: string | null = null,
   // Conversation labels (agent-only); empty when untagged.
-  tags: ChatTagDTO[] = []
+  tags: ChatTagDTO[] = [],
+  // The end-conversation note (agent-only); callers pass null on visitor paths.
+  endNote: string | null = null
 ): ConversationDTO {
   return {
     id: conversation.id,
@@ -317,6 +320,11 @@ export function toConversationDTO(
     csatRating: conversation.csatRating ?? null,
     visitorEmail,
     resolvedAt: conversation.resolvedAt?.toISOString() ?? null,
+    // The reason is shown on both sides (so a closed thread displays its
+    // outcome); the free-text note is agent-only. The column is plain text but
+    // the app constrains writes to the taxonomy, so the cast is safe.
+    endReason: (conversation.endReason as ConversationEndReason | null) ?? null,
+    endNote,
     tags,
   }
 }
@@ -400,7 +408,8 @@ export async function conversationToDTO(
       : null,
     unread,
     side === 'agent' ? (conversation.visitorEmail ?? null) : null,
-    tagMap.get(conversation.id) ?? []
+    tagMap.get(conversation.id) ?? [],
+    side === 'agent' ? (conversation.endNote ?? null) : null
   )
 }
 
@@ -853,7 +862,8 @@ export async function listConversationsForAgent(
           : null,
         unreadMap.get(c.id) ?? 0,
         c.visitorEmail ?? null,
-        tagMap.get(c.id) ?? []
+        tagMap.get(c.id) ?? [],
+        c.endNote ?? null
       )
     ),
     hasMore,

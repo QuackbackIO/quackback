@@ -39,6 +39,8 @@ const agentDto = {
   csatRating: null,
   visitorEmail: 'visitor@example.com',
   resolvedAt: null,
+  endReason: null,
+  endNote: 'internal end note',
   tags: [{ id: 'chat_tag_1', name: 'VIP', color: '#ff0000' }],
 } as unknown as ConversationDTO
 
@@ -74,11 +76,13 @@ describe('publishConversationUpdate', () => {
     const inboxConv = (inbox![1] as { conversation: ConversationDTO }).conversation
     expect(inboxConv.visitorEmail).toBe('visitor@example.com')
     expect(inboxConv.tags).toHaveLength(1)
+    expect(inboxConv.endNote).toBe('internal end note')
 
     // ...the visitor copy must have every agent-only field stripped.
     const visitorConv = (visitor![1] as { conversation: ConversationDTO }).conversation
     expect(visitorConv.visitorEmail).toBeNull()
     expect(visitorConv.tags).toEqual([])
+    expect(visitorConv.endNote).toBeNull()
   })
 })
 
