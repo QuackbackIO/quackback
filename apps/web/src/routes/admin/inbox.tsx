@@ -796,9 +796,22 @@ function ChatThread({
   // lags one frame behind a programmatic/follow scroll — so to flag "new messages
   // below" we compare against the PREVIOUS render's at-end state (wasAtEndRef),
   // not the live value (which momentarily reads false right after any append).
+  const lastMessageId = messages.at(-1)?.id
   const atEnd = virtualizer.isAtEnd()
   const [hasNewBelow, setHasNewBelow] = useState(false)
   const wasAtEndRef = useRef(true)
+  const prevLastIdRef = useRef(lastMessageId)
+  // Surface the "new messages" pill when a message lands while the agent was
+  // scrolled up. Declared BEFORE the at-end effect on purpose: React runs effects
+  // in declaration order, so this reads wasAtEndRef while it still holds the
+  // PREVIOUS render's value (before the at-end effect overwrites it) — which keeps
+  // the pill from flashing when followOnAppend re-pins us on a received message.
+  useEffect(() => {
+    if (lastMessageId && lastMessageId !== prevLastIdRef.current && !wasAtEndRef.current) {
+      setHasNewBelow(true)
+    }
+    prevLastIdRef.current = lastMessageId
+  }, [lastMessageId])
   useEffect(() => {
     if (atEnd) setHasNewBelow(false)
     wasAtEndRef.current = atEnd
@@ -842,7 +855,6 @@ function ChatThread({
   // Clear the agent-side unread badge when a thread is open and new visitor
   // messages arrive — opening + reading should mark read, not only replying.
   // Keyed on the last message id so array re-creation doesn't re-fire the write.
-  const lastMessageId = messages.at(-1)?.id
   useEffect(() => {
     if (isLoading || messages.length === 0) return
     if (messages.at(-1)?.senderType !== 'visitor') return
@@ -850,18 +862,6 @@ function ChatThread({
       .then(() => onChanged())
       .catch(() => {})
   }, [conversationId, lastMessageId, isLoading, onChanged])
-
-  // Surface the "new messages" pill when a message lands while the agent was
-  // scrolled up. We gate on wasAtEndRef (the PREVIOUS render's at-end state)
-  // rather than the live isAtEnd — appending grows the total size, so the live
-  // value reads false for a frame even when followOnAppend re-pins us.
-  const prevLastIdRef = useRef(lastMessageId)
-  useEffect(() => {
-    if (lastMessageId && lastMessageId !== prevLastIdRef.current && !wasAtEndRef.current) {
-      setHasNewBelow(true)
-    }
-    prevLastIdRef.current = lastMessageId
-  }, [lastMessageId])
 
   // Merge a freshly-sent message into the thread cache (dedup by id).
   const appendToThread = (res: { conversation: ConversationDTO; message: ChatMessageDTO }) => {
