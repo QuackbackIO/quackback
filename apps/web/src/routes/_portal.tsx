@@ -39,6 +39,13 @@ export const Route = createFileRoute('/_portal')({
     const accessResult = await evaluateMyPortalAccessFn()
 
     if (!accessResult.granted) {
+      // A suspended/deleting workspace is surfaced by the root SuspendedView
+      // overlay (__root.tsx), not the portal access-gate. Skip the gate here —
+      // the public read fns already return empty for a suspended workspace
+      // (resolvePortalAccessForRequest denies), so nothing is dehydrated. This
+      // also narrows `reason` to the auth-denial literals for the rest below.
+      if (accessResult.reason === 'suspended') return
+
       // OWASP authz_fail — emit only for authenticated denials (anonymous denials
       // are too noisy and lower-signal). Best-effort, never blocks the gate throw.
       const session = context.session

@@ -180,4 +180,17 @@ describe('_portal beforeLoad — portal.access.denied audit', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
   })
+
+  it('skips the access-gate (no throw, no audit) for a suspended workspace', async () => {
+    // A suspended workspace is surfaced by the root SuspendedView overlay, not
+    // the portal access-gate — so beforeLoad must NOT throw the gate error here,
+    // and it isn't an access-denial worth auditing.
+    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: false, reason: 'suspended' })
+
+    const context = makeContext({ id: 'user_1', email: 'admin@y.com', principalType: 'user' })
+    await expect(runBeforeLoad(context)).resolves.toBeUndefined()
+
+    await new Promise((r) => setTimeout(r, 0))
+    expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
+  })
 })

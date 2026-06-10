@@ -30,7 +30,7 @@ export type PortalAccessDecision =
     }
   | {
       granted: false
-      reason: 'unauthenticated' | 'unauthorized'
+      reason: 'unauthenticated' | 'unauthorized' | 'suspended'
     }
 
 /**
@@ -57,6 +57,28 @@ export type PortalAccessDecision =
  */
 export const resolvePortalAccessForRequest = createServerOnlyFn(
   async (): Promise<PortalAccessDecision> => {
+    // Billing suspension: a suspended/deleting workspace serves NO portal data.
+    // This is the shared chokepoint every public read funnels through, so
+    // gating here (rather than at each loader) keeps a suspended workspace's
+    // content out of the SSR payload entirely — not just hidden behind the
+    // root SuspendedView overlay. Reuse ensureNotSuspended (the same guard the
+    // write/API paths use — single source of truth for the state) but honour
+    // this resolver's never-throw contract by converting its throw into a
+    // denial. Any OTHER error (e.g. a settings-read blip) falls through to the
+    // normal access eval — fail OPEN so a transient read can't suspend a
+    // healthy workspace, matching the resolver's existing config-unreadable
+    // philosophy.
+    try {
+      const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
+      await ensureNotSuspended()
+    } catch (e) {
+      const { SuspendedError, DeletingError } =
+        await import('@/lib/server/middleware/suspension-guard')
+      if (e instanceof SuspendedError || e instanceof DeletingError) {
+        return { granted: false, reason: 'suspended' }
+      }
+    }
+
     const { auth } = await import('@/lib/server/auth/index')
     const { db, principal, eq } = await import('@/lib/server/db')
     const { getRequestHeaders } = await import('@tanstack/react-start/server')
