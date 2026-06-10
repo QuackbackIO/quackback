@@ -59,3 +59,29 @@ describe('mergeTierLimits', () => {
     expect(result.maxBoards).toBeNull()
   })
 })
+
+describe('plan notice passthrough', () => {
+  it('carries a stored notice through the merge', () => {
+    const merged = mergeTierLimits({
+      maxBoards: 5,
+      notice: {
+        label: 'Free trial',
+        expiresAt: '2026-06-24T00:00:00.000Z',
+        actionUrl: 'https://example.com/billing',
+        actionLabel: 'Choose your plan',
+      },
+    })
+    expect(merged.notice).toEqual({
+      label: 'Free trial',
+      expiresAt: '2026-06-24T00:00:00.000Z',
+      actionUrl: 'https://example.com/billing',
+      actionLabel: 'Choose your plan',
+    })
+    expect(merged.maxBoards).toBe(5)
+  })
+
+  it('returns no notice when absent from stored limits', () => {
+    expect(mergeTierLimits({ maxBoards: 1 }).notice).toBeUndefined()
+    expect(mergeTierLimits(null).notice).toBeUndefined()
+  })
+})

@@ -9,6 +9,8 @@ import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { PostModal } from '@/components/admin/feedback/post-modal'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UpdateBanner } from '@/components/admin/update-banner'
+import { PlanNoticeBanner } from '@/components/admin/plan-notice-banner'
+import { getPlanNotice } from '@/lib/server/functions/plan-notice'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: async ({ location }) => {
@@ -35,7 +37,13 @@ export const Route = createFileRoute('/admin')({
     // Skip for public admin routes (login, signup) - they have their own layouts
     const publicPaths = ['/admin/login', '/admin/signup']
     if (publicPaths.includes(location.pathname)) {
-      return { user: null, initialUserData: null, latestVersion: null, currentUser: null }
+      return {
+        user: null,
+        initialUserData: null,
+        latestVersion: null,
+        currentUser: null,
+        planNotice: null,
+      }
     }
 
     // Auth is already validated in beforeLoad - user and principal are guaranteed here
@@ -44,11 +52,12 @@ export const Route = createFileRoute('/admin')({
       principal: NonNullable<typeof context.principal>
     }
 
-    const [avatarData, latestRelease] = await Promise.all([
+    const [avatarData, latestRelease, planNotice] = await Promise.all([
       fetchUserAvatar({
         data: { userId: user.id, fallbackImageUrl: user.image },
       }),
       getLatestVersion(),
+      getPlanNotice(),
     ])
 
     const latestVersion =
@@ -65,6 +74,7 @@ export const Route = createFileRoute('/admin')({
       user,
       initialUserData,
       latestVersion,
+      planNotice,
       currentUser: {
         name: user.name,
         email: user.email,
@@ -85,7 +95,7 @@ function usePostIdFromUrl(): string | undefined {
 }
 
 function AdminLayout() {
-  const { initialUserData, latestVersion, currentUser } = Route.useLoaderData()
+  const { initialUserData, latestVersion, planNotice, currentUser } = Route.useLoaderData()
   const postId = usePostIdFromUrl()
 
   // Mark team members online for chat routing across the whole admin (not just
@@ -108,6 +118,7 @@ function AdminLayout() {
           <main className="flex-1 min-w-0 overflow-hidden sm:h-screen sm:py-2 sm:pr-2 sm:pl-1 p-0">
             {/* Mobile: Add padding for fixed header */}
             <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col">
+              <PlanNoticeBanner notice={planNotice} />
               <UpdateBanner latestVersion={latestVersion} />
               <div className="flex-1 min-h-0 overflow-hidden">
                 <Outlet />
