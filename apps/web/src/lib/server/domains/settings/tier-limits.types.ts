@@ -25,6 +25,25 @@ export interface TierFeatureFlags {
   integrations: boolean
 }
 
+/**
+ * Optional operator-set notice rendered as a banner in the admin UI.
+ * Written through the same channel as the limits themselves (the
+ * declarative config file / internal writer). Self-hosters can use it
+ * for license or maintenance notices; absent (the default) renders
+ * nothing.
+ */
+export interface PlanNotice {
+  /** Short badge text, e.g. "Free trial". */
+  label: string
+  /** Optional supporting copy. */
+  message?: string
+  /** ISO timestamp; when set the banner renders a countdown. */
+  expiresAt?: string
+  /** When set the banner renders an action button linking here. */
+  actionUrl?: string
+  actionLabel?: string
+}
+
 export interface TierLimits {
   maxBoards: TierLimit<number>
   maxPosts: TierLimit<number>
@@ -42,6 +61,8 @@ export interface TierLimits {
   apiRequestsPerMinute: TierLimit<number>
 
   features: TierFeatureFlags
+  /** See PlanNotice. Absent on OSS defaults. */
+  notice?: PlanNotice
 }
 
 export const OSS_TIER_LIMITS: TierLimits = {
