@@ -42,10 +42,14 @@ setup('authenticate as admin', async ({ page }) => {
   // Step 4: Ensure test user has admin role (user now exists after verify)
   ensureTestUserHasRole(ADMIN_EMAIL, 'admin')
 
-  // Step 5: Navigate to admin page and confirm we land there (not login)
+  // Step 5: Navigate to admin page and confirm we land there (not login).
+  // No networkidle wait: with the support inbox enabled the admin shell keeps
+  // SSE streams (presence/inbox) open, so the network never goes idle.
   await page.goto('/admin')
-  await page.waitForLoadState('networkidle')
   await expect(page).toHaveURL(/\/admin/, { timeout: 10000 })
+  // The sidebar renders once the admin shell is hydrated — a concrete signal
+  // that auth landed, without depending on the network going quiet.
+  await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 10000 })
 
   await page.context().storageState({ path: AUTH_FILE })
 })
