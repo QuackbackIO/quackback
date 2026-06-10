@@ -42,6 +42,19 @@ const workspaceSchema = z
 // (the reconciler merges into the existing tierLimits row, so the
 // file only needs to declare the fields it wants to lock).
 const tierLimitNumberSchema = z.number().int().nonnegative().nullable()
+
+// Optional operator-set admin banner. Delivered alongside tier limits;
+// see PlanNotice in domains/settings/tier-limits.types.ts.
+const planNoticeSchema = z
+  .object({
+    label: z.string().min(1),
+    message: z.string().optional(),
+    expiresAt: z.string().optional(),
+    actionUrl: httpsUrl.optional(),
+    actionLabel: z.string().optional(),
+  })
+  .strict()
+
 const tierFeatureFlagsSchema = z
   .object({
     customDomain: z.boolean().optional(),
@@ -65,6 +78,7 @@ const tierLimitsSchema = z
     apiRequestsPerMonth: tierLimitNumberSchema.optional(),
     apiRequestsPerMinute: tierLimitNumberSchema.optional(),
     features: tierFeatureFlagsSchema,
+    notice: planNoticeSchema.optional(),
   })
   .strict()
 

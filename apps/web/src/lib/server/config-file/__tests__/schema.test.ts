@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseQuackbackConfig } from '../schema'
+import { parseQuackbackConfig, quackbackConfigSchema } from '../schema'
 
 describe('parseQuackbackConfig', () => {
   it('accepts a fully-populated valid config', () => {
@@ -148,5 +148,54 @@ describe('parseQuackbackConfig', () => {
       },
     })
     expect(result.success).toBe(false)
+  })
+})
+
+const baseConfig = {
+  apiVersion: 'quackback.io/v1' as const,
+  kind: 'QuackbackConfig' as const,
+  spec: {},
+}
+
+describe('tierLimits.notice', () => {
+  it('accepts a full notice', () => {
+    const r = quackbackConfigSchema.safeParse({
+      ...baseConfig,
+      spec: {
+        tierLimits: {
+          maxBoards: null,
+          notice: {
+            label: 'Free trial',
+            expiresAt: '2026-06-24T00:00:00.000Z',
+            actionUrl: 'https://billing.example.com/plan',
+            actionLabel: 'Choose your plan',
+          },
+        },
+      },
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts a label-only notice', () => {
+    const r = quackbackConfigSchema.safeParse({
+      ...baseConfig,
+      spec: { tierLimits: { notice: { label: 'Maintenance window' } } },
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('still rejects unknown keys inside tierLimits and notice', () => {
+    expect(
+      quackbackConfigSchema.safeParse({
+        ...baseConfig,
+        spec: { tierLimits: { notice: { label: 'x', bogus: true } } },
+      }).success
+    ).toBe(false)
+    expect(
+      quackbackConfigSchema.safeParse({
+        ...baseConfig,
+        spec: { tierLimits: { bogus: true } },
+      }).success
+    ).toBe(false)
   })
 })
