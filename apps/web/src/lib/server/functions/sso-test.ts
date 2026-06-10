@@ -19,7 +19,7 @@
  *    payload or null if not ready.
  */
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
@@ -47,6 +47,7 @@ type TestSession = {
   redirectUri: string
   adminUserId: string
   startedAt: number
+  codeVerifier: string
 }
 
 export type StartSsoTestResult =
@@ -96,6 +97,11 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     const testId = `ssotest_${randomBytes(15).toString('base64url')}`
     const state = randomBytes(32).toString('base64url')
     const nonce = randomBytes(32).toString('base64url')
+    // PKCE (RFC 7636, S256) — mirrors production now that genericOAuth
+    // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
+    // without a code_challenge; IdPs without PKCE support ignore it.
+    const codeVerifier = randomBytes(32).toString('base64url')
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
     const session: TestSession = {
       testId,
@@ -110,6 +116,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       clientId: sso.clientId,
       clientSecret,
       redirectUri,
+      codeVerifier,
       adminUserId: user.id,
       startedAt: Date.now(),
     }
@@ -117,8 +124,8 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     const { cacheSet } = await import('@/lib/server/redis')
     await cacheSet(ssoTestSessionKey(state), session, TTL_SECONDS)
 
-    // Mirror production: no PKCE on the authorize request because
-    // genericOAuth doesn't send code_verifier on the token request.
+    // Mirror production: genericOAuth runs with pkce: true, so the
+    // test handshake sends the same S256 code_challenge pair.
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: sso.clientId,
@@ -127,6 +134,8 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       state,
       nonce,
       prompt: 'login',
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
     })
     return {
       testId,

@@ -33,6 +33,8 @@ export interface HandshakeInput {
   clientId: string
   clientSecret: string
   redirectUri: string
+  /** PKCE verifier minted at authorize time (S256 challenge). */
+  codeVerifier: string
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -164,6 +166,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   // and produce false positives.
   const tokenBody = new URLSearchParams({
     grant_type: 'authorization_code',
+    code_verifier: input.codeVerifier,
     code: input.code,
     redirect_uri: input.redirectUri,
     client_id: input.clientId,

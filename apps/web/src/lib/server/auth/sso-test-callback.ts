@@ -71,6 +71,7 @@ export async function handleSsoTestCallback(
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,
+    codeVerifier: session.codeVerifier,
   })
 
   // Strip the failure-branch `raw` debug field before persisting:

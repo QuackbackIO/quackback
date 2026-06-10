@@ -149,7 +149,11 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(
       /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Fsso/
     )
-    expect(result.authorizeUrl).not.toMatch(/code_challenge/)
+    // PKCE is mandatory for OAuth 2.1 IdPs (e.g. Supabase Auth) and
+    // ignored by IdPs that don't support it — the authorize URL must
+    // carry an S256 challenge pair, mirroring production (pkce: true).
+    expect(result.authorizeUrl).toMatch(/code_challenge=[A-Za-z0-9_-]{43}/)
+    expect(result.authorizeUrl).toMatch(/code_challenge_method=S256/)
     expect(hoisted.cacheSet).toHaveBeenCalledTimes(1)
   })
 })

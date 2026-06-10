@@ -20,6 +20,7 @@ const baseInput: HandshakeInput = {
   clientId: 'cid',
   clientSecret: 'csecret',
   redirectUri: 'https://qb/api/auth/oauth2/callback/sso',
+  codeVerifier: 'test-code-verifier',
   expectedNonce: 'nonce789',
   expectedState: 'state123',
 }
