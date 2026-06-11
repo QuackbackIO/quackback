@@ -137,15 +137,19 @@ export function safeEmail(email: string | null | undefined): string {
   return `${email.slice(0, 1)}***@${email.slice(at + 1)}`
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+}
+
 export function stripHtml(html: string): string {
   return html
-    .replace(/<[^>]*>/g, '') // Remove HTML tags
-    .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
-    .replace(/&amp;/g, '&') // Decode ampersand
-    .replace(/&lt;/g, '<') // Decode less than
-    .replace(/&gt;/g, '>') // Decode greater than
-    .replace(/&quot;/g, '"') // Decode quotes
-    .replace(/&#39;/g, "'") // Decode apostrophe
+    .replace(/<[^>]*>?/g, '') // Remove HTML tags, including an unterminated trailing one
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (m) => HTML_ENTITIES[m]) // Decode entities in a single pass so "&amp;lt;" yields "&lt;", not "<"
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }

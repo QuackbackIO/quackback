@@ -191,6 +191,16 @@ describe('stripHtml', () => {
   it('handles complex HTML', () => {
     expect(stripHtml('<div class="foo"><p>Hello</p><br/><p>World</p></div>')).toBe('HelloWorld')
   })
+
+  it('does not double-decode entities', () => {
+    // "&amp;lt;" is an escaped ampersand followed by literal "lt;" — it must
+    // decode to "&lt;" (text), never cascade to "<".
+    expect(stripHtml('&amp;lt;script&amp;gt;')).toBe('&lt;script&gt;')
+  })
+
+  it('drops an unterminated trailing tag', () => {
+    expect(stripHtml('hello <script src=x')).toBe('hello')
+  })
 })
 
 describe('slugify', () => {
