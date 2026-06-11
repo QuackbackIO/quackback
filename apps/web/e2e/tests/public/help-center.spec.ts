@@ -134,9 +134,7 @@ test.describe('Public Help Center', () => {
     const articleLinks = page.locator('a[href*="/hc/articles/"]')
     if ((await articleLinks.count()) === 0) {
       // Category exists but has no articles yet
-      await expect(
-        page.getByText(/No articles in this category yet|No articles yet/)
-      ).toBeVisible()
+      await expect(page.getByText(/No articles in this category yet|No articles yet/)).toBeVisible()
       return
     }
 
@@ -387,7 +385,9 @@ test.describe('Public Help Center', () => {
     await page.waitForTimeout(600)
 
     // Results dropdown is a <ul> inside the search container
-    const resultsDropdown = page.locator('ul').filter({ has: page.locator('button[type="button"]') })
+    const resultsDropdown = page
+      .locator('ul')
+      .filter({ has: page.locator('button[type="button"]') })
     // If there are results, the dropdown should be visible; if not, that is fine too
     const dropdownVisible = (await resultsDropdown.count()) > 0
     if (dropdownVisible) {
@@ -661,9 +661,7 @@ test.describe('Help Center - Article Content Verification', () => {
     if (!ok) return
 
     // Any <p>, <li>, or <ul> inside the prose area means the article has body content
-    const bodyContent = page
-      .locator('.prose p, .prose li, .prose ul, .prose ol')
-      .first()
+    const bodyContent = page.locator('.prose p, .prose li, .prose ul, .prose ol').first()
     if ((await bodyContent.count()) === 0) {
       // Article has content but not as standard block elements — skip gracefully
       return
@@ -727,8 +725,10 @@ test.describe('Help Center - Article Content Verification', () => {
     await firstLink.click()
     await page.waitForTimeout(300)
 
-    // The URL should now contain the heading hash
-    await expect(page).toHaveURL(new RegExp(expectedHash.replace('#', '#')))
+    // The URL should now contain the heading hash (escape regex metacharacters
+    // since heading slugs may contain them)
+    const escapedHash = expectedHash.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    await expect(page).toHaveURL(new RegExp(escapedHash))
   })
 })
 
@@ -784,7 +784,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
     await yesBtn.click()
 
     // After voting helpful the subtitle changes to the confirmation copy
-    await expect(page.getByText("Thanks — glad it landed.")).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
   })
 
   test('clicking thumbs-down shows a confirmation message', async ({ page }) => {
@@ -797,9 +797,9 @@ test.describe('Help Center - Article Feedback Widget', () => {
     await noBtn.click()
 
     // After voting not-helpful the subtitle changes to the follow-up copy
-    await expect(
-      page.getByText("Noted. We'll revisit this article.")
-    ).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText("Noted. We'll revisit this article.")).toBeVisible({
+      timeout: 5000,
+    })
   })
 
   test('after voting helpful the thumbs-up button shows selected styling', async ({ page }) => {
@@ -811,7 +811,7 @@ test.describe('Help Center - Article Feedback Widget', () => {
 
     await yesBtn.click()
     // Wait for state to settle
-    await expect(page.getByText("Thanks — glad it landed.")).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
 
     // Selected state: the button gets bg-primary/10 and border-primary/20 classes
     // We check via the class attribute rather than computed styles
@@ -828,12 +828,12 @@ test.describe('Help Center - Article Feedback Widget', () => {
 
     // First click — registers vote
     await yesBtn.click()
-    await expect(page.getByText("Thanks — glad it landed.")).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible({ timeout: 5000 })
 
     // Second click on the same button — should be a no-op per component logic
     await yesBtn.click()
     // Confirmation copy must still be visible (vote was not reversed)
-    await expect(page.getByText("Thanks — glad it landed.")).toBeVisible()
+    await expect(page.getByText('Thanks — glad it landed.')).toBeVisible()
     // And the "Was this helpful?" prompt text should be gone (replaced by the confirmation)
     const subtitleEl = page.locator('p.text-xs.text-muted-foreground')
     await expect(subtitleEl).not.toHaveText('Your feedback shapes what we write next.')
