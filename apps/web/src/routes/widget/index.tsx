@@ -23,14 +23,14 @@ import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-deta
 import { WidgetHelp } from '@/components/widget/widget-help'
 import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
 import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
-import { WidgetSupportCard } from '@/components/widget/widget-support-card'
-import { WidgetSupportList } from '@/components/widget/widget-support-list'
-import { WidgetSupportNew } from '@/components/widget/widget-support-new'
-import { WidgetSupportDetail } from '@/components/widget/widget-support-detail'
 import { WidgetLiveChat } from '@/components/widget/widget-live-chat'
 import type { ConversationId } from '@quackback/ids'
 import { WidgetMessagesSection } from '@/components/widget/widget-messages-section'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
+import { WidgetSupportCard } from '@/components/widget/widget-support-card'
+import { WidgetSupportList } from '@/components/widget/widget-support-list'
+import { WidgetSupportNew } from '@/components/widget/widget-support-new'
+import { WidgetSupportDetail } from '@/components/widget/widget-support-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
@@ -138,6 +138,7 @@ export const Route = createFileRoute('/widget/')({
       linkPreviews:
         (settings?.featureFlags as { linkPreviews?: boolean } | undefined)?.linkPreviews ?? false,
       defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
+      imageUploadsInWidget: settings?.publicWidgetConfig?.imageUploadsInWidget ?? true,
       ticketingEnabled: settings?.publicWidgetConfig?.ticketing?.enabled ?? false,
       portalAccess: {
         isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
@@ -152,18 +153,6 @@ export const Route = createFileRoute('/widget/')({
   component: WidgetPage,
 })
 
-type WidgetView =
-  | 'home'
-  | 'post-detail'
-  | 'success'
-  | 'changelog'
-  | 'changelog-detail'
-  | 'help'
-  | 'help-category'
-  | 'help-detail'
-  | 'support-list'
-  | 'support-new'
-  | 'support-detail'
 interface SuccessPost {
   id: string
   title: string
@@ -183,6 +172,7 @@ function WidgetPage() {
     tabs,
     linkPreviews,
     defaultBoard,
+    imageUploadsInWidget,
     ticketingEnabled,
     portalAccess,
     portalOrigin,
@@ -234,8 +224,8 @@ function WidgetPage() {
     name: string
     icon: string | null
   } | null>(null)
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
 
   const allPosts = useMemo(() => {
     const createdIds = new Set(createdPosts.map((p) => p.id))
@@ -256,21 +246,19 @@ function WidgetPage() {
       if (!msg || typeof msg !== 'object' || msg.type !== 'quackback:open' || !msg.data) return
 
       const opts = msg.data as { view?: string; ticketId?: string }
-      if (opts.view === 'changelog' && tabs.changelog) {
+      if (opts.view === 'support' && ticketingEnabled) {
+        setActiveTab('feedback')
+        if (opts.ticketId) {
+          setSelectedTicketId(opts.ticketId)
+          setView('support-detail' as WidgetView)
+        } else {
+          setView('support-list' as WidgetView)
+        }
+      } else if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
       } else if (opts.view === 'help' && (tabs.help || tabs.chat)) {
         setActiveTab('help')
-        setView('help')
-      } else if (opts.view === 'support') {
-        if (!ticketingEnabled) return
-        setActiveTab('feedback')
-        if (opts.ticketId) {
-          setSelectedTicketId(opts.ticketId)
-          setView('support-detail')
-        } else {
-          setView('support-list')
-        }
         setView(supportRootView(tabs))
       } else if ((opts.view === 'chat' || opts.view === 'live-chat') && tabs.chat) {
         openChat()
@@ -281,8 +269,7 @@ function WidgetPage() {
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [tabs.changelog, tabs.help, ticketingEnabled])
-  }, [tabs, openChat])
+  }, [tabs, openChat, ticketingEnabled])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
     setCreatedPosts((prev) => [
@@ -325,32 +312,16 @@ function WidgetPage() {
       setView('help')
       return
     }
-    if (view === 'support-detail') {
+    if ((view as string) === 'support-detail') {
       setSelectedTicketId(null)
-      setView('support-list')
+      setView('support-list' as WidgetView)
       return
     }
-    if (view === 'support-new' || view === 'support-list') {
+    if ((view as string) === 'support-new' || (view as string) === 'support-list') {
       setSelectedTicketId(null)
-      setView('home')
+      setView('feedback')
       return
     }
-    setSelectedPostId(null)
-    setView('home')
-  }, [view, selectedCategory])
-
-  const handleTabChange = useCallback((tab: WidgetTab) => {
-    setActiveTab(tab)
-    if (tab === 'feedback') {
-      setSelectedPostId(null)
-      setView('home')
-    } else if (tab === 'changelog') {
-      setSelectedChangelogId(null)
-      setView('changelog')
-    } else {
-      setSelectedHelpSlug(null)
-      setSelectedCategory(null)
-      setView('help')
     if (view === 'chat') {
       // Chat is opened from the support surface; back returns to its root
       // (help articles, or the messages list for a chat-only widget).
@@ -409,23 +380,25 @@ function WidgetPage() {
     if (!ticketingEnabled) return
     setActiveTab('feedback')
     setSelectedTicketId(null)
-    setView('support-list')
+    setView('support-list' as WidgetView)
   }, [ticketingEnabled])
 
   const handleSupportNewTicket = useCallback(() => {
-    setView('support-new')
+    setView('support-new' as WidgetView)
   }, [])
 
   const handleSupportTicketSelect = useCallback((ticketId: string) => {
     setSelectedTicketId(ticketId)
-    setView('support-detail')
+    setView('support-detail' as WidgetView)
   }, [])
 
   const handleSupportTicketCreated = useCallback((ticket: { id: string }) => {
     setSelectedTicketId(ticket.id)
-    setView('support-detail')
+    setView('support-detail' as WidgetView)
   }, [])
+
   // Root views have no back arrow. 'messages' is the chat-only support root.
+  // Root views have no back arrow. Support-list IS a non-root view (back goes to feedback).
   const shellOnBack =
     view !== 'overview' &&
     view !== 'feedback' &&
@@ -528,16 +501,16 @@ function WidgetPage() {
         />
       </div>
 
-      {view === 'support-list' && (
+      {(view as string) === 'support-list' && (
         <WidgetSupportList
           onNewTicket={handleSupportNewTicket}
           onTicketSelect={handleSupportTicketSelect}
         />
       )}
 
-      {view === 'support-new' && <WidgetSupportNew onCreated={handleSupportTicketCreated} />}
+      {(view as string) === 'support-new' && <WidgetSupportNew onCreated={handleSupportTicketCreated} />}
 
-      {view === 'support-detail' && selectedTicketId && (
+      {(view as string) === 'support-detail' && selectedTicketId && (
         <WidgetSupportDetail ticketId={selectedTicketId} />
       )}
 
