@@ -49,8 +49,15 @@ export async function readBodyWithLimit(
 }
 
 export async function handleProxyUpload({ request }: { request: Request }): Promise<Response> {
-  const { isS3Configured, getS3Config, uploadObject, verifyProxyUploadToken, MAX_FILE_SIZE } =
-    await import('@/lib/server/storage/s3')
+  const {
+    isS3Configured,
+    getS3Config,
+    uploadObject,
+    verifyProxyUploadToken,
+    isAllowedImageType,
+    MAX_FILE_SIZE,
+  } = await import('@/lib/server/storage/s3')
+  const { sniffImageMime } = await import('@/lib/server/content/magic-bytes')
   const { config } = await import('@/lib/server/config')
 
   if (!isS3Configured() || !config.s3Proxy) {
@@ -74,6 +81,15 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
 
   const body = await readBodyWithLimit(request, MAX_FILE_SIZE)
   if (!body) return Response.json({ error: 'File too large' }, { status: 413 })
+
+  // The token authenticates which (key, ct) may be written, not that the bytes
+  // are that type — apply the same magic-byte check as the multipart path.
+  // Every presigned flow signs an allowed image type, so non-image cts are
+  // rejected outright.
+  const sniffed = sniffImageMime(Buffer.from(body.buffer, body.byteOffset, body.byteLength))
+  if (!isAllowedImageType(ct) || sniffed !== ct) {
+    return Response.json({ error: 'File content does not match its type' }, { status: 400 })
+  }
 
   await uploadObject(key, body, ct)
   proxyCache.delete(key)
