@@ -954,10 +954,6 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
 
       return true
     })
-    // Filter by event-type subscription and (board-bearing events only) board.
-    const matchingWebhooks = activeWebhooks.filter((webhook) =>
-      webhookSubscriptionMatches(webhook, event)
-    )
 
     console.log(
       `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardIds.length ? ` (boards: ${boardIds.join(', ')})` : ''}${inboxIds.length ? ` (inboxes: ${inboxIds.join(', ')})` : ''}`

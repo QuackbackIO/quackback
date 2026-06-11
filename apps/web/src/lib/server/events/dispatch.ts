@@ -8,7 +8,6 @@
 
 import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
 
-import type { EventActor, EventData, EventPostRef, EventTicketRef } from './types.js'
 import type {
   EventActor,
   EventConversationData,
@@ -16,6 +15,7 @@ import type {
   EventData,
   EventMessageData,
   EventPostRef,
+  EventTicketRef,
 } from './types.js'
 import { realEmail } from '@/lib/shared/anonymous-email'
 
@@ -459,6 +459,9 @@ export async function dispatchTicketSlaBreach(
     ...eventEnvelope(actor),
     type: 'ticket.sla_breach',
     data: { ticket: ticketRef(ticket), kind },
+  })
+}
+
 export async function dispatchConversationCreated(
   actor: EventActor,
   conversation: EventConversationData

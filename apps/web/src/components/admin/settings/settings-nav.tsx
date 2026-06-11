@@ -18,7 +18,6 @@ import {
   ArrowsRightLeftIcon,
   ClockIcon,
   ShieldExclamationIcon,
-  UserGroupIcon,
   ClipboardDocumentListIcon,
   MegaphoneIcon,
 } from '@heroicons/react/24/solid'

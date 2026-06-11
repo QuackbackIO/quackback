@@ -21,27 +21,6 @@ const NAV_ITEM_HELP = {
   defaultMessage: 'Help Center',
 } as const
 
-export type PortalNavItem =
-  | (typeof NAV_ITEMS_BASE)[number]
-  | typeof NAV_ITEM_TICKETS
-  | typeof NAV_ITEM_HELP
-
-/**
- * Returns the nav items shown in the portal header.
- * - Feedback / Roadmap / Changelog are always shown.
- * - "My tickets" is appended for signed-in users (between base + help).
- * - Help Center is appended last when the workspace has the feature on.
- */
-export function buildNavItems({
-  helpCenterEnabled,
-  isSignedIn = false,
-}: {
-  helpCenterEnabled: boolean
-  isSignedIn?: boolean
-}): readonly PortalNavItem[] {
-  const items: PortalNavItem[] = [...NAV_ITEMS_BASE]
-  if (isSignedIn) items.push(NAV_ITEM_TICKETS)
-  if (helpCenterEnabled) items.push(NAV_ITEM_HELP)
 const NAV_ITEM_SUPPORT = {
   to: '/support',
   messageId: 'portal.header.nav.support',
@@ -50,23 +29,28 @@ const NAV_ITEM_SUPPORT = {
 
 export type PortalNavItem =
   | (typeof NAV_ITEMS_BASE)[number]
+  | typeof NAV_ITEM_TICKETS
   | typeof NAV_ITEM_HELP
   | typeof NAV_ITEM_SUPPORT
 
 /**
  * Returns the nav items shown in the portal header.
- * Feedback/roadmap/changelog are always shown; a Help tab is appended when
- * the help center feature is enabled, and a Support tab (the signed-in
- * user's conversations) when portal support is enabled.
+ * - Feedback / Roadmap / Changelog are always shown.
+ * - "My tickets" is appended for signed-in users (between base + help).
+ * - Help Center is appended when the workspace has the feature on.
+ * - Support (live-chat conversations) is appended when portal support is enabled.
  */
 export function buildNavItems({
   helpCenterEnabled,
-  supportEnabled,
+  isSignedIn = false,
+  supportEnabled = false,
 }: {
   helpCenterEnabled: boolean
-  supportEnabled: boolean
+  isSignedIn?: boolean
+  supportEnabled?: boolean
 }): readonly PortalNavItem[] {
   const items: PortalNavItem[] = [...NAV_ITEMS_BASE]
+  if (isSignedIn) items.push(NAV_ITEM_TICKETS)
   if (helpCenterEnabled) items.push(NAV_ITEM_HELP)
   if (supportEnabled) items.push(NAV_ITEM_SUPPORT)
   return items

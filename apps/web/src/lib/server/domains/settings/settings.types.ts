@@ -507,7 +507,6 @@ export interface WidgetConfig {
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
   'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'imageUploadsInWidget' | 'ticketing'
-  'enabled' | 'defaultBoard' | 'position' | 'tabs'
 > & {
   /** Whether verified identity is required (derived from identifyVerification) */
   hmacRequired?: boolean
