@@ -147,20 +147,19 @@ const HTML_ENTITIES: Record<string, string> = {
 }
 
 export function stripHtml(html: string): string {
-  const entityPattern = /&(?:nbsp|amp|lt|gt|quot|#39);/g
-  const tagPattern = /<[^>]*>?/g
-
+  // Strip tag-like sequences (`<` followed by a letter, `/`, or `!`) to a
+  // fixpoint so nested fragments can't reassemble into a tag; the closing `>`
+  // is optional so an unterminated trailing tag is also dropped. A lone `<`
+  // in plain text ("1 < 2") is not tag-like and survives.
+  let text = html
   let previous: string
-  let current = html
-
   do {
-    previous = current
-    current = current
-      .replace(entityPattern, (m) => HTML_ENTITIES[m])
-      .replace(tagPattern, '') // Remove HTML tags, including an unterminated trailing one
-  } while (current !== previous)
+    previous = text
+    text = text.replace(/<[a-z!/][^>]*>?/gi, '')
+  } while (text !== previous)
 
-  return current
+  return text
+    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (m) => HTML_ENTITIES[m]) // Decode entities in a single pass so "&amp;lt;" yields "&lt;", not "<"
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }
