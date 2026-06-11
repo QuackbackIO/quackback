@@ -19,7 +19,12 @@ export function isTrustedAttachmentUrl(url: string): boolean {
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
     if (config.s3PublicUrl) {
       const base = new URL(config.s3PublicUrl)
-      if (u.hostname === base.hostname && u.pathname.startsWith(base.pathname)) return true
+      // Match on a path-segment boundary: a bare prefix check would admit a
+      // sibling bucket on the same host (`/bucket` matching `/bucket-evil/x`).
+      const basePath = base.pathname.replace(/\/$/, '')
+      const pathOk =
+        basePath === '' || u.pathname === basePath || u.pathname.startsWith(`${basePath}/`)
+      if (u.hostname === base.hostname && pathOk) return true
     }
     return u.hostname === appBase.hostname && u.pathname.startsWith('/api/storage/')
   } catch {
