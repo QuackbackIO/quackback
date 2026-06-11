@@ -96,6 +96,10 @@
     {
       "name": "Webhooks",
       "description": "Webhook delivery audit log"
+    },
+    {
+      "name": "Conversations",
+      "description": "Manage support conversations"
     }
   ],
   "paths": {
@@ -1711,9 +1715,67 @@
                             ],
                             "example": "Submit and vote on feature ideas"
                           },
-                          "isPublic": {
-                            "type": "boolean",
-                            "example": true
+                          "audience": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "public"
+                                  }
+                                },
+                                "required": ["kind"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "authenticated"
+                                  }
+                                },
+                                "required": ["kind"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "team"
+                                  }
+                                },
+                                "required": ["kind"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "segments"
+                                  },
+                                  "segmentIds": {
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "description": "TypeID - a type-prefixed UUID",
+                                      "example": "post_01h455vb4pex5vsknk084sn02q"
+                                    }
+                                  }
+                                },
+                                "required": ["kind", "segmentIds"],
+                                "additionalProperties": false
+                              }
+                            ],
+                            "description": "Who can view this board (legacy shape — derived from the internal access matrix). public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.",
+                            "example": {
+                              "kind": "public"
+                            },
+                            "type": "object"
                           },
                           "postCount": {
                             "type": "number",
@@ -1740,7 +1802,7 @@
                           "name",
                           "slug",
                           "description",
-                          "isPublic",
+                          "audience",
                           "postCount",
                           "createdAt",
                           "updatedAt"
@@ -1850,11 +1912,6 @@
                     "description": "Board description",
                     "type": "string",
                     "maxLength": 500
-                  },
-                  "isPublic": {
-                    "description": "Whether board is public",
-                    "default": true,
-                    "type": "boolean"
                   }
                 },
                 "required": ["name"],
@@ -1901,9 +1958,67 @@
                           ],
                           "example": "Submit and vote on feature ideas"
                         },
-                        "isPublic": {
-                          "type": "boolean",
-                          "example": true
+                        "audience": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "public"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "authenticated"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "team"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "segments"
+                                },
+                                "segmentIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "description": "TypeID - a type-prefixed UUID",
+                                    "example": "post_01h455vb4pex5vsknk084sn02q"
+                                  }
+                                }
+                              },
+                              "required": ["kind", "segmentIds"],
+                              "additionalProperties": false
+                            }
+                          ],
+                          "description": "Who can view this board (legacy shape — derived from the internal access matrix). public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.",
+                          "example": {
+                            "kind": "public"
+                          },
+                          "type": "object"
                         },
                         "createdAt": {
                           "type": "string",
@@ -1925,7 +2040,7 @@
                         "name",
                         "slug",
                         "description",
-                        "isPublic",
+                        "audience",
                         "createdAt",
                         "updatedAt"
                       ],
@@ -2061,9 +2176,67 @@
                           ],
                           "example": "Submit and vote on feature ideas"
                         },
-                        "isPublic": {
-                          "type": "boolean",
-                          "example": true
+                        "audience": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "public"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "authenticated"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "team"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "segments"
+                                },
+                                "segmentIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "description": "TypeID - a type-prefixed UUID",
+                                    "example": "post_01h455vb4pex5vsknk084sn02q"
+                                  }
+                                }
+                              },
+                              "required": ["kind", "segmentIds"],
+                              "additionalProperties": false
+                            }
+                          ],
+                          "description": "Who can view this board (legacy shape — derived from the internal access matrix). public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.",
+                          "example": {
+                            "kind": "public"
+                          },
+                          "type": "object"
                         },
                         "settings": {
                           "type": "object",
@@ -2093,7 +2266,7 @@
                         "name",
                         "slug",
                         "description",
-                        "isPublic",
+                        "audience",
                         "settings",
                         "createdAt",
                         "updatedAt"
@@ -2210,9 +2383,6 @@
                         "type": "null"
                       }
                     ]
-                  },
-                  "isPublic": {
-                    "type": "boolean"
                   }
                 },
                 "description": "Update board request body"
@@ -2258,9 +2428,67 @@
                           ],
                           "example": "Submit and vote on feature ideas"
                         },
-                        "isPublic": {
-                          "type": "boolean",
-                          "example": true
+                        "audience": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "public"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "authenticated"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "team"
+                                }
+                              },
+                              "required": ["kind"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "segments"
+                                },
+                                "segmentIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "description": "TypeID - a type-prefixed UUID",
+                                    "example": "post_01h455vb4pex5vsknk084sn02q"
+                                  }
+                                }
+                              },
+                              "required": ["kind", "segmentIds"],
+                              "additionalProperties": false
+                            }
+                          ],
+                          "description": "Who can view this board (legacy shape — derived from the internal access matrix). public = everyone; authenticated = signed-in portal users; team = admins & members only; segments = members of the listed segments.",
+                          "example": {
+                            "kind": "public"
+                          },
+                          "type": "object"
                         },
                         "settings": {
                           "type": "object",
@@ -2290,7 +2518,7 @@
                         "name",
                         "slug",
                         "description",
-                        "isPublic",
+                        "audience",
                         "settings",
                         "createdAt",
                         "updatedAt"
@@ -12026,6 +12254,181 @@
       }
     },
     "/tickets/{ticketId}/threads/{threadId}": {
+      "get": {
+        "tags": ["Tickets"],
+        "summary": "Get a single thread",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "ticket_thread_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "ticketId": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "post_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "principalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "audience": {
+                          "type": "string",
+                          "enum": ["public", "internal", "shared_team"]
+                        },
+                        "sharedWithTeamId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "bodyText": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "bodyJson": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "editedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "ticketId",
+                        "principalId",
+                        "audience",
+                        "sharedWithTeamId",
+                        "bodyText",
+                        "bodyJson",
+                        "createdAt",
+                        "editedAt"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Ticket thread (message)"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Thread"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket or thread not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": ["Tickets"],
         "summary": "Edit a thread (author only)",
@@ -12741,6 +13144,171 @@
       }
     },
     "/tickets/{ticketId}/threads/{threadId}/attachments/{attachmentId}": {
+      "get": {
+        "tags": ["Tickets"],
+        "summary": "Get a single attachment",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "ticket_att_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "threadId": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "post_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "uploadedByPrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "mimeType": {
+                          "type": "string"
+                        },
+                        "sizeBytes": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "storageKey": {
+                          "type": "string"
+                        },
+                        "publicUrl": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "threadId",
+                        "uploadedByPrincipalId",
+                        "filename",
+                        "mimeType",
+                        "sizeBytes",
+                        "storageKey",
+                        "publicUrl",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Ticket attachment metadata"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Attachment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket / thread / attachment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": ["Tickets"],
         "summary": "Delete an attachment",
@@ -12798,6 +13366,941 @@
           },
           "404": {
             "description": "Ticket / thread / attachment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticketId}/assign": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Assign a ticket",
+        "description": "Assign to an agent (assigneePrincipalId) and/or a team (assigneeTeamId). Requires `ticket.assign_any` or `ticket.assign_self` if assigning to self.",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "assigneePrincipalId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "TypeID - a type-prefixed UUID",
+                        "example": "post_01h455vb4pex5vsknk084sn02q"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "assigneeTeamId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "TypeID - a type-prefixed UUID",
+                        "example": "post_01h455vb4pex5vsknk084sn02q"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["expectedUpdatedAt"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket assigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "ticket_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "descriptionText": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "normal", "high", "urgent"]
+                        },
+                        "channel": {
+                          "type": "string",
+                          "enum": ["portal", "email", "api", "widget"]
+                        },
+                        "visibilityScope": {
+                          "type": "string",
+                          "enum": ["team", "org", "shared", "private"]
+                        },
+                        "statusId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "primaryTeamId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "assigneePrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "assigneeTeamId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requesterPrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requesterContactId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "organizationId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "inboxId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "slaPolicyId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "firstResponseAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "resolvedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "reopenedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "closedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "lastActivityAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "descriptionText",
+                        "priority",
+                        "channel",
+                        "visibilityScope",
+                        "statusId",
+                        "primaryTeamId",
+                        "assigneePrincipalId",
+                        "assigneeTeamId",
+                        "requesterPrincipalId",
+                        "requesterContactId",
+                        "organizationId",
+                        "inboxId",
+                        "slaPolicyId",
+                        "firstResponseAt",
+                        "resolvedAt",
+                        "reopenedAt",
+                        "closedAt",
+                        "lastActivityAt",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Ticket header record"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Ticket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "VALIDATION_ERROR"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Request validation failed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permissions"
+          },
+          "404": {
+            "description": "Ticket not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticketId}/transition": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Transition ticket status",
+        "description": "Move the ticket to a new status. Sets lifecycle timestamps based on the destination category. Requires `ticket.edit_fields`.",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "statusId": {
+                    "type": "string",
+                    "description": "TypeID - a type-prefixed UUID",
+                    "example": "post_01h455vb4pex5vsknk084sn02q"
+                  }
+                },
+                "required": ["expectedUpdatedAt", "statusId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ticket transitioned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "ticket_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "descriptionText": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "normal", "high", "urgent"]
+                        },
+                        "channel": {
+                          "type": "string",
+                          "enum": ["portal", "email", "api", "widget"]
+                        },
+                        "visibilityScope": {
+                          "type": "string",
+                          "enum": ["team", "org", "shared", "private"]
+                        },
+                        "statusId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "primaryTeamId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "assigneePrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "assigneeTeamId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requesterPrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requesterContactId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "organizationId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "inboxId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "slaPolicyId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "firstResponseAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "resolvedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "reopenedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "closedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "lastActivityAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "ISO 8601 timestamp or null",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "subject",
+                        "descriptionText",
+                        "priority",
+                        "channel",
+                        "visibilityScope",
+                        "statusId",
+                        "primaryTeamId",
+                        "assigneePrincipalId",
+                        "assigneeTeamId",
+                        "requesterPrincipalId",
+                        "requesterContactId",
+                        "organizationId",
+                        "inboxId",
+                        "slaPolicyId",
+                        "firstResponseAt",
+                        "resolvedAt",
+                        "reopenedAt",
+                        "closedAt",
+                        "lastActivityAt",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Ticket header record"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Ticket"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "VALIDATION_ERROR"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Request validation failed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ticket.edit_fields required"
+          },
+          "404": {
+            "description": "Ticket not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticketId}/shares/{shareId}": {
+      "delete": {
+        "tags": ["Tickets"],
+        "summary": "Revoke a share",
+        "description": "Revoke a cross-team share grant. Requires `ticket.share_cross_team`.",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          },
+          {
+            "name": "shareId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Share revoked"
+          },
+          "403": {
+            "description": "ticket.share_cross_team required"
+          },
+          "404": {
+            "description": "Ticket or share not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticketId}/participants/{participantId}": {
+      "delete": {
+        "tags": ["Tickets"],
+        "summary": "Remove a participant",
+        "description": "Remove a watcher/collaborator/CC from the ticket. Requires `ticket.manage_participants`.",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          },
+          {
+            "name": "participantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "def": {
+                "type": "string"
+              },
+              "type": "string",
+              "format": null,
+              "minLength": null,
+              "maxLength": null
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Participant removed"
+          },
+          "403": {
+            "description": "ticket.manage_participants required"
+          },
+          "404": {
+            "description": "Ticket or participant not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -17338,6 +18841,689 @@
                   "required": ["data"],
                   "additionalProperties": false,
                   "description": "Deliveries"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations": {
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "List conversations",
+        "description": "Returns a paginated list of support conversations. Requires a team-role API key.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["open", "pending", "closed"]
+            },
+            "description": "Filter by conversation status"
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["none", "low", "medium", "high", "urgent"]
+            },
+            "description": "Filter by triage priority"
+          },
+          {
+            "name": "assignedAgentPrincipalId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by assigned agent principal ID"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Pagination cursor from previous response"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "TypeID - a type-prefixed UUID",
+                            "example": "conversation_01h455vb4pex5vsknk084sn02q"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["open", "pending", "closed"],
+                            "description": "Current conversation status",
+                            "example": "open"
+                          },
+                          "channel": {
+                            "type": "string",
+                            "enum": ["live_chat", "email", "web_form"],
+                            "description": "Channel the conversation arrived on",
+                            "example": "live_chat"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": ["none", "low", "medium", "high", "urgent"],
+                            "description": "Agent-set triage priority",
+                            "example": "none"
+                          },
+                          "subject": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Conversation subject line, null for live-chat threads",
+                            "example": null
+                          },
+                          "visitorPrincipalId": {
+                            "type": "string",
+                            "description": "Principal ID of the visiting user",
+                            "example": "principal_01h455vb4pex5vsknk084sn02q"
+                          },
+                          "visitorEmail": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Captured contact email for the visitor, null if not provided",
+                            "example": "visitor@example.com"
+                          },
+                          "assignedAgentPrincipalId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "description": "TypeID - a type-prefixed UUID",
+                                "example": "post_01h455vb4pex5vsknk084sn02q"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Principal ID of the assigned agent, null if unassigned",
+                            "example": null
+                          },
+                          "lastMessageAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                            "description": "ISO 8601 timestamp",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          },
+                          "resolvedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "When the conversation was resolved, null while still active",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                            "description": "ISO 8601 timestamp",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "channel",
+                          "priority",
+                          "subject",
+                          "visitorPrincipalId",
+                          "visitorEmail",
+                          "assignedAgentPrincipalId",
+                          "lastMessageAt",
+                          "resolvedAt",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "cursor": {
+                              "description": "Cursor for next page, null if no more pages",
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "hasMore": {
+                              "type": "boolean",
+                              "description": "Whether there are more items"
+                            },
+                            "total": {
+                              "description": "Total count (when available)",
+                              "type": "number"
+                            }
+                          },
+                          "required": ["hasMore"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["pagination"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Paginated conversations list"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "UNAUTHORIZED"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Authentication required or invalid API key"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}": {
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "Get a conversation",
+        "description": "Get a single conversation by ID. Requires a team-role API key.",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Conversation ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "TypeID - a type-prefixed UUID",
+                          "example": "conversation_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["open", "pending", "closed"],
+                          "description": "Current conversation status",
+                          "example": "open"
+                        },
+                        "channel": {
+                          "type": "string",
+                          "enum": ["live_chat", "email", "web_form"],
+                          "description": "Channel the conversation arrived on",
+                          "example": "live_chat"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["none", "low", "medium", "high", "urgent"],
+                          "description": "Agent-set triage priority",
+                          "example": "none"
+                        },
+                        "subject": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Conversation subject line, null for live-chat threads",
+                          "example": null
+                        },
+                        "visitorPrincipalId": {
+                          "type": "string",
+                          "description": "Principal ID of the visiting user",
+                          "example": "principal_01h455vb4pex5vsknk084sn02q"
+                        },
+                        "visitorEmail": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Captured contact email for the visitor, null if not provided",
+                          "example": "visitor@example.com"
+                        },
+                        "assignedAgentPrincipalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "description": "TypeID - a type-prefixed UUID",
+                              "example": "post_01h455vb4pex5vsknk084sn02q"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Principal ID of the assigned agent, null if unassigned",
+                          "example": null
+                        },
+                        "lastMessageAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "resolvedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "When the conversation was resolved, null while still active",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "ISO 8601 timestamp",
+                          "example": "2024-01-15T10:30:00.000Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "channel",
+                        "priority",
+                        "subject",
+                        "visitorPrincipalId",
+                        "visitorEmail",
+                        "assignedAgentPrincipalId",
+                        "lastMessageAt",
+                        "resolvedAt",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Conversation details"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "UNAUTHORIZED"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Authentication required or invalid API key"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{conversationId}/messages": {
+      "get": {
+        "tags": ["Conversations"],
+        "summary": "List messages in a conversation",
+        "description": "Returns a paginated list of messages in a conversation. Internal agent notes are excluded by default. Requires a team-role API key.",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Conversation ID"
+          },
+          {
+            "name": "includeInternal",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Include internal agent notes (default: false)"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Pagination cursor from previous response"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "TypeID - a type-prefixed UUID",
+                            "example": "chat_msg_01h455vb4pex5vsknk084sn02q"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "description": "TypeID - a type-prefixed UUID",
+                            "example": "conversation_01h455vb4pex5vsknk084sn02q"
+                          },
+                          "senderType": {
+                            "type": "string",
+                            "enum": ["visitor", "agent", "system"],
+                            "description": "Who sent the message",
+                            "example": "visitor"
+                          },
+                          "isInternal": {
+                            "type": "boolean",
+                            "description": "Whether this is an internal agent note not visible to the visitor",
+                            "example": false
+                          },
+                          "authorPrincipalId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "description": "TypeID - a type-prefixed UUID",
+                                "example": "post_01h455vb4pex5vsknk084sn02q"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Principal ID of the author, null for system messages",
+                            "example": "principal_01h455vb4pex5vsknk084sn02q"
+                          },
+                          "authorName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Display name of the author, null for system messages",
+                            "example": "Jane Doe"
+                          },
+                          "content": {
+                            "type": "string",
+                            "example": "Hello, I need help with my account."
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                            "description": "ISO 8601 timestamp",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "senderType",
+                          "isInternal",
+                          "authorPrincipalId",
+                          "authorName",
+                          "content",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "cursor": {
+                              "description": "Cursor for next page, null if no more pages",
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "hasMore": {
+                              "type": "boolean",
+                              "description": "Whether there are more items"
+                            },
+                            "total": {
+                              "description": "Total count (when available)",
+                              "type": "number"
+                            }
+                          },
+                          "required": ["hasMore"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["pagination"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false,
+                  "description": "Paginated messages list"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "UNAUTHORIZED"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Authentication required or invalid API key"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "message"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false,
+                  "description": "Resource not found"
                 }
               }
             }

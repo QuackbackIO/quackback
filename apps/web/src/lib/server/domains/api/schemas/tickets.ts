@@ -602,6 +602,26 @@ registerPath('/tickets/{ticketId}/activity', {
 })
 
 registerPath('/tickets/{ticketId}/threads/{threadId}', {
+  get: {
+    tags: ['Tickets'],
+    summary: 'Get a single thread',
+    parameters: [
+      { name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+      { name: 'threadId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+    ],
+    responses: {
+      200: {
+        description: 'Thread detail',
+        content: {
+          'application/json': { schema: createItemResponseSchema(ThreadSchema, 'Thread') },
+        },
+      },
+      404: {
+        description: 'Ticket or thread not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
   patch: {
     tags: ['Tickets'],
     summary: 'Edit a thread (author only)',
@@ -720,6 +740,27 @@ registerPath('/tickets/{ticketId}/threads/{threadId}/attachments', {
 })
 
 registerPath('/tickets/{ticketId}/threads/{threadId}/attachments/{attachmentId}', {
+  get: {
+    tags: ['Tickets'],
+    summary: 'Get a single attachment',
+    parameters: [
+      { name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+      { name: 'threadId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+      { name: 'attachmentId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+    ],
+    responses: {
+      200: {
+        description: 'Attachment detail',
+        content: {
+          'application/json': { schema: createItemResponseSchema(AttachmentSchema, 'Attachment') },
+        },
+      },
+      404: {
+        description: 'Ticket / thread / attachment not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
   delete: {
     tags: ['Tickets'],
     summary: 'Delete an attachment',
@@ -735,6 +776,136 @@ registerPath('/tickets/{ticketId}/threads/{threadId}/attachments/{attachmentId}'
       403: { description: 'Not the uploader and lacks ticket.edit_fields' },
       404: {
         description: 'Ticket / thread / attachment not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Assign & Transition
+// ---------------------------------------------------------------------------
+
+registerPath('/tickets/{ticketId}/assign', {
+  post: {
+    tags: ['Tickets'],
+    summary: 'Assign a ticket',
+    description:
+      'Assign to an agent (assigneePrincipalId) and/or a team (assigneeTeamId). Requires `ticket.assign_any` or `ticket.assign_self` if assigning to self.',
+    parameters: [{ name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: asSchema(
+            z.object({
+              expectedUpdatedAt: z.string().datetime(),
+              assigneePrincipalId: TypeIdSchema.nullable().optional(),
+              assigneeTeamId: TypeIdSchema.nullable().optional(),
+            })
+          ),
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Ticket assigned',
+        content: {
+          'application/json': { schema: createItemResponseSchema(TicketSchema, 'Ticket') },
+        },
+      },
+      400: {
+        description: 'Validation error',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
+      },
+      403: { description: 'Insufficient permissions' },
+      404: {
+        description: 'Ticket not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+registerPath('/tickets/{ticketId}/transition', {
+  post: {
+    tags: ['Tickets'],
+    summary: 'Transition ticket status',
+    description:
+      'Move the ticket to a new status. Sets lifecycle timestamps based on the destination category. Requires `ticket.edit_fields`.',
+    parameters: [{ name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: asSchema(
+            z.object({
+              expectedUpdatedAt: z.string().datetime(),
+              statusId: TypeIdSchema,
+            })
+          ),
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Ticket transitioned',
+        content: {
+          'application/json': { schema: createItemResponseSchema(TicketSchema, 'Ticket') },
+        },
+      },
+      400: {
+        description: 'Validation error',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
+      },
+      403: { description: 'ticket.edit_fields required' },
+      404: {
+        description: 'Ticket not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Sub-resource deletions
+// ---------------------------------------------------------------------------
+
+registerPath('/tickets/{ticketId}/shares/{shareId}', {
+  delete: {
+    tags: ['Tickets'],
+    summary: 'Revoke a share',
+    description: 'Revoke a cross-team share grant. Requires `ticket.share_cross_team`.',
+    parameters: [
+      { name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+      { name: 'shareId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+    ],
+    responses: {
+      204: { description: 'Share revoked' },
+      403: { description: 'ticket.share_cross_team required' },
+      404: {
+        description: 'Ticket or share not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+registerPath('/tickets/{ticketId}/participants/{participantId}', {
+  delete: {
+    tags: ['Tickets'],
+    summary: 'Remove a participant',
+    description:
+      'Remove a watcher/collaborator/CC from the ticket. Requires `ticket.manage_participants`.',
+    parameters: [
+      { name: 'ticketId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+      { name: 'participantId', in: 'path', required: true, schema: asSchema(TypeIdSchema) },
+    ],
+    responses: {
+      204: { description: 'Participant removed' },
+      403: { description: 'ticket.manage_participants required' },
+      404: {
+        description: 'Ticket or participant not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
