@@ -147,9 +147,20 @@ const HTML_ENTITIES: Record<string, string> = {
 }
 
 export function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>?/g, '') // Remove HTML tags, including an unterminated trailing one
-    .replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (m) => HTML_ENTITIES[m]) // Decode entities in a single pass so "&amp;lt;" yields "&lt;", not "<"
+  const entityPattern = /&(?:nbsp|amp|lt|gt|quot|#39);/g
+  const tagPattern = /<[^>]*>?/g
+
+  let previous: string
+  let current = html
+
+  do {
+    previous = current
+    current = current
+      .replace(entityPattern, (m) => HTML_ENTITIES[m])
+      .replace(tagPattern, '') // Remove HTML tags, including an unterminated trailing one
+  } while (current !== previous)
+
+  return current
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }
