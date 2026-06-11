@@ -13,16 +13,16 @@ function fromCodePointSafe(n: number): string {
   return Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ''
 }
 
-/** Decode the five named HTML entities plus decimal and hex character references. */
+const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"' }
+
+/** Decode the named HTML entities plus decimal and hex character references.
+ *  Single pass so produced characters are never re-interpreted as entities
+ *  ("&amp;lt;" decodes to "&lt;", not "<"). */
 function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => fromCodePointSafe(parseInt(hex, 16)))
-    .replace(/&#(\d+);/gi, (_, dec) => fromCodePointSafe(Number(dec)))
+  return s.replace(/&(?:(amp|lt|gt|quot)|#x([0-9a-f]+)|#(\d+));/gi, (_, name, hex, dec) => {
+    if (name) return NAMED_ENTITIES[name.toLowerCase()]
+    return fromCodePointSafe(hex ? parseInt(hex, 16) : Number(dec))
+  })
 }
 
 /** Strip ASCII control characters (U+0000-U+001F, U+007F). */
