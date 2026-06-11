@@ -918,6 +918,12 @@ export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<
   for (const key of Object.keys(input)) {
     await assertNotManaged(`features.${key}`)
   }
+  // Tier gate: enabling AI feedback extraction is plan-entitled (Scale on
+  // cloud). Checked only on enable so a downgrade can still switch it off.
+  if (input.aiFeedbackExtraction === true) {
+    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+    await assertTierFeature('aiFeedbackExtraction', 'AI feedback extraction')
+  }
   const org = await requireSettings()
   const current: FeatureFlags = {
     ...DEFAULT_FEATURE_FLAGS,

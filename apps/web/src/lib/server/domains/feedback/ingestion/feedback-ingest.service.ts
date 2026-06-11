@@ -132,8 +132,12 @@ export async function enrichAndAdvance(rawItemId: string): Promise<void> {
     })
     .where(eq(rawFeedbackItems.id, rawItemId as RawFeedbackItemId))
 
-  // If AI is enabled, enqueue extraction; otherwise mark completed
-  if (getOpenAI()) {
+  // If AI is enabled and the plan includes extraction, enqueue it;
+  // otherwise mark completed. The tier check runs here (not just at the
+  // Labs toggle) so sources enabled before a downgrade stop extracting.
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const tierAllowsExtraction = (await getTierLimits()).features.aiFeedbackExtraction
+  if (getOpenAI() && tierAllowsExtraction) {
     await enqueueFeedbackAiJob({ type: 'extract-signals', rawItemId })
   } else {
     await db
