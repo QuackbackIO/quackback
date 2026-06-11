@@ -271,6 +271,17 @@ async function getIntegrationTargets(
     return []
   }
 
+  // Never forward internal or shared-team ticket threads to external integrations.
+  // Internal threads are private agent-only context; shared-team threads are
+  // inter-team collaboration not meant for external consumers.
+  if (
+    event.type === 'ticket.thread_added' &&
+    ((event.data as { audience?: string }).audience === 'internal' ||
+      (event.data as { audience?: string }).audience === 'shared_team')
+  ) {
+    return []
+  }
+
   // Get all active mappings from cache or DB, then filter by event type
   const allMappings = await getCachedIntegrationMappings()
   const mappings = allMappings.filter((m) => m.eventType === event.type)
@@ -894,11 +905,13 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
     return []
   }
 
-  // Never deliver internal ticket notes to external webhooks — they are
-  // private agent-only context (analogous to private comments).
+  // Never deliver internal or shared-team ticket notes to external webhooks —
+  // internal threads are private agent-only context; shared-team threads are
+  // inter-team collaboration not meant for external consumers.
   if (
     event.type === 'ticket.thread_added' &&
-    (event.data as { audience?: string }).audience === 'internal'
+    ((event.data as { audience?: string }).audience === 'internal' ||
+      (event.data as { audience?: string }).audience === 'shared_team')
   ) {
     return []
   }
