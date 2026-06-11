@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mockSession } from '../../__tests__/upload-fixtures'
+import { mockSession, mockImageFile } from '../../__tests__/upload-fixtures'
 
 vi.mock('@/lib/server/auth', () => ({
   auth: { api: { getSession: vi.fn() } },
@@ -87,7 +87,7 @@ describe('POST /api/widget/upload', () => {
     // live-chat visitor without an account can attach images too.
     authAs()
     vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/widget-images/shot.webp')
-    const file = new File(['img'], 'shot.webp', { type: 'image/webp' })
+    const file = mockImageFile('shot.webp', 'image/webp')
     const res = await handleWidgetUpload({ request: makeRequest(file, 'valid-token') })
     expect(res.status).toBe(200)
     const body = await res.json()

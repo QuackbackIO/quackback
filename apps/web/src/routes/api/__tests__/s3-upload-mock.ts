@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { sniffImageMime } from '@/lib/server/content/magic-bytes'
 
 /**
  * Shared vi.mock factory for @/lib/server/storage/s3.
@@ -45,11 +46,13 @@ export function createS3MockFactory() {
       try {
         const filename = file.name || `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`
         const key = mockGenerateStorageKey(storagePrefix, filename)
-        const publicUrl = await mockUploadObject(
-          key,
-          Buffer.from(await file.arrayBuffer()),
-          file.type
-        )
+        const body = Buffer.from(await file.arrayBuffer())
+        // Mirror the real implementation's magic-byte check (sniffImageMime is
+        // pure, so the real one is used) — declared type must match the bytes.
+        if (sniffImageMime(body) !== file.type) {
+          return Response.json({ error: 'File content does not match its type' }, { status: 400 })
+        }
+        const publicUrl = await mockUploadObject(key, body, file.type)
         return Response.json({ publicUrl })
       } catch {
         return Response.json({ error: 'Upload failed' }, { status: 500 })
