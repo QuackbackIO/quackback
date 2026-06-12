@@ -43,6 +43,22 @@ function readHeader(headers: unknown, name: string): string | null {
   return null
 }
 
+/**
+ * Pull the addr-spec out of a From header value (`Jane <jane@x>` or a bare
+ * address), normalized to lower case. Returns null when no plausible single
+ * address is present — callers treat that as "sender unknown", never as a
+ * wildcard match.
+ */
+export function extractEmailAddress(raw: string | null): string | null {
+  if (!raw) return null
+  const angled = raw.match(/<([^<>]+)>\s*$/)
+  const candidate = (angled ? angled[1] : raw).trim().toLowerCase()
+  if (!candidate || /[\s<>,;"]/.test(candidate)) return null
+  const at = candidate.indexOf('@')
+  if (at <= 0 || at !== candidate.lastIndexOf('@') || at === candidate.length - 1) return null
+  return candidate
+}
+
 export function parseInboundEmail(data: unknown): ParsedInboundEmail {
   const d = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
   const rawTo = d.to

@@ -22,7 +22,12 @@ import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { canViewConversation } from '@/lib/server/policy/chat'
 import { isTeamMember } from '@/lib/shared/roles'
-import { loadAuthors, toMessageDTO, fallbackAuthor } from '@/lib/server/domains/chat/chat.query'
+import {
+  loadAuthors,
+  toMessageDTO,
+  fallbackAuthor,
+  findBackfillCursor,
+} from '@/lib/server/domains/chat/chat.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -288,9 +293,9 @@ export const Route = createFileRoute('/api/chat/stream')({
               // stream, so it's isolated in its own try/catch.
               if (backfillConversationId && lastEventId) {
                 try {
-                  const cursor = await db.query.chatMessages.findFirst({
-                    where: eq(chatMessages.id, lastEventId as never),
-                  })
+                  // Scoped to the authorized conversation — a Last-Event-ID
+                  // from elsewhere must not shift the backfill window.
+                  const cursor = await findBackfillCursor(backfillConversationId, lastEventId)
                   if (cursor) {
                     const missed = await db
                       .select()

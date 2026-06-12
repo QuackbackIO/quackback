@@ -12,6 +12,8 @@ vi.mock('@/lib/server/storage/s3', () => ({
   getS3Config: mockGetS3Config,
   uploadObject: mockUploadObject,
   verifyProxyUploadToken: mockVerifyProxyUploadToken,
+  isAllowedImageType: (t: string) =>
+    ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'].includes(t),
   MAX_FILE_SIZE,
 }))
 
@@ -23,23 +25,25 @@ const { handleProxyUpload } = await import('../$.js')
 
 const KEY = 'avatars/2024/01/abc123-photo.png'
 const CT = 'image/png'
+// Bodies must carry real magic bytes — the handler sniffs them against `ct`.
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 
-function makeUrl(key = KEY) {
+function makeUrl(key = KEY, ct = CT) {
   const url = new URL(`http://localhost/api/storage/${key}`)
-  url.searchParams.set('ct', CT)
+  url.searchParams.set('ct', ct)
   url.searchParams.set('exp', String(Date.now() + 60_000))
   url.searchParams.set('sig', 'mock-sig')
   return url.toString()
 }
 
 function makeRequest(
-  options: { key?: string; body?: BodyInit; urlOverride?: string } = {}
+  options: { key?: string; body?: BodyInit; ct?: string; urlOverride?: string } = {}
 ): Request {
-  const url = options.urlOverride ?? makeUrl(options.key)
+  const url = options.urlOverride ?? makeUrl(options.key, options.ct)
   return new Request(url, {
     method: 'PUT',
-    body: options.body ?? new Uint8Array(100),
-    headers: { 'Content-Type': CT },
+    body: options.body ?? PNG_BYTES,
+    headers: { 'Content-Type': options.ct ?? CT },
   })
 }
 
@@ -98,6 +102,21 @@ describe('PUT /api/storage/* (proxy upload)', () => {
     const res = await handleProxyUpload({ request: makeRequest() })
     expect(res.status).toBe(200)
     expect(mockUploadObject).toHaveBeenCalledWith(KEY, expect.any(Uint8Array), CT)
+  })
+
+  it('rejects bytes that do not match the signed image content-type', async () => {
+    // The token authenticates (key, ct), not the bytes — HTML under an
+    // image/png label must not reach storage.
+    const html = new Uint8Array([...'<html><script>x</script>'].map((c) => c.charCodeAt(0)))
+    const res = await handleProxyUpload({ request: makeRequest({ body: html }) })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-image signed content-type outright', async () => {
+    const res = await handleProxyUpload({ request: makeRequest({ ct: 'text/html' }) })
+    expect(res.status).toBe(400)
+    expect(mockUploadObject).not.toHaveBeenCalled()
   })
 
   it('passes the secretAccessKey from getS3Config to verifyProxyUploadToken', async () => {

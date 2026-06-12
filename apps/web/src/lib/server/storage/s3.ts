@@ -19,6 +19,7 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { config } from '@/lib/server/config'
+import { sniffImageMime } from '@/lib/server/content/magic-bytes'
 
 // ============================================================================
 // Configuration
@@ -382,6 +383,12 @@ export async function uploadImageFromFormData(
     const filename = file.name || `paste-${Date.now()}.${ext}`
     const key = generateStorageKey(storagePrefix, filename)
     const body = Buffer.from(await file.arrayBuffer())
+    // The multipart type label is caller-controlled and becomes the stored
+    // Content-Type, so verify it against the actual bytes before storing —
+    // same check the unfurl image proxy applies to fetched images.
+    if (sniffImageMime(body) !== file.type) {
+      return Response.json({ error: 'File content does not match its type' }, { status: 400 })
+    }
     const publicUrl = await uploadObject(key, body, file.type)
     return Response.json({ publicUrl })
   } catch {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mockSession, mockPrincipal } from '../../__tests__/upload-fixtures'
+import { mockSession, mockPrincipal, mockImageFile } from '../../__tests__/upload-fixtures'
 
 vi.mock('@/lib/server/auth', () => ({
   auth: {
@@ -107,7 +107,7 @@ describe('POST /api/portal/upload', () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
     vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-images/photo.jpg')
-    const file = new File(['img'], 'photo.jpg', { type: 'image/jpeg' })
+    const file = mockImageFile('photo.jpg', 'image/jpeg')
     const res = await handlePortalUpload({ request: makeRequest(file) })
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -123,7 +123,7 @@ describe('POST /api/portal/upload', () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(identifiedPrincipal)
     vi.mocked(uploadObject).mockResolvedValueOnce('https://cdn.example.com/portal-images/img.png')
-    const file = new File(['img'], 'img.png', { type: 'image/png' })
+    const file = mockImageFile('img.png', 'image/png')
     await handlePortalUpload({ request: makeRequest(file) })
     const { generateStorageKey } = await import('@/lib/server/storage/s3')
     expect(generateStorageKey).toHaveBeenCalledWith('portal-images', expect.any(String))

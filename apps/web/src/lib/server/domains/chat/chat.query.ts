@@ -575,6 +575,29 @@ export interface MessagePage {
 }
 
 /**
+ * Resolve a message-id cursor to its (created_at, id) keyset anchor, scoped to
+ * the conversation: a cursor from another conversation must not be honored —
+ * it could truncate a page or shift a reconnect-backfill window. Shared by
+ * listMessages (`before`) and the SSE stream's Last-Event-ID backfill.
+ */
+export async function findBackfillCursor(
+  conversationId: ConversationId,
+  messageId: string
+): Promise<{ createdAt: Date; id: ChatMessage['id'] } | null> {
+  const [row] = await db
+    .select({ createdAt: chatMessages.createdAt, id: chatMessages.id })
+    .from(chatMessages)
+    .where(
+      and(
+        eq(chatMessages.id, messageId as ChatMessage['id']),
+        eq(chatMessages.conversationId, conversationId)
+      )
+    )
+    .limit(1)
+  return row ?? null
+}
+
+/**
  * List messages in a conversation, newest-first internally for keyset
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
@@ -588,22 +611,7 @@ export async function listMessages(
   // Composite keyset cursor on (created_at, id): two messages can share a
   // microsecond timestamp (e.g. same-transaction or concurrent sends), so a
   // strict created_at comparison would silently skip same-timestamp siblings.
-  let cursor: { createdAt: Date; id: ChatMessage['id'] } | null = null
-  if (opts?.before) {
-    // Scope the cursor lookup to this conversation: a cursor from another
-    // conversation must not be honored (it could truncate the page).
-    const [cursorRow] = await db
-      .select({ createdAt: chatMessages.createdAt, id: chatMessages.id })
-      .from(chatMessages)
-      .where(
-        and(
-          eq(chatMessages.id, opts.before as ChatMessage['id']),
-          eq(chatMessages.conversationId, conversationId)
-        )
-      )
-      .limit(1)
-    cursor = cursorRow ?? null
-  }
+  const cursor = opts?.before ? await findBackfillCursor(conversationId, opts.before) : null
 
   const rows = await db
     .select()

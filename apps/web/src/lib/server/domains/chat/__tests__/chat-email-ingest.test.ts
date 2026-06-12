@@ -17,6 +17,7 @@ const sendVisitorMessage = vi.fn()
 const assertChatSendRate = vi.fn()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
+let userRow: Record<string, unknown> | undefined
 let dupeRows: Array<Record<string, unknown>> = []
 
 vi.mock('../chat.service', () => ({
@@ -42,6 +43,7 @@ vi.mock('@/lib/server/db', () => {
       query: {
         conversations: { findFirst: async () => conversationRow },
         principal: { findFirst: async () => principalRow },
+        user: { findFirst: async () => userRow },
       },
       select: () => selectChain,
     },
@@ -50,6 +52,7 @@ vi.mock('@/lib/server/db', () => {
     chatMessages: { metadata: 'metadata' },
     conversations: { id: 'id' },
     principal: { id: 'id' },
+    user: { id: 'id' },
   }
 })
 
@@ -69,7 +72,16 @@ const baseEvent = {
 beforeEach(() => {
   vi.clearAllMocks()
   conversationRow = { id: 'conversation_abc', visitorPrincipalId: 'principal_v', status: 'closed' }
-  principalRow = { id: 'principal_v', type: 'anonymous', displayName: 'Jane' }
+  // contactEmail matches baseEvent's From — sender verification must hold for
+  // the happy-path tests.
+  principalRow = {
+    id: 'principal_v',
+    type: 'anonymous',
+    displayName: 'Jane',
+    contactEmail: 'jane@example.com',
+    userId: null,
+  }
+  userRow = undefined
   dupeRows = []
   sendVisitorMessage.mockResolvedValue({ created: false })
   assertChatSendRate.mockResolvedValue(undefined)
@@ -144,6 +156,86 @@ describe('ingestInboundEmail', () => {
     })
 
     expect(result).toEqual({ status: 'no_conversation' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('drops a reply whose From matches no known address for the visitor', async () => {
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'attacker@evil.example' },
+    })
+
+    expect(result).toEqual({ status: 'from_mismatch' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('drops a payload with no From at all', async () => {
+    const data: Record<string, unknown> = { ...baseEvent.data }
+    delete data.from
+    const result = await ingestInboundEmail({ ...baseEvent, data })
+
+    expect(result).toEqual({ status: 'from_mismatch' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('accepts a name-addr From matching the contact email case-insensitively', async () => {
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'Jane Visitor <JANE@Example.com>' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+  })
+
+  it('matches the linked account email for an identified visitor', async () => {
+    principalRow = {
+      id: 'principal_v',
+      type: 'user',
+      displayName: 'Jane',
+      contactEmail: null,
+      userId: 'user_1',
+    }
+    userRow = { id: 'user_1', email: 'jane@corp.example' }
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'jane@corp.example' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+  })
+
+  it('matches the captured pre-chat email on the conversation', async () => {
+    principalRow = { ...principalRow!, contactEmail: null }
+    conversationRow = { ...conversationRow!, visitorEmail: 'prechat@example.com' }
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'prechat@example.com' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+  })
+
+  it('never matches a synthetic anonymous placeholder address', async () => {
+    principalRow = { ...principalRow!, contactEmail: null }
+    conversationRow = { ...conversationRow!, visitorEmail: 'temp-abc@anon.quackback.io' }
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'temp-abc@anon.quackback.io' },
+    })
+
+    expect(result).toEqual({ status: 'from_mismatch' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('drops every sender when the visitor has no address on file', async () => {
+    principalRow = { ...principalRow!, contactEmail: null }
+
+    const result = await ingestInboundEmail(baseEvent)
+
+    expect(result).toEqual({ status: 'from_mismatch' })
     expect(sendVisitorMessage).not.toHaveBeenCalled()
   })
 

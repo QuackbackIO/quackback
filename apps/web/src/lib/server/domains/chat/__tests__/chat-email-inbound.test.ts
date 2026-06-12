@@ -4,7 +4,7 @@
  * message is just what the visitor actually wrote.
  */
 import { describe, it, expect } from 'vitest'
-import { parseInboundEmail, extractReplyText } from '../chat.email-inbound'
+import { parseInboundEmail, extractReplyText, extractEmailAddress } from '../chat.email-inbound'
 
 describe('parseInboundEmail', () => {
   it('normalizes an array `to`, reads `from`/`subject`/`text`, and the Message-ID header', () => {
@@ -99,5 +99,31 @@ describe('extractReplyText', () => {
 
   it('still returns empty for a reply that is entirely quoted history', () => {
     expect(extractReplyText('On Mon wrote:\n> only quoted text\n> more quoted')).toBe('')
+  })
+})
+
+describe('extractEmailAddress', () => {
+  it('returns a bare address lowercased and trimmed', () => {
+    expect(extractEmailAddress(' Jane@Example.COM ')).toBe('jane@example.com')
+  })
+
+  it('extracts the addr-spec from a name-addr From header', () => {
+    expect(extractEmailAddress('Jane Visitor <Jane@Example.com>')).toBe('jane@example.com')
+  })
+
+  it('handles a quoted display name containing a comma', () => {
+    expect(extractEmailAddress('"Doe, Jane" <jane@example.com>')).toBe('jane@example.com')
+  })
+
+  it('returns null for null, empty, or address-less input', () => {
+    expect(extractEmailAddress(null)).toBeNull()
+    expect(extractEmailAddress('')).toBeNull()
+    expect(extractEmailAddress('not an address')).toBeNull()
+  })
+
+  it('returns null for malformed addr-specs', () => {
+    expect(extractEmailAddress('Jane <@example.com>')).toBeNull()
+    expect(extractEmailAddress('Jane <jane@>')).toBeNull()
+    expect(extractEmailAddress('a@b@c')).toBeNull()
   })
 })

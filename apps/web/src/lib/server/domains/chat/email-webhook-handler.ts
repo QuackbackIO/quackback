@@ -55,6 +55,7 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
     if (
       result.status === 'no_conversation' ||
       result.status === 'empty' ||
+      result.status === 'from_mismatch' ||
       result.status === 'rate_limited'
     ) {
       console.warn(`[chat:email-inbound] dropped event (${result.status})`)

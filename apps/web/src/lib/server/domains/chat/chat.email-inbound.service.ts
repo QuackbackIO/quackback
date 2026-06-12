@@ -10,11 +10,12 @@
  * the route maps to a 200 (so the provider stops retrying a message we can't
  * place) and logs the reason.
  */
-import { db, eq, sql, chatMessages, conversations, principal } from '@/lib/server/db'
+import { db, eq, sql, chatMessages, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
-import { parseInboundEmail, extractReplyText } from './chat.email-inbound'
+import { realEmail } from '@/lib/shared/anonymous-email'
+import { parseInboundEmail, extractReplyText, extractEmailAddress } from './chat.email-inbound'
 import { conversationIdFromInboundAddress } from './chat.email-channel'
 import { assertChatSendRate, ChatRateLimitError } from './chat.ratelimit'
 import { sendVisitorMessage } from './chat.service'
@@ -24,6 +25,7 @@ export type IngestInboundResult =
   | { status: 'duplicate' }
   | { status: 'no_conversation' }
   | { status: 'empty' }
+  | { status: 'from_mismatch' }
   | { status: 'rate_limited' }
 
 /** Find the conversation id carried by any recipient plus-address. */
@@ -69,6 +71,25 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
     where: eq(principal.id, visitorPrincipalId),
   })
   if (!visitor) return { status: 'no_conversation' }
+
+  // The Svix signature authenticates the delivery provider, not the sender:
+  // the reply+ address is visible to anyone on the email thread (CC, forward),
+  // so without this check any third party could inject messages attributed to
+  // the visitor. The From must match an address we know for this visitor —
+  // linked account email, principal contact email, or the captured pre-chat
+  // email. realEmail() keeps synthetic anonymous placeholders out of the set;
+  // an empty set means we never emailed this visitor, so nothing can match.
+  const linkedUser = visitor.userId
+    ? await db.query.user.findFirst({ where: eq(user.id, visitor.userId) })
+    : null
+  const knownAddresses = new Set(
+    [linkedUser?.email, visitor.contactEmail, conversation.visitorEmail]
+      .map((e) => realEmail(e))
+      .filter((e): e is string => e !== null)
+      .map((e) => e.toLowerCase())
+  )
+  const sender = extractEmailAddress(parsed.from)
+  if (!sender || !knownAddresses.has(sender)) return { status: 'from_mismatch' }
 
   // Same per-visitor throttle the widget send path enforces — the inbound email
   // channel must not be an unbounded back door for the offline-notification

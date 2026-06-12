@@ -72,6 +72,15 @@ describe('parseOpenGraph', () => {
     expect(parseOpenGraph(html, BASE).title).toBe('Tom & Jerry \'s "Show"')
   })
 
+  it('does not double-decode entities', () => {
+    // "&amp;lt;" is an escaped ampersand followed by literal "lt;" — it must
+    // decode to "&lt;" (text), never cascade to "<".
+    const html = `<html><head>
+      <meta property="og:title" content="&amp;lt;script&amp;gt; and &amp;amp; and &amp;#60;" />
+    </head></html>`
+    expect(parseOpenGraph(html, BASE).title).toBe('&lt;script&gt; and &amp; and &#60;')
+  })
+
   it('caps title at 200 chars, description at 500, siteName at 100', () => {
     const long = 'x'.repeat(600)
     const html = `<html><head>
