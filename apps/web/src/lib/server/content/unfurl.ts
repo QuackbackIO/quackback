@@ -7,9 +7,11 @@
  * hotlinked. Never throws; degrades to null on any failure.
  */
 
+import { createHash } from 'node:crypto'
 import { safeFetch, SsrfError, TimeoutError } from './ssrf-guard'
-import { sniffImageMime, ALLOWED_REHOST_MIMES } from './magic-bytes'
+import { sniffImageMime, ALLOWED_REHOST_MIMES, canonicalizeImageMime } from './magic-bytes'
 import { uploadImageBuffer } from '@/lib/server/storage/s3'
+import { cacheGet, cacheSet } from '@/lib/server/redis'
 import { parseOpenGraph } from './og-parse'
 
 export interface LinkPreview {
@@ -28,6 +30,14 @@ const IMAGE_TIMEOUT_MS = 10_000
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024
 const FAVICON_TIMEOUT_MS = 5_000
 const FAVICON_MAX_BYTES = 64 * 1024
+// One favicon URL is shared across every page of a site, so cache the proxied
+// result by favicon URL to skip the fetch + upload on subsequent unfurls. Long
+// TTL for hits (favicons rarely change); short TTL for misses so a transient
+// failure doesn't suppress the icon for long.
+const FAVICON_CACHE_TTL_S = 7 * 24 * 60 * 60
+const FAVICON_CACHE_NEG_TTL_S = 60 * 60
+/** Negative-cache sentinel — distinguishable from any real proxied URL. */
+const FAVICON_NONE = '__none'
 
 /**
  * Fetch a URL with SSRF protection and a redirect-following loop (max 3 hops).
@@ -79,25 +89,32 @@ async function fetchFollowingRedirects(
 }
 
 /**
- * Fetch an image URL, magic-byte verify it, and upload to our storage.
- * Returns the proxied URL on success, null on any failure.
+ * Fetch an image/favicon URL, magic-byte verify it against its declared
+ * Content-Type, and upload to our storage. Rejects SVG. Returns the proxied URL
+ * on success, null on any failure. Uploads are content-addressed so the same
+ * bytes (a favicon shared across a site, a repeated OG image) collapse to one
+ * stored object instead of accumulating a copy per unfurl.
  */
-async function proxyImage(rawImageUrl: string): Promise<string | null> {
+async function proxyRehostedImage(
+  rawUrl: string,
+  opts: { timeoutMs: number; maxBytes: number }
+): Promise<string | null> {
   let response: Response
   try {
-    response = await safeFetch(rawImageUrl, {
+    response = await safeFetch(rawUrl, {
       method: 'GET',
-      timeoutMs: IMAGE_TIMEOUT_MS,
-      maxResponseBytes: IMAGE_MAX_BYTES,
+      timeoutMs: opts.timeoutMs,
+      maxResponseBytes: opts.maxBytes,
       onOverflow: 'error',
     })
   } catch {
     return null
   }
 
-  if (response.status >= 300 || !response.ok) return null
+  if (!response.ok) return null
 
-  const headerMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+  const rawMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+  const headerMime = canonicalizeImageMime(rawMime)
   if (headerMime === 'image/svg+xml') return null
   if (!ALLOWED_REHOST_MIMES.has(headerMime)) return null
 
@@ -112,60 +129,43 @@ async function proxyImage(rawImageUrl: string): Promise<string | null> {
   if (sniffed === null || sniffed !== headerMime) return null
 
   try {
-    const { url } = await uploadImageBuffer(buffer, sniffed, 'link-previews')
+    const { url } = await uploadImageBuffer(buffer, sniffed, 'link-previews', {
+      contentAddressed: true,
+    })
     return url
   } catch {
     return null
   }
 }
 
-/** Normalize ICO MIME aliases to the canonical form before the sniff cross-check. */
-function normalizeIconMime(mime: string): string {
-  if (mime === 'image/vnd.microsoft.icon' || mime === 'image/icon') return 'image/x-icon'
-  return mime
+const proxyImage = (rawImageUrl: string) =>
+  proxyRehostedImage(rawImageUrl, { timeoutMs: IMAGE_TIMEOUT_MS, maxBytes: IMAGE_MAX_BYTES })
+
+const proxyFavicon = (rawFaviconUrl: string) =>
+  proxyRehostedImage(rawFaviconUrl, { timeoutMs: FAVICON_TIMEOUT_MS, maxBytes: FAVICON_MAX_BYTES })
+
+/** Cache key for a proxied favicon, derived from its source URL. */
+function faviconCacheKey(rawFaviconUrl: string): string {
+  return `linkpreview:favicon:v1:${createHash('sha256').update(rawFaviconUrl).digest('hex')}`
 }
 
 /**
- * Fetch a favicon URL, magic-byte verify it, and upload to our storage.
- * Handles ICO MIME aliases; rejects SVG. 64KB max.
- * Returns the proxied URL on success, null on any failure.
+ * Proxy a favicon, memoized by its source URL in Redis so every page of a site
+ * reuses the first page's proxied favicon instead of re-fetching + re-uploading.
+ * Caching is best-effort: a Redis miss/error just falls through to proxyFavicon.
  */
-async function proxyFavicon(rawFaviconUrl: string): Promise<string | null> {
-  let response: Response
-  try {
-    response = await safeFetch(rawFaviconUrl, {
-      method: 'GET',
-      timeoutMs: FAVICON_TIMEOUT_MS,
-      maxResponseBytes: FAVICON_MAX_BYTES,
-      onOverflow: 'error',
-    })
-  } catch {
-    return null
-  }
+async function proxyFaviconCached(rawFaviconUrl: string): Promise<string | null> {
+  const key = faviconCacheKey(rawFaviconUrl)
+  const cached = await cacheGet<string>(key)
+  if (cached !== null) return cached === FAVICON_NONE ? null : cached
 
-  if (response.status >= 300 || !response.ok) return null
-
-  const rawMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
-  const headerMime = normalizeIconMime(rawMime)
-  if (headerMime === 'image/svg+xml') return null
-  if (!ALLOWED_REHOST_MIMES.has(headerMime)) return null
-
-  let buffer: Buffer
-  try {
-    buffer = Buffer.from(await response.arrayBuffer())
-  } catch {
-    return null
-  }
-
-  const sniffed = sniffImageMime(buffer)
-  if (sniffed === null || sniffed !== headerMime) return null
-
-  try {
-    const { url } = await uploadImageBuffer(buffer, sniffed, 'link-previews')
-    return url
-  } catch {
-    return null
-  }
+  const proxied = await proxyFavicon(rawFaviconUrl)
+  await cacheSet(
+    key,
+    proxied ?? FAVICON_NONE,
+    proxied ? FAVICON_CACHE_TTL_S : FAVICON_CACHE_NEG_TTL_S
+  )
+  return proxied
 }
 
 /**
@@ -209,7 +209,7 @@ export async function unfurlExternalUrl(rawUrl: string): Promise<LinkPreview | n
     // Proxy OG image and favicon in parallel
     const [proxiedImage, proxiedFavicon] = await Promise.all([
       og.imageUrl ? proxyImage(og.imageUrl) : Promise.resolve(null),
-      og.faviconUrl ? proxyFavicon(og.faviconUrl) : Promise.resolve(null),
+      og.faviconUrl ? proxyFaviconCached(og.faviconUrl) : Promise.resolve(null),
     ])
 
     const preview: LinkPreview = {

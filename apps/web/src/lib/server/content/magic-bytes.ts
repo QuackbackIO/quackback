@@ -19,6 +19,18 @@ export const ALLOWED_REHOST_MIMES = new Set([
   'image/x-icon',
 ])
 
+/**
+ * Map equivalent MIME spellings to the canonical form `sniffImageMime` returns,
+ * so a header cross-check accepts e.g. `image/vnd.microsoft.icon` as `image/x-icon`.
+ * Owns the alias vocabulary alongside the canonical set above.
+ */
+export function canonicalizeImageMime(mime: string): string {
+  if (mime === 'image/vnd.microsoft.icon' || mime === 'image/icon' || mime === 'image/ico') {
+    return 'image/x-icon'
+  }
+  return mime
+}
+
 function startsWithAt(buf: Buffer, offset: number, pattern: number[]): boolean {
   if (buf.length < offset + pattern.length) return false
   for (let i = 0; i < pattern.length; i++) {

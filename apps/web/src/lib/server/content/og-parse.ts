@@ -50,6 +50,23 @@ function extractAttr(tag: string, attr: string): string | null {
   return m[1] ?? m[2] ?? m[3] ?? null
 }
 
+/**
+ * Resolve an href against baseUrl and return it only if it's an http(s) URL
+ * within maxLen. Returns null on a malformed URL or a disallowed scheme, so the
+ * caller can fall through to a default.
+ */
+function resolveHttpUrl(href: string, baseUrl: string, maxLen = Infinity): string | null {
+  try {
+    const u = new URL(href, baseUrl)
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && u.href.length <= maxLen) {
+      return u.href
+    }
+  } catch {
+    // malformed URL — caller falls back
+  }
+  return null
+}
+
 export interface OpenGraphData {
   title: string | null
   description: string | null
@@ -115,63 +132,37 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
     const rawSiteName = ogSiteName
     const rawImage = ogImage ?? twitterImage
 
-    // Parse favicon links — priority: apple-touch-icon > icon > shortcut icon
-    const iconHrefs: Partial<Record<'apple-touch-icon' | 'icon' | 'shortcut icon', string>> = {}
+    // Parse favicon links — priority: apple-touch-icon > icon. The rel attribute
+    // is a space-separated token set, so `shortcut icon` and `icon shortcut` are
+    // the same thing; tokenize rather than string-match the whole value.
+    let appleIconHref: string | null = null
+    let iconHref: string | null = null
     const linkTagRe = /<link\s[^>]+>/gi
     let lm: RegExpExecArray | null
     while ((lm = linkTagRe.exec(head)) !== null) {
       const tag = lm[0]
-      const rel = extractAttr(tag, 'rel')?.trim().toLowerCase()
+      const rel = extractAttr(tag, 'rel')
       const href = extractAttr(tag, 'href')
       if (!rel || !href) continue
-      if (rel === 'apple-touch-icon' && !iconHrefs['apple-touch-icon']) {
-        iconHrefs['apple-touch-icon'] = href
-      } else if (rel === 'icon' && !iconHrefs['icon']) {
-        iconHrefs['icon'] = href
-      } else if (rel === 'shortcut icon' && !iconHrefs['shortcut icon']) {
-        iconHrefs['shortcut icon'] = href
+      const tokens = rel.trim().toLowerCase().split(/\s+/)
+      if (
+        (tokens.includes('apple-touch-icon') || tokens.includes('apple-touch-icon-precomposed')) &&
+        !appleIconHref
+      ) {
+        appleIconHref = href
+      } else if (tokens.includes('icon') && !iconHref) {
+        iconHref = href
       }
     }
-    const rawFavicon =
-      iconHrefs['apple-touch-icon'] ?? iconHrefs['icon'] ?? iconHrefs['shortcut icon'] ?? null
+    const rawFavicon = appleIconHref ?? iconHref
 
-    let faviconUrl: string | null = null
-    if (rawFavicon) {
-      try {
-        const resolved = new URL(rawFavicon, baseUrl)
-        if (
-          (resolved.protocol === 'http:' || resolved.protocol === 'https:') &&
-          resolved.href.length <= 2048
-        ) {
-          faviconUrl = resolved.href
-        }
-      } catch {
-        // malformed URL — fall through to /favicon.ico
-      }
-    }
-    if (!faviconUrl) {
-      try {
-        const fallback = new URL('/favicon.ico', baseUrl)
-        if (fallback.protocol === 'http:' || fallback.protocol === 'https:') {
-          faviconUrl = fallback.href
-        }
-      } catch {
-        // malformed baseUrl
-      }
-    }
+    // Use the declared favicon if it resolves to a sane http(s) URL; otherwise
+    // assume the conventional /favicon.ico at the site root.
+    const faviconUrl =
+      (rawFavicon ? resolveHttpUrl(rawFavicon, baseUrl, 2048) : null) ??
+      resolveHttpUrl('/favicon.ico', baseUrl)
 
-    // Resolve and validate image URL
-    let imageUrl: string | null = null
-    if (rawImage) {
-      try {
-        const resolved = new URL(rawImage, baseUrl)
-        if (resolved.protocol === 'http:' || resolved.protocol === 'https:') {
-          imageUrl = resolved.href
-        }
-      } catch {
-        // Malformed URL — leave null
-      }
-    }
+    const imageUrl = rawImage ? resolveHttpUrl(rawImage, baseUrl) : null
 
     return {
       title: cap(rawTitle, 200),

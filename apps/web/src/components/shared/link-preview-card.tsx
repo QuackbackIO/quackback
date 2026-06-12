@@ -53,6 +53,7 @@ export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
                 <img
                   src={preview.faviconUrl}
                   alt=""
+                  loading="lazy"
                   className="h-4 w-4 shrink-0 rounded-sm object-contain"
                 />
               )}

@@ -167,4 +167,17 @@ describe('faviconUrl parsing', () => {
     const html = `<html><head><link rel="icon" href="ftp://bad.example/icon.ico" /></head></html>`
     expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/favicon.ico')
   })
+
+  it('treats apple-touch-icon-precomposed as an apple icon', () => {
+    const html = `<html><head>
+      <link rel="apple-touch-icon-precomposed" href="/touch.png" />
+      <link rel="icon" href="/favicon.png" />
+    </head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/touch.png')
+  })
+
+  it('matches rel tokens regardless of order (e.g. rel="icon shortcut")', () => {
+    const html = `<html><head><link rel="icon shortcut" href="/fav.ico" /></head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/fav.ico')
+  })
 })

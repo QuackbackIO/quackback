@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sniffImageMime, ALLOWED_REHOST_MIMES } from '../magic-bytes'
+import { sniffImageMime, ALLOWED_REHOST_MIMES, canonicalizeImageMime } from '../magic-bytes'
 
 const bytes = (...values: number[]) => Buffer.from(values)
 
@@ -71,5 +71,18 @@ describe('ALLOWED_REHOST_MIMES', () => {
     expect(ALLOWED_REHOST_MIMES).toEqual(
       new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/x-icon'])
     )
+  })
+})
+
+describe('canonicalizeImageMime', () => {
+  it('maps ICO aliases to image/x-icon', () => {
+    expect(canonicalizeImageMime('image/vnd.microsoft.icon')).toBe('image/x-icon')
+    expect(canonicalizeImageMime('image/icon')).toBe('image/x-icon')
+    expect(canonicalizeImageMime('image/ico')).toBe('image/x-icon')
+  })
+
+  it('leaves non-alias MIMEs untouched', () => {
+    expect(canonicalizeImageMime('image/png')).toBe('image/png')
+    expect(canonicalizeImageMime('image/x-icon')).toBe('image/x-icon')
   })
 })

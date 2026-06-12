@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mocks must exist before the module factories run — vi.hoisted lifts them.
-const { safeFetch, uploadImageBuffer, sniffImageMime } = vi.hoisted(() => ({
+const { safeFetch, uploadImageBuffer, sniffImageMime, cacheGet, cacheSet } = vi.hoisted(() => ({
   safeFetch: vi.fn(),
   uploadImageBuffer: vi.fn(),
   sniffImageMime: vi.fn(),
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn(),
 }))
 
 vi.mock('../ssrf-guard', () => ({
@@ -13,18 +15,14 @@ vi.mock('../ssrf-guard', () => ({
   TimeoutError: class TimeoutError extends Error {},
   ResponseTooLargeError: class ResponseTooLargeError extends Error {},
 }))
-vi.mock('../magic-bytes', () => ({
+vi.mock('../magic-bytes', async (importActual) => ({
+  // sniffImageMime is mocked (we drive it per-test); the rest is real — the
+  // allow-list and the pure MIME canonicalizer don't need stubbing.
+  ...(await importActual<typeof import('../magic-bytes')>()),
   sniffImageMime,
-  ALLOWED_REHOST_MIMES: new Set([
-    'image/png',
-    'image/jpeg',
-    'image/gif',
-    'image/webp',
-    'image/avif',
-    'image/x-icon',
-  ]),
 }))
 vi.mock('@/lib/server/storage/s3', () => ({ uploadImageBuffer }))
+vi.mock('@/lib/server/redis', () => ({ cacheGet, cacheSet }))
 
 import { unfurlExternalUrl } from '../unfurl'
 
@@ -40,6 +38,9 @@ beforeEach(() => {
   safeFetch.mockReset()
   uploadImageBuffer.mockReset()
   sniffImageMime.mockReset()
+  // Favicon dedup cache: default to a miss + a no-op set.
+  cacheGet.mockReset().mockResolvedValue(null)
+  cacheSet.mockReset().mockResolvedValue(undefined)
 })
 
 describe('unfurlExternalUrl', () => {
@@ -132,7 +133,14 @@ describe('unfurlExternalUrl', () => {
 
     const res = await unfurlExternalUrl('https://site.example/')
     expect(res?.imageUrl).toBe('/api/storage/link-previews/abc.png')
-    expect(uploadImageBuffer).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', 'link-previews')
+    expect(uploadImageBuffer).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      'link-previews',
+      {
+        contentAddressed: true,
+      }
+    )
   })
 
   it('proxies a favicon ICO and returns faviconUrl', async () => {
@@ -186,6 +194,110 @@ describe('unfurlExternalUrl', () => {
 
     const res = await unfurlExternalUrl('https://site.example/')
     expect(res?.faviconUrl).toBe('/api/storage/link-previews/fav.ico')
+  })
+
+  it('normalises image/ico to image/x-icon before the MIME check', async () => {
+    const icoBytes = Buffer.from([0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10])
+    safeFetch
+      .mockResolvedValueOnce(
+        htmlRes(
+          page(
+            '<meta property="og:title" content="T"><link rel="icon" href="https://site.example/fav.ico" />'
+          )
+        )
+      )
+      .mockImplementation((url: string) => {
+        if (url === 'https://site.example/fav.ico') {
+          return Promise.resolve(
+            new Response(icoBytes, { status: 200, headers: { 'content-type': 'image/ico' } })
+          )
+        }
+        return Promise.resolve(new Response(null, { status: 404 }))
+      })
+    sniffImageMime.mockReturnValue('image/x-icon')
+    uploadImageBuffer.mockResolvedValue({ url: '/api/storage/link-previews/fav.ico' })
+
+    const res = await unfurlExternalUrl('https://site.example/')
+    expect(res?.faviconUrl).toBe('/api/storage/link-previews/fav.ico')
+  })
+
+  it('uploads favicons with a content-addressed key so duplicates collapse', async () => {
+    const icoBytes = Buffer.from([0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10])
+    safeFetch
+      .mockResolvedValueOnce(
+        htmlRes(
+          page(
+            '<meta property="og:title" content="T"><link rel="icon" href="https://site.example/fav.ico" />'
+          )
+        )
+      )
+      .mockImplementation((url: string) =>
+        url === 'https://site.example/fav.ico'
+          ? Promise.resolve(
+              new Response(icoBytes, { status: 200, headers: { 'content-type': 'image/x-icon' } })
+            )
+          : Promise.resolve(new Response(null, { status: 404 }))
+      )
+    sniffImageMime.mockReturnValue('image/x-icon')
+    uploadImageBuffer.mockResolvedValue({ url: '/api/storage/link-previews/fav.ico' })
+
+    await unfurlExternalUrl('https://site.example/')
+    expect(uploadImageBuffer).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/x-icon',
+      'link-previews',
+      {
+        contentAddressed: true,
+      }
+    )
+  })
+
+  it('reuses a cached proxied favicon without re-fetching or re-uploading', async () => {
+    cacheGet.mockResolvedValue('/api/storage/link-previews/cached-fav.ico')
+    safeFetch.mockResolvedValueOnce(htmlRes(page('<meta property="og:title" content="T">')))
+
+    const res = await unfurlExternalUrl('https://site.example/')
+    expect(res?.faviconUrl).toBe('/api/storage/link-previews/cached-fav.ico')
+    // Page fetched once; favicon served from cache (no second fetch, no upload).
+    expect(safeFetch).toHaveBeenCalledTimes(1)
+    expect(uploadImageBuffer).not.toHaveBeenCalled()
+  })
+
+  it('honors a negative favicon cache entry without re-fetching', async () => {
+    cacheGet.mockResolvedValue('__none')
+    safeFetch.mockResolvedValueOnce(htmlRes(page('<meta property="og:title" content="T">')))
+
+    const res = await unfurlExternalUrl('https://site.example/')
+    expect(res?.faviconUrl).toBeNull()
+    expect(safeFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('caches the proxied favicon URL keyed by the favicon URL on a miss', async () => {
+    const icoBytes = Buffer.from([0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10])
+    safeFetch
+      .mockResolvedValueOnce(
+        htmlRes(
+          page(
+            '<meta property="og:title" content="T"><link rel="icon" href="https://site.example/fav.ico" />'
+          )
+        )
+      )
+      .mockImplementation((url: string) =>
+        url === 'https://site.example/fav.ico'
+          ? Promise.resolve(
+              new Response(icoBytes, { status: 200, headers: { 'content-type': 'image/x-icon' } })
+            )
+          : Promise.resolve(new Response(null, { status: 404 }))
+      )
+    sniffImageMime.mockReturnValue('image/x-icon')
+    uploadImageBuffer.mockResolvedValue({ url: '/api/storage/link-previews/fav.ico' })
+
+    await unfurlExternalUrl('https://site.example/')
+    expect(cacheSet).toHaveBeenCalledWith(
+      expect.stringContaining('favicon'),
+      '/api/storage/link-previews/fav.ico',
+      expect.any(Number)
+    )
   })
 
   it('sets faviconUrl to null when favicon fetch returns 404', async () => {

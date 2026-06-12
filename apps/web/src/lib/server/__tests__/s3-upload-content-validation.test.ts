@@ -42,7 +42,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: vi.fn(async () => 'https://s3.amazonaws.com/presigned'),
 }))
 
-const { uploadImageFromFormData } = await import('@/lib/server/storage/s3')
+const { uploadImageFromFormData, uploadImageBuffer } = await import('@/lib/server/storage/s3')
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 const GIF_BYTES = new Uint8Array([...'GIF89a'].map((c) => c.charCodeAt(0)).concat([0, 0, 0, 0]))
@@ -92,5 +92,25 @@ describe('uploadImageFromFormData — content validation', () => {
       'p'
     )
     expect(res.status).toBe(400)
+  })
+})
+
+describe('uploadImageBuffer — content-addressed keys', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+  const keyOf = (i: number) =>
+    ((mockSend.mock.calls[i] as unknown[])[0] as { input: { Key: string } }).input.Key
+
+  it('derives one stable key from identical bytes so duplicates collapse', async () => {
+    mockSend.mockClear()
+    await uploadImageBuffer(PNG, 'image/png', 'link-previews', { contentAddressed: true })
+    await uploadImageBuffer(PNG, 'image/png', 'link-previews', { contentAddressed: true })
+    expect(keyOf(0)).toBe(keyOf(1))
+    expect(keyOf(0)).toMatch(/^link-previews\/[0-9a-f]{64}\.png$/)
+  })
+
+  it('uses a timestamped key by default', async () => {
+    mockSend.mockClear()
+    await uploadImageBuffer(PNG, 'image/png', 'link-previews')
+    expect(keyOf(0)).toMatch(/rehost-\d+\.png$/)
   })
 })
