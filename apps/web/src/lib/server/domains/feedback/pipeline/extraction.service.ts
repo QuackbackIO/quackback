@@ -25,12 +25,6 @@ const EXTRACTION_PROMPT_VERSION = 'v1'
  * Called by the {feedback-ai} queue worker.
  */
 export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void> {
-  const openai = getOpenAI()
-  const model = getChatModel('extraction')
-  if (!openai || !model) {
-    throw new UnrecoverableError('Extraction model not configured')
-  }
-
   const item = await db.query.rawFeedbackItems.findFirst({
     where: eq(rawFeedbackItems.id, rawItemId),
   })
@@ -48,8 +42,10 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
   // plan entitlement. Enforced HERE, at the single execution chokepoint —
   // not only at enqueue — so a job that was already queued when the tenant
   // downgraded (or re-enqueued by stuck-recovery or a manual retry) does not
-  // run the LLM after the plan disallows it. Terminal no-op mirrors the
-  // quality-gate path so the item isn't re-picked by recoverStuckItems.
+  // run the LLM after the plan disallows it. Runs BEFORE the model lookup so a
+  // disallowed item still terminates cleanly when the extraction model is also
+  // unconfigured (otherwise it would throw and churn via stuck-recovery).
+  // Terminal no-op mirrors the quality-gate path so it isn't re-picked.
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   if (!(await getTierLimits()).features.aiFeedbackExtraction) {
     const context = (item.contextEnvelope ?? {}) as RawFeedbackItemContextEnvelope
@@ -72,6 +68,12 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
       })
       .where(eq(rawFeedbackItems.id, rawItemId))
     return
+  }
+
+  const openai = getOpenAI()
+  const model = getChatModel('extraction')
+  if (!openai || !model) {
+    throw new UnrecoverableError('Extraction model not configured')
   }
 
   await db

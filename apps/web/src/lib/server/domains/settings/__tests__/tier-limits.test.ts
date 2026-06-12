@@ -20,6 +20,7 @@ describe('OSS_TIER_LIMITS', () => {
     expect(features.webhooks).toBe(true)
     expect(features.mcpServer).toBe(true)
     expect(features.analyticsExports).toBe(true)
+    expect(features.aiFeedbackExtraction).toBe(true)
   })
 
   it('matches the TierLimits shape (compile-time check)', () => {
@@ -33,8 +34,21 @@ describe('mergeTierLimits', () => {
     expect(mergeTierLimits(null)).toEqual(OSS_TIER_LIMITS)
   })
 
-  it('returns OSS defaults when stored is empty object', () => {
-    expect(mergeTierLimits({})).toEqual(OSS_TIER_LIMITS)
+  it('fails closed on the paid extraction flag for a stored row, even an empty one', () => {
+    // A stored row signals a managed/cloud (or config-managed) tenant. The
+    // paid auto-capture flag must NOT inherit the generous OSS default there,
+    // or pre-existing rows would grant Scale-only extraction to everyone until
+    // re-seeded. Every other flag still falls back to the OSS default.
+    expect(mergeTierLimits({})).toEqual({
+      ...OSS_TIER_LIMITS,
+      features: { ...OSS_TIER_LIMITS.features, aiFeedbackExtraction: false },
+    })
+  })
+
+  it('honours an explicit aiFeedbackExtraction grant in a stored row (Scale)', () => {
+    expect(
+      mergeTierLimits({ features: { aiFeedbackExtraction: true } }).features.aiFeedbackExtraction
+    ).toBe(true)
   })
 
   it('overrides numeric limits from stored partial', () => {

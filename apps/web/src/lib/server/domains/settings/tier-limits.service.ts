@@ -13,6 +13,15 @@ export function mergeTierLimits(stored: StoredTierLimits | null): TierLimits {
     features: {
       ...OSS_TIER_LIMITS.features,
       ...(stored.features ?? {}),
+      // Fail closed for the paid auto-capture entitlement on ANY stored row.
+      // A managed/cloud row (or a config-managed self-host row) created before
+      // this key existed would otherwise inherit the generous OSS default
+      // (true) and grant Scale-only AI feedback extraction to every tenant —
+      // including non-Scale plans — until the control plane re-seeds each row
+      // with an explicit value. Only a tenant with NO stored row at all (bare
+      // self-host) keeps the OSS default, via the early return above. An
+      // explicit value in stored.features (what the CP writes per plan) wins.
+      aiFeedbackExtraction: stored.features?.aiFeedbackExtraction ?? false,
     },
   }
 }
