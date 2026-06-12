@@ -43,24 +43,45 @@ export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
       rel="noopener noreferrer nofollow"
       className="mt-1 block overflow-hidden rounded-lg border border-border bg-card no-underline transition-colors hover:bg-muted/40"
     >
-      {preview.imageUrl && (
-        <img src={preview.imageUrl} alt="" className="h-32 w-full object-cover" loading="lazy" />
-      )}
-      <div className="p-2.5">
-        {preview.siteName && (
-          <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-            {preview.siteName}
-          </p>
-        )}
-        {preview.title && (
-          <p className="line-clamp-2 text-xs font-semibold text-foreground">{preview.title}</p>
-        )}
-        {preview.description && (
-          <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
-            {preview.description}
-          </p>
-        )}
+      {/* Text section with left accent bar */}
+      <div className="flex">
+        <div className="w-[3px] shrink-0 self-stretch bg-primary/80" />
+        <div className="min-w-0 flex-1 p-2.5">
+          {(preview.faviconUrl || preview.siteName) && (
+            <div className="mb-1 flex items-center gap-1.5">
+              {preview.faviconUrl && (
+                <img
+                  src={preview.faviconUrl}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-sm object-contain"
+                />
+              )}
+              {preview.siteName && (
+                <span className="truncate text-[11px] font-medium text-muted-foreground">
+                  {preview.siteName}
+                </span>
+              )}
+            </div>
+          )}
+          {preview.title && (
+            <p className="line-clamp-2 text-xs font-semibold text-primary">{preview.title}</p>
+          )}
+          {preview.description && (
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+              {preview.description}
+            </p>
+          )}
+        </div>
       </div>
+      {/* OG image at bottom, full-width */}
+      {preview.imageUrl && (
+        <img
+          src={preview.imageUrl}
+          alt=""
+          className="block w-full max-h-48 object-cover"
+          loading="lazy"
+        />
+      )}
     </a>
   )
 }
