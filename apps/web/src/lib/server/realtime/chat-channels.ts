@@ -9,7 +9,7 @@
  * agent's inbox update at once. Clients dedupe by message id.
  */
 import type { ConversationId, PrincipalId } from '@quackback/ids'
-import type { ChatStreamEvent, ConversationDTO } from '@/lib/shared/chat/types'
+import type { ChatStreamEvent, ConversationDTO, ConversationSide } from '@/lib/shared/chat/types'
 import { publish } from './pubsub'
 
 export function conversationChannel(conversationId: ConversationId): string {
@@ -26,49 +26,51 @@ export function publishChatEvent(conversationId: ConversationId, event: ChatStre
 }
 
 /**
- * Publish an agent typing signal. The visitor's channel gets an anonymous
- * "agent is typing" (NO principal id — never leak who is on the team side); the
- * inbox channel gets the id so other agents can detect a collision. The
- * originating agent's own echo is suppressed at the stream layer
- * (shouldSuppressOwnAgentTyping).
+ * Publish a typing signal, tagging each copy with the typist where it's safe:
+ * the inbox channel always gets the id (self-suppression + agent collision
+ * detection); the conversation channel gets it only for visitor-side typing —
+ * there the id is the owner's own, while agent identities must never reach the
+ * visitor. The typist's own echo is dropped at the stream layer on every
+ * surface (isOwnTyping).
  */
-export function publishAgentTyping(
+export function publishTyping(
   conversationId: ConversationId,
+  side: ConversationSide,
   at: string,
-  agentPrincipalId: PrincipalId
+  // null (no principal to attribute) publishes untagged — delivered to all, suppressed for none.
+  typistPrincipalId: PrincipalId | null
 ): void {
-  publish(conversationChannel(conversationId), {
-    kind: 'typing',
-    conversationId,
-    side: 'agent',
-    at,
-  })
-  publish(CHAT_INBOX_CHANNEL, {
-    kind: 'typing',
-    conversationId,
-    side: 'agent',
-    at,
-    agentPrincipalId,
-  })
+  const base = { kind: 'typing' as const, conversationId, side, at }
+  const tagged = typistPrincipalId ? { ...base, typistPrincipalId } : base
+  // Agent identities never reach the visitor channel; a visitor-side id is the
+  // owner's own, so it can ride along there.
+  publish(conversationChannel(conversationId), side === 'agent' ? base : tagged)
+  publish(CHAT_INBOX_CHANNEL, tagged)
+}
+
+/** A pub/sub frame parsed for routing decisions; null when unparseable. */
+export type ParsedChatFrame = {
+  kind?: string
+  typistPrincipalId?: string
+  message?: { id?: string }
+} | null
+
+export function parseChatFrame(message: string): ParsedChatFrame {
+  try {
+    return JSON.parse(message) as ParsedChatFrame
+  } catch {
+    return null
+  }
 }
 
 /**
- * True when a raw pub/sub frame is an agent-typing event from `selfPrincipalId`
- * — used by the inbox stream to drop an agent's own typing echo so the client
- * can treat any agent-typing it receives as "another agent". Unparseable or
+ * True when a parsed frame is a typing event from `selfPrincipalId` — used by
+ * every stream to drop the subscriber's own typing echo, so clients can treat
+ * any typing they receive as someone else's. Unparseable, anonymous, or
  * non-matching frames are never suppressed.
  */
-export function shouldSuppressOwnAgentTyping(message: string, selfPrincipalId: string): boolean {
-  try {
-    const e = JSON.parse(message) as {
-      kind?: string
-      side?: string
-      agentPrincipalId?: string
-    }
-    return e.kind === 'typing' && e.side === 'agent' && e.agentPrincipalId === selfPrincipalId
-  } catch {
-    return false
-  }
+export function isOwnTyping(frame: ParsedChatFrame, selfPrincipalId: string): boolean {
+  return frame?.kind === 'typing' && frame.typistPrincipalId === selfPrincipalId
 }
 
 /**

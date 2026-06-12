@@ -21,6 +21,8 @@ export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
 // a centered notice rather than a chat bubble.
 export type ChatSenderType = 'visitor' | 'agent' | 'system'
+/** A human side of a conversation — who acts (types, reads); 'system' is neither. */
+export type ConversationSide = Exclude<ChatSenderType, 'system'>
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
 export type Channel = 'live_chat' | 'email' | 'web_form'
 
@@ -203,10 +205,12 @@ export type ChatStreamEvent =
       conversationId: ConversationId
       side: ChatSenderType
       at: string
-      /** For agent typing: which agent (inbox channel only — never sent to the
-       *  visitor). Lets other agents detect a collision; the originating agent's
-       *  own echo is filtered server-side. */
-      agentPrincipalId?: PrincipalId
+      /** Who is typing. Set everywhere EXCEPT the conversation-channel copy of
+       *  agent typing (never leak team identities to the visitor). The stream
+       *  layer drops any typing event whose typist matches the subscriber, so
+       *  no surface ever sees its own echo; agents also use it to tell another
+       *  agent's typing from their own collisions. */
+      typistPrincipalId?: PrincipalId
     }
   | { kind: 'message_deleted'; conversationId: ConversationId; messageId: ChatMessageId }
   // An existing message changed in an agent-only way (reaction or flag toggled).

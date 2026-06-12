@@ -16,8 +16,9 @@ import {
   publishChatEvent,
   publishAgentChatEvent,
   publishConversationUpdate,
-  publishAgentTyping,
-  shouldSuppressOwnAgentTyping,
+  publishTyping,
+  parseChatFrame,
+  isOwnTyping,
 } from '../chat-channels'
 
 const conversationId = 'conversation_1' as ConversationId
@@ -86,48 +87,65 @@ describe('publishConversationUpdate', () => {
   })
 })
 
-describe('publishAgentTyping', () => {
-  it('sends the agent id only to the inbox, never to the visitor channel', () => {
-    publishAgentTyping(conversationId, '2026-01-01T00:00:00.000Z', 'principal_agent' as never)
+describe('publishTyping', () => {
+  it('agent side: sends the typist id only to the inbox, never to the visitor channel', () => {
+    publishTyping(conversationId, 'agent', '2026-01-01T00:00:00.000Z', 'principal_agent' as never)
 
     const inbox = publish.mock.calls.find((c) => c[0] === CHAT_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
 
-    // Inbox carries the agent id (so other agents can detect a collision)...
+    // Inbox carries the typist id (collision detection + self-suppression)...
     expect(inbox![1]).toMatchObject({
       kind: 'typing',
       side: 'agent',
-      agentPrincipalId: 'principal_agent',
+      typistPrincipalId: 'principal_agent',
     })
     // ...the visitor only sees an anonymous "agent is typing" — no id leak.
     expect(visitor![1]).toMatchObject({ kind: 'typing', side: 'agent' })
-    expect((visitor![1] as { agentPrincipalId?: string }).agentPrincipalId).toBeUndefined()
+    expect((visitor![1] as { typistPrincipalId?: string }).typistPrincipalId).toBeUndefined()
+  })
+
+  it('visitor side: carries the typist id on BOTH channels so every stream can drop the echo', () => {
+    publishTyping(conversationId, 'visitor', '2026-01-01T00:00:00.000Z', 'principal_owner' as never)
+
+    const inbox = publish.mock.calls.find((c) => c[0] === CHAT_INBOX_CHANNEL)
+    const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
+
+    // Inbox: a team member typing in a conversation they OWN signals the
+    // visitor side — without the id their own inbox stream would echo it back.
+    expect(inbox![1]).toMatchObject({
+      kind: 'typing',
+      side: 'visitor',
+      typistPrincipalId: 'principal_owner',
+    })
+    // Conversation channel: the id is the owner's own (no agent leak) and lets
+    // the owner's streams drop their own echo server-side.
+    expect(visitor![1]).toMatchObject({
+      kind: 'typing',
+      side: 'visitor',
+      typistPrincipalId: 'principal_owner',
+    })
   })
 })
 
-describe('shouldSuppressOwnAgentTyping', () => {
-  const frame = (e: unknown) => JSON.stringify(e)
+describe('isOwnTyping', () => {
+  const frame = (e: unknown) => parseChatFrame(JSON.stringify(e))
 
-  it('suppresses an agent typing frame from the same principal', () => {
+  it('suppresses a typing frame from the same principal, on either side', () => {
     expect(
-      shouldSuppressOwnAgentTyping(
-        frame({ kind: 'typing', side: 'agent', agentPrincipalId: 'p1' }),
-        'p1'
-      )
+      isOwnTyping(frame({ kind: 'typing', side: 'agent', typistPrincipalId: 'p1' }), 'p1')
+    ).toBe(true)
+    expect(
+      isOwnTyping(frame({ kind: 'typing', side: 'visitor', typistPrincipalId: 'p1' }), 'p1')
     ).toBe(true)
   })
 
-  it('does not suppress another agent, a visitor, a non-typing event, or junk', () => {
+  it('does not suppress another typist, an anonymous frame, a non-typing event, or junk', () => {
     expect(
-      shouldSuppressOwnAgentTyping(
-        frame({ kind: 'typing', side: 'agent', agentPrincipalId: 'p2' }),
-        'p1'
-      )
+      isOwnTyping(frame({ kind: 'typing', side: 'agent', typistPrincipalId: 'p2' }), 'p1')
     ).toBe(false)
-    expect(shouldSuppressOwnAgentTyping(frame({ kind: 'typing', side: 'visitor' }), 'p1')).toBe(
-      false
-    )
-    expect(shouldSuppressOwnAgentTyping(frame({ kind: 'message' }), 'p1')).toBe(false)
-    expect(shouldSuppressOwnAgentTyping('not json{', 'p1')).toBe(false)
+    expect(isOwnTyping(frame({ kind: 'typing', side: 'visitor' }), 'p1')).toBe(false)
+    expect(isOwnTyping(frame({ kind: 'message', typistPrincipalId: 'p1' }), 'p1')).toBe(false)
+    expect(isOwnTyping(parseChatFrame('not json{'), 'p1')).toBe(false)
   })
 })

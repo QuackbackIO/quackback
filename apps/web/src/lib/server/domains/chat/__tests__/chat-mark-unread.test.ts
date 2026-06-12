@@ -19,7 +19,7 @@ vi.mock('@/lib/server/realtime/chat-channels', () => ({
   publishChatEvent: (...a: unknown[]) => publishChatEvent(...a),
   publishAgentChatEvent: (...a: unknown[]) => publishAgentChatEvent(...a),
   publishConversationUpdate: vi.fn(),
-  publishAgentTyping: vi.fn(),
+  publishTyping: vi.fn(),
 }))
 
 vi.mock('@/lib/server/config', () => ({

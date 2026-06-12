@@ -37,11 +37,11 @@ import type { Actor } from '@/lib/server/policy/types'
 import {
   MAX_CHAT_MESSAGE_LENGTH,
   MAX_CHAT_ATTACHMENTS,
-  type ChatSenderType,
   type ConversationStatus,
   type ConversationPriority,
   type ConversationEndReason,
   type ConversationDTO,
+  type ConversationSide,
 } from '@/lib/shared/chat/types'
 import {
   applyVisitorReopenStatus,
@@ -54,7 +54,7 @@ import {
   publishChatEvent,
   publishAgentChatEvent,
   publishConversationUpdate,
-  publishAgentTyping,
+  publishTyping,
 } from '@/lib/server/realtime/chat-channels'
 import { truncate } from '@/lib/shared/utils/string'
 import { notifyVisitorMessage, notifyAgentReply, notifyConversationStarted } from './chat.notify'
@@ -1076,7 +1076,7 @@ export async function recordCsat(
  * is the visitor there — deriving from role alone would echo their typing back
  * to them as "agent is typing" and stamp the wrong read watermark.
  */
-function conversationSideFor(conversation: Conversation, actor: Actor): ChatSenderType {
+function conversationSideFor(conversation: Conversation, actor: Actor): ConversationSide {
   return isTeamMember(actor.role) && conversation.visitorPrincipalId !== actor.principalId
     ? 'agent'
     : 'visitor'
@@ -1088,14 +1088,8 @@ export async function signalTyping(conversationId: ConversationId, actor: Actor)
   // conversation the actor can't see.
   const conversation = await assertConversationViewable(conversationId, actor)
   const side = conversationSideFor(conversation, actor)
-  const at = new Date().toISOString()
-  // Agent typing carries the agent id on the inbox channel only (collision
-  // detection) — never to the visitor. Visitor typing fans out as before.
-  if (side === 'agent' && actor.principalId) {
-    publishAgentTyping(conversationId, at, actor.principalId)
-  } else {
-    publishChatEvent(conversationId, { kind: 'typing', conversationId, side, at })
-  }
+  // The typist id rides along so the stream layer can drop the typist's own echo.
+  publishTyping(conversationId, side, new Date().toISOString(), actor.principalId)
 }
 
 /** Mark a conversation read up to now for the actor's side of it. */

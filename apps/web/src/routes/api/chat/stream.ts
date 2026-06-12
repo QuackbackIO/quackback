@@ -16,7 +16,9 @@ import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
 import {
   conversationChannel,
   CHAT_INBOX_CHANNEL,
-  shouldSuppressOwnAgentTyping,
+  parseChatFrame,
+  isOwnTyping,
+  type ParsedChatFrame,
 } from '@/lib/server/realtime/chat-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
@@ -77,18 +79,13 @@ function sse(event: string, data: unknown, id?: string): string {
 }
 
 /** Frame a raw pub/sub payload as a named SSE event (id carried for message
- *  events so reconnect backfill can resume). Pure — hoisted so it isn't
+ *  events so reconnect backfill can resume). Takes the already-parsed frame so
+ *  the subscribe callback parses each payload once; an unparseable (null)
+ *  frame passes through as a generic message. Pure — hoisted so it isn't
  *  re-created per connection. */
-function formatFrame(message: string): { id?: string; frame: string } {
-  let id: string | undefined
-  let eventName = 'message'
-  try {
-    const parsed = JSON.parse(message) as { kind?: string; message?: { id?: string } }
-    eventName = parsed.kind ?? 'message'
-    if (parsed.kind === 'message') id = parsed.message?.id
-  } catch {
-    // pass through as-is if unparseable
-  }
+function formatFrame(message: string, parsed: ParsedChatFrame): { id?: string; frame: string } {
+  const eventName = parsed?.kind ?? 'message'
+  const id = parsed?.kind === 'message' ? parsed.message?.id : undefined
   return {
     id,
     frame: `${id ? `id: ${id}\n` : ''}event: ${eventName}\ndata: ${message}\n\n`,
@@ -264,12 +261,14 @@ export const Route = createFileRoute('/api/chat/stream')({
               const liveBuffer: Array<{ id?: string; frame: string }> = []
 
               const unsub = await subscribe(channels, (_channel, message) => {
-                // Don't echo an agent's own typing back to them — so the client
-                // can treat any agent-typing it receives as "another agent".
-                if (isAgentStream && shouldSuppressOwnAgentTyping(message, me.principalId)) {
+                const event = parseChatFrame(message)
+                // Never echo a subscriber's own typing back to them, on any
+                // surface — clients can treat every typing event they receive
+                // as someone else's.
+                if (isOwnTyping(event, me.principalId)) {
                   return
                 }
-                const { id, frame } = formatFrame(message)
+                const { id, frame } = formatFrame(message, event)
                 if (backfilling) {
                   liveBuffer.push({ id, frame })
                   return

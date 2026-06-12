@@ -13,7 +13,7 @@ const publish = vi.hoisted(() => ({
   publishChatEvent: vi.fn(),
   publishAgentChatEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
-  publishAgentTyping: vi.fn(),
+  publishTyping: vi.fn(),
 }))
 vi.mock('@/lib/server/realtime/chat-channels', () => publish)
 
@@ -137,24 +137,31 @@ beforeEach(() => {
 describe('signalTyping side derivation', () => {
   it('a team member typing in SOMEONE ELSE’s conversation signals the agent side', async () => {
     await signalTyping(conversationId, teamActor('principal_agent'))
-    expect(publish.publishAgentTyping).toHaveBeenCalledTimes(1)
-    expect(publish.publishChatEvent).not.toHaveBeenCalled()
-  })
-
-  it('a team member typing in THEIR OWN conversation signals the visitor side', async () => {
-    await signalTyping(conversationId, teamActor('principal_owner'))
-    expect(publish.publishAgentTyping).not.toHaveBeenCalled()
-    expect(publish.publishChatEvent).toHaveBeenCalledWith(
+    expect(publish.publishTyping).toHaveBeenCalledWith(
       conversationId,
-      expect.objectContaining({ kind: 'typing', side: 'visitor' })
+      'agent',
+      expect.any(String),
+      'principal_agent'
     )
   })
 
-  it('a portal user typing in their own conversation signals the visitor side', async () => {
-    await signalTyping(conversationId, userActor)
-    expect(publish.publishChatEvent).toHaveBeenCalledWith(
+  it('a team member typing in THEIR OWN conversation signals the visitor side with their id', async () => {
+    await signalTyping(conversationId, teamActor('principal_owner'))
+    expect(publish.publishTyping).toHaveBeenCalledWith(
       conversationId,
-      expect.objectContaining({ kind: 'typing', side: 'visitor' })
+      'visitor',
+      expect.any(String),
+      'principal_owner'
+    )
+  })
+
+  it('a portal user typing in their own conversation signals the visitor side with their id', async () => {
+    await signalTyping(conversationId, userActor)
+    expect(publish.publishTyping).toHaveBeenCalledWith(
+      conversationId,
+      'visitor',
+      expect.any(String),
+      'principal_owner'
     )
   })
 })
