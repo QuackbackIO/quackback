@@ -119,12 +119,19 @@ vi.mock('../../queues/feedback-ai-queue', () => ({
   enqueueFeedbackAiJob: (...args: unknown[]) => mockEnqueue(...args),
 }))
 
+const mockGetTierLimits = vi.fn()
+vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
+  getTierLimits: (...args: unknown[]) => mockGetTierLimits(...args),
+}))
+
 describe('extraction.service', () => {
   beforeEach(() => {
     updateSetCalls.length = 0
     insertValuesCalls.length = 0
     deleteWhereCalls.length = 0
     vi.clearAllMocks()
+    // Default: plan allows extraction. Disabled-path tests override per-case.
+    mockGetTierLimits.mockResolvedValue({ features: { aiFeedbackExtraction: true } })
   })
 
   const rawItemId = 'raw_item_123' as RawFeedbackItemId
@@ -262,6 +269,37 @@ describe('extraction.service', () => {
     expect(updateSetCalls.length).toBe(0)
   })
 
+  it('skips the LLM and completes the item when the plan disallows extraction', async () => {
+    // Execution-time tier gate: a job queued before a downgrade (or
+    // re-enqueued by stuck-recovery / manual retry) must not run the LLM.
+    mockFindFirst.mockResolvedValueOnce({ ...mockItem })
+    mockGetTierLimits.mockResolvedValueOnce({ features: { aiFeedbackExtraction: false } })
+
+    const { extractSignals } = await import('../extraction.service')
+    await extractSignals(rawItemId)
+
+    expect(mockOpenAI.chat.completions.create).not.toHaveBeenCalled()
+    expect(mockShouldExtract).not.toHaveBeenCalled()
+    const states = updateSetCalls.map((c) => (c[0] as { processingState?: string }).processingState)
+    expect(states).toEqual(['completed'])
+    expect(states).not.toContain('extracting')
+  })
+
+  it('dismisses channel-monitored items when the plan disallows extraction', async () => {
+    mockFindFirst.mockResolvedValueOnce({
+      ...mockItem,
+      contextEnvelope: { metadata: { ingestionMode: 'channel_monitor' } },
+    })
+    mockGetTierLimits.mockResolvedValueOnce({ features: { aiFeedbackExtraction: false } })
+
+    const { extractSignals } = await import('../extraction.service')
+    await extractSignals(rawItemId)
+
+    expect(mockOpenAI.chat.completions.create).not.toHaveBeenCalled()
+    const states = updateSetCalls.map((c) => (c[0] as { processingState?: string }).processingState)
+    expect(states).toEqual(['dismissed'])
+  })
+
   it('should filter low-confidence signals and log filter counts', async () => {
     mockFindFirst.mockResolvedValueOnce(mockItem)
     mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
@@ -386,7 +424,10 @@ describe('extraction.service', () => {
     )
   })
 
-  it('should throw when AI not configured', async () => {
+  it('should throw when AI not configured (for an entitled, ready item)', async () => {
+    // The model check now runs AFTER the item/state/entitlement gates, so an
+    // entitled, ready item reaches it and throws when the client is missing.
+    mockFindFirst.mockResolvedValueOnce({ ...mockItem })
     const { getOpenAI } = await import('@/lib/server/domains/ai/config')
     vi.mocked(getOpenAI).mockReturnValueOnce(null)
 
@@ -396,12 +437,15 @@ describe('extraction.service', () => {
 
   it('should throw UnrecoverableError when client is present but extraction model is null', async () => {
     // Client is non-null (default mock returns mockOpenAI) but the model is
-    // disabled — e.g. AI_EXTRACTION_MODEL=off. The service must reject before
-    // touching the DB.
+    // disabled — e.g. AI_EXTRACTION_MODEL=off. Rejects before transitioning
+    // the item to `extracting` (no state write / attempt-count bump).
+    mockFindFirst.mockResolvedValueOnce({ ...mockItem })
     const { getChatModel } = await import('@/lib/server/domains/ai/models')
     vi.mocked(getChatModel).mockReturnValueOnce(null)
 
     const { extractSignals } = await import('../extraction.service')
     await expect(extractSignals(rawItemId)).rejects.toThrow('Extraction model not configured')
+    const states = updateSetCalls.map((c) => (c[0] as { processingState?: string }).processingState)
+    expect(states).not.toContain('extracting')
   })
 })

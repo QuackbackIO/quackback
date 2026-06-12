@@ -25,12 +25,6 @@ const EXTRACTION_PROMPT_VERSION = 'v1'
  * Called by the {feedback-ai} queue worker.
  */
 export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void> {
-  const openai = getOpenAI()
-  const model = getChatModel('extraction')
-  if (!openai || !model) {
-    throw new UnrecoverableError('Extraction model not configured')
-  }
-
   const item = await db.query.rawFeedbackItems.findFirst({
     where: eq(rawFeedbackItems.id, rawItemId),
   })
@@ -42,6 +36,44 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
   if (item.processingState !== 'ready_for_extraction') {
     console.log(`[Extraction] Skipping ${rawItemId} in state ${item.processingState}`)
     return
+  }
+
+  // Tier gate (execution-time). Auto-capture / AI feedback extraction is a
+  // plan entitlement. Enforced HERE, at the single execution chokepoint —
+  // not only at enqueue — so a job that was already queued when the tenant
+  // downgraded (or re-enqueued by stuck-recovery or a manual retry) does not
+  // run the LLM after the plan disallows it. Runs BEFORE the model lookup so a
+  // disallowed item still terminates cleanly when the extraction model is also
+  // unconfigured (otherwise it would throw and churn via stuck-recovery).
+  // Terminal no-op mirrors the quality-gate path so it isn't re-picked.
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  if (!(await getTierLimits()).features.aiFeedbackExtraction) {
+    const context = (item.contextEnvelope ?? {}) as RawFeedbackItemContextEnvelope
+    const isChannelMonitor =
+      (context.metadata as Record<string, unknown> | undefined)?.ingestionMode === 'channel_monitor'
+    const finalState = isChannelMonitor ? 'dismissed' : 'completed'
+    console.log(`[Extraction] Plan disallows extraction, ${rawItemId} -> ${finalState}`)
+    await logPipelineEvent({
+      eventType: 'extraction.skipped_no_entitlement',
+      rawFeedbackItemId: rawItemId,
+      detail: { finalState, sourceType: item.sourceType },
+    })
+    await db
+      .update(rawFeedbackItems)
+      .set({
+        processingState: finalState,
+        stateChangedAt: new Date(),
+        processedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(rawFeedbackItems.id, rawItemId))
+    return
+  }
+
+  const openai = getOpenAI()
+  const model = getChatModel('extraction')
+  if (!openai || !model) {
+    throw new UnrecoverableError('Extraction model not configured')
   }
 
   await db

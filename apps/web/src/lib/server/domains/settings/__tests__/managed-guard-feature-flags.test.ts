@@ -44,7 +44,15 @@ vi.mock('@/lib/server/config-file/managed-guard', () => ({
   assertNotManaged: hoisted.mockAssertNotManaged,
 }))
 
+// updateFeatureFlags dynamically imports tier-enforce when enabling
+// aiFeedbackExtraction; stub it here and exercise it in the tier-gate
+// tests below.
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  assertTierFeature: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { updateFeatureFlags } from '../settings.service'
+import { assertTierFeature } from '../tier-enforce'
 
 describe('updateFeatureFlags — per-key managed-paths gate', () => {
   beforeEach(() => {
@@ -77,5 +85,22 @@ describe('updateFeatureFlags — per-key managed-paths gate', () => {
     hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
     const result = await updateFeatureFlags({ aiFeedbackExtraction: true })
     expect(result.aiFeedbackExtraction).toBe(true)
+  })
+
+  it('tier-gates enabling aiFeedbackExtraction, before any DB write', async () => {
+    hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
+    vi.mocked(assertTierFeature).mockRejectedValueOnce(
+      new Error('AI feedback extraction is not available on your plan.')
+    )
+    await expect(updateFeatureFlags({ aiFeedbackExtraction: true })).rejects.toThrow(
+      'not available on your plan'
+    )
+    expect(hoisted.mockDbUpdate).not.toHaveBeenCalled()
+  })
+
+  it('does not tier-gate disabling aiFeedbackExtraction', async () => {
+    hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
+    await updateFeatureFlags({ aiFeedbackExtraction: false })
+    expect(vi.mocked(assertTierFeature)).not.toHaveBeenCalled()
   })
 })
