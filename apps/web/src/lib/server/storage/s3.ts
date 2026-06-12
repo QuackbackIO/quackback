@@ -340,6 +340,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
   'image/gif',
   'image/webp',
   'image/avif',
+  'image/x-icon',
 ])
 
 /**

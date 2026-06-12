@@ -201,6 +201,11 @@ export async function unfurlExternalUrl(rawUrl: string): Promise<LinkPreview | n
 
     const og = parseOpenGraph(html, finalUrl)
 
+    // Short-circuit before any proxy work if there is nothing worth showing.
+    // og.faviconUrl is always set (fallback to /favicon.ico), so without this
+    // guard every dead page would cause an external fetch + orphaned S3 upload.
+    if (!og.title && !og.description && !og.imageUrl) return null
+
     // Proxy OG image and favicon in parallel
     const [proxiedImage, proxiedFavicon] = await Promise.all([
       og.imageUrl ? proxyImage(og.imageUrl) : Promise.resolve(null),
