@@ -55,6 +55,7 @@ export interface OpenGraphData {
   description: string | null
   siteName: string | null
   imageUrl: string | null
+  faviconUrl: string | null
 }
 
 /**
@@ -114,6 +115,51 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
     const rawSiteName = ogSiteName
     const rawImage = ogImage ?? twitterImage
 
+    // Parse favicon links — priority: apple-touch-icon > icon > shortcut icon
+    const iconHrefs: Partial<Record<'apple-touch-icon' | 'icon' | 'shortcut icon', string>> = {}
+    const linkTagRe = /<link\s[^>]+>/gi
+    let lm: RegExpExecArray | null
+    while ((lm = linkTagRe.exec(head)) !== null) {
+      const tag = lm[0]
+      const rel = extractAttr(tag, 'rel')?.trim().toLowerCase()
+      const href = extractAttr(tag, 'href')
+      if (!rel || !href) continue
+      if (rel === 'apple-touch-icon' && !iconHrefs['apple-touch-icon']) {
+        iconHrefs['apple-touch-icon'] = href
+      } else if (rel === 'icon' && !iconHrefs['icon']) {
+        iconHrefs['icon'] = href
+      } else if (rel === 'shortcut icon' && !iconHrefs['shortcut icon']) {
+        iconHrefs['shortcut icon'] = href
+      }
+    }
+    const rawFavicon =
+      iconHrefs['apple-touch-icon'] ?? iconHrefs['icon'] ?? iconHrefs['shortcut icon'] ?? null
+
+    let faviconUrl: string | null = null
+    if (rawFavicon) {
+      try {
+        const resolved = new URL(rawFavicon, baseUrl)
+        if (
+          (resolved.protocol === 'http:' || resolved.protocol === 'https:') &&
+          resolved.href.length <= 2048
+        ) {
+          faviconUrl = resolved.href
+        }
+      } catch {
+        // malformed URL — fall through to /favicon.ico
+      }
+    }
+    if (!faviconUrl) {
+      try {
+        const fallback = new URL('/favicon.ico', baseUrl)
+        if (fallback.protocol === 'http:' || fallback.protocol === 'https:') {
+          faviconUrl = fallback.href
+        }
+      } catch {
+        // malformed baseUrl
+      }
+    }
+
     // Resolve and validate image URL
     let imageUrl: string | null = null
     if (rawImage) {
@@ -132,8 +178,9 @@ export function parseOpenGraph(html: string, baseUrl: string): OpenGraphData {
       description: cap(rawDescription, 500),
       siteName: cap(rawSiteName, 100),
       imageUrl,
+      faviconUrl,
     }
   } catch {
-    return { title: null, description: null, siteName: null, imageUrl: null }
+    return { title: null, description: null, siteName: null, imageUrl: null, faviconUrl: null }
   }
 }

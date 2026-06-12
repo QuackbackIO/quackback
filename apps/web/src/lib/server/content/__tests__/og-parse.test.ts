@@ -16,6 +16,7 @@ describe('parseOpenGraph', () => {
       description: 'My Desc',
       siteName: 'My Site',
       imageUrl: 'https://example.com/img.jpg',
+      faviconUrl: 'https://example.com/favicon.ico',
     })
   })
 
@@ -100,6 +101,7 @@ describe('parseOpenGraph', () => {
       description: null,
       siteName: null,
       imageUrl: null,
+      faviconUrl: 'https://example.com/favicon.ico',
     })
   })
 
@@ -121,5 +123,48 @@ describe('parseOpenGraph', () => {
   it('never throws on malformed html', () => {
     expect(() => parseOpenGraph('not html at all << >>', 'not-a-url')).not.toThrow()
     expect(() => parseOpenGraph('', '')).not.toThrow()
+  })
+})
+
+describe('faviconUrl parsing', () => {
+  it('extracts apple-touch-icon with highest priority', () => {
+    const html = `<html><head>
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      <link rel="icon" href="/favicon.png" />
+    </head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/apple-touch-icon.png')
+  })
+
+  it('falls back to rel="icon" when no apple-touch-icon', () => {
+    const html = `<html><head>
+      <link rel="icon" href="https://cdn.example.com/icon.png" />
+    </head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://cdn.example.com/icon.png')
+  })
+
+  it('falls back to rel="shortcut icon"', () => {
+    const html = `<html><head>
+      <link rel="shortcut icon" href="/fav.ico" />
+    </head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/fav.ico')
+  })
+
+  it('falls back to /favicon.ico when no link tags present', () => {
+    const html = `<html><head><title>No Icons</title></head></html>`
+    expect(parseOpenGraph(html, 'https://site.example/page').faviconUrl).toBe(
+      'https://site.example/favicon.ico'
+    )
+  })
+
+  it('resolves relative favicon href against baseUrl', () => {
+    const html = `<html><head><link rel="icon" href="/static/icon.png" /></head></html>`
+    expect(parseOpenGraph(html, 'https://app.example/page').faviconUrl).toBe(
+      'https://app.example/static/icon.png'
+    )
+  })
+
+  it('skips non-http favicon href and falls back to /favicon.ico', () => {
+    const html = `<html><head><link rel="icon" href="ftp://bad.example/icon.ico" /></head></html>`
+    expect(parseOpenGraph(html, BASE).faviconUrl).toBe('https://example.com/favicon.ico')
   })
 })
