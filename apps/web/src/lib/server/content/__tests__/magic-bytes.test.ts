@@ -59,12 +59,17 @@ describe('sniffImageMime', () => {
     const svg = Buffer.from('<?xml version="1.0"?><svg xmlns="..."></svg>')
     expect(sniffImageMime(svg)).toBeNull()
   })
+
+  it('detects ICO from magic bytes', () => {
+    const buf = Buffer.concat([bytes(0x00, 0x00, 0x01, 0x00), Buffer.alloc(32)])
+    expect(sniffImageMime(buf)).toBe('image/x-icon')
+  })
 })
 
 describe('ALLOWED_REHOST_MIMES', () => {
-  it('contains the five image formats we rehost', () => {
+  it('contains the six image formats we rehost', () => {
     expect(ALLOWED_REHOST_MIMES).toEqual(
-      new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'])
+      new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/x-icon'])
     )
   })
 })

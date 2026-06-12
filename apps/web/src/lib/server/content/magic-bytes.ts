@@ -16,6 +16,7 @@ export const ALLOWED_REHOST_MIMES = new Set([
   'image/gif',
   'image/webp',
   'image/avif',
+  'image/x-icon',
 ])
 
 function startsWithAt(buf: Buffer, offset: number, pattern: number[]): boolean {
@@ -56,6 +57,10 @@ export function sniffImageMime(buf: Buffer): string | null {
   if (buf.length >= 12 && buf.slice(4, 8).toString('ascii') === 'ftyp') {
     const brand = buf.slice(8, 12).toString('ascii')
     if (brand === 'avif' || brand === 'avis') return 'image/avif'
+  }
+  // ICO: 00 00 01 00
+  if (startsWithAt(buf, 0, [0x00, 0x00, 0x01, 0x00])) {
+    return 'image/x-icon'
   }
   return null
 }
