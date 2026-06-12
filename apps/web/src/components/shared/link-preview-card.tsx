@@ -75,7 +75,12 @@ export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
       </div>
       {/* OG image at bottom, full-width */}
       {preview.imageUrl && (
-        <img src={preview.imageUrl} alt="" className="block w-full" loading="lazy" />
+        <img
+          src={preview.imageUrl}
+          alt=""
+          className="block w-full max-h-48 object-contain"
+          loading="lazy"
+        />
       )}
     </a>
   )
