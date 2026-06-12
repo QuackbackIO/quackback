@@ -8,6 +8,11 @@ import { getSession } from '@/lib/server/auth/session'
 
 /**
  * Get the app settings.
+ *
+ * Returns the RAW settings row: JSON config columns (featureFlags, authConfig,
+ * portalConfig, ...) come back as unparsed text. For parsed, default-merged
+ * reads use the settings domain service (getTenantSettings / isFeatureEnabled)
+ * instead of casting a column off this row.
  */
 export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
   try {

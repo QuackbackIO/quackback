@@ -54,11 +54,12 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
         if (!access.granted) return null
       }
 
-      // 3. Feature flag
-      const { getSettings } = await import('./workspace')
-      const settings = await getSettings()
-      const flags = settings?.featureFlags as { linkPreviews?: boolean } | undefined
-      if (!flags?.linkPreviews) return null
+      // 3. Feature flag — read via the domain service, which parses the
+      //    featureFlags text column and merges defaults. The raw settings row
+      //    holds the unparsed JSON string, so reading the flag off it directly
+      //    always fails.
+      const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+      if (!(await isFeatureEnabled('linkPreviews'))) return null
 
       // 4. Exclude internal Quackback URLs
       if (parseEmbedUrl(data.url) !== null) return null
