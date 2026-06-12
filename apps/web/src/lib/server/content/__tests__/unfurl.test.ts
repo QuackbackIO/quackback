@@ -20,6 +20,7 @@ vi.mock('../magic-bytes', () => ({
     'image/jpeg',
     'image/gif',
     'image/webp',
+    'image/avif',
     'image/x-icon',
   ]),
 }))
