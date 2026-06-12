@@ -18,6 +18,7 @@ export interface LinkPreview {
   description: string | null
   siteName: string | null
   imageUrl: string | null
+  faviconUrl: string | null
 }
 
 const MAX_REDIRECTS = 3
@@ -25,6 +26,8 @@ const PAGE_TIMEOUT_MS = 5_000
 const PAGE_MAX_BYTES = 512 * 1024
 const IMAGE_TIMEOUT_MS = 10_000
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const FAVICON_TIMEOUT_MS = 5_000
+const FAVICON_MAX_BYTES = 64 * 1024
 
 /**
  * Fetch a URL with SSRF protection and a redirect-following loop (max 3 hops).
@@ -116,6 +119,55 @@ async function proxyImage(rawImageUrl: string): Promise<string | null> {
   }
 }
 
+/** Normalize ICO MIME aliases to the canonical form before the sniff cross-check. */
+function normalizeIconMime(mime: string): string {
+  if (mime === 'image/vnd.microsoft.icon' || mime === 'image/icon') return 'image/x-icon'
+  return mime
+}
+
+/**
+ * Fetch a favicon URL, magic-byte verify it, and upload to our storage.
+ * Handles ICO MIME aliases; rejects SVG. 64KB max.
+ * Returns the proxied URL on success, null on any failure.
+ */
+async function proxyFavicon(rawFaviconUrl: string): Promise<string | null> {
+  let response: Response
+  try {
+    response = await safeFetch(rawFaviconUrl, {
+      method: 'GET',
+      timeoutMs: FAVICON_TIMEOUT_MS,
+      maxResponseBytes: FAVICON_MAX_BYTES,
+      onOverflow: 'error',
+    })
+  } catch {
+    return null
+  }
+
+  if (response.status >= 300 || !response.ok) return null
+
+  const rawMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+  const headerMime = normalizeIconMime(rawMime)
+  if (headerMime === 'image/svg+xml') return null
+  if (!ALLOWED_REHOST_MIMES.has(headerMime)) return null
+
+  let buffer: Buffer
+  try {
+    buffer = Buffer.from(await response.arrayBuffer())
+  } catch {
+    return null
+  }
+
+  const sniffed = sniffImageMime(buffer)
+  if (sniffed === null || sniffed !== headerMime) return null
+
+  try {
+    const { url } = await uploadImageBuffer(buffer, headerMime, 'link-previews')
+    return url
+  } catch {
+    return null
+  }
+}
+
 /**
  * Unfurl an external URL: fetch HTML, parse OG tags, proxy the image.
  * Returns null if the URL is unsafe, non-HTML, or yields nothing worth showing.
@@ -149,11 +201,11 @@ export async function unfurlExternalUrl(rawUrl: string): Promise<LinkPreview | n
 
     const og = parseOpenGraph(html, finalUrl)
 
-    // Proxy the OG image
-    let proxiedImage: string | null = null
-    if (og.imageUrl) {
-      proxiedImage = await proxyImage(og.imageUrl)
-    }
+    // Proxy OG image and favicon in parallel
+    const [proxiedImage, proxiedFavicon] = await Promise.all([
+      og.imageUrl ? proxyImage(og.imageUrl) : Promise.resolve(null),
+      og.faviconUrl ? proxyFavicon(og.faviconUrl) : Promise.resolve(null),
+    ])
 
     const preview: LinkPreview = {
       url: finalUrl,
@@ -161,6 +213,7 @@ export async function unfurlExternalUrl(rawUrl: string): Promise<LinkPreview | n
       description: og.description,
       siteName: og.siteName,
       imageUrl: proxiedImage,
+      faviconUrl: proxiedFavicon,
     }
 
     // Nothing worth showing
