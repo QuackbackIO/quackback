@@ -41,7 +41,7 @@ export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer nofollow"
-      className="mt-1 block overflow-hidden rounded-lg border border-border bg-card no-underline transition-colors hover:bg-muted/40"
+      className="mt-1 block max-w-sm overflow-hidden rounded-lg border border-border bg-card no-underline transition-colors hover:bg-muted/40"
     >
       {/* Text section with left accent bar */}
       <div className="flex">
@@ -75,12 +75,7 @@ export function LinkPreviewCard({ url, getAuthHeaders }: LinkPreviewCardProps) {
       </div>
       {/* OG image at bottom, full-width */}
       {preview.imageUrl && (
-        <img
-          src={preview.imageUrl}
-          alt=""
-          className="block w-full max-h-48 object-cover"
-          loading="lazy"
-        />
+        <img src={preview.imageUrl} alt="" className="block w-full" loading="lazy" />
       )}
     </a>
   )
