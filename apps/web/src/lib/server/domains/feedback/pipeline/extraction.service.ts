@@ -44,6 +44,36 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
     return
   }
 
+  // Tier gate (execution-time). Auto-capture / AI feedback extraction is a
+  // plan entitlement. Enforced HERE, at the single execution chokepoint —
+  // not only at enqueue — so a job that was already queued when the tenant
+  // downgraded (or re-enqueued by stuck-recovery or a manual retry) does not
+  // run the LLM after the plan disallows it. Terminal no-op mirrors the
+  // quality-gate path so the item isn't re-picked by recoverStuckItems.
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  if (!(await getTierLimits()).features.aiFeedbackExtraction) {
+    const context = (item.contextEnvelope ?? {}) as RawFeedbackItemContextEnvelope
+    const isChannelMonitor =
+      (context.metadata as Record<string, unknown> | undefined)?.ingestionMode === 'channel_monitor'
+    const finalState = isChannelMonitor ? 'dismissed' : 'completed'
+    console.log(`[Extraction] Plan disallows extraction, ${rawItemId} -> ${finalState}`)
+    await logPipelineEvent({
+      eventType: 'extraction.skipped_no_entitlement',
+      rawFeedbackItemId: rawItemId,
+      detail: { finalState, sourceType: item.sourceType },
+    })
+    await db
+      .update(rawFeedbackItems)
+      .set({
+        processingState: finalState,
+        stateChangedAt: new Date(),
+        processedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(rawFeedbackItems.id, rawItemId))
+    return
+  }
+
   await db
     .update(rawFeedbackItems)
     .set({
