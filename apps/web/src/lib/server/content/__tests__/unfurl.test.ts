@@ -150,7 +150,7 @@ describe('unfurlExternalUrl', () => {
             new Response(icoBytes, { status: 200, headers: { 'content-type': 'image/x-icon' } })
           )
         }
-        return Promise.resolve(undefined as unknown as Response)
+        return Promise.resolve(new Response(null, { status: 404 }))
       })
     sniffImageMime.mockReturnValue('image/x-icon')
     uploadImageBuffer.mockResolvedValue({ url: '/api/storage/link-previews/fav.ico' })
@@ -178,7 +178,7 @@ describe('unfurlExternalUrl', () => {
             })
           )
         }
-        return Promise.resolve(undefined as unknown as Response)
+        return Promise.resolve(new Response(null, { status: 404 }))
       })
     sniffImageMime.mockReturnValue('image/x-icon')
     uploadImageBuffer.mockResolvedValue({ url: '/api/storage/link-previews/fav.ico' })

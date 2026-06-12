@@ -161,7 +161,7 @@ async function proxyFavicon(rawFaviconUrl: string): Promise<string | null> {
   if (sniffed === null || sniffed !== headerMime) return null
 
   try {
-    const { url } = await uploadImageBuffer(buffer, headerMime, 'link-previews')
+    const { url } = await uploadImageBuffer(buffer, sniffed, 'link-previews')
     return url
   } catch {
     return null
