@@ -624,15 +624,15 @@ describe('resendPortalInviteFn — success', () => {
 
     await expect(resendHandler({ data: { inviteId: 'invite_1' } })).rejects.toThrow('smtp down')
 
-    // The just-minted token is revoked (orphan cleanup) and the invitee's
+    // The undelivered new token is revoked (orphan cleanup) and the invitee's
     // existing token is NOT revoked, so their current link still works.
     expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_new')
     expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalledWith('tok_old')
-    // And the new token is never recorded on the row.
-    const tokenWrite = hoisted.mockDbSet.mock.calls.find(
-      (c) => (c[0] as Record<string, unknown>).magicLinkToken !== undefined
-    )
-    expect(tokenWrite).toBeUndefined()
+    // The pre-send record is rolled back: the final token write restores the prior.
+    const tokenWrites = hoisted.mockDbSet.mock.calls
+      .map((c) => (c[0] as Record<string, unknown>).magicLinkToken)
+      .filter((v) => v !== undefined)
+    expect(tokenWrites.at(-1)).toBe('tok_old')
   })
 
   it('emits portal.invite.resent (not portal.invite.sent) on resend', async () => {

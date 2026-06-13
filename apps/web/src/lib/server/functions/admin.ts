@@ -59,7 +59,7 @@ import { getBaseUrl } from '@/lib/server/config'
 import {
   INVITATION_EXPIRY_MS,
   generateInvitationMagicLink,
-  rotateInviteMagicLinkToken,
+  recordInviteMagicLinkToken,
 } from './invitation-magic-link'
 
 /**
@@ -1127,6 +1127,17 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         portalUrl
       )
 
+      const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+      const priorToken = invitationRecord.magicLinkToken
+
+      // Record the new token BEFORE sending, so the emailed link is always the
+      // one tracked on the invite and a concurrent cancel/rotation is caught
+      // before we email it.
+      if (!(await recordInviteMagicLinkToken(invitationId, priorToken, magicLinkToken))) {
+        await revokeMagicLinkToken(magicLinkToken) // not emailed yet; safe to drop
+        throw new Error('Invitation is no longer pending — refresh and try again')
+      }
+
       const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
       const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
       let result: Awaited<ReturnType<typeof sendInvitationEmail>>
@@ -1140,20 +1151,16 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
           logoUrl,
         })
       } catch (sendError) {
-        // The new link won't reach the invitee — drop the orphan token and
-        // leave their existing link working.
-        const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+        // Send failed: undo the record (restore the prior token as current) and
+        // drop the undelivered new one, so the invitee's existing link still works.
+        await recordInviteMagicLinkToken(invitationId, magicLinkToken, priorToken)
         await revokeMagicLinkToken(magicLinkToken)
         throw sendError
       }
 
       // Delivered (or returned for manual sharing): the new link supersedes the
-      // old one, so revoke the prior token and record the new one.
-      await rotateInviteMagicLinkToken(
-        invitationId,
-        invitationRecord.magicLinkToken,
-        magicLinkToken
-      )
+      // old one, so revoke the prior token now.
+      await revokeMagicLinkToken(priorToken)
 
       console.log(
         `[fn:admin] resendInvitationFn: ${result.sent ? 'resent' : 'regenerated (email not configured)'}`

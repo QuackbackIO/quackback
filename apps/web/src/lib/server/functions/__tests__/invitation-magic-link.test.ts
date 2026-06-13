@@ -27,7 +27,7 @@ vi.mock('@/lib/server/db', () => ({
   isNull: vi.fn((col: unknown) => ({ op: 'isNull', col })),
 }))
 
-const { generateInvitationMagicLink, rotateInviteMagicLinkToken } =
+const { generateInvitationMagicLink, recordInviteMagicLinkToken } =
   await import('../invitation-magic-link')
 
 beforeEach(() => {
@@ -71,26 +71,24 @@ describe('generateInvitationMagicLink', () => {
   })
 })
 
-describe('rotateInviteMagicLinkToken', () => {
-  it('revokes the prior token and records the new one when the invite still matches', async () => {
+describe('recordInviteMagicLinkToken', () => {
+  it('compare-and-swaps the token and returns true when the invite still matches', async () => {
     mockReturning.mockResolvedValue([{ id: 'invite_1' }]) // CAS matched
 
-    await rotateInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
+    const ok = await recordInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
 
-    expect(mockRevokeMagicLinkToken).toHaveBeenCalledTimes(1)
-    expect(mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_old')
+    expect(ok).toBe(true)
     expect(mockSet).toHaveBeenCalledWith({ magicLinkToken: 'tok_new' })
+    // It is a pure swap — revocation is the caller's responsibility.
+    expect(mockRevokeMagicLinkToken).not.toHaveBeenCalled()
   })
 
-  it('revokes the just-minted token and throws when the row changed (cancel / double-rotation race)', async () => {
-    mockReturning.mockResolvedValue([]) // CAS matched nothing — row canceled or re-rotated
+  it('returns false without writing when the row changed (cancel / concurrent rotation)', async () => {
+    mockReturning.mockResolvedValue([]) // CAS matched nothing
 
-    await expect(
-      rotateInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
-    ).rejects.toThrow(/changed during update/)
+    const ok = await recordInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
 
-    // Prior token revoked, AND the orphan we just minted is cleaned up.
-    expect(mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_old')
-    expect(mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_new')
+    expect(ok).toBe(false)
+    expect(mockRevokeMagicLinkToken).not.toHaveBeenCalled()
   })
 })

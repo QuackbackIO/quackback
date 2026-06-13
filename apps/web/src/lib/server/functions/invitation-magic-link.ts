@@ -40,46 +40,36 @@ export async function generateInvitationMagicLink(
 }
 
 /**
- * Point an invite at a freshly-minted magic-link token: revoke the prior token
- * (so the previously-emailed link dies) and record the new one on the row. Used
- * by the resend and copy-link paths, which supersede an existing link; cancel
- * only revokes, so it calls `revokeMagicLinkToken` directly.
+ * Compare-and-swap the invite's recorded magic-link token from `expected` to
+ * `next`, only while the invite is still `pending`. Returns true if the row
+ * matched and was updated, false otherwise (the invite was canceled, or another
+ * request changed the token first).
  *
- * The write is a compare-and-swap on `(status='pending', magicLinkToken=prior)`
- * rather than a blind last-write-wins, to stay correct under concurrency:
- *   - a request racing a cancel must not re-arm a live link on a canceled invite
- *   - a request racing another rotation must not orphan the other token (which
- *     would leave it live but untracked, so never revoked)
- * If the row no longer matches, the just-minted token is revoked (it isn't
- * tracked by the invite) and the call throws so the caller doesn't email or
- * return a now-dead link as success.
+ * Callers record the new token with this BEFORE delivering its link (emailing,
+ * or returning it to copy), so the delivered token is always the one tracked on
+ * the invite and a concurrent cancel/rotation is detected before delivery. The
+ * old token is only revoked AFTER successful delivery, so a delivery failure
+ * never strands the recipient. Passing `next: null` restores the unset state
+ * (used to roll back a record when delivery then fails).
  */
-export async function rotateInviteMagicLinkToken(
+export async function recordInviteMagicLinkToken(
   inviteId: InviteId,
-  priorToken: string | null | undefined,
-  newToken: string
-): Promise<void> {
+  expected: string | null | undefined,
+  next: string | null
+): Promise<boolean> {
   const { db, invitation, eq, and, isNull } = await import('@/lib/server/db')
-  const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-
-  await revokeMagicLinkToken(priorToken)
-
   const swapped = await db
     .update(invitation)
-    .set({ magicLinkToken: newToken })
+    .set({ magicLinkToken: next })
     .where(
       and(
         eq(invitation.id, inviteId),
         eq(invitation.status, 'pending'),
-        priorToken == null
+        expected == null
           ? isNull(invitation.magicLinkToken)
-          : eq(invitation.magicLinkToken, priorToken)
+          : eq(invitation.magicLinkToken, expected)
       )
     )
     .returning({ id: invitation.id })
-
-  if (swapped.length === 0) {
-    await revokeMagicLinkToken(newToken)
-    throw new Error('Invitation changed during update — refresh and try again')
-  }
+  return swapped.length > 0
 }
