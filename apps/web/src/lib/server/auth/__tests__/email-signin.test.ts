@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
-  mockMintMagicLinkUrl: vi.fn(async () => 'https://example.com/verify-magic-link?token=t'),
+  mockMintMagicLinkUrl: vi.fn(async () => ({
+    url: 'https://example.com/verify-magic-link?token=t',
+    token: 't',
+  })),
   mockSendVerificationOTP: vi.fn(async () => undefined),
   mockSendMagicLinkEmail: vi.fn(async () => undefined),
   mockGetOTP: vi.fn(() => '123456'),

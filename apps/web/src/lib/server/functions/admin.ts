@@ -1044,15 +1044,18 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
             eq(invitation.status, 'pending')
           )
         )
-        .returning({ id: invitation.id })
+        .returning({ id: invitation.id, magicLinkToken: invitation.magicLinkToken })
 
       if (cancelled.length === 0) {
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
-      // Invalidate the emailed magic link so a cancelled invite can't sign anyone in.
+      // Invalidate the emailed magic link so a cancelled invite can't sign
+      // anyone in. Revoke the token the UPDATE returned (the one live at the
+      // instant of cancellation) rather than the earlier read, so a rotation
+      // racing this cancel can't leave a live token behind.
       const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-      await revokeMagicLinkToken(invitationRecord.magicLinkToken)
+      await revokeMagicLinkToken(cancelled[0].magicLinkToken)
 
       console.log(`[fn:admin] cancelInvitationFn: canceled`)
       return { invitationId }

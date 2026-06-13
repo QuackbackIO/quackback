@@ -132,7 +132,10 @@ beforeEach(() => {
   hoisted.findUser.mockResolvedValue(null)
   hoisted.findCodes.mockResolvedValue([])
   hoisted.verifyRecoveryCode.mockResolvedValue(false)
-  hoisted.mintMagicLinkUrl.mockResolvedValue('https://acme.quackback.io/verify-magic-link?token=t')
+  hoisted.mintMagicLinkUrl.mockResolvedValue({
+    url: 'https://acme.quackback.io/verify-magic-link?token=t',
+    token: 't',
+  })
 })
 
 await import('../recovery-codes-consume')

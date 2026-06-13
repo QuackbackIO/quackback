@@ -283,16 +283,19 @@ export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
           eq(invitation.status, 'pending')
         )
       )
-      .returning({ id: invitation.id })
+      .returning({ id: invitation.id, magicLinkToken: invitation.magicLinkToken })
 
     if (updated.length === 0) {
       console.log(`[fn:portal-invites] cancelPortalInviteFn: no-op (row concurrently mutated)`)
       return { inviteId, status: 'no_op_already_accepted' as const }
     }
 
-    // Invalidate the emailed magic link so a cancelled invite can't sign anyone in.
+    // Invalidate the emailed magic link so a cancelled invite can't sign anyone
+    // in. Revoke the token the UPDATE returned (live at the instant of
+    // cancellation) rather than the earlier read, so a rotation racing this
+    // cancel can't leave a live token behind.
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-    await revokeMagicLinkToken(inv.magicLinkToken)
+    await revokeMagicLinkToken(updated[0].magicLinkToken)
 
     await recordAuditEvent({
       event: 'portal.invite.revoked',

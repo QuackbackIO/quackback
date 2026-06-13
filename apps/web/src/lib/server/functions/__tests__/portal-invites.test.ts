@@ -105,6 +105,7 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn((...args: unknown[]) => args),
     or: vi.fn((...args: unknown[]) => args),
     gt: vi.fn((col, val) => ({ col, val })),
+    isNull: vi.fn((col) => ({ col, isNull: true })),
     sql: vi.fn((parts: TemplateStringsArray) => parts.raw[0]),
   }
 })
@@ -524,18 +525,22 @@ describe('cancelPortalInviteFn — success', () => {
     expect(auditCall).toBeDefined()
   })
 
-  it('revokes the magic-link token so the emailed link can no longer sign anyone in', async () => {
+  it('revokes the token live at cancel time (from the UPDATE), not a stale earlier read', async () => {
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_1',
       kind: 'portal',
       status: 'pending',
       email: 'user@example.com',
-      magicLinkToken: 'tok_live',
+      magicLinkToken: 'tok_stale',
     })
+    // The cancel UPDATE returns the token actually on the row at that instant —
+    // a concurrent rotation may have changed it since the read above.
+    hoisted.mockDbReturning.mockResolvedValue([{ id: 'invite_1', magicLinkToken: 'tok_live' }])
 
     await cancelHandler({ data: { inviteId: 'invite_1' } })
 
     expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_live')
+    expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalledWith('tok_stale')
   })
 })
 
