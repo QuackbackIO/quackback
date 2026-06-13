@@ -54,6 +54,7 @@ const hoisted = vi.hoisted(() => ({
   },
   mockSendPortalInviteEmail: vi.fn(),
   mockMintMagicLinkUrl: vi.fn(),
+  mockRevokeMagicLinkToken: vi.fn(),
   mockGetEmailSafeUrl: vi.fn(),
   mockGetBaseUrl: vi.fn(),
   mockGenerateId: vi.fn(),
@@ -123,6 +124,7 @@ vi.mock('@quackback/ids', () => ({
 // Dynamic imports used inside handlers
 vi.mock('@/lib/server/auth/magic-link-mint', () => ({
   mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl,
+  revokeMagicLinkToken: hoisted.mockRevokeMagicLinkToken,
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -169,9 +171,11 @@ beforeEach(async () => {
   // Sensible defaults
   hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)
   hoisted.mockGetBaseUrl.mockReturnValue('https://acme.example.com')
-  hoisted.mockMintMagicLinkUrl.mockResolvedValue(
-    'https://acme.example.com/verify-magic-link?token=abc'
-  )
+  hoisted.mockMintMagicLinkUrl.mockResolvedValue({
+    url: 'https://acme.example.com/verify-magic-link?token=abc',
+    token: 'tok_new',
+  })
+  hoisted.mockRevokeMagicLinkToken.mockResolvedValue(undefined)
   hoisted.mockGetEmailSafeUrl.mockReturnValue(null)
   hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: false })
   hoisted.mockGenerateId.mockReturnValue('invite_test')
@@ -280,6 +284,20 @@ describe('sendPortalInviteFn — success (single)', () => {
     )
   })
 
+  it('mints a link that lives as long as the invite (30 days), not the 10-minute sign-in default', async () => {
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
+
+    const opts = hoisted.mockMintMagicLinkUrl.mock.calls[0][0] as { expiresInSeconds?: number }
+    expect(opts.expiresInSeconds).toBe(30 * 24 * 60 * 60) // 30-day invite lifetime, not the 10-min sign-in default
+  })
+
+  it('persists the magic-link token on the invite row so cancel can revoke it', async () => {
+    await sendHandler({ data: { emails: ['invitee@example.com'] } })
+
+    const insertCall = hoisted.mockDbInsert.mock.calls[0][0] as Record<string, unknown>
+    expect(insertCall.magicLinkToken).toBe('tok_new')
+  })
+
   it('records a portal.invite.sent audit event', async () => {
     await sendHandler({ data: { emails: ['invitee@example.com'] } })
 
@@ -356,14 +374,38 @@ describe('getPortalInviteLinkFn', () => {
       email: 'user@example.com',
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
     })
-    hoisted.mockMintMagicLinkUrl.mockResolvedValue(
-      'https://acme.example.com/verify-magic-link?token=xyz'
-    )
+    hoisted.mockMintMagicLinkUrl.mockResolvedValue({
+      url: 'https://acme.example.com/verify-magic-link?token=xyz',
+      token: 'tok_xyz',
+    })
 
     const result = await getLinkHandler({ data: { inviteId: 'invite_abc' } })
     const r = result as { inviteLink: string; expiresAt: Date }
     expect(r.inviteLink).toMatch(/verify-magic-link/)
     expect(r.expiresAt).toBeInstanceOf(Date)
+  })
+
+  it("caps the copy-link token at the invite's remaining lifetime so it can't outlive the invite", async () => {
+    // Invite was created earlier and expires in ~3 days; copy-link must mint a
+    // token that dies with the invite, not a fresh full-lifetime one.
+    const threeDaysSeconds = 3 * 24 * 60 * 60
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_abc',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: new Date(Date.now() + threeDaysSeconds * 1000),
+      magicLinkToken: 'tok_old',
+    })
+
+    await getLinkHandler({ data: { inviteId: 'invite_abc' } })
+
+    const opts = hoisted.mockMintMagicLinkUrl.mock.calls[0][0] as { expiresInSeconds?: number }
+    // Allow a few seconds of slack for execution time.
+    expect(opts.expiresInSeconds).toBeGreaterThan(threeDaysSeconds - 60)
+    expect(opts.expiresInSeconds).toBeLessThanOrEqual(threeDaysSeconds)
+    // And the prior token is revoked.
+    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_old')
   })
 
   it('rejects for a non-portal invite kind (returns null from DB)', async () => {
@@ -481,6 +523,20 @@ describe('cancelPortalInviteFn — success', () => {
     )
     expect(auditCall).toBeDefined()
   })
+
+  it('revokes the magic-link token so the emailed link can no longer sign anyone in', async () => {
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_1',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      magicLinkToken: 'tok_live',
+    })
+
+    await cancelHandler({ data: { inviteId: 'invite_1' } })
+
+    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_live')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -527,6 +583,26 @@ describe('resendPortalInviteFn — success', () => {
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalled()
     expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalled()
     expect((result as { inviteId: string }).inviteId).toBe('invite_1')
+  })
+
+  it('revokes the prior token and records the new one so cancel revokes the live link', async () => {
+    const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_1',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: futureDate,
+      magicLinkToken: 'tok_old',
+    })
+
+    await resendHandler({ data: { inviteId: 'invite_1' } })
+
+    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_old')
+    const tokenWrite = hoisted.mockDbSet.mock.calls.find(
+      (c) => (c[0] as Record<string, unknown>).magicLinkToken !== undefined
+    )
+    expect(tokenWrite?.[0]).toMatchObject({ magicLinkToken: 'tok_new' })
   })
 
   it('emits portal.invite.resent (not portal.invite.sent) on resend', async () => {
@@ -834,7 +910,7 @@ describe('cancelPortalInviteFn — race guard', () => {
 // ---------------------------------------------------------------------------
 
 describe('resendPortalInviteFn — extends expiresAt', () => {
-  it('sets expiresAt to ~14 days from now on resend', async () => {
+  it('sets expiresAt to ~30 days from now on resend', async () => {
     const nearExpiry = new Date(Date.now() + 2 * 60 * 60 * 1000) // 2 hours left
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_1',
@@ -854,11 +930,11 @@ describe('resendPortalInviteFn — extends expiresAt', () => {
       expiresAt: Date
     }
 
-    // expiresAt must be ~14 days from the time of resend, not the old near-expiry.
-    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
+    // expiresAt must be ~30 days from the time of resend, not the old near-expiry.
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
     const expiresAtMs = setPayload.expiresAt.getTime()
-    expect(expiresAtMs).toBeGreaterThanOrEqual(before + FOURTEEN_DAYS_MS - 5000)
-    expect(expiresAtMs).toBeLessThanOrEqual(after + FOURTEEN_DAYS_MS + 5000)
+    expect(expiresAtMs).toBeGreaterThanOrEqual(before + THIRTY_DAYS_MS - 5000)
+    expect(expiresAtMs).toBeLessThanOrEqual(after + THIRTY_DAYS_MS + 5000)
   })
 
   it('also updates lastSentAt on resend', async () => {

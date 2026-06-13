@@ -27,7 +27,7 @@ const EMPTY_COPY: Record<InvitesStatus, { title: string; body: string }> = {
   },
   expired: {
     title: 'No expired invitations',
-    body: 'Pending invitations expire after 14 days. Expired ones show here so you can resend.',
+    body: 'Pending invitations expire after 30 days. Expired ones show here so you can resend.',
   },
   all: {
     title: 'No invitations yet',

@@ -778,6 +778,13 @@
       "when": 1782172800000,
       "tag": "0110_oauth_refresh_token_family_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1782259200000,
+      "tag": "0111_invitation_magic_link_token",
+      "breakpoints": true
     }
   ]
 }

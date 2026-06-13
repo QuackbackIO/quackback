@@ -145,7 +145,7 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
             eq(invitation.kind, 'portal'),
             // Accepted invites are permanent until revoked — expiry only governs
             // pending invites. Dropping the expires_at check here prevents a
-            // user losing access 14 days after the invite was sent.
+            // user losing access once the invite's pending window passes.
             eq(invitation.status, 'accepted')
           ),
           columns: { id: true },

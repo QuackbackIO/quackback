@@ -62,8 +62,8 @@ interface InviteRowProps {
  *
  * The Revoke button uses an inline "confirm" two-step (avoids a dialog
  * for a per-row destructive action). Copy-link mints a fresh magic-link
- * URL valid for ~10 minutes so admins can hand it to invitees out of
- * band when SMTP isn't reachable.
+ * URL (valid for the invite's lifetime) so admins can hand it to invitees
+ * out of band when SMTP isn't reachable.
  */
 export function InviteRow({ invite, onRevoke, onResend, revoking, resending }: InviteRowProps) {
   const [confirmRevoke, setConfirmRevoke] = useState(false)
@@ -113,7 +113,7 @@ export function InviteRow({ invite, onRevoke, onResend, revoking, resending }: I
           >
             {copyState === 'copying' && <ArrowPathIcon className="mr-1 h-3.5 w-3.5 animate-spin" />}
             {copyState === 'copied'
-              ? 'Copied — link valid 10 min'
+              ? 'Link copied'
               : copyState === 'error'
                 ? 'Copy failed'
                 : 'Copy link'}

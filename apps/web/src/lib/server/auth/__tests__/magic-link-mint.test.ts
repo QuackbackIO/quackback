@@ -25,7 +25,18 @@ vi.mock('../index', async () => {
   }
 })
 
-const { mintMagicLinkUrl } = await import('../magic-link-mint')
+const mockDeleteWhere = vi.fn().mockResolvedValue(undefined)
+const mockDbDelete = vi.fn(() => ({ where: mockDeleteWhere }))
+const mockEq = vi.fn((col: unknown, val: unknown) => ({ col, val }))
+const mockVerificationTable = { identifier: 'verification.identifier' }
+
+vi.mock('@/lib/server/db', () => ({
+  db: { delete: mockDbDelete },
+  verification: mockVerificationTable,
+  eq: mockEq,
+}))
+
+const { mintMagicLinkUrl, revokeMagicLinkToken } = await import('../magic-link-mint')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -76,12 +87,31 @@ describe('mintMagicLinkUrl', () => {
   })
 
   it('returns a /verify-magic-link URL with the token embedded', async () => {
-    const url = await mintMagicLinkUrl({
+    const { url, token } = await mintMagicLinkUrl({
       email: 'a@b.com',
       callbackPath: '/admin',
       portalUrl: 'https://acme.test',
     })
     expect(url).toMatch(/^https:\/\/acme\.test\/verify-magic-link\?token=/)
     expect(url).toContain('callbackURL=')
+    // The returned token is the verification identifier and the one in the URL.
+    expect(token).toBe(mockCreateVerificationValue.mock.calls[0][0].identifier)
+    expect(url).toContain(`token=${token}`)
+  })
+})
+
+describe('revokeMagicLinkToken', () => {
+  it('deletes the verification row whose identifier is the token', async () => {
+    await revokeMagicLinkToken('tok_abc')
+
+    expect(mockDbDelete).toHaveBeenCalledTimes(1)
+    expect(mockDbDelete).toHaveBeenCalledWith(mockVerificationTable)
+    expect(mockEq).toHaveBeenCalledWith(mockVerificationTable.identifier, 'tok_abc')
+    expect(mockDeleteWhere).toHaveBeenCalled()
+  })
+
+  it('is a no-op when the token is null (invite minted before tracking)', async () => {
+    await revokeMagicLinkToken(null)
+    expect(mockDbDelete).not.toHaveBeenCalled()
   })
 })

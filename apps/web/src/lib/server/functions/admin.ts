@@ -56,9 +56,11 @@ import {
 import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
-
-/** Invitation expiry duration — 7 days in milliseconds */
-const INVITATION_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
+import {
+  INVITATION_EXPIRY_MS,
+  generateInvitationMagicLink,
+  rotateInviteMagicLinkToken,
+} from './invitation-magic-link'
 
 /**
  * Server functions for admin data fetching.
@@ -904,30 +906,6 @@ export type SendInvitationInput = z.infer<typeof sendInvitationSchema>
 export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
 
 /**
- * Generate a magic link for invitation authentication.
- * Uses Better Auth's API to generate the token and stores it for later URL construction.
- *
- * @param email - The invitee's email address
- * @param callbackPath - Relative path to redirect to after authentication (e.g., /complete-signup/{id})
- * @param portalUrl - The base portal URL (workspace domain)
- * @returns The magic link URL with the correct workspace domain
- */
-async function generateInvitationMagicLink(
-  email: string,
-  callbackPath: string,
-  portalUrl: string
-): Promise<string> {
-  console.log(
-    `[fn:admin] generateInvitationMagicLink: email=${email}, callbackPath=${callbackPath}, portalUrl=${portalUrl}`
-  )
-  const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
-  // Invitations reuse the same path for success + error so an
-  // expired/consumed link sends the recipient back to the same
-  // invitation page (with its own expired-state copy).
-  return mintMagicLinkUrl({ email, callbackPath, portalUrl })
-}
-
-/**
  * Send a team invitation
  */
 export const sendInvitationFn = createServerFn({ method: 'POST' })
@@ -977,6 +955,17 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
       const now = new Date()
 
+      // Mint the magic link before the insert so the row can record its token
+      // (lets cancel/resend revoke the link). invitationId is fixed above, so
+      // the callback path is already known.
+      const portalUrl = getBaseUrl()
+      const callbackURL = `/complete-signup/${invitationId}`
+      const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
+        email,
+        callbackURL,
+        portalUrl
+      )
+
       await db.insert(invitation).values({
         id: invitationId,
         email,
@@ -987,12 +976,8 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         lastSentAt: now,
         inviterId: auth.user.id,
         createdAt: now,
+        magicLinkToken,
       })
-
-      // Generate magic link for one-click authentication
-      const portalUrl = getBaseUrl()
-      const callbackURL = `/complete-signup/${invitationId}`
-      const inviteLink = await generateInvitationMagicLink(email, callbackURL, portalUrl)
 
       const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
       const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
@@ -1065,6 +1050,10 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
+      // Invalidate the emailed magic link so a cancelled invite can't sign anyone in.
+      const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkToken(invitationRecord.magicLinkToken)
+
       console.log(`[fn:admin] cancelInvitationFn: canceled`)
       return { invitationId }
     } catch (error) {
@@ -1123,13 +1112,20 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
-      // Generate new magic link for one-click authentication
+      // Generate new magic link for one-click authentication. Revoke the
+      // invite's previous token and record the new one so a later cancel
+      // invalidates the link that's actually live.
       const portalUrl = getBaseUrl()
       const callbackURL = `/complete-signup/${invitationId}`
-      const inviteLink = await generateInvitationMagicLink(
+      const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
         invitationRecord.email,
         callbackURL,
         portalUrl
+      )
+      await rotateInviteMagicLinkToken(
+        invitationId,
+        invitationRecord.magicLinkToken,
+        magicLinkToken
       )
 
       const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')

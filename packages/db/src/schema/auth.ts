@@ -464,6 +464,13 @@ export const invitation = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+    /**
+     * The `verification.identifier` (magic-link token) currently minted for
+     * this invite. Lets cancel / re-send delete the backing verification row
+     * so a cancelled or superseded link can't mint a session. Null for invites
+     * sent before this was tracked (their tokens just self-expire at expiresAt).
+     */
+    magicLinkToken: text('magic_link_token'),
     inviterId: typeIdColumn('user')('inviter_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

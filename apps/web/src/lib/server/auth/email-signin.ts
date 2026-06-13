@@ -30,7 +30,7 @@ export async function requestEmailSignin(opts: {
   // back to /auth/login (the public signup/login screen).
   const errorCallbackPath = opts.callbackURL.startsWith('/admin') ? '/admin/login' : '/auth/login'
 
-  const [signInUrl, , settings] = await Promise.all([
+  const [{ url: signInUrl }, , settings] = await Promise.all([
     mintMagicLinkUrl({
       email: opts.email,
       callbackPath: opts.callbackURL,

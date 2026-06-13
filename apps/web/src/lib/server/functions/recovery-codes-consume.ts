@@ -156,7 +156,7 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
       .set({ usedAt: new Date() })
       .where(eq(ssoRecoveryCode.id, matchedId as SsoRecoveryCodeId))
 
-    const redirectUrl = await mintMagicLinkUrl({
+    const { url: redirectUrl } = await mintMagicLinkUrl({
       email: data.email,
       callbackPath: '/admin',
       errorCallbackPath: '/admin/login',
