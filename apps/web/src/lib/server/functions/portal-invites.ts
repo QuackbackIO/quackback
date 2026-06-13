@@ -32,6 +32,10 @@ const PORTAL_INVITE_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000
  *  row's own `expiresAt` still governs long-term access. */
 const PORTAL_INVITE_MAGIC_LINK_TTL_SECONDS = PORTAL_INVITE_EXPIRY_MS / 1000
 
+/** The magic-link callback path a portal invitee lands on to accept. Shared by
+ *  the mint and copy-link paths so the two always build the same URL. */
+const portalInviteCallbackPath = (inviteId: string) => `/portal-invite/${inviteId}`
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -66,7 +70,7 @@ async function mintPortalInviteMagicLink(
   const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
   return mintMagicLinkUrl({
     email,
-    callbackPath: `/portal-invite/${inviteId}`,
+    callbackPath: portalInviteCallbackPath(inviteId),
     portalUrl,
     expiresInSeconds,
   })
@@ -510,26 +514,34 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
     if (inv.expiresAt && inv.expiresAt < new Date()) throw new Error('Invite has expired')
 
     const portalUrl = getBaseUrl()
-    // Copy-link mints a fresh token but does NOT extend the invite row, so cap
-    // the token at the invite's remaining lifetime — otherwise a link copied
-    // late could outlive (and sign in past) the invite's own expiry.
-    const remainingSeconds = Math.floor((inv.expiresAt.getTime() - Date.now()) / 1000)
-    const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
-      inv.email,
-      inv.id,
-      portalUrl,
-      remainingSeconds
-    )
-    // Record the new token before returning it (so it's tracked and a concurrent
-    // cancel/rotation is caught), then revoke the prior one it supersedes. The
-    // link is returned synchronously, so there's no delivery step that can fail
-    // after the old token is gone.
-    const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-    if (!(await recordInviteMagicLinkToken(inv.id, inv.magicLinkToken, magicLinkToken))) {
-      await revokeMagicLinkToken(magicLinkToken)
-      throw new Error('Invite is no longer pending — refresh and try again')
+    const { isMagicLinkTokenLive, buildVerifyMagicLinkUrl, revokeMagicLinkToken } =
+      await import('@/lib/server/auth/magic-link-mint')
+
+    let inviteLink: string
+    // Copying returns the invite's CURRENT live link rather than rotating it, so
+    // a link the invitee may already hold keeps working. Only mint a fresh token
+    // when there isn't a live one (never sent, or it was already used/expired).
+    const currentToken = inv.magicLinkToken
+    if (currentToken && (await isMagicLinkTokenLive(currentToken))) {
+      inviteLink = buildVerifyMagicLinkUrl({
+        origin: portalUrl,
+        token: currentToken,
+        callbackPath: portalInviteCallbackPath(inv.id),
+      })
+    } else {
+      // Cap the fresh token at the invite's remaining lifetime — copy-link does
+      // not extend the row, so otherwise a late copy could outlive its expiry.
+      const remainingSeconds = Math.floor((inv.expiresAt.getTime() - Date.now()) / 1000)
+      const minted = await mintPortalInviteMagicLink(inv.email, inv.id, portalUrl, remainingSeconds)
+      // Record the new token (catches a concurrent cancel/rotation). The prior
+      // token, if any, is already dead — that's why we're minting — so there is
+      // nothing live to revoke.
+      if (!(await recordInviteMagicLinkToken(inv.id, inv.magicLinkToken, minted.token))) {
+        await revokeMagicLinkToken(minted.token)
+        throw new Error('Invite is no longer pending — refresh and try again')
+      }
+      inviteLink = minted.url
     }
-    await revokeMagicLinkToken(inv.magicLinkToken)
 
     await recordAuditEvent({
       event: 'portal.invite.link_minted',
@@ -540,8 +552,6 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
       metadata: { email: inv.email },
     })
 
-    // The token is capped to expire with the invite row, so the row's own
-    // expiry is the accurate cutoff to surface.
     return { inviteLink, expiresAt: inv.expiresAt }
   })
 

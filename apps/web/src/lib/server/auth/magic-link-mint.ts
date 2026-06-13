@@ -84,3 +84,19 @@ export async function revokeMagicLinkToken(token: string | null | undefined): Pr
   // mintMagicLinkUrl above, which stores the raw token as the identifier.
   await db.delete(verification).where(eq(verification.identifier, token))
 }
+
+/**
+ * Whether a previously-minted magic-link token can still be verified — i.e. its
+ * verification row still exists (single-use, so it's deleted once consumed) and
+ * has not expired. Lets the copy-link path reuse the invite's current link
+ * instead of rotating it. Returns false for null/undefined tokens.
+ */
+export async function isMagicLinkTokenLive(token: string | null | undefined): Promise<boolean> {
+  if (!token) return false
+  const rows = await db
+    .select({ expiresAt: verification.expiresAt })
+    .from(verification)
+    .where(eq(verification.identifier, token))
+    .limit(1)
+  return rows.length > 0 && rows[0].expiresAt > new Date()
+}

@@ -28,15 +28,24 @@ vi.mock('../index', async () => {
 const mockDeleteWhere = vi.fn().mockResolvedValue(undefined)
 const mockDbDelete = vi.fn(() => ({ where: mockDeleteWhere }))
 const mockEq = vi.fn((col: unknown, val: unknown) => ({ col, val }))
-const mockVerificationTable = { identifier: 'verification.identifier' }
+const mockVerificationTable = {
+  identifier: 'verification.identifier',
+  expiresAt: 'verification.expiresAt',
+}
+// select().from().where().limit() chain for isMagicLinkTokenLive
+const mockSelectLimit = vi.fn()
+const mockDbSelect = vi.fn(() => ({
+  from: () => ({ where: () => ({ limit: mockSelectLimit }) }),
+}))
 
 vi.mock('@/lib/server/db', () => ({
-  db: { delete: mockDbDelete },
+  db: { delete: mockDbDelete, select: mockDbSelect },
   verification: mockVerificationTable,
   eq: mockEq,
 }))
 
-const { mintMagicLinkUrl, revokeMagicLinkToken } = await import('../magic-link-mint')
+const { mintMagicLinkUrl, revokeMagicLinkToken, isMagicLinkTokenLive } =
+  await import('../magic-link-mint')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -113,5 +122,27 @@ describe('revokeMagicLinkToken', () => {
   it('is a no-op when the token is null (invite minted before tracking)', async () => {
     await revokeMagicLinkToken(null)
     expect(mockDbDelete).not.toHaveBeenCalled()
+  })
+})
+
+describe('isMagicLinkTokenLive', () => {
+  it('is true when the verification row exists and has not expired', async () => {
+    mockSelectLimit.mockResolvedValue([{ expiresAt: new Date(Date.now() + 60_000) }])
+    expect(await isMagicLinkTokenLive('tok_abc')).toBe(true)
+  })
+
+  it('is false when the row is missing (single-use token already consumed)', async () => {
+    mockSelectLimit.mockResolvedValue([])
+    expect(await isMagicLinkTokenLive('tok_abc')).toBe(false)
+  })
+
+  it('is false when the row exists but has expired', async () => {
+    mockSelectLimit.mockResolvedValue([{ expiresAt: new Date(Date.now() - 60_000) }])
+    expect(await isMagicLinkTokenLive('tok_abc')).toBe(false)
+  })
+
+  it('is false (no query) for a null token', async () => {
+    expect(await isMagicLinkTokenLive(null)).toBe(false)
+    expect(mockDbSelect).not.toHaveBeenCalled()
   })
 })
