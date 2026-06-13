@@ -55,7 +55,8 @@ const hoisted = vi.hoisted(() => ({
   mockSendPortalInviteEmail: vi.fn(),
   mockMintMagicLinkUrl: vi.fn(),
   mockRevokeMagicLinkToken: vi.fn(),
-  mockIsMagicLinkTokenLive: vi.fn(),
+  mockRevokeMagicLinkTokens: vi.fn(),
+  mockFindLiveMagicLinkToken: vi.fn(),
   mockBuildVerifyMagicLinkUrl: vi.fn(),
   mockGetEmailSafeUrl: vi.fn(),
   mockGetBaseUrl: vi.fn(),
@@ -128,7 +129,8 @@ vi.mock('@quackback/ids', () => ({
 vi.mock('@/lib/server/auth/magic-link-mint', () => ({
   mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl,
   revokeMagicLinkToken: hoisted.mockRevokeMagicLinkToken,
-  isMagicLinkTokenLive: hoisted.mockIsMagicLinkTokenLive,
+  revokeMagicLinkTokens: hoisted.mockRevokeMagicLinkTokens,
+  findLiveMagicLinkToken: hoisted.mockFindLiveMagicLinkToken,
   buildVerifyMagicLinkUrl: hoisted.mockBuildVerifyMagicLinkUrl,
 }))
 
@@ -181,8 +183,9 @@ beforeEach(async () => {
     token: 'tok_new',
   })
   hoisted.mockRevokeMagicLinkToken.mockResolvedValue(undefined)
-  // Default: no live token, so copy-link mints a fresh one (matches most tests).
-  hoisted.mockIsMagicLinkTokenLive.mockResolvedValue(false)
+  hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
+  // Default: no live token in the set, so copy-link mints a fresh one.
+  hoisted.mockFindLiveMagicLinkToken.mockResolvedValue(null)
   hoisted.mockBuildVerifyMagicLinkUrl.mockReturnValue(
     'https://acme.example.com/verify-magic-link?token=existing'
   )
@@ -301,11 +304,11 @@ describe('sendPortalInviteFn — success (single)', () => {
     expect(opts.expiresInSeconds).toBe(30 * 24 * 60 * 60) // 30-day invite lifetime, not the 10-min sign-in default
   })
 
-  it('persists the magic-link token on the invite row so cancel can revoke it', async () => {
+  it('seeds the invite token set with the minted token so cancel can revoke it', async () => {
     await sendHandler({ data: { emails: ['invitee@example.com'] } })
 
     const insertCall = hoisted.mockDbInsert.mock.calls[0][0] as Record<string, unknown>
-    expect(insertCall.magicLinkToken).toBe('tok_new')
+    expect(insertCall.magicLinkTokens).toEqual(['tok_new'])
   })
 
   it('records a portal.invite.sent audit event', async () => {
@@ -423,9 +426,9 @@ describe('getPortalInviteLinkFn', () => {
       status: 'pending',
       email: 'user@example.com',
       expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-      magicLinkToken: 'tok_live',
+      magicLinkTokens: ['tok_old', 'tok_live'],
     })
-    hoisted.mockIsMagicLinkTokenLive.mockResolvedValue(true)
+    hoisted.mockFindLiveMagicLinkToken.mockResolvedValue('tok_live')
     hoisted.mockBuildVerifyMagicLinkUrl.mockReturnValue(
       'https://acme.example.com/verify-magic-link?token=tok_live'
     )
@@ -557,22 +560,22 @@ describe('cancelPortalInviteFn — success', () => {
     expect(auditCall).toBeDefined()
   })
 
-  it('revokes the token live at cancel time (from the UPDATE), not a stale earlier read', async () => {
+  it('revokes the whole token set returned by the cancel UPDATE', async () => {
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_1',
       kind: 'portal',
       status: 'pending',
       email: 'user@example.com',
-      magicLinkToken: 'tok_stale',
+      magicLinkTokens: ['tok_a', 'tok_b'],
     })
-    // The cancel UPDATE returns the token actually on the row at that instant —
-    // a concurrent rotation may have changed it since the read above.
-    hoisted.mockDbReturning.mockResolvedValue([{ id: 'invite_1', magicLinkToken: 'tok_live' }])
+    // The cancel UPDATE returns the full token set atomically at the flip.
+    hoisted.mockDbReturning.mockResolvedValue([
+      { id: 'invite_1', magicLinkTokens: ['tok_a', 'tok_b', 'tok_c'] },
+    ])
 
     await cancelHandler({ data: { inviteId: 'invite_1' } })
 
-    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_live')
-    expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalledWith('tok_stale')
+    expect(hoisted.mockRevokeMagicLinkTokens).toHaveBeenCalledWith(['tok_a', 'tok_b', 'tok_c'])
   })
 })
 
@@ -622,7 +625,7 @@ describe('resendPortalInviteFn — success', () => {
     expect((result as { inviteId: string }).inviteId).toBe('invite_1')
   })
 
-  it('revokes the prior token and records the new one so cancel revokes the live link', async () => {
+  it('appends the new token without revoking prior links (resend is additive)', async () => {
     const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_1',
@@ -630,19 +633,22 @@ describe('resendPortalInviteFn — success', () => {
       status: 'pending',
       email: 'user@example.com',
       expiresAt: futureDate,
-      magicLinkToken: 'tok_old',
+      magicLinkTokens: ['tok_old'],
     })
 
     await resendHandler({ data: { inviteId: 'invite_1' } })
 
-    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_old')
-    const tokenWrite = hoisted.mockDbSet.mock.calls.find(
-      (c) => (c[0] as Record<string, unknown>).magicLinkToken !== undefined
+    // The token set is updated (array_append) and the prior token is NOT revoked
+    // — both the old and new links stay valid until accept/cancel/expiry.
+    const appended = hoisted.mockDbSet.mock.calls.some(
+      (c) => 'magicLinkTokens' in (c[0] as Record<string, unknown>)
     )
-    expect(tokenWrite?.[0]).toMatchObject({ magicLinkToken: 'tok_new' })
+    expect(appended).toBe(true)
+    expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalled()
+    expect(hoisted.mockSendPortalInviteEmail).toHaveBeenCalled()
   })
 
-  it('preserves the existing link when the email send fails (drops the orphan token)', async () => {
+  it('drops only the new token when the email send fails (prior links untouched)', async () => {
     const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_1',
@@ -650,21 +656,16 @@ describe('resendPortalInviteFn — success', () => {
       status: 'pending',
       email: 'user@example.com',
       expiresAt: futureDate,
-      magicLinkToken: 'tok_old',
+      magicLinkTokens: ['tok_old'],
     })
     hoisted.mockSendPortalInviteEmail.mockRejectedValue(new Error('smtp down'))
 
     await expect(resendHandler({ data: { inviteId: 'invite_1' } })).rejects.toThrow('smtp down')
 
-    // The undelivered new token is revoked (orphan cleanup) and the invitee's
-    // existing token is NOT revoked, so their current link still works.
+    // removeInviteMagicLinkToken revokes the undelivered new token; the prior
+    // token is never revoked, so the invitee's existing link still works.
     expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_new')
     expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalledWith('tok_old')
-    // The pre-send record is rolled back: the final token write restores the prior.
-    const tokenWrites = hoisted.mockDbSet.mock.calls
-      .map((c) => (c[0] as Record<string, unknown>).magicLinkToken)
-      .filter((v) => v !== undefined)
-    expect(tokenWrites.at(-1)).toBe('tok_old')
   })
 
   it('emits portal.invite.resent (not portal.invite.sent) on resend', async () => {

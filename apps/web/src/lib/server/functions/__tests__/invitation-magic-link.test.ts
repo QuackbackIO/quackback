@@ -20,14 +20,14 @@ vi.mock('@/lib/server/db', () => ({
   invitation: {
     id: 'invitation.id',
     status: 'invitation.status',
-    magicLinkToken: 'invitation.magicLinkToken',
+    magicLinkTokens: 'invitation.magicLinkTokens',
   },
   eq: vi.fn((col: unknown, val: unknown) => ({ op: 'eq', col, val })),
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
-  isNull: vi.fn((col: unknown) => ({ op: 'isNull', col })),
+  sql: vi.fn((parts: TemplateStringsArray) => ({ op: 'sql', raw: parts.raw[0] })),
 }))
 
-const { generateInvitationMagicLink, recordInviteMagicLinkToken } =
+const { generateInvitationMagicLink, appendInviteMagicLinkToken, removeInviteMagicLinkToken } =
   await import('../invitation-magic-link')
 
 beforeEach(() => {
@@ -37,7 +37,7 @@ beforeEach(() => {
     token: 'tok_team',
   })
   mockRevokeMagicLinkToken.mockResolvedValue(undefined)
-  // Default: the compare-and-swap matched one row.
+  // Default: the status-pinned append matched one row.
   mockReturning.mockResolvedValue([{ id: 'invite_1' }])
 })
 
@@ -71,24 +71,32 @@ describe('generateInvitationMagicLink', () => {
   })
 })
 
-describe('recordInviteMagicLinkToken', () => {
-  it('compare-and-swaps the token and returns true when the invite still matches', async () => {
-    mockReturning.mockResolvedValue([{ id: 'invite_1' }]) // CAS matched
+describe('appendInviteMagicLinkToken', () => {
+  it('appends and returns true while the invite is pending', async () => {
+    mockReturning.mockResolvedValue([{ id: 'invite_1' }]) // status-pinned UPDATE matched
 
-    const ok = await recordInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
+    const ok = await appendInviteMagicLinkToken('invite_1' as InviteId, 'tok_new')
 
     expect(ok).toBe(true)
-    expect(mockSet).toHaveBeenCalledWith({ magicLinkToken: 'tok_new' })
-    // It is a pure swap — revocation is the caller's responsibility.
+    expect(mockSet).toHaveBeenCalledTimes(1) // SET magic_link_tokens = array_append(...)
+    // Appending is a pure add — revocation is the caller's responsibility.
     expect(mockRevokeMagicLinkToken).not.toHaveBeenCalled()
   })
 
-  it('returns false without writing when the row changed (cancel / concurrent rotation)', async () => {
-    mockReturning.mockResolvedValue([]) // CAS matched nothing
+  it('returns false without throwing when the invite is no longer pending', async () => {
+    mockReturning.mockResolvedValue([]) // UPDATE matched nothing (canceled/accepted/expired)
 
-    const ok = await recordInviteMagicLinkToken('invite_1' as InviteId, 'tok_old', 'tok_new')
+    const ok = await appendInviteMagicLinkToken('invite_1' as InviteId, 'tok_new')
 
     expect(ok).toBe(false)
-    expect(mockRevokeMagicLinkToken).not.toHaveBeenCalled()
+  })
+})
+
+describe('removeInviteMagicLinkToken', () => {
+  it('drops the token from the set and revokes it', async () => {
+    await removeInviteMagicLinkToken('invite_1' as InviteId, 'tok_x')
+
+    expect(mockSet).toHaveBeenCalledTimes(1) // SET magic_link_tokens = array_remove(...)
+    expect(mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_x')
   })
 })

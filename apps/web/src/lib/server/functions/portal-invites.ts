@@ -16,7 +16,7 @@ import type { InviteId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { db, invitation, principal, user, eq, and, gt, or, sql } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
-import { recordInviteMagicLinkToken } from './invitation-magic-link'
+import { appendInviteMagicLinkToken, removeInviteMagicLinkToken } from './invitation-magic-link'
 import { actorFromAuth, recordAuditEvent } from '@/lib/server/audit/log'
 import { getBaseUrl } from '@/lib/server/config'
 import { sendPortalInviteEmail } from '@quackback/email'
@@ -135,8 +135,9 @@ async function sendOnePortalInvite({
   const inviteId = generateId('invite')
   const expiresAt = new Date(now.getTime() + PORTAL_INVITE_EXPIRY_MS)
 
-  // Mint before the insert so the row records its token (lets cancel/resend
-  // revoke the link). inviteId is fixed above, so the callback path is known.
+  // Mint before the insert so the row records its token in its token set
+  // (cancel revokes every token in the set). inviteId is fixed above, so the
+  // callback path is known.
   const portalUrl = getBaseUrl()
   const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
     email,
@@ -155,7 +156,7 @@ async function sendOnePortalInvite({
     createdAt: now,
     lastSentAt: now,
     inviterId: auth.user.id as UserId,
-    magicLinkToken,
+    magicLinkTokens: [magicLinkToken],
   })
 
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
@@ -287,19 +288,19 @@ export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
           eq(invitation.status, 'pending')
         )
       )
-      .returning({ id: invitation.id, magicLinkToken: invitation.magicLinkToken })
+      .returning({ id: invitation.id, magicLinkTokens: invitation.magicLinkTokens })
 
     if (updated.length === 0) {
       console.log(`[fn:portal-invites] cancelPortalInviteFn: no-op (row concurrently mutated)`)
       return { inviteId, status: 'no_op_already_accepted' as const }
     }
 
-    // Invalidate the emailed magic link so a cancelled invite can't sign anyone
-    // in. Revoke the token the UPDATE returned (live at the instant of
-    // cancellation) rather than the earlier read, so a rotation racing this
-    // cancel can't leave a live token behind.
-    const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-    await revokeMagicLinkToken(updated[0].magicLinkToken)
+    // Invalidate every link this invite ever minted so a cancelled invite can't
+    // sign anyone in. Revoking the full set (returned atomically by the status
+    // flip) closes the resend/copy/worker-restart windows where a single
+    // rotating pointer could leave a token live but untracked.
+    const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+    await revokeMagicLinkTokens(updated[0].magicLinkTokens)
 
     await recordAuditEvent({
       event: 'portal.invite.revoked',
@@ -396,19 +397,15 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
       portalUrl
     )
 
+    // Add the new token to the invite's set (resend is additive — prior links
+    // keep working until accept/cancel/expiry). Recorded the moment it's minted,
+    // so a send failure or worker restart can't leave it live-but-untracked.
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-    const priorToken = inv.magicLinkToken
-
-    // Record the new token BEFORE sending so the emailed link is always tracked
-    // and a concurrent cancel/rotation is caught before delivery.
-    if (!(await recordInviteMagicLinkToken(inviteId, priorToken, magicLinkToken))) {
-      await revokeMagicLinkToken(magicLinkToken) // not emailed yet; safe to drop
+    if (!(await appendInviteMagicLinkToken(inviteId, magicLinkToken))) {
+      await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
       throw new Error('Invitation is no longer pending — refresh and try again')
     }
 
-    // The prior token is revoked only AFTER the email is sent (or surfaced for
-    // manual sharing when email isn't configured), so a send failure can't
-    // strand the invitee by killing the still-valid link they already have.
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
@@ -420,13 +417,10 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
         logoUrl,
       })
     } catch (sendError) {
-      // Send failed: undo the record (restore the prior token) and drop the
-      // undelivered new one, leaving the invitee's existing link working.
-      await recordInviteMagicLinkToken(inviteId, magicLinkToken, priorToken)
-      await revokeMagicLinkToken(magicLinkToken)
+      // The new link never went out — drop it from the set and revoke it.
+      await removeInviteMagicLinkToken(inviteId, magicLinkToken)
       throw sendError
     }
-    await revokeMagicLinkToken(priorToken)
 
     await recordAuditEvent({
       event: 'portal.invite.resent',
@@ -514,18 +508,18 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
     if (inv.expiresAt && inv.expiresAt < new Date()) throw new Error('Invite has expired')
 
     const portalUrl = getBaseUrl()
-    const { isMagicLinkTokenLive, buildVerifyMagicLinkUrl, revokeMagicLinkToken } =
+    const { findLiveMagicLinkToken, buildVerifyMagicLinkUrl, revokeMagicLinkToken } =
       await import('@/lib/server/auth/magic-link-mint')
 
     let inviteLink: string
-    // Copying returns the invite's CURRENT live link rather than rotating it, so
-    // a link the invitee may already hold keeps working. Only mint a fresh token
-    // when there isn't a live one (never sent, or it was already used/expired).
-    const currentToken = inv.magicLinkToken
-    if (currentToken && (await isMagicLinkTokenLive(currentToken))) {
+    // Copying returns one of the invite's CURRENT live links rather than minting
+    // a new one, so a link the invitee may already hold keeps working. Only mint
+    // when none of the set's tokens are still live (never sent, or all used/expired).
+    const liveToken = await findLiveMagicLinkToken(inv.magicLinkTokens)
+    if (liveToken) {
       inviteLink = buildVerifyMagicLinkUrl({
         origin: portalUrl,
-        token: currentToken,
+        token: liveToken,
         callbackPath: portalInviteCallbackPath(inv.id),
       })
     } else {
@@ -533,11 +527,8 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
       // not extend the row, so otherwise a late copy could outlive its expiry.
       const remainingSeconds = Math.floor((inv.expiresAt.getTime() - Date.now()) / 1000)
       const minted = await mintPortalInviteMagicLink(inv.email, inv.id, portalUrl, remainingSeconds)
-      // Record the new token (catches a concurrent cancel/rotation). The prior
-      // token, if any, is already dead — that's why we're minting — so there is
-      // nothing live to revoke.
-      if (!(await recordInviteMagicLinkToken(inv.id, inv.magicLinkToken, minted.token))) {
-        await revokeMagicLinkToken(minted.token)
+      if (!(await appendInviteMagicLinkToken(inv.id, minted.token))) {
+        await revokeMagicLinkToken(minted.token) // invite no longer pending; drop it
         throw new Error('Invite is no longer pending — refresh and try again')
       }
       inviteLink = minted.url

@@ -59,7 +59,8 @@ import { getBaseUrl } from '@/lib/server/config'
 import {
   INVITATION_EXPIRY_MS,
   generateInvitationMagicLink,
-  recordInviteMagicLinkToken,
+  appendInviteMagicLinkToken,
+  removeInviteMagicLinkToken,
 } from './invitation-magic-link'
 
 /**
@@ -955,9 +956,9 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
       const now = new Date()
 
-      // Mint the magic link before the insert so the row can record its token
-      // (lets cancel/resend revoke the link). invitationId is fixed above, so
-      // the callback path is already known.
+      // Mint the magic link before the insert so the row records its token in
+      // its token set (cancel revokes every token in the set). invitationId is
+      // fixed above, so the callback path is already known.
       const portalUrl = getBaseUrl()
       const callbackURL = `/complete-signup/${invitationId}`
       const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
@@ -976,7 +977,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         lastSentAt: now,
         inviterId: auth.user.id,
         createdAt: now,
-        magicLinkToken,
+        magicLinkTokens: [magicLinkToken],
       })
 
       const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
@@ -1044,18 +1045,18 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
             eq(invitation.status, 'pending')
           )
         )
-        .returning({ id: invitation.id, magicLinkToken: invitation.magicLinkToken })
+        .returning({ id: invitation.id, magicLinkTokens: invitation.magicLinkTokens })
 
       if (cancelled.length === 0) {
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
-      // Invalidate the emailed magic link so a cancelled invite can't sign
-      // anyone in. Revoke the token the UPDATE returned (the one live at the
-      // instant of cancellation) rather than the earlier read, so a rotation
-      // racing this cancel can't leave a live token behind.
-      const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-      await revokeMagicLinkToken(cancelled[0].magicLinkToken)
+      // Invalidate every link this invite ever minted, so a cancelled invite
+      // can't sign anyone in. Revoking the full set (returned atomically by the
+      // status flip) closes the resend/copy/worker-restart windows where a
+      // single rotating pointer could leave a token live but untracked.
+      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkTokens(cancelled[0].magicLinkTokens)
 
       console.log(`[fn:admin] cancelInvitationFn: canceled`)
       return { invitationId }
@@ -1115,10 +1116,11 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
-      // Generate a new magic link for one-click authentication. The previous
-      // token is revoked only AFTER the email is sent (or surfaced for manual
-      // sharing when email isn't configured), so a send failure can't strand
-      // the invitee by killing the still-valid link they already have.
+      // Generate a new magic link and add it to the invite's token set. Prior
+      // tokens are left intact (resend is additive, not destructive) — both the
+      // old and new links work until the invite is accepted, cancelled, or
+      // expires. The token is recorded the moment it's minted, so even if the
+      // send below fails or the worker restarts, cancellation still revokes it.
       const portalUrl = getBaseUrl()
       const callbackURL = `/complete-signup/${invitationId}`
       const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
@@ -1128,13 +1130,8 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       )
 
       const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-      const priorToken = invitationRecord.magicLinkToken
-
-      // Record the new token BEFORE sending, so the emailed link is always the
-      // one tracked on the invite and a concurrent cancel/rotation is caught
-      // before we email it.
-      if (!(await recordInviteMagicLinkToken(invitationId, priorToken, magicLinkToken))) {
-        await revokeMagicLinkToken(magicLinkToken) // not emailed yet; safe to drop
+      if (!(await appendInviteMagicLinkToken(invitationId, magicLinkToken))) {
+        await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
@@ -1151,16 +1148,10 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
           logoUrl,
         })
       } catch (sendError) {
-        // Send failed: undo the record (restore the prior token as current) and
-        // drop the undelivered new one, so the invitee's existing link still works.
-        await recordInviteMagicLinkToken(invitationId, magicLinkToken, priorToken)
-        await revokeMagicLinkToken(magicLinkToken)
+        // The new link never went out — drop it from the set and revoke it.
+        await removeInviteMagicLinkToken(invitationId, magicLinkToken)
         throw sendError
       }
-
-      // Delivered (or returned for manual sharing): the new link supersedes the
-      // old one, so revoke the prior token now.
-      await revokeMagicLinkToken(priorToken)
 
       console.log(
         `[fn:admin] resendInvitationFn: ${result.sent ? 'resent' : 'regenerated (email not configured)'}`

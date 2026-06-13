@@ -42,9 +42,12 @@ vi.mock('@/lib/server/db', () => ({
   db: { delete: mockDbDelete, select: mockDbSelect },
   verification: mockVerificationTable,
   eq: mockEq,
+  and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
+  gt: vi.fn((col: unknown, val: unknown) => ({ op: 'gt', col, val })),
+  inArray: vi.fn((col: unknown, vals: unknown) => ({ op: 'inArray', col, vals })),
 }))
 
-const { mintMagicLinkUrl, revokeMagicLinkToken, isMagicLinkTokenLive } =
+const { mintMagicLinkUrl, revokeMagicLinkToken, revokeMagicLinkTokens, findLiveMagicLinkToken } =
   await import('../magic-link-mint')
 
 beforeEach(() => {
@@ -125,24 +128,33 @@ describe('revokeMagicLinkToken', () => {
   })
 })
 
-describe('isMagicLinkTokenLive', () => {
-  it('is true when the verification row exists and has not expired', async () => {
-    mockSelectLimit.mockResolvedValue([{ expiresAt: new Date(Date.now() + 60_000) }])
-    expect(await isMagicLinkTokenLive('tok_abc')).toBe(true)
+describe('revokeMagicLinkTokens', () => {
+  it('deletes the verification rows for the whole set', async () => {
+    await revokeMagicLinkTokens(['tok_a', 'tok_b'])
+    expect(mockDbDelete).toHaveBeenCalledTimes(1)
+    expect(mockDbDelete).toHaveBeenCalledWith(mockVerificationTable)
+    expect(mockDeleteWhere).toHaveBeenCalled()
   })
 
-  it('is false when the row is missing (single-use token already consumed)', async () => {
+  it('is a no-op for an empty set', async () => {
+    await revokeMagicLinkTokens([])
+    expect(mockDbDelete).not.toHaveBeenCalled()
+  })
+})
+
+describe('findLiveMagicLinkToken', () => {
+  it('returns a token whose verification row exists and has not expired', async () => {
+    mockSelectLimit.mockResolvedValue([{ identifier: 'tok_b' }])
+    expect(await findLiveMagicLinkToken(['tok_a', 'tok_b'])).toBe('tok_b')
+  })
+
+  it('returns null when no token in the set is still live', async () => {
     mockSelectLimit.mockResolvedValue([])
-    expect(await isMagicLinkTokenLive('tok_abc')).toBe(false)
+    expect(await findLiveMagicLinkToken(['tok_a', 'tok_b'])).toBeNull()
   })
 
-  it('is false when the row exists but has expired', async () => {
-    mockSelectLimit.mockResolvedValue([{ expiresAt: new Date(Date.now() - 60_000) }])
-    expect(await isMagicLinkTokenLive('tok_abc')).toBe(false)
-  })
-
-  it('is false (no query) for a null token', async () => {
-    expect(await isMagicLinkTokenLive(null)).toBe(false)
+  it('returns null (no query) for an empty set', async () => {
+    expect(await findLiveMagicLinkToken([])).toBeNull()
     expect(mockDbSelect).not.toHaveBeenCalled()
   })
 })

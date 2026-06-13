@@ -40,36 +40,39 @@ export async function generateInvitationMagicLink(
 }
 
 /**
- * Compare-and-swap the invite's recorded magic-link token from `expected` to
- * `next`, only while the invite is still `pending`. Returns true if the row
- * matched and was updated, false otherwise (the invite was canceled, or another
- * request changed the token first).
+ * Append a freshly-minted token to the invite's token set, but only while the
+ * invite is still `pending`. Returns true if appended, false if the invite is
+ * no longer pending (canceled / accepted / expired) — in which case the caller
+ * should revoke the token it just minted rather than leave it live.
  *
- * Callers record the new token with this BEFORE delivering its link (emailing,
- * or returning it to copy), so the delivered token is always the one tracked on
- * the invite and a concurrent cancel/rotation is detected before delivery. The
- * old token is only revoked AFTER successful delivery, so a delivery failure
- * never strands the recipient. Passing `next: null` restores the unset state
- * (used to roll back a record when delivery then fails).
+ * Appending (rather than replacing) means a token is recorded the instant it's
+ * minted, so it can never be live-but-untracked: even if the email send then
+ * fails or the worker restarts, cancellation still revokes it via the set.
  */
-export async function recordInviteMagicLinkToken(
+export async function appendInviteMagicLinkToken(
   inviteId: InviteId,
-  expected: string | null | undefined,
-  next: string | null
+  token: string
 ): Promise<boolean> {
-  const { db, invitation, eq, and, isNull } = await import('@/lib/server/db')
-  const swapped = await db
+  const { db, invitation, eq, and, sql } = await import('@/lib/server/db')
+  const updated = await db
     .update(invitation)
-    .set({ magicLinkToken: next })
-    .where(
-      and(
-        eq(invitation.id, inviteId),
-        eq(invitation.status, 'pending'),
-        expected == null
-          ? isNull(invitation.magicLinkToken)
-          : eq(invitation.magicLinkToken, expected)
-      )
-    )
+    .set({ magicLinkTokens: sql`array_append(${invitation.magicLinkTokens}, ${token})` })
+    .where(and(eq(invitation.id, inviteId), eq(invitation.status, 'pending')))
     .returning({ id: invitation.id })
-  return swapped.length > 0
+  return updated.length > 0
+}
+
+/**
+ * Drop a token from the invite's set and revoke its verification row. Used to
+ * discard a token whose link was never delivered (e.g. the email send threw),
+ * keeping the set to links that actually went out.
+ */
+export async function removeInviteMagicLinkToken(inviteId: InviteId, token: string): Promise<void> {
+  const { db, invitation, eq, sql } = await import('@/lib/server/db')
+  const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+  await db
+    .update(invitation)
+    .set({ magicLinkTokens: sql`array_remove(${invitation.magicLinkTokens}, ${token})` })
+    .where(eq(invitation.id, inviteId))
+  await revokeMagicLinkToken(token)
 }

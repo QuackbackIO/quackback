@@ -1,5 +1,5 @@
 import { generateRandomString } from 'better-auth/crypto'
-import { db, verification, eq } from '@/lib/server/db'
+import { db, verification, eq, and, gt, inArray } from '@/lib/server/db'
 import { getAuth } from './index'
 
 interface MintOptions {
@@ -86,17 +86,27 @@ export async function revokeMagicLinkToken(token: string | null | undefined): Pr
 }
 
 /**
- * Whether a previously-minted magic-link token can still be verified — i.e. its
- * verification row still exists (single-use, so it's deleted once consumed) and
- * has not expired. Lets the copy-link path reuse the invite's current link
- * instead of rotating it. Returns false for null/undefined tokens.
+ * Bulk-revoke a set of magic-link tokens by deleting their verification rows.
+ * Used by invite cancellation to invalidate every link the invite ever minted.
+ * No-op on an empty set; already-consumed/expired tokens simply match no rows.
  */
-export async function isMagicLinkTokenLive(token: string | null | undefined): Promise<boolean> {
-  if (!token) return false
+export async function revokeMagicLinkTokens(tokens: string[]): Promise<void> {
+  if (tokens.length === 0) return
+  await db.delete(verification).where(inArray(verification.identifier, tokens))
+}
+
+/**
+ * Return one still-verifiable token from the given set — its verification row
+ * exists (single-use, so it's deleted once consumed) and has not expired — or
+ * null if none are live. Lets the copy-link path reuse the invite's current
+ * link instead of minting (and thus accumulating) a new one.
+ */
+export async function findLiveMagicLinkToken(tokens: string[]): Promise<string | null> {
+  if (tokens.length === 0) return null
   const rows = await db
-    .select({ expiresAt: verification.expiresAt })
+    .select({ identifier: verification.identifier })
     .from(verification)
-    .where(eq(verification.identifier, token))
+    .where(and(inArray(verification.identifier, tokens), gt(verification.expiresAt, new Date())))
     .limit(1)
-  return rows.length > 0 && rows[0].expiresAt > new Date()
+  return rows[0]?.identifier ?? null
 }
