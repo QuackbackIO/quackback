@@ -241,8 +241,15 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       // emailed/copied link for this invite can still sign anyone in. (The link
       // just used was already consumed by the magic-link verify; siblings from
       // resends/copies would otherwise stay live until their 30-day expiry.)
-      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
-      await revokeMagicLinkTokens(claimed.magicLinkTokens)
+      // Best-effort: the membership is already committed, so a cleanup failure
+      // here must NOT hit the outer catch and roll the accept back to pending —
+      // log it and move on (the stray tokens still expire with the invite).
+      try {
+        const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+        await revokeMagicLinkTokens(claimed.magicLinkTokens)
+      } catch (revokeError) {
+        console.error(`[fn:invitations] ⚠️ acceptInvitationFn: token revoke failed:`, revokeError)
+      }
 
       console.log(`[fn:invitations] acceptInvitationFn: accepted`)
       return { invitationId: invitationId as InviteId }

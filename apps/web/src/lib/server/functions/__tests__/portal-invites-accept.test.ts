@@ -48,7 +48,10 @@ const hoisted = vi.hoisted(() => ({
   // The accept handler now uses RETURNING to detect zero-row writes
   // (concurrent cancel / expiry / accept race). Tests can override this
   // per-case to simulate the race.
-  mockDbUpdateReturning: vi.fn(() => Promise.resolve([{ id: 'invite_1' }])),
+  mockDbUpdateReturning: vi.fn(
+    (): Promise<Array<{ id: string; magicLinkTokens?: string[] }>> =>
+      Promise.resolve([{ id: 'invite_1' }])
+  ),
   mockDbQuery: {
     invitation: { findFirst: vi.fn() },
     principal: { findFirst: vi.fn() },

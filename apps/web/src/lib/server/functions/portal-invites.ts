@@ -721,9 +721,18 @@ export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
     // Accepted — revoke every token in the set so no other emailed/copied link
     // for this invite can still sign anyone in. The link just used was consumed
     // by the magic-link verify; siblings from resends/copies would otherwise
-    // stay live until their 30-day expiry.
-    const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
-    await revokeMagicLinkTokens(updated[0].magicLinkTokens)
+    // stay live until their 30-day expiry. Best-effort: the accept is already
+    // committed, so a cleanup failure must not fail the request (the stray
+    // tokens still expire with the invite).
+    try {
+      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkTokens(updated[0].magicLinkTokens)
+    } catch (revokeError) {
+      console.error(
+        `[fn:portal-invites] ⚠️ acceptPortalInviteFn: token revoke failed:`,
+        revokeError
+      )
+    }
 
     console.log(`[fn:portal-invites] acceptPortalInviteFn: accepted id=${inviteId}`)
     return { status: 'accepted', alreadyAccepted: false }
