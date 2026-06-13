@@ -610,6 +610,31 @@ describe('resendPortalInviteFn — success', () => {
     expect(tokenWrite?.[0]).toMatchObject({ magicLinkToken: 'tok_new' })
   })
 
+  it('preserves the existing link when the email send fails (drops the orphan token)', async () => {
+    const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+    hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
+      id: 'invite_1',
+      kind: 'portal',
+      status: 'pending',
+      email: 'user@example.com',
+      expiresAt: futureDate,
+      magicLinkToken: 'tok_old',
+    })
+    hoisted.mockSendPortalInviteEmail.mockRejectedValue(new Error('smtp down'))
+
+    await expect(resendHandler({ data: { inviteId: 'invite_1' } })).rejects.toThrow('smtp down')
+
+    // The just-minted token is revoked (orphan cleanup) and the invitee's
+    // existing token is NOT revoked, so their current link still works.
+    expect(hoisted.mockRevokeMagicLinkToken).toHaveBeenCalledWith('tok_new')
+    expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalledWith('tok_old')
+    // And the new token is never recorded on the row.
+    const tokenWrite = hoisted.mockDbSet.mock.calls.find(
+      (c) => (c[0] as Record<string, unknown>).magicLinkToken !== undefined
+    )
+    expect(tokenWrite).toBeUndefined()
+  })
+
   it('emits portal.invite.resent (not portal.invite.sent) on resend', async () => {
     const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({

@@ -1115,9 +1115,10 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         throw new Error('Invitation is no longer pending — refresh and try again')
       }
 
-      // Generate new magic link for one-click authentication. Revoke the
-      // invite's previous token and record the new one so a later cancel
-      // invalidates the link that's actually live.
+      // Generate a new magic link for one-click authentication. The previous
+      // token is revoked only AFTER the email is sent (or surfaced for manual
+      // sharing when email isn't configured), so a send failure can't strand
+      // the invitee by killing the still-valid link they already have.
       const portalUrl = getBaseUrl()
       const callbackURL = `/complete-signup/${invitationId}`
       const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
@@ -1125,22 +1126,34 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         callbackURL,
         portalUrl
       )
+
+      const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+      const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+      let result: Awaited<ReturnType<typeof sendInvitationEmail>>
+      try {
+        result = await sendInvitationEmail({
+          to: invitationRecord.email,
+          invitedByName: auth.user.name,
+          inviteeName: invitationRecord.name || undefined,
+          workspaceName: auth.settings.name,
+          inviteLink,
+          logoUrl,
+        })
+      } catch (sendError) {
+        // The new link won't reach the invitee — drop the orphan token and
+        // leave their existing link working.
+        const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+        await revokeMagicLinkToken(magicLinkToken)
+        throw sendError
+      }
+
+      // Delivered (or returned for manual sharing): the new link supersedes the
+      // old one, so revoke the prior token and record the new one.
       await rotateInviteMagicLinkToken(
         invitationId,
         invitationRecord.magicLinkToken,
         magicLinkToken
       )
-
-      const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-      const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-      const result = await sendInvitationEmail({
-        to: invitationRecord.email,
-        invitedByName: auth.user.name,
-        inviteeName: invitationRecord.name || undefined,
-        workspaceName: auth.settings.name,
-        inviteLink,
-        logoUrl,
-      })
 
       console.log(
         `[fn:admin] resendInvitationFn: ${result.sent ? 'resent' : 'regenerated (email not configured)'}`

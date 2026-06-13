@@ -391,18 +391,26 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
       inviteId,
       portalUrl
     )
-    // Revoke the superseded token and record the new one so a later cancel
-    // invalidates the link that's actually live.
-    await rotateInviteMagicLinkToken(inviteId, inv.magicLinkToken, magicLinkToken)
 
+    // Revoke the superseded token only AFTER the email is sent (or surfaced for
+    // manual sharing when email isn't configured), so a send failure can't
+    // strand the invitee by killing the still-valid link they already have.
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    const result = await sendPortalInviteEmail({
-      to: inv.email,
-      workspaceName: auth.settings.name,
-      inviteLink,
-      logoUrl,
-    })
+    let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
+    try {
+      result = await sendPortalInviteEmail({
+        to: inv.email,
+        workspaceName: auth.settings.name,
+        inviteLink,
+        logoUrl,
+      })
+    } catch (sendError) {
+      const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkToken(magicLinkToken)
+      throw sendError
+    }
+    await rotateInviteMagicLinkToken(inviteId, inv.magicLinkToken, magicLinkToken)
 
     await recordAuditEvent({
       event: 'portal.invite.resent',
