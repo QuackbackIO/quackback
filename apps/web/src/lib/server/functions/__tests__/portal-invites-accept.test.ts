@@ -57,6 +57,7 @@ const hoisted = vi.hoisted(() => ({
   mockDbInsert: vi.fn(),
   mockSendPortalInviteEmail: vi.fn(),
   mockMintMagicLinkUrl: vi.fn(),
+  mockRevokeMagicLinkTokens: vi.fn(),
   mockGetEmailSafeUrl: vi.fn(),
   mockGetBaseUrl: vi.fn(),
   mockGenerateId: vi.fn(),
@@ -126,6 +127,7 @@ vi.mock('@quackback/ids', () => ({
 
 vi.mock('@/lib/server/auth/magic-link-mint', () => ({
   mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl,
+  revokeMagicLinkTokens: hoisted.mockRevokeMagicLinkTokens,
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -401,6 +403,18 @@ describe('acceptPortalInviteFn — happy path', () => {
       (c) => (c[0] as { event: string }).event === 'portal.invite.accepted'
     )
     expect(auditCall).toBeDefined()
+  })
+
+  it('revokes the invite token set on accept so sibling links can no longer sign in', async () => {
+    // An invite resent/copied has more than one live token; accepting via one
+    // must kill the rest.
+    hoisted.mockDbUpdateReturning.mockResolvedValue([
+      { id: 'invite_1', magicLinkTokens: ['tok_used', 'tok_sibling'] },
+    ])
+
+    await acceptHandler({ data: { inviteId: 'invite_1' } })
+
+    expect(hoisted.mockRevokeMagicLinkTokens).toHaveBeenCalledWith(['tok_used', 'tok_sibling'])
   })
 
   it('includes the invite email in the audit after-value', async () => {

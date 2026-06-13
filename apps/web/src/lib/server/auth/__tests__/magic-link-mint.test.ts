@@ -32,10 +32,10 @@ const mockVerificationTable = {
   identifier: 'verification.identifier',
   expiresAt: 'verification.expiresAt',
 }
-// select().from().where().limit() chain for isMagicLinkTokenLive
+// select().from().where().orderBy().limit() chain for findLiveMagicLinkToken
 const mockSelectLimit = vi.fn()
 const mockDbSelect = vi.fn(() => ({
-  from: () => ({ where: () => ({ limit: mockSelectLimit }) }),
+  from: () => ({ where: () => ({ orderBy: () => ({ limit: mockSelectLimit }) }) }),
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -45,6 +45,7 @@ vi.mock('@/lib/server/db', () => ({
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   gt: vi.fn((col: unknown, val: unknown) => ({ op: 'gt', col, val })),
   inArray: vi.fn((col: unknown, vals: unknown) => ({ op: 'inArray', col, vals })),
+  desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
 const { mintMagicLinkUrl, revokeMagicLinkToken, revokeMagicLinkTokens, findLiveMagicLinkToken } =

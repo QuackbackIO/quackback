@@ -1,5 +1,5 @@
 import { generateRandomString } from 'better-auth/crypto'
-import { db, verification, eq, and, gt, inArray } from '@/lib/server/db'
+import { db, verification, eq, and, gt, inArray, desc } from '@/lib/server/db'
 import { getAuth } from './index'
 
 interface MintOptions {
@@ -96,10 +96,12 @@ export async function revokeMagicLinkTokens(tokens: string[]): Promise<void> {
 }
 
 /**
- * Return one still-verifiable token from the given set — its verification row
- * exists (single-use, so it's deleted once consumed) and has not expired — or
- * null if none are live. Lets the copy-link path reuse the invite's current
- * link instead of minting (and thus accumulating) a new one.
+ * Return the longest-lived still-verifiable token from the given set — its
+ * verification row exists (single-use, so it's deleted once consumed) and has
+ * not expired — or null if none are live. Lets the copy-link path reuse the
+ * invite's current link instead of minting a new one. Ordered by expiry so a
+ * resent invite hands out the token that covers the most of its lifetime, not
+ * an arbitrary older one.
  */
 export async function findLiveMagicLinkToken(tokens: string[]): Promise<string | null> {
   if (tokens.length === 0) return null
@@ -107,6 +109,7 @@ export async function findLiveMagicLinkToken(tokens: string[]): Promise<string |
     .select({ identifier: verification.identifier })
     .from(verification)
     .where(and(inArray(verification.identifier, tokens), gt(verification.expiresAt, new Date())))
+    .orderBy(desc(verification.expiresAt))
     .limit(1)
   return rows[0]?.identifier ?? null
 }

@@ -237,6 +237,13 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         await db.update(user).set({ name: displayName }).where(eq(user.id, userId))
       }
 
+      // The invite is accepted — revoke every token in its set so no other
+      // emailed/copied link for this invite can still sign anyone in. (The link
+      // just used was already consumed by the magic-link verify; siblings from
+      // resends/copies would otherwise stay live until their 30-day expiry.)
+      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+      await revokeMagicLinkTokens(claimed.magicLinkTokens)
+
       console.log(`[fn:invitations] acceptInvitationFn: accepted`)
       return { invitationId: invitationId as InviteId }
     } catch (error) {
