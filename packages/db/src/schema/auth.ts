@@ -471,7 +471,10 @@ export const invitation = pgTable(
      * send window or after a worker restart. Tokens are single-use and expire
      * with the invite, so the set stays small and self-pruning.
      */
-    magicLinkTokens: text('magic_link_tokens').array().notNull().default([]),
+    magicLinkTokens: text('magic_link_tokens')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     inviterId: typeIdColumn('user')('inviter_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

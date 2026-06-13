@@ -508,30 +508,23 @@ export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
     if (inv.expiresAt && inv.expiresAt < new Date()) throw new Error('Invite has expired')
 
     const portalUrl = getBaseUrl()
-    const { findLiveMagicLinkToken, buildVerifyMagicLinkUrl, revokeMagicLinkToken } =
-      await import('@/lib/server/auth/magic-link-mint')
+    const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
 
-    let inviteLink: string
-    // Copying returns one of the invite's CURRENT live links rather than minting
-    // a new one, so a link the invitee may already hold keeps working. Only mint
-    // when none of the set's tokens are still live (never sent, or all used/expired).
-    const liveToken = await findLiveMagicLinkToken(inv.magicLinkTokens)
-    if (liveToken) {
-      inviteLink = buildVerifyMagicLinkUrl({
-        origin: portalUrl,
-        token: liveToken,
-        callbackPath: portalInviteCallbackPath(inv.id),
-      })
-    } else {
-      // Cap the fresh token at the invite's remaining lifetime — copy-link does
-      // not extend the row, so otherwise a late copy could outlive its expiry.
-      const remainingSeconds = Math.floor((inv.expiresAt.getTime() - Date.now()) / 1000)
-      const minted = await mintPortalInviteMagicLink(inv.email, inv.id, portalUrl, remainingSeconds)
-      if (!(await appendInviteMagicLinkToken(inv.id, minted.token))) {
-        await revokeMagicLinkToken(minted.token) // invite no longer pending; drop it
-        throw new Error('Invite is no longer pending — refresh and try again')
-      }
-      inviteLink = minted.url
+    // Mint a fresh link and add it to the set. Minting is additive — it never
+    // touches the invite's other outstanding links, so copying doesn't
+    // invalidate a link the invitee may already hold. Capping the token at the
+    // invite's remaining lifetime keeps it from outliving the invite, and a
+    // freshly-minted token always covers that full window (no stale reuse).
+    const remainingSeconds = Math.floor((inv.expiresAt.getTime() - Date.now()) / 1000)
+    const { url: inviteLink, token } = await mintPortalInviteMagicLink(
+      inv.email,
+      inv.id,
+      portalUrl,
+      remainingSeconds
+    )
+    if (!(await appendInviteMagicLinkToken(inv.id, token))) {
+      await revokeMagicLinkToken(token) // invite no longer pending; drop it
+      throw new Error('Invite is no longer pending — refresh and try again')
     }
 
     await recordAuditEvent({

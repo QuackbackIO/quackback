@@ -28,27 +28,16 @@ vi.mock('../index', async () => {
 const mockDeleteWhere = vi.fn().mockResolvedValue(undefined)
 const mockDbDelete = vi.fn(() => ({ where: mockDeleteWhere }))
 const mockEq = vi.fn((col: unknown, val: unknown) => ({ col, val }))
-const mockVerificationTable = {
-  identifier: 'verification.identifier',
-  expiresAt: 'verification.expiresAt',
-}
-// select().from().where().orderBy().limit() chain for findLiveMagicLinkToken
-const mockSelectLimit = vi.fn()
-const mockDbSelect = vi.fn(() => ({
-  from: () => ({ where: () => ({ orderBy: () => ({ limit: mockSelectLimit }) }) }),
-}))
+const mockVerificationTable = { identifier: 'verification.identifier' }
 
 vi.mock('@/lib/server/db', () => ({
-  db: { delete: mockDbDelete, select: mockDbSelect },
+  db: { delete: mockDbDelete },
   verification: mockVerificationTable,
   eq: mockEq,
-  and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
-  gt: vi.fn((col: unknown, val: unknown) => ({ op: 'gt', col, val })),
   inArray: vi.fn((col: unknown, vals: unknown) => ({ op: 'inArray', col, vals })),
-  desc: vi.fn((col: unknown) => ({ op: 'desc', col })),
 }))
 
-const { mintMagicLinkUrl, revokeMagicLinkToken, revokeMagicLinkTokens, findLiveMagicLinkToken } =
+const { mintMagicLinkUrl, revokeMagicLinkToken, revokeMagicLinkTokens } =
   await import('../magic-link-mint')
 
 beforeEach(() => {
@@ -140,22 +129,5 @@ describe('revokeMagicLinkTokens', () => {
   it('is a no-op for an empty set', async () => {
     await revokeMagicLinkTokens([])
     expect(mockDbDelete).not.toHaveBeenCalled()
-  })
-})
-
-describe('findLiveMagicLinkToken', () => {
-  it('returns a token whose verification row exists and has not expired', async () => {
-    mockSelectLimit.mockResolvedValue([{ identifier: 'tok_b' }])
-    expect(await findLiveMagicLinkToken(['tok_a', 'tok_b'])).toBe('tok_b')
-  })
-
-  it('returns null when no token in the set is still live', async () => {
-    mockSelectLimit.mockResolvedValue([])
-    expect(await findLiveMagicLinkToken(['tok_a', 'tok_b'])).toBeNull()
-  })
-
-  it('returns null (no query) for an empty set', async () => {
-    expect(await findLiveMagicLinkToken([])).toBeNull()
-    expect(mockDbSelect).not.toHaveBeenCalled()
   })
 })

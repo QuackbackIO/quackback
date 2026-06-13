@@ -56,8 +56,6 @@ const hoisted = vi.hoisted(() => ({
   mockMintMagicLinkUrl: vi.fn(),
   mockRevokeMagicLinkToken: vi.fn(),
   mockRevokeMagicLinkTokens: vi.fn(),
-  mockFindLiveMagicLinkToken: vi.fn(),
-  mockBuildVerifyMagicLinkUrl: vi.fn(),
   mockGetEmailSafeUrl: vi.fn(),
   mockGetBaseUrl: vi.fn(),
   mockGenerateId: vi.fn(),
@@ -130,8 +128,6 @@ vi.mock('@/lib/server/auth/magic-link-mint', () => ({
   mintMagicLinkUrl: hoisted.mockMintMagicLinkUrl,
   revokeMagicLinkToken: hoisted.mockRevokeMagicLinkToken,
   revokeMagicLinkTokens: hoisted.mockRevokeMagicLinkTokens,
-  findLiveMagicLinkToken: hoisted.mockFindLiveMagicLinkToken,
-  buildVerifyMagicLinkUrl: hoisted.mockBuildVerifyMagicLinkUrl,
 }))
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -184,11 +180,6 @@ beforeEach(async () => {
   })
   hoisted.mockRevokeMagicLinkToken.mockResolvedValue(undefined)
   hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
-  // Default: no live token in the set, so copy-link mints a fresh one.
-  hoisted.mockFindLiveMagicLinkToken.mockResolvedValue(null)
-  hoisted.mockBuildVerifyMagicLinkUrl.mockReturnValue(
-    'https://acme.example.com/verify-magic-link?token=existing'
-  )
   hoisted.mockGetEmailSafeUrl.mockReturnValue(null)
   hoisted.mockSendPortalInviteEmail.mockResolvedValue({ sent: false })
   hoisted.mockGenerateId.mockReturnValue('invite_test')
@@ -419,29 +410,22 @@ describe('getPortalInviteLinkFn', () => {
     expect(opts.expiresInSeconds).toBeLessThanOrEqual(threeDaysSeconds)
   })
 
-  it('reuses the current live link without minting or revoking (copy is non-destructive)', async () => {
+  it('does not revoke other outstanding links when minting a copy (additive)', async () => {
     hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue({
       id: 'invite_abc',
       kind: 'portal',
       status: 'pending',
       email: 'user@example.com',
       expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-      magicLinkTokens: ['tok_old', 'tok_live'],
+      magicLinkTokens: ['tok_old'],
     })
-    hoisted.mockFindLiveMagicLinkToken.mockResolvedValue('tok_live')
-    hoisted.mockBuildVerifyMagicLinkUrl.mockReturnValue(
-      'https://acme.example.com/verify-magic-link?token=tok_live'
-    )
 
     await getLinkHandler({ data: { inviteId: 'invite_abc' } })
 
-    // The URL is rebuilt from the invite's existing live token...
-    expect(hoisted.mockBuildVerifyMagicLinkUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'tok_live' })
-    )
-    // ...and copy must not mint a new token nor revoke the existing (emailed) one.
-    expect(hoisted.mockMintMagicLinkUrl).not.toHaveBeenCalled()
+    // Copy mints a fresh token (additive) and never revokes existing links.
+    expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalled()
     expect(hoisted.mockRevokeMagicLinkToken).not.toHaveBeenCalled()
+    expect(hoisted.mockRevokeMagicLinkTokens).not.toHaveBeenCalled()
   })
 
   it('rejects for a non-portal invite kind (returns null from DB)', async () => {
