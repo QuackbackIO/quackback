@@ -158,6 +158,10 @@ export function useUpdateHeaderDisplayName() {
 // loader-warmed cache keeps serving the pre-save value and settings pages that
 // seed `useState` from it revert on the next visit until a hard reload.
 // `router.invalidate()` alone does NOT fix this — it re-runs the same cached loader.
+//
+// Each onSuccess RETURNS the invalidate promise so the mutation stays pending
+// until the refetch settles. Otherwise a fast navigate-away/back during the
+// in-flight refetch would re-read the still-stale cache via `ensureQueryData`.
 // ============================================================================
 
 export function useUpdatePortalConfig() {
@@ -166,9 +170,8 @@ export function useUpdatePortalConfig() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updatePortalConfigFn>[0]['data']) =>
       updatePortalConfigFn({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey })
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey }),
   })
 }
 
@@ -178,9 +181,8 @@ export function useUpdateModerationDefault() {
   return useMutation({
     mutationFn: (data: NonNullable<Parameters<typeof updateModerationDefaultFn>[0]>['data']) =>
       updateModerationDefaultFn({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey })
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.portalConfig().queryKey }),
   })
 }
 
@@ -190,9 +192,8 @@ export function useUpdateWidgetConfig() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateWidgetConfigFn>[0]['data']) =>
       updateWidgetConfigFn({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey })
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey }),
   })
 }
 
@@ -201,9 +202,8 @@ export function useRegenerateWidgetSecret() {
 
   return useMutation({
     mutationFn: () => regenerateWidgetSecretFn(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey })
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey }),
   })
 }
 
@@ -213,9 +213,8 @@ export function useUpdateHelpCenterConfig() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateHelpCenterConfigFn>[0]['data']) =>
       updateHelpCenterConfigFn({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey })
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
   })
 }
 
@@ -228,9 +227,10 @@ export function useSaveBrandingTheme() {
         updateThemeFn({ data: { brandingConfig: input.brandingConfig } }),
         updateCustomCssFn({ data: { customCss: input.customCss } }),
       ]),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey })
-      queryClient.invalidateQueries({ queryKey: settingsQueries.customCss().queryKey })
-    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: settingsQueries.branding().queryKey }),
+        queryClient.invalidateQueries({ queryKey: settingsQueries.customCss().queryKey }),
+      ]),
   })
 }
