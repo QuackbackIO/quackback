@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { updatePortalConfigFn } from '@/lib/server/functions/settings'
+import { useUpdatePortalConfig } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { DEFAULT_PORTAL_CONFIG, PORTAL_WELCOME_CARD_TITLE_MAX } from '@/lib/shared/types/settings'
 import type {
@@ -38,13 +38,14 @@ export const Route = createFileRoute('/admin/settings/portal')({
 
 function PortalSettingsPage() {
   const router = useRouter()
+  const updatePortalConfig = useUpdatePortalConfig()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const config = portalConfigQuery.data as PortalConfig
 
   // Initialise once from the loader-warmed query and treat local state as
-  // authoritative until the user explicitly clicks Save. router.invalidate
-  // after a successful save refreshes the cache for the next visit, but the
-  // live form fields never get re-synced from it.
+  // authoritative until the user explicitly clicks Save. The mutation hook
+  // invalidates the portalConfig query so the cache reflects the saved value
+  // on the next visit; the live form fields are intentionally not re-synced.
   const [enabled, setEnabled] = useState(config.welcomeCard?.enabled ?? false)
   const [title, setTitle] = useState(
     config.welcomeCard?.title ?? DEFAULT_PORTAL_CONFIG.welcomeCard!.title
@@ -61,9 +62,7 @@ function PortalSettingsPage() {
   async function handleSave() {
     setSaving(true)
     try {
-      await updatePortalConfigFn({
-        data: { welcomeCard: { enabled, title, body } },
-      })
+      await updatePortalConfig.mutateAsync({ welcomeCard: { enabled, title, body } })
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)

@@ -12,7 +12,7 @@ import {
   type ThemeMode,
   type ParsedCssVariables,
 } from '@/lib/shared/theme'
-import { updateThemeFn, updateCustomCssFn } from '@/lib/server/functions/settings'
+import { useSaveBrandingTheme } from '@/lib/client/mutations/settings'
 
 export const FONT_OPTIONS = [
   {
@@ -201,6 +201,7 @@ function buildInitialCss(initialCustomCss: string, initialThemeConfig: ThemeConf
 
 export function useBrandingState(options: UseBrandingStateOptions): BrandingState {
   const { initialLogoUrl, initialThemeConfig, initialCustomCss } = options
+  const { mutateAsync: saveBrandingTheme } = useSaveBrandingTheme()
 
   // ============================================
   // Primary state: CSS text is the source of truth
@@ -313,12 +314,13 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
         dark: { ...darkMinimal, fontSans: font, radius: `${radius}rem` },
       }
 
-      await Promise.all([
-        updateThemeFn({
-          data: { brandingConfig: themeConfig as unknown as Record<string, unknown> },
-        }),
-        updateCustomCssFn({ data: { customCss: cssText } }),
-      ])
+      // The mutation hook invalidates the branding + customCss queries on success,
+      // so the next visit reflects the save instead of re-seeding the editor from
+      // the stale pre-save cache.
+      await saveBrandingTheme({
+        brandingConfig: themeConfig as unknown as Record<string, unknown>,
+        customCss: cssText,
+      })
 
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -327,7 +329,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
     } finally {
       setIsSaving(false)
     }
-  }, [cssText, themeMode, font, radius, defaultLightMinimal, defaultDarkMinimal])
+  }, [cssText, themeMode, font, radius, defaultLightMinimal, defaultDarkMinimal, saveBrandingTheme])
 
   return {
     logoUrl,

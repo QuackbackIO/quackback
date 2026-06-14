@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/select'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { adminQueries } from '@/lib/client/queries/admin'
-import { updateWidgetConfigFn, regenerateWidgetSecretFn } from '@/lib/server/functions/settings'
+import { useUpdateWidgetConfig, useRegenerateWidgetSecret } from '@/lib/client/mutations/settings'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/widget')({
@@ -119,6 +119,7 @@ function WidgetSettingsPage() {
 
 function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
   const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [enabled, setEnabled] = useState(initialEnabled)
@@ -127,7 +128,7 @@ function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
     setEnabled(checked)
     setSaving(true)
     try {
-      await updateWidgetConfigFn({ data: { enabled: checked } })
+      await updateWidgetConfig.mutateAsync({ enabled: checked })
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)
@@ -184,6 +185,7 @@ function WidgetAppearanceControls({
   helpCenterFlagEnabled: boolean
 }) {
   const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
   const [defaultBoard, setDefaultBoard] = useState(config.defaultBoard ?? '')
@@ -196,10 +198,10 @@ function WidgetAppearanceControls({
 
   const showHelpTabToggle = helpCenterFlagEnabled && helpCenterEnabled
 
-  async function save(updates: Record<string, unknown>) {
+  async function save(updates: Parameters<typeof updateWidgetConfig.mutateAsync>[0]) {
     setSaving(true)
     try {
-      await updateWidgetConfigFn({ data: updates })
+      await updateWidgetConfig.mutateAsync(updates)
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)
@@ -270,7 +272,7 @@ function WidgetAppearanceControls({
                   setHomeTab(checked)
                   setSaving(true)
                   try {
-                    await updateWidgetConfigFn({ data: { tabs: { home: checked } } })
+                    await updateWidgetConfig.mutateAsync({ tabs: { home: checked } })
                     startTransition(() => router.invalidate())
                   } catch {
                     setHomeTab(!checked)
@@ -348,7 +350,7 @@ function WidgetAppearanceControls({
                     onTabsChange({ ...widgetTabs, help: checked })
                     setSaving(true)
                     try {
-                      await updateWidgetConfigFn({ data: { tabs: { help: checked } } })
+                      await updateWidgetConfig.mutateAsync({ tabs: { help: checked } })
                       startTransition(() => router.invalidate())
                     } catch {
                       setHelpTab(!checked)
@@ -657,6 +659,8 @@ function WidgetInstallation({
   baseUrl: string
 }) {
   const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const regenerateSecret = useRegenerateWidgetSecret()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
 
@@ -721,7 +725,7 @@ function WidgetInstallation({
     setVerifiedIdentityOnly(checked)
     setSaving(true)
     try {
-      await updateWidgetConfigFn({ data: { identifyVerification: checked } })
+      await updateWidgetConfig.mutateAsync({ identifyVerification: checked })
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)
@@ -744,7 +748,7 @@ function WidgetInstallation({
   async function handleRegenerate() {
     setRegenerating(true)
     try {
-      const newSecret = await regenerateWidgetSecretFn()
+      const newSecret = await regenerateSecret.mutateAsync()
       setCurrentSecret(newSecret)
       startTransition(() => router.invalidate())
     } finally {
