@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface TeamsOAuthState {
   type: 'teams_oauth'
@@ -81,7 +82,7 @@ async function getTeamsAccessToken(integration: { secrets: unknown; config: unkn
       const credentials = await getPlatformCredentials('teams')
       const refreshed = await refreshTeamsToken(secrets.refreshToken, credentials ?? undefined)
 
-      const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+      const newExpiry = toIsoString(new Date(Date.now() + refreshed.expiresIn * 1000))
       await db
         .update(integrations)
         .set({

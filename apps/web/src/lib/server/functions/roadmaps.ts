@@ -24,6 +24,7 @@ import {
   updateRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
+import { toIsoString } from '@/lib/shared/utils'
 
 // ============================================
 // Schemas
@@ -111,8 +112,8 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
       description: roadmap.description,
       isPublic: roadmap.isPublic,
       position: roadmap.position,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      createdAt: toIsoString(roadmap.createdAt),
+      updatedAt: toIsoString(roadmap.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:roadmaps] fetchRoadmaps failed:`, error)
@@ -139,8 +140,8 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       console.error(`[fn:roadmaps] fetchRoadmap failed:`, error)
@@ -176,8 +177,8 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       console.error(`[fn:roadmaps] createRoadmapFn failed:`, error)
@@ -208,8 +209,8 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       console.error(`[fn:roadmaps] updateRoadmapFn failed:`, error)

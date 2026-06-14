@@ -21,6 +21,7 @@ import { getBaseUrl } from '@/lib/server/config'
 import { sendPortalInviteEmail } from '@quackback/email'
 import { getSession } from '@/lib/server/auth/session'
 import { safeEmail } from '@/lib/shared/utils/string'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 /** Portal invite lifetime — 14 days. */
 const PORTAL_INVITE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000
@@ -160,7 +161,7 @@ async function sendOnePortalInvite({
     target: { type: 'invitation', id: inviteId },
     metadata: {
       email,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: toIsoString(expiresAt),
       hasMessage: !!message,
       ...(batchId ? { batchId } : {}),
     },
@@ -431,9 +432,9 @@ export const fetchPortalInvitesFn = createServerFn({ method: 'GET' }).handler(as
     email: inv.email,
     status: inv.status,
     kind: inv.kind,
-    createdAt: inv.createdAt.toISOString(),
-    lastSentAt: inv.lastSentAt?.toISOString() ?? null,
-    expiresAt: inv.expiresAt.toISOString(),
+    createdAt: toIsoString(inv.createdAt),
+    lastSentAt: toIsoStringOrNull(inv.lastSentAt),
+    expiresAt: toIsoString(inv.expiresAt),
   }))
 })
 

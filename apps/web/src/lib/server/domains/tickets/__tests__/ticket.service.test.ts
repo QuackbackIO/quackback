@@ -15,12 +15,16 @@ const updateTicketsReturningMock = vi.fn()
 const recordEventMock = vi.fn()
 const findOrCreateByEmailMock = vi.fn()
 const linkContactToUserMock = vi.fn()
+const listLinksForUserMock = vi.fn()
+const getContactMock = vi.fn()
 /** Captures the .values(...) payload for every tickets insert. */
 const ticketInsertValuesCalls: Array<Record<string, unknown>> = []
 
 vi.mock('../../organizations/contact.service', () => ({
   findOrCreateByEmail: (...args: unknown[]) => findOrCreateByEmailMock(...args),
   linkContactToUser: (...args: unknown[]) => linkContactToUserMock(...args),
+  listLinksForUser: (...args: unknown[]) => listLinksForUserMock(...args),
+  getContact: (...args: unknown[]) => getContactMock(...args),
 }))
 
 const dispatchTicketUpdatedMock = vi.fn()
@@ -135,6 +139,8 @@ beforeEach(() => {
   updateTicketsReturningMock.mockReset()
   findOrCreateByEmailMock.mockReset()
   linkContactToUserMock.mockReset()
+  listLinksForUserMock.mockReset().mockResolvedValue([])
+  getContactMock.mockReset().mockResolvedValue(null)
   ticketInsertValuesCalls.length = 0
   insertActivityReturningMock.mockResolvedValue([{ id: 'ticket_act_x' }])
   recordEventMock.mockReset()
@@ -289,7 +295,7 @@ describe('createTicket', () => {
     it('derives a contact from the portal user email when only principal is supplied', async () => {
       stubDefaultStatus()
       principalFindFirstMock.mockResolvedValueOnce({ userId: 'user_1', type: 'user' })
-      userFindFirstMock.mockResolvedValueOnce({ email: '[email protected]' })
+      userFindFirstMock.mockResolvedValueOnce({ email: '[email protected]', emailVerified: true })
       findOrCreateByEmailMock.mockResolvedValueOnce({ id: 'contact_x' })
       linkContactToUserMock.mockResolvedValueOnce({ id: 'cu_link_x' })
       const { createTicket } = await import('../ticket.service')
@@ -305,6 +311,50 @@ describe('createTicket', () => {
       })
       expect(ticketInsertValuesCalls[0]?.requesterContactId).toBe('contact_x')
       expect(ticketInsertValuesCalls[0]?.requesterPrincipalId).toBe('principal_1')
+    })
+
+    it('uses an existing contact link before deriving by email', async () => {
+      stubDefaultStatus()
+      principalFindFirstMock.mockResolvedValueOnce({ userId: 'user_1', type: 'user' })
+      listLinksForUserMock.mockResolvedValueOnce([{ contactId: 'contact_linked' }])
+      const { createTicket } = await import('../ticket.service')
+      await createTicket({
+        subject: 'Hi',
+        requesterPrincipalId: 'principal_1' as never,
+      })
+      expect(userFindFirstMock).not.toHaveBeenCalled()
+      expect(findOrCreateByEmailMock).not.toHaveBeenCalled()
+      expect(ticketInsertValuesCalls[0]?.requesterContactId).toBe('contact_linked')
+    })
+
+    it('derives organizationId from the resolved contact when caller omits it', async () => {
+      stubDefaultStatus()
+      principalFindFirstMock.mockResolvedValueOnce({ userId: 'user_1', type: 'user' })
+      listLinksForUserMock.mockResolvedValueOnce([{ contactId: 'contact_linked' }])
+      getContactMock.mockResolvedValueOnce({ id: 'contact_linked', organizationId: 'org_1' })
+      const { createTicket } = await import('../ticket.service')
+      await createTicket({
+        subject: 'Hi',
+        requesterPrincipalId: 'principal_1' as never,
+      })
+      expect(ticketInsertValuesCalls[0]?.requesterContactId).toBe('contact_linked')
+      expect(ticketInsertValuesCalls[0]?.organizationId).toBe('org_1')
+    })
+
+    it('preserves caller-provided organizationId over contact enrichment', async () => {
+      stubDefaultStatus()
+      getContactMock.mockResolvedValueOnce({
+        id: 'contact_explicit',
+        organizationId: 'org_contact',
+      })
+      const { createTicket } = await import('../ticket.service')
+      await createTicket({
+        subject: 'Hi',
+        requesterContactId: 'contact_explicit' as never,
+        organizationId: 'org_explicit' as never,
+      })
+      expect(ticketInsertValuesCalls[0]?.requesterContactId).toBe('contact_explicit')
+      expect(ticketInsertValuesCalls[0]?.organizationId).toBe('org_explicit')
     })
 
     it('keeps caller-provided requesterContactId and skips derivation', async () => {
@@ -337,6 +387,22 @@ describe('createTicket', () => {
       stubDefaultStatus()
       principalFindFirstMock.mockResolvedValueOnce({ userId: 'user_2', type: 'user' })
       userFindFirstMock.mockResolvedValueOnce({ email: null })
+      const { createTicket } = await import('../ticket.service')
+      await createTicket({
+        subject: 'Hi',
+        requesterPrincipalId: 'principal_2' as never,
+      })
+      expect(findOrCreateByEmailMock).not.toHaveBeenCalled()
+      expect(ticketInsertValuesCalls[0]?.requesterContactId).toBe(null)
+    })
+
+    it('skips derivation when the user email is unverified', async () => {
+      stubDefaultStatus()
+      principalFindFirstMock.mockResolvedValueOnce({ userId: 'user_2', type: 'user' })
+      userFindFirstMock.mockResolvedValueOnce({
+        email: '[email protected]',
+        emailVerified: false,
+      })
       const { createTicket } = await import('../ticket.service')
       await createTicket({
         subject: 'Hi',

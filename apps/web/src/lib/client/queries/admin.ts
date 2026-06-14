@@ -1,16 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { BoardId, TagId, PrincipalId, PostId, RoadmapId } from '@quackback/ids'
-
-/**
- * Guard against TanStack Start server function RPC resolving with `undefined`
- * on 500 errors. Converts to a thrown error so React Query can retry.
- */
-function ensureData<T>(data: T, label: string): NonNullable<T> {
-  if (data === undefined || data === null) {
-    throw new Error(`Server returned no data for ${label}`)
-  }
-  return data as NonNullable<T>
-}
+import { ensureData } from '@/lib/client/query/ensure-data'
 import {
   fetchInboxPosts,
   fetchBoardsList,
@@ -24,6 +14,7 @@ import {
   fetchIntegrationCatalog,
   fetchIntegrationByType,
   listPortalUsersFn,
+  listCustomerPeopleFn,
   listSegmentsFn,
   listUserAttributesFn,
 } from '@/lib/server/functions/admin'
@@ -131,7 +122,14 @@ export const adminQueries = {
   tags: () =>
     queryOptions({
       queryKey: ['admin', 'tags'],
-      queryFn: async () => ensureData(await fetchTagsList(), 'tags'),
+      queryFn: async () => {
+        const data = ensureData(await fetchTagsList(), 'tags')
+        return data.map((tag) => ({
+          ...tag,
+          createdAt: new Date(tag.createdAt),
+          deletedAt: tag.deletedAt ? new Date(tag.deletedAt) : null,
+        }))
+      },
       staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
@@ -141,7 +139,14 @@ export const adminQueries = {
   statuses: () =>
     queryOptions({
       queryKey: ['admin', 'statuses'],
-      queryFn: async () => ensureData(await fetchStatusesList(), 'statuses'),
+      queryFn: async () => {
+        const data = ensureData(await fetchStatusesList(), 'statuses')
+        return data.map((status) => ({
+          ...status,
+          createdAt: new Date(status.createdAt),
+          deletedAt: status.deletedAt ? new Date(status.deletedAt) : null,
+        }))
+      },
       staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
     }),
 
@@ -186,7 +191,7 @@ export const adminQueries = {
   searchMembers: (params: { search?: string; limit?: number }) =>
     queryOptions({
       queryKey: ['admin', 'members', 'search', params],
-      queryFn: () => searchMembersFn({ data: params }),
+      queryFn: async () => ensureData(await searchMembersFn({ data: params }), 'searchMembers'),
       staleTime: 30 * 1000,
     }),
 
@@ -196,19 +201,57 @@ export const adminQueries = {
   portalUsers: (filters: PortalUserListParams) =>
     queryOptions({
       queryKey: ['admin', 'users', filters],
-      queryFn: () =>
-        listPortalUsersFn({
-          data: {
-            search: filters.search,
-            verified: filters.verified,
-            dateFrom: filters.dateFrom?.toISOString(),
-            dateTo: filters.dateTo?.toISOString(),
-            sort: filters.sort,
-            page: filters.page,
-            limit: filters.limit,
-            segmentIds: filters.segmentIds,
-          },
-        }),
+      queryFn: async () =>
+        ensureData(
+          await listPortalUsersFn({
+            data: {
+              search: filters.search,
+              verified: filters.verified,
+              dateFrom: filters.dateFrom?.toISOString(),
+              dateTo: filters.dateTo?.toISOString(),
+              emailDomain: filters.emailDomain,
+              postCount: filters.postCount,
+              voteCount: filters.voteCount,
+              commentCount: filters.commentCount,
+              customAttrs: filters.customAttrs,
+              sort: filters.sort,
+              page: filters.page,
+              limit: filters.limit,
+              segmentIds: filters.segmentIds,
+              includeAnonymous: filters.includeAnonymous,
+            },
+          }),
+          'portalUsers'
+        ),
+      staleTime: 30 * 1000,
+    }),
+
+  /**
+   * List unified customer people.
+   */
+  customerPeople: (filters: {
+    search?: string
+    includeArchived?: boolean
+    segmentIds?: import('@quackback/ids').SegmentId[]
+    limit?: number
+    offset?: number
+  }) =>
+    queryOptions({
+      queryKey: ['admin', 'customers', 'people', filters],
+      queryFn: async () => {
+        const data = ensureData(await listCustomerPeopleFn({ data: filters }), 'customerPeople')
+        return {
+          ...data,
+          items: data.items.map((item) => ({
+            ...item,
+            archivedAt: item.archivedAt ? new Date(item.archivedAt) : null,
+            linkedUsers: item.linkedUsers.map((linkedUser) => ({
+              ...linkedUser,
+              joinedAt: new Date(linkedUser.joinedAt),
+            })),
+          })),
+        }
+      },
       staleTime: 30 * 1000,
     }),
 
@@ -218,7 +261,7 @@ export const adminQueries = {
   segments: () =>
     queryOptions({
       queryKey: ['admin', 'segments'],
-      queryFn: () => listSegmentsFn(),
+      queryFn: async () => ensureData(await listSegmentsFn(), 'segments'),
       staleTime: 30 * 1000,
     }),
 
@@ -228,7 +271,7 @@ export const adminQueries = {
   onboardingStatus: () =>
     queryOptions({
       queryKey: ['admin', 'onboarding'],
-      queryFn: () => fetchOnboardingStatus(),
+      queryFn: async () => ensureData(await fetchOnboardingStatus(), 'onboardingStatus'),
       staleTime: 0, // Always fresh during onboarding
     }),
 
@@ -239,7 +282,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'roadmap', 'statuses'],
       queryFn: async () => {
-        const statuses = await fetchPublicStatuses()
+        const statuses = ensureData(await fetchPublicStatuses(), 'roadmapStatuses')
         return statuses.filter((s) => s.showOnRoadmap)
       },
       staleTime: 5 * 60 * 1000, // 5min - reference data
@@ -251,7 +294,7 @@ export const adminQueries = {
   integrationCatalog: () =>
     queryOptions({
       queryKey: ['admin', 'integrationCatalog'],
-      queryFn: () => fetchIntegrationCatalog(),
+      queryFn: async () => ensureData(await fetchIntegrationCatalog(), 'integrationCatalog'),
       staleTime: 5 * 60 * 1000, // 5min - availability changes when credentials are configured
     }),
 
@@ -261,7 +304,11 @@ export const adminQueries = {
   platformCredentials: (type: string) =>
     queryOptions({
       queryKey: ['admin', 'platformCredentials', type],
-      queryFn: () => fetchPlatformCredentialsMaskedFn({ data: { integrationType: type } }),
+      queryFn: async () =>
+        ensureData(
+          await fetchPlatformCredentialsMaskedFn({ data: { integrationType: type } }),
+          'platformCredentials'
+        ),
       staleTime: 5 * 60 * 1000, // 5min - rarely changes during a session
     }),
 
@@ -271,7 +318,7 @@ export const adminQueries = {
   integrations: () =>
     queryOptions({
       queryKey: ['admin', 'integrations'],
-      queryFn: () => fetchIntegrationsList(),
+      queryFn: async () => ensureData(await fetchIntegrationsList(), 'integrations'),
       staleTime: 1 * 60 * 1000, // 1min - integration status can change
     }),
 
@@ -281,7 +328,8 @@ export const adminQueries = {
   integrationByType: (type: string) =>
     queryOptions({
       queryKey: ['admin', 'integrations', type],
-      queryFn: () => fetchIntegrationByType({ data: { type } }),
+      queryFn: async () =>
+        ensureData(await fetchIntegrationByType({ data: { type } }), 'integrationByType'),
       staleTime: 30 * 1000, // 30s - config may change frequently during setup
     }),
 
@@ -291,7 +339,7 @@ export const adminQueries = {
   githubIntegrations: () =>
     queryOptions({
       queryKey: ['admin', 'integrations', 'github-all'],
-      queryFn: () => fetchGitHubIntegrationsFn(),
+      queryFn: async () => ensureData(await fetchGitHubIntegrationsFn(), 'githubIntegrations'),
       staleTime: 30 * 1000,
     }),
 
@@ -303,7 +351,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['inbox', 'detail', postId],
       queryFn: async () => {
-        const data = await fetchPostWithDetails({ data: { id: postId } })
+        const data = ensureData(await fetchPostWithDetails({ data: { id: postId } }), 'postDetail')
         // Deserialize nested date strings from server response
         type ServerComment = (typeof data.comments)[0]
         type DeserializedComment = Omit<ServerComment, 'createdAt' | 'replies'> & {
@@ -336,7 +384,8 @@ export const adminQueries = {
   postVoters: (postId: PostId) =>
     queryOptions({
       queryKey: ['inbox', 'voters', postId],
-      queryFn: () => fetchPostVotersFn({ data: { id: postId } }),
+      queryFn: async () =>
+        ensureData(await fetchPostVotersFn({ data: { id: postId } }), 'postVoters'),
       staleTime: 30 * 1000,
     }),
 
@@ -355,9 +404,12 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['inbox', 'merge-preview', canonicalPostId, duplicatePostId],
       queryFn: async () => {
-        const data = await fetchMergePreviewFn({
-          data: { canonicalPostId, duplicatePostId },
-        })
+        const data = ensureData(
+          await fetchMergePreviewFn({
+            data: { canonicalPostId, duplicatePostId },
+          }),
+          'mergePreview'
+        )
         // Deserialize nested date strings (same pattern as postDetail)
         type ServerComment = (typeof data.post.comments)[0]
         type DeserializedComment = Omit<ServerComment, 'createdAt' | 'replies'> & {
@@ -400,7 +452,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'api-keys'],
       queryFn: async () => {
-        const data = await fetchApiKeys()
+        const data = ensureData(await fetchApiKeys(), 'apiKeys')
         return data.map((k) => ({
           ...k,
           createdAt: new Date(k.createdAt),
@@ -419,7 +471,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'webhooks'],
       queryFn: async () => {
-        const data = await fetchWebhooks()
+        const data = ensureData(await fetchWebhooks(), 'webhooks')
         return data.map((w) => ({
           ...w,
           createdAt: new Date(w.createdAt),
@@ -436,7 +488,7 @@ export const adminQueries = {
   authProviderStatus: () =>
     queryOptions({
       queryKey: ['admin', 'authProviderStatus'],
-      queryFn: () => fetchAuthProviderStatusFn(),
+      queryFn: async () => ensureData(await fetchAuthProviderStatusFn(), 'authProviderStatus'),
       staleTime: 5 * 60 * 1000, // 5min - changes when credentials are saved/deleted
     }),
 
@@ -446,7 +498,11 @@ export const adminQueries = {
   authProviderCredentials: (credentialType: string) =>
     queryOptions({
       queryKey: ['admin', 'authProviderCredentials', credentialType],
-      queryFn: () => fetchAuthProviderCredentialsMaskedFn({ data: { credentialType } }),
+      queryFn: async () =>
+        ensureData(
+          await fetchAuthProviderCredentialsMaskedFn({ data: { credentialType } }),
+          'authProviderCredentials'
+        ),
       staleTime: 5 * 60 * 1000,
     }),
 
@@ -456,7 +512,7 @@ export const adminQueries = {
   userAttributes: () =>
     queryOptions({
       queryKey: ['admin', 'userAttributes'],
-      queryFn: () => listUserAttributesFn(),
+      queryFn: async () => ensureData(await listUserAttributesFn(), 'userAttributes'),
       staleTime: 60 * 1000,
     }),
 
@@ -466,7 +522,7 @@ export const adminQueries = {
   ssoStatus: () =>
     queryOptions({
       queryKey: ['admin', 'ssoStatus'],
-      queryFn: () => getSsoStatusFn(),
+      queryFn: async () => ensureData(await getSsoStatusFn(), 'ssoStatus'),
       staleTime: 30 * 1000,
     }),
 
@@ -477,7 +533,7 @@ export const adminQueries = {
   recoveryCodes: () =>
     queryOptions({
       queryKey: ['admin', 'recoveryCodes'],
-      queryFn: () => listRecoveryCodesFn({ data: {} }),
+      queryFn: async () => ensureData(await listRecoveryCodesFn({ data: {} }), 'recoveryCodes'),
       staleTime: 30 * 1000,
     }),
 
@@ -488,7 +544,7 @@ export const adminQueries = {
   moderationStatus: () =>
     queryOptions({
       queryKey: ['admin', 'moderationStatus'],
-      queryFn: () => getModerationStatus(),
+      queryFn: async () => ensureData(await getModerationStatus(), 'moderationStatus'),
       staleTime: 30 * 1000, // 30s - count changes as posts are approved/rejected
     }),
 
@@ -507,7 +563,7 @@ export const adminQueries = {
   }) =>
     queryOptions({
       queryKey: ['admin', 'auditEvents', filters],
-      queryFn: () => listAuditEventsFn({ data: filters }),
+      queryFn: async () => ensureData(await listAuditEventsFn({ data: filters }), 'auditEvents'),
       // 30s — long enough for the page to feel stable; short enough
       // that the next interaction reflects fresh writes.
       staleTime: 30 * 1000,

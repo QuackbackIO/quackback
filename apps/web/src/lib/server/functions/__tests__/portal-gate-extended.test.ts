@@ -303,6 +303,39 @@ describe('portal.ts fetchPortalData — portal-visibility gate', () => {
     expect(mockListPublicBoardsWithStats).toHaveBeenCalledTimes(1)
   })
 
+  it('serializes post timestamps that are already strings', async () => {
+    const createdAt = '2026-06-12T08:30:00.000Z'
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockListPublicBoardsWithStats.mockResolvedValue([])
+    mockListPublicPostsWithVotesAndAvatars.mockResolvedValue({
+      items: [
+        {
+          id: 'post_1',
+          title: 'String timestamp post',
+          content: null,
+          statusId: null,
+          voteCount: 3,
+          authorName: 'Taylor',
+          principalId: 'principal_1',
+          createdAt,
+          commentCount: 0,
+          tags: [],
+          board: { id: 'board_1', name: 'Feedback', slug: 'feedback' },
+        },
+      ],
+      hasMore: false,
+    })
+    mockListPublicStatuses.mockResolvedValue([])
+    mockListPublicTags.mockResolvedValue([])
+    mockGetVotedPostIdsByUserId.mockResolvedValue(new Set())
+
+    const h = await loadModule(PORTAL)
+    const result = (await h[FETCH_PORTAL_DATA]({ data: { sort: 'top' } })) as {
+      posts: { items: Array<{ createdAt: string }> }
+    }
+    expect(result.posts.items[0].createdAt).toBe(createdAt)
+  })
+
   it('serves data when an authorized caller accesses a private portal', async () => {
     mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'team' })
     mockListPublicBoardsWithStats.mockResolvedValue([])

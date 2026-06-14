@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface HubSpotOAuthState {
   type: 'hubspot_oauth'
@@ -95,7 +96,7 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
           .update(integrations)
           .set({
             secrets: newSecrets,
-            config: { ...cfg, tokenExpiresAt: newExpiry.toISOString() },
+            config: { ...cfg, tokenExpiresAt: toIsoString(newExpiry) },
             updatedAt: new Date(),
           })
           .where(eqOp(integrations.integrationType, 'hubspot'))

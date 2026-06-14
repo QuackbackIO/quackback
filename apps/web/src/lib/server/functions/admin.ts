@@ -15,7 +15,7 @@ import {
   type BoardSettings,
 } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, requireAuthWithPermissions } from './auth-helpers'
 import { getSettings } from './workspace'
 import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
@@ -30,6 +30,7 @@ import {
 } from '@/lib/server/domains/principals/principal.service'
 import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
 import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
+import { listCustomerPeople } from '@/lib/server/domains/customers'
 import {
   listSegments,
   createSegment,
@@ -53,6 +54,8 @@ import {
   updateUserAttribute,
   deleteUserAttribute,
 } from '@/lib/server/domains/user-attributes/user-attribute.service'
+import { PERMISSIONS } from '@/lib/server/domains/authz'
+import { hasPermission } from '@/lib/server/domains/authz/authz.service'
 import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
 import { getBaseUrl } from '@/lib/server/config'
@@ -120,6 +123,14 @@ const portalUserByIdSchema = z.object({
   principalId: z.string(),
 })
 
+const listCustomerPeopleSchema = z.object({
+  search: z.string().optional(),
+  includeArchived: z.boolean().optional(),
+  segmentIds: z.array(z.string()).optional(),
+  limit: z.number().optional(),
+  offset: z.number().optional(),
+})
+
 /**
  * Fetch inbox posts with filters for admin feedback view
  */
@@ -155,9 +166,9 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         items: result.items.map((p) => ({
           ...p,
           contentJson: (p.contentJson ?? {}) as TiptapContent,
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-          deletedAt: p.deletedAt?.toISOString() || null,
+          createdAt: toIsoString(p.createdAt),
+          updatedAt: toIsoString(p.updatedAt),
+          deletedAt: toIsoStringOrNull(p.deletedAt),
         })),
       }
     } catch (error) {
@@ -179,8 +190,8 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
     return result.map((b) => ({
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
+      createdAt: toIsoString(b.createdAt),
+      updatedAt: toIsoString(b.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:admin] ❌ fetchBoardsList failed:`, error)
@@ -198,7 +209,11 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
 
     const result = await listTags()
     console.log(`[fn:admin] fetchTagsList: count=${result.length}`)
-    return result
+    return result.map((tag) => ({
+      ...tag,
+      createdAt: toIsoString(tag.createdAt),
+      deletedAt: toIsoStringOrNull(tag.deletedAt),
+    }))
   } catch (error) {
     console.error(`[fn:admin] ❌ fetchTagsList failed:`, error)
     throw error
@@ -215,7 +230,11 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
 
     const result = await listStatuses()
     console.log(`[fn:admin] fetchStatusesList: count=${result.length}`)
-    return result
+    return result.map((status) => ({
+      ...status,
+      createdAt: toIsoString(status.createdAt),
+      deletedAt: toIsoStringOrNull(status.deletedAt),
+    }))
   } catch (error) {
     console.error(`[fn:admin] ❌ fetchStatusesList failed:`, error)
     throw error
@@ -402,8 +421,8 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
     return orgBoards.map((b) => ({
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
+      createdAt: toIsoString(b.createdAt),
+      updatedAt: toIsoString(b.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:admin] ❌ fetchBoardsForSettings failed:`, error)
@@ -697,7 +716,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         ...result,
         items: result.items.map((user) => ({
           ...user,
-          joinedAt: user.joinedAt.toISOString(),
+          joinedAt: toIsoString(user.joinedAt),
         })),
       }
     } catch (error) {
@@ -727,16 +746,56 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
       console.log(`[fn:admin] getPortalUserFn: found`)
       return {
         ...result,
-        joinedAt: result.joinedAt.toISOString(),
-        createdAt: result.createdAt.toISOString(),
+        joinedAt: toIsoString(result.joinedAt),
+        createdAt: toIsoString(result.createdAt),
         engagedPosts: result.engagedPosts.map((post) => ({
           ...post,
-          createdAt: post.createdAt.toISOString(),
-          engagedAt: post.engagedAt.toISOString(),
+          createdAt: toIsoString(post.createdAt),
+          engagedAt: toIsoString(post.engagedAt),
         })),
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ getPortalUserFn failed:`, error)
+      throw error
+    }
+  })
+
+/**
+ * List unified customer people (contacts + linked portal users + portal-only users).
+ */
+export const listCustomerPeopleFn = createServerFn({ method: 'GET' })
+  .inputValidator(listCustomerPeopleSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] listCustomerPeopleFn`)
+    try {
+      const ctx = await requireAuthWithPermissions()
+      if (ctx.principal.role !== 'admin' && ctx.principal.role !== 'member') {
+        throw new Error('Access denied: Requires [admin, member]')
+      }
+      const canViewCrm = hasPermission(ctx.permissions, PERMISSIONS.ORG_VIEW)
+      const canViewTicketCounts = hasPermission(ctx.permissions, PERMISSIONS.TICKET_VIEW_ALL)
+      const result = await listCustomerPeople({
+        search: data.search,
+        includeArchived: data.includeArchived,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
+        includeCrm: canViewCrm,
+        includeTicketCounts: canViewTicketCounts,
+        limit: data.limit,
+        offset: data.offset,
+      })
+      return {
+        ...result,
+        items: result.items.map((item) => ({
+          ...item,
+          archivedAt: toIsoStringOrNull(item.archivedAt),
+          linkedUsers: item.linkedUsers.map((linkedUser) => ({
+            ...linkedUser,
+            joinedAt: toIsoString(linkedUser.joinedAt),
+          })),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ listCustomerPeopleFn failed:`, error)
       throw error
     }
   })
@@ -1186,6 +1245,11 @@ export const segmentConditionSchema = z.object({
     'last_active_days_ago',
     'signup_source',
     'principal_type',
+    'contact_title',
+    'contact_metadata_key',
+    'organization_domain',
+    'organization_external_id',
+    'organization_metadata_key',
   ]),
   operator: z.enum([
     'eq',
@@ -1268,7 +1332,16 @@ const assignUsersSchema = z.object({
  * values are actually present in their workspace as they type.
  */
 const fetchSegmentAttributeValuesSchema = z.object({
-  attribute: z.enum(['country', 'locale', 'name', 'email', 'signup_source']),
+  attribute: z.enum([
+    'country',
+    'locale',
+    'name',
+    'email',
+    'signup_source',
+    'contact_title',
+    'organization_domain',
+    'organization_external_id',
+  ]),
   query: z.string().max(200).default(''),
   limit: z.number().int().min(1).max(50).default(20),
 })
@@ -1293,8 +1366,8 @@ export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async ()
     console.log(`[fn:admin] listSegmentsFn: count=${result.length}`)
     return result.map((seg) => ({
       ...seg,
-      createdAt: seg.createdAt.toISOString(),
-      updatedAt: seg.updatedAt.toISOString(),
+      createdAt: toIsoString(seg.createdAt),
+      updatedAt: toIsoString(seg.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:admin] ❌ listSegmentsFn failed:`, error)
@@ -1324,8 +1397,8 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
       console.log(`[fn:admin] createSegmentFn: created id=${segment.id}`)
       return {
         ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
+        createdAt: toIsoString(segment.createdAt),
+        updatedAt: toIsoString(segment.updatedAt),
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ createSegmentFn failed:`, error)
@@ -1362,8 +1435,8 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
       console.log(`[fn:admin] updateSegmentFn: updated`)
       return {
         ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
+        createdAt: toIsoString(segment.createdAt),
+        updatedAt: toIsoString(segment.updatedAt),
       }
     } catch (error) {
       console.error(`[fn:admin] ❌ updateSegmentFn failed:`, error)

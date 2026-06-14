@@ -6,15 +6,18 @@
  * column = tabs (Properties / Participants / Shares / SLA / Activity). All
  * mutations live inside the per-tab components.
  */
-import { Suspense } from 'react'
+import { Suspense, useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createRouteErrorComponent } from '@/components/admin/shared'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import type { TicketId } from '@quackback/ids'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import type { JSONContent } from '@tiptap/react'
+import type { TicketId, TeamId } from '@quackback/ids'
 import { ticketQueries } from '@/lib/client/queries/tickets'
+import { updateTicketFn } from '@/lib/server/functions/tickets'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMyPermissions } from '@/lib/client/hooks/use-authz-queries'
+import type { MyPermissionsResult } from '@/lib/server/functions/authz'
 import { TicketDetailHeader } from '@/components/admin/tickets/ticket-detail-header'
 import { TicketThreadFeed } from '@/components/admin/tickets/ticket-thread-feed'
 import { TicketThreadComposer } from '@/components/admin/tickets/ticket-thread-composer'
@@ -23,6 +26,8 @@ import { TicketParticipantsList } from '@/components/admin/tickets/ticket-partic
 import { TicketSharesPanel } from '@/components/admin/tickets/ticket-shares-panel'
 import { TicketSlaPanel } from '@/components/admin/tickets/ticket-sla-panel'
 import { TicketActivityTimeline } from '@/components/admin/tickets/ticket-activity-timeline'
+import { handleTicketConflict } from '@/lib/client/utils/handle-ticket-conflict'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/admin/tickets/$ticketId')({
   loader: async ({ params, context }) => {
@@ -51,9 +56,31 @@ function hasAnyPermission(
   return perms.teamPermissions.some((tp) => tp.permissions.includes(key as never))
 }
 
+function hasTicketResourcePermission(
+  perms: MyPermissionsResult | undefined,
+  key: string,
+  resource: {
+    primaryTeamId: TeamId | null
+    assigneeTeamId: TeamId | null
+    sharedTeamIds: readonly TeamId[]
+  }
+): boolean {
+  if (!perms) return false
+  if (perms.workspacePermissions.includes(key as never)) return true
+  return perms.teamPermissions.some((tp) => {
+    if (!tp.permissions.includes(key as never)) return false
+    return (
+      tp.teamId === resource.primaryTeamId ||
+      tp.teamId === resource.assigneeTeamId ||
+      resource.sharedTeamIds.includes(tp.teamId)
+    )
+  })
+}
+
 function TicketDetailPage() {
   const { ticketId: rawId } = Route.useParams()
   const ticketId = rawId as TicketId
+  const qc = useQueryClient()
 
   const { data: ticket } = useSuspenseQuery(ticketQueries.detail(ticketId))
   const { data: threads } = useSuspenseQuery(ticketQueries.threads(ticketId))
@@ -65,6 +92,42 @@ function TicketDetailPage() {
   const canPublic = hasAnyPermission(perms.data, 'ticket.reply_public')
   const canInternal = hasAnyPermission(perms.data, 'ticket.comment_internal')
   const canShared = hasAnyPermission(perms.data, 'ticket.share_cross_team')
+  const sharedTeamIds = shares.map((s) => s.teamId as TeamId)
+  const canEditDescription = hasTicketResourcePermission(perms.data, 'ticket.edit_fields', {
+    primaryTeamId: ticket.primaryTeamId as TeamId | null,
+    assigneeTeamId: ticket.assigneeTeamId as TeamId | null,
+    sharedTeamIds,
+  })
+
+  const invalidateTicket = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ticketQueries.detail(ticketId).queryKey })
+    qc.invalidateQueries({ queryKey: ticketQueries.activity(ticketId).queryKey })
+    qc.invalidateQueries({ queryKey: ['tickets', 'list'] })
+  }, [qc, ticketId])
+
+  const descriptionMutation = useMutation({
+    mutationFn: (patch: { descriptionJson: JSONContent | null; descriptionText: string | null }) =>
+      updateTicketFn({
+        data: {
+          ticketId,
+          expectedUpdatedAt: new Date(ticket.updatedAt).toISOString(),
+          descriptionJson: patch.descriptionJson as { type: 'doc'; content?: unknown[] } | null,
+          descriptionText: patch.descriptionText,
+        },
+      }),
+    onSuccess: () => {
+      invalidateTicket()
+      toast.success('Description updated')
+    },
+    onError: (error) => handleTicketConflict(error, qc, ticketId),
+  })
+
+  const handleDescriptionUpdate = useCallback(
+    (descriptionJson: JSONContent | null, descriptionText: string | null) => {
+      descriptionMutation.mutate({ descriptionJson, descriptionText })
+    },
+    [descriptionMutation]
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -101,6 +164,8 @@ function TicketDetailPage() {
                   ? { text: ticket.descriptionText, json: ticket.descriptionJson }
                   : null
               }
+              onDescriptionUpdate={canEditDescription ? handleDescriptionUpdate : undefined}
+              isDescriptionSaving={descriptionMutation.isPending}
             />
           </div>
           <TicketThreadComposer
@@ -111,16 +176,28 @@ function TicketDetailPage() {
           />
         </div>
 
-        <aside className="w-80 shrink-0 overflow-auto">
-          <Tabs defaultValue="properties" className="h-full">
-            <TabsList className="w-full justify-start rounded-none border-b border-border/50 bg-transparent px-2">
-              <TabsTrigger value="properties">Properties</TabsTrigger>
-              <TabsTrigger value="participants">People</TabsTrigger>
-              <TabsTrigger value="shares">Shares</TabsTrigger>
-              <TabsTrigger value="sla">SLA</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-            </TabsList>
-            <TabsContent value="properties" className="p-3">
+        <aside className="w-80 shrink-0 overflow-hidden bg-background xl:w-96">
+          <Tabs defaultValue="properties" className="flex h-full min-h-0 flex-col gap-0">
+            <div className="shrink-0 border-b border-border/50 px-3 py-2">
+              <TabsList className="grid h-8 w-full grid-cols-5 rounded-md bg-muted/30 p-0.5">
+                <TabsTrigger value="properties" className="min-w-0 px-1.5 text-xs">
+                  Properties
+                </TabsTrigger>
+                <TabsTrigger value="participants" className="min-w-0 px-1.5 text-xs">
+                  People
+                </TabsTrigger>
+                <TabsTrigger value="shares" className="min-w-0 px-1.5 text-xs">
+                  Shares
+                </TabsTrigger>
+                <TabsTrigger value="sla" className="min-w-0 px-1.5 text-xs">
+                  SLA
+                </TabsTrigger>
+                <TabsTrigger value="activity" className="min-w-0 px-1.5 text-xs">
+                  Activity
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="properties" className="m-0 min-h-0 overflow-auto p-4">
               <TicketPropertiesPanel
                 ticket={{
                   id: ticket.id,
@@ -137,7 +214,7 @@ function TicketDetailPage() {
                 }}
               />
             </TabsContent>
-            <TabsContent value="participants" className="p-3">
+            <TabsContent value="participants" className="m-0 min-h-0 overflow-auto p-4">
               <TicketParticipantsList
                 ticketId={ticketId}
                 participants={participants.map((p) => ({
@@ -149,7 +226,7 @@ function TicketDetailPage() {
                 }))}
               />
             </TabsContent>
-            <TabsContent value="shares" className="p-3">
+            <TabsContent value="shares" className="m-0 min-h-0 overflow-auto p-4">
               <TicketSharesPanel
                 ticketId={ticketId}
                 shares={shares.map((s) => ({
@@ -161,12 +238,12 @@ function TicketDetailPage() {
                 canShare={canShared}
               />
             </TabsContent>
-            <TabsContent value="sla" className="p-3">
+            <TabsContent value="sla" className="m-0 min-h-0 overflow-auto p-4">
               <Suspense fallback={<Skeleton className="h-24 w-full" />}>
                 <TicketSlaPanel ticketId={ticketId} />
               </Suspense>
             </TabsContent>
-            <TabsContent value="activity" className="p-3">
+            <TabsContent value="activity" className="m-0 min-h-0 overflow-auto p-4">
               <Suspense fallback={<Skeleton className="h-24 w-full" />}>
                 <TicketActivityTimeline ticketId={ticketId} />
               </Suspense>

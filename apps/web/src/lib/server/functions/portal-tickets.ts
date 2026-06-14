@@ -27,6 +27,7 @@ import {
 } from '@/lib/server/domains/tickets/ticket.portal-query'
 import { listPublicThreadsForTicket } from '@/lib/server/domains/tickets/ticket.threads'
 import type { PrincipalId, TicketId, TicketStatusId, UserId } from '@quackback/ids'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 const tiptapDocSchema = z
   .object({ type: z.literal('doc'), content: z.array(z.unknown()).optional() })
@@ -82,8 +83,8 @@ export const listMyTicketsFn = createServerFn({ method: 'GET' })
         statusCategory: (s?.category ?? 'open') as SerializedTicketRow['statusCategory'],
         statusName: s?.name ?? 'Unknown',
         statusColor: s?.color ?? null,
-        lastActivityAt: r.lastActivityAt.toISOString(),
-        createdAt: r.createdAt.toISOString(),
+        lastActivityAt: toIsoString(r.lastActivityAt),
+        createdAt: toIsoString(r.createdAt),
       }
     })
     return { rows: serialized, total }
@@ -178,9 +179,9 @@ export const getMyTicketFn = createServerFn({ method: 'GET' })
         statusName: status?.name ?? 'Unknown',
         statusColor: status?.color ?? null,
         requesterPrincipalId: (ticket.requesterPrincipalId as PrincipalId | null) ?? null,
-        createdAt: ticket.createdAt.toISOString(),
-        lastActivityAt: ticket.lastActivityAt.toISOString(),
-        updatedAt: ticket.updatedAt.toISOString(),
+        createdAt: toIsoString(ticket.createdAt),
+        lastActivityAt: toIsoString(ticket.lastActivityAt),
+        updatedAt: toIsoString(ticket.updatedAt),
       },
       threads: threads.map(
         (t): SerializedThread => ({
@@ -189,8 +190,8 @@ export const getMyTicketFn = createServerFn({ method: 'GET' })
           audience: t.audience as SerializedThread['audience'],
           bodyJson: (t.bodyJson as TiptapContent | null) ?? null,
           bodyText: t.bodyText,
-          createdAt: t.createdAt.toISOString(),
-          editedAt: t.editedAt ? t.editedAt.toISOString() : null,
+          createdAt: toIsoString(t.createdAt),
+          editedAt: toIsoStringOrNull(t.editedAt),
         })
       ),
       principalNames,
@@ -219,7 +220,7 @@ export const replyToMyTicketFn = createServerFn({ method: 'POST' })
       id: thread.id,
       ticketId: thread.ticketId as TicketId,
       audience: thread.audience as SerializedThread['audience'],
-      createdAt: thread.createdAt.toISOString(),
+      createdAt: toIsoString(thread.createdAt),
     }
   })
 
@@ -243,7 +244,7 @@ export const updateMyTicketDescriptionFn = createServerFn({ method: 'POST' })
     })
     return {
       id: updated.id as TicketId,
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: toIsoString(updated.updatedAt),
     }
   })
 
@@ -264,7 +265,7 @@ export const closeMyTicketFn = createServerFn({ method: 'POST' })
       id: updated.id as TicketId,
       statusCategory: (status?.category ?? 'solved') as SerializedTicketRow['statusCategory'],
       statusName: status?.name ?? 'Solved',
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: toIsoString(updated.updatedAt),
     }
   })
 
@@ -285,6 +286,6 @@ export const reopenMyTicketFn = createServerFn({ method: 'POST' })
       id: updated.id as TicketId,
       statusCategory: (status?.category ?? 'open') as SerializedTicketRow['statusCategory'],
       statusName: status?.name ?? 'Open',
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: toIsoString(updated.updatedAt),
     }
   })

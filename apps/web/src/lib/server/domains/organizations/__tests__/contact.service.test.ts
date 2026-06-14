@@ -7,6 +7,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const contactFindFirstMock = vi.fn()
 const linkFindFirstMock = vi.fn()
 const insertReturningMock = vi.fn()
+const selectWhereMock = vi.fn()
+const selectFromMock = vi.fn(() => ({ where: selectWhereMock }))
+const selectMock = vi.fn(() => ({ from: selectFromMock }))
 
 vi.mock('@/lib/server/db', () => {
   const insertChain = {
@@ -26,15 +29,22 @@ vi.mock('@/lib/server/db', () => {
         returning: vi.fn(),
       })),
       delete: vi.fn(() => ({ where: vi.fn() })),
-      select: vi.fn(),
+      select: selectMock,
     },
     eq: vi.fn(),
     and: vi.fn(),
     or: vi.fn(),
     ilike: vi.fn(),
     isNull: vi.fn(),
+    sql: vi.fn(),
     asc: vi.fn(),
     desc: vi.fn(),
+    user: {
+      id: 'user.id',
+      email: 'user.email',
+      emailVerified: 'user.email_verified',
+      isAnonymous: 'user.is_anonymous',
+    },
     contacts: {
       id: 'contacts.id',
       email: 'contacts.email',
@@ -80,6 +90,9 @@ beforeEach(() => {
   contactFindFirstMock.mockReset()
   linkFindFirstMock.mockReset()
   insertReturningMock.mockReset()
+  selectMock.mockClear()
+  selectFromMock.mockClear()
+  selectWhereMock.mockReset()
 })
 
 describe('createContact', () => {
@@ -101,10 +114,30 @@ describe('createContact', () => {
 
   it('inserts with normalised email on success', async () => {
     contactFindFirstMock.mockResolvedValue(undefined)
+    selectWhereMock.mockResolvedValueOnce([])
     insertReturningMock.mockResolvedValueOnce([{ id: 'contact_new', email: 'a@b.com' }])
     const { createContact } = await import('../contact.service')
     const result = await createContact({ email: 'A@B.COM' })
     expect(result.id).toBe('contact_new')
+  })
+
+  it('links matching verified portal users after contact creation', async () => {
+    contactFindFirstMock.mockResolvedValue(undefined)
+    selectWhereMock.mockResolvedValueOnce([{ id: 'user_verified' }])
+    linkFindFirstMock.mockResolvedValueOnce(undefined)
+    insertReturningMock
+      .mockResolvedValueOnce([{ id: 'contact_new', email: 'a@b.com', archivedAt: null }])
+      .mockResolvedValueOnce([
+        { id: 'cu_link_new', contactId: 'contact_new', userId: 'user_verified' },
+      ])
+
+    const { createContact } = await import('../contact.service')
+    await createContact({ email: 'A@B.COM' })
+
+    expect(selectMock).toHaveBeenCalled()
+    expect(selectWhereMock).toHaveBeenCalled()
+    expect(linkFindFirstMock).toHaveBeenCalled()
+    expect(insertReturningMock).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -118,6 +151,7 @@ describe('findOrCreateByEmail', () => {
 
   it('creates a new contact when no match', async () => {
     contactFindFirstMock.mockResolvedValueOnce(undefined)
+    selectWhereMock.mockResolvedValueOnce([])
     insertReturningMock.mockResolvedValueOnce([{ id: 'contact_new', email: 'a@b.com' }])
     const { findOrCreateByEmail } = await import('../contact.service')
     const result = await findOrCreateByEmail({ email: 'a@b.com' })

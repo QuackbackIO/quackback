@@ -10,7 +10,12 @@ import {
 import type { SegmentRuleAttribute } from '@/lib/server/db'
 
 const ALLOWED_TYPES: ReadonlyArray<BuiltinField['type']> = ['string', 'number', 'boolean', 'date']
-const ALLOWED_GROUPS: ReadonlyArray<BuiltinField['group']> = ['attribute', 'account', 'activity']
+const ALLOWED_GROUPS: ReadonlyArray<BuiltinField['group']> = [
+  'attribute',
+  'account',
+  'activity',
+  'crm',
+]
 
 describe('BUILTIN_FIELDS registry well-formedness', () => {
   it('is a non-empty array', () => {
@@ -66,6 +71,11 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
       'last_active_days_ago',
       'signup_source',
       'principal_type',
+      'contact_title',
+      'contact_metadata_key',
+      'organization_domain',
+      'organization_external_id',
+      'organization_metadata_key',
     ]
     for (const key of expected) {
       expect(keys.has(key), `expected key "${key}" to be in BUILTIN_FIELDS`).toBe(true)
@@ -108,7 +118,19 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
   })
 
   it('string fields have type string', () => {
-    for (const key of ['email', 'name', 'locale', 'country', 'signup_source', 'principal_type']) {
+    for (const key of [
+      'email',
+      'name',
+      'locale',
+      'country',
+      'signup_source',
+      'principal_type',
+      'contact_title',
+      'contact_metadata_key',
+      'organization_domain',
+      'organization_external_id',
+      'organization_metadata_key',
+    ]) {
       const field = BUILTIN_FIELDS.find((f) => f.key === key)
       expect(field?.type, `"${key}" should be string`).toBe('string')
     }
@@ -155,6 +177,21 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
     expect(activityKeys).not.toContain('email_verified')
     expect(activityKeys).not.toContain('principal_type')
     expect(activityKeys).not.toContain('created_at_days_ago')
+  })
+
+  it('crm-group fields expose linked contact and organization predicates', () => {
+    const crmKeys = BUILTIN_FIELDS.filter((f) => f.group === 'crm').map((f) => f.key)
+    expect(crmKeys).toEqual(
+      expect.arrayContaining([
+        'contact_title',
+        'contact_metadata_key',
+        'organization_domain',
+        'organization_external_id',
+        'organization_metadata_key',
+      ])
+    )
+    expect(crmKeys).not.toContain('email')
+    expect(crmKeys).not.toContain('post_count')
   })
 })
 

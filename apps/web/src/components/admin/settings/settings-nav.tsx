@@ -124,11 +124,6 @@ export function buildNavSections(flags?: {
     sections.push({ label: 'Support', items: supportItems })
   }
 
-  sections.push({
-    label: 'Customers',
-    items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
-  })
-
   return sections
 }
 

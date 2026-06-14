@@ -36,6 +36,7 @@ import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/serv
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils/date'
 
 // ============================================
 // Read Operations
@@ -165,7 +166,6 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       // both the Date and string shapes — postgres-js returns the
       // `max()` aggregate as a string, plain timestamp selects come
       // back as Date.
-      const { toIsoStringOrNull } = await import('@/lib/shared/utils/date')
       const members = membersRaw.map((m) => ({
         ...m,
         lastSignInAt: toIsoStringOrNull(m.lastSignInAt),
@@ -190,9 +190,9 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         email: inv.email,
         name: inv.name,
         role: inv.role,
-        createdAt: inv.createdAt.toISOString(),
-        lastSentAt: inv.lastSentAt?.toISOString() ?? null,
-        expiresAt: inv.expiresAt.toISOString(),
+        createdAt: toIsoString(inv.createdAt),
+        lastSentAt: toIsoStringOrNull(inv.lastSentAt),
+        expiresAt: toIsoString(inv.expiresAt),
       }))
 
       return { members, avatarMap, formattedInvitations }

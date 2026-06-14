@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface JiraOAuthState {
   type: 'jira_oauth'
@@ -84,7 +85,7 @@ async function getJiraAccessToken(integration: { secrets: unknown; config: unkno
       const credentials = await getPlatformCredentials('jira')
       const refreshed = await refreshJiraToken(secrets.refreshToken, credentials ?? undefined)
 
-      const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+      const newExpiry = toIsoString(new Date(Date.now() + refreshed.expiresIn * 1000))
       await db
         .update(integrations)
         .set({

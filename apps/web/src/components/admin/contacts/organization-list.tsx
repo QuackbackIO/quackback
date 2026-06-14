@@ -22,8 +22,12 @@ interface Props {
 }
 
 export function OrganizationList({ search, showArchived }: Props) {
+  const trimmedSearch = search.trim()
   const { data: orgs } = useSuspenseQuery(
-    organizationQueries.list({ search, includeArchived: true })
+    organizationQueries.list({
+      includeArchived: true,
+      ...(trimmedSearch ? { search: trimmedSearch } : {}),
+    })
   )
 
   const rows = useMemo(

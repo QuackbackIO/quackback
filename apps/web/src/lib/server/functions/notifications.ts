@@ -28,6 +28,7 @@ import { listSharesForTicket } from '@/lib/server/domains/tickets/ticket.share'
 import { canViewTicket, toResourceScope } from '@/lib/server/domains/tickets/ticket.permissions'
 import { loadPermissionSet } from '@/lib/server/domains/authz/authz.service'
 import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 // ============================================
 // Schemas
@@ -88,9 +89,9 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
             commentId: n.commentId,
             ticketId: n.ticketId ?? null,
             conversationId: typeof conversationId === 'string' ? conversationId : null,
-            readAt: n.readAt?.toISOString() ?? null,
-            archivedAt: n.archivedAt?.toISOString() ?? null,
-            createdAt: n.createdAt.toISOString(),
+            readAt: toIsoStringOrNull(n.readAt),
+            archivedAt: toIsoStringOrNull(n.archivedAt),
+            createdAt: toIsoString(n.createdAt),
             post: n.post,
           }
         }),
@@ -282,7 +283,7 @@ export const muteTicketFn = createServerFn({ method: 'POST' })
     await assertCanViewTicket(ticketId, auth.principal.id)
     const until = data.untilIso ? new Date(data.untilIso) : null
     const row = await muteTicketSubscription(ticketId, auth.principal.id, until)
-    return { mutedUntil: row?.mutedUntil?.toISOString() ?? null }
+    return { mutedUntil: toIsoStringOrNull(row?.mutedUntil) }
   })
 
 export const unmuteTicketFn = createServerFn({ method: 'POST' })
@@ -312,8 +313,8 @@ export const listTicketSubscriptionsFn = createServerFn({ method: 'GET' })
       notifyParticipants: r.notifyParticipants,
       notifyShares: r.notifyShares,
       notifySla: r.notifySla,
-      mutedUntil: r.mutedUntil?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
+      mutedUntil: toIsoStringOrNull(r.mutedUntil),
+      createdAt: toIsoString(r.createdAt),
     }))
   })
 
@@ -334,8 +335,8 @@ export const getMyTicketSubscriptionFn = createServerFn({ method: 'GET' })
       notifyParticipants: row.notifyParticipants,
       notifyShares: row.notifyShares,
       notifySla: row.notifySla,
-      mutedUntil: row.mutedUntil?.toISOString() ?? null,
-      createdAt: row.createdAt.toISOString(),
+      mutedUntil: toIsoStringOrNull(row.mutedUntil),
+      createdAt: toIsoString(row.createdAt),
     }
   })
 
@@ -371,17 +372,17 @@ export const listMyTicketSubscriptionsFn = createServerFn({ method: 'GET' })
         notifyParticipants: r.notifyParticipants,
         notifyShares: r.notifyShares,
         notifySla: r.notifySla,
-        mutedUntil: r.mutedUntil?.toISOString() ?? null,
-        createdAt: r.createdAt.toISOString(),
+        mutedUntil: toIsoStringOrNull(r.mutedUntil),
+        createdAt: toIsoString(r.createdAt),
         ticket: {
           id: r.ticket.id,
           subject: r.ticket.subject,
           statusId: r.ticket.statusId,
           priority: r.ticket.priority,
           channel: r.ticket.channel,
-          updatedAt: r.ticket.updatedAt.toISOString(),
+          updatedAt: toIsoString(r.ticket.updatedAt),
         },
       })),
-      nextCursor: last ? { createdAt: last.createdAt.toISOString(), id: last.id } : null,
+      nextCursor: last ? { createdAt: toIsoString(last.createdAt), id: last.id } : null,
     }
   })

@@ -1,73 +1,7 @@
-/**
- * Cross-org contacts list with search + show-archived toggle + create dialog.
- */
-import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { createRouteErrorComponent } from '@/components/admin/shared'
-import { Suspense } from 'react'
-import { contactQueries } from '@/lib/client/queries/contacts'
-import { ContactList } from '@/components/admin/contacts/contact-list'
-import { ContactCreateDialog } from '@/components/admin/contacts/contact-create-dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
-import { PlusIcon } from '@heroicons/react/24/solid'
-import { PermissionGate } from '@/components/admin/shared/permission-gate'
-import { PERMISSIONS } from '@/lib/server/domains/authz'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/admin/contacts/people')({
-  loader: async ({ context }) => {
-    const { queryClient } = context as {
-      queryClient: import('@tanstack/react-query').QueryClient
-    }
-    await queryClient.ensureQueryData(contactQueries.search({ includeArchived: true }))
+  loader: () => {
+    throw redirect({ to: '/admin/customers/people' })
   },
-  errorComponent: createRouteErrorComponent('Failed to load contacts'),
-  component: ContactsPeoplePage,
 })
-
-function ContactsPeoplePage() {
-  const [search, setSearch] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
-
-  return (
-    <div className="space-y-4 max-w-5xl">
-      <div className="flex items-center justify-between gap-3">
-        <Input
-          placeholder="Search contacts…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="contacts-show-archived"
-              checked={showArchived}
-              onCheckedChange={setShowArchived}
-            />
-            <Label htmlFor="contacts-show-archived" className="text-xs font-normal">
-              Show archived
-            </Label>
-          </div>
-          <PermissionGate permission={PERMISSIONS.ORG_MANAGE}>
-            <ContactCreateDialog
-              trigger={
-                <Button size="sm">
-                  <PlusIcon className="h-4 w-4 mr-1" />
-                  New contact
-                </Button>
-              }
-            />
-          </PermissionGate>
-        </div>
-      </div>
-
-      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-        <ContactList search={search} showArchived={showArchived} />
-      </Suspense>
-    </div>
-  )
-}

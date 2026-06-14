@@ -18,6 +18,7 @@ import {
 } from '@/lib/server/domains/boards/board.service'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { boardAccessSchema, boardPresetSchema, accessForPreset } from '@/lib/shared/schemas/boards'
+import { toIsoString } from '@/lib/shared/utils'
 
 // Re-export for back-compat: existing test imports `boardAccessSchema`
 // from '../boards'. The actual definition lives in @/lib/shared/schemas/boards
@@ -99,8 +100,8 @@ function serializeBoard(b: Awaited<ReturnType<typeof listBoards>>[number]) {
   return {
     ...b,
     settings: (b.settings ?? {}) as BoardSettings,
-    createdAt: b.createdAt.toISOString(),
-    updatedAt: b.updatedAt.toISOString(),
+    createdAt: toIsoString(b.createdAt),
+    updatedAt: toIsoString(b.updatedAt),
   }
 }
 
@@ -266,7 +267,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
             ...setupState.steps,
             boards: true,
           },
-          completedAt: new Date().toISOString(),
+          completedAt: toIsoString(new Date()),
         }
         await db
           .update(settings)

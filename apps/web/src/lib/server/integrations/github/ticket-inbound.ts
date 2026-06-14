@@ -10,6 +10,7 @@
  */
 
 import type { GitHubIntegrationConfig } from './types'
+import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import {
   buildInboundTicketThreadBody,
   findThreadLinkByExternalComment,
@@ -352,6 +353,31 @@ type IntegrationRecord = {
   config: GitHubIntegrationConfig
 }
 
+function buildIssueDescriptionPatch(body: string | null): {
+  descriptionJson: ReturnType<typeof markdownToTiptapJson> | null
+  descriptionText: string | null
+} {
+  const description = extractIssueDescription(body)
+  if (!description?.trim()) {
+    return { descriptionJson: null, descriptionText: null }
+  }
+  return {
+    descriptionJson: markdownToTiptapJson(description),
+    descriptionText: description,
+  }
+}
+
+function extractIssueDescription(body: string | null): string | null {
+  if (body == null) return null
+  const viewLinkIndex = body.search(/\n\[View in Quackback\]\([^)]+\)\s*$/)
+  if (viewLinkIndex === -1) return body
+
+  const beforeFooter = body.slice(0, viewLinkIndex)
+  const separators = [...beforeFooter.matchAll(/^---\s*$/gm)]
+  const boundary = separators[separators.length - 1]
+  return boundary?.index == null ? body : body.slice(0, boundary.index).trim()
+}
+
 async function handleIssueCommentCreated(
   payload: GitHubIssueCommentPayload,
   integration: IntegrationRecord,
@@ -470,7 +496,7 @@ async function handleIssueOpened(
 
   const ticket = await createTicket({
     subject: truncateSubject(issue.title),
-    descriptionText: issue.body ?? undefined,
+    ...buildIssueDescriptionPatch(issue.body),
     channel: 'api',
     inboxId: integration.config.defaultInboxId
       ? (integration.config.defaultInboxId as InboxId)
@@ -576,7 +602,7 @@ async function handleIssueEdited(
     expectedUpdatedAt: ticket.updatedAt,
     actorPrincipalId: (integration.principalId as PrincipalId) ?? null,
     subject: truncateSubject(payload.issue.title),
-    descriptionText: payload.issue.body ?? undefined,
+    ...buildIssueDescriptionPatch(payload.issue.body),
     syncSourceIntegrationId: integration.id,
   })
 }

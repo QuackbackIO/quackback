@@ -66,14 +66,14 @@ export const Route = createFileRoute('/admin/feedback/')({
           limit: 20,
         })
       ),
-      queryClient.ensureQueryData(adminQueries.boards()),
-      queryClient.ensureQueryData(adminQueries.tags()),
-      queryClient.ensureQueryData(adminQueries.statuses()),
-      queryClient.ensureQueryData(adminQueries.teamMembers()),
-      queryClient.ensureQueryData(mergeSuggestionQueries.summary()),
+      queryClient.prefetchQuery(adminQueries.boards()),
+      queryClient.prefetchQuery(adminQueries.tags()),
+      queryClient.prefetchQuery(adminQueries.statuses()),
+      queryClient.prefetchQuery(adminQueries.teamMembers()),
+      queryClient.prefetchQuery(mergeSuggestionQueries.summary()),
       // Warm the moderation count so the pending-moderation banner renders on
       // first paint instead of popping in once the query resolves.
-      queryClient.ensureQueryData(adminQueries.moderationStatus()),
+      queryClient.prefetchQuery(adminQueries.moderationStatus()),
     ])
 
     return {
@@ -115,7 +115,6 @@ function FeedbackIndexPage() {
   const ownerFilterId = search.owner
 
   // Read pre-fetched data from React Query cache
-  const boardsQuery = useSuspenseQuery(adminQueries.boards())
   const postsQuery = useSuspenseQuery(
     adminQueries.inboxPosts({
       boardIds: boardFilterIds.length > 0 ? boardFilterIds : undefined,
@@ -133,16 +132,17 @@ function FeedbackIndexPage() {
       limit: 20,
     })
   )
-  const tagsQuery = useSuspenseQuery(adminQueries.tags())
-  const statusesQuery = useSuspenseQuery(adminQueries.statuses())
+  const boardsQuery = useQuery(adminQueries.boards())
+  const tagsQuery = useQuery(adminQueries.tags())
+  const statusesQuery = useQuery(adminQueries.statuses())
   const membersQuery = useQuery(adminQueries.teamMembers())
 
   return (
     <InboxContainer
       initialPosts={postsQuery.data as InboxPostListResult}
-      boards={boardsQuery.data}
-      tags={tagsQuery.data}
-      statuses={statusesQuery.data}
+      boards={boardsQuery.data ?? []}
+      tags={tagsQuery.data ?? []}
+      statuses={statusesQuery.data ?? []}
       members={membersQuery.data ?? []}
       currentUser={currentUser}
     />

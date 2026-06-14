@@ -26,7 +26,6 @@ import type { WidgetMetadata, WidgetEventName, WidgetEventMap } from '@/lib/shar
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
 import { onIntlError } from '@/lib/client/intl-error'
-import { createWidgetIdentifyTokenFn } from '@/lib/server/functions/widget'
 
 interface WidgetUser {
   id: string
@@ -229,9 +228,7 @@ export function WidgetAuthProvider({
           if (hmacRequired) return false
 
           const previousToken = getWidgetToken()
-          const { ssoToken } = await createWidgetIdentifyTokenFn({
-            data: { email, name: name || email.split('@')[0] },
-          })
+          const displayName = name || email.split('@')[0]
 
           const headers: Record<string, string> = { 'Content-Type': 'application/json' }
           if (previousToken) {
@@ -241,7 +238,12 @@ export function WidgetAuthProvider({
           const response = await fetch('/api/widget/identify', {
             method: 'POST',
             headers,
-            body: JSON.stringify(previousToken ? { ssoToken, previousToken } : { ssoToken }),
+            body: JSON.stringify({
+              id: email,
+              email,
+              name: displayName,
+              ...(previousToken ? { previousToken } : {}),
+            }),
           })
           if (!response.ok) return false
           applyIdentifyResult(await response.json())

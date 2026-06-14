@@ -3,6 +3,7 @@ import { getThemeCookie, type Theme } from '@/lib/shared/theme'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface BootstrapData {
   baseUrl: string
@@ -79,10 +80,10 @@ async function getSessionAndRole(): Promise<{
       session: {
         session: {
           id: session.session.id as SessionId,
-          expiresAt: session.session.expiresAt.toISOString(),
+          expiresAt: toIsoString(session.session.expiresAt),
           token: session.session.token,
-          createdAt: session.session.createdAt.toISOString(),
-          updatedAt: session.session.updatedAt.toISOString(),
+          createdAt: toIsoString(session.session.createdAt),
+          updatedAt: toIsoString(session.session.updatedAt),
           userId,
         },
         user: {
@@ -92,8 +93,8 @@ async function getSessionAndRole(): Promise<{
           emailVerified: session.user.emailVerified,
           image: session.user.image ?? null,
           principalType: (principalRecord?.type as PrincipalType) ?? 'user',
-          createdAt: session.user.createdAt.toISOString(),
-          updatedAt: session.user.updatedAt.toISOString(),
+          createdAt: toIsoString(session.user.createdAt),
+          updatedAt: toIsoString(session.user.updatedAt),
         },
       },
       role: (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null,

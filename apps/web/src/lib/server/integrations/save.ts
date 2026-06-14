@@ -7,6 +7,7 @@ import { encryptSecrets } from './encryption'
 import { getIntegration } from './index'
 import type { IntegrationId, PrincipalId } from '@quackback/ids'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface SaveIntegrationParams {
   principalId: PrincipalId
@@ -47,7 +48,7 @@ export async function saveIntegration(
 
   const config = {
     ...oauthConfig,
-    ...(tokenExpiresAt ? { tokenExpiresAt: tokenExpiresAt.toISOString() } : {}),
+    ...(tokenExpiresAt ? { tokenExpiresAt: toIsoString(tokenExpiresAt) } : {}),
   }
 
   // Check if integration already exists (for reconnect — keep existing service principal)

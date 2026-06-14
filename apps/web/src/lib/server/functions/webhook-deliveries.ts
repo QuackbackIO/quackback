@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import type { WebhookId, WebhookDeliveryId } from '@quackback/ids'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 const STATUSES = [
   'queued',
@@ -51,7 +52,7 @@ export const listWebhookDeliveriesFn = createServerFn({ method: 'GET' })
     const nextCursor =
       rows.length === data.limit
         ? {
-            cursorAttemptedAt: rows[rows.length - 1].attemptedAt.toISOString(),
+            cursorAttemptedAt: toIsoString(rows[rows.length - 1].attemptedAt),
             cursorId: rows[rows.length - 1].id,
           }
         : null
@@ -71,8 +72,8 @@ export const listWebhookDeliveriesFn = createServerFn({ method: 'GET' })
         responseBodySnippet: r.responseBodySnippet,
         latencyMs: r.latencyMs,
         signatureTimestamp: r.signatureTimestamp,
-        attemptedAt: r.attemptedAt.toISOString(),
-        nextRetryAt: r.nextRetryAt?.toISOString() ?? null,
+        attemptedAt: toIsoString(r.attemptedAt),
+        nextRetryAt: toIsoStringOrNull(r.nextRetryAt),
         canRedeliver:
           (r.status === 'failed_retryable' || r.status === 'failed_terminal') &&
           (r as { requestPayloadJson?: unknown }).requestPayloadJson != null &&

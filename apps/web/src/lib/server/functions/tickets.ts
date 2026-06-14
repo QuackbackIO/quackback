@@ -184,6 +184,8 @@ export const updateTicketFn = createServerFn({ method: 'POST' })
       ticketId: ticketIdSchema,
       expectedUpdatedAt: isoDate,
       subject: z.string().min(1).max(500).optional(),
+      descriptionJson: tiptapDocSchema.nullable().optional(),
+      descriptionText: z.string().max(100_000).nullable().optional(),
       priority: z.enum(TICKET_PRIORITIES).optional(),
       visibilityScope: z.enum(TICKET_VISIBILITY_SCOPES).optional(),
       primaryTeamId: teamIdSchema.nullable().optional(),
@@ -200,6 +202,7 @@ export const updateTicketFn = createServerFn({ method: 'POST' })
     }
     return updateTicket(data.ticketId, {
       ...data,
+      descriptionJson: data.descriptionJson as never,
       expectedUpdatedAt: new Date(data.expectedUpdatedAt),
       actorPrincipalId: ctx.principal.id,
     })

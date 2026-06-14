@@ -18,6 +18,8 @@ import {
   tickets,
   ticketStatuses,
   ticketActivity,
+  principal,
+  user,
   type Ticket,
   type TicketActivity,
 } from '@/lib/server/db'
@@ -25,6 +27,7 @@ import type {
   TicketId,
   TicketStatusId,
   PrincipalId,
+  UserId,
   TeamId,
   ContactId,
   OrganizationId,
@@ -108,6 +111,68 @@ async function resolveStatus(
   return { id: row.id as TicketStatusId, category: row.category as TicketStatusCategory }
 }
 
+async function resolveRequesterContactId(
+  requesterPrincipalId: PrincipalId | null | undefined
+): Promise<ContactId | null> {
+  if (!requesterPrincipalId) return null
+
+  const principalRow = await db.query.principal.findFirst({
+    where: eq(principal.id, requesterPrincipalId),
+    columns: { userId: true, type: true },
+  })
+  if (!principalRow?.userId || principalRow.type !== 'user') return null
+
+  const { findOrCreateByEmail, linkContactToUser, listLinksForUser } =
+    await import('../organizations/contact.service')
+
+  const existingLinks = await listLinksForUser(principalRow.userId as UserId)
+  if (existingLinks[0]) return existingLinks[0].contactId as ContactId
+
+  const userRow = await db.query.user.findFirst({
+    where: eq(user.id, principalRow.userId as UserId),
+    columns: { email: true, emailVerified: true },
+  })
+  if (!userRow?.email || !userRow.emailVerified) return null
+
+  const contact = await findOrCreateByEmail({ email: userRow.email })
+  await linkContactToUser({
+    contactId: contact.id as ContactId,
+    userId: principalRow.userId as UserId,
+    linkedByPrincipalId: null,
+  })
+  return contact.id as ContactId
+}
+
+async function resolveTicketCustomerContext(
+  input: Pick<CreateTicketInput, 'requesterPrincipalId' | 'requesterContactId' | 'organizationId'>
+): Promise<{
+  requesterContactId: ContactId | null
+  organizationId: OrganizationId | null
+}> {
+  const requesterContactId =
+    input.requesterContactId !== undefined
+      ? input.requesterContactId
+      : await resolveRequesterContactId(input.requesterPrincipalId)
+
+  if (input.organizationId !== undefined) {
+    return {
+      requesterContactId: requesterContactId ?? null,
+      organizationId: input.organizationId,
+    }
+  }
+
+  if (!requesterContactId) {
+    return { requesterContactId: null, organizationId: null }
+  }
+
+  const { getContact } = await import('../organizations/contact.service')
+  const contact = await getContact(requesterContactId)
+  return {
+    requesterContactId,
+    organizationId: (contact?.organizationId as OrganizationId | null | undefined) ?? null,
+  }
+}
+
 export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   const subject = validateSubject(input.subject)
   if (input.priority && !TICKET_PRIORITIES.includes(input.priority)) {
@@ -162,6 +227,20 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
     (routingDecision?.visibilityScope as TicketVisibilityScope | undefined) ??
     'team'
 
+  let customerContext = {
+    requesterContactId: input.requesterContactId ?? null,
+    organizationId: input.organizationId ?? null,
+  }
+  try {
+    customerContext = await resolveTicketCustomerContext(input)
+  } catch (err) {
+    console.warn('[tickets] resolveTicketCustomerContext failed', {
+      requesterPrincipalId: input.requesterPrincipalId ?? null,
+      requesterContactId: input.requesterContactId ?? null,
+      error: err instanceof Error ? err.message : err,
+    })
+  }
+
   const now = new Date()
   const [created] = await db
     .insert(tickets)
@@ -177,8 +256,8 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
       assigneePrincipalId: resolvedAssigneePrincipalId,
       assigneeTeamId: resolvedAssigneeTeamId,
       requesterPrincipalId: input.requesterPrincipalId ?? null,
-      requesterContactId: input.requesterContactId ?? null,
-      organizationId: input.organizationId ?? null,
+      requesterContactId: customerContext.requesterContactId,
+      organizationId: customerContext.organizationId,
       inboxId: resolvedInboxId,
       slaPolicyId: input.slaPolicyId ?? null,
       createdByPrincipalId: input.createdByPrincipalId ?? null,

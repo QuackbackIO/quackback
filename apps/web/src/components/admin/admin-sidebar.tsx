@@ -5,7 +5,6 @@ import {
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
   MapIcon,
-  UsersIcon,
   Cog6ToothIcon,
   Bars3Icon,
   GlobeAltIcon,
@@ -81,21 +80,24 @@ const navItems: NavItemDef[] = [
     icon: TicketIcon,
     requiresPermission: PERMISSIONS.TICKET_VIEW_ALL,
   },
-  {
-    label: 'Contacts',
-    href: '/admin/contacts',
-    icon: BuildingOffice2Icon,
-    requiresPermission: PERMISSIONS.ORG_VIEW,
-  },
+  { label: 'Customers', href: '/admin/customers', icon: BuildingOffice2Icon },
   { label: 'Conversations', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
 function isNavActive(pathname: string, href: string) {
+  if (href === '/admin/customers') {
+    return (
+      pathname === href ||
+      pathname.startsWith('/admin/customers/') ||
+      pathname.startsWith('/admin/contacts/') ||
+      pathname === '/admin/contacts' ||
+      pathname === '/admin/users'
+    )
+  }
   return pathname === href || pathname.startsWith(href + '/')
 }
 

@@ -40,6 +40,7 @@ import { getMemberByUser } from '@/lib/server/domains/principals/principal.servi
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 // ============================================
 // Schemas
@@ -177,7 +178,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
         ...result,
         items: result.items.map((post) => ({
           ...post,
-          createdAt: post.createdAt.toISOString(),
+          createdAt: toIsoString(post.createdAt),
         })),
       }
     } catch (error) {
@@ -289,9 +290,9 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
       // Serialize Date fields
       return {
         ...result,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt.toISOString(),
-        deletedAt: result.deletedAt?.toISOString() || null,
+        createdAt: toIsoString(result.createdAt),
+        updatedAt: toIsoString(result.updatedAt),
+        deletedAt: toIsoStringOrNull(result.deletedAt),
       }
     } catch (error) {
       console.error(`[fn:public-posts] ❌ userEditPostFn failed:`, error)
@@ -493,7 +494,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         content: post.content,
         statusId: post.statusId,
         voteCount: post.voteCount,
-        createdAt: post.createdAt.toISOString(),
+        createdAt: toIsoString(post.createdAt),
         board: {
           id: board.id,
           name: board.name,
@@ -562,8 +563,8 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
       description: roadmap.description,
       isPublic: roadmap.isPublic,
       position: roadmap.position,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      createdAt: toIsoString(roadmap.createdAt),
+      updatedAt: toIsoString(roadmap.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:public-posts] ❌ listPublicRoadmapsFn failed:`, error)

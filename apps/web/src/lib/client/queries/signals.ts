@@ -5,14 +5,7 @@ import {
   fetchMergeSuggestionSummaryFn,
   fetchMergeSuggestionCountsForPostsFn,
 } from '@/lib/server/functions/merge-suggestions'
-
-/** Guard against server function RPC resolving with undefined on 500 errors. */
-function ensureData<T>(data: T, label: string): NonNullable<T> {
-  if (data === undefined || data === null) {
-    throw new Error(`Server returned no data for ${label}`)
-  }
-  return data as NonNullable<T>
-}
+import { ensureData } from '@/lib/client/query/ensure-data'
 
 /**
  * Query options factory for merge suggestions.
@@ -38,7 +31,11 @@ export const mergeSuggestionQueries = {
   countsForPosts: (postIds: PostId[]) =>
     queryOptions({
       queryKey: ['merge-suggestions', 'counts', postIds],
-      queryFn: () => fetchMergeSuggestionCountsForPostsFn({ data: { postIds } }),
+      queryFn: async () =>
+        ensureData(
+          await fetchMergeSuggestionCountsForPostsFn({ data: { postIds } }),
+          'mergeSuggestionCounts'
+        ),
       staleTime: 30 * 1000,
       enabled: postIds.length > 0,
     }),
@@ -49,7 +46,11 @@ export const mergeSuggestionQueries = {
   forPost: (postId: PostId) =>
     queryOptions({
       queryKey: ['merge-suggestions', 'post', postId],
-      queryFn: () => getMergeSuggestionsForPostFn({ data: { postId } }),
+      queryFn: async () =>
+        ensureData(
+          await getMergeSuggestionsForPostFn({ data: { postId } }),
+          'mergeSuggestionsForPost'
+        ),
       staleTime: 30 * 1000,
     }),
 }

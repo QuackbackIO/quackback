@@ -15,6 +15,7 @@ import {
   getPendingMergeSuggestionSummary,
   getMergeSuggestionCountsForPosts,
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
+import { toIsoString } from '@/lib/shared/utils'
 
 // ============================================
 // Server Functions
@@ -36,7 +37,7 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
       const suggestions = await getPendingSuggestionsForPost(data.postId as PostId)
       return suggestions.map((s) => ({
         ...s,
-        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+        createdAt: toIsoString(s.createdAt),
       }))
     } catch (error) {
       console.error(`[fn:merge-suggestions] getMergeSuggestionsForPostFn failed:`, error)

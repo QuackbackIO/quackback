@@ -14,6 +14,7 @@ const linkFindFirstMock = vi.fn()
 const insertReturningMock = vi.fn()
 const updateReturningMock = vi.fn()
 const deleteReturningMock = vi.fn()
+const selectWhereMock = vi.fn()
 
 const dispatchContactCreatedMock = vi.fn()
 const dispatchContactUpdatedMock = vi.fn()
@@ -46,15 +47,26 @@ vi.mock('@/lib/server/db', () => ({
       where: vi.fn().mockReturnThis(),
       returning: deleteReturningMock,
     })),
-    select: vi.fn(),
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: selectWhereMock,
+      })),
+    })),
   },
   eq: vi.fn(),
   and: vi.fn(),
   or: vi.fn(),
   ilike: vi.fn(),
   isNull: vi.fn(),
+  sql: vi.fn(),
   asc: vi.fn(),
   desc: vi.fn(),
+  user: {
+    id: 'user.id',
+    email: 'user.email',
+    emailVerified: 'user.email_verified',
+    isAnonymous: 'user.is_anonymous',
+  },
   contacts: {
     id: 'contacts.id',
     email: 'contacts.email',
@@ -93,6 +105,7 @@ vi.mock('@/lib/server/events/dispatch', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  selectWhereMock.mockResolvedValue([])
 })
 
 const ACTOR = { principalId: 'principal_a' as never, userId: 'user_a' as never }

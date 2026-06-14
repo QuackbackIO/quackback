@@ -49,6 +49,11 @@ function createUpdateChain() {
 
 const mockFindFirst = vi.fn()
 const mockSelectFrom = vi.fn()
+const linkContactForUserMock = vi.fn()
+
+vi.mock('@/lib/server/auth/link-contact', () => ({
+  linkContactForUser: (...args: unknown[]) => linkContactForUserMock(...args),
+}))
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -131,6 +136,7 @@ describe('user.service', () => {
     insertValuesCalls.length = 0
     updateSetCalls.length = 0
     vi.clearAllMocks()
+    linkContactForUserMock.mockReset()
   })
 
   // ============================================
@@ -372,6 +378,33 @@ describe('user.service', () => {
       const metadata = JSON.parse(setArgs.metadata as string)
       expect(metadata.plan).toBe('pro')
       expect(metadata).not.toHaveProperty('_externalUserId')
+    })
+
+    it('links verified API-identified users to matching contacts', async () => {
+      const existingUser = {
+        id: 'user_existing' as UserId,
+        name: 'Existing User',
+        email: 'existing@example.com',
+        image: null,
+        emailVerified: true,
+        metadata: null,
+        createdAt: new Date('2024-01-01'),
+      }
+
+      mockFindFirst.mockResolvedValueOnce(existingUser).mockResolvedValueOnce(existingUser)
+
+      const { identifyPortalUser } = await import('../user.identify')
+      await identifyPortalUser({
+        email: 'existing@example.com',
+        emailVerified: true,
+      })
+
+      expect(linkContactForUserMock).toHaveBeenCalledWith({
+        userId: 'user_existing',
+        email: 'existing@example.com',
+        emailVerified: true,
+        anonymous: false,
+      })
     })
   })
 })

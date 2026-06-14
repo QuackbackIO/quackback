@@ -47,6 +47,11 @@ export type SegmentRuleAttribute =
   | 'last_active_days_ago'
   | 'signup_source'
   | 'principal_type'
+  | 'contact_title'
+  | 'contact_metadata_key'
+  | 'organization_domain'
+  | 'organization_external_id'
+  | 'organization_metadata_key'
 
 export interface SegmentCondition {
   attribute: SegmentRuleAttribute

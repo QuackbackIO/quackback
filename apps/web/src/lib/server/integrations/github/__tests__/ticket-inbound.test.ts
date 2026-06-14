@@ -16,6 +16,14 @@ const assignTicketMock = vi.fn()
 const addThreadMock = vi.fn()
 const editThreadMock = vi.fn()
 const softDeleteThreadMock = vi.fn()
+const markdownToTiptapJsonMock = vi.fn((markdown: string) => ({
+  type: 'doc',
+  content: [{ type: 'paragraph', content: [{ type: 'text', text: markdown }] }],
+}))
+
+vi.mock('@/lib/server/markdown-tiptap', () => ({
+  markdownToTiptapJson: (...a: [string]) => markdownToTiptapJsonMock(...a),
+}))
 
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   createTicket: (...a: unknown[]) => createTicketMock(...a),
@@ -201,11 +209,13 @@ describe('handleGitHubTicketEvent — issues.opened', () => {
       expect.objectContaining({
         subject: 'Bug: login fails on mobile',
         descriptionText: 'Steps to reproduce...',
+        descriptionJson: expect.objectContaining({ type: 'doc' }),
         channel: 'api',
         inboxId: 'inbox_support',
         syncSourceIntegrationId: 'integration_gh1',
       })
     )
+    expect(markdownToTiptapJsonMock).toHaveBeenCalledWith('Steps to reproduce...')
   })
 
   it('skips when createTicketsFromIssues is false', async () => {
@@ -301,9 +311,69 @@ describe('handleGitHubTicketEvent — issues.edited', () => {
       expect.objectContaining({
         subject: 'Updated title',
         descriptionText: 'New body',
+        descriptionJson: expect.objectContaining({ type: 'doc' }),
         syncSourceIntegrationId: 'integration_gh1',
       })
     )
+    expect(markdownToTiptapJsonMock).toHaveBeenCalledWith('New body')
+  })
+
+  it('clears ticket description when the GitHub issue body is empty', async () => {
+    findFirstLinkMock.mockResolvedValueOnce({ ticketId: 'ticket_linked1' })
+    getTicketMock.mockResolvedValueOnce({
+      id: 'ticket_linked1',
+      updatedAt: NOW,
+      descriptionJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Old body' }] }],
+      },
+      descriptionText: 'Old body',
+    })
+    updateTicketMock.mockResolvedValueOnce({})
+
+    const payload = makePayload('edited', { body: null })
+    const result = await handleGitHubTicketEvent(payload, makeIntegration())
+
+    expect(result).toBe(true)
+    expect(updateTicketMock).toHaveBeenCalledWith(
+      'ticket_linked1',
+      expect.objectContaining({
+        descriptionJson: null,
+        descriptionText: null,
+        syncSourceIntegrationId: 'integration_gh1',
+      })
+    )
+  })
+
+  it('strips Quackback metadata from outbound GitHub issue bodies', async () => {
+    findFirstLinkMock.mockResolvedValueOnce({ ticketId: 'ticket_linked1' })
+    getTicketMock.mockResolvedValueOnce({ id: 'ticket_linked1', updatedAt: NOW })
+    updateTicketMock.mockResolvedValueOnce({})
+
+    const payload = makePayload('edited', {
+      body: [
+        'Updated customer-facing description',
+        '',
+        '---',
+        '',
+        '**Priority:** high',
+        '**Channel:** portal',
+        '',
+        '[View in Quackback](https://example.test/admin/tickets/ticket_linked1)',
+      ].join('\n'),
+    })
+    const result = await handleGitHubTicketEvent(payload, makeIntegration())
+
+    expect(result).toBe(true)
+    expect(updateTicketMock).toHaveBeenCalledWith(
+      'ticket_linked1',
+      expect.objectContaining({
+        descriptionText: 'Updated customer-facing description',
+        descriptionJson: expect.objectContaining({ type: 'doc' }),
+        syncSourceIntegrationId: 'integration_gh1',
+      })
+    )
+    expect(markdownToTiptapJsonMock).toHaveBeenCalledWith('Updated customer-facing description')
   })
 })
 

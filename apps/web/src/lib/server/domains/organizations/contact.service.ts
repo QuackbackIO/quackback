@@ -11,10 +11,12 @@ import {
   isNull,
   ilike,
   or,
+  sql,
   asc,
   desc,
   contacts,
   contactUserLinks,
+  user,
   type Contact,
   type ContactUserLink,
 } from '@/lib/server/db'
@@ -135,6 +137,7 @@ export async function createContact(
     })
     .returning()
   await fireContactEvent('created', actor, created)
+  await autoLinkVerifiedUsersForContact(created, actor)
   return created
 }
 
@@ -221,7 +224,46 @@ export async function updateContact(
     }
   }
   if (changedFields.length > 0) await fireContactEvent('updated', actor, updated, { changedFields })
+  if (changedFields.includes('email')) {
+    await autoLinkVerifiedUsersForContact(updated, actor)
+  }
   return updated
+}
+
+async function autoLinkVerifiedUsersForContact(
+  contact: Contact,
+  actor: ContactActorContext
+): Promise<void> {
+  if (!contact.email || contact.archivedAt) return
+
+  try {
+    const rows = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(
+        and(
+          sql`LOWER(${user.email}) = ${contact.email}`,
+          eq(user.emailVerified, true),
+          eq(user.isAnonymous, false)
+        )
+      )
+
+    for (const row of rows) {
+      await linkContactToUser(
+        {
+          contactId: contact.id as ContactId,
+          userId: row.id as UserId,
+          linkedByPrincipalId: actor.principalId,
+        },
+        actor
+      )
+    }
+  } catch (err) {
+    console.warn('[contacts] auto-link verified users failed', {
+      contactId: contact.id,
+      error: err instanceof Error ? err.message : err,
+    })
+  }
 }
 
 export async function archiveContact(

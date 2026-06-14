@@ -1,5 +1,6 @@
 /**
- * Contacts surface layout — Organizations / People sub-tab strip + Outlet.
+ * Legacy contacts detail shell. List routes redirect to Customers; detail
+ * routes still render here until they move to canonical Customers paths.
  */
 import { createFileRoute, Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/shared/utils'
@@ -12,20 +13,25 @@ function ContactsLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
   const tabs: { label: string; to: string }[] = [
-    { label: 'Organizations', to: '/admin/contacts/organizations' },
-    { label: 'People', to: '/admin/contacts/people' },
+    { label: 'People', to: '/admin/customers/people' },
+    { label: 'Organizations', to: '/admin/customers/organizations' },
   ]
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">Contacts</h1>
-        <p className="text-sm text-muted-foreground">Organizations and the people you support.</p>
+        <h1 className="text-lg font-semibold">Customers</h1>
+        <p className="text-sm text-muted-foreground">People, organizations, and segments.</p>
       </div>
 
       <div className="flex items-center gap-1 border-b border-border/60">
         {tabs.map((t) => {
-          const active = pathname === t.to || pathname.startsWith(t.to + '/')
+          const active =
+            pathname === t.to ||
+            pathname.startsWith(t.to + '/') ||
+            (t.to === '/admin/customers/people' && pathname.startsWith('/admin/contacts/people')) ||
+            (t.to === '/admin/customers/organizations' &&
+              pathname.startsWith('/admin/contacts/organizations'))
           return (
             <Link
               key={t.to}

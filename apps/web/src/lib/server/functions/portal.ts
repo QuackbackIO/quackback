@@ -39,6 +39,7 @@ import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscr
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
+import { toIsoString } from '@/lib/shared/utils'
 
 // Schemas
 const sortSchema = z.enum(['top', 'new', 'trending'])
@@ -134,6 +135,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         tags: [],
         votedPostIds: [],
         principalId: null,
+        boardPermissions: {},
       }
     }
 
@@ -202,7 +204,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         voteCount: post.voteCount,
         authorName: post.authorName,
         principalId: post.principalId,
-        createdAt: post.createdAt.toISOString(),
+        createdAt: toIsoString(post.createdAt),
         commentCount: post.commentCount,
         tags: post.tags,
         board: post.board,
@@ -308,11 +310,6 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
 
     if (!result) return null
 
-    // Helper to safely convert Date or string to ISO string
-    // Raw SQL may return dates as strings depending on the driver
-    const toISOString = (date: Date | string): string =>
-      typeof date === 'string' ? date : date.toISOString()
-
     type CommentType = (typeof result.comments)[0]
     type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
       createdAt: string
@@ -321,7 +318,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     function serializeComment(c: CommentType): SerializedComment {
       return {
         ...c,
-        createdAt: toISOString(c.createdAt),
+        createdAt: toIsoString(c.createdAt),
         replies: c.replies.map(serializeComment),
       }
     }
@@ -388,7 +385,7 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
       const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
       return {
         ...result,
-        items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
+        items: result.items.map((p) => ({ ...p, createdAt: toIsoString(p.createdAt) })),
       }
     } catch (error) {
       console.error(`[fn:portal] fetchPublicPosts failed:`, error)
@@ -545,8 +542,8 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
       description: r.description,
       isPublic: r.isPublic,
       position: r.position,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
+      createdAt: toIsoString(r.createdAt),
+      updatedAt: toIsoString(r.updatedAt),
     }))
   } catch (error) {
     console.error(`[fn:portal] fetchPublicRoadmaps failed:`, error)

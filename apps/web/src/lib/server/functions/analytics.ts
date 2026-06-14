@@ -27,7 +27,7 @@ import {
 import { requireAuth } from './auth-helpers'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
-import { toIsoDateOnly } from '@/lib/shared/utils/date'
+import { toIsoDateOnly, toIsoString, toIsoStringOrNull } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
   .inputValidator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
@@ -43,7 +43,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const startStr = toIsoDateOnly(start)
     const previousStartStr = toIsoDateOnly(previousStart)
     // Full-precision period start for timestamptz comparisons in raw SQL.
-    const sinceIso = start.toISOString()
+    const sinceIso = toIsoString(start)
 
     // -- Every query below depends only on the pure date/period values above,
     // never on another query's result, so they all run concurrently. The whole
@@ -233,13 +233,13 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
             // denominator share one scope. An entry unpublished after accruing
             // public views would otherwise inflate the total against a count that
             // excludes it.
-            totalViews: sql<number>`COALESCE(sum(${changelogEntries.viewCount}) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz), 0)::int`,
+            totalViews: sql<number>`COALESCE(sum(${changelogEntries.viewCount}) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${toIsoString(now)}::timestamptz), 0)::int`,
             // All-time published entries (drafts excluded) — the denominator for
             // "avg views / entry".
-            publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
+            publishedCount: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} IS NOT NULL AND ${changelogEntries.publishedAt} <= ${toIsoString(now)}::timestamptz)::int`,
             // Entries published within the selected period — responds to the
             // period selector.
-            publishedInPeriod: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} >= ${start.toISOString()}::timestamptz AND ${changelogEntries.publishedAt} <= ${now.toISOString()}::timestamptz)::int`,
+            publishedInPeriod: sql<number>`count(*) FILTER (WHERE ${changelogEntries.publishedAt} >= ${toIsoString(start)}::timestamptz AND ${changelogEntries.publishedAt} <= ${toIsoString(now)}::timestamptz)::int`,
           })
           .from(changelogEntries)
           .where(isNull(changelogEntries.deletedAt))
@@ -427,7 +427,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         : 0
 
     // -- Computed at timestamp --
-    const computedAt = latestRow?.computedAt?.toISOString() ?? null
+    const computedAt = toIsoStringOrNull(latestRow?.computedAt)
 
     return {
       summary,

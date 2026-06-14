@@ -22,6 +22,7 @@ import { and, db, eq, isNull, ssoRecoveryCode } from '@/lib/server/db'
 import { actorFromAuth, recordAuditEvent } from '@/lib/server/audit/log'
 import { generateRecoveryCode, hashRecoveryCode } from '@/lib/server/auth/recovery-codes'
 import { requireAuth } from './auth-helpers'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 const RECOVERY_CODE_BATCH_SIZE = 10
 
@@ -74,8 +75,8 @@ export const listRecoveryCodesFn = createServerFn({ method: 'GET' })
     return {
       codes: rows.map((row) => ({
         id: row.id,
-        usedAt: row.usedAt ? row.usedAt.toISOString() : null,
-        createdAt: row.createdAt.toISOString(),
+        usedAt: toIsoStringOrNull(row.usedAt),
+        createdAt: toIsoString(row.createdAt),
       })),
     }
   })

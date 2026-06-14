@@ -14,6 +14,7 @@ import {
 } from '@/lib/server/db'
 import type { IntegrationId, BoardId, PrincipalId } from '@quackback/ids'
 import type { EventMappingFilters } from '@/lib/server/db'
+import { toIsoString } from '@/lib/shared/utils'
 // cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep ioredis out of the client bundle
 
 // ============================================
@@ -624,7 +625,7 @@ export const fetchSyncLogFn = createServerFn({ method: 'GET' })
 
     const hasMore = rows.length > limit
     const items = rows.slice(0, limit)
-    const nextCursor = hasMore ? items[items.length - 1].createdAt.toISOString() : null
+    const nextCursor = hasMore ? toIsoString(items[items.length - 1].createdAt) : null
 
     return { items, nextCursor }
   })

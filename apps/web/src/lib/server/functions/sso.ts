@@ -31,6 +31,7 @@ import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { SSO_OAUTH_CALLBACK_PATH } from '@/lib/shared/sso-test-keys'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 
 const testSsoConnectionInput = z.object({
   discoveryUrl: httpsUrl,
@@ -331,7 +332,7 @@ export const getSsoStatusFn = createServerFn({ method: 'GET' }).handler(
     const redirectUri = `${config.baseUrl.replace(/\/$/, '')}${SSO_OAUTH_CALLBACK_PATH}`
 
     return {
-      lastSignInAt: lastSignInAt ? lastSignInAt.toISOString() : null,
+      lastSignInAt: toIsoStringOrNull(lastSignInAt),
       secretConfigured,
       discoveryReachable,
       enableEligible,
@@ -613,7 +614,7 @@ export const verifyDomainFn = createServerFn({ method: 'POST' })
       return { verified: false, reason: 'mismatch' }
     }
 
-    const verifiedAt = new Date().toISOString()
+    const verifiedAt = toIsoString(new Date())
     try {
       await stampVerifiedDomain({
         id: dom.id,

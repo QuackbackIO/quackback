@@ -3,10 +3,18 @@
  * order with audience-aware bubble styling: public = neutral card, internal =
  * yellow tinted, shared_team = purple tinted with the team label.
  */
+import { useCallback, useState } from 'react'
+import type { JSONContent } from '@tiptap/react'
 import type { TicketId, TeamId, PrincipalId } from '@quackback/ids'
 import { cn } from '@/lib/shared/utils'
 import { TimeAgo } from '@/components/ui/time-ago'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import {
+  RichTextContent,
+  RichTextEditor,
+  isRichTextContent,
+} from '@/components/ui/rich-text-editor'
+import { Button } from '@/components/ui/button'
+import { Pencil } from 'lucide-react'
 
 export interface ThreadRow {
   id: string
@@ -28,6 +36,65 @@ export interface TicketThreadFeedProps {
   principalNames?: Record<string, string>
   /** Optional initial-description block (rendered before first thread). */
   description?: { text: string | null; json: unknown } | null
+  /** Callback to save an edited description. When provided, the description is editable. */
+  onDescriptionUpdate?: (json: JSONContent | null, text: string | null) => void
+  /** Whether a description update is currently saving. */
+  isDescriptionSaving?: boolean
+}
+
+const DESCRIPTION_EDITOR_FEATURES = {
+  headings: false,
+  codeBlocks: true,
+  blockquotes: true,
+  dividers: false,
+  images: false,
+  taskLists: false,
+  tables: false,
+  embeds: false,
+  slashMenu: false,
+} as const
+
+function plainTextFromJson(json: JSONContent | null): string {
+  if (!json) return ''
+  let out = ''
+  const walk = (node: JSONContent) => {
+    if (node.type === 'text' && typeof node.text === 'string') out += node.text
+    if (node.content) node.content.forEach(walk)
+    if (node.type === 'paragraph' || node.type === 'heading') out += '\n'
+  }
+  walk(json)
+  return out.trim()
+}
+
+function textToDoc(text: string): JSONContent {
+  return {
+    type: 'doc',
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      content: line ? [{ type: 'text', text: line }] : undefined,
+    })),
+  }
+}
+
+function hasMeaningfulJsonContent(content: unknown): content is JSONContent {
+  if (!isRichTextContent(content)) return false
+  const visit = (node: JSONContent): boolean => {
+    if (node.type === 'text') return typeof node.text === 'string' && node.text.trim().length > 0
+    if (node.type === 'image' || node.type === 'quackbackEmbed' || node.type === 'horizontalRule') {
+      return true
+    }
+    return node.content?.some(visit) ?? false
+  }
+  return visit(content)
+}
+
+function hasDescriptionContent(
+  description: { text: string | null; json: unknown } | null | undefined
+) {
+  return Boolean(
+    description &&
+    ((description.text?.trim() ?? '').length > 0 || hasMeaningfulJsonContent(description.json))
+  )
 }
 
 const audienceStyles: Record<ThreadRow['audience'], string> = {
@@ -48,23 +115,104 @@ export function TicketThreadFeed({
   teamNames,
   principalNames,
   description,
+  onDescriptionUpdate,
+  isDescriptionSaving,
 }: TicketThreadFeedProps) {
-  const hasDesc = description && (description.text || isRichTextContent(description.json))
+  const hasDesc = hasDescriptionContent(description)
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [descDraft, setDescDraft] = useState<JSONContent | null>(null)
+  const [descDraftText, setDescDraftText] = useState('')
+
+  const startEditingDescription = useCallback(() => {
+    const currentText = description?.text ?? ''
+    const currentJson = isRichTextContent(description?.json)
+      ? (description!.json as JSONContent)
+      : null
+    setDescDraft(currentJson ?? (currentText ? textToDoc(currentText) : null))
+    setDescDraftText(currentText)
+    setEditingDescription(true)
+  }, [description])
+
+  const cancelEditingDescription = useCallback(() => {
+    setEditingDescription(false)
+    setDescDraft(null)
+    setDescDraftText('')
+  }, [])
+
+  const saveDescription = useCallback(() => {
+    const nextText = descDraftText.trim() || plainTextFromJson(descDraft)
+    const nextJson = hasMeaningfulJsonContent(descDraft) ? descDraft : null
+    onDescriptionUpdate?.(nextJson, nextText || null)
+    setEditingDescription(false)
+  }, [descDraft, descDraftText, onDescriptionUpdate])
+
   if (threads.length === 0 && !hasDesc) {
-    return <div className="text-sm text-muted-foreground py-6 text-center">No replies yet.</div>
+    if (!onDescriptionUpdate) {
+      return <div className="text-sm text-muted-foreground py-6 text-center">No replies yet.</div>
+    }
   }
   return (
     <div className="space-y-3">
-      {hasDesc && (
-        <div className="rounded-md border border-border/50 bg-muted/20 p-3">
-          <div className="text-xs font-medium text-muted-foreground mb-1">Description</div>
-          {isRichTextContent(description!.json) ? (
+      {editingDescription ? (
+        <article className="rounded-md border border-border/50 bg-muted/20 p-3">
+          <div className="mb-2 text-xs font-medium text-muted-foreground">Description</div>
+          <div className="rounded border bg-background">
+            <RichTextEditor
+              value={descDraft ?? undefined}
+              onChange={(json, _html, markdown) => {
+                setDescDraft(json)
+                setDescDraftText(markdown)
+              }}
+              placeholder="Add a description..."
+              minHeight="100px"
+              features={DESCRIPTION_EDITOR_FEATURES}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={cancelEditingDescription}
+              disabled={isDescriptionSaving}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" onClick={saveDescription} disabled={isDescriptionSaving}>
+              {isDescriptionSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </article>
+      ) : hasDesc ? (
+        <article className="group rounded-md border border-border/50 bg-muted/20 p-3">
+          <header className="mb-1 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+            <span>Description</span>
+            {onDescriptionUpdate && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                onClick={startEditingDescription}
+              >
+                <Pencil className="mr-1 size-3" />
+                Edit
+              </Button>
+            )}
+          </header>
+          {hasMeaningfulJsonContent(description!.json) ? (
             <RichTextContent content={description!.json} className="prose-sm" />
           ) : (
             <div className="text-sm whitespace-pre-wrap">{description!.text}</div>
           )}
-        </div>
-      )}
+        </article>
+      ) : onDescriptionUpdate ? (
+        <button
+          type="button"
+          onClick={startEditingDescription}
+          className="w-full rounded-md border border-dashed border-border/50 bg-muted/10 p-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/30"
+        >
+          Add a description...
+        </button>
+      ) : null}
       {threads.map((th) => {
         const teamLabel =
           th.audience === 'shared_team' && th.sharedWithTeamId

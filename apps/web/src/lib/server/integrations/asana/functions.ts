@@ -3,6 +3,7 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface AsanaOAuthState {
   type: 'asana_oauth'
@@ -93,7 +94,7 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
         const refreshed = await refreshAsanaToken(secrets.refreshToken, credentials ?? undefined)
         accessToken = refreshed.accessToken
 
-        const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+        const newExpiry = toIsoString(new Date(Date.now() + refreshed.expiresIn * 1000))
         await db
           .update(integrations)
           .set({
