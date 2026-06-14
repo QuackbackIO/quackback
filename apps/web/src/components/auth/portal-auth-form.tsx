@@ -467,88 +467,112 @@ export function PortalAuthForm({
   // Stage 1 — email entry
   // ============================================================
   if (view.stage === 'email') {
+    const showOAuth = oauthProviders.length > 0
+    // Email entry (and the "or" divider + create-account link) only makes sense
+    // when a portal email method is enabled (password or magic-link); with both
+    // off it dead-ends at an empty Stage 2, so show only the OAuth tiles. Team
+    // members (incl. SSO) sign in at /admin/login, not here. (#231)
+    const emailEntryEnabled = passwordEnabled || magicLinkEnabled
     return (
       <div className="space-y-6">
         {/* OAuth tiles bypass Stage 2 entirely. */}
-        {oauthProviders.length > 0 && (
+        {showOAuth && (
           <>
             <OAuthButtons callbackUrl={callbackUrl} providers={oauthProviders} />
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+            {/* Divider only when an email path follows the tiles. */}
+            {emailEntryEnabled && (
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    <FormattedMessage id="portal.auth.dividerOr" defaultMessage="or" />
+                  </span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-2 text-muted-foreground">
-                  <FormattedMessage id="portal.auth.dividerOr" defaultMessage="or" />
-                </span>
-              </div>
-            </div>
+            )}
           </>
         )}
 
-        <form onSubmit={continueFromEmail} className="space-y-4">
-          {error && <FormError message={error} />}
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
-            </label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder={intl.formatMessage({
-                id: 'portal.auth.email.placeholder',
-                defaultMessage: 'you@example.com',
-              })}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={continueLoading}
-              required
-            />
-          </div>
-          <Button type="submit" disabled={continueLoading || !email.trim()} className="w-full">
-            {continueLoading ? (
-              <ArrowPathIcon className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" /> &rarr;
-              </>
-            )}
-          </Button>
-        </form>
+        {emailEntryEnabled && (
+          <>
+            <form onSubmit={continueFromEmail} className="space-y-4">
+              {error && <FormError message={error} />}
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium">
+                  <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  placeholder={intl.formatMessage({
+                    id: 'portal.auth.email.placeholder',
+                    defaultMessage: 'you@example.com',
+                  })}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={continueLoading}
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={continueLoading || !email.trim()} className="w-full">
+                {continueLoading ? (
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <FormattedMessage id="portal.auth.continue" defaultMessage="Continue" /> &rarr;
+                  </>
+                )}
+              </Button>
+            </form>
 
-        {onModeSwitch && (
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === 'login' ? (
-              <>
-                <FormattedMessage id="portal.auth.switch.newHere" defaultMessage="New here?" />{' '}
-                <button
-                  type="button"
-                  onClick={() => onModeSwitch('signup')}
-                  className="text-primary hover:underline font-medium"
-                >
-                  <FormattedMessage
-                    id="portal.auth.switch.createAccount"
-                    defaultMessage="Create an account"
-                  />
-                </button>
-              </>
-            ) : (
-              <>
-                <FormattedMessage
-                  id="portal.auth.switch.haveAccount"
-                  defaultMessage="Have an account?"
-                />{' '}
-                <button
-                  type="button"
-                  onClick={() => onModeSwitch('login')}
-                  className="text-primary hover:underline font-medium"
-                >
-                  <FormattedMessage id="portal.auth.switch.signIn" defaultMessage="Sign in" />
-                </button>
-              </>
+            {onModeSwitch && (
+              <p className="text-center text-sm text-muted-foreground">
+                {mode === 'login' ? (
+                  <>
+                    <FormattedMessage id="portal.auth.switch.newHere" defaultMessage="New here?" />{' '}
+                    <button
+                      type="button"
+                      onClick={() => onModeSwitch('signup')}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      <FormattedMessage
+                        id="portal.auth.switch.createAccount"
+                        defaultMessage="Create an account"
+                      />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <FormattedMessage
+                      id="portal.auth.switch.haveAccount"
+                      defaultMessage="Have an account?"
+                    />{' '}
+                    <button
+                      type="button"
+                      onClick={() => onModeSwitch('login')}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      <FormattedMessage id="portal.auth.switch.signIn" defaultMessage="Sign in" />
+                    </button>
+                  </>
+                )}
+              </p>
             )}
+          </>
+        )}
+
+        {/* Misconfiguration safety net — updatePortalConfig blocks saving zero
+            methods, but never strand the user on a blank card if it happens. */}
+        {!showOAuth && !emailEntryEnabled && (
+          <p className="text-center text-sm text-muted-foreground">
+            <FormattedMessage
+              id="portal.auth.noMethods"
+              defaultMessage="No sign-in methods are configured. Contact your workspace administrator."
+            />
           </p>
         )}
       </div>

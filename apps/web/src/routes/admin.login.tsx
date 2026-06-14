@@ -95,6 +95,12 @@ export const Route = createFileRoute('/admin/login')({
  * `<TeamLoginForm>` (invitation-claim mechanism + SSO break-glass).
  * Password and other-OAuth pass through whatever the tenant configured;
  * Layer A registration filter skips disabled providers.
+ *
+ * Counterpart: the portal/end-user sign-in (`<PortalAuthForm>` on
+ * /auth/login and `<PortalAuthFormInline>` in the portal dialog) only
+ * surfaces the workspace's public methods and can hide email entry when
+ * none are enabled — team members always have this always-on email + SSO
+ * path here.
  */
 function AdminLoginPage() {
   const { errorMessage, safeCallbackUrl, authConfig, locale } = Route.useLoaderData()
