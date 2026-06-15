@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { withStartContext } from '@/test-utils/with-start-context'
 
 const hoisted = vi.hoisted(() => ({
   mockSavePlatformCredentials: vi.fn(async () => undefined),
@@ -45,11 +44,9 @@ describe('saveAuthProviderCredentialsFn — customOidcProvider gate', () => {
     })
 
     await expect(
-      withStartContext(() =>
-        saveAuthProviderCredentialsFn({
-          data: { credentialType: 'auth_custom-oidc', credentials: validOidcCreds },
-        })
-      )
+      saveAuthProviderCredentialsFn({
+        data: { credentialType: 'auth_custom-oidc', credentials: validOidcCreds },
+      })
     ).rejects.toBeInstanceOf(TierLimitError)
 
     expect(hoisted.mockSavePlatformCredentials).not.toHaveBeenCalled()
@@ -58,11 +55,9 @@ describe('saveAuthProviderCredentialsFn — customOidcProvider gate', () => {
   it('allows generic-oauth save when feature is on (Scale tier / OSS default)', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue(OSS_TIER_LIMITS)
 
-    await withStartContext(() =>
-      saveAuthProviderCredentialsFn({
-        data: { credentialType: 'auth_custom-oidc', credentials: validOidcCreds },
-      })
-    )
+    await saveAuthProviderCredentialsFn({
+      data: { credentialType: 'auth_custom-oidc', credentials: validOidcCreds },
+    })
 
     expect(hoisted.mockSavePlatformCredentials).toHaveBeenCalledTimes(1)
   })
@@ -76,14 +71,12 @@ describe('saveAuthProviderCredentialsFn — customOidcProvider gate', () => {
       features: { ...OSS_TIER_LIMITS.features, customOidcProvider: false },
     })
 
-    await withStartContext(() =>
-      saveAuthProviderCredentialsFn({
-        data: {
-          credentialType: 'auth_google',
-          credentials: { clientId: 'g_id', clientSecret: 'g_secret' },
-        },
-      })
-    )
+    await saveAuthProviderCredentialsFn({
+      data: {
+        credentialType: 'auth_google',
+        credentials: { clientId: 'g_id', clientSecret: 'g_secret' },
+      },
+    })
 
     expect(hoisted.mockSavePlatformCredentials).toHaveBeenCalledTimes(1)
     expect(hoisted.mockGetTierLimits).not.toHaveBeenCalled()

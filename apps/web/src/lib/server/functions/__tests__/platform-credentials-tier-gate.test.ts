@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
-import { withStartContext } from '@/test-utils/with-start-context'
 
 const hoisted = vi.hoisted(() => ({
   mockSavePlatformCredentials: vi.fn(async () => undefined),
@@ -46,11 +45,9 @@ describe('savePlatformCredentialsFn — integrations gate', () => {
     })
 
     await expect(
-      withStartContext(() =>
-        savePlatformCredentialsFn({
-          data: { integrationType: 'github', credentials: validCreds },
-        })
-      )
+      savePlatformCredentialsFn({
+        data: { integrationType: 'github', credentials: validCreds },
+      })
     ).rejects.toBeInstanceOf(TierLimitError)
 
     expect(hoisted.mockSavePlatformCredentials).not.toHaveBeenCalled()
@@ -59,11 +56,9 @@ describe('savePlatformCredentialsFn — integrations gate', () => {
   it('allows save when integrations feature is on (Pro+ / OSS default)', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue(OSS_TIER_LIMITS)
 
-    await withStartContext(() =>
-      savePlatformCredentialsFn({
-        data: { integrationType: 'github', credentials: validCreds },
-      })
-    )
+    await savePlatformCredentialsFn({
+      data: { integrationType: 'github', credentials: validCreds },
+    })
 
     expect(hoisted.mockSavePlatformCredentials).toHaveBeenCalledTimes(1)
   })
