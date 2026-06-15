@@ -4,7 +4,7 @@
  * Emits flat NDJSON to stdout — one JSON object per line — for ingestion by a
  * log shipper (Grafana Alloy, Promtail, Fluent Bit, Vector, ...). Every line
  * carries:
- *   - service_name, env            (static bindings)
+ *   - service_name                 (static binding)
  *   - level (string), time, msg    (Pino, string level for level detection)
  *   - request_id, route, tenant_id, user_id   (from the shared ALS context)
  *   - trace_id, span_id            (from the active OpenTelemetry span, if any)
@@ -104,12 +104,11 @@ export type AppLogger = pino.Logger
  * default falls back to OTEL_SERVICE_NAME then "quackback".
  */
 export function createLogger(options: CreateLoggerOptions = {}): pino.Logger {
-  const env = process.env.NODE_ENV ?? 'development'
   const serviceName = process.env.OTEL_SERVICE_NAME ?? 'quackback'
 
   const pinoOptions: pino.LoggerOptions = {
     level: options.level ?? defaultLevel(),
-    base: { service_name: serviceName, env, ...options.base },
+    base: { service_name: serviceName, ...options.base },
     // String level (e.g. "info") so Grafana/Loki level detection works.
     formatters: { level: (label) => ({ level: label }) },
     redact: { paths: REDACT_PATHS, remove: true },
