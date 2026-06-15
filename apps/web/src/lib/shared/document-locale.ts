@@ -1,26 +1,36 @@
 import { DEFAULT_LOCALE, type SupportedLocale } from './i18n'
 
-// Routes that render in English regardless of the visitor's language: the admin
-// app and the non-portal system routes. `/admin/login` is the exception — it
-// renders translated like the public auth pages, so it's handled before this.
-const ENGLISH_ONLY_PREFIXES = [
-  '/admin',
-  '/onboarding',
-  '/api',
-  '/complete-signup',
-  '/oauth',
-  '/.well-known',
-]
+// The portal layout route. Every page rendered under it (`/`, `/hc`, `/roadmap`,
+// `/settings`, ...) is wrapped in PortalIntlProvider, so it's localized.
+const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
+
+// Standalone routes (outside the portal layout) that also render translated
+// content. Everything NOT in this set and NOT under the portal layout — the
+// English admin app, onboarding, and auth utility pages like /auth/two-factor —
+// renders hard-coded English with no provider.
+const LOCALIZED_ROUTE_IDS = new Set([
+  '/auth/login',
+  '/auth/signup',
+  '/auth/recovery',
+  '/auth/reset-password',
+  '/admin/login',
+  '/widget',
+])
 
 /**
- * The locale the SSR document's `<html lang>` (and `dir`) should advertise for a
- * given path. Localized surfaces — the public portal, `/auth/*`, `/admin/login`,
- * and the widget — use the resolved locale; the English admin UI and system
- * routes stay on the default. Keeps `<html lang>` matching the rendered content
- * instead of mislabeling an English admin page with the visitor's language.
+ * The locale the SSR document's `<html lang>`/`dir` should advertise, decided
+ * from the matched route IDs rather than the pathname: the path can't tell a
+ * localized portal page (`/hc`) from an English standalone one (`/help`), or a
+ * localized `/auth/login` from an English `/auth/two-factor`. Mislabeling an
+ * English page (e.g. `lang="ar" dir="rtl"`) is worse than the gap it fixes, so
+ * only known-localized routes get the resolved locale; everything else stays on
+ * the default.
  */
-export function documentLocale(pathname: string, resolved: SupportedLocale): SupportedLocale {
-  if (pathname.startsWith('/admin/login')) return resolved
-  if (ENGLISH_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return DEFAULT_LOCALE
-  return resolved
+export function documentLocale(
+  routeIds: readonly string[],
+  resolved: SupportedLocale
+): SupportedLocale {
+  const localized =
+    routeIds.includes(PORTAL_LAYOUT_ROUTE_ID) || routeIds.some((id) => LOCALIZED_ROUTE_IDS.has(id))
+  return localized ? resolved : DEFAULT_LOCALE
 }

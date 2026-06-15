@@ -1,27 +1,32 @@
 import { describe, it, expect } from 'vitest'
 import { documentLocale } from '../document-locale'
 
+// The argument is the matched route-id chain (root -> leaf), as exposed by
+// useRouterState's `matches`.
 describe('documentLocale', () => {
-  it('uses the resolved locale on localized public surfaces', () => {
-    expect(documentLocale('/', 'zh-cn')).toBe('zh-cn')
-    expect(documentLocale('/changelog', 'zh-cn')).toBe('zh-cn')
-    expect(documentLocale('/roadmap', 'zh-tw')).toBe('zh-tw')
-    expect(documentLocale('/auth/login', 'zh-tw')).toBe('zh-tw')
-    expect(documentLocale('/widget', 'ar')).toBe('ar')
+  it('localizes any page under the portal layout', () => {
+    expect(documentLocale(['__root__', '/_portal', '/_portal/'], 'zh-cn')).toBe('zh-cn')
+    expect(documentLocale(['__root__', '/_portal', '/_portal/hc'], 'zh-cn')).toBe('zh-cn')
+    expect(documentLocale(['__root__', '/_portal', '/_portal/roadmap/'], 'zh-tw')).toBe('zh-tw')
   })
-  it('keeps the English admin app on the default locale', () => {
-    expect(documentLocale('/admin', 'zh-cn')).toBe('en')
-    expect(documentLocale('/admin/posts', 'zh-cn')).toBe('en')
-    expect(documentLocale('/admin/settings/branding', 'ar')).toBe('en')
+  it('localizes the standalone auth/admin-login/widget routes', () => {
+    expect(documentLocale(['__root__', '/auth/login'], 'zh-tw')).toBe('zh-tw')
+    expect(documentLocale(['__root__', '/auth/reset-password'], 'zh-cn')).toBe('zh-cn')
+    expect(documentLocale(['__root__', '/admin/login'], 'zh-cn')).toBe('zh-cn')
+    expect(documentLocale(['__root__', '/widget'], 'ar')).toBe('ar')
   })
-  it('localizes the admin sign-in page (it renders translated, unlike the rest of /admin)', () => {
-    expect(documentLocale('/admin/login', 'zh-cn')).toBe('zh-cn')
-    expect(documentLocale('/admin/login', 'zh-tw')).toBe('zh-tw')
+  it('keeps untranslated auth utility pages on the default locale', () => {
+    // These render hard-coded English with no IntlProvider — labeling them
+    // `lang="ar" dir="rtl"` would misstate the language and flip the layout.
+    expect(documentLocale(['__root__', '/auth/two-factor'], 'ar')).toBe('en')
+    expect(documentLocale(['__root__', '/auth/auth-complete'], 'zh-cn')).toBe('en')
+    expect(documentLocale(['__root__', '/auth/widget-handoff'], 'zh-tw')).toBe('en')
   })
-  it('keeps non-portal system routes on the default locale', () => {
-    expect(documentLocale('/onboarding', 'ar')).toBe('en')
-    expect(documentLocale('/api/v1/posts', 'zh-cn')).toBe('en')
-    expect(documentLocale('/complete-signup/abc', 'zh-cn')).toBe('en')
-    expect(documentLocale('/oauth/callback', 'zh-cn')).toBe('en')
+  it('keeps the English admin app and standalone system routes on the default', () => {
+    expect(documentLocale(['__root__', '/admin/posts'], 'zh-cn')).toBe('en')
+    expect(documentLocale(['__root__', '/onboarding'], 'ar')).toBe('en')
+    expect(documentLocale(['__root__', '/apps'], 'zh-cn')).toBe('en')
+    expect(documentLocale(['__root__', '/unsubscribe'], 'zh-cn')).toBe('en')
+    expect(documentLocale(['__root__', '/verify-magic-link'], 'zh-cn')).toBe('en')
   })
 })

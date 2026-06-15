@@ -225,6 +225,7 @@ const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup'
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const routeIds = useRouterState({ select: (s) => s.matches.map((m) => m.routeId) })
 
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
@@ -238,8 +239,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 
   // Advertise the rendered language on the document during SSR so non-English
   // visitors don't get an English `<html lang>` (and so RTL locales aren't laid
-  // out LTR until hydration). The admin app stays English; see documentLocale.
-  const htmlLocale = documentLocale(pathname, acceptLanguageLocale ?? DEFAULT_LOCALE)
+  // out LTR until hydration). Decided from the matched route IDs so only
+  // actually-localized routes are tagged; see documentLocale.
+  const htmlLocale = documentLocale(routeIds, acceptLanguageLocale ?? DEFAULT_LOCALE)
   const dir = isRtlForced() || isRtlLocale(htmlLocale) ? 'rtl' : 'ltr'
 
   return (
