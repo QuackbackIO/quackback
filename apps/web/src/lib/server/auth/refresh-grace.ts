@@ -46,6 +46,9 @@ import { createHash } from 'node:crypto'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { db, oauthRefreshToken, eq, and, isNull } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'refresh-grace' })
 
 /**
  * Mirror of the oauth-provider's `storeTokens: 'hashed'` default
@@ -150,6 +153,6 @@ export async function handleRefreshGraceHeal(ctx: {
   } catch (err) {
     // Fail open: grace is an availability optimization — on error the
     // request proceeds with the plugin's vanilla (strict) behavior.
-    console.error('[refresh-grace] heal pass failed; falling back to strict rotation:', err)
+    log.error({ err }, 'heal pass failed; falling back to strict rotation')
   }
 }

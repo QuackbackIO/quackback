@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildAsanaTaskBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'asana' })
 
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
@@ -30,7 +33,7 @@ export const asanaHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Asana] Creating task for ${event.type} → project ${projectId}`)
+    log.debug({ event_type: event.type, project_id: projectId }, 'creating task')
 
     const { name, htmlNotes } = buildAsanaTaskBody(event, rootUrl)
 
@@ -63,7 +66,7 @@ export const asanaHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.error('[Asana] Rate limited')
+          log.warn({ status }, 'rate limited')
           return {
             success: false,
             error: 'Rate limited by Asana',
@@ -73,7 +76,7 @@ export const asanaHook: HookHandler = {
 
         if (status >= 500) {
           const errorText = await response.text()
-          console.error(`[Asana] Server error ${status}: ${errorText}`)
+          log.error({ status, error_text: errorText }, 'server error')
           return {
             success: false,
             error: `Asana server error: HTTP ${status}`,
@@ -82,7 +85,7 @@ export const asanaHook: HookHandler = {
         }
 
         const errorText = await response.text()
-        console.error(`[Asana] API error ${status}: ${errorText}`)
+        log.error({ status, error_text: errorText }, 'api error')
         return {
           success: false,
           error: `Asana API error: HTTP ${status}`,
@@ -99,11 +102,11 @@ export const asanaHook: HookHandler = {
         return { success: false, error: 'No task returned', shouldRetry: false }
       }
 
-      console.log(`[Asana] Created task ${task.gid}`)
+      log.info({ task_id: task.gid }, 'task created')
       return { success: true, externalId: task.gid, externalUrl: task.permalink_url }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Asana] Exception: ${errorMsg}`)
+      log.error({ err: error }, 'task creation failed')
 
       return {
         success: false,

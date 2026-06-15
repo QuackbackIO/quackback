@@ -5,6 +5,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { db, principal, eq } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'workspace' })
 
 /**
  * Get the app settings.
@@ -19,7 +22,7 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
     const org = await db.query.settings.findFirst()
     return org ?? null
   } catch (error) {
-    console.error(`[fn:workspace] ❌ getSettings failed:`, error)
+    log.error({ err: error }, 'get settings failed')
     throw error
   }
 })
@@ -29,11 +32,11 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
  */
 export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
   async (): Promise<'admin' | 'member' | 'user' | null> => {
-    console.log(`[fn:workspace] getCurrentUserRole`)
+    log.debug('get current user role')
     try {
       const session = await getSession()
       if (!session?.user) {
-        console.log(`[fn:workspace] getCurrentUserRole: no session`)
+        log.debug('no session')
         return null
       }
 
@@ -42,13 +45,13 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
       })
 
       if (!principalRecord) {
-        console.log(`[fn:workspace] getCurrentUserRole: no principal`)
+        log.debug('no principal')
         return null
       }
-      console.log(`[fn:workspace] getCurrentUserRole: role=${principalRecord.role}`)
+      log.debug({ role: principalRecord.role }, 'current user role')
       return principalRecord.role as 'admin' | 'member' | 'user'
     } catch (error) {
-      console.error(`[fn:workspace] ❌ getCurrentUserRole failed:`, error)
+      log.error({ err: error }, 'get current user role failed')
       throw error
     }
   }
@@ -97,7 +100,7 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       user: session.user,
     }
   } catch (error) {
-    console.error(`[fn:workspace] ❌ validateApiWorkspaceAccess failed:`, error)
+    log.error({ err: error }, 'validate api workspace access failed')
     throw error
   }
 })

@@ -25,6 +25,9 @@ import { isTeamMember, isAdmin } from '@/lib/shared/roles'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'principals' })
 
 // Re-export types for backwards compatibility
 export type { TeamMember } from './principal.types'
@@ -39,7 +42,7 @@ export async function getMemberByUser(userId: UserId): Promise<Principal | null>
     })
     return foundMember ?? null
   } catch (error) {
-    console.error('Error looking up principal:', error)
+    log.error({ err: error }, 'principal lookup failed')
     throw new InternalError('DATABASE_ERROR', 'Failed to lookup principal', error)
   }
 }
@@ -54,7 +57,7 @@ export async function getMemberById(principalId: PrincipalId): Promise<Principal
     })
     return foundMember ?? null
   } catch (error) {
-    console.error('Error looking up principal:', error)
+    log.error({ err: error }, 'principal lookup failed')
     throw new InternalError('DATABASE_ERROR', 'Failed to lookup principal', error)
   }
 }
@@ -147,7 +150,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       lastSignInAt: m.lastSignInAt == null ? null : new Date(m.lastSignInAt),
     }))
   } catch (error) {
-    console.error('Error listing team members:', error)
+    log.error({ err: error }, 'failed to list team members')
     throw new InternalError('DATABASE_ERROR', 'Failed to list team members', error)
   }
 }
@@ -201,7 +204,7 @@ export async function countMembers(): Promise<number> {
 
     return Number(result[0]?.count ?? 0)
   } catch (error) {
-    console.error('Error counting principals:', error)
+    log.error({ err: error }, 'failed to count principals')
     throw new InternalError('DATABASE_ERROR', 'Failed to count principals', error)
   }
 }
@@ -277,7 +280,7 @@ export async function updateMemberRole(
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error
     }
-    console.error('Error updating principal role:', error)
+    log.error({ err: error }, 'failed to update principal role')
     throw new InternalError('DATABASE_ERROR', 'Failed to update principal role', error)
   }
 }
@@ -352,7 +355,7 @@ export async function removeTeamMember(
     if (error instanceof ForbiddenError || error instanceof NotFoundError) {
       throw error
     }
-    console.error('Error removing team member:', error)
+    log.error({ err: error }, 'failed to remove team member')
     throw new InternalError('DATABASE_ERROR', 'Failed to remove team member', error)
   }
 }

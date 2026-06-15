@@ -60,8 +60,10 @@ export const fetchMondayBoardsFn = createServerFn({ method: 'GET' }).handler(
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets } = await import('../encryption')
     const { listMondayBoards } = await import('./boards')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'monday' })
 
-    console.log(`[fn:integrations] fetchMondayBoardsFn`)
+    log.debug('fetch monday boards')
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -82,7 +84,7 @@ export const fetchMondayBoardsFn = createServerFn({ method: 'GET' }).handler(
     }
 
     const boards = await listMondayBoards(secrets.accessToken)
-    console.log(`[fn:integrations] fetchMondayBoardsFn: ${boards.length} boards`)
+    log.debug({ board_count: boards.length }, 'fetched monday boards')
     return boards
   }
 )

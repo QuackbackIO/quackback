@@ -25,6 +25,9 @@ import {
   count,
 } from '@/lib/server/db'
 import { listSuggestions } from '@/lib/server/domains/feedback/suggestion.query'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'feedback' })
 
 // ============================================
 // Schemas
@@ -88,9 +91,7 @@ const deleteSourceSchema = z.object({
 export const fetchSuggestions = createServerFn({ method: 'GET' })
   .inputValidator(listSuggestionsSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:feedback] fetchSuggestions: status=${data.status}, sort=${data.sort}, limit=${data.limit}, offset=${data.offset}`
-    )
+    log.debug({ status: data.status, sort: data.sort, limit: data.limit, offset: data.offset }, 'fetch suggestions')
     await requireAuth({ roles: ['admin', 'member'] })
 
     return listSuggestions({
@@ -131,7 +132,7 @@ export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).ha
 })
 
 export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:feedback] fetchFeedbackSources`)
+  log.debug('fetch feedback sources')
   await requireAuth({ roles: ['admin', 'member'] })
 
   const sources = await db.query.feedbackSources.findMany({
@@ -162,9 +163,7 @@ export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(as
 export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   .inputValidator(acceptSuggestionSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:feedback] acceptSuggestionFn: id=${data.id}, swapDirection=${data.swapDirection}`
-    )
+    log.debug({ suggestion_id: data.id, swap_direction: data.swapDirection }, 'accept suggestion')
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
@@ -216,7 +215,7 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
       )
       return { success: true, resultPostId: result.resultPostId }
     } catch (error) {
-      console.error(`[fn:feedback] acceptSuggestionFn failed:`, error)
+      log.error({ err: error }, 'accept suggestion failed')
       throw error
     }
   })
@@ -224,7 +223,7 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
 export const dismissSuggestionFn = createServerFn({ method: 'POST' })
   .inputValidator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:feedback] dismissSuggestionFn: id=${data.id}`)
+    log.debug({ suggestion_id: data.id }, 'dismiss suggestion')
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
@@ -243,7 +242,7 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:feedback] dismissSuggestionFn failed:`, error)
+      log.error({ err: error }, 'dismiss suggestion failed')
       throw error
     }
   })
@@ -251,7 +250,7 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
 export const restoreSuggestionFn = createServerFn({ method: 'POST' })
   .inputValidator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:feedback] restoreSuggestionFn: id=${data.id}`)
+    log.debug({ suggestion_id: data.id }, 'restore suggestion')
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
@@ -270,7 +269,7 @@ export const restoreSuggestionFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:feedback] restoreSuggestionFn failed:`, error)
+      log.error({ err: error }, 'restore suggestion failed')
       throw error
     }
   })
@@ -278,7 +277,7 @@ export const restoreSuggestionFn = createServerFn({ method: 'POST' })
 export const retryFailedItemFn = createServerFn({ method: 'POST' })
   .inputValidator(retryItemSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:feedback] retryFailedItemFn: rawItemId=${data.rawItemId}`)
+    log.debug({ raw_item_id: data.rawItemId }, 'retry failed item')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -299,13 +298,13 @@ export const retryFailedItemFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:feedback] retryFailedItemFn failed:`, error)
+      log.error({ err: error }, 'retry failed item failed')
       throw error
     }
   })
 
 export const retryAllFailedItemsFn = createServerFn({ method: 'POST' }).handler(async () => {
-  console.log(`[fn:feedback] retryAllFailedItemsFn`)
+  log.debug('retry all failed items')
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
@@ -337,7 +336,7 @@ export const retryAllFailedItemsFn = createServerFn({ method: 'POST' }).handler(
 
     return { retriedCount: failedItems.length }
   } catch (error) {
-    console.error(`[fn:feedback] retryAllFailedItemsFn failed:`, error)
+    log.error({ err: error }, 'retry all failed items failed')
     throw error
   }
 })
@@ -345,9 +344,7 @@ export const retryAllFailedItemsFn = createServerFn({ method: 'POST' }).handler(
 export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
   .inputValidator(createSourceSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:feedback] createFeedbackSourceFn: name=${data.name}, sourceType=${data.sourceType}, deliveryMode=${data.deliveryMode}`
-    )
+    log.debug({ source_type: data.sourceType, delivery_mode: data.deliveryMode }, 'create feedback source')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -363,7 +360,7 @@ export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
 
       return { ...source, config: source.config as Record<string, never> }
     } catch (error) {
-      console.error(`[fn:feedback] createFeedbackSourceFn failed:`, error)
+      log.error({ err: error }, 'create feedback source failed')
       throw error
     }
   })
@@ -371,7 +368,7 @@ export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
 export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
   .inputValidator(updateSourceSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:feedback] updateFeedbackSourceFn: id=${data.id}`)
+    log.debug({ source_id: data.id }, 'update feedback source')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -388,7 +385,7 @@ export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
 
       return { ...updated, config: updated.config as Record<string, never> }
     } catch (error) {
-      console.error(`[fn:feedback] updateFeedbackSourceFn failed:`, error)
+      log.error({ err: error }, 'update feedback source failed')
       throw error
     }
   })
@@ -396,7 +393,7 @@ export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
 export const deleteFeedbackSourceFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteSourceSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:feedback] deleteFeedbackSourceFn: id=${data.id}`)
+    log.debug({ source_id: data.id }, 'delete feedback source')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -404,7 +401,7 @@ export const deleteFeedbackSourceFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:feedback] deleteFeedbackSourceFn failed:`, error)
+      log.error({ err: error }, 'delete feedback source failed')
       throw error
     }
   })

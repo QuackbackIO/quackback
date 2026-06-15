@@ -10,6 +10,9 @@ import { aggregateReactions } from '@/lib/shared'
 import { type Actor } from '@/lib/server/policy'
 import { assertCommentViewable } from '@/lib/server/domains/posts/post.access'
 import type { CommentReactionCount, ReactionResult } from './comment.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comment-reactions' })
 
 /** Load a comment's reactions aggregated with the reactors' display names (for
  *  the hover tooltip) and the viewer's hasReacted flag. */
@@ -46,7 +49,7 @@ export async function addReaction(
   principalId: PrincipalId,
   actor: Actor
 ): Promise<ReactionResult> {
-  console.log(`[domain:comments] addReaction: commentId=${commentId}, emoji=${emoji}`)
+  log.info({ comment_id: commentId, emoji }, 'add reaction')
   // Single chokepoint for comment access: audience + moderation +
   // isPrivate + isNull(deletedAt) on comment/post/board. Previously this
   // function did its own canViewPost+isPrivate inline but didn't check
@@ -86,7 +89,7 @@ export async function removeReaction(
   principalId: PrincipalId,
   actor: Actor
 ): Promise<ReactionResult> {
-  console.log(`[domain:comments] removeReaction: commentId=${commentId}, emoji=${emoji}`)
+  log.info({ comment_id: commentId, emoji }, 'remove reaction')
   // Same chokepoint as addReaction — see notes there.
   await assertCommentViewable(commentId, actor)
 

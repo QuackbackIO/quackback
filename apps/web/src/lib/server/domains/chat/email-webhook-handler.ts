@@ -8,6 +8,9 @@
 import { isEmailInboundConfigured } from './chat.email-channel'
 import { verifyResendWebhookSignature } from './email-webhook-verify'
 import { ingestInboundEmail } from './chat.email-inbound.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-email-inbound' })
 
 /** Svix sends both `webhook-*` and `svix-*` aliases; accept either. */
 function header(request: Request, base: string): string | null {
@@ -46,7 +49,7 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
   // other unroutable payload so the provider stops retrying.
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled())) {
-    console.warn('[chat:email-inbound] dropped event (conversations disabled)')
+    log.warn({ reason: 'conversations_disabled' }, 'dropped inbound email event')
     return Response.json({ status: 'disabled' })
   }
 
@@ -58,12 +61,12 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
       result.status === 'from_mismatch' ||
       result.status === 'rate_limited'
     ) {
-      console.warn(`[chat:email-inbound] dropped event (${result.status})`)
+      log.warn({ status: result.status }, 'dropped inbound email event')
     }
     return Response.json({ status: result.status })
   } catch (err) {
     // A transient failure should be retried; idempotency makes redelivery safe.
-    console.error('[chat:email-inbound] ingest failed:', (err as Error).message)
+    log.error({ err }, 'inbound email ingest failed')
     return new Response('Ingest failed', { status: 500 })
   }
 }

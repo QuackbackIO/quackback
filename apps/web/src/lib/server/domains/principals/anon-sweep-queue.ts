@@ -4,7 +4,10 @@
  */
 import { Queue, Worker } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { logger } from '@/lib/server/logger'
 import { sweepAnonymousPrincipals } from './anon-sweep.service'
+
+const log = logger.child({ component: 'anon-sweep-queue' })
 
 const QUEUE_NAME = '{anon-sweep}'
 const CONCURRENCY = 1
@@ -34,7 +37,7 @@ async function initializeQueue() {
       if (job.data.type === 'sweep-anonymous') {
         const result = await sweepAnonymousPrincipals()
         if (result.deleted > 0 || result.candidates > 0) {
-          console.log(`[anon-sweep] candidates=${result.candidates} deleted=${result.deleted}`)
+          log.debug({ candidates: result.candidates, deleted: result.deleted }, 'anon-sweep run complete')
         }
       }
     },
@@ -72,7 +75,7 @@ async function initializeQueue() {
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
     const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    console.error(`[anon-sweep] ${prefix}: ${error.message}`)
+    log.error({ err: error, status: prefix }, 'anon-sweep job failed')
   })
 
   return { queue, worker }
@@ -87,5 +90,5 @@ export async function initAnonSweepWorker(): Promise<void> {
     })
   }
   await initPromise
-  console.log('[anon-sweep] Worker initialized')
+  log.info('anon-sweep worker initialized')
 }

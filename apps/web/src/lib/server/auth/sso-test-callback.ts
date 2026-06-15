@@ -17,7 +17,10 @@ import {
   SSO_TEST_POSTMESSAGE_SOURCE,
 } from '@/lib/shared/sso-test-keys'
 import { escapeHtmlAttr } from '@/lib/shared/utils/sanitize'
+import { logger } from '@/lib/server/logger'
 import type { SsoTestDiagnostic, TestSession } from '@/lib/server/functions/sso-test'
+
+const log = logger.child({ component: 'sso-test-callback' })
 
 const RESULT_TTL_SECONDS = 600
 
@@ -103,7 +106,7 @@ export async function handleSsoTestCallback(
   if (result.ok) {
     const { markSsoTestSucceeded } = await import('@/lib/server/domains/settings/settings.service')
     await markSsoTestSucceeded()
-    console.log(`[sso-test] success — unlocked SSO gates (adminUserId=${session.adminUserId})`)
+    log.info({ admin_user_id: session.adminUserId }, 'sso test succeeded; sso gates unlocked')
 
     if (result.claims.email) {
       const { db, user, eq } = await import('@/lib/server/db')

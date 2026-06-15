@@ -50,6 +50,9 @@ import {
 } from '@/lib/shared/schemas/help-center'
 import { z } from 'zod'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'help-center' })
 
 // ============================================================================
 // Helper: serialize article dates
@@ -159,14 +162,14 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
 export const restoreCategoryFn = createServerFn({ method: 'POST' })
   .inputValidator(restoreCategorySchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:help-center] restoreCategoryFn: id=${data.id}`)
+    log.debug({ category_id: data.id }, 'restore category')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
       const category = await restoreCategory(data.id as HelpCenterCategoryId)
-      console.log(`[fn:help-center] restoreCategoryFn: restored id=${category.id}`)
+      log.info({ category_id: category.id }, 'category restored')
       return serializeCategory(category)
     } catch (error) {
-      console.error(`[fn:help-center] restoreCategoryFn failed:`, error)
+      log.error({ err: error }, 'restore category failed')
       throw error
     }
   })
@@ -174,14 +177,14 @@ export const restoreCategoryFn = createServerFn({ method: 'POST' })
 export const restoreArticleFn = createServerFn({ method: 'POST' })
   .inputValidator(restoreArticleSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:help-center] restoreArticleFn: id=${data.id}`)
+    log.debug({ article_id: data.id }, 'restore article')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
       const article = await restoreArticle(data.id as HelpCenterArticleId)
-      console.log(`[fn:help-center] restoreArticleFn: restored id=${article.id}`)
+      log.info({ article_id: article.id }, 'article restored')
       return serializeArticle(article)
     } catch (error) {
-      console.error(`[fn:help-center] restoreArticleFn failed:`, error)
+      log.error({ err: error }, 'restore article failed')
       throw error
     }
   })

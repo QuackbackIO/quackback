@@ -12,6 +12,9 @@ import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding
 import type { PostId } from '@quackback/ids'
 import { db, postTags, tags, eq } from '@/lib/server/db'
 import { claimHookDelivery } from '../hook-idempotency'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ai' })
 
 /**
  * AI hook handler - processes sentiment and embeddings for new posts.
@@ -33,11 +36,11 @@ export const aiHook: HookHandler = {
     // that interrupts the AI worker double-bills.
     const claimed = await claimHookDelivery(ctx?.jobId, 'ai')
     if (!claimed) {
-      console.log(`[AI] Skipping duplicate processing for job ${ctx?.jobId} (post ${postId})`)
+      log.debug({ job_id: ctx?.jobId, post_id: postId }, 'skipping duplicate processing')
       return { success: true }
     }
 
-    console.log(`[AI] Processing post: ${postId}`)
+    log.debug({ post_id: postId }, 'processing post')
 
     // Run sentiment and embedding in parallel
     const [sentimentResult, embeddingResult] = await Promise.allSettled([
@@ -50,13 +53,16 @@ export const aiHook: HookHandler = {
 
     // Log any failures
     if (sentimentResult.status === 'rejected') {
-      console.error(`[AI] Sentiment failed for ${postId}:`, sentimentResult.reason)
+      log.error({ err: sentimentResult.reason, post_id: postId }, 'sentiment failed')
     }
     if (embeddingResult.status === 'rejected') {
-      console.error(`[AI] Embedding failed for ${postId}:`, embeddingResult.reason)
+      log.error({ err: embeddingResult.reason, post_id: postId }, 'embedding failed')
     }
 
-    console.log(`[AI] ${postId}: sentiment=${sentimentOk}, embedding=${embeddingOk}`)
+    log.info(
+      { post_id: postId, sentiment_ok: sentimentOk, embedding_ok: embeddingOk },
+      'post analysis complete'
+    )
 
     return { success: true }
   },
@@ -70,7 +76,7 @@ async function processSentiment(postId: PostId, title: string, content: string):
   if (!result) return false
 
   await saveSentiment(postId, result)
-  console.log(`[Sentiment] ${postId} -> ${result.sentiment}`)
+  log.debug({ post_id: postId, sentiment: result.sentiment }, 'sentiment saved')
   return true
 }
 
@@ -88,7 +94,7 @@ async function getPostTagNames(postId: PostId): Promise<string[]> {
 
     return result.map((r) => r.name)
   } catch (error) {
-    console.warn(`[AI] Failed to fetch tags for ${postId}:`, error)
+    log.warn({ err: error, post_id: postId }, 'failed to fetch tags')
     return []
   }
 }
@@ -100,12 +106,12 @@ async function processEmbedding(postId: PostId, title: string, content: string):
   // Fetch tags to include in embedding for better semantic matching
   const tagNames = await getPostTagNames(postId)
   if (tagNames.length > 0) {
-    console.log(`[Embedding] Including ${tagNames.length} tags: ${tagNames.join(', ')}`)
+    log.debug({ post_id: postId, tag_count: tagNames.length, tags: tagNames }, 'including tags in embedding')
   }
 
   const success = await generatePostEmbedding(postId, title, content, tagNames)
   if (success) {
-    console.log(`[Embedding] ${postId}`)
+    log.debug({ post_id: postId }, 'embedding generated')
   }
   return success
 }

@@ -11,7 +11,10 @@ import { getPlatformCredentials } from '@/lib/server/domains/platform-credential
 import { decryptSecrets } from '../encryption'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
 import { verifySlackSignature } from './verify'
+import { logger } from '@/lib/server/logger'
 import type { FeedbackSourceId, IntegrationId } from '@quackback/ids'
+
+const log = logger.child({ component: 'slack' })
 
 interface SlackMessageEvent {
   type?: string
@@ -69,7 +72,7 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
   ])
 
   if (!credentials?.signingSecret) {
-    console.error('[SlackEvents] Signing secret not configured')
+    log.error('signing secret not configured')
     return new Response('Slack signing secret not configured', { status: 500 })
   }
 
@@ -126,7 +129,7 @@ export async function handleSlackEvents(request: Request): Promise<Response> {
       integration.id as IntegrationId,
       secrets.accessToken
     ).catch((err) => {
-      console.error('[SlackEvents] Failed to handle message:', err)
+      log.error({ err }, 'failed to handle channel message')
     })
   }
 
@@ -168,7 +171,7 @@ async function handleChannelMessage(
   })
 
   if (!source) {
-    console.error('[SlackEvents] No feedback source found for integration', integrationId)
+    log.error({ integration_id: integrationId }, 'no feedback source found for integration')
     return
   }
 
@@ -243,7 +246,7 @@ async function resolveSlackUser(
     pruneMap(USER_CACHE, 1000, USER_CACHE_TTL_MS)
     return { name, email }
   } catch (error) {
-    console.warn(`[SlackEvents] Failed to resolve user ${userId}:`, error)
+    log.warn({ err: error, user_id: userId }, 'failed to resolve slack user')
     return { name: userId }
   }
 }

@@ -3,6 +3,9 @@ import { clickupHook } from './hook'
 import { clickupInboundHandler } from './inbound'
 import { getClickUpOAuthUrl, exchangeClickUpCode } from './oauth'
 import { clickupCatalog } from './catalog'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'clickup' })
 
 export const clickupIntegration: IntegrationDefinition = {
   id: 'clickup',
@@ -29,6 +32,6 @@ export const clickupIntegration: IntegrationDefinition = {
     },
   ],
   async onDisconnect() {
-    console.log('[ClickUp] Integration disconnected (no token revocation available)')
+    log.info('integration disconnected, no token revocation available')
   },
 }

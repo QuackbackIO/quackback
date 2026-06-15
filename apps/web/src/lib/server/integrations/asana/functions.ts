@@ -62,6 +62,8 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
     const { listAsanaProjects } = await import('./projects')
     const { refreshAsanaToken } = await import('./oauth')
     const { encryptSecrets } = await import('../encryption')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'asana' })
 
     await requireAuth({ roles: ['admin'] })
 
@@ -86,7 +88,7 @@ export const fetchAsanaProjectsFn = createServerFn({ method: 'GET' }).handler(
       const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
       const bufferMs = 5 * 60 * 1000
       if (Date.now() >= expiresAt - bufferMs) {
-        console.log('[Asana] Access token expired, refreshing...')
+        log.info('access token expired, refreshing')
         const { getPlatformCredentials } =
           await import('@/lib/server/domains/platform-credentials/platform-credential.service')
         const credentials = await getPlatformCredentials('asana')

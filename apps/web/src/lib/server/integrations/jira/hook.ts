@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildJiraIssueBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'jira' })
 
 export interface JiraTarget {
   channelId: string // projectId is stored as channelId for consistency
@@ -57,7 +60,7 @@ export const jiraHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Jira] Creating issue for ${event.type} -> project ${projectId}`)
+    log.debug({ event_type: event.type, project_id: projectId }, 'creating issue')
 
     const { title, description } = buildJiraIssueBody(event, rootUrl)
 
@@ -82,7 +85,7 @@ export const jiraHook: HookHandler = {
       const issueUrl = siteUrl
         ? `${siteUrl}/browse/${result.key}`
         : `https://api.atlassian.com/ex/jira/${cloudId}/browse/${result.key}`
-      console.log(`[Jira] Created issue ${result.key}`)
+      log.info({ issue_key: result.key }, 'issue created')
       return { success: true, externalId: result.key, externalUrl: issueUrl }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'

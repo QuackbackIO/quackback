@@ -5,6 +5,10 @@
  * See: https://developers.asana.com/docs/oauth
  */
 
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'asana' })
+
 const ASANA_TOKEN_URL = 'https://app.asana.com/-/oauth_token'
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
@@ -168,8 +172,8 @@ export async function revokeAsanaToken(
         token: refreshToken,
       }),
     })
-    console.log('[Asana] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[Asana] Failed to revoke token:', error)
+    log.error({ err: error }, 'token revoke failed')
   }
 }

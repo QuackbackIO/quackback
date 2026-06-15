@@ -5,6 +5,9 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import type { EvaluationResult } from './segment.types'
 import type { SegmentRules, SegmentCondition } from '@/lib/server/db'
 import { getSegment } from './segment.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'segment-evaluation' })
 
 /** SQL comparison operators for rule conditions */
 const OPERATOR_SQL: Record<string, string> = {
@@ -331,7 +334,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
         .then(({ notifyUserSyncIntegrations }) =>
           notifyUserSyncIntegrations(segment.name, [], removedIds)
         )
-        .catch((err) => console.error('[UserSync] notifyUserSyncIntegrations failed:', err))
+        .catch((err) => log.error({ err }, 'user sync notify failed'))
     }
     return { segmentId, added: 0, removed: deleted.length }
   }
@@ -384,7 +387,7 @@ export async function evaluateDynamicSegment(segmentId: SegmentId): Promise<Eval
       .then(({ notifyUserSyncIntegrations }) =>
         notifyUserSyncIntegrations(segment.name, toAdd, toRemove)
       )
-      .catch((err) => console.error('[UserSync] notifyUserSyncIntegrations failed:', err))
+      .catch((err) => log.error({ err }, 'user sync notify failed'))
   }
 
   return { segmentId, added: toAdd.length, removed: toRemove.length }

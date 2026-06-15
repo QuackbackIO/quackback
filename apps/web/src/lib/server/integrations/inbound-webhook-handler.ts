@@ -14,6 +14,9 @@ import { decryptSecrets } from './encryption'
 import { resolveStatusMapping, type StatusMappings } from './status-mapping'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import type { PostId, StatusId, PrincipalId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'inbound-webhook' })
 
 /**
  * Handle an inbound webhook from an external platform.
@@ -58,7 +61,7 @@ export async function handleInboundWebhook(
   const config = (integration.config ?? {}) as Record<string, unknown>
   const webhookSecret = config.webhookSecret as string | undefined
   if (!webhookSecret) {
-    console.error(`[Inbound] No webhook secret for ${integrationType}`)
+    log.error({ integration_type: integrationType }, 'inbound webhook secret not configured')
     return new Response('Webhook not configured', { status: 404 })
   }
 
@@ -78,8 +81,14 @@ export async function handleInboundWebhook(
     return new Response('OK', { status: 200 })
   }
 
-  console.log(
-    `[Inbound] ${integrationType} ${result.eventType}: externalId=${result.externalId} → status="${result.externalStatus}"`
+  log.info(
+    {
+      integration_type: integrationType,
+      event_type: result.eventType,
+      external_id: result.externalId,
+      external_status: result.externalStatus,
+    },
+    'inbound status change received'
   )
 
   // Reverse lookup: find the post linked to this external ID
@@ -90,7 +99,10 @@ export async function handleInboundWebhook(
     ),
   })
   if (!link) {
-    console.log(`[Inbound] No linked post for ${integrationType}:${result.externalId}, ignoring`)
+    log.debug(
+      { integration_type: integrationType, external_id: result.externalId },
+      'no linked post for external id, ignoring'
+    )
     return new Response('OK', { status: 200 })
   }
 
@@ -98,8 +110,9 @@ export async function handleInboundWebhook(
   const statusMappings = config.statusMappings as StatusMappings | undefined
   const statusId = resolveStatusMapping(result.externalStatus, statusMappings)
   if (!statusId) {
-    console.log(
-      `[Inbound] No status mapping for "${result.externalStatus}" in ${integrationType}, ignoring`
+    log.debug(
+      { integration_type: integrationType, external_status: result.externalStatus },
+      'no status mapping, ignoring'
     )
     return new Response('OK', { status: 200 })
   }
@@ -107,8 +120,9 @@ export async function handleInboundWebhook(
   // Update the post status using the integration's service principal
   try {
     if (!integration.principalId) {
-      console.error(
-        `[Inbound] Integration ${integrationType} has no service principal, skipping status update`
+      log.error(
+        { integration_type: integrationType },
+        'integration has no service principal, skipping status update'
       )
       return new Response('OK', { status: 200 })
     }
@@ -117,11 +131,12 @@ export async function handleInboundWebhook(
       principalId: integration.principalId as PrincipalId,
       displayName: `${integrationType} Integration`,
     })
-    console.log(
-      `[Inbound] Updated post ${link.postId} status to ${statusId} via ${integrationType}`
+    log.info(
+      { post_id: link.postId, status_id: statusId, integration_type: integrationType },
+      'inbound status update applied'
     )
   } catch (error) {
-    console.error(`[Inbound] Failed to update post status:`, error)
+    log.error({ err: error, integration_type: integrationType }, 'inbound status update failed')
     // Still return 200 to prevent the platform from retrying
   }
 

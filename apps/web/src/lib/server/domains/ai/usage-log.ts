@@ -6,6 +6,9 @@
  */
 
 import { db, aiUsageLog, sql } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ai-usage-log' })
 
 export interface LogAiUsageParams {
   pipelineStep: string
@@ -81,7 +84,7 @@ export async function withUsageLogging<T>(
       retryCount,
       status: 'success',
     }).catch((err) => {
-      console.warn('[AiUsageLog] Failed to log usage:', err)
+      log.warn({ err }, 'failed to log ai usage')
     })
 
     return result
@@ -104,7 +107,7 @@ export async function withUsageLogging<T>(
       status: 'error',
       error: errorMessage,
     }).catch((logErr) => {
-      console.warn(`[AiUsageLog] Failed to log error entry: ${logErr}`)
+      log.warn({ err: logErr }, 'failed to log ai usage error entry')
     })
 
     throw error
@@ -134,9 +137,14 @@ export async function cleanupExpiredLogs(): Promise<{
   const pipelineDeleted = (pipelineResult as { count: number }).count ?? 0
 
   if (aiUsageDeleted > 0 || pipelineDeleted > 0) {
-    console.log(
-      `[Retention] Cleaned up ${aiUsageDeleted} ai_usage_log rows (>${AI_USAGE_RETENTION_DAYS}d), ` +
-        `${pipelineDeleted} pipeline_log rows (>${PIPELINE_LOG_RETENTION_DAYS}d)`
+    log.info(
+      {
+        ai_usage_deleted: aiUsageDeleted,
+        pipeline_deleted: pipelineDeleted,
+        ai_usage_retention_days: AI_USAGE_RETENTION_DAYS,
+        pipeline_log_retention_days: PIPELINE_LOG_RETENTION_DAYS,
+      },
+      'retention cleanup completed'
     )
   }
 

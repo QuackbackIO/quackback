@@ -4,6 +4,10 @@
  * The subdomain is collected via preAuthFields before the OAuth flow starts.
  */
 
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'zendesk' })
+
 /**
  * Generate the Zendesk OAuth authorization URL.
  */
@@ -109,7 +113,7 @@ export async function exchangeZendeskCode(
 export async function revokeZendeskToken(accessToken: string, subdomain: string): Promise<void> {
   try {
     if (!subdomain || subdomain === 'unknown') {
-      console.log('[Zendesk] No subdomain available, skipping token revocation')
+      log.debug('no subdomain available, skipping token revocation')
       return
     }
 
@@ -117,8 +121,8 @@ export async function revokeZendeskToken(accessToken: string, subdomain: string)
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     })
-    console.log('[Zendesk] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[Zendesk] Failed to revoke token:', error)
+    log.error({ err: error }, 'token revoke failed')
   }
 }

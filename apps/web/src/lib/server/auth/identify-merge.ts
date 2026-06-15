@@ -8,7 +8,10 @@
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import { mergeAnonymousToIdentified } from './merge-anonymous'
+
+const log = logger.child({ component: 'identify-merge' })
 
 interface ResolveAndMergeParams {
   /** The previous widget session token (captured before re-identify) */
@@ -57,6 +60,6 @@ export async function resolveAndMergeAnonymousToken(params: ResolveAndMergeParam
     })
   } catch (error) {
     // Merge failures are non-fatal — the identify should still succeed
-    console.error('[widget-identify] previousToken merge failed:', error)
+    log.error({ err: error }, 'previous token merge failed')
   }
 }

@@ -18,7 +18,23 @@ type Handler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 const hoisted = vi.hoisted(() => ({
   handlersByIndex: [] as Handler[],
   mockGetPortalConfig: vi.fn(),
+  logSpies: {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  },
 }))
+
+vi.mock('@/lib/server/logger', () => {
+  const child = () => ({ ...hoisted.logSpies, child })
+  return {
+    logger: { ...hoisted.logSpies, child },
+    createLogger: () => ({ ...hoisted.logSpies, child }),
+  }
+})
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
@@ -1155,15 +1171,14 @@ describe('getModerationStatus', () => {
       .mockImplementationOnce(() => makeOk(4) as never)
       .mockImplementationOnce(() => makeFail() as never)
     mockGetPortalConfig.mockResolvedValue({ moderationDefault: { requireApproval: 'all' } })
-    // Silence the expected console.error from the rejected branch.
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    hoisted.logSpies.error.mockClear()
     const result = (await getModerationStatusHandler()({ data: {} })) as {
       enabled: boolean
       pendingCount: number
     }
     expect(result.pendingCount).toBe(4)
-    expect(errSpy).toHaveBeenCalled()
-    errSpy.mockRestore()
+    // The rejected count branch logs the failure via the structured logger.
+    expect(hoisted.logSpies.error).toHaveBeenCalled()
   })
 
   it('pendingCount sums pending posts AND pending comments', async () => {

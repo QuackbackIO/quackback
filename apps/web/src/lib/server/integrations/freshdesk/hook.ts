@@ -6,6 +6,9 @@
 import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'freshdesk' })
 
 export interface FreshdeskTarget {
   channelId: string
@@ -30,7 +33,7 @@ export const freshdeskHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Freshdesk] Enriching feedback from ${email}`)
+    log.debug('enriching feedback')
 
     try {
       const response = await fetch(
@@ -61,12 +64,12 @@ export const freshdeskHook: HookHandler = {
       const contacts = (await response.json()) as Array<{ id: number; name?: string }>
 
       if (contacts.length === 0) {
-        console.log(`[Freshdesk] No contact found for ${email}`)
+        log.debug('no contact found')
         return { success: true }
       }
 
       const contact = contacts[0]
-      console.log(`[Freshdesk] ✅ Found contact ${contact.id}`)
+      log.info({ contact_id: contact.id }, 'contact found')
 
       return {
         success: true,
@@ -75,7 +78,7 @@ export const freshdeskHook: HookHandler = {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Freshdesk] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'enrichment failed')
       return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
     }
   },

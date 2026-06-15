@@ -36,49 +36,52 @@ import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/serv
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'settings' })
 
 // ============================================
 // Read Operations
 // ============================================
 
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchBrandingConfig`)
+  log.debug('fetch branding config')
   try {
     return await getBrandingConfig()
   } catch (error) {
-    console.error(`[fn:settings] fetchBrandingConfig failed:`, error)
+    log.error({ err: error }, 'fetch branding config failed')
     throw error
   }
 })
 
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchPortalConfig`)
+  log.debug('fetch portal config')
   try {
     await requireAuth({ roles: ['admin'] })
     const config = await getPortalConfig()
     return config ?? DEFAULT_PORTAL_CONFIG
   } catch (error) {
-    console.error(`[fn:settings] fetchPortalConfig failed:`, error)
+    log.error({ err: error }, 'fetch portal config failed')
     throw error
   }
 })
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchPublicPortalConfig`)
+  log.debug('fetch public portal config')
   try {
     return await getPublicPortalConfig()
   } catch (error) {
-    console.error(`[fn:settings] fetchPublicPortalConfig failed:`, error)
+    log.error({ err: error }, 'fetch public portal config failed')
     throw error
   }
 })
 
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchPublicAuthConfig`)
+  log.debug('fetch public auth config')
   try {
     return await getPublicAuthConfig()
   } catch (error) {
-    console.error(`[fn:settings] fetchPublicAuthConfig failed:`, error)
+    log.error({ err: error }, 'fetch public auth config failed')
     throw error
   }
 })
@@ -90,7 +93,7 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
  * admin form even though it's broader than `fetchPublicAuthConfig`.
  */
 export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchAuthConfigFn`)
+  log.debug('fetch auth config')
   try {
     await requireAuth({ roles: ['admin'] })
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
@@ -102,18 +105,18 @@ export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async
       }
     )
   } catch (error) {
-    console.error(`[fn:settings] fetchAuthConfigFn failed:`, error)
+    log.error({ err: error }, 'fetch auth config failed')
     throw error
   }
 })
 
 export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchDeveloperConfig`)
+  log.debug('fetch developer config')
   try {
     await requireAuth({ roles: ['admin'] })
     return await getDeveloperConfig()
   } catch (error) {
-    console.error(`[fn:settings] fetchDeveloperConfig failed:`, error)
+    log.error({ err: error }, 'fetch developer config failed')
     throw error
   }
 })
@@ -127,7 +130,7 @@ function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null 
 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
-    console.log(`[fn:settings] fetchTeamMembersAndInvitations`)
+    log.debug('fetch team members and invitations')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -197,7 +200,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 
       return { members, avatarMap, formattedInvitations }
     } catch (error) {
-      console.error(`[fn:settings] fetchTeamMembersAndInvitations failed:`, error)
+      log.error({ err: error }, 'fetch team members and invitations failed')
       throw error
     }
   }
@@ -206,7 +209,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 export const fetchUserProfile = createServerFn({ method: 'GET' })
   .inputValidator(userIdSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] fetchUserProfile: userId=${data}`)
+    log.debug({ user_id: data }, 'fetch user profile')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -280,7 +283,7 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
         ssoEnforced,
       }
     } catch (error) {
-      console.error(`[fn:settings] fetchUserProfile failed:`, error)
+      log.error({ err: error }, 'fetch user profile failed')
       throw error
     }
   })
@@ -337,12 +340,12 @@ export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNam
 export const updateThemeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateThemeSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateThemeFn`)
+    log.info('update theme')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
     } catch (error) {
-      console.error(`[fn:settings] updateThemeFn failed:`, error)
+      log.error({ err: error }, 'update theme failed')
       throw error
     }
   })
@@ -350,12 +353,12 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updatePortalConfigFn`)
+    log.info('update portal config')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updatePortalConfig(data as UpdatePortalConfigInput)
     } catch (error) {
-      console.error(`[fn:settings] updatePortalConfigFn failed:`, error)
+      log.error({ err: error }, 'update portal config failed')
       throw error
     }
   })
@@ -433,7 +436,7 @@ const AUDIT_TRACKED_OAUTH_KEYS: Array<{
 export const updateAuthConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updateAuthConfigSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateAuthConfigFn`)
+    log.info('update auth config')
     try {
       const { getRequestHeaders } = await import('@tanstack/react-start/server')
       const auth = await requireAuth({ roles: ['admin'] })
@@ -526,7 +529,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
         throw error
       }
     } catch (error) {
-      console.error(`[fn:settings] updateAuthConfigFn failed:`, error)
+      log.error({ err: error }, 'update auth config failed')
       throw error
     }
   })
@@ -534,23 +537,23 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
 export const saveLogoKeyFn = createServerFn({ method: 'POST' })
   .inputValidator(saveLogoKeySchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] saveLogoKeyFn: key=${data.key}`)
+    log.info({ key: data.key }, 'save logo key')
     try {
       await requireAuth({ roles: ['admin'] })
       return await saveLogoKey(data.key)
     } catch (error) {
-      console.error(`[fn:settings] saveLogoKeyFn failed:`, error)
+      log.error({ err: error }, 'save logo key failed')
       throw error
     }
   })
 
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  console.log(`[fn:settings] deleteLogoFn`)
+  log.info('delete logo')
   try {
     await requireAuth({ roles: ['admin'] })
     return await deleteLogoKey()
   } catch (error) {
-    console.error(`[fn:settings] deleteLogoFn failed:`, error)
+    log.error({ err: error }, 'delete logo failed')
     throw error
   }
 })
@@ -558,23 +561,23 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
 export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
   .inputValidator(saveLogoKeySchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] saveHeaderLogoKeyFn: key=${data.key}`)
+    log.info({ key: data.key }, 'save header logo key')
     try {
       await requireAuth({ roles: ['admin'] })
       return await saveHeaderLogoKey(data.key)
     } catch (error) {
-      console.error(`[fn:settings] saveHeaderLogoKeyFn failed:`, error)
+      log.error({ err: error }, 'save header logo key failed')
       throw error
     }
   })
 
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
-  console.log(`[fn:settings] deleteHeaderLogoFn`)
+  log.info('delete header logo')
   try {
     await requireAuth({ roles: ['admin'] })
     return await deleteHeaderLogoKey()
   } catch (error) {
-    console.error(`[fn:settings] deleteHeaderLogoFn failed:`, error)
+    log.error({ err: error }, 'delete header logo failed')
     throw error
   }
 })
@@ -582,12 +585,12 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateHeaderDisplayModeFn: mode=${data.mode}`)
+    log.info({ mode: data.mode }, 'update header display mode')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateHeaderDisplayMode(data.mode)
     } catch (error) {
-      console.error(`[fn:settings] updateHeaderDisplayModeFn failed:`, error)
+      log.error({ err: error }, 'update header display mode failed')
       throw error
     }
   })
@@ -595,12 +598,12 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateHeaderDisplayNameFn: name=${data.name}`)
+    log.info({ name: data.name }, 'update header display name')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateHeaderDisplayName(data.name)
     } catch (error) {
-      console.error(`[fn:settings] updateHeaderDisplayNameFn failed:`, error)
+      log.error({ err: error }, 'update header display name failed')
       throw error
     }
   })
@@ -614,12 +617,12 @@ export type UpdateWorkspaceNameInput = z.infer<typeof updateWorkspaceNameSchema>
 export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateWorkspaceNameSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateWorkspaceNameFn: name=${data.name}`)
+    log.info({ name: data.name }, 'update workspace name')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateWorkspaceName(data.name)
     } catch (error) {
-      console.error(`[fn:settings] updateWorkspaceNameFn failed:`, error)
+      log.error({ err: error }, 'update workspace name failed')
       throw error
     }
   })
@@ -637,11 +640,11 @@ const updateCustomCssSchema = z.object({
 export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
 
 export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchCustomCssFn`)
+  log.debug('fetch custom css')
   try {
     return await getCustomCss()
   } catch (error) {
-    console.error(`[fn:settings] fetchCustomCssFn failed:`, error)
+    log.error({ err: error }, 'fetch custom css failed')
     throw error
   }
 })
@@ -649,12 +652,12 @@ export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async 
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .inputValidator(updateCustomCssSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateCustomCssFn: cssLength=${data.customCss.length}`)
+    log.info({ css_length: data.customCss.length }, 'update custom css')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateCustomCss(data.customCss)
     } catch (error) {
-      console.error(`[fn:settings] updateCustomCssFn failed:`, error)
+      log.error({ err: error }, 'update custom css failed')
       throw error
     }
   })
@@ -670,12 +673,12 @@ const updateDeveloperConfigSchema = z.object({
 export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updateDeveloperConfigSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateDeveloperConfigFn: mcpEnabled=${data.mcpEnabled}`)
+    log.info({ mcp_enabled: data.mcpEnabled }, 'update developer config')
     try {
       await requireAuth({ roles: ['admin'] })
       return await updateDeveloperConfig(data)
     } catch (error) {
-      console.error(`[fn:settings] updateDeveloperConfigFn failed:`, error)
+      log.error({ err: error }, 'update developer config failed')
       throw error
     }
   })
@@ -685,25 +688,25 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
 // ============================================
 
 export const fetchWidgetConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchWidgetConfig`)
+  log.debug('fetch widget config')
   try {
     await requireAuth({ roles: ['admin'] })
     const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
     return await getWidgetConfig()
   } catch (error) {
-    console.error(`[fn:settings] fetchWidgetConfig failed:`, error)
+    log.error({ err: error }, 'fetch widget config failed')
     throw error
   }
 })
 
 export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] fetchWidgetSecret`)
+  log.debug('fetch widget secret')
   try {
     await requireAuth({ roles: ['admin'] })
     const { getWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
     return await getWidgetSecret()
   } catch (error) {
-    console.error(`[fn:settings] fetchWidgetSecret failed:`, error)
+    log.error({ err: error }, 'fetch widget secret failed')
     throw error
   }
 })
@@ -767,27 +770,25 @@ const updateWidgetConfigSchema = z.object({
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
   .inputValidator(updateWidgetConfigSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:settings] updateWidgetConfigFn: enabled=${data.enabled}, position=${data.position}`
-    )
+    log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
     try {
       await requireAuth({ roles: ['admin'] })
       const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
       return await updateWidgetConfig(data)
     } catch (error) {
-      console.error(`[fn:settings] updateWidgetConfigFn failed:`, error)
+      log.error({ err: error }, 'update widget config failed')
       throw error
     }
   })
 
 export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
-  console.log(`[fn:settings] regenerateWidgetSecretFn`)
+  log.info('regenerate widget secret')
   try {
     await requireAuth({ roles: ['admin'] })
     const { regenerateWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
     return await regenerateWidgetSecret()
   } catch (error) {
-    console.error(`[fn:settings] regenerateWidgetSecretFn failed:`, error)
+    log.error({ err: error }, 'regenerate widget secret failed')
     throw error
   }
 })
@@ -806,7 +807,7 @@ const moderationDefaultSchema = z.object({
  * whether inbound reply threading is configured — names only, never secrets.
  */
 export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings] getEmailChannelStatusFn`)
+  log.debug('get email channel status')
   try {
     await requireAuth({ roles: ['admin'] })
     const { getEmailProvider } = await import('@quackback/email')
@@ -819,7 +820,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
       inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
     }
   } catch (error) {
-    console.error(`[fn:settings] getEmailChannelStatusFn failed:`, error)
+    log.error({ err: error }, 'get email channel status failed')
     throw error
   }
 })
@@ -827,7 +828,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
 export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
   .inputValidator(moderationDefaultSchema.parse)
   .handler(async ({ data }) => {
-    console.log(`[fn:settings] updateModerationDefaultFn: requireApproval=${data.requireApproval}`)
+    log.info({ require_approval: data.requireApproval }, 'update moderation default')
     const auth = await requireAuth()
     if (!isAdmin(auth.principal.role)) {
       throw new ForbiddenError('FORBIDDEN', 'Admin only')

@@ -6,8 +6,11 @@
 
 import { Queue, Worker, UnrecoverableError } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { logger } from '@/lib/server/logger'
 import type { FeedbackAiJob } from '../types'
 import type { RawFeedbackItemId, FeedbackSignalId } from '@quackback/ids'
+
+const log = logger.child({ component: 'feedback-ai-queue' })
 
 const QUEUE_NAME = '{feedback-ai}'
 const CONCURRENCY = 1
@@ -115,7 +118,7 @@ async function initializeQueue() {
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
     const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    console.error(`[FeedbackAI] ${job.data.type} ${prefix}: ${error.message}`)
+    log.error({ err: error, job_type: job.data.type, status: prefix }, 'feedback ai job failed')
   })
 
   return { queue, worker }
@@ -124,7 +127,7 @@ async function initializeQueue() {
 /** Initialize the AI queue worker eagerly (called from startup). */
 export async function initFeedbackAiWorker(): Promise<void> {
   await ensureQueue()
-  console.log('[FeedbackAI] Worker initialized')
+  log.debug('worker initialized')
 }
 
 /** Enqueue a feedback AI job. */

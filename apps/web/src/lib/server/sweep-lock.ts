@@ -17,6 +17,9 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'sweep-lock' })
 
 /**
  * Execute `fn` if no other instance currently holds the named sweep lock.
@@ -61,7 +64,7 @@ export async function withSweepLock(
         WHERE name = ${name} AND acquired_at = ${acquiredAt}
       `)
     } catch (err) {
-      console.error('[sweep-lock] release failed:', err)
+      log.error({ err, name }, 'lock release failed')
     }
   }
 }

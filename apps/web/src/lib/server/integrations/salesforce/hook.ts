@@ -6,6 +6,9 @@
 import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'salesforce' })
 
 export interface SalesforceTarget {
   channelId: string
@@ -30,7 +33,7 @@ export const salesforceHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Salesforce] Enriching feedback from ${email}`)
+    log.debug('enriching feedback')
 
     try {
       // SOQL query to find contact by email — escape backslashes then single quotes
@@ -71,12 +74,12 @@ export const salesforceHook: HookHandler = {
       }
 
       if (data.records.length === 0) {
-        console.log(`[Salesforce] No contact found for ${email}`)
+        log.debug('no contact found')
         return { success: true }
       }
 
       const contact = data.records[0]
-      console.log(`[Salesforce] ✅ Found contact ${contact.Id}`)
+      log.info({ contact_id: contact.Id }, 'contact found')
 
       return {
         success: true,
@@ -85,7 +88,7 @@ export const salesforceHook: HookHandler = {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Salesforce] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'enrichment failed')
       return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
     }
   },

@@ -10,7 +10,10 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { findMergeCandidates } from './merge-search.service'
 import { assessMergeCandidates, determineDirection } from './merge-assessment.service'
 import { createMergeSuggestion, expireStaleMergeSuggestions } from './merge-suggestion.service'
+import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
+
+const log = logger.child({ component: 'merge-check' })
 
 const SWEEP_BATCH_SIZE = 50
 const SWEEP_POST_DELAY_MS = 500
@@ -55,7 +58,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
     return
   }
 
-  console.log(`[MergeSuggestion] Found ${candidates.length} candidates for post ${postId}`)
+  log.info({ candidate_count: candidates.length, post_id: postId }, 'found merge candidates')
 
   // Step 2: LLM verification
   const assessments = await assessMergeCandidates(
@@ -64,7 +67,7 @@ export async function checkPostForMergeCandidates(postId: PostId): Promise<void>
     model
   )
 
-  console.log(`[MergeSuggestion] LLM confirmed ${assessments.length} duplicates for post ${postId}`)
+  log.info({ duplicate_count: assessments.length, post_id: postId }, 'llm confirmed duplicates')
 
   // Step 3: Pick single best match (highest confidence, tiebreak by hybrid score)
   const bestAssessment = assessments.sort((a, b) => {
@@ -156,7 +159,7 @@ async function _doSweep(): Promise<void> {
     if (stalePosts.length === 0) break
 
     if (totalProcessed === 0 && totalFailed === 0) {
-      console.log(`[MergeSuggestion] Sweep: found stale posts, processing...`)
+      log.info('sweep found stale posts')
     }
 
     let batchSucceeded = 0
@@ -174,7 +177,7 @@ async function _doSweep(): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, SWEEP_POST_DELAY_MS))
       } catch (err) {
         totalFailed++
-        console.error(`[MergeSuggestion] Failed to check post ${id}:`, err)
+        log.error({ err, post_id: id }, 'failed to check post')
       }
     }
 
@@ -185,29 +188,30 @@ async function _doSweep(): Promise<void> {
     if (batchSucceeded === 0) {
       consecutiveEmptyBatches++
       if (consecutiveEmptyBatches >= SWEEP_ABORT_AFTER_EMPTY_BATCHES) {
-        console.error(
-          `[MergeSuggestion] Aborting sweep: ${consecutiveEmptyBatches} consecutive batches with 0 successes (${totalProcessed} processed, ${totalFailed} failed total). Next sweep will retry.`
+        log.error(
+          {
+            consecutive_empty_batches: consecutiveEmptyBatches,
+            total_processed: totalProcessed,
+            total_failed: totalFailed,
+          },
+          'aborting sweep after consecutive empty batches'
         )
         break
       }
     } else {
       consecutiveEmptyBatches = 0
-      console.log(
-        `[MergeSuggestion] Sweep progress: ${totalProcessed} processed, ${totalFailed} failed`
-      )
+      log.debug({ total_processed: totalProcessed, total_failed: totalFailed }, 'sweep progress')
     }
   }
 
   // Expire old suggestions
   const expired = await expireStaleMergeSuggestions()
   if (expired > 0) {
-    console.log(`[MergeSuggestion] Expired ${expired} stale suggestions`)
+    log.info({ expired_count: expired }, 'expired stale suggestions')
   }
 
   if (totalProcessed > 0) {
-    console.log(
-      `[MergeSuggestion] Sweep complete: ${totalProcessed} processed, ${totalFailed} failed`
-    )
+    log.info({ total_processed: totalProcessed, total_failed: totalFailed }, 'sweep complete')
   }
 }
 

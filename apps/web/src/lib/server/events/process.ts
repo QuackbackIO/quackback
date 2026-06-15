@@ -13,6 +13,9 @@ import { isRetryableError } from './hook-utils'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
 import type { WebhookId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'event-process' })
 
 interface HookJobData {
   hookType: string
@@ -106,7 +109,7 @@ async function initializeQueue() {
       if (result.success) {
         if (result.externalId) {
           persistExternalLink(job.data, result).catch((err) =>
-            console.error('[Event] Failed to persist external link:', err)
+            log.error({ err }, 'failed to persist external link')
           )
         }
         return
@@ -141,9 +144,15 @@ async function initializeQueue() {
     // so we must also check the error name to detect permanent failure.
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
-    const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    console.error(
-      `[Event] ${job.data.hookType} ${prefix} for event ${job.data.event.id}: ${error.message}`
+    log.error(
+      {
+        err: error,
+        hook_type: job.data.hookType,
+        event_id: job.data.event.id,
+        permanent: isPermanent,
+        attempt: job.attemptsMade,
+      },
+      'hook failed'
     )
 
     // Webhook failure counting: only on permanent failure.
@@ -151,7 +160,7 @@ async function initializeQueue() {
     // auto-disable threshold after ~17 flaky events instead of 50).
     if (isPermanent && job.data.hookType === 'webhook') {
       updateWebhookFailureCount(job.data, error.message).catch((err) =>
-        console.error('[Event] Failed to update webhook failure count:', err)
+        log.error({ err }, 'failed to update webhook failure count')
       )
     }
   })
@@ -220,7 +229,10 @@ export async function processEvent(event: EventData): Promise<void> {
   const targets = await getHookTargets(event)
   if (targets.length === 0) return
 
-  console.log(`[Event] Processing ${event.type} event ${event.id} (${targets.length} targets)`)
+  log.debug(
+    { event_type: event.type, event_id: event.id, target_count: targets.length },
+    'processing event'
+  )
 
   const queue = await ensureQueue()
 
@@ -245,12 +257,12 @@ export async function closeQueue(): Promise<void> {
   try {
     await worker.close()
   } catch (e) {
-    console.error('[Event] Worker close error:', e)
+    log.error({ err: e }, 'worker close error')
   }
   try {
     await queue.close()
   } catch (e) {
-    console.error('[Event] Queue close error:', e)
+    log.error({ err: e }, 'queue close error')
   }
 }
 
@@ -288,7 +300,7 @@ export async function removeDelayedJob(jobId: string): Promise<void> {
     const job = await queue.getJob(jobId)
     if (job) {
       await job.remove()
-      console.log(`[Event] Removed delayed job ${jobId}`)
+      log.debug({ job_id: jobId }, 'removed delayed job')
     }
   } catch {
     // Job may have already been processed or removed
@@ -310,9 +322,7 @@ async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>
   })
 
   if (!entry || !entry.publishedAt || entry.publishedAt > new Date()) {
-    console.log(
-      `[Event] Skipping delayed changelog publish for ${changelogId} — no longer published`
-    )
+    log.debug({ changelog_id: changelogId }, 'skipping delayed changelog publish, no longer published')
     return
   }
 
@@ -352,5 +362,5 @@ async function handlePostMergeRecheck(hookConfig: Record<string, unknown>): Prom
   const { checkPostForMergeCandidates } =
     await import('@/lib/server/domains/merge-suggestions/merge-check.service')
   await checkPostForMergeCandidates(postId as import('@quackback/ids').PostId)
-  console.log(`[PostMerge] Post-merge recheck complete for ${postId}`)
+  log.debug({ post_id: postId }, 'post-merge recheck complete')
 }

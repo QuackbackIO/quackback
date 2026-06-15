@@ -17,7 +17,10 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { buildQualityGatePrompt } from './prompts/quality-gate.prompt'
+import { logger } from '@/lib/server/logger'
 import type { RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
+
+const log = logger.child({ component: 'quality-gate' })
 
 /** Sources where users intentionally submit feedback — high baseline intent. */
 const HIGH_INTENT_SOURCES = new Set(['api', 'quackback'])
@@ -133,9 +136,7 @@ export async function shouldExtract(item: {
     }
   } catch (error) {
     // Quality gate failure should never block the pipeline — pass through
-    console.warn(
-      `[QualityGate] LLM call failed, passing through: ${error instanceof Error ? error.message : String(error)}`
-    )
+    log.warn({ err: error }, 'llm call failed, passing through')
     return { extract: true, tier: 3, reason: 'quality gate error, passing through' }
   }
 }

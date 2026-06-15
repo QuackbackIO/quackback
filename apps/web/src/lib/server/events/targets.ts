@@ -35,6 +35,9 @@ import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'targets' })
 
 /**
  * Drop subscribers who can't view the post under its current board
@@ -159,7 +162,7 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     // Build context ONCE at the start - consolidates all settings/URL queries
     const context = await buildHookContext()
     if (!context) {
-      console.error('[Targets] Failed to build hook context')
+      log.error('failed to build hook context')
       return []
     }
 
@@ -213,7 +216,7 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 
     return targets
   } catch (error) {
-    console.error(`[Targets] Failed to resolve targets for ${event.type}:`, error)
+    log.error({ err: error, event_type: event.type }, 'failed to resolve targets')
     return [] // Graceful degradation - don't crash event processing
   }
 }
@@ -230,7 +233,7 @@ type CachedIntegrationMapping = {
 async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[]> {
   const cached = await cacheGet<CachedIntegrationMapping[]>(CACHE_KEYS.INTEGRATION_MAPPINGS)
   if (cached) {
-    console.log(`[Targets] Integration mappings: cache hit (${cached.length} mappings)`)
+    log.debug({ count: cached.length }, 'integration mappings cache hit')
     return cached
   }
 
@@ -247,7 +250,7 @@ async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[
     .innerJoin(integrations, eq(integrationEventMappings.integrationId, integrations.id))
     .where(and(eq(integrationEventMappings.enabled, true), eq(integrations.status, 'active')))
 
-  console.log(`[Targets] Integration mappings: cache miss, fetched ${mappings.length} from DB`)
+  log.debug({ count: mappings.length }, 'integration mappings cache miss')
   await cacheSet(CACHE_KEYS.INTEGRATION_MAPPINGS, mappings, 300)
   return mappings
 }
@@ -299,7 +302,7 @@ async function getIntegrationTargets(
     const channelId = (actionConfig.channelId || integrationConfig.channelId) as string | undefined
 
     if (!channelId) {
-      console.warn(`[Targets] No channelId for ${m.integrationType}, skipping`)
+      log.warn({ integration_type: m.integrationType }, 'no channel id for integration, skipping')
       continue
     }
 
@@ -314,7 +317,7 @@ async function getIntegrationTargets(
         const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
         accessToken = secrets.accessToken
       } catch (error) {
-        console.error(`[Targets] Failed to decrypt secrets for ${m.integrationType}:`, error)
+        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
         continue
       }
     }
@@ -342,8 +345,9 @@ async function getSubscriberTargets(event: EventData, context: HookContext): Pro
 
   // Fetch subscribers ONCE for both email and notification targets
   const subscribers = await getSubscribersForEvent(postId, notifEventType)
-  console.log(
-    `[Targets] Found ${subscribers.length} subscribers for ${notifEventType} on post ${postId}`
+  log.debug(
+    { count: subscribers.length, notif_event_type: notifEventType, post_id: postId },
+    'found subscribers for event'
   )
   if (subscribers.length === 0) return []
 
@@ -766,8 +770,9 @@ async function getChangelogSubscriberTargets(
   }
 
   const subscribers = [...allSubscribers.values()]
-  console.log(
-    `[Targets] Found ${subscribers.length} unique subscribers across ${postIds.length} linked posts for changelog ${changelogId}`
+  log.debug(
+    { count: subscribers.length, post_count: postIds.length, changelog_id: changelogId },
+    'found unique subscribers across linked posts'
   )
   if (subscribers.length === 0) return []
 
@@ -883,12 +888,12 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
       CACHE_KEYS.ACTIVE_WEBHOOKS
     )
     if (activeWebhooks) {
-      console.log(`[Targets] Active webhooks: cache hit (${activeWebhooks.length} webhooks)`)
+      log.debug({ count: activeWebhooks.length }, 'active webhooks cache hit')
     } else {
       activeWebhooks = await db.query.webhooks.findMany({
         where: and(eq(webhooks.status, 'active'), isNull(webhooks.deletedAt)),
       })
-      console.log(`[Targets] Active webhooks: cache miss, fetched ${activeWebhooks.length} from DB`)
+      log.debug({ count: activeWebhooks.length }, 'active webhooks cache miss')
       await cacheSet(CACHE_KEYS.ACTIVE_WEBHOOKS, activeWebhooks, 300)
     }
 
@@ -904,8 +909,9 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
       webhookSubscriptionMatches(webhook, event)
     )
 
-    console.log(
-      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardIds.length ? ` (boards: ${boardIds.join(', ')})` : ''}`
+    log.debug(
+      { count: matchingWebhooks.length, event_type: event.type, board_ids: boardIds },
+      'found matching webhooks for event'
     )
 
     // Build targets - decrypt secrets for delivery
@@ -919,13 +925,13 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
           config: { secret, webhookId: webhook.id as WebhookId },
         })
       } catch (error) {
-        console.error(`[Targets] Failed to decrypt webhook secret for ${webhook.id}:`, error)
+        log.error({ err: error, webhook_id: webhook.id }, 'failed to decrypt webhook secret')
         // Skip this webhook rather than crash all
       }
     }
     return targets
   } catch (error) {
-    console.error('[Targets] Failed to resolve webhook targets:', error)
+    log.error({ err: error }, 'failed to resolve webhook targets')
     return []
   }
 }

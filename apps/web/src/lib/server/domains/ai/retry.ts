@@ -5,6 +5,10 @@
  * Best practice from OpenAI: https://cookbook.openai.com/examples/how_to_handle_rate_limits
  */
 
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ai-retry' })
+
 export interface RetryOptions {
   maxRetries?: number
   baseDelayMs?: number
@@ -43,8 +47,9 @@ export async function withRetry<T>(
       retryCount++
       const delay = Math.min(baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000, maxDelayMs)
 
-      console.log(
-        `[AI] Retry attempt ${attempt + 1}/${maxRetries} after ${Math.round(delay)}ms: ${lastError.message}`
+      log.debug(
+        { attempt: attempt + 1, max_retries: maxRetries, delay_ms: Math.round(delay), err: lastError },
+        'retrying ai call'
       )
 
       await sleep(delay)

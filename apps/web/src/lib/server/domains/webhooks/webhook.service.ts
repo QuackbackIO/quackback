@@ -11,6 +11,7 @@ import { encryptWebhookSecret } from './encryption'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { isValidWebhookUrl } from '@/lib/server/events/integrations/webhook/constants'
+import { logger } from '@/lib/server/logger'
 import type {
   Webhook,
   CreateWebhookInput,
@@ -18,6 +19,8 @@ import type {
   UpdateWebhookInput,
 } from './webhook.types'
 export type { Webhook, CreateWebhookInput, CreateWebhookResult, UpdateWebhookInput }
+
+const log = logger.child({ component: 'webhooks' })
 
 /** Maximum webhooks per workspace */
 const MAX_WEBHOOKS = 25
@@ -36,8 +39,9 @@ export async function createWebhook(
   input: CreateWebhookInput,
   createdById: PrincipalId
 ): Promise<CreateWebhookResult> {
-  console.log(
-    `[domain:webhooks] createWebhook: url=${input.url} events=${input.events.length} createdById=${createdById}`
+  log.debug(
+    { event_count: input.events.length, created_by_id: createdById },
+    'create webhook'
   )
   const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
   await assertTierFeature('webhooks', 'Webhooks')
@@ -126,7 +130,7 @@ export async function getWebhookById(id: WebhookId): Promise<Webhook> {
  * Update a webhook
  */
 export async function updateWebhook(id: WebhookId, input: UpdateWebhookInput): Promise<Webhook> {
-  console.log(`[domain:webhooks] updateWebhook: id=${id}`)
+  log.debug({ webhook_id: id }, 'update webhook')
   // Validate URL if provided
   if (input.url !== undefined) {
     if (!input.url?.trim()) {
@@ -178,7 +182,7 @@ export async function updateWebhook(id: WebhookId, input: UpdateWebhookInput): P
  * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteWebhook(id: WebhookId): Promise<void> {
-  console.log(`[domain:webhooks] deleteWebhook: id=${id}`)
+  log.debug({ webhook_id: id }, 'delete webhook')
   const [deleted] = await db
     .update(webhooks)
     .set({ deletedAt: new Date() })
@@ -199,7 +203,7 @@ export async function deleteWebhook(id: WebhookId): Promise<void> {
 export async function rotateWebhookSecret(
   id: WebhookId
 ): Promise<{ webhook: Webhook; secret: string }> {
-  console.log(`[domain:webhooks] rotateWebhookSecret: id=${id}`)
+  log.debug({ webhook_id: id }, 'rotate webhook secret')
   // Generate new secret
   const secret = generateSecret()
   const secretEncrypted = encryptWebhookSecret(secret)

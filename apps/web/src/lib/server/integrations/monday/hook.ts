@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildMondayItem } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'monday' })
 
 const MONDAY_API = 'https://api.monday.com/v2'
 
@@ -29,7 +32,7 @@ export const mondayHook: HookHandler = {
     const { channelId: boardId } = target as MondayTarget
     const { accessToken, rootUrl, groupId } = config as MondayConfig
 
-    console.log(`[Monday] Processing ${event.type} → board ${boardId}`)
+    log.debug({ event_type: event.type, board_id: boardId }, 'processing event')
 
     const { name, updateBody } = buildMondayItem(event, rootUrl)
 
@@ -55,7 +58,7 @@ export const mondayHook: HookHandler = {
         const status = response.status
 
         if (status === 401 || status === 403) {
-          console.error(`[Monday] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect Monday.com.`,
@@ -64,11 +67,11 @@ export const mondayHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.warn(`[Monday] ⚠️ Rate limited`)
+          log.warn({ status }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[Monday] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status, body: errorBody }, 'api error')
         return {
           success: false,
           error: `Monday.com API error: ${status}`,
@@ -83,7 +86,7 @@ export const mondayHook: HookHandler = {
 
       if (data.errors?.length) {
         const errorMsg = data.errors[0].message
-        console.error(`[Monday] ❌ GraphQL error: ${errorMsg}`)
+        log.error({ error_message: errorMsg }, 'graphql error')
         return { success: false, error: errorMsg, shouldRetry: false }
       }
 
@@ -106,11 +109,11 @@ export const mondayHook: HookHandler = {
         })
       }
 
-      console.log(`[Monday] ✅ Created item ${itemId}`)
+      log.info({ item_id: itemId }, 'created item')
       return { success: true, externalId: itemId }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Monday] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'exception')
 
       return {
         success: false,

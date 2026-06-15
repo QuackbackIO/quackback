@@ -20,6 +20,9 @@ import { watchConfigFile } from './watcher'
 import { reconcileFileIntoDb } from './reconciler'
 import { makeReconcileDeps } from './deps'
 import type { QuackbackConfigSpec } from './schema'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'config-file' })
 
 /** Default config-file path. Override via env `QUACKBACK_CONFIG_FILE`. */
 const DEFAULT_PATH = '/etc/quackback/config.yaml'
@@ -42,7 +45,7 @@ export function startQuackbackConfigWatcher(): () => void {
       return
     }
     if (result.kind === 'error') {
-      console.error(`[config-file] file invalid: ${result.error}`)
+      log.error({ reason: result.error }, 'config file invalid')
       await deps.reportStatus?.({ kind: 'error', message: result.error })
       return
     }
@@ -51,7 +54,7 @@ export function startQuackbackConfigWatcher(): () => void {
       kind: 'ok',
       configHash: hashSpec(result.config.spec),
     })
-    console.log(`[config-file] reconciled spec from ${path}`)
+    log.info({ path }, 'reconciled config spec')
   })
 }
 

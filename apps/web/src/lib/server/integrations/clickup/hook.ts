@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildClickUpTaskBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'clickup' })
 
 const CLICKUP_API = 'https://api.clickup.com/api/v2'
 
@@ -29,7 +32,7 @@ export const clickupHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[ClickUp] Creating task for ${event.type} → list ${listId}`)
+    log.debug({ event_type: event.type, list_id: listId }, 'creating task')
 
     const { name, description } = buildClickUpTaskBody(event, rootUrl)
 
@@ -81,7 +84,7 @@ export const clickupHook: HookHandler = {
 
       const task = (await response.json()) as { id: string; url: string }
 
-      console.log(`[ClickUp] Created task ${task.id}`)
+      log.info({ task_id: task.id }, 'task created')
       return { success: true, externalId: task.id, externalUrl: task.url }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'

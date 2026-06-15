@@ -1,6 +1,9 @@
 import { watch as fsWatch } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { loadConfigFile, type LoadResult } from './loader'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'config-watcher' })
 
 export interface WatchOptions {
   /** Polling fallback interval. Defaults to 30s — `fs.watch` on
@@ -49,7 +52,7 @@ export function watchConfigFile(
       // here. Without this catch they become unhandled rejections that
       // crash the Node process under default handlers. Log loudly + let
       // the next poll/native-watch tick retry.
-      console.error('[config-file] tick failed:', err)
+      log.error({ err }, 'tick failed')
     })
     try {
       await inFlight

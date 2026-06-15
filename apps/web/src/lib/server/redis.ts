@@ -7,6 +7,9 @@
 
 import Redis from 'ioredis'
 import { config } from './config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'redis' })
 
 let client: Redis | null = null
 
@@ -18,7 +21,7 @@ export function getRedis(): Redis {
       lazyConnect: true,
     })
     client.on('error', (err) => {
-      console.error('[Redis] Connection error:', err.message)
+      log.error({ err }, 'connection error')
     })
   }
   return client
@@ -47,7 +50,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     const raw = await getRedis().get(key)
     return raw ? JSON.parse(raw) : null
   } catch (err) {
-    console.warn(`[Cache] GET ${key} failed:`, (err as Error).message)
+    log.warn({ err, key }, 'cache get failed')
     return null
   }
 }
@@ -56,7 +59,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
   try {
     await getRedis().set(key, JSON.stringify(value), 'EX', ttlSeconds)
   } catch (err) {
-    console.warn(`[Cache] SET ${key} failed:`, (err as Error).message)
+    log.warn({ err, key }, 'cache set failed')
   }
 }
 
@@ -64,6 +67,6 @@ export async function cacheDel(...keys: string[]): Promise<void> {
   try {
     await getRedis().del(...keys)
   } catch (err) {
-    console.warn(`[Cache] DEL ${keys.join(', ')} failed:`, (err as Error).message)
+    log.warn({ err, keys }, 'cache del failed')
   }
 }

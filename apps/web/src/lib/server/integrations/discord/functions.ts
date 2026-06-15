@@ -69,8 +69,10 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets } = await import('../encryption')
     const { listDiscordChannels } = await import('./channels')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'discord' })
 
-    console.log(`[fn:integrations] fetchDiscordChannelsFn`)
+    log.debug('fetch channels')
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -97,7 +99,7 @@ export const fetchDiscordChannelsFn = createServerFn({ method: 'GET' }).handler(
 
     const channels = await listDiscordChannels(secrets.accessToken, cfg.guildId)
 
-    console.log(`[fn:integrations] fetchDiscordChannelsFn: ${channels.length} channels`)
+    log.debug({ channel_count: channels.length }, 'fetched channels')
     return channels
   }
 )

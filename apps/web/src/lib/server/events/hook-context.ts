@@ -8,6 +8,9 @@
 import { db } from '@/lib/server/db'
 import { getBaseUrl } from '@/lib/server/config'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'hook-context' })
 
 /**
  * Centralized hook context containing workspace data needed by all hooks.
@@ -33,7 +36,7 @@ export async function buildHookContext(): Promise<HookContext | null> {
   })
 
   if (!settings) {
-    console.error('[Targets] No workspace settings found')
+    log.error('no workspace settings found')
     return null
   }
 

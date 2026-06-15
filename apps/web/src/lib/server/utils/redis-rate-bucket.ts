@@ -5,6 +5,9 @@
  * count) so an outage doesn't lock callers out.
  */
 import { getRedis } from '@/lib/server/redis'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'redis-rate-bucket' })
 
 export interface RateBucketSpec {
   key: string
@@ -25,7 +28,7 @@ export async function incrementBucket(spec: RateBucketSpec): Promise<RateBucketR
     const results = await pipeline.exec()
     return { count: Number(results?.[0]?.[1] ?? 0) }
   } catch (error) {
-    console.error(`[redis-rate-bucket] error on ${spec.key}; failing open:`, error)
+    log.error({ err: error, key: spec.key }, 'bucket increment failed, failing open')
     return { count: null }
   }
 }
@@ -51,7 +54,7 @@ export async function incrementBuckets(
     // Each spec contributes 2 commands; INCR is the even-indexed reply.
     return specs.map((_, i) => Number(results[i * 2]?.[1] ?? 0))
   } catch (error) {
-    console.error('[redis-rate-bucket] pipeline error; failing open:', error)
+    log.error({ err: error }, 'pipeline increment failed, failing open')
     return specs.map(() => null)
   }
 }

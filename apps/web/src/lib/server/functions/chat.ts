@@ -39,6 +39,9 @@ import {
   type AuthContext,
 } from './auth-helpers'
 import { isTeamMember } from '@/lib/shared/roles'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat' })
 
 const attachmentSchema = z.object({
   url: z.string().min(1),
@@ -228,7 +231,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
         (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
       )
     } catch (error) {
-      console.error('[fn:chat] sendChatMessageFn failed:', error)
+      log.error({ err: error }, 'send chat message failed')
       throw error
     }
   })
@@ -384,7 +387,7 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
         hasMore: page.hasMore,
       }
     } catch (error) {
-      console.error('[fn:chat] getMyChatFn failed:', error)
+      log.error({ err: error }, 'get my chat failed')
       throw error
     }
   })
@@ -414,7 +417,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
     const { listConversationsForVisitor } = await import('@/lib/server/domains/chat/chat.query')
     return { conversations: await listConversationsForVisitor(ctx.principal.id, 50, 'visitor') }
   } catch (error) {
-    console.error('[fn:chat] getMyConversationsFn failed:', error)
+    log.error({ err: error }, 'get my conversations failed')
     throw error
   }
 })
@@ -449,7 +452,7 @@ export const listChatMessagesFn = createServerFn({ method: 'GET' })
       }
       return page
     } catch (error) {
-      console.error('[fn:chat] listChatMessagesFn failed:', error)
+      log.error({ err: error }, 'list chat messages failed')
       throw error
     }
   })
@@ -468,7 +471,7 @@ export const markChatReadFn = createServerFn({ method: 'POST' })
       await markConversationRead(data.conversationId as ConversationId, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] markChatReadFn failed:', error)
+      log.error({ err: error }, 'mark chat read failed')
       throw error
     }
   })
@@ -486,7 +489,7 @@ export const sendChatTypingFn = createServerFn({ method: 'POST' })
       await signalTyping(data.conversationId as ConversationId, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] sendChatTypingFn failed:', error)
+      log.error({ err: error }, 'send chat typing failed')
       throw error
     }
   })
@@ -503,7 +506,7 @@ export const submitCsatFn = createServerFn({ method: 'POST' })
       await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] submitCsatFn failed:', error)
+      log.error({ err: error }, 'submit csat failed')
       throw error
     }
   })
@@ -520,7 +523,7 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
       await setAgentAvailability(ctx.principal.id, data.availability)
       return { availability: data.availability }
     } catch (error) {
-      console.error('[fn:chat] setAgentAvailabilityFn failed:', error)
+      log.error({ err: error }, 'set agent availability failed')
       throw error
     }
   })
@@ -533,7 +536,7 @@ export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(a
     const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
     return { token: mintStreamToken(ctx.principal.id) }
   } catch (error) {
-    console.error('[fn:chat] mintChatStreamTokenFn failed:', error)
+    log.error({ err: error }, 'mint chat stream token failed')
     throw error
   }
 })
@@ -550,7 +553,7 @@ export const deleteChatMessageFn = createServerFn({ method: 'POST' })
       await deleteChatMessage(data.messageId as ChatMessageId, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] deleteChatMessageFn failed:', error)
+      log.error({ err: error }, 'delete chat message failed')
       throw error
     }
   })
@@ -575,7 +578,7 @@ export const getCannedRepliesFn = createServerFn({ method: 'GET' }).handler(asyn
     const chat = await getLiveChatConfig()
     return { cannedReplies: chat.cannedReplies ?? [] }
   } catch (error) {
-    console.error('[fn:chat] getCannedRepliesFn failed:', error)
+    log.error({ err: error }, 'get canned replies failed')
     throw error
   }
 })
@@ -600,7 +603,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         before: data.before,
       })
     } catch (error) {
-      console.error('[fn:chat] listConversationsFn failed:', error)
+      log.error({ err: error }, 'list conversations failed')
       throw error
     }
   })
@@ -624,7 +627,7 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
         before: data.before,
       })
     } catch (error) {
-      console.error('[fn:chat] listConversationsForUserFn failed:', error)
+      log.error({ err: error }, 'list conversations for user failed')
       throw error
     }
   })
@@ -659,7 +662,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       )
       return { conversation: dto, messages, hasMore: page.hasMore }
     } catch (error) {
-      console.error('[fn:chat] getConversationFn failed:', error)
+      log.error({ err: error }, 'get conversation failed')
       throw error
     }
   })
@@ -685,7 +688,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
         (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
       )
     } catch (error) {
-      console.error('[fn:chat] sendAgentMessageFn failed:', error)
+      log.error({ err: error }, 'send agent message failed')
       throw error
     }
   })
@@ -719,7 +722,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
         actor
       )
     } catch (error) {
-      console.error('[fn:chat] startAgentConversationFn failed:', error)
+      log.error({ err: error }, 'start agent conversation failed')
       throw error
     }
   })
@@ -745,7 +748,7 @@ export const addChatNoteFn = createServerFn({ method: 'POST' })
         data.attachments as ChatAttachment[] | undefined
       )
     } catch (error) {
-      console.error('[fn:chat] addChatNoteFn failed:', error)
+      log.error({ err: error }, 'add chat note failed')
       throw error
     }
   })
@@ -780,7 +783,7 @@ export const createPostFromConversationFn = createServerFn({ method: 'POST' })
         { agentActor: actor, agentPrincipalId: ctx.principal.id, agent }
       )
     } catch (error) {
-      console.error('[fn:chat] createPostFromConversationFn failed:', error)
+      log.error({ err: error }, 'create post from conversation failed')
       throw error
     }
   })
@@ -807,7 +810,7 @@ export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
         actor
       )
     } catch (error) {
-      console.error('[fn:chat] captureVisitorContactEmailFn failed:', error)
+      log.error({ err: error }, 'capture visitor contact email failed')
       throw error
     }
   })
@@ -835,7 +838,7 @@ export const sharePostFn = createServerFn({ method: 'POST' })
       )
       return { messageId: r.message.id }
     } catch (error) {
-      console.error('[fn:chat] sharePostFn failed:', error)
+      log.error({ err: error }, 'share post failed')
       throw error
     }
   })
@@ -850,7 +853,7 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
       await setConversationStatus(data.conversationId as ConversationId, data.status, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] setConversationStatusFn failed:', error)
+      log.error({ err: error }, 'set conversation status failed')
       throw error
     }
   })
@@ -870,7 +873,7 @@ export const endConversationFn = createServerFn({ method: 'POST' })
         actor
       )
     } catch (error) {
-      console.error('[fn:chat] endConversationFn failed:', error)
+      log.error({ err: error }, 'end conversation failed')
       throw error
     }
   })
@@ -889,7 +892,7 @@ export const assignConversationFn = createServerFn({ method: 'POST' })
       await assignConversation(data.conversationId as ConversationId, assignTo, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] assignConversationFn failed:', error)
+      log.error({ err: error }, 'assign conversation failed')
       throw error
     }
   })
@@ -904,7 +907,7 @@ export const setConversationPriorityFn = createServerFn({ method: 'POST' })
       await setConversationPriority(data.conversationId as ConversationId, data.priority, actor)
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] setConversationPriorityFn failed:', error)
+      log.error({ err: error }, 'set conversation priority failed')
       throw error
     }
   })
@@ -919,7 +922,7 @@ export const addMessageReactionFn = createServerFn({ method: 'POST' })
       const { addMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
       return await addMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
     } catch (error) {
-      console.error('[fn:chat] addMessageReactionFn failed:', error)
+      log.error({ err: error }, 'add message reaction failed')
       throw error
     }
   })
@@ -934,7 +937,7 @@ export const removeMessageReactionFn = createServerFn({ method: 'POST' })
       const { removeMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
       return await removeMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
     } catch (error) {
-      console.error('[fn:chat] removeMessageReactionFn failed:', error)
+      log.error({ err: error }, 'remove message reaction failed')
       throw error
     }
   })
@@ -949,7 +952,7 @@ export const setMessageFlagFn = createServerFn({ method: 'POST' })
       const { setMessageFlag } = await import('@/lib/server/domains/chat/message.actions')
       return await setMessageFlag(data.messageId as ChatMessageId, data.flagged, actor)
     } catch (error) {
-      console.error('[fn:chat] setMessageFlagFn failed:', error)
+      log.error({ err: error }, 'set message flag failed')
       throw error
     }
   })
@@ -970,7 +973,7 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
       )
       return { ok: true }
     } catch (error) {
-      console.error('[fn:chat] markConversationUnreadFromMessageFn failed:', error)
+      log.error({ err: error }, 'mark conversation unread from message failed')
       throw error
     }
   })
@@ -982,7 +985,7 @@ export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(a
     const { listFlaggedMessages } = await import('@/lib/server/domains/chat/chat.query')
     return await listFlaggedMessages(ctx.principal.id)
   } catch (error) {
-    console.error('[fn:chat] listFlaggedMessagesFn failed:', error)
+    log.error({ err: error }, 'list flagged messages failed')
     throw error
   }
 })
@@ -995,7 +998,7 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
       const { getLinkedPostsForConversation } = await import('@/lib/server/domains/chat/chat.query')
       return await getLinkedPostsForConversation(data.conversationId as ConversationId)
     } catch (error) {
-      console.error('[fn:chat] getLinkedPostsForConversationFn failed:', error)
+      log.error({ err: error }, 'get linked posts for conversation failed')
       throw error
     }
   })
@@ -1008,7 +1011,7 @@ export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
       const { getLinkedConversationsForPost } = await import('@/lib/server/domains/chat/chat.query')
       return await getLinkedConversationsForPost(data.postId as PostId)
     } catch (error) {
-      console.error('[fn:chat] getLinkedConversationsForPostFn failed:', error)
+      log.error({ err: error }, 'get linked conversations for post failed')
       throw error
     }
   })

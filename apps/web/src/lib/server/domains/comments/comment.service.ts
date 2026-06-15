@@ -30,6 +30,9 @@ import type { Actor } from '@/lib/server/policy/types'
 import { recordAuditEvent } from '@/lib/server/audit/log'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comments' })
 
 /**
  * Resolve the TipTap doc to store. UI clients send `contentJson` directly
@@ -63,9 +66,7 @@ export async function createComment(
   actor: Actor,
   options?: { skipDispatch?: boolean; headers?: Headers }
 ): Promise<CreateCommentResult> {
-  console.log(
-    `[domain:comments] createComment: postId=${input.postId}, parentId=${input.parentId ?? 'none'}`
-  )
+  log.info({ post_id: input.postId, parent_id: input.parentId ?? null }, 'create comment')
   // Validate post exists (and is not deleted) and eagerly load board in single query.
   // The relational `with: { board: true }` can't push isNull(boards.deletedAt) into
   // the join, so we filter the soft-deleted case in JS. Surface it as POST_NOT_FOUND
@@ -330,7 +331,7 @@ export async function updateComment(
   input: UpdateCommentInput,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<Comment> {
-  console.log(`[domain:comments] updateComment: id=${id}`)
+  log.info({ comment_id: id }, 'update comment')
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),
@@ -423,7 +424,7 @@ export async function deleteComment(
   id: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<void> {
-  console.log(`[domain:comments] deleteComment: id=${id}`)
+  log.info({ comment_id: id }, 'delete comment')
   // Get existing comment with post and board in single query
   const existingComment = await db.query.comments.findFirst({
     where: eq(comments.id, id),

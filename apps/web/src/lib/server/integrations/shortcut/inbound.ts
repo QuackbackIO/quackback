@@ -10,6 +10,9 @@
 
 import { timingSafeEqual, createHmac } from 'crypto'
 import type { InboundWebhookHandler, InboundWebhookResult } from '../inbound-types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'shortcut' })
 
 export const shortcutInboundHandler: InboundWebhookHandler = {
   async verifySignature(request: Request, body: string, secret: string): Promise<true | Response> {
@@ -56,9 +59,7 @@ export const shortcutInboundHandler: InboundWebhookHandler = {
       (ref) => ref.entity_type === 'workflow-state' && ref.id === newStateId
     )?.name
     if (!stateName) {
-      console.log(
-        `[Shortcut Inbound] No workflow-state reference for ID ${newStateId} in webhook payload.`
-      )
+      log.debug({ state_id: newStateId }, 'no workflow-state reference in webhook payload')
       return null
     }
 

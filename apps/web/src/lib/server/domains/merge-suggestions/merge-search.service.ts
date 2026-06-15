@@ -6,7 +6,10 @@
  */
 
 import { db, posts, and, isNull, isNotNull, ne, desc, sql } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
+
+const log = logger.child({ component: 'merge-search' })
 
 export interface MergeCandidate {
   postId: PostId
@@ -32,9 +35,7 @@ export async function findMergeCandidates(
   postId: PostId,
   opts?: { limit?: number; sourcePost?: { title: string; embedding: unknown } }
 ): Promise<MergeCandidate[]> {
-  console.log(
-    `[domain:merge-search] findMergeCandidates: postId=${postId} limit=${opts?.limit ?? DEFAULT_LIMIT}`
-  )
+  log.debug({ post_id: postId, limit: opts?.limit ?? DEFAULT_LIMIT }, 'find merge candidates')
   const limit = opts?.limit ?? DEFAULT_LIMIT
   const fetchLimit = limit * 2
 

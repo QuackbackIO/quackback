@@ -6,6 +6,7 @@
  */
 
 import { db, eq, and, rawFeedbackItems } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import type { FeedbackSourceId, RawFeedbackItemId } from '@quackback/ids'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { enqueueFeedbackIngestJob } from '../queues/feedback-ingest-queue'
@@ -14,6 +15,8 @@ import { resolveAuthorPrincipal } from './author-resolver'
 import { logPipelineEvent } from '../pipeline/pipeline-log'
 import type { RawFeedbackSeed } from '../types'
 import type { FeedbackSourceType } from '@/lib/server/integrations/feedback-source-types'
+
+const log = logger.child({ component: 'feedback-ingest' })
 
 interface IngestContext {
   sourceId: FeedbackSourceId
@@ -96,7 +99,7 @@ export async function enrichAndAdvance(rawItemId: string): Promise<void> {
   })
 
   if (!item) {
-    console.warn(`[FeedbackIngest] Raw item ${rawItemId} not found, skipping`)
+    log.warn({ raw_item_id: rawItemId }, 'raw item not found, skipping')
     return
   }
 

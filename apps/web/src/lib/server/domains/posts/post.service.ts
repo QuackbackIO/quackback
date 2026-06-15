@@ -54,6 +54,9 @@ import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'posts' })
 
 /**
  * Create a new post
@@ -81,7 +84,7 @@ export async function createPost(
   },
   options?: { skipDispatch?: boolean; headers?: Headers }
 ): Promise<CreatePostResult> {
-  console.log(`[domain:posts] createPost: boardId=${input.boardId}`)
+  log.info({ board_id: input.boardId }, 'create post')
 
   // Validate input before the tier gate — invalid input doesn't deserve a
   // count(*) query.
@@ -313,7 +316,7 @@ export async function updatePost(
     displayName?: string
   }
 ): Promise<Post> {
-  console.log(`[domain:posts] updatePost: id=${id}`)
+  log.info({ post_id: id }, 'update post')
   if (!actor?.principalId) {
     throw new ValidationError('VALIDATION_ERROR', 'Actor principal ID is required for post updates')
   }
@@ -401,7 +404,7 @@ export async function updatePost(
       .then(({ generatePostEmbedding }) =>
         generatePostEmbedding(id, updatedPost.title, updatedPost.content)
       )
-      .catch((err) => console.error(`[domain:posts] Embedding regen failed for ${id}:`, err))
+      .catch((err) => log.error({ err, post_id: id }, 'embedding regen failed'))
   }
 
   // Update tags if provided

@@ -2,6 +2,9 @@
  * Startup banner -- logs build and runtime info once on first request.
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'startup' })
 
 let _logged = false
 let _shutdownWired = false
@@ -24,12 +27,12 @@ function wireGracefulShutdown(): void {
   const shutdown = (signal: string) => {
     if (inProgress) return
     inProgress = true
-    console.log(`[Shutdown] ${signal} received — draining queues`)
+    log.info({ signal }, 'shutdown signal received, draining queues')
 
     // Hard timeout: if any close hangs, force-exit. The deadline starts
     // ticking the moment we receive the signal, not after closes resolve.
     const forceExit = setTimeout(() => {
-      console.error('[Shutdown] 30s timeout exceeded — force-exiting')
+      log.error({ timeout_ms: 30_000 }, 'shutdown timeout exceeded, force exiting')
       process.exit(1)
     }, 30_000)
     forceExit.unref?.()
@@ -49,7 +52,7 @@ function wireGracefulShutdown(): void {
           ),
         ])
         for (const r of closes) {
-          if (r.status === 'rejected') console.error('[Shutdown] close error:', r.reason)
+          if (r.status === 'rejected') log.error({ err: r.reason }, 'queue close failed')
         }
 
         // Drain the live-chat pub/sub subscriber connection before the
@@ -61,10 +64,10 @@ function wireGracefulShutdown(): void {
         await import('./queue/redis-config').then(({ closeQueueRedis }) => closeQueueRedis())
 
         clearTimeout(forceExit)
-        console.log('[Shutdown] complete')
+        log.info('shutdown complete')
         process.exit(0)
       } catch (err) {
-        console.error('[Shutdown] fatal:', err)
+        log.error({ err }, 'shutdown failed')
         process.exit(1)
       }
     })()
@@ -88,25 +91,23 @@ export function logStartupBanner(): void {
   const port = process.env.PORT ?? '3000'
   const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`
 
-  const lines = [
-    '',
-    '========================================',
-    `  Quackback v${__APP_VERSION__} (${__GIT_COMMIT__})`,
-    '========================================',
-    `  Environment: ${env}`,
-    `  Runtime:     ${runtime}`,
-    `  Base URL:    ${baseUrl}`,
-    `  Built:       ${__BUILD_TIME__}`,
-    '========================================',
-    '',
-  ]
-
-  console.log(lines.join('\n'))
+  log.info(
+    {
+      version: __APP_VERSION__,
+      commit: __GIT_COMMIT__,
+      env,
+      runtime,
+      port,
+      base_url: baseUrl,
+      built: __BUILD_TIME__,
+    },
+    'server started'
+  )
 
   // Surface half-configured AI loudly instead of failing silently (see #180).
   import('@/lib/server/domains/ai/config')
     .then(({ validateAiConfig }) => validateAiConfig())
-    .catch((err) => console.error('[Startup] AI config validation failed:', err))
+    .catch((err) => log.error({ err }, 'ai config validation failed'))
 
   // Wire SIGTERM/SIGINT once — the rest of this function spawns
   // long-lived workers + sweepers, so register the drain handler before
@@ -118,22 +119,22 @@ export function logStartupBanner(): void {
   // repeatable jobs survive normal app restarts, but this is a safety net.
   import('@/lib/server/events/segment-scheduler')
     .then(({ restoreAllEvaluationSchedules }) => restoreAllEvaluationSchedules())
-    .catch((err) => console.error('[Startup] Failed to restore segment schedules:', err))
+    .catch((err) => log.error({ err }, 'failed to restore segment schedules'))
 
   // Initialize feedback AI worker eagerly so it processes jobs from any source
   import('./domains/feedback/queues/feedback-ai-queue')
     .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
-    .catch((err) => console.error('[Startup] Failed to init feedback AI worker:', err))
+    .catch((err) => log.error({ err }, 'failed to init feedback ai worker'))
 
   // Initialize analytics worker (hourly stats refresh)
   import('./domains/analytics/analytics-queue')
     .then(({ initAnalyticsWorker }) => initAnalyticsWorker())
-    .catch((err) => console.error('[Startup] Failed to init analytics worker:', err))
+    .catch((err) => log.error({ err }, 'failed to init analytics worker'))
 
   // Initialize anonymous-principal sweep worker (daily; bounds anon-row bloat)
   import('./domains/principals/anon-sweep-queue')
     .then(({ initAnonSweepWorker }) => initAnonSweepWorker())
-    .catch((err) => console.error('[Startup] Failed to init anon-sweep worker:', err))
+    .catch((err) => log.error({ err }, 'failed to init anon-sweep worker'))
 
   // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily).
   // Runs under a cross-instance lock so only one replica executes per tick.
@@ -147,7 +148,7 @@ export function logStartupBanner(): void {
       setTimeout(() => {
         void withSweepLock('stuck_recovery', ONE_HOUR, () =>
           recoverStuckItems().catch((err: unknown) =>
-            console.error('[Startup] Initial stuck-item recovery failed:', err)
+            log.error({ err }, 'initial stuck-item recovery failed')
           )
         )
       }, 20_000) // 20s delay
@@ -155,7 +156,7 @@ export function logStartupBanner(): void {
         () => {
           void withSweepLock('stuck_recovery', ONE_HOUR, () =>
             recoverStuckItems().catch((err: unknown) =>
-              console.error('[Startup] Stuck-item recovery failed:', err)
+              log.error({ err }, 'stuck-item recovery failed')
             )
           )
         },
@@ -165,14 +166,14 @@ export function logStartupBanner(): void {
         () => {
           void withSweepLock('suggestion_expiry', ONE_HOUR, async () => {
             await expireStaleSuggestions().catch((err: unknown) =>
-              console.error('[Startup] Suggestion expiry failed:', err)
+              log.error({ err }, 'suggestion expiry failed')
             )
           })
         },
         24 * 60 * 60 * 1000
       ) // Daily
     })
-    .catch((err) => console.error('[Startup] Failed to init feedback maintenance:', err))
+    .catch((err) => log.error({ err }, 'failed to init feedback maintenance'))
 
   // Audit-log retention sweep + expired portal/team invite sweep.
   // Daily maintenance runs under a cross-instance lock so only one
@@ -189,12 +190,12 @@ export function logStartupBanner(): void {
         const ONE_HOUR = 60 * 60 * 1000
         await withSweepLock('audit_prune', ONE_HOUR, async () => {
           await pruneAuditLog().catch((err) =>
-            console.error('[Startup] Audit-log prune failed:', err)
+            log.error({ err }, 'audit-log prune failed')
           )
         })
         await withSweepLock('invite_sweep', ONE_HOUR, async () => {
           await sweepExpiredPortalInvites().catch((err) =>
-            console.error('[Startup] Invite sweep failed:', err)
+            log.error({ err }, 'invite sweep failed')
           )
         })
       }
@@ -208,7 +209,7 @@ export function logStartupBanner(): void {
         24 * 60 * 60 * 1000
       )
     })
-    .catch((err) => console.error('[Startup] Failed to init audit-log maintenance:', err))
+    .catch((err) => log.error({ err }, 'failed to init audit-log maintenance'))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries).
   // Runs under a cross-instance lock — AI calls are expensive, so only
@@ -220,7 +221,7 @@ export function logStartupBanner(): void {
       setTimeout(() => {
         void withSweepLock('summary_sweep', ONE_HOUR, () =>
           refreshStaleSummaries().catch((err) =>
-            console.error('[Startup] Initial summary sweep failed:', err)
+            log.error({ err }, 'initial summary sweep failed')
           )
         )
       }, 5_000) // 5s delay to let other startup tasks finish
@@ -228,14 +229,14 @@ export function logStartupBanner(): void {
         () => {
           void withSweepLock('summary_sweep', ONE_HOUR, () =>
             refreshStaleSummaries().catch((err) =>
-              console.error('[Startup] Summary sweep failed:', err)
+              log.error({ err }, 'summary sweep failed')
             )
           )
         },
         30 * 60 * 1000
       ) // Every 30 minutes
     })
-    .catch((err) => console.error('[Startup] Failed to init summary sweep:', err))
+    .catch((err) => log.error({ err }, 'failed to init summary sweep'))
 
   // Start periodic merge suggestion sweep (detects duplicate posts).
   // Runs under a cross-instance lock — AI calls are expensive and duplicate
@@ -250,7 +251,7 @@ export function logStartupBanner(): void {
       setTimeout(() => {
         void withSweepLock('merge_sweep', ONE_HOUR, () =>
           sweepMergeSuggestions().catch((err) =>
-            console.error('[Startup] Initial merge suggestion sweep failed:', err)
+            log.error({ err }, 'initial merge suggestion sweep failed')
           )
         )
       }, 15_000) // 15s delay (stagger after summary's 5s)
@@ -258,24 +259,24 @@ export function logStartupBanner(): void {
         () => {
           void withSweepLock('merge_sweep', ONE_HOUR, () =>
             sweepMergeSuggestions().catch((err) =>
-              console.error('[Startup] Merge suggestion sweep failed:', err)
+              log.error({ err }, 'merge suggestion sweep failed')
             )
           )
         },
         30 * 60 * 1000
       ) // Every 30 minutes
     })
-    .catch((err) => console.error('[Startup] Failed to init merge suggestion sweep:', err))
+    .catch((err) => log.error({ err }, 'failed to init merge suggestion sweep'))
 
   // Ensure quackback feedback source exists (idempotent, creates on first startup)
   import('./domains/feedback/sources/quackback.source')
     .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())
-    .catch((err) => console.error('[Startup] Failed to ensure quackback feedback source:', err))
+    .catch((err) => log.error({ err }, 'failed to ensure quackback feedback source'))
 
   // Quackback config file watcher — reconciles managed fields from
   // /etc/quackback/config.yaml on every change. No-op when the file
   // is absent (self-host default).
   import('@/lib/server/config-file')
     .then(({ startQuackbackConfigWatcher }) => startQuackbackConfigWatcher())
-    .catch((err) => console.error('[Startup] Failed to start config-file watcher:', err))
+    .catch((err) => log.error({ err }, 'failed to start config-file watcher'))
 }

@@ -33,6 +33,9 @@ import type {
   UpdateSegmentInput,
 } from './segment.types'
 import type { EvaluationSchedule, SegmentRules, SegmentWeightConfig } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'segments' })
 
 // ============================================
 // Helpers
@@ -234,7 +237,7 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
   // Clean up BullMQ evaluation schedule before deleting
   await import('@/lib/server/events/segment-scheduler')
     .then(({ removeSegmentEvaluationSchedule }) => removeSegmentEvaluationSchedule(segmentId))
-    .catch((err) => console.error('[Segments] Failed to remove evaluation schedule:', err))
+    .catch((err) => log.error({ err }, 'failed to remove segment evaluation schedule'))
 
   await db.transaction(async (tx) => {
     await tx.delete(userSegments).where(eq(userSegments.segmentId, segmentId))

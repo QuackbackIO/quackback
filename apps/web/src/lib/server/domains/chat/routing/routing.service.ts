@@ -1,6 +1,9 @@
 import type { Conversation } from '@/lib/server/db'
 import { getStrategy } from './routing.registry'
 import type { RoutingResult } from './routing.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-routing' })
 
 /** The routing config lives on the live-chat config (widget JSON); null = off. */
 async function getRoutingConfig() {
@@ -29,7 +32,7 @@ export async function routeConversation(conversation: Conversation): Promise<Rou
       visitorPrincipalId: conversation.visitorPrincipalId,
     })
   } catch (err) {
-    console.warn('[chat:routing] routeConversation failed:', (err as Error).message)
+    log.warn({ err }, 'route conversation failed')
     return unassigned('error')
   }
 }

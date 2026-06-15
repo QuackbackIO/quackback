@@ -17,6 +17,9 @@ import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './chat.recipient'
 import { inboundReplyToAddress, isEmailInboundConfigured } from './chat.email-channel'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-notify' })
 
 const previewOf = (content: string) => truncate(content, 140)
 
@@ -102,7 +105,7 @@ export async function notifyVisitorMessage(opts: {
       )
     }
   } catch (err) {
-    console.warn('[chat:notify] notifyVisitorMessage failed:', (err as Error).message)
+    log.warn({ err }, 'notify visitor message failed')
   }
 }
 
@@ -133,8 +136,9 @@ export async function notifyAgentReply(opts: {
     if (!recipient) {
       // The visitor is offline and unreachable — surface it instead of dropping
       // silently (the inbox can flag conversations with no reply-to address).
-      console.warn(
-        `[chat:notify] agent reply undeliverable (no email) for conversation ${opts.conversationId}`
+      log.warn(
+        { conversation_id: opts.conversationId },
+        'agent reply undeliverable (no email)'
       )
       return
     }
@@ -163,12 +167,13 @@ export async function notifyAgentReply(opts: {
       replyTo,
     })
     if (result && result.sent === false) {
-      console.warn(
-        `[chat:notify] agent-reply email not sent (provider returned sent:false) for conversation ${opts.conversationId}`
+      log.warn(
+        { conversation_id: opts.conversationId },
+        'agent-reply email not sent (provider returned sent:false)'
       )
     }
   } catch (err) {
-    console.warn('[chat:notify] notifyAgentReply failed:', (err as Error).message)
+    log.warn({ err }, 'notify agent reply failed')
   }
 }
 
@@ -195,8 +200,9 @@ export async function notifyConversationStarted(opts: {
 
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
     if (!recipient) {
-      console.warn(
-        `[chat:notify] outbound message undeliverable (no email) for conversation ${opts.conversationId}`
+      log.warn(
+        { conversation_id: opts.conversationId },
+        'outbound message undeliverable (no email)'
       )
       return
     }
@@ -219,11 +225,12 @@ export async function notifyConversationStarted(opts: {
       replyTo,
     })
     if (result && result.sent === false) {
-      console.warn(
-        `[chat:notify] outbound message email not sent (provider returned sent:false) for conversation ${opts.conversationId}`
+      log.warn(
+        { conversation_id: opts.conversationId },
+        'outbound message email not sent (provider returned sent:false)'
       )
     }
   } catch (err) {
-    console.warn('[chat:notify] notifyConversationStarted failed:', (err as Error).message)
+    log.warn({ err }, 'notify conversation started failed')
   }
 }

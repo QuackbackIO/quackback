@@ -19,8 +19,11 @@ import {
   count,
 } from '@/lib/server/db'
 import { mergePost } from '@/lib/server/domains/posts/post.merge'
+import { logger } from '@/lib/server/logger'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { PostId, PrincipalId, MergeSuggestionId } from '@quackback/ids'
+
+const log = logger.child({ component: 'merge-suggestion' })
 
 export interface MergeSuggestionPostView {
   id: string
@@ -69,8 +72,13 @@ export interface MergeSuggestionView {
  * Create a merge suggestion. Uses onConflictDoNothing for the partial unique index.
  */
 export async function createMergeSuggestion(opts: CreateMergeSuggestionOpts): Promise<void> {
-  console.log(
-    `[domain:merge-suggestions] createMergeSuggestion: sourcePostId=${opts.sourcePostId} targetPostId=${opts.targetPostId} hybridScore=${opts.hybridScore}`
+  log.info(
+    {
+      source_post_id: opts.sourcePostId,
+      target_post_id: opts.targetPostId,
+      hybrid_score: opts.hybridScore,
+    },
+    'create merge suggestion'
   )
   await db
     .insert(mergeSuggestions)
@@ -95,8 +103,9 @@ export async function acceptMergeSuggestion(
   principalId: PrincipalId,
   opts?: { swapDirection?: boolean }
 ): Promise<void> {
-  console.log(
-    `[domain:merge-suggestions] acceptMergeSuggestion: id=${id} principalId=${principalId} swapDirection=${opts?.swapDirection ?? false}`
+  log.info(
+    { merge_suggestion_id: id, principal_id: principalId, swap_direction: opts?.swapDirection ?? false },
+    'accept merge suggestion'
   )
   const suggestion = await db.query.mergeSuggestions.findFirst({
     where: (s, { eq }) => eq(s.id, id),
@@ -154,9 +163,7 @@ export async function dismissMergeSuggestion(
   id: MergeSuggestionId,
   principalId: PrincipalId
 ): Promise<void> {
-  console.log(
-    `[domain:merge-suggestions] dismissMergeSuggestion: id=${id} principalId=${principalId}`
-  )
+  log.info({ merge_suggestion_id: id, principal_id: principalId }, 'dismiss merge suggestion')
   await db
     .update(mergeSuggestions)
     .set({
@@ -175,9 +182,7 @@ export async function restoreMergeSuggestion(
   id: MergeSuggestionId,
   principalId: PrincipalId
 ): Promise<void> {
-  console.log(
-    `[domain:merge-suggestions] restoreMergeSuggestion: id=${id} principalId=${principalId}`
-  )
+  log.info({ merge_suggestion_id: id, principal_id: principalId }, 'restore merge suggestion')
   await db
     .update(mergeSuggestions)
     .set({
@@ -193,7 +198,7 @@ export async function restoreMergeSuggestion(
  * Get pending merge suggestions for a post (where the post is source OR target).
  */
 export async function getPendingSuggestionsForPost(postId: PostId): Promise<MergeSuggestionView[]> {
-  console.log(`[domain:merge-suggestions] getPendingSuggestionsForPost: postId=${postId}`)
+  log.debug({ post_id: postId }, 'get pending suggestions for post')
   const sourcePostsAlias = db
     .select({
       id: posts.id,
@@ -279,9 +284,7 @@ export async function getPendingMergeSuggestions(opts: {
   }>
   total: number
 }> {
-  console.log(
-    `[domain:merge-suggestions] getPendingMergeSuggestions: sort=${opts.sort ?? 'newest'} limit=${opts.limit ?? 50}`
-  )
+  log.debug({ sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 }, 'get pending merge suggestions')
   // Step 1: Fetch count + merge suggestion rows in parallel
   const orderBy =
     opts.sort === 'relevance'
@@ -361,7 +364,7 @@ export async function getPendingMergeSuggestions(opts: {
  * Expire stale pending suggestions (older than 30 days).
  */
 export async function expireStaleMergeSuggestions(): Promise<number> {
-  console.log(`[domain:merge-suggestions] expireStaleMergeSuggestions`)
+  log.info('expire stale merge suggestions')
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const result = await db
     .update(mergeSuggestions)

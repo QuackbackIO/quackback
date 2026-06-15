@@ -22,6 +22,9 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from '@/lib/server/domains/subscriptions/subscription.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user' })
 
 /**
  * User profile and notification preferences server functions.
@@ -116,7 +119,7 @@ async function deleteExistingAvatar(userId: string): Promise<string | null> {
  */
 export const getProfileFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserProfile> => {
-    console.log(`[fn:user] getProfileFn`)
+    log.debug('get profile')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -152,7 +155,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
         userType = 'team'
       }
 
-      console.log(`[fn:user] getProfileFn: id=${userRecord.id}, userType=${userType}`)
+      log.debug({ user_id: userRecord.id, user_type: userType }, 'profile fetched')
       return {
         id: userRecord.id,
         name: userRecord.name,
@@ -163,7 +166,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
         userType,
       }
     } catch (error) {
-      console.error(`[fn:user] ❌ getProfileFn failed:`, error)
+      log.error({ err: error }, 'get profile failed')
       throw error
     }
   }
@@ -176,7 +179,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
   .inputValidator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
-    console.log(`[fn:user] updateProfileNameFn`)
+    log.debug('update profile name')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -191,13 +194,13 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
         .returning()
 
       await syncPrincipalProfile(updated.id as UserId, { displayName: name.trim() })
-      console.log(`[fn:user] updateProfileNameFn: updated id=${updated.id}`)
+      log.info({ user_id: updated.id }, 'profile name updated')
       return {
         ...updated,
         hasCustomAvatar: !!updated.imageKey,
       }
     } catch (error) {
-      console.error(`[fn:user] ❌ updateProfileNameFn failed:`, error)
+      log.error({ err: error }, 'update profile name failed')
       throw error
     }
   })
@@ -208,7 +211,7 @@ export const updateProfileNameFn = createServerFn({ method: 'POST' })
  */
 export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<UserProfile> => {
-    console.log(`[fn:user] removeAvatarFn`)
+    log.debug('remove avatar')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -224,13 +227,13 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
         .returning()
 
       await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
-      console.log(`[fn:user] removeAvatarFn: removed for id=${updated.id}`)
+      log.info({ user_id: updated.id }, 'avatar removed')
       return {
         ...updated,
         hasCustomAvatar: false,
       }
     } catch (error) {
-      console.error(`[fn:user] ❌ removeAvatarFn failed:`, error)
+      log.error({ err: error }, 'remove avatar failed')
       throw error
     }
   }
@@ -243,7 +246,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
 export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
   .inputValidator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
-    console.log(`[fn:user] saveAvatarKeyFn`)
+    log.debug('save avatar key')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -259,9 +262,9 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
         .returning()
 
       await syncPrincipalProfile(updated.id as UserId, { avatarKey: data.key })
-      console.log(`[fn:user] saveAvatarKeyFn: saved for id=${updated.id}`)
+      log.info({ user_id: updated.id }, 'avatar key saved')
     } catch (error) {
-      console.error(`[fn:user] ❌ saveAvatarKeyFn failed:`, error)
+      log.error({ err: error }, 'save avatar key failed')
       throw error
     }
   })
@@ -272,7 +275,7 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
-    console.log(`[fn:user] getUserRoleFn`)
+    log.debug('get user role')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -280,10 +283,10 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
       }
 
       const role = await getCurrentUserRole()
-      console.log(`[fn:user] getUserRoleFn: role=${role}`)
+      log.debug({ role }, 'user role fetched')
       return { role }
     } catch (error) {
-      console.error(`[fn:user] ❌ getUserRoleFn failed:`, error)
+      log.error({ err: error }, 'get user role failed')
       throw error
     }
   }
@@ -294,14 +297,14 @@ export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
  */
 export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<NotificationPreferences> => {
-    console.log(`[fn:user] getNotificationPreferencesFn`)
+    log.debug('get notification preferences')
     try {
       const principalId = await requirePrincipalId()
       const preferences = await getNotificationPreferences(principalId)
-      console.log(`[fn:user] getNotificationPreferencesFn: fetched`)
+      log.debug('notification preferences fetched')
       return preferences
     } catch (error) {
-      console.error(`[fn:user] ❌ getNotificationPreferencesFn failed:`, error)
+      log.error({ err: error }, 'get notification preferences failed')
       throw error
     }
   }
@@ -318,7 +321,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
     }: {
       data: UpdateNotificationPreferencesInput
     }): Promise<NotificationPreferences> => {
-      console.log(`[fn:user] updateNotificationPreferencesFn`)
+      log.debug('update notification preferences')
       try {
         const principalId = await requirePrincipalId()
         const { emailStatusChange, emailNewComment, emailMuted } = data
@@ -344,10 +347,10 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
         }
 
         const preferences = await updateNotificationPreferences(principalId, updates)
-        console.log(`[fn:user] updateNotificationPreferencesFn: updated`)
+        log.info('notification preferences updated')
         return preferences
       } catch (error) {
-        console.error(`[fn:user] ❌ updateNotificationPreferencesFn failed:`, error)
+        log.error({ err: error }, 'update notification preferences failed')
         throw error
       }
     }
@@ -359,7 +362,7 @@ export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' }
 
 export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<UserEngagementStats> => {
-    console.log(`[fn:user] getUserStatsFn`)
+    log.debug('get user stats')
     try {
       const principalId = await requirePrincipalId()
 
@@ -381,7 +384,7 @@ export const getUserStatsFn = createServerFn({ method: 'GET' }).handler(
         comments: commentsResult[0]?.count ?? 0,
       }
     } catch (error) {
-      console.error(`[fn:user] getUserStatsFn failed:`, error)
+      log.error({ err: error }, 'get user stats failed')
       throw error
     }
   }

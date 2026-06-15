@@ -13,6 +13,9 @@ import {
   getConfiguredIntegrationTypes,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import type { PlatformCredentialField } from '@/lib/server/integrations/types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth-provider-credentials' })
 
 const saveSchema = z.object({
   credentialType: z.string().min(1),
@@ -34,9 +37,7 @@ const fetchMaskedSchema = z.object({
 export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(saveSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:auth-provider-credentials] saveAuthProviderCredentialsFn: credentialType=${data.credentialType}`
-    )
+    log.debug({ credential_type: data.credentialType }, 'save auth provider credentials')
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
@@ -84,7 +85,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:auth-provider-credentials] saveAuthProviderCredentialsFn failed:`, error)
+      log.error({ err: error }, 'save auth provider credentials failed')
       throw error
     }
   })
@@ -96,9 +97,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
 export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:auth-provider-credentials] deleteAuthProviderCredentialsFn: credentialType=${data.credentialType}`
-    )
+    log.debug({ credential_type: data.credentialType }, 'delete auth provider credentials')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -125,7 +124,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:auth-provider-credentials] deleteAuthProviderCredentialsFn failed:`, error)
+      log.error({ err: error }, 'delete auth provider credentials failed')
       throw error
     }
   })
@@ -136,9 +135,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
 export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GET' })
   .inputValidator(fetchMaskedSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:auth-provider-credentials] fetchAuthProviderCredentialsMaskedFn: credentialType=${data.credentialType}`
-    )
+    log.debug({ credential_type: data.credentialType }, 'fetch masked auth provider credentials')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -172,10 +169,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
 
       return { configured: true as const, fields: masked, baseUrl }
     } catch (error) {
-      console.error(
-        `[fn:auth-provider-credentials] fetchAuthProviderCredentialsMaskedFn failed:`,
-        error
-      )
+      log.error({ err: error }, 'fetch masked auth provider credentials failed')
       throw error
     }
   })
@@ -185,7 +179,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
  * Returns Record<providerId, boolean>.
  */
 export const fetchAuthProviderStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:auth-provider-credentials] fetchAuthProviderStatusFn`)
+  log.debug('fetch auth provider status')
   try {
     await requireAuth({ roles: ['admin'] })
 
@@ -200,7 +194,7 @@ export const fetchAuthProviderStatusFn = createServerFn({ method: 'GET' }).handl
 
     return { ...status, _emailConfigured: isEmailConfigured() }
   } catch (error) {
-    console.error(`[fn:auth-provider-credentials] fetchAuthProviderStatusFn failed:`, error)
+    log.error({ err: error }, 'fetch auth provider status failed')
     throw error
   }
 })

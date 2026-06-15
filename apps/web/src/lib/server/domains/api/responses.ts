@@ -5,6 +5,9 @@
  * All responses include security headers (X-Content-Type-Options, Cache-Control).
  */
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'api' })
 
 /** Security headers applied to all API responses. */
 const SECURITY_HEADERS: Record<string, string> = {
@@ -233,13 +236,13 @@ export function handleDomainError(error: unknown): Response {
           if (s === 404) return notFoundResponse(domainError.message)
           if (s === 409) return conflictResponse(domainError.message)
         }
-        console.error('[api] Unhandled domain error:', error)
+        log.error({ err: error }, 'unhandled domain error')
         return internalErrorResponse()
       }
     }
   }
 
-  console.error('[api] Unexpected error:', error)
+  log.error({ err: error }, 'unexpected error')
   return internalErrorResponse()
 }
 

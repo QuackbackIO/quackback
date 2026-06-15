@@ -9,6 +9,9 @@
 
 import OpenAI from 'openai'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ai-config' })
 
 let openai: OpenAI | null = null
 
@@ -79,7 +82,7 @@ export function validateAiConfig(): void {
     chatModel: config.aiChatModel,
     embeddingModel: config.aiEmbeddingModel,
   })
-  for (const w of warnings) console.warn(`[AI] ${w}`)
+  for (const w of warnings) log.warn({ warning: w }, 'ai config warning')
 }
 
 /** Strip markdown code fences that some models wrap around JSON responses. */

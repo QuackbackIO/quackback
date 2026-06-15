@@ -16,6 +16,9 @@
 import Redis from 'ioredis'
 import { config } from '../config'
 import { getRedis } from '../redis'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'pubsub' })
 
 // channel -> set of in-process listeners. The shared subscriber connection is
 // SUBSCRIBEd to a channel exactly once (when its first listener registers) and
@@ -39,12 +42,12 @@ function getSubscriber(): Redis {
         try {
           fn(message)
         } catch (err) {
-          console.error('[pubsub] listener threw:', (err as Error).message)
+          log.error({ err, channel }, 'listener threw')
         }
       }
     })
     subscriber.on('error', (err) => {
-      console.error('[pubsub] subscriber connection error:', err.message)
+      log.error({ err }, 'subscriber connection error')
     })
   }
   return subscriber
@@ -85,7 +88,7 @@ export async function subscribe(
         try {
           await sub.unsubscribe(channel)
         } catch (err) {
-          console.warn('[pubsub] unsubscribe failed:', (err as Error).message)
+          log.warn({ err, channel }, 'unsubscribe failed')
         }
       }
     }
@@ -100,7 +103,7 @@ export async function subscribe(
 export function publish(channel: string, payload: unknown): void {
   void getRedis()
     .publish(channel, JSON.stringify(payload))
-    .catch((err) => console.warn(`[pubsub] publish to ${channel} failed:`, err?.message))
+    .catch((err) => log.warn({ err, channel }, 'publish failed'))
 }
 
 /** Drain the subscriber connection on graceful shutdown. */

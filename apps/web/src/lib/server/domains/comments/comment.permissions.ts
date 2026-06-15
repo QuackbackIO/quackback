@@ -24,6 +24,9 @@ import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { CommentPermissionCheckResult } from './comment.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comment-permissions' })
 
 // ============================================================================
 // Helper Functions (Internal)
@@ -66,7 +69,7 @@ export async function canEditComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
-  console.log(`[domain:comments] canEditComment: commentId=${commentId}`)
+  log.debug({ comment_id: commentId }, 'can edit comment check')
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -115,7 +118,7 @@ export async function canDeleteComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<CommentPermissionCheckResult> {
-  console.log(`[domain:comments] canDeleteComment: commentId=${commentId}`)
+  log.debug({ comment_id: commentId }, 'can delete comment check')
   // Get the comment
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
@@ -171,7 +174,7 @@ export async function userEditComment(
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
   options?: { contentJson?: TiptapContent | null }
 ): Promise<Comment> {
-  console.log(`[domain:comments] userEditComment: commentId=${commentId}`)
+  log.debug({ comment_id: commentId }, 'user edit comment')
   // Check permission first
   const permResult = await canEditComment(commentId, actor)
   if (!permResult.allowed) {
@@ -258,7 +261,7 @@ export async function softDeleteComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  console.log(`[domain:comments] softDeleteComment: commentId=${commentId}`)
+  log.info({ comment_id: commentId }, 'soft delete comment')
   // Check permission first
   const permResult = await canDeleteComment(commentId, actor)
   if (!permResult.allowed) {

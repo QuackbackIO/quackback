@@ -6,6 +6,9 @@
 import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'stripe' })
 
 const STRIPE_API = 'https://api.stripe.com/v1'
 
@@ -28,11 +31,11 @@ export const stripeHook: HookHandler = {
     const email = event.data.post.authorEmail
 
     if (!email) {
-      console.log(`[Stripe] No author email, skipping enrichment`)
+      log.debug('no author email, skipping enrichment')
       return { success: true }
     }
 
-    console.log(`[Stripe] Enriching feedback from ${email}`)
+    log.debug('enriching feedback')
 
     try {
       // Search for customer by email
@@ -75,12 +78,12 @@ export const stripeHook: HookHandler = {
       }
 
       if (data.data.length === 0) {
-        console.log(`[Stripe] No customer found for ${email}`)
+        log.debug('no customer found')
         return { success: true }
       }
 
       const customer = data.data[0]
-      console.log(`[Stripe] ✅ Found customer ${customer.id}`)
+      log.info({ customer_id: customer.id }, 'customer found')
 
       return {
         success: true,
@@ -89,7 +92,7 @@ export const stripeHook: HookHandler = {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Stripe] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'enrichment failed')
 
       return {
         success: false,

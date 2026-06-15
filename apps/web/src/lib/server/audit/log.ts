@@ -11,6 +11,9 @@ import { db, auditLog } from '@/lib/server/db'
 import type { UserId } from '@quackback/ids'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import type { AuthContext } from '@/lib/server/functions/auth-helpers'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'audit' })
 
 /** A JSON-shaped value — fits into a Postgres jsonb column. */
 export type JsonValue =
@@ -176,7 +179,7 @@ export async function recordAuditEvent(input: RecordAuditEventInput): Promise<vo
       metadata: input.metadata ?? null,
     })
   } catch (error) {
-    console.error('[audit] recordAuditEvent failed:', { event: input.event, error })
+    log.error({ err: error, event: input.event }, 'recordAuditEvent failed')
   }
 }
 
@@ -214,7 +217,7 @@ export async function pruneAuditLog(opts?: { retentionDays?: number }): Promise<
   `)) as unknown as { count?: number; length?: number }
   const deleted = result.count ?? result.length ?? 0
   if (deleted > 0) {
-    console.log(`[audit] pruned ${deleted} rows older than ${retentionDays} days`)
+    log.info({ deleted_count: deleted, retention_days: retentionDays }, 'pruned audit rows')
   }
   return deleted
 }

@@ -11,6 +11,9 @@ import { db, integrations, principal, user, eq, and, inArray } from '@/lib/serve
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { getIntegration, getIntegrationTypesWithSegmentSync } from './index'
 import { decryptSecrets } from './encryption'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-sync' })
 
 interface UserRef {
   email: string | null
@@ -64,9 +67,9 @@ export async function notifyUserSyncIntegrations(
     await Promise.allSettled(calls).then((results) => {
       for (const r of results) {
         if (r.status === 'rejected') {
-          console.error(
-            `[UserSync] ${integration.integrationType} syncSegmentMembership failed:`,
-            r.reason
+          log.error(
+            { err: r.reason, integration_type: integration.integrationType },
+            'segment membership sync failed'
           )
         }
       }

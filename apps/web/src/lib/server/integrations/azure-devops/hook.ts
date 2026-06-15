@@ -8,6 +8,9 @@ import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { createWorkItem } from './api'
 import { buildAzureDevOpsWorkItemBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'azure-devops' })
 
 export interface AzureDevOpsTarget {
   channelId: string // "projectName:workItemType"
@@ -38,7 +41,10 @@ export const azureDevOpsHook: HookHandler = {
       }
     }
 
-    console.log(`[AzureDevOps] Creating ${workItemType} in ${project} for ${event.type}`)
+    log.debug(
+      { work_item_type: workItemType, project, event_type: event.type },
+      'creating work item'
+    )
 
     const { title, description } = buildAzureDevOpsWorkItemBody(event, rootUrl)
 
@@ -48,7 +54,7 @@ export const azureDevOpsHook: HookHandler = {
         description,
       })
 
-      console.log(`[AzureDevOps] Created work item #${result.id}`)
+      log.info({ work_item_id: result.id }, 'work item created')
       return {
         success: true,
         externalId: String(result.id),

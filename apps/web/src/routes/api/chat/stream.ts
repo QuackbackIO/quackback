@@ -32,6 +32,9 @@ import {
 } from '@/lib/server/domains/chat/chat.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import type { Actor } from '@/lib/server/policy/types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-stream' })
 
 const HEARTBEAT_MS = 20_000
 
@@ -337,7 +340,7 @@ export const Route = createFileRoute('/api/chat/stream')({
                     }
                   }
                 } catch (err) {
-                  console.warn('[chat:stream] backfill failed:', (err as Error).message)
+                  log.warn({ err }, 'chat stream backfill failed')
                 }
               }
 
@@ -358,7 +361,7 @@ export const Route = createFileRoute('/api/chat/stream')({
               // A late abort (during the awaits above) must still tear down.
               if (request.signal.aborted) await cleanup()
             } catch (err) {
-              console.warn('[chat:stream] start failed:', (err as Error).message)
+              log.warn({ err }, 'chat stream start failed')
               await cleanup()
             }
           },

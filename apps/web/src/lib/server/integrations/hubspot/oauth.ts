@@ -1,6 +1,9 @@
 /**
  * HubSpot OAuth utilities.
  */
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'hubspot' })
 
 const HUBSPOT_API = 'https://api.hubapi.com'
 
@@ -167,8 +170,8 @@ export async function revokeHubSpotToken(
     await fetch(`${HUBSPOT_API}/oauth/v1/refresh-tokens/${refreshToken}`, {
       method: 'DELETE',
     })
-    console.log('[HubSpot] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[HubSpot] Failed to revoke token:', error)
+    log.error({ err: error }, 'token revoke failed')
   }
 }

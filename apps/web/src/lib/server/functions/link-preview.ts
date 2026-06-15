@@ -21,6 +21,9 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { cacheGet, cacheSet, getRedis } from '@/lib/server/redis'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import type { LinkPreview } from '@/lib/server/content/unfurl'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'link-preview' })
 
 const RATE_LIMIT_WINDOW_S = 60
 // Per-principal cap. A per-IP cap (below) backs it up because an attacker can
@@ -101,7 +104,7 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
 
       return result
     } catch (err) {
-      console.error('[fn:link-preview] unfurlLinkFn failed:', err)
+      log.error({ err }, 'unfurl link failed')
       return null
     }
   })

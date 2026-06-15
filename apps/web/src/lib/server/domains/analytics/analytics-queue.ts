@@ -4,7 +4,10 @@
 
 import { Queue, Worker } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { logger } from '@/lib/server/logger'
 import { refreshAnalytics } from './analytics.service'
+
+const log = logger.child({ component: 'analytics-queue' })
 
 const QUEUE_NAME = '{analytics}'
 const CONCURRENCY = 1
@@ -73,7 +76,7 @@ async function initializeQueue() {
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
     const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    console.error(`[Analytics] ${prefix}: ${error.message}`)
+    log.error({ err: error, status: prefix }, 'analytics job failed')
   })
 
   return { queue, worker }
@@ -88,5 +91,5 @@ export async function initAnalyticsWorker(): Promise<void> {
     })
   }
   await initPromise
-  console.log('[Analytics] Worker initialized')
+  log.info('analytics worker initialized')
 }

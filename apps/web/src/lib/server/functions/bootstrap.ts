@@ -3,6 +3,9 @@ import { getThemeCookie, type Theme } from '@/lib/shared/theme'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'bootstrap' })
 
 export interface BootstrapData {
   baseUrl: string
@@ -101,7 +104,7 @@ async function getSessionAndRole(): Promise<{
   } catch (error) {
     // During SSR, auth might fail due to env var issues
     // Return null session and let the client retry
-    console.error('[bootstrap] getSession error:', error)
+    log.error({ err: error }, 'get session failed')
     return { session: null, role: null }
   }
 }
@@ -157,11 +160,11 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
-    console.log(`[fn:bootstrap] getBootstrapData`)
+    log.debug('get bootstrap data')
     try {
       return await getBootstrapDataInternal()
     } catch (error) {
-      console.error(`[fn:bootstrap] getBootstrapData failed:`, error)
+      log.error({ err: error }, 'get bootstrap data failed')
       throw error
     }
   }

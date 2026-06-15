@@ -14,6 +14,9 @@ import { decryptSecrets } from './encryption'
 import { coerceAttributeValue } from '@/lib/server/domains/user-attributes/coerce'
 import type { UserAttributeType } from '@/lib/server/db'
 import type { UserIdentifyPayload } from './user-sync-types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-sync' })
 
 /**
  * Handle an inbound user identify event from an integration.
@@ -76,11 +79,12 @@ export async function handleInboundIdentify(
     // in a single call to avoid TOCTOU race on the metadata column
     const rawFields = externalUserId ? { _externalUserId: externalUserId } : {}
     await mergeUserAttributes(email, attributes, rawFields)
-    console.log(
-      `[UserSync] Merged ${Object.keys(attributes).length} attribute(s) for ${email} via ${integrationType}`
+    log.info(
+      { integration_type: integrationType, attribute_count: Object.keys(attributes).length },
+      'merged user attributes'
     )
   } catch (error) {
-    console.error(`[UserSync] Failed to merge attributes for ${email}:`, error)
+    log.error({ err: error, integration_type: integrationType }, 'attribute merge failed')
     // Return 200 — we received the payload successfully, processing failure is internal
   }
 
@@ -158,7 +162,7 @@ export async function mergeUserAttributes(
     columns: { id: true, metadata: true },
   })
   if (!userRecord) {
-    console.log(`[UserSync] No user found for email ${email}, skipping attribute merge`)
+    log.debug('no user found for identify, skipping attribute merge')
     return
   }
 

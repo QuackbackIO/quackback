@@ -1,5 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getWidgetSession } from '@/lib/server/functions/widget-auth'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'widget-session' })
 
 export const Route = createFileRoute('/api/widget/session')({
   server: {
@@ -36,7 +39,7 @@ export const Route = createFileRoute('/api/widget/session')({
             { headers: noStoreHeaders() }
           )
         } catch (error) {
-          console.error('[widget:session] Error:', error)
+          log.error({ err: error }, 'widget session load failed')
           return Response.json(
             { error: { code: 'SERVER_ERROR', message: 'Failed to load widget session' } },
             { status: 500, headers: noStoreHeaders() }

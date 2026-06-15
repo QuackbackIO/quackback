@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildShortcutStoryBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'shortcut' })
 
 const SHORTCUT_API = 'https://api.app.shortcut.com/api/v3'
 
@@ -34,7 +37,7 @@ export const shortcutHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Shortcut] Creating story for ${event.type} → team ${groupId}`)
+    log.debug({ event_type: event.type, group_id: groupId }, 'creating story')
 
     const { title, description } = buildShortcutStoryBody(event, rootUrl)
 
@@ -82,7 +85,7 @@ export const shortcutHook: HookHandler = {
 
       const story = (await response.json()) as ShortcutStoryResponse
 
-      console.log(`[Shortcut] Created story ${story.id}`)
+      log.info({ story_id: story.id, group_id: groupId }, 'story created')
       return {
         success: true,
         externalId: String(story.id),

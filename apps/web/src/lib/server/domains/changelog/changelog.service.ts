@@ -26,6 +26,9 @@ import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { buildEventActor, dispatchChangelogPublished } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'changelog' })
 import type {
   CreateChangelogInput,
   UpdateChangelogInput,
@@ -99,7 +102,7 @@ export async function createChangelog(
       contentPreview: entry.content.slice(0, 200),
       publishedAt: publishedAt!,
       linkedPostCount: input.linkedPostIds?.length ?? 0,
-    }).catch((err) => console.error('[Changelog] Failed to dispatch published event:', err))
+    }).catch((err) => log.error({ err }, 'failed to dispatch changelog published event'))
   } else if (input.publishState.type === 'scheduled' && publishedAt) {
     const delayMs = publishedAt.getTime() - Date.now()
     if (delayMs > 0) {
@@ -109,7 +112,7 @@ export async function createChangelog(
         delayMs,
         payload: { changelogId: entry.id, principalId: author.principalId },
         actor,
-      }).catch((err) => console.error('[Changelog] Failed to schedule publish job:', err))
+      }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
     }
   }
 
@@ -201,7 +204,7 @@ export async function updateChangelog(
         contentPreview: updated.content.slice(0, 200),
         publishedAt: new Date(),
         linkedPostCount: updated.linkedPosts.length,
-      }).catch((err) => console.error('[Changelog] Failed to dispatch published event:', err))
+      }).catch((err) => log.error({ err }, 'failed to dispatch changelog published event'))
     } else if (input.publishState.type === 'scheduled') {
       const newPublishedAt = getPublishedAtFromState(input.publishState)
       if (newPublishedAt) {
@@ -213,7 +216,7 @@ export async function updateChangelog(
             delayMs,
             payload: { changelogId: id, principalId: existing.principalId },
             actor,
-          }).catch((err) => console.error('[Changelog] Failed to schedule publish job:', err))
+          }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
         }
       }
     } else if (input.publishState.type === 'draft') {

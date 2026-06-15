@@ -4,6 +4,9 @@
 
 import { WebClient } from '@slack/web-api'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'slack' })
 
 type SlackChannelInfo = { id: string; name: string; isPrivate: boolean }
 
@@ -21,7 +24,7 @@ export async function listSlackChannels(
   if (!opts?.force) {
     const cached = await cacheGet<SlackChannelInfo[]>(CACHE_KEYS.SLACK_CHANNELS)
     if (cached) {
-      console.log('[Slack] Returning cached channel list')
+      log.debug('returning cached channel list')
       return cached
     }
   }
@@ -60,8 +63,9 @@ export async function listSlackChannels(
 
   await cacheSet(CACHE_KEYS.SLACK_CHANNELS, channels, CACHE_TTL_SECONDS)
 
-  console.log(
-    `[Slack] Fetched ${channels.length} channels from API (cached for ${CACHE_TTL_SECONDS}s)`
+  log.info(
+    { channel_count: channels.length, cache_ttl_seconds: CACHE_TTL_SECONDS },
+    'fetched channels from api'
   )
   return channels
 }
@@ -80,7 +84,7 @@ export async function joinSlackChannel(accessToken: string, channelId: string): 
     const slackError = error as { data?: { error?: string } }
     if (slackError.data?.error === 'method_not_supported_for_channel_type') {
       // Private channel -- bot must be invited manually
-      console.warn(`[Slack] Cannot join private channel ${channelId} -- bot must be invited`)
+      log.warn({ channel_id: channelId }, 'cannot join private channel; bot must be invited')
       return false
     }
     if (slackError.data?.error === 'already_in_channel') {

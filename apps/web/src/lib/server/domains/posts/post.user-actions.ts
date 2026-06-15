@@ -28,6 +28,9 @@ import {
 } from '@/lib/server/events/dispatch'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { UserEditPostInput } from './post.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'post-user-actions' })
 
 // ============================================================================
 // Internal Helpers (duplicated from post.permissions.ts for independence)
@@ -101,8 +104,9 @@ export async function userEditPost(
   input: UserEditPostInput,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Post> {
-  console.log(
-    `[domain:post-user-actions] userEditPost: postId=${postId} principalId=${actor.principalId} role=${actor.role}`
+  log.info(
+    { post_id: postId, principal_id: actor.principalId, role: actor.role },
+    'user edit post'
   )
   // Validate input first (no DB needed)
   if (!input.title?.trim()) {
@@ -196,9 +200,7 @@ export async function userEditPost(
     .then(({ generatePostEmbedding }) =>
       generatePostEmbedding(postId, updatedPost.title, updatedPost.content)
     )
-    .catch((err) =>
-      console.error(`[domain:post-user-actions] Embedding regen failed for ${postId}:`, err)
-    )
+    .catch((err) => log.error({ err, post_id: postId }, 'embedding regen failed'))
 
   return updatedPost
 }
@@ -214,8 +216,9 @@ export async function softDeletePost(
   postId: PostId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
 ): Promise<void> {
-  console.log(
-    `[domain:post-user-actions] softDeletePost: postId=${postId} principalId=${actor.principalId} role=${actor.role}`
+  log.info(
+    { post_id: postId, principal_id: actor.principalId, role: actor.role },
+    'soft delete post'
   )
   // Fetch post with status + portal config in parallel (eliminates duplicate fetches)
   const [existingPost, config] = await Promise.all([
@@ -314,7 +317,7 @@ export async function restorePost(
   actorPrincipalId?: PrincipalId,
   actorUserId?: UserId
 ): Promise<Post> {
-  console.log(`[domain:post-user-actions] restorePost: postId=${postId}`)
+  log.info({ post_id: postId }, 'restore post')
   // Get the post first to validate it exists and is deleted
   const existingPost = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
   if (!existingPost) {
@@ -385,7 +388,7 @@ export async function restorePost(
  * @param postId - Post ID to permanently delete
  */
 export async function permanentDeletePost(postId: PostId): Promise<void> {
-  console.log(`[domain:post-user-actions] permanentDeletePost: postId=${postId}`)
+  log.info({ post_id: postId }, 'permanent delete post')
   const [deleted] = await db.delete(posts).where(eq(posts.id, postId)).returning()
   if (!deleted) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)

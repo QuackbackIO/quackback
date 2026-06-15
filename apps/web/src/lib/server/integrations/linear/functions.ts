@@ -60,6 +60,8 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets, encryptSecrets } = await import('../encryption')
     const { listLinearTeams } = await import('./teams')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'linear' })
 
     await requireAuth({ roles: ['admin'] })
 
@@ -82,7 +84,7 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
       const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
       const bufferMs = 5 * 60 * 1000
       if (Date.now() >= expiresAt - bufferMs) {
-        console.log('[Linear] Access token expired, refreshing...')
+        log.info('access token expired, refreshing')
         const { refreshLinearToken } = await import('./oauth')
         const { getPlatformCredentials } =
           await import('@/lib/server/domains/platform-credentials/platform-credential.service')

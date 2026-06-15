@@ -23,6 +23,9 @@ import type {
   UpdateArticleInput,
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'help-center-articles' })
 
 // ============================================================================
 // Articles
@@ -177,7 +180,7 @@ export async function createArticle(
 
   // Fire-and-forget: generate embedding for the new article
   generateArticleEmbedding(article.id, title, content, resolved.category?.name).catch((err) =>
-    console.error(`[KB Embedding] Failed for article ${article.id}:`, err)
+    log.error({ article_id: article.id, err }, 'article embedding generation failed')
   )
 
   return resolved
@@ -244,7 +247,7 @@ export async function updateArticle(
   // Fire-and-forget: re-generate embedding when title or content changed
   if (input.title || input.content) {
     generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
-      (err) => console.error(`[KB Embedding] Failed for article ${id}:`, err)
+      (err) => log.error({ article_id: id, err }, 'article embedding generation failed')
     )
   }
 
@@ -290,7 +293,7 @@ export async function deleteArticle(id: HelpCenterArticleId): Promise<void> {
 export async function restoreArticle(
   id: HelpCenterArticleId
 ): Promise<HelpCenterArticleWithCategory> {
-  console.log(`[domain:help-center] restoreArticle: id=${id}`)
+  log.debug({ article_id: id }, 'restore article')
   const article = await db.query.helpCenterArticles.findFirst({
     where: eq(helpCenterArticles.id, id),
   })

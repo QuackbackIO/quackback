@@ -15,16 +15,19 @@ import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'onboarding' })
 
 /** Onboarding promotes the acting user to admin in two server fns
  *  (saveUseCaseFn, setupWorkspaceFn). Same DB shape, same intent —
  *  insert when missing, upgrade when present-but-not-admin. */
-async function ensureAdminPrincipal(userId: UserId, logLabel: string): Promise<void> {
+async function ensureAdminPrincipal(userId: UserId): Promise<void> {
   const existing = await db.query.principal.findFirst({
     where: eq(principal.userId, userId),
   })
   if (!existing) {
-    console.log(`[fn:onboarding] ${logLabel}: creating admin member for user`)
+    log.debug({ user_id: userId }, 'creating admin member')
     await db.insert(principal).values({
       id: generateId('principal'),
       userId,
@@ -32,7 +35,7 @@ async function ensureAdminPrincipal(userId: UserId, logLabel: string): Promise<v
       createdAt: new Date(),
     })
   } else if (!isAdmin(existing.role)) {
-    console.log(`[fn:onboarding] ${logLabel}: upgrading user to admin`)
+    log.debug({ user_id: userId }, 'upgrading user to admin')
     await db.update(principal).set({ role: 'admin' }).where(eq(principal.userId, userId))
   }
 }
@@ -85,7 +88,7 @@ export interface SetupWorkspaceResult {
 export const setupWorkspaceFn = createServerFn({ method: 'POST' })
   .inputValidator(setupWorkspaceSchema)
   .handler(async ({ data }: { data: SetupWorkspaceInput }): Promise<SetupWorkspaceResult> => {
-    console.log(`[fn:onboarding] setupWorkspaceFn: workspaceName=${data.workspaceName}`)
+    log.debug({ workspace_name: data.workspaceName }, 'setup workspace: entry')
     try {
       // Check authentication manually (can't use requireAuth - it needs settings to exist)
       const session = await getSession()
@@ -121,7 +124,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       // Settings exist + workspace step done: require existing admin.
       // Settings exist + workspace step not done: ensure user becomes admin.
       if (!existingSettings) {
-        await ensureAdminPrincipal(session.user.id as UserId, 'setupWorkspaceFn')
+        await ensureAdminPrincipal(session.user.id as UserId)
       } else if (setupState?.steps?.workspace) {
         const principalRecord = await db.query.principal.findFirst({
           where: eq(principal.userId, session.user.id as UserId),
@@ -130,7 +133,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           throw new Error('Only admin can complete setup')
         }
       } else {
-        await ensureAdminPrincipal(session.user.id as UserId, 'setupWorkspaceFn')
+        await ensureAdminPrincipal(session.user.id as UserId)
       }
 
       // Check if onboarding is already complete
@@ -154,7 +157,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
 
       // Settings exist: update name/slug and mark workspace step complete
       if (existingSettings) {
-        console.log(`[fn:onboarding] setupWorkspaceFn: updating existing settings`)
+        log.debug('setup workspace: updating existing settings')
 
         // Slug is auto-derived from name client-side, but if the
         // config file owns workspace.slug we skip the column write and
@@ -199,11 +202,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             .where(eq(settings.id, existingSettings.id))
             .returning()
           finalSettings = updated
-          console.log(
-            `[fn:onboarding] setupWorkspaceFn: updated name=${workspaceName}, slug=${
-              slugManaged ? '<managed:skipped>' : slug
-            }, workspace=true`
-          )
+          log.info({ workspace_name: workspaceName, slug_managed: slugManaged }, 'setup workspace: settings updated')
         }
       } else {
         // Self-hosted: create settings from scratch
@@ -252,7 +251,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           .returning()
 
         finalSettings = createdSettings
-        console.log(`[fn:onboarding] setupWorkspaceFn: created settings for self-hosted instance`)
+        log.info('setup workspace: created settings')
       }
 
       // Create default post statuses if none exist
@@ -264,22 +263,18 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
           createdAt: new Date(),
         }))
         await db.insert(postStatuses).values(statusValues)
-        console.log(
-          `[fn:onboarding] setupWorkspaceFn: created ${statusValues.length} default statuses`
-        )
+        log.info({ count: statusValues.length }, 'setup workspace: created default statuses')
       }
 
       await invalidateSettingsCache()
-      console.log(
-        `[fn:onboarding] setupWorkspaceFn: id=${finalSettings!.id}, slug=${finalSettings!.slug}`
-      )
+      log.info({ workspace_id: finalSettings!.id, slug: finalSettings!.slug }, 'setup workspace: complete')
       return {
         id: finalSettings!.id,
         name: finalSettings!.name,
         slug: finalSettings!.slug,
       }
     } catch (error) {
-      console.error(`[fn:onboarding] ❌ setupWorkspaceFn failed:`, error)
+      log.error({ err: error }, 'setup workspace failed')
       throw error
     }
   })
@@ -295,7 +290,7 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }: { data: { name: string } }): Promise<void> => {
-    console.log(`[fn:onboarding] saveUserNameFn`)
+    log.debug('save user name: entry')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -311,9 +306,9 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
         .where(eq(user.id, session.user.id as UserId))
       await syncPrincipalProfile(session.user.id as UserId, { displayName: data.name.trim() })
 
-      console.log(`[fn:onboarding] saveUserNameFn: saved name for user ${session.user.id}`)
+      log.info({ user_id: session.user.id }, 'save user name: saved')
     } catch (error) {
-      console.error(`[fn:onboarding] ❌ saveUserNameFn failed:`, error)
+      log.error({ err: error }, 'save user name failed')
       throw error
     }
   })
@@ -326,7 +321,7 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
 export const saveUseCaseFn = createServerFn({ method: 'POST' })
   .inputValidator(z.object({ useCase: z.enum(USE_CASE_TYPES) }))
   .handler(async ({ data }: { data: { useCase: UseCaseType } }): Promise<void> => {
-    console.log(`[fn:onboarding] saveUseCaseFn: useCase=${data.useCase}`)
+    log.debug({ use_case: data.useCase }, 'save use case: entry')
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -353,11 +348,11 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
           .where(eq(settings.id, existingSettings.id))
 
         if (!setupState.steps.workspace) {
-          await ensureAdminPrincipal(session.user.id as UserId, 'saveUseCaseFn')
+          await ensureAdminPrincipal(session.user.id as UserId)
         }
 
         await invalidateSettingsCache()
-        console.log(`[fn:onboarding] saveUseCaseFn: saved useCase=${data.useCase}`)
+        log.info({ use_case: data.useCase }, 'save use case: saved')
       } else {
         // Fresh install: create minimal settings to store useCase. The
         // workspace step will update name/slug later.
@@ -380,15 +375,13 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
           setupState: JSON.stringify(setupState),
         })
 
-        await ensureAdminPrincipal(session.user.id as UserId, 'saveUseCaseFn')
+        await ensureAdminPrincipal(session.user.id as UserId)
 
         await invalidateSettingsCache()
-        console.log(
-          `[fn:onboarding] saveUseCaseFn: created initial settings with useCase=${data.useCase}`
-        )
+        log.info({ use_case: data.useCase }, 'save use case: created initial settings')
       }
     } catch (error) {
-      console.error(`[fn:onboarding] ❌ saveUseCaseFn failed:`, error)
+      log.error({ err: error }, 'save use case failed')
       throw error
     }
   })
@@ -400,7 +393,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
  * selector as radio-style (single-select) when only one board fits.
  */
 export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:onboarding] listBoardsForOnboarding`)
+  log.debug('list boards for onboarding: entry')
   try {
     const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
     const [boardList, limits] = await Promise.all([listBoards(), getTierLimits()])
@@ -413,7 +406,7 @@ export const listBoardsForOnboarding = createServerFn({ method: 'GET' }).handler
       maxBoards: limits.maxBoards,
     }
   } catch (error) {
-    console.error(`[fn:onboarding] ❌ listBoardsForOnboarding failed:`, error)
+    log.error({ err: error }, 'list boards for onboarding failed')
     return { boards: [], maxBoards: null }
   }
 })

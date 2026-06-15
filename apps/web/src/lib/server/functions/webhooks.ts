@@ -9,6 +9,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'webhooks' })
 
 // ============================================
 // Schemas
@@ -53,17 +56,17 @@ export type RotateWebhookSecretInput = z.infer<typeof rotateWebhookSecretSchema>
  * List all webhooks for the workspace
  */
 export const fetchWebhooks = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:webhooks] fetchWebhooks`)
+  log.debug({}, 'fetch webhooks')
   try {
     await requireAuth({ roles: ['admin'] })
 
     const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
     const webhooks = await listWebhooks()
 
-    console.log(`[fn:webhooks] fetchWebhooks: count=${webhooks.length}`)
+    log.debug({ count: webhooks.length }, 'fetch webhooks')
     return webhooks
   } catch (error) {
-    console.error(`[fn:webhooks] fetchWebhooks failed:`, error)
+    log.error({ err: error }, 'fetch webhooks failed')
     throw error
   }
 })
@@ -79,7 +82,7 @@ export const fetchWebhooks = createServerFn({ method: 'GET' }).handler(async () 
 export const createWebhookFn = createServerFn({ method: 'POST' })
   .inputValidator(createWebhookSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:webhooks] createWebhookFn: url=${data.url}`)
+    log.debug({ url: data.url }, 'create webhook')
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
@@ -93,10 +96,10 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
         auth.principal.id
       )
 
-      console.log(`[fn:webhooks] createWebhookFn: id=${result.webhook.id}`)
+      log.info({ webhook_id: result.webhook.id }, 'webhook created')
       return result
     } catch (error) {
-      console.error(`[fn:webhooks] createWebhookFn failed:`, error)
+      log.error({ err: error }, 'create webhook failed')
       throw error
     }
   })
@@ -107,7 +110,7 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
 export const updateWebhookFn = createServerFn({ method: 'POST' })
   .inputValidator(updateWebhookSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:webhooks] updateWebhookFn: id=${data.webhookId}`)
+    log.debug({ webhook_id: data.webhookId }, 'update webhook')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -119,10 +122,10 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
         status: data.status,
       })
 
-      console.log(`[fn:webhooks] updateWebhookFn: updated id=${webhook.id}`)
+      log.info({ webhook_id: webhook.id }, 'webhook updated')
       return webhook
     } catch (error) {
-      console.error(`[fn:webhooks] updateWebhookFn failed:`, error)
+      log.error({ err: error }, 'update webhook failed')
       throw error
     }
   })
@@ -133,17 +136,17 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
 export const deleteWebhookFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteWebhookSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:webhooks] deleteWebhookFn: id=${data.webhookId}`)
+    log.debug({ webhook_id: data.webhookId }, 'delete webhook')
     try {
       await requireAuth({ roles: ['admin'] })
 
       const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
       await deleteWebhook(data.webhookId as WebhookId)
 
-      console.log(`[fn:webhooks] deleteWebhookFn: deleted`)
+      log.info({ webhook_id: data.webhookId }, 'webhook deleted')
       return { id: data.webhookId as WebhookId }
     } catch (error) {
-      console.error(`[fn:webhooks] deleteWebhookFn failed:`, error)
+      log.error({ err: error }, 'delete webhook failed')
       throw error
     }
   })
@@ -155,17 +158,17 @@ export const deleteWebhookFn = createServerFn({ method: 'POST' })
 export const rotateWebhookSecretFn = createServerFn({ method: 'POST' })
   .inputValidator(rotateWebhookSecretSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:webhooks] rotateWebhookSecretFn: id=${data.webhookId}`)
+    log.debug({ webhook_id: data.webhookId }, 'rotate webhook secret')
     try {
       await requireAuth({ roles: ['admin'] })
 
       const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks/webhook.service')
       const result = await rotateWebhookSecret(data.webhookId as WebhookId)
 
-      console.log(`[fn:webhooks] rotateWebhookSecretFn: rotated`)
+      log.info({ webhook_id: data.webhookId }, 'webhook secret rotated')
       return result
     } catch (error) {
-      console.error(`[fn:webhooks] rotateWebhookSecretFn failed:`, error)
+      log.error({ err: error }, 'rotate webhook secret failed')
       throw error
     }
   })

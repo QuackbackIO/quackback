@@ -3,6 +3,9 @@ import Papa from 'papaparse'
 import type { ImportInput } from '@/lib/server/domains/import/types'
 import { REQUIRED_HEADERS } from '@/lib/shared/schemas/import'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'import' })
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_ROWS = 10000
@@ -28,8 +31,9 @@ export const Route = createFileRoute('/api/import/')({
           const file = formData.get('file') as File | null
           const boardIdParam = formData.get('boardId') as string | null
 
-          console.log(
-            `[import] 📦 Starting CSV import: file=${file?.name || 'none'}, size=${file?.size || 0} bytes`
+          log.info(
+            { file_name: file?.name || 'none', file_size: file?.size || 0 },
+            'csv import started'
           )
 
           // Validate workspace access
@@ -40,7 +44,7 @@ export const Route = createFileRoute('/api/import/')({
 
           // Check role - only admin can import
           if (!canAccess(validation.principal.role as Role, ['admin'])) {
-            console.warn(`[import] ⚠️ Access denied: role=${validation.principal.role}`)
+            log.warn({ role: validation.principal.role }, 'import access denied')
             return Response.json({ error: 'Only admins can import data' }, { status: 403 })
           }
 
@@ -132,7 +136,7 @@ export const Route = createFileRoute('/api/import/')({
             )
           }
 
-          console.log(`[import] 🔄 Processing ${totalRows} rows`)
+          log.info({ total_rows: totalRows }, 'processing import rows')
 
           // Encode CSV as base64 for job queue
           const csvContent = Buffer.from(csvText).toString('base64')
@@ -148,8 +152,9 @@ export const Route = createFileRoute('/api/import/')({
           // Process import inline (synchronous)
           const result = await processImport(importData)
 
-          console.log(
-            `[import] ✅ Import complete: ${result.imported} imported, ${result.skipped} skipped`
+          log.info(
+            { imported: result.imported, skipped: result.skipped },
+            'csv import complete'
           )
           return Response.json({
             imported: result.imported,
@@ -159,7 +164,7 @@ export const Route = createFileRoute('/api/import/')({
             totalRows,
           })
         } catch (error) {
-          console.error(`[import] ❌ Import failed:`, error)
+          log.error({ err: error }, 'csv import failed')
           const errorMessage = error instanceof Error ? error.message : 'Internal server error'
           return Response.json({ error: errorMessage }, { status: 500 })
         }

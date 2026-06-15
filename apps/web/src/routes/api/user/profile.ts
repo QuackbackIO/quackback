@@ -4,6 +4,9 @@ import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-profile' })
 
 export const Route = createFileRoute('/api/user/profile')({
   server: {
@@ -13,12 +16,12 @@ export const Route = createFileRoute('/api/user/profile')({
        * Get current user's profile information.
        */
       GET: async () => {
-        console.log(`[api] GET /user/profile`)
+        log.debug('get profile request')
 
         try {
           const session = await getSession()
           if (!session?.user) {
-            console.warn(`[api] ⚠️ Unauthorized profile access`)
+            log.warn('unauthorized profile access')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -42,7 +45,7 @@ export const Route = createFileRoute('/api/user/profile')({
             hasCustomAvatar: !!userRecord.imageKey,
           })
         } catch (error) {
-          console.error(`[api] ❌ Profile fetch failed:`, error)
+          log.error({ err: error }, 'profile fetch failed')
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },
@@ -52,12 +55,12 @@ export const Route = createFileRoute('/api/user/profile')({
        * Update current user's profile (name only - avatar uploads use presigned URLs).
        */
       PATCH: async ({ request }) => {
-        console.log(`[api] PATCH /user/profile`)
+        log.debug('patch profile request')
 
         try {
           const session = await getSession()
           if (!session?.user) {
-            console.warn(`[api] ⚠️ Unauthorized profile update`)
+            log.warn('unauthorized profile update')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -97,7 +100,7 @@ export const Route = createFileRoute('/api/user/profile')({
             await syncPrincipalProfile(updated.id as UserId, { displayName: updates.name })
           }
 
-          console.log(`[api] ✅ Profile updated: user=${session.user.id}`)
+          log.info({ user_id: session.user.id }, 'profile updated')
           return Response.json({
             success: true,
             user: {
@@ -106,7 +109,7 @@ export const Route = createFileRoute('/api/user/profile')({
             },
           })
         } catch (error) {
-          console.error(`[api] ❌ Profile update failed:`, error)
+          log.error({ err: error }, 'profile update failed')
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },
@@ -116,12 +119,12 @@ export const Route = createFileRoute('/api/user/profile')({
        * Remove custom avatar.
        */
       DELETE: async () => {
-        console.log(`[api] DELETE /user/profile (avatar)`)
+        log.debug('delete avatar request')
 
         try {
           const session = await getSession()
           if (!session?.user) {
-            console.warn(`[api] ⚠️ Unauthorized avatar delete`)
+            log.warn('unauthorized avatar delete')
             return Response.json({ error: 'Unauthorized' }, { status: 401 })
           }
 
@@ -151,7 +154,7 @@ export const Route = createFileRoute('/api/user/profile')({
           // Sync avatar removal to principal record
           await syncPrincipalProfile(updated.id as UserId, { avatarKey: null })
 
-          console.log(`[api] ✅ Avatar removed: user=${session.user.id}`)
+          log.info({ user_id: session.user.id }, 'avatar removed')
           return Response.json({
             success: true,
             user: {
@@ -160,7 +163,7 @@ export const Route = createFileRoute('/api/user/profile')({
             },
           })
         } catch (error) {
-          console.error(`[api] ❌ Avatar removal failed:`, error)
+          log.error({ err: error }, 'avatar removal failed')
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },

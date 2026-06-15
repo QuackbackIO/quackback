@@ -1,6 +1,9 @@
 import { getAuth, getOTP } from './index'
 import { mintMagicLinkUrl } from './magic-link-mint'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth-email-signin' })
 
 /**
  * Sends a passwordless sign-in email containing both a magic-link button
@@ -48,9 +51,7 @@ export async function requestEmailSignin(opts: {
   if (!otp) throw new Error('OTP was not captured')
 
   if (!isEmailConfigured()) {
-    console.warn(
-      `[auth] Sign-in email requested for ${opts.email} but email is not configured. Email will not be delivered.`
-    )
+    log.warn('sign-in email not sent: email transport is not configured')
     return
   }
 

@@ -19,6 +19,9 @@ import type { TiptapContent } from '@/lib/server/db'
 import { isS3Configured, uploadImageBuffer } from '@/lib/server/storage/s3'
 import { safeFetch, SsrfError, ResponseTooLargeError, TimeoutError } from './ssrf-guard'
 import { sniffImageMime, ALLOWED_REHOST_MIMES } from './magic-bytes'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'rehost-images' })
 
 const MAX_BYTES = Number(process.env.REHOST_MAX_BYTES) || 10 * 1024 * 1024
 const MAX_IMAGES_PER_SAVE = Number(process.env.REHOST_MAX_IMAGES_PER_SAVE) || 20
@@ -64,9 +67,9 @@ type RejectReason =
 
 function logRejection(src: string, reason: RejectReason, opts: RehostOptions, err?: unknown): void {
   const principal = opts.principalId ?? 'unknown'
-  const detail = err instanceof Error ? `: ${err.message}` : ''
-  console.warn(
-    `[content:rehost-images] skipped image contentType=${opts.contentType} principalId=${principal} src=${src} reason=${reason}${detail}`
+  log.warn(
+    { content_type: opts.contentType, principal_id: principal, src, reason, err },
+    'skipped image'
   )
 }
 
@@ -253,7 +256,7 @@ export async function rehostExternalImages(
   try {
     if (!json || typeof json !== 'object') return json
     if (!isS3Configured()) {
-      console.info('[content:rehost-images] S3 not configured — no-op')
+      log.debug('s3 not configured, skipping rehost')
       return json
     }
 
@@ -305,7 +308,7 @@ export async function rehostExternalImages(
 
     return cloned
   } catch (err) {
-    console.error('[content:rehost-images] unexpected error, returning input unchanged', err)
+    log.error({ err }, 'unexpected error, returning input unchanged')
     return json
   }
 }

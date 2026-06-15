@@ -7,7 +7,10 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { safeFetch } from '../../content/ssrf-guard'
+import { logger } from '@/lib/server/logger'
 import { buildN8nPayload } from './message'
+
+const log = logger.child({ component: 'n8n' })
 
 export interface N8nTarget {
   channelId: string // webhookUrl stored as channelId for consistency
@@ -27,7 +30,7 @@ export const n8nHook: HookHandler = {
       return { success: false, error: 'Invalid webhook URL', shouldRetry: false }
     }
 
-    console.log(`[n8n] Processing ${event.type} → webhook`)
+    log.debug({ event_type: event.type }, 'processing event')
 
     const payload = buildN8nPayload(event, rootUrl)
 
@@ -40,7 +43,7 @@ export const n8nHook: HookHandler = {
 
       if (!response.ok) {
         const status = response.status
-        console.error(`[n8n] ❌ Webhook returned ${status}`)
+        log.error({ status_code: status }, 'webhook returned error status')
 
         return {
           success: false,
@@ -49,11 +52,11 @@ export const n8nHook: HookHandler = {
         }
       }
 
-      console.log(`[n8n] ✅ Webhook delivered`)
+      log.info('webhook delivered')
       return { success: true }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[n8n] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'webhook delivery failed')
 
       return {
         success: false,

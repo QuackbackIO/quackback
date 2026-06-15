@@ -15,6 +15,9 @@ import {
   getPendingMergeSuggestionSummary,
   getMergeSuggestionCountsForPosts,
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'merge-suggestions' })
 
 // ============================================
 // Server Functions
@@ -39,7 +42,7 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
         createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
       }))
     } catch (error) {
-      console.error(`[fn:merge-suggestions] getMergeSuggestionsForPostFn failed:`, error)
+      log.error({ err: error }, 'get merge suggestions for post failed')
       return []
     }
   })
@@ -52,7 +55,7 @@ export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).h
   try {
     return getPendingMergeSuggestionSummary()
   } catch (error) {
-    console.error(`[fn:merge-suggestions] fetchMergeSuggestionSummaryFn failed:`, error)
+    log.error({ err: error }, 'fetch merge suggestion summary failed')
     return { count: 0 }
   }
 })
@@ -67,7 +70,7 @@ export const fetchMergeSuggestionCountsForPostsFn = createServerFn({ method: 'PO
     try {
       return getMergeSuggestionCountsForPosts(data.postIds as PostId[])
     } catch (error) {
-      console.error(`[fn:merge-suggestions] fetchMergeSuggestionCountsForPostsFn failed:`, error)
+      log.error({ err: error }, 'fetch merge suggestion counts for posts failed')
       return []
     }
   })

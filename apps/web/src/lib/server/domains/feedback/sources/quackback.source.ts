@@ -9,6 +9,9 @@
 import { db, eq, feedbackSources } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 import { hashCode } from '@/lib/server/utils'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'quackback-source' })
 
 /**
  * Ensure the quackback feedback source exists.
@@ -27,7 +30,7 @@ export async function ensureQuackbackFeedbackSource(): Promise<void> {
     })
 
     if (existing) {
-      console.log('[QuackbackSource] Quackback feedback source already exists:', existing.id)
+      log.debug({ source_id: existing.id }, 'quackback feedback source already exists')
       return
     }
 
@@ -42,6 +45,6 @@ export async function ensureQuackbackFeedbackSource(): Promise<void> {
       })
       .returning({ id: feedbackSources.id })
 
-    console.log('[QuackbackSource] Created quackback feedback source:', created.id)
+    log.info({ source_id: created.id }, 'created quackback feedback source')
   })
 }

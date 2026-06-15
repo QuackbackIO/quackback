@@ -8,6 +8,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildSlackMessage } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'slack' })
 
 /**
  * Slack hook target.
@@ -65,22 +68,22 @@ async function postMessage(
     })
   } catch (error) {
     const errorCode = getSlackErrorCode(error)
-    console.log(`[Slack] API error: ${errorCode}`)
+    log.debug({ error_code: errorCode }, 'post message failed, evaluating retry')
 
     // If not in channel, try to join (only works for public channels)
     if (errorCode === 'not_in_channel' || errorCode === 'channel_not_found') {
-      console.log(`[Slack] Attempting to join channel ${channelId}`)
+      log.debug({ channel_id: channelId }, 'attempting to join channel')
       const joinResult = await client.conversations.join({ channel: channelId })
 
       if (!joinResult.ok) {
-        console.error(`[Slack] Failed to join: ${joinResult.error}`)
+        log.warn({ channel_id: channelId, join_error: joinResult.error }, 'failed to join channel')
         throw new Error(
           `Cannot post to this channel. Please invite the bot to the channel first.`,
           { cause: error }
         )
       }
 
-      console.log(`[Slack] Joined ${channelId}, retrying message`)
+      log.debug({ channel_id: channelId }, 'joined channel, retrying message')
       return await client.chat.postMessage({
         channel: channelId,
         unfurl_links: false,
@@ -98,7 +101,7 @@ export const slackHook: HookHandler = {
     const { channelId } = target as SlackTarget
     const { accessToken, rootUrl } = config as SlackConfig
 
-    console.log(`[Slack] Processing ${event.type} → channel ${channelId}`)
+    log.debug({ event_type: event.type, channel_id: channelId }, 'processing hook event')
 
     const client = new WebClient(accessToken)
     const message = buildSlackMessage(event, rootUrl)
@@ -107,9 +110,9 @@ export const slackHook: HookHandler = {
       const result = await postMessage(client, channelId, message)
 
       if (result.ok) {
-        console.log(`[Slack] ✅ Posted to ${channelId} (ts=${result.ts})`)
+        log.info({ channel_id: channelId, message_ts: result.ts }, 'posted message to channel')
       } else {
-        console.error(`[Slack] ❌ Failed: ${result.error}`)
+        log.error({ channel_id: channelId, error_code: result.error }, 'failed to post message')
       }
 
       return {
@@ -120,13 +123,10 @@ export const slackHook: HookHandler = {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       const errorCode = getSlackErrorCode(error)
-      console.error(`[Slack] ❌ Exception: ${errorMsg}${errorCode ? ` (${errorCode})` : ''}`)
+      log.error({ err: error, error_code: errorCode }, 'hook delivery failed')
 
       // Auth errors should not be retried - they require reconnecting Slack
       if (isAuthError(error)) {
-        console.error(
-          `[Slack] OAuth token invalid (${errorCode}). Please reconnect Slack integration.`
-        )
         return {
           success: false,
           error: `Authentication failed: ${errorCode}. Please reconnect Slack.`,

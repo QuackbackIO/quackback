@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildLinearIssueBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'linear' })
 
 const LINEAR_API = 'https://api.linear.app/graphql'
 
@@ -56,7 +59,7 @@ export const linearHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[Linear] Creating issue for ${event.type} → team ${teamId}`)
+    log.debug({ event_type: event.type, team_id: teamId }, 'creating issue')
 
     const { title, description } = buildLinearIssueBody(event, rootUrl)
 
@@ -67,7 +70,7 @@ export const linearHook: HookHandler = {
 
       if (result.errors?.length) {
         const errorMsg = result.errors[0].message
-        console.error(`[Linear] ❌ GraphQL error: ${errorMsg}`)
+        log.error({ error_message: errorMsg, team_id: teamId }, 'graphql error')
         return {
           success: false,
           error: errorMsg,
@@ -84,7 +87,7 @@ export const linearHook: HookHandler = {
         return { success: false, error: 'No issue returned', shouldRetry: false }
       }
 
-      console.log(`[Linear] ✅ Created issue ${issue.identifier}`)
+      log.info({ issue_id: issue.id, issue_identifier: issue.identifier, team_id: teamId }, 'issue created')
       return {
         success: true,
         externalId: issue.id,

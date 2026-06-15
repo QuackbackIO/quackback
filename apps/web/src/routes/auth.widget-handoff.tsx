@@ -72,7 +72,8 @@ export const isWidgetSessionHmacVerified = createServerOnlyFn(
       })
       return row?.hmacVerified === true
     } catch (err) {
-      console.error('[route:widget-handoff] provenance lookup failed:', err)
+      const { logger } = await import('@/lib/server/logger')
+      logger.child({ component: 'widget-handoff' }).error({ err }, 'provenance lookup failed')
       return false
     }
   }
@@ -116,6 +117,8 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<HandoffResult> => {
     const { config } = await import('@/lib/server/config')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'widget-handoff' })
 
     const returnTo = isSafeCallbackUrl(data.returnTo) ? (data.returnTo as string) : '/'
 
@@ -150,7 +153,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
         body: JSON.stringify({ token: data.ott }),
       })
     } catch (err) {
-      console.error('[route:widget-handoff] fetch to OTT verify failed:', err)
+      log.error({ err }, 'ott verify fetch failed')
       await recordAuditEvent({
         event: 'portal.widget_handshake.invalid',
         outcome: 'failure',
@@ -205,7 +208,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       userId = body?.user?.id ?? body?.session?.userId ?? null
     } catch {
       // Response body unreadable — refuse safely.
-      console.warn('[route:widget-handoff] could not parse verify response body')
+      log.warn('could not parse verify response body')
     }
 
     // Provenance gate: only sessions whose identity claim was
@@ -214,9 +217,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
     // email signup, email-capture widget identify, etc.) would
     // unlock the portal widget grant. See widget_identified_session.
     if (!sessionId || !userId) {
-      console.warn(
-        '[route:widget-handoff] session/user id missing from verify response — handoff rejected'
-      )
+      log.warn('session/user id missing from verify response, handoff rejected')
       await recordAuditEvent({
         event: 'portal.widget_handshake.invalid',
         outcome: 'failure',
@@ -262,7 +263,7 @@ const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
       const { db, widgetOriginSession } = await import('@/lib/server/db')
       await db.insert(widgetOriginSession).values({ sessionId, userId }).onConflictDoNothing()
     } catch (err) {
-      console.error('[route:widget-handoff] failed to insert widget_origin_session marker:', err)
+      log.error({ err }, 'failed to insert widget_origin_session marker')
     }
 
     // Record the success audit event — best-effort.

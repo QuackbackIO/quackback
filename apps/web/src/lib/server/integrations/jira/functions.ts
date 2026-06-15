@@ -67,6 +67,8 @@ export const getJiraConnectUrl = createServerFn({ method: 'GET' }).handler(
 async function getJiraAccessToken(integration: { secrets: unknown; config: unknown }) {
   const { decryptSecrets, encryptSecrets } = await import('../encryption')
   const { db, integrations, eq } = await import('@/lib/server/db')
+  const { logger } = await import('@/lib/server/logger')
+  const log = logger.child({ component: 'jira' })
 
   const secrets = decryptSecrets<{ accessToken: string; refreshToken?: string }>(
     integration.secrets as string
@@ -77,7 +79,7 @@ async function getJiraAccessToken(integration: { secrets: unknown; config: unkno
     const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
     const bufferMs = 5 * 60 * 1000
     if (Date.now() >= expiresAt - bufferMs) {
-      console.log('[Jira] Access token expired, refreshing...')
+      log.info('access token expired, refreshing')
       const { refreshJiraToken } = await import('./oauth')
       const { getPlatformCredentials } =
         await import('@/lib/server/domains/platform-credentials/platform-credential.service')

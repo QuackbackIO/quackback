@@ -1,5 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isValidTypeId, type UserId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-avatar' })
 
 export const Route = createFileRoute('/api/user/avatar/$userId')({
   server: {
@@ -49,7 +52,7 @@ export const Route = createFileRoute('/api/user/avatar/$userId')({
           // No avatar available
           return Response.json({ error: 'No avatar found' }, { status: 404 })
         } catch (error) {
-          console.error('Error fetching avatar:', error)
+          log.error({ err: error }, 'avatar fetch failed')
           return Response.json({ error: 'Internal server error' }, { status: 500 })
         }
       },

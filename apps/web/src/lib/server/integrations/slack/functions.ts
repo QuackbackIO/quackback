@@ -75,8 +75,10 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets } = await import('../encryption')
     const { listSlackChannels } = await import('./channels')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'slack' })
 
-    console.log(`[fn:integrations] fetchSlackChannelsFn (force=${data.force})`)
+    log.debug({ force: data.force }, 'fetching slack channels')
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -98,6 +100,6 @@ export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
 
     const channels = await listSlackChannels(secrets.accessToken, { force: data.force })
 
-    console.log(`[fn:integrations] fetchSlackChannelsFn: ${channels.length} channels`)
+    log.debug({ channel_count: channels.length }, 'fetched slack channels')
     return channels
   })

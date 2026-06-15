@@ -12,6 +12,9 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'sentiment' })
 
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
@@ -103,7 +106,7 @@ export async function analyzeSentiment(
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{}')
 
     if (!isValidSentiment(parsed.sentiment) || typeof parsed.confidence !== 'number') {
-      console.error('[Sentiment] Invalid model response:', parsed)
+      log.error({ model_response: parsed }, 'invalid sentiment model response')
       return null
     }
 
@@ -115,7 +118,7 @@ export async function analyzeSentiment(
       outputTokens: response.usage?.completion_tokens,
     }
   } catch (error) {
-    console.error('[Sentiment] OpenAI failed:', error)
+    log.error({ err: error }, 'sentiment generation failed')
     return null
   }
 }

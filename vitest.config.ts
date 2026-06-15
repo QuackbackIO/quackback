@@ -18,6 +18,9 @@ export default defineConfig({
       '**/.next/**',
       '**/e2e/**',
       '**/.output/**',
+      // Isolated git worktrees live here; they are separate checkouts with
+      // their own deps and must not be run by the parent repo's suite.
+      '**/.claude/**',
       '**/*-integration.test.ts',
       // Widget package has its own vitest.config.ts with happy-dom — run via
       // `bun run --cwd packages/widget test`. Don't double-run from the root.

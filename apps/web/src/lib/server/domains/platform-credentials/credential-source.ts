@@ -14,6 +14,9 @@
  */
 import { db, integrationPlatformCredentials, eq } from '@/lib/server/db'
 import { decryptPlatformCredentials } from '@/lib/server/integrations/encryption'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'platform-credentials' })
 
 export interface CredentialSource {
   /** Decrypted credentials for a type, or null if not configured. */
@@ -35,9 +38,9 @@ export class DbCredentialSource implements CredentialSource {
     try {
       return decryptPlatformCredentials<Record<string, string>>(row.secrets)
     } catch (error) {
-      console.error(
-        `[PlatformCredentials] Failed to decrypt credentials for ${integrationType}:`,
-        error
+      log.error(
+        { integration_type: integrationType, err: error },
+        'failed to decrypt platform credentials'
       )
       return null
     }

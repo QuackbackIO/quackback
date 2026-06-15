@@ -32,6 +32,9 @@ import {
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'users' })
 import type {
   PortalUserListParams,
   PortalUserListResult,
@@ -357,7 +360,7 @@ export async function listPortalUsers(
       hasMore: page * limit < total,
     }
   } catch (error) {
-    console.error('Error listing portal users:', error)
+    log.error({ err: error }, 'failed to list portal users')
     throw new InternalError('DATABASE_ERROR', 'Failed to list portal users', error)
   }
 }
@@ -386,7 +389,7 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
     await db.delete(principal).where(eq(principal.id, principalId))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
-    console.error('Error removing portal user:', error)
+    log.error({ err: error }, 'failed to remove portal user')
     throw new InternalError('DATABASE_ERROR', 'Failed to remove portal user', error)
   }
 }

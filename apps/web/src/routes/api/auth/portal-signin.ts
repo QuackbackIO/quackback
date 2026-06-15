@@ -1,5 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { requestEmailSignin } from '@/lib/server/auth/email-signin'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'portal-signin' })
 
 interface PortalSigninBody {
   email?: unknown
@@ -32,7 +35,7 @@ export const Route = createFileRoute('/api/auth/portal-signin')({
           await requestEmailSignin({ email: body.email, callbackURL })
           return Response.json({ ok: true })
         } catch (err) {
-          console.error('[auth] portal-signin failed:', err)
+          log.error({ err }, 'portal signin failed')
           return Response.json(
             { error: err instanceof Error ? err.message : 'Failed to send sign-in email' },
             { status: 500 }

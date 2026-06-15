@@ -2,6 +2,7 @@ import { db, eq, settings } from '@/lib/server/db'
 import { deleteObject } from '@/lib/server/storage/s3'
 import { ValidationError } from '@/lib/shared/errors'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
+import { logger } from '@/lib/server/logger'
 import type { BrandingConfig } from './settings.types'
 import {
   requireSettings,
@@ -9,6 +10,8 @@ import {
   parseJsonOrNull,
   invalidateSettingsCache,
 } from './settings.helpers'
+
+const log = logger.child({ component: 'settings-media' })
 
 // ============================================================================
 // Branding Config
@@ -19,13 +22,13 @@ export async function getBrandingConfig(): Promise<BrandingConfig> {
     const org = await requireSettings()
     return parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
   } catch (error) {
-    console.error(`[domain:settings] getBrandingConfig failed:`, error)
+    log.error({ err: error }, 'get branding config failed')
     wrapDbError('fetch branding config', error)
   }
 }
 
 export async function updateBrandingConfig(config: BrandingConfig): Promise<BrandingConfig> {
-  console.log(`[domain:settings] updateBrandingConfig`)
+  log.info('update branding config')
   try {
     // Setting custom theme colors (light/dark overrides) is gated.
     // Preset and themeMode swaps don't count as colour customisation —
@@ -44,7 +47,7 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
     await invalidateSettingsCache()
     return config
   } catch (error) {
-    console.error(`[domain:settings] updateBrandingConfig failed:`, error)
+    log.error({ err: error }, 'update branding config failed')
     wrapDbError('update branding config', error)
   }
 }
@@ -58,13 +61,13 @@ export async function getCustomCss(): Promise<string> {
     const org = await requireSettings()
     return org.customCss ?? ''
   } catch (error) {
-    console.error(`[domain:settings] getCustomCss failed:`, error)
+    log.error({ err: error }, 'get custom css failed')
     wrapDbError('fetch custom CSS', error)
   }
 }
 
 export async function updateCustomCss(css: string): Promise<string> {
-  console.log(`[domain:settings] updateCustomCss`)
+  log.info('update custom css')
   try {
     // Clearing CSS (empty string) is always allowed so a workspace whose
     // tier just stopped including custom CSS can wipe it without being
@@ -79,7 +82,7 @@ export async function updateCustomCss(css: string): Promise<string> {
     await invalidateSettingsCache()
     return css
   } catch (error) {
-    console.error(`[domain:settings] updateCustomCss failed:`, error)
+    log.error({ err: error }, 'update custom css failed')
     wrapDbError('update custom CSS', error)
   }
 }
@@ -92,7 +95,7 @@ export async function updateCustomCss(css: string): Promise<string> {
  * Save logo S3 key and delete old image if exists.
  */
 export async function saveLogoKey(key: string): Promise<{ success: true; key: string }> {
-  console.log(`[domain:settings] saveLogoKey`)
+  log.info('save logo key')
   try {
     const org = await requireSettings()
 
@@ -101,7 +104,7 @@ export async function saveLogoKey(key: string): Promise<{ success: true; key: st
       try {
         await deleteObject(org.logoKey)
       } catch (err) {
-        console.warn(`[domain:settings] Failed to delete old logo S3 object ${org.logoKey}:`, err)
+        log.warn({ err, logo_key: org.logoKey }, 'failed to delete old logo s3 object')
       }
     }
 
@@ -110,7 +113,7 @@ export async function saveLogoKey(key: string): Promise<{ success: true; key: st
 
     return { success: true, key }
   } catch (error) {
-    console.error(`[domain:settings] saveLogoKey failed:`, error)
+    log.error({ err: error }, 'save logo key failed')
     wrapDbError('save logo key', error)
   }
 }
@@ -119,7 +122,7 @@ export async function saveLogoKey(key: string): Promise<{ success: true; key: st
  * Delete logo from S3 and clear the key.
  */
 export async function deleteLogoKey(): Promise<{ success: true }> {
-  console.log(`[domain:settings] deleteLogoKey`)
+  log.info('delete logo key')
   try {
     const org = await requireSettings()
 
@@ -127,7 +130,7 @@ export async function deleteLogoKey(): Promise<{ success: true }> {
       try {
         await deleteObject(org.logoKey)
       } catch (err) {
-        console.warn(`[domain:settings] Failed to delete logo S3 object ${org.logoKey}:`, err)
+        log.warn({ err, logo_key: org.logoKey }, 'failed to delete logo s3 object')
       }
     }
 
@@ -136,7 +139,7 @@ export async function deleteLogoKey(): Promise<{ success: true }> {
 
     return { success: true }
   } catch (error) {
-    console.error(`[domain:settings] deleteLogoKey failed:`, error)
+    log.error({ err: error }, 'delete logo key failed')
     wrapDbError('delete logo key', error)
   }
 }
@@ -145,7 +148,7 @@ export async function deleteLogoKey(): Promise<{ success: true }> {
  * Save favicon S3 key and delete old image if exists.
  */
 export async function saveFaviconKey(key: string): Promise<{ success: true; key: string }> {
-  console.log(`[domain:settings] saveFaviconKey`)
+  log.info('save favicon key')
   try {
     const org = await requireSettings()
 
@@ -153,10 +156,7 @@ export async function saveFaviconKey(key: string): Promise<{ success: true; key:
       try {
         await deleteObject(org.faviconKey)
       } catch (err) {
-        console.warn(
-          `[domain:settings] Failed to delete old favicon S3 object ${org.faviconKey}:`,
-          err
-        )
+        log.warn({ err, favicon_key: org.faviconKey }, 'failed to delete old favicon s3 object')
       }
     }
 
@@ -165,7 +165,7 @@ export async function saveFaviconKey(key: string): Promise<{ success: true; key:
 
     return { success: true, key }
   } catch (error) {
-    console.error(`[domain:settings] saveFaviconKey failed:`, error)
+    log.error({ err: error }, 'save favicon key failed')
     wrapDbError('save favicon key', error)
   }
 }
@@ -174,7 +174,7 @@ export async function saveFaviconKey(key: string): Promise<{ success: true; key:
  * Delete favicon from S3 and clear the key.
  */
 export async function deleteFaviconKey(): Promise<{ success: true }> {
-  console.log(`[domain:settings] deleteFaviconKey`)
+  log.info('delete favicon key')
   try {
     const org = await requireSettings()
 
@@ -182,7 +182,7 @@ export async function deleteFaviconKey(): Promise<{ success: true }> {
       try {
         await deleteObject(org.faviconKey)
       } catch (err) {
-        console.warn(`[domain:settings] Failed to delete favicon S3 object ${org.faviconKey}:`, err)
+        log.warn({ err, favicon_key: org.faviconKey }, 'failed to delete favicon s3 object')
       }
     }
 
@@ -191,7 +191,7 @@ export async function deleteFaviconKey(): Promise<{ success: true }> {
 
     return { success: true }
   } catch (error) {
-    console.error(`[domain:settings] deleteFaviconKey failed:`, error)
+    log.error({ err: error }, 'delete favicon key failed')
     wrapDbError('delete favicon key', error)
   }
 }
@@ -200,7 +200,7 @@ export async function deleteFaviconKey(): Promise<{ success: true }> {
  * Save header logo S3 key and delete old image if exists.
  */
 export async function saveHeaderLogoKey(key: string): Promise<{ success: true; key: string }> {
-  console.log(`[domain:settings] saveHeaderLogoKey`)
+  log.info('save header logo key')
   try {
     const org = await requireSettings()
 
@@ -208,9 +208,9 @@ export async function saveHeaderLogoKey(key: string): Promise<{ success: true; k
       try {
         await deleteObject(org.headerLogoKey)
       } catch (err) {
-        console.warn(
-          `[domain:settings] Failed to delete old header logo S3 object ${org.headerLogoKey}:`,
-          err
+        log.warn(
+          { err, header_logo_key: org.headerLogoKey },
+          'failed to delete old header logo s3 object'
         )
       }
     }
@@ -220,7 +220,7 @@ export async function saveHeaderLogoKey(key: string): Promise<{ success: true; k
 
     return { success: true, key }
   } catch (error) {
-    console.error(`[domain:settings] saveHeaderLogoKey failed:`, error)
+    log.error({ err: error }, 'save header logo key failed')
     wrapDbError('save header logo key', error)
   }
 }
@@ -229,7 +229,7 @@ export async function saveHeaderLogoKey(key: string): Promise<{ success: true; k
  * Delete header logo from S3 and clear the key.
  */
 export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
-  console.log(`[domain:settings] deleteHeaderLogoKey`)
+  log.info('delete header logo key')
   try {
     const org = await requireSettings()
 
@@ -237,9 +237,9 @@ export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
       try {
         await deleteObject(org.headerLogoKey)
       } catch (err) {
-        console.warn(
-          `[domain:settings] Failed to delete header logo S3 object ${org.headerLogoKey}:`,
-          err
+        log.warn(
+          { err, header_logo_key: org.headerLogoKey },
+          'failed to delete header logo s3 object'
         )
       }
     }
@@ -249,7 +249,7 @@ export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
 
     return { success: true }
   } catch (error) {
-    console.error(`[domain:settings] deleteHeaderLogoKey failed:`, error)
+    log.error({ err: error }, 'delete header logo key failed')
     wrapDbError('delete header logo key', error)
   }
 }
@@ -261,7 +261,7 @@ export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
 const VALID_HEADER_MODES = ['logo_and_name', 'logo_only', 'custom_logo'] as const
 
 export async function updateHeaderDisplayMode(mode: string): Promise<string> {
-  console.log(`[domain:settings] updateHeaderDisplayMode: mode=${mode}`)
+  log.info({ mode }, 'update header display mode')
   if (!VALID_HEADER_MODES.includes(mode as (typeof VALID_HEADER_MODES)[number])) {
     throw new ValidationError('VALIDATION_ERROR', `Invalid header display mode: ${mode}`)
   }
@@ -277,13 +277,13 @@ export async function updateHeaderDisplayMode(mode: string): Promise<string> {
     await invalidateSettingsCache()
     return updated?.headerDisplayMode || 'logo_and_name'
   } catch (error) {
-    console.error(`[domain:settings] updateHeaderDisplayMode failed:`, error)
+    log.error({ err: error }, 'update header display mode failed')
     wrapDbError('update header display mode', error)
   }
 }
 
 export async function updateHeaderDisplayName(name: string | null): Promise<string | null> {
-  console.log(`[domain:settings] updateHeaderDisplayName`)
+  log.info('update header display name')
   try {
     const org = await requireSettings()
     const sanitizedName = name?.trim() || null
@@ -297,13 +297,13 @@ export async function updateHeaderDisplayName(name: string | null): Promise<stri
     await invalidateSettingsCache()
     return updated?.headerDisplayName ?? null
   } catch (error) {
-    console.error(`[domain:settings] updateHeaderDisplayName failed:`, error)
+    log.error({ err: error }, 'update header display name failed')
     wrapDbError('update header display name', error)
   }
 }
 
 export async function updateWorkspaceName(name: string): Promise<string> {
-  console.log(`[domain:settings] updateWorkspaceName`)
+  log.info('update workspace name')
   try {
     await assertNotManaged('workspace.name')
     const org = await requireSettings()
@@ -318,7 +318,7 @@ export async function updateWorkspaceName(name: string): Promise<string> {
     await invalidateSettingsCache()
     return updated?.name ?? sanitizedName
   } catch (error) {
-    console.error(`[domain:settings] updateWorkspaceName failed:`, error)
+    log.error({ err: error }, 'update workspace name failed')
     wrapDbError('update workspace name', error)
   }
 }

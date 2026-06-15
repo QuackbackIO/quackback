@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildGitLabIssue } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'gitlab' })
 
 const GITLAB_API = 'https://gitlab.com/api/v4'
 
@@ -28,7 +31,7 @@ export const gitlabHook: HookHandler = {
     const { channelId: projectId } = target as GitLabTarget
     const { accessToken, rootUrl } = config as GitLabConfig
 
-    console.log(`[GitLab] Processing ${event.type} → project ${projectId}`)
+    log.debug({ event_type: event.type, project_id: projectId }, 'processing event')
 
     const { title, description } = buildGitLabIssue(event, rootUrl)
 
@@ -50,7 +53,7 @@ export const gitlabHook: HookHandler = {
         const status = response.status
 
         if (status === 401 || status === 403) {
-          console.error(`[GitLab] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status_code: status, project_id: projectId, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect GitLab.`,
@@ -59,11 +62,11 @@ export const gitlabHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.warn(`[GitLab] ⚠️ Rate limited: ${errorBody}`)
+          log.warn({ status_code: status, project_id: projectId, body: errorBody }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[GitLab] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status_code: status, project_id: projectId, body: errorBody }, 'api error')
         return {
           success: false,
           error: `GitLab API error: ${status}`,
@@ -72,12 +75,12 @@ export const gitlabHook: HookHandler = {
       }
 
       const data = (await response.json()) as { iid: number; web_url: string }
-      console.log(`[GitLab] ✅ Created issue #${data.iid}`)
+      log.info({ issue_iid: data.iid, project_id: projectId }, 'issue created')
 
       return { success: true, externalId: String(data.iid), externalUrl: data.web_url }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[GitLab] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error, project_id: projectId }, 'issue creation failed')
 
       return {
         success: false,

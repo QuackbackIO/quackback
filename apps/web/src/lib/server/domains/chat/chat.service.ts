@@ -81,6 +81,9 @@ import type {
   SendVisitorMessageResult,
   SendAgentMessageResult,
 } from './chat.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat' })
 
 /** Actor for system-initiated events (auto-routing): no principal, service type. */
 function systemActor(): Actor {
@@ -788,7 +791,7 @@ async function emitSystemMessage(
     const messageDTO = toMessageDTO(message, null)
     publishChatEvent(conversationId, { kind: 'message', conversationId, message: messageDTO })
   } catch (err) {
-    console.warn('[chat] emitSystemMessage failed:', (err as Error).message)
+    log.warn({ err }, 'emit system message failed')
   }
 }
 
@@ -950,7 +953,7 @@ export async function requeueUnansweredOnAgentOffline(
       if (current) publishConversationUpdate(current.id, await conversationToDTO(current, 'agent'))
     }
   } catch (err) {
-    console.warn('[chat:routing] requeueUnansweredOnAgentOffline failed:', (err as Error).message)
+    log.warn({ err }, 'requeue unanswered on agent offline failed')
   }
 }
 

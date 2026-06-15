@@ -60,8 +60,10 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
     const { db, integrations, eq } = await import('@/lib/server/db')
     const { decryptSecrets } = await import('../encryption')
     const { listNotionDatabases } = await import('./databases')
+    const { logger } = await import('@/lib/server/logger')
+    const log = logger.child({ component: 'notion' })
 
-    console.log(`[fn:integrations] fetchNotionDatabasesFn`)
+    log.debug('fetch notion databases')
     await requireAuth({ roles: ['admin'] })
 
     const integration = await db.query.integrations.findFirst({
@@ -83,7 +85,7 @@ export const fetchNotionDatabasesFn = createServerFn({ method: 'GET' }).handler(
 
     const databases = await listNotionDatabases(secrets.accessToken)
 
-    console.log(`[fn:integrations] fetchNotionDatabasesFn: ${databases.length} databases`)
+    log.debug({ database_count: databases.length }, 'fetched notion databases')
     return databases
   }
 )

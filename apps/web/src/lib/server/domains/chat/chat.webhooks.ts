@@ -29,6 +29,9 @@ import {
   dispatchMessageNoteCreated,
   dispatchMessageDeleted,
 } from '@/lib/server/events/dispatch'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-webhooks' })
 
 function toEventActor(actor: Actor, author?: ChatAuthorInput | null): EventActor {
   const principalId = actor.principalId ?? undefined
@@ -81,7 +84,7 @@ async function safe(label: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn()
   } catch (err) {
-    console.warn(`[chat:webhooks] ${label} failed:`, (err as Error).message)
+    log.warn({ err, label }, 'webhook failed')
   }
 }
 

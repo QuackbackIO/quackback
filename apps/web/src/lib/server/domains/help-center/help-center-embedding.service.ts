@@ -10,6 +10,9 @@ import { getOpenAI } from '@/lib/server/domains/ai/config'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import type { HelpCenterArticleId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'help-center-embedding' })
 
 const KB_EMBEDDING_DIMENSIONS = 1536
 
@@ -44,7 +47,7 @@ export async function generateKbEmbedding(text: string): Promise<number[] | null
     )
     return response.data[0]?.embedding ?? null
   } catch (error) {
-    console.error('[KB Embedding] Embedding generation failed:', error)
+    log.error({ err: error }, 'article embedding generation failed')
     return null
   }
 }

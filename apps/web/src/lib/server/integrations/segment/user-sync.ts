@@ -18,6 +18,9 @@
 
 import { timingSafeEqual, createHmac } from 'crypto'
 import type { UserSyncHandler, UserIdentifyPayload } from '../user-sync-types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'segment' })
 
 const SEGMENT_TRACKING_API = 'https://api.segment.io/v1'
 
@@ -121,7 +124,7 @@ export const segmentUserSync: UserSyncHandler = {
         const r = results[j]
         if (r.status === 'rejected') {
           batchFailures++
-          console.error(`[Segment] Failed to sync user ${batch[j].email}:`, r.reason)
+          log.error({ err: r.reason }, 'failed to sync user')
         }
       }
       totalFailures += batchFailures

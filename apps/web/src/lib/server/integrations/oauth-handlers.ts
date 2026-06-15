@@ -22,6 +22,9 @@ import {
   createCookie,
   isValidTenantDomain,
 } from './oauth'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'oauth' })
 
 const FALLBACK_URL = 'https://quackback.io'
 
@@ -203,16 +206,16 @@ export async function handleOAuthCallback(
     const successUrl = buildSettingsUrl(tenantUrl, settingsPath, integrationType, 'connected')
     return redirectResponse(successUrl, [clearCookie(cookieName, isSecureRequest(request))])
   } catch (err) {
-    console.error(`[${integrationType}] Exchange/save error:`, err)
+    log.error({ err, integration_type: integrationType }, 'oauth exchange/save failed')
 
     // If we got a token but failed to save, attempt to revoke it
     if (accessToken && definition.onDisconnect) {
       try {
         await definition.onDisconnect({ accessToken } as Record<string, unknown>, {})
       } catch (revokeErr) {
-        console.error(
-          `[${integrationType}] Token revocation after save failure also failed:`,
-          revokeErr
+        log.error(
+          { err: revokeErr, integration_type: integrationType },
+          'token revocation after save failure failed'
         )
       }
     }

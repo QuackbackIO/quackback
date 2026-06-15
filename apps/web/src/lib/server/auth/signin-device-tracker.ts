@@ -12,6 +12,9 @@
  */
 import { createHash } from 'node:crypto'
 import { getRedis } from '@/lib/server/redis'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'signin-device-tracker' })
 
 const DEVICE_SET_TTL_SECONDS = 90 * 24 * 60 * 60
 
@@ -42,7 +45,7 @@ export async function isDeviceUnseen(userId: string, fingerprint: string): Promi
     const results = await pipeline.exec()
     return Number(results?.[0]?.[1] ?? 0) === 1
   } catch (error) {
-    console.error('[signin-device-tracker] isDeviceUnseen failed; treating as known:', error)
+    log.error({ err: error }, 'isDeviceUnseen failed; treating device as known')
     return false
   }
 }
@@ -52,7 +55,7 @@ export async function markDeviceSeen(userId: string): Promise<void> {
   try {
     await getRedis().expire(key(userId), DEVICE_SET_TTL_SECONDS)
   } catch (error) {
-    console.error('[signin-device-tracker] markDeviceSeen failed:', error)
+    log.error({ err: error }, 'markDeviceSeen failed')
   }
 }
 
@@ -61,6 +64,6 @@ export async function forgetDevice(userId: string, fingerprint: string): Promise
   try {
     await getRedis().srem(key(userId), fingerprint)
   } catch (error) {
-    console.error('[signin-device-tracker] forgetDevice failed:', error)
+    log.error({ err: error }, 'forgetDevice failed')
   }
 }

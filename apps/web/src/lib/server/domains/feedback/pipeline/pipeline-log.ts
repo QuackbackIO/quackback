@@ -4,6 +4,9 @@
  */
 
 import { db, pipelineLog } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'pipeline-log' })
 
 export interface LogPipelineEventParams {
   eventType: string
@@ -27,6 +30,6 @@ export async function logPipelineEvent(params: LogPipelineEventParams): Promise<
       detail: params.detail,
     })
   } catch (err) {
-    console.warn('[pipeline-log] Failed to log event:', params.eventType, err)
+    log.warn({ err, event_type: params.eventType }, 'failed to log pipeline event')
   }
 }

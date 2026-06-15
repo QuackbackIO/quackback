@@ -6,11 +6,14 @@ import { db } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { logger } from '@/lib/server/logger'
 import {
   DEFAULT_PORTAL_CONFIG,
   PORTAL_WELCOME_CARD_TITLE_MAX,
   type PortalWelcomeCard,
 } from './settings.types'
+
+const log = logger.child({ component: 'settings-helpers' })
 
 export type SettingsRecord = NonNullable<Awaited<ReturnType<typeof db.query.settings.findFirst>>>
 
@@ -75,7 +78,7 @@ export function wrapDbError(operation: string, error: unknown): never {
 
 /** @internal */
 export async function invalidateSettingsCache(): Promise<void> {
-  console.log(`[domain:settings] Invalidating settings cache`)
+  log.info('invalidating settings cache')
   await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
 }
 

@@ -2,6 +2,9 @@ import type { IntegrationDefinition } from '../types'
 import { teamsHook } from './hook'
 import { getTeamsOAuthUrl, exchangeTeamsCode } from './oauth'
 import { teamsCatalog } from './catalog'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'teams' })
 
 export const teamsIntegration: IntegrationDefinition = {
   id: 'teams',
@@ -27,6 +30,6 @@ export const teamsIntegration: IntegrationDefinition = {
     },
   ],
   async onDisconnect() {
-    console.log('[Teams] Integration disconnected (no token revocation available)')
+    log.info('integration disconnected, no token revocation available')
   },
 }

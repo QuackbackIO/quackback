@@ -20,6 +20,9 @@
  * restrict reference skips just that row rather than failing the batch.
  */
 import { db, eq, sql, principal, session, user } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'anon-sweep' })
 
 export interface AnonSweepResult {
   /** Eligible empties found this run (bounded by batchSize). */
@@ -66,7 +69,7 @@ export async function sweepAnonymousPrincipals(opts?: {
       deleted++
     } catch (err) {
       // An unexpected referencing row (FK restrict) — leave it and move on.
-      console.warn(`[anon-sweep] skipped ${t.principal_id}: ${(err as Error).message}`)
+      log.warn({ principal_id: t.principal_id, err }, 'anon-sweep skipped principal')
     }
   }
 

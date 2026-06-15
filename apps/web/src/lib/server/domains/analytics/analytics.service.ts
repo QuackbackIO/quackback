@@ -26,6 +26,9 @@ import {
   analyticsTopPosts,
 } from '@/lib/server/db'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'analytics' })
 
 /**
  * Refresh today's row in analytics_daily_stats and the top posts snapshots.
@@ -36,7 +39,7 @@ export async function refreshAnalytics(): Promise<void> {
   const dayStart = new Date(`${today}T00:00:00.000Z`)
   const dayEnd = new Date(`${today}T23:59:59.999Z`)
 
-  console.log(`[analytics] Refreshing stats for ${today}`)
+  log.debug({ date: today }, 'refreshing analytics stats')
 
   // Run all count and groupBy queries in parallel
   const [
@@ -138,7 +141,7 @@ export async function refreshAnalytics(): Promise<void> {
   // Refresh top posts for each period
   await refreshTopPosts()
 
-  console.log(`[analytics] Refresh complete for ${today}`)
+  log.info({ date: today }, 'analytics refresh completed')
 }
 
 async function refreshTopPosts(): Promise<void> {

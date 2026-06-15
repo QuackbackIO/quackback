@@ -4,6 +4,7 @@ import { ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
+import { logger } from '@/lib/server/logger'
 import type {
   AuthConfig,
   UpdateAuthConfigInput,
@@ -41,6 +42,8 @@ import {
   mergeWelcomeCard,
   publicWelcomeCard,
 } from './settings.helpers'
+
+const log = logger.child({ component: 'settings' })
 
 async function getConfiguredAuthTypes(): Promise<Set<string>> {
   const { getConfiguredIntegrationTypes } =
@@ -120,7 +123,7 @@ export async function getAuthConfig(): Promise<AuthConfig> {
     const org = await requireSettings()
     return parseJsonConfig(org.authConfig, DEFAULT_AUTH_CONFIG)
   } catch (error) {
-    console.error(`[domain:settings] getAuthConfig failed:`, error)
+    log.error({ err: error }, 'get auth config failed')
     wrapDbError('fetch auth config', error)
   }
 }
@@ -132,7 +135,7 @@ export async function getAuthConfig(): Promise<AuthConfig> {
 const STANDARD_OAUTH_PROVIDERS = new Set(['google', 'github', 'microsoft', 'discord'])
 
 export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
-  console.log(`[domain:settings] updateAuthConfig`)
+  log.info('update auth config')
   try {
     // Managed-fields gate: refuse touching paths the config file at
     // `/etc/quackback/config.yaml` has declared. Per-key so the file
@@ -327,7 +330,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    console.error(`[domain:settings] updateAuthConfig failed:`, error)
+    log.error({ err: error }, 'update auth config failed')
     wrapDbError('update auth config', error)
   }
 }
@@ -367,11 +370,11 @@ async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>):
  * invariant honest.
  */
 export async function markSsoDetailsChanged(): Promise<void> {
-  console.log(`[domain:settings] markSsoDetailsChanged`)
+  log.info('mark sso details changed')
   try {
     await patchSsoOidc({ detailsChangedAt: new Date().toISOString() })
   } catch (error) {
-    console.error(`[domain:settings] markSsoDetailsChanged failed:`, error)
+    log.error({ err: error }, 'mark sso details changed failed')
     wrapDbError('mark sso details changed', error)
   }
 }
@@ -383,11 +386,11 @@ export async function markSsoDetailsChanged(): Promise<void> {
  * to gate enabling SSO and per-domain enforcement.
  */
 export async function markSsoTestSucceeded(): Promise<void> {
-  console.log(`[domain:settings] markSsoTestSucceeded`)
+  log.info('mark sso test succeeded')
   try {
     await patchSsoOidc({ lastSuccessfulTestAt: new Date().toISOString() })
   } catch (error) {
-    console.error(`[domain:settings] markSsoTestSucceeded failed:`, error)
+    log.error({ err: error }, 'mark sso test succeeded failed')
     wrapDbError('mark sso test succeeded', error)
   }
 }
@@ -438,7 +441,7 @@ function generateVerificationToken(): string {
  * pending/verified state and token). Caps at MAX_VERIFIED_DOMAINS.
  */
 export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain> {
-  console.log(`[domain:settings] insertVerifiedDomain name=${name}`)
+  log.info({ name }, 'insert verified domain')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -474,14 +477,14 @@ export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain
     }
     return rowToVerifiedDomain(inserted.row)
   } catch (error) {
-    console.error(`[domain:settings] insertVerifiedDomain failed:`, error)
+    log.error({ err: error }, 'insert verified domain failed')
     wrapDbError('insert verified domain', error)
   }
 }
 
 /** Remove a verified-domain row by id. No-op if the row doesn't exist. */
 export async function removeVerifiedDomain(id: `domain_${string}`): Promise<void> {
-  console.log(`[domain:settings] removeVerifiedDomain id=${id}`)
+  log.info({ id }, 'remove verified domain')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -500,7 +503,7 @@ export async function removeVerifiedDomain(id: `domain_${string}`): Promise<void
       await invalidateSettingsCache()
     }
   } catch (error) {
-    console.error(`[domain:settings] removeVerifiedDomain failed:`, error)
+    log.error({ err: error }, 'remove verified domain failed')
     wrapDbError('remove verified domain', error)
   }
 }
@@ -516,7 +519,7 @@ export async function stampVerifiedDomain(input: {
   expectedToken: string
   verifiedAt: string
 }): Promise<VerifiedDomain> {
-  console.log(`[domain:settings] stampVerifiedDomain id=${input.id}`)
+  log.info({ id: input.id }, 'stamp verified domain')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -544,7 +547,7 @@ export async function stampVerifiedDomain(input: {
     await invalidateSettingsCache()
     return rowToVerifiedDomain(updated)
   } catch (error) {
-    console.error(`[domain:settings] stampVerifiedDomain failed:`, error)
+    log.error({ err: error }, 'stamp verified domain failed')
     wrapDbError('stamp verified domain', error)
   }
 }
@@ -556,7 +559,7 @@ export async function setVerifiedDomainEnforced(
   id: `domain_${string}`,
   enforced: boolean
 ): Promise<VerifiedDomain> {
-  console.log(`[domain:settings] setVerifiedDomainEnforced id=${id} enforced=${enforced}`)
+  log.info({ id, enforced }, 'set verified domain enforced')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -577,7 +580,7 @@ export async function setVerifiedDomainEnforced(
     await invalidateSettingsCache()
     return rowToVerifiedDomain(updated)
   } catch (error) {
-    console.error(`[domain:settings] setVerifiedDomainEnforced failed:`, error)
+    log.error({ err: error }, 'set verified domain enforced failed')
     wrapDbError('set verified domain enforced', error)
   }
 }
@@ -587,7 +590,7 @@ export async function listVerifiedDomains(): Promise<VerifiedDomain[]> {
     const rows = await db.select().from(ssoVerifiedDomain).orderBy(ssoVerifiedDomain.createdAt)
     return rows.map(rowToVerifiedDomain)
   } catch (error) {
-    console.error(`[domain:settings] listVerifiedDomains failed:`, error)
+    log.error({ err: error }, 'list verified domains failed')
     wrapDbError('list verified domains', error)
   }
 }
@@ -597,13 +600,13 @@ export async function getPortalConfig(): Promise<PortalConfig> {
     const org = await requireSettings()
     return parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
   } catch (error) {
-    console.error(`[domain:settings] getPortalConfig failed:`, error)
+    log.error({ err: error }, 'get portal config failed')
     wrapDbError('fetch portal config', error)
   }
 }
 
 export async function updatePortalConfig(input: UpdatePortalConfigInput): Promise<PortalConfig> {
-  console.log(`[domain:settings] updatePortalConfig`)
+  log.info('update portal config')
   try {
     const normalizedWelcome = normalizeWelcomeCardInput(input.welcomeCard)
     const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
@@ -649,7 +652,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    console.error(`[domain:settings] updatePortalConfig failed:`, error)
+    log.error({ err: error }, 'update portal config failed')
     wrapDbError('update portal config', error)
   }
 }
@@ -659,7 +662,7 @@ export async function getDeveloperConfig(): Promise<DeveloperConfig> {
     const org = await requireSettings()
     return parseJsonConfig(org.developerConfig, DEFAULT_DEVELOPER_CONFIG)
   } catch (error) {
-    console.error(`[domain:settings] getDeveloperConfig failed:`, error)
+    log.error({ err: error }, 'get developer config failed')
     wrapDbError('fetch developer config', error)
   }
 }
@@ -667,7 +670,7 @@ export async function getDeveloperConfig(): Promise<DeveloperConfig> {
 export async function updateDeveloperConfig(
   input: UpdateDeveloperConfigInput
 ): Promise<DeveloperConfig> {
-  console.log(`[domain:settings] updateDeveloperConfig`)
+  log.info('update developer config')
   try {
     // Tier gate: refuse mcpEnabled=true when mcpServer feature is off.
     // No-op in OSS. Disabling MCP is always allowed (no upgrade required).
@@ -686,7 +689,7 @@ export async function updateDeveloperConfig(
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    console.error(`[domain:settings] updateDeveloperConfig failed:`, error)
+    log.error({ err: error }, 'update developer config failed')
     wrapDbError('update developer config', error)
   }
 }
@@ -696,7 +699,7 @@ export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
     const org = await requireSettings()
     return parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
   } catch (error) {
-    console.error(`[domain:settings] getHelpCenterConfig failed:`, error)
+    log.error({ err: error }, 'get help center config failed')
     wrapDbError('fetch help center config', error)
   }
 }
@@ -704,7 +707,7 @@ export async function getHelpCenterConfig(): Promise<HelpCenterConfig> {
 export async function updateHelpCenterConfig(
   input: Partial<HelpCenterConfig>
 ): Promise<HelpCenterConfig> {
-  console.log(`[domain:settings] updateHelpCenterConfig`)
+  log.info('update help center config')
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
@@ -716,7 +719,7 @@ export async function updateHelpCenterConfig(
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    console.error(`[domain:settings] updateHelpCenterConfig failed:`, error)
+    log.error({ err: error }, 'update help center config failed')
     wrapDbError('update help center config', error)
   }
 }
@@ -740,7 +743,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
       openSignup: authConfig.openSignup,
     }
   } catch (error) {
-    console.error(`[domain:settings] getPublicAuthConfig failed:`, error)
+    log.error({ err: error }, 'get public auth config failed')
     wrapDbError('fetch public auth config', error)
   }
 }
@@ -772,7 +775,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       },
     }
   } catch (error) {
-    console.error(`[domain:settings] getPublicPortalConfig failed:`, error)
+    log.error({ err: error }, 'get public portal config failed')
     wrapDbError('fetch public portal config', error)
   }
 }
@@ -784,7 +787,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
   try {
     const cached = await cacheGet<TenantSettings>(CACHE_KEYS.TENANT_SETTINGS)
     if (cached) {
-      console.log(`[domain:settings] getTenantSettings: cache hit`)
+      log.debug('tenant settings cache hit')
       return cached
     }
 
@@ -883,7 +886,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     await cacheSet(CACHE_KEYS.TENANT_SETTINGS, result, 3600)
     return result
   } catch (error) {
-    console.error(`[domain:settings] getTenantSettings failed:`, error)
+    log.error({ err: error }, 'get tenant settings failed')
     wrapDbError('fetch settings with all configs', error)
   }
 }

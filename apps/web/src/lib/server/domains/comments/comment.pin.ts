@@ -10,6 +10,9 @@ import { type CommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'comment-pin' })
 
 /**
  * Restore a soft-deleted comment
@@ -22,7 +25,7 @@ export async function restoreComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  console.log(`[domain:comments] restoreComment: commentId=${commentId}`)
+  log.info({ comment_id: commentId }, 'restore comment')
 
   if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can restore comments')
@@ -97,7 +100,7 @@ export async function canPinComment(commentId: CommentId): Promise<{
   canPin: boolean
   reason?: string
 }> {
-  console.log(`[domain:comments] canPinComment: commentId=${commentId}`)
+  log.debug({ comment_id: commentId }, 'can pin comment check')
   const comment = await db.query.comments.findFirst({
     where: eq(comments.id, commentId),
   })
@@ -140,7 +143,7 @@ export async function pinComment(
   commentId: CommentId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<{ postId: PostId }> {
-  console.log(`[domain:comments] pinComment: commentId=${commentId}`)
+  log.info({ comment_id: commentId }, 'pin comment')
   // Only team members can pin comments
   if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can pin comments')
@@ -182,7 +185,7 @@ export async function unpinComment(
   postId: PostId,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<void> {
-  console.log(`[domain:comments] unpinComment: postId=${postId}`)
+  log.info({ post_id: postId }, 'unpin comment')
   // Only team members can unpin comments
   if (!isTeamMember(actor.role)) {
     throw new ForbiddenError('UNAUTHORIZED', 'Only team members can unpin comments')

@@ -1,6 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { hybridSearch } from '@/lib/server/domains/help-center/help-center-search.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'widget-kb-search' })
 
 export const Route = createFileRoute('/api/widget/kb-search')({
   server: {
@@ -34,7 +37,7 @@ export const Route = createFileRoute('/api/widget/kb-search')({
 
           return Response.json({ data: { articles } }, { headers: corsHeaders() })
         } catch (error) {
-          console.error('[widget:kb-search] Error:', error)
+          log.error({ err: error }, 'kb search failed')
           return Response.json(
             { error: { code: 'SERVER_ERROR', message: 'Search failed' } },
             { status: 500, headers: corsHeaders() }

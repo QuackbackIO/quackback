@@ -1,4 +1,7 @@
 import type { ReconcileDeps } from './reconciler'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'config-report-status' })
 
 /**
  * Build the post-reconcile status reporter for `ReconcileDeps`.
@@ -52,7 +55,7 @@ export function makeReportStatus(): NonNullable<ReconcileDeps['reportStatus']> {
           throw new Error(`status ${res.status}`, { cause: firstErr })
         }
       } catch (retryErr) {
-        console.error('[config-file] status report failed after retry:', retryErr)
+        log.error({ err: retryErr }, 'status report failed after retry')
       }
     }
   }

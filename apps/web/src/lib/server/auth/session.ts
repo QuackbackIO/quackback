@@ -2,6 +2,9 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { UserId, SessionId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal as principalTable, eq } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth-session' })
 
 export type PrincipalType = 'user' | 'anonymous' | 'service'
 
@@ -29,7 +32,7 @@ export interface Session {
 }
 
 export async function getSession(): Promise<Session | null> {
-  console.log(`[fn:auth] getSession`)
+  log.debug('get session')
   try {
     const session = await auth.api.getSession({
       headers: getRequestHeaders(),
@@ -67,7 +70,7 @@ export async function getSession(): Promise<Session | null> {
       },
     }
   } catch (error) {
-    console.error(`[fn:auth] getSession failed:`, error)
+    log.error({ err: error }, 'get session failed')
     throw error
   }
 }

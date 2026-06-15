@@ -19,6 +19,9 @@ import {
   InternalError,
 } from '@/lib/shared/errors'
 import type { Status, CreateStatusInput, UpdateStatusInput } from './status.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'statuses' })
 
 /**
  * Atomically set a status as default, unsetting all others in a single query.
@@ -38,7 +41,7 @@ async function setStatusAsDefaultAtomic(statusId: StatusId): Promise<void> {
  * Create a new status
  */
 export async function createStatus(input: CreateStatusInput): Promise<Status> {
-  console.log(`[domain:statuses] createStatus: slug=${input.slug}`)
+  log.debug({ slug: input.slug }, 'create status')
   // Validate input
   if (!input.name?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Name is required')
@@ -96,7 +99,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
  * Update an existing status
  */
 export async function updateStatus(id: StatusId, input: UpdateStatusInput): Promise<Status> {
-  console.log(`[domain:statuses] updateStatus: id=${id}`)
+  log.debug({ status_id: id }, 'update status')
   // Get existing status (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
@@ -155,7 +158,7 @@ export async function updateStatus(id: StatusId, input: UpdateStatusInput): Prom
  * Sets deletedAt timestamp instead of removing the row.
  */
 export async function deleteStatus(id: StatusId): Promise<void> {
-  console.log(`[domain:statuses] deleteStatus: id=${id}`)
+  log.debug({ status_id: id }, 'delete status')
   // Get existing status (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: and(eq(postStatuses.id, id), isNull(postStatuses.deletedAt)),
@@ -237,7 +240,7 @@ export async function listStatuses(): Promise<Status[]> {
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderStatuses(ids: StatusId[]): Promise<void> {
-  console.log(`[domain:statuses] reorderStatuses: count=${ids?.length ?? 0}`)
+  log.debug({ count: ids?.length ?? 0 }, 'reorder statuses')
   // Validate input
   if (!ids || ids.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'Status IDs are required')
@@ -261,7 +264,7 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
  * Set a status as the default for new posts
  */
 export async function setDefaultStatus(id: StatusId): Promise<Status> {
-  console.log(`[domain:statuses] setDefaultStatus: id=${id}`)
+  log.debug({ status_id: id }, 'set default status')
   // Get existing status to verify it exists (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
@@ -319,7 +322,7 @@ export async function listPublicStatuses(): Promise<Status[]> {
       orderBy: [asc(postStatuses.category), asc(postStatuses.position)],
     })
   } catch (error) {
-    console.error(`[domain:statuses] listPublicStatuses failed:`, error)
+    log.error({ err: error }, 'list public statuses failed')
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to fetch statuses: ${error instanceof Error ? error.message : 'Unknown error'}`,

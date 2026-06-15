@@ -7,7 +7,10 @@
 import { db, eq, feedbackSources } from '@/lib/server/db'
 import { sql } from 'drizzle-orm'
 import { hashCode } from '@/lib/server/utils'
+import { logger } from '@/lib/server/logger'
 import type { IntegrationId } from '@quackback/ids'
+
+const log = logger.child({ component: 'slack' })
 
 export async function ensureSlackFeedbackSource(integrationId: IntegrationId): Promise<void> {
   await db.transaction(async (tx) => {
@@ -40,6 +43,6 @@ export async function ensureSlackFeedbackSource(integrationId: IntegrationId): P
       config: {},
     })
 
-    console.log('[Slack] Created feedback source for integration', integrationId)
+    log.info({ integration_id: integrationId }, 'created feedback source')
   })
 }

@@ -48,6 +48,9 @@ import type {
   PostWithDetails,
 } from './post.types'
 import type { CommentTreeNode } from '@/lib/shared'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'post-merge' })
 
 /**
  * Merge a duplicate post into a canonical post.
@@ -216,9 +219,7 @@ function schedulePostMergeRecheck(canonicalPostId: PostId): void {
     handler: '__post_merge_recheck__',
     delayMs: 3000,
     payload: { postId: canonicalPostId },
-  }).catch((err) =>
-    console.error(`[PostMerge] Failed to schedule recheck for ${canonicalPostId}:`, err)
-  )
+  }).catch((err) => log.error({ err, post_id: canonicalPostId }, 'failed to schedule merge recheck'))
 }
 
 /**

@@ -11,6 +11,9 @@ import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
 import { db, principal, eq } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth-helpers' })
 
 // Type alias for session result
 type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>
@@ -47,7 +50,7 @@ async function getSessionDirect(): Promise<SessionResult | null> {
   try {
     return await auth.api.getSession({ headers: getRequestHeaders() })
   } catch (error) {
-    console.error('[auth] Failed to get session:', error)
+    log.error({ err: error }, 'get session failed')
     return null
   }
 }
@@ -89,7 +92,7 @@ export interface AuthContext {
  * const auth = await requireAuth()
  */
 export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthContext> {
-  console.log(`[fn:auth-helpers] requireAuth: roles=${options?.roles?.join(',') ?? 'any'}`)
+  log.debug({ roles: options?.roles }, 'require auth')
   try {
     const session = await getSessionDirect()
     if (!session?.user) {
@@ -143,7 +146,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       },
     }
   } catch (error) {
-    console.error(`[fn:auth-helpers] requireAuth failed:`, error)
+    log.error({ err: error }, 'require auth failed')
     throw error
   }
 }
@@ -156,7 +159,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
  * who don't have one (e.g., users who signed up via OTP).
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
-  console.log(`[fn:auth-helpers] getOptionalAuth`)
+  log.debug('get optional auth')
   try {
     const session = await getSessionDirect()
     if (!session?.user) {
@@ -210,7 +213,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       },
     }
   } catch (error) {
-    console.error(`[fn:auth-helpers] getOptionalAuth failed:`, error)
+    log.error({ err: error }, 'get optional auth failed')
     throw error
   }
 }

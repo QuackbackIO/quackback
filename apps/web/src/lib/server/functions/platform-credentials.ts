@@ -13,6 +13,9 @@ import {
   arePlatformCredentialsManaged,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import type { PlatformCredentialField } from '@/lib/server/integrations/types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'platform-credentials' })
 
 const savePlatformCredentialsSchema = z.object({
   integrationType: z.string().min(1),
@@ -33,9 +36,7 @@ const fetchPlatformCredentialsMaskedSchema = z.object({
 export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(savePlatformCredentialsSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:platform-credentials] savePlatformCredentialsFn: integrationType=${data.integrationType}`
-    )
+    log.debug({ integration_type: data.integrationType }, 'save platform credentials')
     try {
       const auth = await requireAuth({ roles: ['admin'] })
 
@@ -73,7 +74,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:platform-credentials] savePlatformCredentialsFn failed:`, error)
+      log.error({ err: error }, 'save platform credentials failed')
       throw error
     }
   })
@@ -84,9 +85,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
 export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .inputValidator(deletePlatformCredentialsSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:platform-credentials] deletePlatformCredentialsFn: integrationType=${data.integrationType}`
-    )
+    log.debug({ integration_type: data.integrationType }, 'delete platform credentials')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -94,7 +93,7 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:platform-credentials] deletePlatformCredentialsFn failed:`, error)
+      log.error({ err: error }, 'delete platform credentials failed')
       throw error
     }
   })
@@ -106,9 +105,7 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
 export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' })
   .inputValidator(fetchPlatformCredentialsMaskedSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:platform-credentials] fetchPlatformCredentialsMaskedFn: integrationType=${data.integrationType}`
-    )
+    log.debug({ integration_type: data.integrationType }, 'fetch masked platform credentials')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -150,7 +147,7 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
         managed: arePlatformCredentialsManaged(data.integrationType),
       }
     } catch (error) {
-      console.error(`[fn:platform-credentials] fetchPlatformCredentialsMaskedFn failed:`, error)
+      log.error({ err: error }, 'fetch masked platform credentials failed')
       throw error
     }
   })

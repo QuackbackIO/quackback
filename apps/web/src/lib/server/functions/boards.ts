@@ -18,12 +18,15 @@ import {
 } from '@/lib/server/domains/boards/board.service'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { boardAccessSchema, boardPresetSchema, accessForPreset } from '@/lib/shared/schemas/boards'
+import { logger } from '@/lib/server/logger'
 
 // Re-export for back-compat: existing test imports `boardAccessSchema`
 // from '../boards'. The actual definition lives in @/lib/shared/schemas/boards
 // alongside the other board schemas, keeping it out of the client → server
 // import-protection chain.
 export { boardAccessSchema }
+
+const log = logger.child({ component: 'boards' })
 
 // ============================================
 // Schemas
@@ -108,11 +111,11 @@ function serializeBoard(b: Awaited<ReturnType<typeof listBoards>>[number]) {
  * List all boards for the authenticated user's workspace
  */
 export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:boards] fetchBoards`)
+  log.debug({}, 'fetch boards')
   await requireAuth({ roles: ['admin', 'member'] })
 
   const boards = await listBoards()
-  console.log(`[fn:boards] fetchBoards: count=${boards.length}`)
+  log.debug({ count: boards.length }, 'fetch boards')
   return boards.map(serializeBoard)
 })
 
@@ -122,11 +125,11 @@ export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchBoardFn = createServerFn({ method: 'GET' })
   .inputValidator(getBoardSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] fetchBoard: id=${data.id}`)
+    log.debug({ board_id: data.id }, 'fetch board')
     await requireAuth({ roles: ['admin', 'member'] })
 
     const board = await getBoardById(data.id as BoardId)
-    console.log(`[fn:boards] fetchBoard: found=${!!board}`)
+    log.debug({ found: !!board }, 'fetch board')
     return serializeBoard(board)
   })
 
@@ -140,7 +143,7 @@ export const fetchBoardFn = createServerFn({ method: 'GET' })
 export const createBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] createBoardFn: name=${data.name} preset=${data.preset}`)
+    log.debug({ name: data.name, preset: data.preset }, 'create board')
     await requireAuth({ roles: ['admin', 'member'] })
 
     // Map the binary preset choice (Public/Private) into a BoardAccess
@@ -152,7 +155,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
       description: data.description,
       access: accessForPreset(data.preset),
     })
-    console.log(`[fn:boards] createBoardFn: id=${board.id}`)
+    log.info({ board_id: board.id }, 'board created')
     return serializeBoard(board)
   })
 
@@ -167,7 +170,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
 export const updateBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(updateBoardSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] updateBoardFn: id=${data.id}`)
+    log.debug({ board_id: data.id }, 'update board')
     await requireAuth({ roles: ['admin', 'member'] })
 
     const board = await updateBoard(data.id as BoardId, {
@@ -176,7 +179,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
       settings: data.settings as BoardSettings | undefined,
     })
 
-    console.log(`[fn:boards] updateBoardFn: updated id=${board.id}`)
+    log.info({ board_id: board.id }, 'board updated')
     return serializeBoard(board)
   })
 
@@ -186,11 +189,11 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
 export const deleteBoardFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteBoardSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] deleteBoardFn: id=${data.id}`)
+    log.debug({ board_id: data.id }, 'delete board')
     await requireAuth({ roles: ['admin', 'member'] })
 
     await deleteBoard(data.id as BoardId)
-    console.log(`[fn:boards] deleteBoardFn: deleted id=${data.id}`)
+    log.info({ board_id: data.id }, 'board deleted')
     return { id: data.id }
   })
 
@@ -210,7 +213,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
 export const createBoardsBatchFn = createServerFn({ method: 'POST' })
   .inputValidator(createBoardsBatchSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:boards] createBoardsBatchFn: count=${data.boards.length}`)
+    log.debug({ count: data.boards.length }, 'create boards batch')
     await requireAuth({ roles: ['admin', 'member'] })
 
     // Pre-flight against the tier limit so we never call createBoard
@@ -243,13 +246,14 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
     }
 
     if (data.boards.length === 0) {
-      console.log(`[fn:boards] createBoardsBatchFn: skipped (no boards selected)`)
+      log.debug({}, 'boards batch skipped')
     } else if (limited) {
-      console.log(
-        `[fn:boards] createBoardsBatchFn: created ${createdBoards.length}/${data.boards.length} boards (tier limit)`
+      log.info(
+        { count: createdBoards.length, requested: data.boards.length },
+        'boards batch created (tier limit)'
       )
     } else {
-      console.log(`[fn:boards] createBoardsBatchFn: created ${createdBoards.length} boards`)
+      log.info({ count: createdBoards.length }, 'boards batch created')
     }
 
     // Update setupState to mark boards step as complete (and onboarding as finished).
@@ -273,7 +277,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
           .set({ setupState: JSON.stringify(updatedState) })
           .where(eq(settings.id, currentSettings.id))
         await invalidateSettingsCache()
-        console.log(`[fn:boards] createBoardsBatchFn: onboarding complete, setupState updated`)
+        log.info({}, 'onboarding complete')
       }
     }
 

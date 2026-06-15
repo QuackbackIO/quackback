@@ -9,6 +9,9 @@
 
 import { timingSafeEqual, createHmac } from 'crypto'
 import type { InboundWebhookHandler, InboundWebhookResult } from '../inbound-types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'asana' })
 
 const ASANA_API = 'https://app.asana.com/api/1.0'
 
@@ -62,7 +65,7 @@ export const asanaInboundHandler: InboundWebhookHandler = {
     // Asana compact events don't include the actual data — must fetch the task
     const accessToken = secrets.accessToken as string | undefined
     if (!accessToken) {
-      console.error('[Asana Inbound] No access token in secrets for API fetch')
+      log.error('no access token in secrets for api fetch')
       return null
     }
 
@@ -75,7 +78,7 @@ export const asanaInboundHandler: InboundWebhookHandler = {
       )
 
       if (!response.ok) {
-        console.error(`[Asana Inbound] API fetch failed: ${response.status}`)
+        log.error({ status_code: response.status }, 'task api fetch failed')
         return null
       }
 
@@ -95,7 +98,7 @@ export const asanaInboundHandler: InboundWebhookHandler = {
         eventType: 'task.changed',
       }
     } catch (error) {
-      console.error('[Asana Inbound] Failed to fetch task:', error)
+      log.error({ err: error }, 'failed to fetch task')
       return null
     }
   },

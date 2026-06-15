@@ -14,6 +14,9 @@ import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth' })
 
 // Plugin callbacks (magicLink, emailOTP) stash tokens here instead of
 // emailing — callers that own the email template (invitations,
@@ -162,14 +165,12 @@ async function createAuth() {
     // status banner asking the admin to paste the secret. Also warn
     // explicitly when the legacy env-var is set so self-hosters
     // upgrading from the env-fallback era have a breadcrumb.
-    console.error(
-      '[auth] ssoOidc enabled but no client secret in platform_credentials. ' +
-        'Set the secret via Admin → Settings → Security → Authentication → Single Sign-On.'
+    log.error(
+      'sso enabled but no client secret in platform_credentials; set it via admin settings → security → authentication → single sign-on'
     )
     if (process.env.SSO_OIDC_CLIENT_SECRET) {
-      console.error(
-        '[auth] SSO_OIDC_CLIENT_SECRET is set in the environment but is no longer ' +
-          'read at runtime. Re-enter the secret via the admin UI to restore SSO.'
+      log.warn(
+        'sso client secret env var is set but no longer read at runtime; re-enter the secret via the admin ui to restore sso'
       )
     }
   }
@@ -372,8 +373,9 @@ async function createAuth() {
       autoSignIn: true,
       async sendResetPassword({ user, url }) {
         if (!isEmailConfigured()) {
-          console.warn(
-            `[auth] Password reset requested for ${user.email} but email is not configured. Link will not be delivered.`
+          log.warn(
+            { user_id: user.id },
+            'password reset requested but email is not configured; link not delivered'
           )
           return
         }
@@ -454,8 +456,9 @@ async function createAuth() {
                   : ((user as Record<string, unknown>).imageKey as string | null),
                 createdAt: new Date(),
               })
-              console.log(
-                `[auth] Created principal record: userId=${user.id}, role=user, type=${isAnonymous ? 'anonymous' : 'user'}`
+              log.info(
+                { user_id: user.id, role: 'user', type: isAnonymous ? 'anonymous' : 'user' },
+                'created principal record'
               )
             }
           },
@@ -601,8 +604,9 @@ async function createAuth() {
               })
             }
 
-            console.log(
-              `[auth] Linked anonymous to existing: anonUserId=${anonUserId} → existingUserId=${newUserId}`
+            log.info(
+              { anon_user_id: anonUserId, existing_user_id: newUserId },
+              'linked anonymous user to existing account'
             )
           } else {
             // SIGN-UP (new account): keep the anonymous user, absorb the new user into it.
@@ -655,8 +659,9 @@ async function createAuth() {
             const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
             await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(anonUserId))
 
-            console.log(
-              `[auth] Linked anonymous to new account: kept anonUserId=${anonUserId}, deleted newUserId=${newUserId}`
+            log.info(
+              { anon_user_id: anonUserId, deleted_user_id: newUserId },
+              'linked anonymous user to new account'
             )
           }
         },
@@ -744,14 +749,15 @@ export const auth = {
     const url = new URL(request.url)
     const isMagicLink = url.pathname.includes('magic-link')
     if (isMagicLink) {
-      console.log(`[auth] magic-link request: ${request.method} ${url.pathname}${url.search}`)
+      log.debug({ method: request.method, path: url.pathname }, 'magic-link request')
     }
     const authInstance = await getAuth()
     const response = await authInstance.handler(request)
     if (isMagicLink) {
       const location = response.headers.get('location')
-      console.log(
-        `[auth] magic-link response: status=${response.status}, location=${location ?? 'none'}`
+      log.debug(
+        { status: response.status, location: location ?? null },
+        'magic-link response'
       )
     }
     return response

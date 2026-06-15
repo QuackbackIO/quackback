@@ -20,8 +20,11 @@ import { embedSignal, findSimilarPosts, findSimilarPendingSuggestions } from './
 import { createPostSuggestion, createVoteSuggestion } from './suggestion.service'
 import { logPipelineEvent } from './pipeline-log'
 import { buildSuggestionPrompt } from './prompts/suggestion.prompt'
+import { logger } from '@/lib/server/logger'
 import type { SuggestionGenerationResult } from '../types'
 import type { FeedbackSignalId, RawFeedbackItemId, BoardId, PostId } from '@quackback/ids'
+
+const log = logger.child({ component: 'interpretation' })
 
 /** Above this threshold, the primary suggestion is vote_on_post. */
 const VOTE_SUGGESTION_THRESHOLD = 0.8
@@ -58,7 +61,7 @@ export async function interpretSignal(
   }
 
   if (signal.processingState !== 'pending_interpretation') {
-    console.log(`[Interpretation] Skipping ${signalId} in state ${signal.processingState}`)
+    log.debug({ signal_id: signalId, state: signal.processingState }, 'skipping signal')
     return
   }
 
@@ -164,10 +167,13 @@ export async function interpretSignal(
           : []
 
         if (similarSuggestions[0]) {
-          console.log(
-            `[Interpretation] Skipping duplicate suggestion for signal ${signalId} — ` +
-              `similar pending suggestion ${similarSuggestions[0].id} exists ` +
-              `(${Math.round(similarSuggestions[0].similarity * 100)}% similar)`
+          log.debug(
+            {
+              signal_id: signalId,
+              similar_suggestion_id: similarSuggestions[0].id,
+              similarity: similarSuggestions[0].similarity,
+            },
+            'skipping duplicate suggestion, similar pending suggestion exists'
           )
 
           await logPipelineEvent({
@@ -211,7 +217,7 @@ export async function interpretSignal(
 
     await checkRawItemCompletion(signal.rawFeedbackItemId)
 
-    console.log(`[Interpretation] Completed signal ${signalId}`)
+    log.info({ signal_id: signalId }, 'completed signal')
   } catch (error) {
     await logPipelineEvent({
       eventType: 'interpretation.failed',
@@ -321,7 +327,7 @@ async function generateSuggestion(opts: {
         usedFallback = false
       }
     } catch (err) {
-      console.warn(`[Interpretation] LLM suggestion generation failed, using fallback:`, err)
+      log.warn({ err }, 'llm suggestion generation failed, using fallback')
     }
   }
 

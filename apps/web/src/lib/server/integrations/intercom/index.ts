@@ -1,6 +1,9 @@
 import type { IntegrationDefinition } from '../types'
 import { getIntercomOAuthUrl, exchangeIntercomCode } from './oauth'
 import { intercomCatalog } from './catalog'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'intercom' })
 
 export const intercomIntegration: IntegrationDefinition = {
   id: 'intercom',
@@ -26,6 +29,6 @@ export const intercomIntegration: IntegrationDefinition = {
     },
   ],
   async onDisconnect() {
-    console.log('[Intercom] Integration disconnected (no token revocation available)')
+    log.info('integration disconnected, no token revocation available')
   },
 }

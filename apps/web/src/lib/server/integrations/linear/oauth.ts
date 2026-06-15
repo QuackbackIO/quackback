@@ -2,6 +2,10 @@
  * Linear OAuth utilities.
  */
 
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'linear' })
+
 const LINEAR_API = 'https://api.linear.app'
 
 /**
@@ -173,8 +177,8 @@ export async function revokeLinearToken(
         token: accessToken,
       }),
     })
-    console.log('[Linear] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[Linear] Failed to revoke token:', error)
+    log.error({ err: error }, 'token revoke failed')
   }
 }

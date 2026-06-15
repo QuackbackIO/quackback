@@ -5,6 +5,9 @@ import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'widget-auth' })
 
 export interface WidgetAuthContext {
   settings: {
@@ -38,7 +41,7 @@ export interface WidgetAuthContext {
 export async function getWidgetSession(opts?: {
   roll?: boolean
 }): Promise<WidgetAuthContext | null> {
-  console.log(`[fn:widget-auth] getWidgetSession`)
+  log.debug('get widget session')
   try {
     const headers = getRequestHeaders()
     const authHeader = headers.get('authorization')
@@ -108,7 +111,7 @@ export async function getWidgetSession(opts?: {
       },
     }
   } catch (error) {
-    console.error(`[fn:widget-auth] getWidgetSession failed:`, error)
+    log.error({ err: error }, 'get widget session failed')
     throw error
   }
 }

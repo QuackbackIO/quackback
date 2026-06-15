@@ -8,6 +8,9 @@
 import { isTelemetryEnabled } from './config'
 import { buildPayload } from './payload'
 import { sendTelemetryPing } from './sender'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'telemetry' })
 
 const ONE_DAY = 24 * 60 * 60 * 1000
 
@@ -24,9 +27,7 @@ export async function startTelemetry(): Promise<void> {
   try {
     if (!isTelemetryEnabled()) return
 
-    console.log(
-      '[Telemetry] Anonymous usage statistics enabled. ' + 'Disable with DISABLE_TELEMETRY=true.'
-    )
+    log.info('anonymous usage statistics enabled; disable with DISABLE_TELEMETRY=true')
 
     await sendPing()
     setInterval(() => void sendPing(), ONE_DAY)

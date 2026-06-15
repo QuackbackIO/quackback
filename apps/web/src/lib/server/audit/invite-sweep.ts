@@ -20,6 +20,9 @@
  */
 import { db, invitation, and, eq, lt, inArray, or } from '@/lib/server/db'
 import { recordAuditEvent } from './log'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'invite-sweep' })
 
 export async function sweepExpiredPortalInvites(): Promise<number> {
   const now = new Date()
@@ -82,9 +85,9 @@ export async function sweepExpiredPortalInvites(): Promise<number> {
         sentAt: inv.createdAt.toISOString(),
         neverAccepted: true,
       },
-    }).catch((err) => console.warn('[invite-sweep] audit emit failed:', err))
+    }).catch((err) => log.warn({ err }, 'audit emit failed'))
   }
 
-  console.log(`[invite-sweep] marked ${actuallyExpired.length} invites as expired`)
+  log.info({ swept_count: actuallyExpired.length }, 'marked invites as expired')
   return actuallyExpired.length
 }

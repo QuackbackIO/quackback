@@ -12,6 +12,9 @@
 import { getRedis } from '../redis'
 import { db, principal, eq, and, inArray } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'presence' })
 
 /** TTL must comfortably exceed the SSE heartbeat interval (20s). */
 export const PRESENCE_TTL_SECONDS = 45
@@ -70,7 +73,7 @@ export async function markPresent(
   try {
     await writePresent(principalId, streamId, isAgent)
   } catch (err) {
-    console.warn('[presence] markPresent failed:', (err as Error).message)
+    log.warn({ err, principal_id: principalId, stream_id: streamId }, 'mark present failed')
   }
 }
 
@@ -83,7 +86,7 @@ export async function refreshPresence(
   try {
     await writePresent(principalId, streamId, isAgent)
   } catch (err) {
-    console.warn('[presence] refreshPresence failed:', (err as Error).message)
+    log.warn({ err, principal_id: principalId, stream_id: streamId }, 'refresh presence failed')
   }
 }
 
@@ -112,7 +115,7 @@ export async function clearPresence(
     )
     return Number(wentOffline) === 1
   } catch (err) {
-    console.warn('[presence] clearPresence failed:', (err as Error).message)
+    log.warn({ err, principal_id: principalId, stream_id: streamId }, 'clear presence failed')
     return false
   }
 }
@@ -125,7 +128,7 @@ export async function isPrincipalOnline(principalId: PrincipalId): Promise<boole
     await redis.zremrangebyscore(key, 0, staleCutoff())
     return (await redis.zcard(key)) > 0
   } catch (err) {
-    console.warn('[presence] isPrincipalOnline failed:', (err as Error).message)
+    log.warn({ err, principal_id: principalId }, 'principal online check failed')
     // Fail CLOSED (treat as offline) so a Redis outage doesn't silently swallow
     // offline reply notifications — a possibly-redundant email beats a reply the
     // visitor never sees.
@@ -141,7 +144,7 @@ export async function isAnyAgentOnline(): Promise<boolean> {
     const count = await redis.zcard(AGENTS_ZSET)
     return count > 0
   } catch (err) {
-    console.warn('[presence] isAnyAgentOnline failed:', (err as Error).message)
+    log.warn({ err }, 'any agent online check failed')
     return true
   }
 }
@@ -159,7 +162,7 @@ export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
     const ids = await redis.zrange(AGENTS_ZSET, 0, -1)
     return ids as PrincipalId[]
   } catch (err) {
-    console.warn('[presence] listOnlineAgentIds failed:', (err as Error).message)
+    log.warn({ err }, 'list online agents failed')
     return []
   }
 }
@@ -178,7 +181,7 @@ export async function listAvailableAgentIds(onlineIds: PrincipalId[]): Promise<P
       .where(and(inArray(principal.id, onlineIds), eq(principal.chatAvailability, 'online')))
     return rows.map((r) => r.id)
   } catch (err) {
-    console.warn('[presence] listAvailableAgentIds failed:', (err as Error).message)
+    log.warn({ err }, 'list available agents failed')
     return []
   }
 }

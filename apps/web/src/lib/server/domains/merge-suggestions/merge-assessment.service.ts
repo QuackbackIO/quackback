@@ -7,9 +7,12 @@
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
+import { logger } from '@/lib/server/logger'
 import type { PostId } from '@quackback/ids'
 import { truncate } from '@/lib/shared/utils/string'
 import type { MergeCandidate } from './merge-search.service'
+
+const log = logger.child({ component: 'merge-assessment' })
 
 const SYSTEM_PROMPT = `You are a duplicate-detection assistant for a customer feedback platform used by product managers.
 You will be given a reference post and one or more posts to compare. For each comparison post, determine whether it is truly a DUPLICATE of the reference — meaning they request the exact same thing, just worded differently.
@@ -77,7 +80,7 @@ export async function assessMergeCandidates(
 
   const responseText = completion.choices[0]?.message?.content
   if (!responseText) {
-    console.error('[MergeSuggestion] Empty LLM response')
+    log.error('empty llm response')
     return []
   }
 
@@ -85,7 +88,7 @@ export async function assessMergeCandidates(
   try {
     parsed = JSON.parse(stripCodeFences(responseText))
   } catch {
-    console.error(`[MergeSuggestion] Failed to parse LLM JSON: ${responseText.slice(0, 200)}`)
+    log.error({ response_preview: responseText.slice(0, 200) }, 'failed to parse llm json')
     return []
   }
 

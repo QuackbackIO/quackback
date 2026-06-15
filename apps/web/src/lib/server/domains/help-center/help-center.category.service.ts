@@ -26,6 +26,9 @@ import {
   getCategoryDepth,
   getSubtreeMaxDepth,
 } from './category-tree'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'help-center-categories' })
 
 // ============================================================================
 // Categories
@@ -309,7 +312,7 @@ export async function deleteCategory(id: HelpCenterCategoryId): Promise<void> {
 }
 
 export async function restoreCategory(id: HelpCenterCategoryId): Promise<HelpCenterCategory> {
-  console.log(`[domain:help-center] restoreCategory: id=${id}`)
+  log.debug({ category_id: id }, 'restore category')
   const category = await db.query.helpCenterCategories.findFirst({
     where: eq(helpCenterCategories.id, id),
   })

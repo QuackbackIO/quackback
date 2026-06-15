@@ -7,6 +7,9 @@ import type {
   CreateUserAttributeInput,
   UpdateUserAttributeInput,
 } from './user-attribute.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-attributes' })
 
 function rowToUserAttribute(row: typeof userAttributeDefinitions.$inferSelect): UserAttribute {
   return {
@@ -30,7 +33,7 @@ export async function listUserAttributes(): Promise<UserAttribute[]> {
       .orderBy(asc(userAttributeDefinitions.label))
     return rows.map(rowToUserAttribute)
   } catch (error) {
-    console.error('Error listing user attributes:', error)
+    log.error({ err: error }, 'failed to list user attributes')
     throw new InternalError('DATABASE_ERROR', 'Failed to list user attributes', error)
   }
 }
@@ -71,7 +74,7 @@ export async function createUserAttribute(input: CreateUserAttributeInput): Prom
     if ((error as { code?: string }).code === '23505') {
       throw new ConflictError('DUPLICATE_KEY', `An attribute with that key already exists`)
     }
-    console.error('Error creating user attribute:', error)
+    log.error({ err: error }, 'failed to create user attribute')
     throw new InternalError('DATABASE_ERROR', 'Failed to create user attribute', error)
   }
 }
@@ -112,7 +115,7 @@ export async function updateUserAttribute(
     return rowToUserAttribute(row)
   } catch (error) {
     if (error instanceof NotFoundError || error instanceof ValidationError) throw error
-    console.error('Error updating user attribute:', error)
+    log.error({ err: error }, 'failed to update user attribute')
     throw new InternalError('DATABASE_ERROR', 'Failed to update user attribute', error)
   }
 }
@@ -128,7 +131,7 @@ export async function deleteUserAttribute(id: UserAttributeId): Promise<void> {
     await db.delete(userAttributeDefinitions).where(eq(userAttributeDefinitions.id, id))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
-    console.error('Error deleting user attribute:', error)
+    log.error({ err: error }, 'failed to delete user attribute')
     throw new InternalError('DATABASE_ERROR', 'Failed to delete user attribute', error)
   }
 }

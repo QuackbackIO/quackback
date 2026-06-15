@@ -313,7 +313,7 @@ export interface MessageDeletedEvent extends EventBase<'message.deleted'> {
  * Use type narrowing to access event-specific data:
  * @example
  * if (event.type === 'post.created') {
- *   console.log(event.data.post.title)
+ *   const title = event.data.post.title
  * }
  */
 export type EventData =

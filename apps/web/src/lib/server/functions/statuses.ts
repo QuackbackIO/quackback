@@ -14,6 +14,9 @@ import {
   deleteStatus,
   reorderStatuses,
 } from '@/lib/server/domains/statuses/status.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'statuses' })
 
 // ============================================
 // Schemas
@@ -77,15 +80,15 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
  * List all statuses for the workspace
  */
 export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:statuses] fetchStatuses`)
+  log.debug('fetch statuses')
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
     const statuses = await listStatuses()
-    console.log(`[fn:statuses] fetchStatuses: count=${statuses.length}`)
+    log.debug({ count: statuses.length }, 'fetch statuses count')
     return statuses
   } catch (error) {
-    console.error(`[fn:statuses] ❌ fetchStatuses failed:`, error)
+    log.error({ err: error }, 'fetch statuses failed')
     throw error
   }
 })
@@ -96,15 +99,15 @@ export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async (
 export const fetchStatusFn = createServerFn({ method: 'GET' })
   .inputValidator(getStatusSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:statuses] fetchStatus: id=${data.id}`)
+    log.debug({ status_id: data.id }, 'fetch status')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       const status = await getStatusById(data.id as StatusId)
-      console.log(`[fn:statuses] fetchStatus: found=${!!status}`)
+      log.debug({ found: !!status }, 'fetch status result')
       return status
     } catch (error) {
-      console.error(`[fn:statuses] ❌ fetchStatus failed:`, error)
+      log.error({ err: error }, 'fetch status failed')
       throw error
     }
   })
@@ -119,15 +122,15 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
 export const createStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(createStatusSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:statuses] createStatusFn: name=${data.name}, category=${data.category}`)
+    log.debug({ category: data.category }, 'create status')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       const status = await createStatus(data)
-      console.log(`[fn:statuses] createStatusFn: id=${status.id}`)
+      log.info({ status_id: status.id }, 'status created')
       return status
     } catch (error) {
-      console.error(`[fn:statuses] ❌ createStatusFn failed:`, error)
+      log.error({ err: error }, 'create status failed')
       throw error
     }
   })
@@ -138,7 +141,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
 export const updateStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(updateStatusSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:statuses] updateStatusFn: id=${data.id}`)
+    log.debug({ status_id: data.id }, 'update status')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -148,10 +151,10 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
         showOnRoadmap: data.showOnRoadmap,
         isDefault: data.isDefault,
       })
-      console.log(`[fn:statuses] updateStatusFn: updated id=${status.id}`)
+      log.info({ status_id: status.id }, 'status updated')
       return status
     } catch (error) {
-      console.error(`[fn:statuses] ❌ updateStatusFn failed:`, error)
+      log.error({ err: error }, 'update status failed')
       throw error
     }
   })
@@ -162,15 +165,15 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
 export const deleteStatusFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteStatusSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:statuses] deleteStatusFn: id=${data.id}`)
+    log.debug({ status_id: data.id }, 'delete status')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       await deleteStatus(data.id as StatusId)
-      console.log(`[fn:statuses] deleteStatusFn: deleted`)
+      log.info({ status_id: data.id }, 'status deleted')
       return { id: data.id as StatusId }
     } catch (error) {
-      console.error(`[fn:statuses] ❌ deleteStatusFn failed:`, error)
+      log.error({ err: error }, 'delete status failed')
       throw error
     }
   })
@@ -181,15 +184,15 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
 export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderStatusesSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:statuses] reorderStatusesFn: count=${data.statusIds.length}`)
+    log.debug({ count: data.statusIds.length }, 'reorder statuses')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       await reorderStatuses(data.statusIds as StatusId[])
-      console.log(`[fn:statuses] reorderStatusesFn: reordered`)
+      log.info({ count: data.statusIds.length }, 'statuses reordered')
       return { success: true }
     } catch (error) {
-      console.error(`[fn:statuses] ❌ reorderStatusesFn failed:`, error)
+      log.error({ err: error }, 'reorder statuses failed')
       throw error
     }
   })

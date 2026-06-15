@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildNotionPage } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'notion' })
 
 const NOTION_API = 'https://api.notion.com/v1'
 const NOTION_VERSION = '2022-06-28'
@@ -29,7 +32,7 @@ export const notionHook: HookHandler = {
     const { channelId: databaseId } = target as NotionTarget
     const { accessToken, rootUrl } = config as NotionConfig
 
-    console.log(`[Notion] Processing ${event.type} → database ${databaseId}`)
+    log.debug({ event_type: event.type, database_id: databaseId }, 'processing event')
 
     const { title, blocks } = buildNotionPage(event, rootUrl)
 
@@ -57,7 +60,7 @@ export const notionHook: HookHandler = {
         const status = response.status
 
         if (status === 401 || status === 403) {
-          console.error(`[Notion] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect Notion.`,
@@ -66,11 +69,11 @@ export const notionHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.warn(`[Notion] ⚠️ Rate limited: ${errorBody}`)
+          log.warn({ status, body: errorBody }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[Notion] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status, body: errorBody }, 'api error')
         return {
           success: false,
           error: `Notion API error: ${status}`,
@@ -79,12 +82,12 @@ export const notionHook: HookHandler = {
       }
 
       const data = (await response.json()) as { id: string; url: string }
-      console.log(`[Notion] ✅ Created page ${data.id}`)
+      log.info({ page_id: data.id }, 'created page')
 
       return { success: true, externalId: data.id, externalUrl: data.url }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Notion] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'exception')
 
       return {
         success: false,

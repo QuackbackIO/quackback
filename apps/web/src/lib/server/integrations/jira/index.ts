@@ -3,6 +3,9 @@ import { jiraHook } from './hook'
 import { jiraInboundHandler } from './inbound'
 import { getJiraOAuthUrl, exchangeJiraCode } from './oauth'
 import { jiraCatalog } from './catalog'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'jira' })
 
 export const jiraIntegration: IntegrationDefinition = {
   id: 'jira',
@@ -29,6 +32,6 @@ export const jiraIntegration: IntegrationDefinition = {
     },
   ],
   async onDisconnect() {
-    console.log('[Jira] Integration disconnected (no token revocation available)')
+    log.info('integration disconnected, no token revocation available')
   },
 }

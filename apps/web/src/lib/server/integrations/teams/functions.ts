@@ -64,6 +64,8 @@ export const getTeamsConnectUrl = createServerFn({ method: 'GET' }).handler(
 async function getTeamsAccessToken(integration: { secrets: unknown; config: unknown }) {
   const { decryptSecrets, encryptSecrets } = await import('../encryption')
   const { db, integrations, eq } = await import('@/lib/server/db')
+  const { logger } = await import('@/lib/server/logger')
+  const log = logger.child({ component: 'teams' })
 
   const secrets = decryptSecrets<{ accessToken: string; refreshToken?: string }>(
     integration.secrets as string
@@ -74,7 +76,7 @@ async function getTeamsAccessToken(integration: { secrets: unknown; config: unkn
     const expiresAt = new Date(cfg.tokenExpiresAt).getTime()
     const bufferMs = 5 * 60 * 1000
     if (Date.now() >= expiresAt - bufferMs) {
-      console.log('[Teams] Access token expired, refreshing...')
+      log.info('access token expired, refreshing')
       const { refreshTeamsToken } = await import('./oauth')
       const { getPlatformCredentials } =
         await import('@/lib/server/domains/platform-credentials/platform-credential.service')

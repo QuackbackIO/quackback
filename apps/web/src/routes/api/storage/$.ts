@@ -1,4 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'storage' })
 
 // In-memory cache for proxied assets (e.g. email logos) to avoid S3 round-trips.
 // Entries expire after 1 hour. Logo images are typically < 50 KB so memory is negligible.
@@ -169,7 +172,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       },
     })
   } catch (error) {
-    console.error('Error serving storage object:', error)
+    log.error({ err: error }, 'storage object serve failed')
     return Response.json({ error: 'Failed to resolve storage URL' }, { status: 500 })
   }
 }

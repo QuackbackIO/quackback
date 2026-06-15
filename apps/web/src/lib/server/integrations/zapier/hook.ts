@@ -7,7 +7,10 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { safeFetch } from '../../content/ssrf-guard'
+import { logger } from '@/lib/server/logger'
 import { buildZapierPayload } from './message'
+
+const log = logger.child({ component: 'zapier' })
 
 export interface ZapierTarget {
   channelId: string // webhookUrl stored as channelId for consistency
@@ -41,7 +44,7 @@ export const zapierHook: HookHandler = {
       return { success: false, error: 'Invalid webhook URL', shouldRetry: false }
     }
 
-    console.log(`[Zapier] Processing ${event.type} → webhook`)
+    log.debug({ event_type: event.type }, 'processing event')
 
     const payload = buildZapierPayload(event, rootUrl)
 
@@ -54,7 +57,7 @@ export const zapierHook: HookHandler = {
 
       if (!response.ok) {
         const status = response.status
-        console.error(`[Zapier] ❌ Webhook returned ${status}`)
+        log.error({ status_code: status }, 'webhook returned error status')
 
         if (status === 404 || status === 410) {
           return {
@@ -71,11 +74,11 @@ export const zapierHook: HookHandler = {
         }
       }
 
-      console.log(`[Zapier] ✅ Webhook delivered`)
+      log.info('webhook delivered')
       return { success: true }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Zapier] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'webhook delivery failed')
 
       return {
         success: false,

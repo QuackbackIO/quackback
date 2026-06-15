@@ -2,6 +2,10 @@
  * GitHub OAuth utilities.
  */
 
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'github' })
+
 const GITHUB_API = 'https://api.github.com'
 
 /**
@@ -135,8 +139,8 @@ export async function revokeGitHubToken(
       },
       body: JSON.stringify({ access_token: accessToken }),
     })
-    console.log('[GitHub] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[GitHub] Failed to revoke token:', error)
+    log.error({ err: error }, 'token revoke failed')
   }
 }

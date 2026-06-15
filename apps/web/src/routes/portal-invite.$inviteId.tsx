@@ -71,9 +71,9 @@ export const Route = createFileRoute('/portal-invite/$inviteId')({
         return { status: 'not_found' }
       }
 
-      // Unexpected error — log it and show a generic message instead of
-      // misleading the user with "invite not found".
-      console.error('[route:portal-invite] unexpected error:', err)
+      // Unexpected error — show a generic message instead of misleading the
+      // user with "invite not found". The acceptPortalInviteFn server fn owns
+      // server-side error logging for this path.
       return { status: 'error' }
     }
   },

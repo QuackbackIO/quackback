@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildTrelloCard } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'trello' })
 
 const TRELLO_API = 'https://api.trello.com/1'
 
@@ -33,7 +36,7 @@ export const trelloHook: HookHandler = {
       return { success: false, error: 'Trello API key missing from config', shouldRetry: false }
     }
 
-    console.log(`[Trello] Processing ${event.type} → list ${listId}`)
+    log.debug({ event_type: event.type, list_id: listId }, 'processing event')
 
     const { name, desc } = buildTrelloCard(event, rootUrl)
 
@@ -56,7 +59,7 @@ export const trelloHook: HookHandler = {
         const status = response.status
 
         if (status === 401) {
-          console.error(`[Trello] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status_code: status, list_id: listId, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect Trello.`,
@@ -65,11 +68,11 @@ export const trelloHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.warn(`[Trello] ⚠️ Rate limited: ${errorBody}`)
+          log.warn({ status_code: status, list_id: listId, body: errorBody }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[Trello] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status_code: status, list_id: listId, body: errorBody }, 'api error')
         return {
           success: false,
           error: `Trello API error: ${status}`,
@@ -78,12 +81,12 @@ export const trelloHook: HookHandler = {
       }
 
       const data = (await response.json()) as { id: string; shortUrl: string }
-      console.log(`[Trello] ✅ Created card ${data.id}`)
+      log.info({ card_id: data.id, list_id: listId }, 'card created')
 
       return { success: true, externalId: data.id, externalUrl: data.shortUrl }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Trello] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error, list_id: listId }, 'card creation failed')
 
       return {
         success: false,

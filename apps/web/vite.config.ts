@@ -7,6 +7,29 @@ import path from 'path'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 
+/**
+ * Replace the server-only structured logger with a no-op stub in the CLIENT
+ * environment. `createServerFn` modules hold a module-scoped
+ * `logger.child({ component })` that runs at import time; left alone it pulls
+ * pino + node:async_hooks into the browser bundle. SSR and the server runtime
+ * keep the real logger.
+ */
+function stubServerLoggerInClient(): PluginOption {
+  const stub = path.resolve(__dirname, 'src/lib/server/logger.client-stub.ts')
+  return {
+    name: 'quackback:stub-server-logger-in-client',
+    enforce: 'pre',
+    resolveId(id) {
+      // `this.environment` is available in per-environment plugin pipelines.
+      if (this.environment?.name !== 'client') return null
+      if (id === '@/lib/server/logger' || /\/lib\/server\/logger(\.ts)?$/.test(id)) {
+        return stub
+      }
+      return null
+    },
+  }
+}
+
 function getBuildInfo() {
   const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
   let gitCommit = 'unknown'
@@ -112,6 +135,7 @@ export default defineConfig(({ mode }) => {
       tsconfigPaths: true,
     },
     plugins: [
+      stubServerLoggerInClient(),
       tailwindcss(),
       nitro({
         preset: 'bun',

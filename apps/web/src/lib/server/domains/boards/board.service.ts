@@ -65,6 +65,9 @@ export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
   }
 }
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'boards' })
 
 /**
  * Create a new board
@@ -252,7 +255,7 @@ export async function deleteBoard(id: BoardId): Promise<void> {
     .where(sql`${webhooks.boardIds} @> ARRAY[${id}]::text[]`)
     .execute()
     .catch((error) => {
-      console.error('[Board] Failed to clean up webhook board_ids:', error)
+      log.error({ err: error }, 'failed to clean up webhook board_ids')
     })
 }
 

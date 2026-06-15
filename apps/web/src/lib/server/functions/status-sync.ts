@@ -14,6 +14,9 @@ import {
   clearWebhookConfig,
 } from '@/lib/server/integrations/webhook-registration'
 import type { IntegrationId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'status-sync' })
 
 const enableStatusSyncSchema = z.object({
   integrationId: z.string(),
@@ -36,9 +39,7 @@ const updateStatusMappingsSchema = z.object({
 export const enableStatusSyncFn = createServerFn({ method: 'POST' })
   .inputValidator(enableStatusSyncSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:status-sync] enableStatusSyncFn: integrationId=${data.integrationId}, type=${data.integrationType}`
-    )
+    log.debug({ integration_id: data.integrationId, integration_type: data.integrationType }, 'enable status sync')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -119,10 +120,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
             // shortcut, azure_devops: manual webhook setup — no auto-registration
           }
         } catch (error) {
-          console.error(
-            `[StatusSync] Failed to register webhook for ${data.integrationType}:`,
-            error
-          )
+          log.error({ err: error, integration_type: data.integrationType }, 'webhook registration failed')
           throw new Error(
             `Failed to register webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
             { cause: error }
@@ -139,7 +137,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
         isManual: !externalWebhookId && !accessToken,
       }
     } catch (error) {
-      console.error(`[fn:status-sync] enableStatusSyncFn failed:`, error)
+      log.error({ err: error }, 'enable status sync failed')
       throw error
     }
   })
@@ -150,9 +148,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
 export const disableStatusSyncFn = createServerFn({ method: 'POST' })
   .inputValidator(disableStatusSyncSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:status-sync] disableStatusSyncFn: integrationId=${data.integrationId}, type=${data.integrationType}`
-    )
+    log.debug({ integration_id: data.integrationId, integration_type: data.integrationType }, 'disable status sync')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -211,10 +207,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
             }
           }
         } catch (error) {
-          console.error(
-            `[StatusSync] Failed to delete external webhook for ${data.integrationType}:`,
-            error
-          )
+          log.error({ err: error, integration_type: data.integrationType }, 'webhook deletion failed')
           // Continue with cleanup even if external deletion fails
         }
       }
@@ -222,7 +215,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
       await clearWebhookConfig(integrationId)
       return { success: true }
     } catch (error) {
-      console.error(`[fn:status-sync] disableStatusSyncFn failed:`, error)
+      log.error({ err: error }, 'disable status sync failed')
       throw error
     }
   })
@@ -233,9 +226,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
 export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
   .inputValidator(updateStatusMappingsSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:status-sync] updateStatusMappingsFn: integrationId=${data.integrationId}, mappingCount=${Object.keys(data.statusMappings).length}`
-    )
+    log.debug({ integration_id: data.integrationId, mapping_count: Object.keys(data.statusMappings).length }, 'update status mappings')
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -258,7 +249,7 @@ export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
 
       return { success: true }
     } catch (error) {
-      console.error(`[fn:status-sync] updateStatusMappingsFn failed:`, error)
+      log.error({ err: error }, 'update status mappings failed')
       throw error
     }
   })

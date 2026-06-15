@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildTeamsMessage } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'teams' })
 
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
 
@@ -29,7 +32,7 @@ export const teamsHook: HookHandler = {
       return { success: false, error: 'Team ID not configured', shouldRetry: false }
     }
 
-    console.log(`[Teams] Processing ${event.type} → channel ${channelId}`)
+    log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
     const message = buildTeamsMessage(event, rootUrl)
 
@@ -48,7 +51,7 @@ export const teamsHook: HookHandler = {
         const status = response.status
 
         if (status === 401 || status === 403) {
-          console.error(`[Teams] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect Teams.`,
@@ -57,11 +60,11 @@ export const teamsHook: HookHandler = {
         }
 
         if (status === 429) {
-          console.warn(`[Teams] ⚠️ Rate limited: ${errorBody}`)
+          log.warn({ status_code: status, channel_id: channelId, body: errorBody }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[Teams] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'api error')
         return {
           success: false,
           error: `Teams API error: ${status}`,
@@ -70,12 +73,12 @@ export const teamsHook: HookHandler = {
       }
 
       const data = (await response.json()) as { id: string }
-      console.log(`[Teams] ✅ Posted to ${channelId} (id=${data.id})`)
+      log.info({ channel_id: channelId, message_id: data.id }, 'message posted')
 
       return { success: true, externalId: data.id }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Teams] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error, channel_id: channelId }, 'message delivery failed')
 
       return {
         success: false,

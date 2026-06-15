@@ -1,4 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'version' })
 
 // --- Semver comparison (exported for testing) ---
 
@@ -45,7 +48,7 @@ export const getLatestVersion = createServerFn({ method: 'GET' }).handler(
       )
 
       if (!res.ok) {
-        console.warn(`[fn:version] GitHub API returned ${res.status}`)
+        log.warn({ status: res.status }, 'github api returned non-ok status')
         return null
       }
 
@@ -60,7 +63,7 @@ export const getLatestVersion = createServerFn({ method: 'GET' }).handler(
       versionCache = { data, expiresAt: Date.now() + CACHE_TTL_MS }
       return data
     } catch (err) {
-      console.warn(`[fn:version] Failed to fetch latest release:`, (err as Error).message)
+      log.warn({ err }, 'failed to fetch latest release')
       return null
     }
   }

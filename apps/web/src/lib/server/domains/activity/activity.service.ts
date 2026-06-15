@@ -8,6 +8,9 @@
 
 import { db, postActivity, eq, desc, principal as principalTable } from '@/lib/server/db'
 import type { PostId, PrincipalId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'activity' })
 
 // ============================================
 // Types
@@ -72,7 +75,7 @@ export function createActivity(opts: CreateActivityOpts): void {
       metadata: opts.metadata ?? {},
     })
     .catch((err) => {
-      console.error(`[domain:activity] failed to create activity: type=${opts.type}`, err)
+      log.error({ activity_type: opts.type, err }, 'failed to create activity')
     })
 }
 

@@ -24,6 +24,9 @@ import type { NotificationId, PrincipalId } from '@quackback/ids'
 import { createId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { ANONYMOUS_ACTOR, boardViewFilter, canViewPost, type Actor } from '@/lib/server/policy'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'notifications' })
 import type {
   CreateNotificationInput,
   NotificationType,
@@ -40,7 +43,7 @@ export async function createNotificationsBatch(
   inputs: CreateNotificationInput[],
   tx?: Transaction
 ): Promise<NotificationId[]> {
-  console.log(`[domain:notifications] createNotificationsBatch: count=${inputs.length}`)
+  log.debug({ count: inputs.length }, 'create notifications batch')
   if (inputs.length === 0) return []
 
   const executor = tx ?? db
@@ -71,8 +74,9 @@ export async function createNotification(
   input: CreateNotificationInput,
   tx?: Transaction
 ): Promise<NotificationId> {
-  console.log(
-    `[domain:notifications] createNotification: type=${input.type}, principalId=${input.principalId}`
+  log.debug(
+    { notification_type: input.type, principal_id: input.principalId },
+    'create notification'
   )
   const [id] = await createNotificationsBatch([input], tx)
   return id
@@ -243,8 +247,9 @@ export async function markAsRead(
   principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
-  console.log(
-    `[domain:notifications] markAsRead: principalId=${principalId}, notificationId=${notificationId}`
+  log.debug(
+    { principal_id: principalId, notification_id: notificationId },
+    'mark notification as read'
   )
   // Verify ownership and update in single query
   const result = await db
@@ -267,7 +272,7 @@ export async function markAsRead(
  * Mark all notifications as read for a member
  */
 export async function markAllAsRead(principalId: PrincipalId): Promise<void> {
-  console.log(`[domain:notifications] markAllAsRead: principalId=${principalId}`)
+  log.debug({ principal_id: principalId }, 'mark all notifications as read')
   await db
     .update(inAppNotifications)
     .set({ readAt: new Date() })
@@ -287,8 +292,9 @@ export async function archiveNotification(
   principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
-  console.log(
-    `[domain:notifications] archiveNotification: principalId=${principalId}, notificationId=${notificationId}`
+  log.debug(
+    { principal_id: principalId, notification_id: notificationId },
+    'archive notification'
   )
   const existing = await db.query.inAppNotifications.findFirst({
     where: and(
@@ -311,7 +317,7 @@ export async function archiveNotification(
  * Archive all notifications for a member
  */
 export async function archiveAllNotifications(principalId: PrincipalId): Promise<void> {
-  console.log(`[domain:notifications] archiveAllNotifications: principalId=${principalId}`)
+  log.debug({ principal_id: principalId }, 'archive all notifications')
   await db
     .update(inAppNotifications)
     .set({ archivedAt: new Date() })

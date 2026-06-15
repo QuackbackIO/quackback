@@ -1,4 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'settings-utils' })
 import {
   getSettingsLogoData,
   getSettingsHeaderLogoData,
@@ -15,58 +18,38 @@ import {
  * Fetch logo data for settings
  */
 export const fetchSettingsLogoData = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings-utils] fetchSettingsLogoData`)
-  try {
-    const data = await getSettingsLogoData()
-    console.log(`[fn:settings-utils] fetchSettingsLogoData: hasLogo=${!!data}`)
-    return data
-  } catch (error) {
-    console.error(`[fn:settings-utils] ❌ fetchSettingsLogoData failed:`, error)
-    throw error
-  }
+  log.debug('fetching settings logo data')
+  const data = await getSettingsLogoData()
+  log.debug({ has_logo: !!data }, 'settings logo data fetched')
+  return data
 })
 
 /**
  * Fetch header logo data for settings
  */
 export const fetchSettingsHeaderLogoData = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings-utils] fetchSettingsHeaderLogoData`)
-  try {
-    const data = await getSettingsHeaderLogoData()
-    console.log(`[fn:settings-utils] fetchSettingsHeaderLogoData: hasHeaderLogo=${!!data}`)
-    return data
-  } catch (error) {
-    console.error(`[fn:settings-utils] ❌ fetchSettingsHeaderLogoData failed:`, error)
-    throw error
-  }
+  log.debug('fetching settings header logo data')
+  const data = await getSettingsHeaderLogoData()
+  log.debug({ has_header_logo: !!data }, 'settings header logo data fetched')
+  return data
 })
 
 /**
  * Fetch branding data for settings (logo, favicon, header logo, etc.)
  */
 export const fetchSettingsBrandingData = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings-utils] fetchSettingsBrandingData`)
-  try {
-    const data = await getSettingsBrandingData()
-    console.log(`[fn:settings-utils] fetchSettingsBrandingData: fetched`)
-    return data
-  } catch (error) {
-    console.error(`[fn:settings-utils] ❌ fetchSettingsBrandingData failed:`, error)
-    throw error
-  }
+  log.debug('fetching settings branding data')
+  const data = await getSettingsBrandingData()
+  log.debug('settings branding data fetched')
+  return data
 })
 
 /**
  * Fetch favicon data for settings
  */
 export const fetchSettingsFaviconData = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:settings-utils] fetchSettingsFaviconData`)
-  try {
-    const data = await getSettingsFaviconData()
-    console.log(`[fn:settings-utils] fetchSettingsFaviconData: hasFavicon=${!!data}`)
-    return data
-  } catch (error) {
-    console.error(`[fn:settings-utils] ❌ fetchSettingsFaviconData failed:`, error)
-    throw error
-  }
+  log.debug('fetching settings favicon data')
+  const data = await getSettingsFaviconData()
+  log.debug({ has_favicon: !!data }, 'settings favicon data fetched')
+  return data
 })

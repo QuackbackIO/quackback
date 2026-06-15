@@ -13,6 +13,9 @@ import {
   updateTag,
   deleteTag,
 } from '@/lib/server/domains/tags/tag.service'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'tags' })
 
 // ============================================
 // Schemas
@@ -63,15 +66,15 @@ export type DeleteTagInput = z.infer<typeof deleteTagSchema>
  * List all tags for the workspace
  */
 export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:tags] fetchTags`)
+  log.debug({}, 'fetch tags')
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
     const tags = await listTags()
-    console.log(`[fn:tags] fetchTags: count=${tags.length}`)
+    log.debug({ count: tags.length }, 'fetch tags')
     return tags
   } catch (error) {
-    console.error(`[fn:tags] ❌ fetchTags failed:`, error)
+    log.error({ err: error }, 'fetch tags failed')
     throw error
   }
 })
@@ -82,15 +85,15 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
 export const fetchTag = createServerFn({ method: 'GET' })
   .inputValidator(getTagSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:tags] fetchTag: id=${data.id}`)
+    log.debug({ tag_id: data.id }, 'fetch tag')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       const tag = await getTagById(data.id as TagId)
-      console.log(`[fn:tags] fetchTag: found=${!!tag}`)
+      log.debug({ found: !!tag }, 'fetch tag')
       return tag
     } catch (error) {
-      console.error(`[fn:tags] ❌ fetchTag failed:`, error)
+      log.error({ err: error }, 'fetch tag failed')
       throw error
     }
   })
@@ -105,7 +108,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
 export const createTagFn = createServerFn({ method: 'POST' })
   .inputValidator(createTagSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:tags] createTagFn: name=${data.name}`)
+    log.debug({ name: data.name }, 'create tag')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -114,10 +117,10 @@ export const createTagFn = createServerFn({ method: 'POST' })
         color: data.color,
         description: data.description,
       })
-      console.log(`[fn:tags] createTagFn: id=${tag.id}`)
+      log.info({ tag_id: tag.id }, 'tag created')
       return tag
     } catch (error) {
-      console.error(`[fn:tags] ❌ createTagFn failed:`, error)
+      log.error({ err: error }, 'create tag failed')
       throw error
     }
   })
@@ -128,7 +131,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
 export const updateTagFn = createServerFn({ method: 'POST' })
   .inputValidator(updateTagSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:tags] updateTagFn: id=${data.id}`)
+    log.debug({ tag_id: data.id }, 'update tag')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -137,10 +140,10 @@ export const updateTagFn = createServerFn({ method: 'POST' })
         color: data.color,
         description: data.description,
       })
-      console.log(`[fn:tags] updateTagFn: updated id=${tag.id}`)
+      log.info({ tag_id: tag.id }, 'tag updated')
       return tag
     } catch (error) {
-      console.error(`[fn:tags] ❌ updateTagFn failed:`, error)
+      log.error({ err: error }, 'update tag failed')
       throw error
     }
   })
@@ -151,15 +154,15 @@ export const updateTagFn = createServerFn({ method: 'POST' })
 export const deleteTagFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteTagSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:tags] deleteTagFn: id=${data.id}`)
+    log.debug({ tag_id: data.id }, 'delete tag')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       await deleteTag(data.id as TagId)
-      console.log(`[fn:tags] deleteTagFn: deleted`)
+      log.info({ tag_id: data.id }, 'tag deleted')
       return { id: data.id as TagId }
     } catch (error) {
-      console.error(`[fn:tags] ❌ deleteTagFn failed:`, error)
+      log.error({ err: error }, 'delete tag failed')
       throw error
     }
   })

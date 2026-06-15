@@ -38,6 +38,9 @@ import {
   isDeviceUnseen,
   markDeviceSeen,
 } from './signin-device-tracker'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth' })
 
 /**
  * Provider id resolved from the Better-Auth endpoint template + ctx.
@@ -177,7 +180,7 @@ export async function handleSignInPreCheck(ctx: {
   if (!provider) return
 
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
-    console.log(`[auth-hooks.before] path=${ctx.path} provider=${provider}`)
+    log.debug({ path: ctx.path, provider }, 'sign-in pre-check')
   }
 
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
@@ -194,7 +197,7 @@ export async function handleSignInPreCheck(ctx: {
   const rateLimiter = selectSignInRateLimiter(provider)
   const rateLimitResult: Awaited<ReturnType<SignInRateLimiter>> = rateLimiter
     ? await rateLimiter(ip, email).catch((error) => {
-        console.error('[handleSignInPreCheck] rate-limit threw; failing open:', error)
+        log.error({ err: error }, 'rate-limit check threw; failing open')
         return { allowed: true }
       })
     : { allowed: true }
@@ -209,7 +212,7 @@ export async function handleSignInPreCheck(ctx: {
         metadata: { retryAfter: rateLimitResult.retryAfter, provider },
       })
     } catch (auditErr) {
-      console.error('[handleSignInPreCheck] audit emit failed (rate-limit):', auditErr)
+      log.error({ err: auditErr }, 'rate-limit audit emit failed')
     }
     // 429 JSON instead of a 302 redirect: sign-in submits are XHR, and
     // the redirect-then-detect pattern depends on `response.redirected`
@@ -353,7 +356,7 @@ export async function handleSsoCallbackAfter(ctx: {
         .update(principalTable)
         .set({ role: 'admin' })
         .where(eq(principalTable.userId, userIdTyped))
-      console.log(`[auth-hooks.after] SSO bootstrap promotion: userId=${userId}`)
+      log.info({ user_id: userId }, 'sso bootstrap admin promotion')
     }
 
     // Stamp lastSsoSignInAt for the bootstrap guard's window check.
@@ -464,9 +467,7 @@ export async function handleAutoProvisionAfter(
     })
   }
 
-  console.log(
-    `[auth-hooks.after] auto-provisioned verified-domain user as ${targetRole} via sso: userId=${userId}`
-  )
+  log.info({ user_id: userId, role: targetRole }, 'auto-provisioned verified-domain user via sso')
 }
 
 /**
@@ -878,7 +879,7 @@ export async function handleTwoFactorLifecycleAudit(ctx: {
       headers: getRequestHeaders(),
     })
   } catch (error) {
-    console.error('[auth-hooks.after] handleTwoFactorLifecycleAudit: audit emit failed:', error)
+    log.error({ err: error }, 'two-factor lifecycle audit emit failed')
   }
 }
 
@@ -945,7 +946,7 @@ export async function handleSignInFailureAudit(ctx: {
     })
   } catch (err) {
     // Best-effort — never let an audit failure surface to the user.
-    console.error('[auth-hooks.after] handleSignInFailureAudit: audit emit failed:', err)
+    log.error({ err }, 'sign-in failure audit emit failed')
   }
 }
 
@@ -995,7 +996,7 @@ export async function handleSignInSuccessAudit(ctx: {
     })
     role = principalRow?.role ?? null
   } catch (error) {
-    console.error('[auth-hooks.after] handleSignInSuccessAudit: principal lookup failed:', error)
+    log.error({ err: error }, 'sign-in success audit principal lookup failed')
   }
 
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
@@ -1017,7 +1018,7 @@ export async function handleSignInSuccessAudit(ctx: {
     // an audit write fail bubble up to Better-Auth would return 500 to a
     // user who is actually signed in. Log and swallow — sign-in audits
     // are observability, not policy.
-    console.error('[auth-hooks.after] handleSignInSuccessAudit: audit emit failed:', error)
+    log.error({ err: error }, 'sign-in success audit emit failed')
   }
 }
 
@@ -1082,7 +1083,7 @@ export async function handleNewDeviceNotification(
     ])
     await markDeviceSeen(userId)
   } catch (error) {
-    console.error('[auth-hooks.after] handleNewDeviceNotification: failed:', error)
+    log.error({ err: error }, 'new-device notification failed')
     await forgetDevice(userId, fingerprint)
   }
 }
@@ -1118,7 +1119,7 @@ export async function handleCountryCapture(ctx: {
       .set({ country })
       .where(eq(userTable.id, userId as UserId))
   } catch (error) {
-    console.error('[auth-hooks.after] handleCountryCapture: failed:', error)
+    log.error({ err: error }, 'country capture failed')
   }
 }
 
@@ -1154,7 +1155,7 @@ export async function handleCountryCapture(ctx: {
 export const hooksAfter = createAuthMiddleware(async (ctx) => {
   if (process.env.AUTH_HOOKS_DEBUG === '1') {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
-    console.log(`[auth-hooks.after] path=${ctx.path} provider=${provider ?? 'n/a'}`)
+    log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
   await handleSsoCallbackAfter(ctx as Parameters<typeof handleSsoCallbackAfter>[0])
 

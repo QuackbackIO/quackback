@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto'
 import { db, eq, settings } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import type {
   WidgetConfig,
   PublicWidgetConfig,
@@ -8,6 +9,8 @@ import type {
   LiveChatConfig,
 } from './settings.types'
 import { DEFAULT_WIDGET_CONFIG, DEFAULT_LIVE_CHAT_CONFIG } from './settings.types'
+
+const log = logger.child({ component: 'settings-widget' })
 
 /** Drop agent-only fields (cannedReplies) from a chat config for public
  *  exposure. Allowlist projection: new fields are excluded unless added here. */
@@ -34,13 +37,13 @@ export async function getWidgetConfig(): Promise<WidgetConfig> {
     const org = await requireSettings()
     return parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
   } catch (error) {
-    console.error(`[domain:settings] getWidgetConfig failed:`, error)
+    log.error({ err: error }, 'get widget config failed')
     wrapDbError('fetch widget config', error)
   }
 }
 
 export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promise<WidgetConfig> {
-  console.log(`[domain:settings] updateWidgetConfig`)
+  log.info('update widget config')
   try {
     const org = await requireSettings()
     const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
@@ -52,7 +55,7 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
     await invalidateSettingsCache()
     return updated
   } catch (error) {
-    console.error(`[domain:settings] updateWidgetConfig failed:`, error)
+    log.error({ err: error }, 'update widget config failed')
     wrapDbError('update widget config', error)
   }
 }
@@ -81,7 +84,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       chat: publicLiveChatConfig(config.chat ?? DEFAULT_LIVE_CHAT_CONFIG),
     }
   } catch (error) {
-    console.error(`[domain:settings] getPublicWidgetConfig failed:`, error)
+    log.error({ err: error }, 'get public widget config failed')
     wrapDbError('fetch public widget config', error)
   }
 }
@@ -119,14 +122,14 @@ export async function getWidgetSecret(): Promise<string | null> {
     const org = await requireSettings()
     return org.widgetSecret ?? null
   } catch (error) {
-    console.error(`[domain:settings] getWidgetSecret failed:`, error)
+    log.error({ err: error }, 'get widget secret failed')
     wrapDbError('fetch widget secret', error)
   }
 }
 
 /** Regenerate the widget secret. Returns the new secret once. */
 export async function regenerateWidgetSecret(): Promise<string> {
-  console.log(`[domain:settings] regenerateWidgetSecret`)
+  log.info('regenerate widget secret')
   try {
     const org = await requireSettings()
     const secret = generateWidgetSecret()
@@ -134,7 +137,7 @@ export async function regenerateWidgetSecret(): Promise<string> {
     await invalidateSettingsCache()
     return secret
   } catch (error) {
-    console.error(`[domain:settings] regenerateWidgetSecret failed:`, error)
+    log.error({ err: error }, 'regenerate widget secret failed')
     wrapDbError('regenerate widget secret', error)
   }
 }

@@ -9,6 +9,9 @@ import type { PostId, LinkedEntityId, IntegrationId } from '@quackback/ids'
 import { db, eq, and, inArray, postExternalLinks, integrations } from '@/lib/server/db'
 import { decryptSecrets, encryptSecrets } from '@/lib/server/integrations/encryption'
 import { archiveExternalIssue } from '@/lib/server/integrations/archive'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'post-cascade-delete' })
 
 // ============================================================================
 // Types
@@ -121,7 +124,7 @@ async function getValidAccessToken(
 
   // Refresh the token
   try {
-    console.log(`[CascadeDelete] Refreshing ${integrationType} token...`)
+    log.debug({ integration_type: integrationType }, 'refreshing integration token')
     const refreshFn = await refreshImport()
     const { getPlatformCredentials } =
       await import('@/lib/server/domains/platform-credentials/platform-credential.service')
@@ -143,7 +146,7 @@ async function getValidAccessToken(
 
     return refreshed.accessToken
   } catch (err) {
-    console.error(`[CascadeDelete] Token refresh failed for ${integrationType}:`, err)
+    log.error({ err, integration_type: integrationType }, 'integration token refresh failed')
     return token // Fall back to existing token; the API call may still 401
   }
 }

@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildGitHubIssueBody } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'github' })
 
 const GITHUB_API = 'https://api.github.com'
 
@@ -29,7 +32,7 @@ export const githubHook: HookHandler = {
       return { success: true }
     }
 
-    console.log(`[GitHub] Creating issue for ${event.type} -> repo ${ownerRepo}`)
+    log.debug({ event_type: event.type, repo: ownerRepo }, 'creating issue')
 
     const { title, body } = buildGitHubIssueBody(event, rootUrl)
 
@@ -90,7 +93,7 @@ export const githubHook: HookHandler = {
         html_url: string
       }
 
-      console.log(`[GitHub] Created issue #${issue.number} in ${ownerRepo}`)
+      log.info({ issue_number: issue.number, repo: ownerRepo }, 'issue created')
       return {
         success: true,
         externalId: String(issue.number),

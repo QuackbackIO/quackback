@@ -7,6 +7,9 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { buildDiscordMessage } from './message'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'discord' })
 
 const DISCORD_API = 'https://discord.com/api/v10'
 
@@ -24,7 +27,7 @@ export const discordHook: HookHandler = {
     const { channelId } = target as DiscordTarget
     const { accessToken, rootUrl } = config as DiscordConfig
 
-    console.log(`[Discord] Processing ${event.type} → channel ${channelId}`)
+    log.debug({ event_type: event.type, channel_id: channelId }, 'processing event')
 
     const message = buildDiscordMessage(event, rootUrl)
 
@@ -44,7 +47,7 @@ export const discordHook: HookHandler = {
 
         // Auth errors — don't retry
         if (status === 401 || status === 403) {
-          console.error(`[Discord] ❌ Auth error (${status}): ${errorBody}`)
+          log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'auth error')
           return {
             success: false,
             error: `Authentication failed (${status}). Please reconnect Discord.`,
@@ -54,11 +57,11 @@ export const discordHook: HookHandler = {
 
         // Rate limit
         if (status === 429) {
-          console.warn(`[Discord] ⚠️ Rate limited: ${errorBody}`)
+          log.warn({ status_code: status, channel_id: channelId, body: errorBody }, 'rate limited')
           return { success: false, error: 'Rate limited', shouldRetry: true }
         }
 
-        console.error(`[Discord] ❌ API error (${status}): ${errorBody}`)
+        log.error({ status_code: status, channel_id: channelId, body: errorBody }, 'api error')
         return {
           success: false,
           error: `Discord API error: ${status}`,
@@ -67,12 +70,12 @@ export const discordHook: HookHandler = {
       }
 
       const data = (await response.json()) as { id: string }
-      console.log(`[Discord] ✅ Posted to ${channelId} (id=${data.id})`)
+      log.info({ channel_id: channelId, message_id: data.id }, 'message posted')
 
       return { success: true, externalId: data.id }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      console.error(`[Discord] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error, channel_id: channelId }, 'message delivery failed')
 
       return {
         success: false,

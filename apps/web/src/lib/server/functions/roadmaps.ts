@@ -24,6 +24,9 @@ import {
   updateRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'roadmaps' })
 
 // ============================================
 // Schemas
@@ -98,7 +101,7 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
  * List all roadmaps for the workspace
  */
 export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:roadmaps] fetchRoadmaps`)
+  log.debug('list roadmaps')
   try {
     await requireAuth({ roles: ['admin', 'member'] })
 
@@ -115,7 +118,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
       updatedAt: roadmap.updatedAt.toISOString(),
     }))
   } catch (error) {
-    console.error(`[fn:roadmaps] fetchRoadmaps failed:`, error)
+    log.error({ err: error }, 'list roadmaps failed')
     throw error
   }
 })
@@ -126,7 +129,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchRoadmap = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:roadmaps] fetchRoadmap: id=${data.id}`)
+    log.debug({ roadmap_id: data.id }, 'get roadmap')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -143,7 +146,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
         updatedAt: roadmap.updatedAt.toISOString(),
       }
     } catch (error) {
-      console.error(`[fn:roadmaps] fetchRoadmap failed:`, error)
+      log.error({ err: error }, 'get roadmap failed')
       throw error
     }
   })
@@ -158,7 +161,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
 export const createRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(createRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:roadmaps] createRoadmapFn: name=${data.name}, slug=${data.slug}`)
+    log.debug({ name: data.name, slug: data.slug }, 'create roadmap')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -180,7 +183,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
         updatedAt: roadmap.updatedAt.toISOString(),
       }
     } catch (error) {
-      console.error(`[fn:roadmaps] createRoadmapFn failed:`, error)
+      log.error({ err: error }, 'create roadmap failed')
       throw error
     }
   })
@@ -191,7 +194,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(updateRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:roadmaps] updateRoadmapFn: id=${data.id}`)
+    log.debug({ roadmap_id: data.id }, 'update roadmap')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -212,7 +215,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
         updatedAt: roadmap.updatedAt.toISOString(),
       }
     } catch (error) {
-      console.error(`[fn:roadmaps] updateRoadmapFn failed:`, error)
+      log.error({ err: error }, 'update roadmap failed')
       throw error
     }
   })
@@ -223,14 +226,14 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(deleteRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:roadmaps] deleteRoadmapFn: id=${data.id}`)
+    log.debug({ roadmap_id: data.id }, 'delete roadmap')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       await deleteRoadmap(data.id as RoadmapId)
       return { id: String(data.id) }
     } catch (error) {
-      console.error(`[fn:roadmaps] deleteRoadmapFn failed:`, error)
+      log.error({ err: error }, 'delete roadmap failed')
       throw error
     }
   })
@@ -241,9 +244,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(addPostToRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:roadmaps] addPostToRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
-    )
+    log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'add post to roadmap')
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
@@ -256,7 +257,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
       )
       return { success: true }
     } catch (error) {
-      console.error(`[fn:roadmaps] addPostToRoadmapFn failed:`, error)
+      log.error({ err: error }, 'add post to roadmap failed')
       throw error
     }
   })
@@ -267,9 +268,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .inputValidator(removePostFromRoadmapSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:roadmaps] removePostFromRoadmapFn: roadmapId=${data.roadmapId}, postId=${data.postId}`
-    )
+    log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'remove post from roadmap')
     try {
       const auth = await requireAuth({ roles: ['admin', 'member'] })
 
@@ -280,7 +279,7 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
       )
       return { success: true }
     } catch (error) {
-      console.error(`[fn:roadmaps] removePostFromRoadmapFn failed:`, error)
+      log.error({ err: error }, 'remove post from roadmap failed')
       throw error
     }
   })
@@ -291,14 +290,14 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .inputValidator(reorderRoadmapsSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:roadmaps] reorderRoadmapsFn: count=${data.roadmapIds.length}`)
+    log.debug({ count: data.roadmapIds.length }, 'reorder roadmaps')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
       await reorderRoadmaps(data.roadmapIds as RoadmapId[])
       return { success: true }
     } catch (error) {
-      console.error(`[fn:roadmaps] reorderRoadmapsFn failed:`, error)
+      log.error({ err: error }, 'reorder roadmaps failed')
       throw error
     }
   })
@@ -309,9 +308,7 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:roadmaps] getRoadmapPostsFn: roadmapId=${data.roadmapId}, limit=${data.limit}, offset=${data.offset}`
-    )
+    log.debug({ roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset }, 'get roadmap posts')
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -347,7 +344,7 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
         })),
       }
     } catch (error) {
-      console.error(`[fn:roadmaps] getRoadmapPostsFn failed:`, error)
+      log.error({ err: error }, 'get roadmap posts failed')
       throw error
     }
   })

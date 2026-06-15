@@ -1,5 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isValidTypeId, type InviteId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'auth-invitation' })
 
 export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
   server: {
@@ -12,12 +15,12 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
         const { db, invitation, eq } = await import('@/lib/server/db')
 
         const { invitationId: invitationIdParam } = params
-        console.log(`[auth] GET invitation: id=${invitationIdParam.slice(0, 12)}...`)
+        log.debug({ invitation_id: invitationIdParam }, 'get invitation request')
 
         try {
           // Validate TypeID format
           if (!isValidTypeId(invitationIdParam, 'invite')) {
-            console.warn(`[auth] ⚠️ Invalid invitation ID format`)
+            log.warn('invalid invitation id format')
             return Response.json({ error: 'Invalid invitation ID format' }, { status: 400 })
           }
           const invitationId = invitationIdParam as InviteId
@@ -59,8 +62,7 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
           }
 
           // Return invitation details (limited info for security)
-          const maskedEmail = inv.email.replace(/(.{2}).*@/, '$1***@')
-          console.log(`[auth] ✅ Invitation found: email=${maskedEmail}, role=${inv.role}`)
+          log.debug({ invitation_id: inv.id, role: inv.role }, 'invitation found')
           return Response.json({
             id: inv.id,
             email: inv.email,
@@ -70,7 +72,7 @@ export const Route = createFileRoute('/api/auth/invitation/$invitationId')({
             inviterName: inv.inviter?.name || null,
           })
         } catch (error) {
-          console.error(`[auth] ❌ Get invitation error:`, error)
+          log.error({ err: error }, 'get invitation failed')
           return Response.json({ error: 'Failed to get invitation' }, { status: 500 })
         }
       },

@@ -13,6 +13,9 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'post-permissions' })
 
 // ============================================================================
 // Permission Checks
@@ -31,8 +34,9 @@ export async function canEditPost(
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
-  console.log(
-    `[domain:post-permissions] canEditPost: postId=${postId} principalId=${actor.principalId} role=${actor.role}`
+  log.debug(
+    { post_id: postId, principal_id: actor.principalId, role: actor.role },
+    'can edit post check'
   )
   // Get the post
   const post = await db.query.posts.findFirst({
@@ -98,8 +102,9 @@ export async function canDeletePost(
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
-  console.log(
-    `[domain:post-permissions] canDeletePost: postId=${postId} principalId=${actor.principalId} role=${actor.role}`
+  log.debug(
+    { post_id: postId, principal_id: actor.principalId, role: actor.role },
+    'can delete post check'
   )
   // Get the post
   const post = await db.query.posts.findFirst({
@@ -169,8 +174,9 @@ export async function getPostPermissions(
   canEdit: PermissionCheckResult
   canDelete: PermissionCheckResult
 }> {
-  console.log(
-    `[domain:post-permissions] getPostPermissions: postId=${postId} principalId=${actor.principalId} role=${actor.role}`
+  log.debug(
+    { post_id: postId, principal_id: actor.principalId, role: actor.role },
+    'get post permissions'
   )
   // Get the post with status in single query (eliminates separate isDefaultStatus query)
   const post = await db.query.posts.findFirst({

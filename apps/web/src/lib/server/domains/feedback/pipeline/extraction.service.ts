@@ -15,8 +15,11 @@ import { buildExtractionPrompt } from './prompts/extraction.prompt'
 import { shouldExtract } from './quality-gate.service'
 import { logPipelineEvent } from './pipeline-log'
 import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
+import { logger } from '@/lib/server/logger'
 import type { ExtractionResult, RawFeedbackContent, RawFeedbackItemContextEnvelope } from '../types'
 import type { RawFeedbackItemId } from '@quackback/ids'
+
+const log = logger.child({ component: 'extraction' })
 
 const EXTRACTION_PROMPT_VERSION = 'v1'
 
@@ -34,7 +37,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
   }
 
   if (item.processingState !== 'ready_for_extraction') {
-    console.log(`[Extraction] Skipping ${rawItemId} in state ${item.processingState}`)
+    log.debug({ raw_item_id: rawItemId, state: item.processingState }, 'skipping raw item')
     return
   }
 
@@ -52,7 +55,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
     const isChannelMonitor =
       (context.metadata as Record<string, unknown> | undefined)?.ingestionMode === 'channel_monitor'
     const finalState = isChannelMonitor ? 'dismissed' : 'completed'
-    console.log(`[Extraction] Plan disallows extraction, ${rawItemId} -> ${finalState}`)
+    log.debug({ raw_item_id: rawItemId, final_state: finalState }, 'plan disallows extraction')
     await logPipelineEvent({
       eventType: 'extraction.skipped_no_entitlement',
       rawFeedbackItemId: rawItemId,
@@ -103,8 +106,9 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
     if (!gate.extract) {
       // Channel-monitored items are 'dismissed' (auditable); others are 'completed'
       const finalState = isChannelMonitor ? 'dismissed' : 'completed'
-      console.log(
-        `[Extraction] Quality gate filtered ${rawItemId} -> ${finalState}: ${gate.reason}`
+      log.debug(
+        { raw_item_id: rawItemId, final_state: finalState, reason: gate.reason },
+        'quality gate filtered raw item'
       )
 
       await logPipelineEvent({
@@ -283,7 +287,7 @@ export async function extractSignals(rawItemId: RawFeedbackItemId): Promise<void
         .where(eq(rawFeedbackItems.id, rawItemId))
     }
 
-    console.log(`[Extraction] Extracted ${signalIds.length} signals from ${rawItemId}`)
+    log.info({ signal_count: signalIds.length, raw_item_id: rawItemId }, 'extracted signals')
   } catch (error) {
     await logPipelineEvent({
       eventType: 'extraction.failed',

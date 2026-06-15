@@ -20,6 +20,9 @@ import { db, chatMessageMentions, principal, and, eq, inArray } from '@/lib/serv
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import { truncate } from '@/lib/shared/utils/string'
 import type { ChatMessageId, ConversationId, PrincipalId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'chat-mentions' })
 
 export interface SyncChatMentionsInput {
   chatMessageId: ChatMessageId
@@ -94,6 +97,6 @@ export async function syncChatMessageMentions(input: SyncChatMentionsInput): Pro
         )
       )
   } catch (err) {
-    console.warn('[chat:notify] syncChatMessageMentions failed:', (err as Error).message)
+    log.warn({ err }, 'sync chat message mentions failed')
   }
 }

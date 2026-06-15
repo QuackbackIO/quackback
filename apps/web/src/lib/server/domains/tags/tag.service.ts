@@ -14,6 +14,9 @@ import { db, eq, and, isNull, asc, type Tag, tags, boards, postTags, posts } fro
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'tags' })
 
 /**
  * Create a new tag
@@ -25,7 +28,7 @@ import type { CreateTagInput, UpdateTagInput } from './tag.types'
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
 export async function createTag(input: CreateTagInput): Promise<Tag> {
-  console.log(`[domain:tags] createTag: name=${input.name}`)
+  log.debug({ name: input.name }, 'create tag')
   // Basic validation
   if (!input.name || !input.name.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
@@ -77,7 +80,7 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
 export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> {
-  console.log(`[domain:tags] updateTag: id=${id}`)
+  log.debug({ tag_id: id }, 'update tag')
   // Get existing tag
   const existingTag = await db.query.tags.findFirst({
     where: eq(tags.id, id),
@@ -146,7 +149,7 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
  * Authorization should be checked at the action/API layer before calling this.
  */
 export async function deleteTag(id: TagId): Promise<void> {
-  console.log(`[domain:tags] deleteTag: id=${id}`)
+  log.debug({ tag_id: id }, 'delete tag')
   // Soft delete the tag by setting deletedAt
   const result = await db
     .update(tags)
@@ -163,7 +166,7 @@ export async function deleteTag(id: TagId): Promise<void> {
  * Get a tag by ID
  */
 export async function getTagById(id: TagId): Promise<Tag> {
-  console.log(`[domain:tags] getTagById: id=${id}`)
+  log.debug({ tag_id: id }, 'get tag by id')
   const tag = await db.query.tags.findFirst({
     where: eq(tags.id, id),
   })
@@ -178,7 +181,7 @@ export async function getTagById(id: TagId): Promise<Tag> {
  * List all tags for the organization (excludes soft-deleted)
  */
 export async function listTags(): Promise<Tag[]> {
-  console.log(`[domain:tags] listTags`)
+  log.debug('list tags')
   const tagList = await db.query.tags.findMany({
     where: isNull(tags.deletedAt),
     orderBy: [asc(tags.name)],
@@ -193,7 +196,7 @@ export async function listTags(): Promise<Tag[]> {
  * This returns only tags that are actually used by posts in the board.
  */
 export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
-  console.log(`[domain:tags] getTagsByBoard: boardId=${boardId}`)
+  log.debug({ board_id: boardId }, 'get tags by board')
   // Validate board exists
   const board = await db.query.boards.findFirst({
     where: eq(boards.id, boardId),
@@ -231,14 +234,14 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
  * This method is used for public endpoints like feedback portal filtering.
  */
 export async function listPublicTags(): Promise<Tag[]> {
-  console.log(`[domain:tags] listPublicTags`)
+  log.debug('list public tags')
   try {
     return await db.query.tags.findMany({
       where: isNull(tags.deletedAt),
       orderBy: [asc(tags.name)],
     })
   } catch (error) {
-    console.error(`[domain:tags] listPublicTags failed:`, error)
+    log.error({ err: error }, 'list public tags failed')
     throw new InternalError(
       'DATABASE_ERROR',
       `Failed to fetch tags: ${error instanceof Error ? error.message : 'Unknown error'}`,

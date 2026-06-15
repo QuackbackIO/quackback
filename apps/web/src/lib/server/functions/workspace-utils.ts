@@ -12,6 +12,9 @@ import type { UserId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, eq } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'workspace-utils' })
 
 const requireWorkspaceRoleSchema = z.object({
   allowedRoles: z.array(z.string()),
@@ -35,9 +38,7 @@ const requireWorkspaceRoleSchema = z.object({
 export const requireWorkspaceRole = createServerFn({ method: 'GET' })
   .inputValidator(requireWorkspaceRoleSchema)
   .handler(async ({ data }) => {
-    console.log(
-      `[fn:workspace-utils] requireWorkspaceRole: allowedRoles=${data.allowedRoles.join(',')}`
-    )
+    log.debug({ allowed_roles: data.allowedRoles }, 'require workspace role')
     // If the route restricts to team roles only, unauthenticated
     // callers belong on /admin/login. If the route also allows
     // role='user' (public portal), fall back to '/' for the regular
@@ -74,7 +75,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
         user: session.user,
       }
     } catch (error) {
-      console.error(`[fn:workspace-utils] requireWorkspaceRole failed:`, error)
+      log.error({ err: error }, 'require workspace role failed')
       throw error
     }
   })

@@ -4,6 +4,9 @@
  */
 
 import { WebClient } from '@slack/web-api'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'slack' })
 
 const SLACK_SCOPES = [
   'channels:read',
@@ -48,9 +51,9 @@ export async function revokeSlackToken(accessToken: string): Promise<void> {
   try {
     const client = new WebClient(accessToken)
     await client.auth.revoke()
-    console.log('[Slack] Token revoked successfully')
+    log.info('token revoked')
   } catch (error) {
-    console.error('[Slack] Failed to revoke token:', error)
+    log.error({ err: error }, 'failed to revoke token')
   }
 }
 

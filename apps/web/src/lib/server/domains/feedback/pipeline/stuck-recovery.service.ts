@@ -6,8 +6,11 @@
  */
 
 import { db, and, eq, rawFeedbackItems, feedbackSignals } from '@/lib/server/db'
+import { logger } from '@/lib/server/logger'
 import { logPipelineEvent } from './pipeline-log'
 import { enqueueFeedbackAiJob } from '../queues/feedback-ai-queue'
+
+const log = logger.child({ component: 'feedback-stuck-recovery' })
 
 const STUCK_THRESHOLD_MINUTES = 30
 const MAX_ATTEMPTS = 3
@@ -134,8 +137,9 @@ export async function recoverStuckItems(): Promise<void> {
   }
 
   if (stuckRawItems.length > 0 || stuckSignals.length > 0) {
-    console.log(
-      `[StuckRecovery] Recovered ${stuckRawItems.length} raw items, ${stuckSignals.length} signals`
+    log.info(
+      { raw_item_count: stuckRawItems.length, signal_count: stuckSignals.length },
+      'recovered stuck items'
     )
   }
 }

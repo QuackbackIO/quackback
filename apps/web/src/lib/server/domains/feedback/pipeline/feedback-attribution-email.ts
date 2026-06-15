@@ -11,8 +11,11 @@ import { getBaseUrl } from '@/lib/server/config'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { generateUnsubscribeToken } from '@/lib/server/domains/subscriptions/subscription.service'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { logger } from '@/lib/server/logger'
 import { sendFeedbackLinkedEmail } from '@quackback/email'
 import type { PrincipalId, PostId } from '@quackback/ids'
+
+const log = logger.child({ component: 'feedback-attribution-email' })
 
 export async function sendFeedbackAttributionEmail(
   principalId: PrincipalId,
@@ -86,9 +89,6 @@ export async function sendFeedbackAttributionEmail(
     })
   } catch (error) {
     // Never fail the accept flow due to email errors
-    console.warn(
-      `[FeedbackAttribution] Failed to send attribution email:`,
-      error instanceof Error ? error.message : String(error)
-    )
+    log.warn({ err: error }, 'failed to send attribution email')
   }
 }

@@ -23,6 +23,9 @@ import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import type { PostId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'summary' })
 
 const SYSTEM_PROMPT = `You are a product feedback analyst writing post briefs for a PM's triage queue.
 Your job is to surface what matters for prioritization, not restate the obvious.
@@ -77,7 +80,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     columns: { title: true, content: true, summaryJson: true },
   })
   if (!post) {
-    console.warn(`[Summary] Post ${postId} not found`)
+    log.warn({ post_id: postId }, 'post not found for summary')
     return
   }
 
@@ -134,7 +137,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
 
   const responseText = completion.choices[0]?.message?.content
   if (!responseText) {
-    console.error(`[Summary] Empty response for post ${postId}`)
+    log.error({ post_id: postId }, 'empty summary response')
     return
   }
 
@@ -142,15 +145,16 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
   try {
     summaryJson = JSON.parse(stripCodeFences(responseText))
   } catch {
-    console.error(
-      `[Summary] Failed to parse JSON for post ${postId}: ${responseText.slice(0, 200)}`
+    log.error(
+      { post_id: postId, response_preview: responseText.slice(0, 200) },
+      'failed to parse summary json'
     )
     return
   }
 
   // Validate shape
   if (typeof summaryJson.summary !== 'string') {
-    console.error(`[Summary] Invalid summary shape for post ${postId}`)
+    log.error({ post_id: postId }, 'invalid summary shape')
     return
   }
 
@@ -172,7 +176,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     })
     .where(eq(posts.id, postId))
 
-  console.log(`[Summary] Generated for post ${postId} (${postComments.length} comments)`)
+  log.info({ post_id: postId, comment_count: postComments.length }, 'post summary generated')
 }
 
 const SWEEP_BATCH_SIZE = 50
@@ -243,7 +247,7 @@ async function _doSweep(): Promise<void> {
     if (stalePosts.length === 0) break
 
     if (totalProcessed === 0 && totalFailed === 0) {
-      console.log(`[Summary] Found stale posts, processing...`)
+      log.debug('found stale posts, processing summary sweep')
     }
 
     let batchSucceeded = 0
@@ -255,7 +259,7 @@ async function _doSweep(): Promise<void> {
         batchSucceeded++
       } catch (err) {
         totalFailed++
-        console.error(`[Summary] Failed to refresh post ${id}:`, err)
+        log.error({ post_id: id, err }, 'failed to refresh post summary')
       }
     }
 
@@ -266,20 +270,25 @@ async function _doSweep(): Promise<void> {
     if (batchSucceeded === 0) {
       consecutiveEmptyBatches++
       if (consecutiveEmptyBatches >= SWEEP_ABORT_AFTER_EMPTY_BATCHES) {
-        console.error(
-          `[Summary] Aborting sweep: ${consecutiveEmptyBatches} consecutive batches with 0 successes (${totalProcessed} processed, ${totalFailed} failed total). Next sweep will retry.`
+        log.error(
+          {
+            consecutive_empty_batches: consecutiveEmptyBatches,
+            processed: totalProcessed,
+            failed: totalFailed,
+          },
+          'aborting summary sweep after consecutive empty batches'
         )
         break
       }
     } else {
       consecutiveEmptyBatches = 0
-      console.log(`[Summary] Progress: ${totalProcessed} processed, ${totalFailed} failed`)
+      log.debug({ processed: totalProcessed, failed: totalFailed }, 'summary sweep progress')
     }
 
     await new Promise((resolve) => setTimeout(resolve, SWEEP_BATCH_DELAY_MS))
   }
 
   if (totalProcessed > 0 || totalFailed > 0) {
-    console.log(`[Summary] Sweep complete: ${totalProcessed} processed, ${totalFailed} failed`)
+    log.info({ processed: totalProcessed, failed: totalFailed }, 'summary sweep completed')
   }
 }

@@ -40,6 +40,9 @@ import { getMemberByUser } from '@/lib/server/domains/principals/principal.servi
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'public-posts' })
 
 // ============================================
 // Schemas
@@ -137,14 +140,12 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
-    console.log(
-      `[fn:public-posts] listPublicPostsFn: sort=${data.sort}, board=${data.boardSlug || 'all'}`
-    )
+    log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
     try {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        console.log(`[fn:public-posts] listPublicPostsFn: portal access denied, returning empty`)
+        log.debug('portal access denied, returning empty')
         return { items: [], hasMore: false, total: 0 }
       }
 
@@ -171,7 +172,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
         actor,
       })
 
-      console.log(`[fn:public-posts] listPublicPostsFn: count=${result.items.length}`)
+      log.debug({ count: result.items.length }, 'list public posts results')
       // Serialize Date fields
       return {
         ...result,
@@ -181,7 +182,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
         })),
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ listPublicPostsFn failed:`, error)
+      log.error({ err: error }, 'list public posts failed')
       throw error
     }
   })
@@ -202,11 +203,11 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
       editReason?: string
       deleteReason?: string
     }> => {
-      console.log(`[fn:public-posts] getPostPermissionsFn: postId=${data.postId}`)
+      log.debug({ post_id: data.postId }, 'get post permissions')
       try {
         // Early bailout: no session cookie = no permissions (skip DB queries)
         if (!hasAuthCredentials()) {
-          console.log(`[fn:public-posts] getPostPermissionsFn: no session cookie, skipping auth`)
+          log.debug('no session cookie, skipping auth')
           return { canEdit: false, canDelete: false }
         }
 
@@ -215,7 +216,7 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
 
         // If no user/member, return no permissions
         if (!ctx?.user || !ctx?.principal) {
-          console.log(`[fn:public-posts] getPostPermissionsFn: no auth context`)
+          log.debug('no auth context')
           return { canEdit: false, canDelete: false }
         }
 
@@ -228,8 +229,9 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
         // Combined permission check - queries post, config, and status only once
         const { canEdit, canDelete } = await getPostPermissions(postId, actor)
 
-        console.log(
-          `[fn:public-posts] getPostPermissionsFn: canEdit=${canEdit.allowed}, canDelete=${canDelete.allowed}`
+        log.debug(
+          { can_edit: canEdit.allowed, can_delete: canDelete.allowed },
+          'get post permissions results'
         )
         return {
           canEdit: canEdit.allowed,
@@ -239,7 +241,7 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
         }
       } catch (error) {
         // Post not found or other error - return no permissions
-        console.error(`[fn:public-posts] ❌ getPostPermissionsFn failed:`, error)
+        log.error({ err: error }, 'get post permissions failed')
         return { canEdit: false, canDelete: false }
       }
     }
@@ -251,7 +253,7 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
 export const userEditPostFn = createServerFn({ method: 'POST' })
   .inputValidator(userEditPostSchema)
   .handler(async ({ data }: { data: UserEditPostInput }) => {
-    console.log(`[fn:public-posts] userEditPostFn: postId=${data.postId}`)
+    log.debug({ post_id: data.postId }, 'user edit post')
     try {
       // Portal-visibility gate — see toggleVoteFn / createPublicPostFn
       // for rationale. Denied callers must not mutate inside a portal
@@ -285,7 +287,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
         actor
       )
 
-      console.log(`[fn:public-posts] userEditPostFn: edited id=${result.id}`)
+      log.info({ post_id: result.id }, 'user edited post')
       // Serialize Date fields
       return {
         ...result,
@@ -294,7 +296,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
         deletedAt: result.deletedAt?.toISOString() || null,
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ userEditPostFn failed:`, error)
+      log.error({ err: error }, 'user edit post failed')
       throw error
     }
   })
@@ -305,7 +307,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
 export const userDeletePostFn = createServerFn({ method: 'POST' })
   .inputValidator(userDeletePostSchema)
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
-    console.log(`[fn:public-posts] userDeletePostFn: postId=${data.postId}`)
+    log.debug({ post_id: data.postId }, 'user delete post')
     try {
       // Portal-visibility gate — see toggleVoteFn / createPublicPostFn.
       const access = await resolvePortalAccessForRequest()
@@ -329,10 +331,10 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
 
       await softDeletePost(postId, actor)
 
-      console.log(`[fn:public-posts] userDeletePostFn: deleted id=${postId}`)
+      log.info({ post_id: postId }, 'user deleted post')
       return { id: postId }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ userDeletePostFn failed:`, error)
+      log.error({ err: error }, 'user delete post failed')
       throw error
     }
   })
@@ -346,7 +348,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
   .inputValidator(toggleVoteSchema)
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
-      console.log(`[fn:public-posts] toggleVoteFn: postId=${data.postId}`)
+      log.debug({ post_id: data.postId }, 'toggle vote')
       try {
         // Portal-visibility gate: a denied caller (signed-in but not on
         // the allowlist of a private portal) must not be able to vote.
@@ -394,12 +396,13 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
         }
 
         const result = await voteOnPost(data.postId as PostId, ctx.principal.id)
-        console.log(
-          `[fn:public-posts] toggleVoteFn: voted=${result.voted}, count=${result.voteCount}, type=${ctx.principal.type}`
+        log.debug(
+          { voted: result.voted, count: result.voteCount, principal_type: ctx.principal.type },
+          'toggle vote results'
         )
         return result
       } catch (error) {
-        console.error(`[fn:public-posts] ❌ toggleVoteFn failed:`, error)
+        log.error({ err: error }, 'toggle vote failed')
         throw error
       }
     }
@@ -411,7 +414,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
 export const createPublicPostFn = createServerFn({ method: 'POST' })
   .inputValidator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
-    console.log(`[fn:public-posts] createPublicPostFn: boardId=${data.boardId}`)
+    log.debug({ board_id: data.boardId }, 'create public post')
     try {
       // Portal-visibility gate: a denied caller must not be able to
       // create posts inside a portal they're not entitled to view. The
@@ -486,7 +489,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         { headers: getRequestHeaders() }
       )
 
-      console.log(`[fn:public-posts] createPublicPostFn: id=${post.id}`)
+      log.info({ post_id: post.id }, 'created public post')
       return {
         id: post.id,
         title: post.title,
@@ -501,7 +504,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         },
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ createPublicPostFn failed:`, error)
+      log.error({ err: error }, 'create public post failed')
       throw error
     }
   })
@@ -511,24 +514,24 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
  */
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
-    console.log(`[fn:public-posts] getVotedPostsFn`)
+    log.debug('get voted posts')
     try {
       if (!hasAuthCredentials()) {
-        console.log(`[fn:public-posts] getVotedPostsFn: no session cookie, skipping auth`)
+        log.debug('no session cookie, skipping auth')
         return { votedPostIds: [] }
       }
 
       const ctx = await getOptionalAuth()
       if (!ctx?.user || !ctx?.principal) {
-        console.log(`[fn:public-posts] getVotedPostsFn: no auth`)
+        log.debug('no auth context')
         return { votedPostIds: [] }
       }
 
       const result = await getAllUserVotedPostIds(ctx.principal.id)
-      console.log(`[fn:public-posts] getVotedPostsFn: count=${result.size}`)
+      log.debug({ count: result.size }, 'get voted posts results')
       return { votedPostIds: Array.from(result) }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ getVotedPostsFn failed:`, error)
+      log.error({ err: error }, 'get voted posts failed')
       throw error
     }
   }
@@ -541,19 +544,19 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
  * caller.
  */
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  console.log(`[fn:public-posts] listPublicRoadmapsFn`)
+  log.debug('list public roadmaps')
   try {
     // Outer gate: private portal + unauthorized caller → no portal data.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
-      console.log(`[fn:public-posts] listPublicRoadmapsFn: portal access denied, returning empty`)
+      log.debug('portal access denied, returning empty')
       return []
     }
 
     // No auth needed - this is public data
     const result = await listPublicRoadmaps()
 
-    console.log(`[fn:public-posts] listPublicRoadmapsFn: count=${result.length}`)
+    log.debug({ count: result.length }, 'list public roadmaps results')
     // Serialize branded types to plain strings for turbo-stream
     return result.map((roadmap) => ({
       id: String(roadmap.id),
@@ -566,7 +569,7 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
       updatedAt: roadmap.updatedAt.toISOString(),
     }))
   } catch (error) {
-    console.error(`[fn:public-posts] ❌ listPublicRoadmapsFn failed:`, error)
+    log.error({ err: error }, 'list public roadmaps failed')
     throw error
   }
 })
@@ -580,14 +583,12 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
 export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
-    console.log(`[fn:public-posts] getPublicRoadmapPostsFn: roadmapId=${data.roadmapId}`)
+    log.debug({ roadmap_id: data.roadmapId }, 'get public roadmap posts')
     try {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        console.log(
-          `[fn:public-posts] getPublicRoadmapPostsFn: portal access denied, returning empty`
-        )
+        log.debug('portal access denied, returning empty')
         return { items: [], hasMore: false, total: 0 }
       }
 
@@ -609,7 +610,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
         },
         actor
       )
-      console.log(`[fn:public-posts] getPublicRoadmapPostsFn: count=${result.items.length}`)
+      log.debug({ count: result.items.length }, 'get public roadmap posts results')
 
       // Serialize branded types to plain strings for turbo-stream
       return {
@@ -632,7 +633,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
         })),
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ getPublicRoadmapPostsFn failed:`, error)
+      log.error({ err: error }, 'get public roadmap posts failed')
       throw error
     }
   })
@@ -646,14 +647,12 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
 export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .inputValidator(getRoadmapPostsByStatusSchema)
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
-    console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: statusId=${data.statusId}`)
+    log.debug({ status_id: data.statusId }, 'get roadmap posts by status')
     try {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        console.log(
-          `[fn:public-posts] getRoadmapPostsByStatusFn: portal access denied, returning empty`
-        )
+        log.debug('portal access denied, returning empty')
         return { items: [], hasMore: false, total: 0 }
       }
 
@@ -672,7 +671,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
         limit,
         actor,
       })
-      console.log(`[fn:public-posts] getRoadmapPostsByStatusFn: count=${result.items.length}`)
+      log.debug({ count: result.items.length }, 'get roadmap posts by status result')
 
       // Serialize branded types to plain strings for turbo-stream
       return {
@@ -683,7 +682,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
         })),
       }
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ getRoadmapPostsByStatusFn failed:`, error)
+      log.error({ err: error }, 'get roadmap posts by status failed')
       throw error
     }
   })
@@ -695,7 +694,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .inputValidator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
-    console.log(`[fn:public-posts] getVoteSidebarDataFn: postId=${data.postId}`)
+    log.debug({ post_id: data.postId }, 'get vote sidebar data')
     try {
       const postId = data.postId as PostId
       const noSub = { subscribed: false, level: 'none' as const, reason: null }
@@ -708,7 +707,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       // default rather than throwing.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        console.log(`[fn:public-posts] getVoteSidebarDataFn: portal access denied`)
+        log.debug('portal access denied')
         return denied
       }
 
@@ -723,7 +722,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         await assertPostViewable(postId, probeActor)
       } catch (err) {
         if (err instanceof Error && err.name === 'NotFoundError') {
-          console.log(`[fn:public-posts] getVoteSidebarDataFn: post not viewable`)
+          log.debug('post not viewable')
           return denied
         }
         throw err
@@ -740,7 +739,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       const boardAccess = await loadBoardAccessForPost(postId)
       if (!boardAccess) {
         // Race: post or board deleted between assertPostViewable and now.
-        console.log(`[fn:public-posts] getVoteSidebarDataFn: post/board vanished mid-call`)
+        log.debug('post or board vanished mid-call')
         return denied
       }
 
@@ -761,8 +760,9 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         const settings = await getSettings()
         const anonEnabled = workspaceAllowsAnonymous(settings?.portalConfig)
         const canVote = anonEnabled && voteDecision.allowed
-        console.log(
-          `[fn:public-posts] getVoteSidebarDataFn: no session, canVote=${canVote} (anonEnabled=${anonEnabled}, voteAllowed=${voteDecision.allowed})`
+        log.debug(
+          { can_vote: canVote, anon_enabled: anonEnabled, vote_allowed: voteDecision.allowed },
+          'vote sidebar data, no session'
         )
         return {
           isMember: false,
@@ -775,7 +775,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
       // Has session (could be regular or anonymous)
       const ctx = await getOptionalAuth()
       if (!ctx?.user || !ctx?.principal) {
-        console.log(`[fn:public-posts] getVoteSidebarDataFn: invalid session`)
+        log.debug('invalid session')
         return { isMember: false, canVote: false, hasVoted: false, subscriptionStatus: noSub }
       }
 
@@ -795,8 +795,9 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
         ctx.principal.id
       )
 
-      console.log(
-        `[fn:public-posts] getVoteSidebarDataFn: isMember=${!isAnonymous}, hasVoted=${hasVoted}, canVote=${canVote}`
+      log.debug(
+        { is_member: !isAnonymous, has_voted: hasVoted, can_vote: canVote },
+        'vote sidebar data resolved'
       )
       return {
         isMember: !isAnonymous,
@@ -813,7 +814,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
     } catch (error) {
       const errorName = error instanceof Error ? error.name : 'Unknown'
       const errorMsg = error instanceof Error ? error.message : String(error)
-      console.error(`[fn:public-posts] ❌ getVoteSidebarDataFn failed: ${errorName}: ${errorMsg}`)
+      log.error({ error_name: errorName, error_msg: errorMsg }, 'get vote sidebar data failed')
       throw error
     }
   })
@@ -896,12 +897,12 @@ function toRawResult(row: {
 export const findSimilarPostsFn = createServerFn({ method: 'GET' })
   .inputValidator(findSimilarPostsSchema)
   .handler(async ({ data }): Promise<SimilarPost[]> => {
-    console.log(`[fn:public-posts] findSimilarPostsFn: title="${data.title.slice(0, 30)}..."`)
+    log.debug({ title_length: data.title.length }, 'find similar posts')
     try {
       // Outer gate: private portal + unauthorized caller → no post data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
-        console.log(`[fn:public-posts] findSimilarPostsFn: portal access denied, returning empty`)
+        log.debug('portal access denied, returning empty')
         return []
       }
 
@@ -986,10 +987,10 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
             .orderBy(desc(sql`1 - (${posts.embedding} <=> ${vectorStr}::vector)`))
             .limit(fetchLimit)
 
-          console.log(`[fn:public-posts] Vector search found ${matches.length} results`)
+          log.debug({ count: matches.length }, 'vector search results')
           return matches.map(toRawResult)
         } catch (error) {
-          console.warn(`[fn:public-posts] Vector search failed, using full-text only:`, error)
+          log.warn({ err: error }, 'vector search failed, using full-text only')
           return []
         }
       })()
@@ -1002,7 +1003,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
         ...toRawResult(r),
         score: Math.min(Number(r.score) * 2, 1),
       }))
-      console.log(`[fn:public-posts] Full-text search found ${ftsResults.length} results`)
+      log.debug({ count: ftsResults.length }, 'full-text search results')
 
       // 3. Merge results (dedupe by ID, combine scores)
       const scoreMap = new Map<
@@ -1032,10 +1033,10 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
         .sort((a, b) => b.score - a.score)
         .slice(0, limit)
 
-      console.log(`[fn:public-posts] Hybrid search merged ${merged.length} results`)
+      log.debug({ count: merged.length }, 'hybrid search merged results')
 
       if (merged.length === 0) {
-        console.log(`[fn:public-posts] findSimilarPostsFn: no matches found`)
+        log.debug('no matches found')
         return []
       }
 
@@ -1076,10 +1077,10 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
         }
       })
 
-      console.log(`[fn:public-posts] findSimilarPostsFn: found ${similarPosts.length} matches`)
+      log.debug({ count: similarPosts.length }, 'find similar posts result')
       return similarPosts
     } catch (error) {
-      console.error(`[fn:public-posts] ❌ findSimilarPostsFn failed:`, error)
+      log.error({ err: error }, 'find similar posts failed')
       return []
     }
   })

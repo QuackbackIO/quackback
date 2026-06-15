@@ -12,7 +12,10 @@ import { getBaseUrl } from '@/lib/server/config'
 import { decryptSecrets } from '../encryption'
 import { ingestRawFeedback } from '@/lib/server/domains/feedback/ingestion/feedback-ingest.service'
 import { verifySlackSignature } from './verify'
+import { logger } from '@/lib/server/logger'
 import type { FeedbackSourceId, IntegrationId } from '@quackback/ids'
+
+const log = logger.child({ component: 'slack' })
 
 interface SlackInteractionPayload {
   type: string
@@ -51,7 +54,7 @@ export async function handleSlackInteractivity(request: Request): Promise<Respon
   ])
 
   if (!credentials?.signingSecret) {
-    console.error('[Slack] Signing secret not configured')
+    log.error('signing secret not configured')
     return new Response('Slack signing secret not configured', { status: 500 })
   }
 
@@ -154,7 +157,7 @@ async function handleMessageAction(
       },
     })
   } catch (error) {
-    console.error('[Slack] Failed to open modal:', error)
+    log.error({ err: error }, 'failed to open modal')
   }
 
   // Must return 200 immediately for message actions
@@ -189,7 +192,7 @@ async function handleViewSubmission(
   })
 
   if (!source) {
-    console.error('[Slack] No feedback source found for integration', integrationId)
+    log.error({ integration_id: integrationId }, 'no feedback source found for integration')
     return new Response('', { status: 200 })
   }
 
@@ -277,7 +280,7 @@ async function handleViewSubmission(
         }
       }
     } catch (error) {
-      console.error('[Slack] Failed to ingest feedback:', error)
+      log.error({ err: error }, 'failed to ingest feedback')
     }
   })()
 

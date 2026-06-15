@@ -1,6 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { makeReportStatus } from '../report-status'
 
+// Failures are reported through the structured logger; mock it so the child
+// logger's `.error` is a spy.
+const { logSpies } = vi.hoisted(() => ({
+  logSpies: {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  },
+}))
+vi.mock('@/lib/server/logger', () => {
+  const child = () => ({ ...logSpies, child })
+  return { logger: { ...logSpies, child }, createLogger: () => ({ ...logSpies, child }) }
+})
+
 const ORIGINAL_ENV = { ...process.env }
 
 beforeEach(() => {
@@ -102,7 +119,7 @@ describe('makeReportStatus', () => {
     process.env.QUACKBACK_INSTANCE_ID = 'inst_123'
 
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'))
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    logSpies.error.mockClear()
 
     const report = makeReportStatus()
 
@@ -112,6 +129,6 @@ describe('makeReportStatus', () => {
     await expect(promise).resolves.toBeUndefined()
     vi.useRealTimers()
 
-    expect(errSpy).toHaveBeenCalled()
+    expect(logSpies.error).toHaveBeenCalled()
   })
 })

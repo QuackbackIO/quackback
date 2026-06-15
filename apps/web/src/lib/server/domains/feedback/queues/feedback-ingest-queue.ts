@@ -7,7 +7,10 @@
 
 import { Queue, Worker, UnrecoverableError } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
+import { logger } from '@/lib/server/logger'
 import type { FeedbackIngestJob } from '../types'
+
+const log = logger.child({ component: 'feedback-ingest-queue' })
 
 const QUEUE_NAME = '{feedback-ingest}'
 const CONCURRENCY = 3
@@ -56,12 +59,12 @@ async function initializeQueue() {
         }
         case 'poll-source': {
           // Poll connector — will be wired in Phase 2+ (Slack/Zendesk)
-          console.log(`[FeedbackIngest] poll-source not yet implemented: ${data.sourceId}`)
+          log.debug({ source_id: data.sourceId }, 'poll-source not yet implemented')
           break
         }
         case 'parse-batch': {
           // Batch parsing — will be wired when CSV/import connector ships
-          console.log(`[FeedbackIngest] parse-batch not yet implemented: ${data.sourceId}`)
+          log.debug({ source_id: data.sourceId }, 'parse-batch not yet implemented')
           break
         }
         default:
@@ -91,7 +94,7 @@ async function initializeQueue() {
     const isPermanent =
       job.attemptsMade >= (job.opts.attempts ?? 1) || error.name === 'UnrecoverableError'
     const prefix = isPermanent ? 'permanently failed' : `failed (attempt ${job.attemptsMade})`
-    console.error(`[FeedbackIngest] ${job.data.type} ${prefix}: ${error.message}`)
+    log.error({ err: error, job_type: job.data.type, status: prefix }, 'feedback ingest job failed')
   })
 
   return { queue, worker }

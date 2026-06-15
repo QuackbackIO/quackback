@@ -28,6 +28,9 @@ import type { PrincipalId, SegmentId } from '@quackback/ids'
 import { InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { truncate } from '@/lib/shared/utils/string'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'user-detail' })
 import type {
   PortalUserDetail,
   EngagedPost,
@@ -309,7 +312,7 @@ export async function getPortalUserDetail(
       segments: userSegmentList,
     }
   } catch (error) {
-    console.error('Error getting portal user detail:', error)
+    log.error({ err: error }, 'failed to get portal user detail')
     throw new InternalError('DATABASE_ERROR', 'Failed to get portal user detail', error)
   }
 }

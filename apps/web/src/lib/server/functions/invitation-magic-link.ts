@@ -5,6 +5,9 @@
  * shared token-rotation helper used by both team and portal invite paths.
  */
 import type { InviteId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'invitation-magic-link' })
 
 /**
  * Team invitation lifetime — 30 days. Source of truth for both the
@@ -27,9 +30,7 @@ export async function generateInvitationMagicLink(
   callbackPath: string,
   portalUrl: string
 ): Promise<{ url: string; token: string }> {
-  console.log(
-    `[fn:invite] generateInvitationMagicLink: email=${email}, callbackPath=${callbackPath}, portalUrl=${portalUrl}`
-  )
+  log.debug({ callback_path: callbackPath }, 'generate invitation magic link')
   const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
   return mintMagicLinkUrl({
     email,
