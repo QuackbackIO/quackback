@@ -34,15 +34,15 @@ export function useIntlSetup(
     }
   }, [locale])
 
+  // Keep `<html lang/dir>` in step with runtime locale changes (e.g. the widget's
+  // `quackback:locale` postMessage). The root document already sets the correct
+  // value for the initial render/navigation, so this only nudges it forward and
+  // must NOT restore a captured value on cleanup: doing so re-applies a stale
+  // locale when unmounting (e.g. leaving a localized page for the English admin
+  // app), fighting the root document's reactive value.
   useEffect(() => {
-    const prevLang = document.documentElement.lang
-    const prevDir = document.documentElement.dir
     document.documentElement.lang = locale
     document.documentElement.dir = isRtlForced() || isRtlLocale(locale) ? 'rtl' : 'ltr'
-    return () => {
-      document.documentElement.lang = prevLang
-      document.documentElement.dir = prevDir || 'ltr'
-    }
   }, [locale])
 
   return messages

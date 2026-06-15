@@ -21,7 +21,13 @@ import { OttHandler } from '@/components/shared/ott-handler'
 import { SuspendedView } from '@/components/shared/suspended-view'
 import { isSuspensionExempt } from '@/lib/server/middleware/suspension-paths'
 import { documentLocale } from '@/lib/shared/document-locale'
-import { isRtlLocale, isRtlForced, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
+import {
+  isRtlLocale,
+  isRtlForced,
+  normalizeLocale,
+  DEFAULT_LOCALE,
+  type SupportedLocale,
+} from '@/lib/shared/i18n'
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -226,6 +232,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const routeIds = useRouterState({ select: (s) => s.matches.map((m) => m.routeId) })
+  // The widget honors a `?locale=` override (its SDK appends it); read it so the
+  // iframe document advertises the widget's actual language, not just the
+  // Accept-Language one. Only the widget route reads this param.
+  const widgetLocaleParam = useRouterState({
+    select: (s) => (s.location.search as { locale?: string }).locale,
+  })
 
   // Portal routes can force a specific theme (light/dark) via branding config.
   // Admin and other non-portal routes always respect the user's preference.
@@ -240,8 +252,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // Advertise the rendered language on the document during SSR so non-English
   // visitors don't get an English `<html lang>` (and so RTL locales aren't laid
   // out LTR until hydration). Decided from the matched route IDs so only
-  // actually-localized routes are tagged; see documentLocale.
-  const htmlLocale = documentLocale(routeIds, acceptLanguageLocale ?? DEFAULT_LOCALE)
+  // actually-localized routes are tagged; see documentLocale. On the widget a
+  // valid `?locale=` override wins, matching what the widget itself renders.
+  const widgetOverride =
+    routeIds.includes('/widget') && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
+  const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
+  const htmlLocale = documentLocale(routeIds, resolvedLocale)
   const dir = isRtlForced() || isRtlLocale(htmlLocale) ? 'rtl' : 'ltr'
 
   return (

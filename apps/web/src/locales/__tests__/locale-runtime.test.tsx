@@ -74,4 +74,22 @@ describe('Chinese locale runtime wiring', () => {
     await waitFor(() => expect(node.textContent).toBe('3 則留言'))
     expect(node.textContent).not.toMatch(/comment/i) // English plural did not leak
   })
+
+  it('does not restore a stale document locale when a localized provider unmounts', async () => {
+    // Simulate the SSR baseline the root document set for a localized page.
+    document.documentElement.lang = 'ar'
+    document.documentElement.dir = 'rtl'
+    const { unmount } = render(
+      <PortalIntlProvider locale="zh-cn">
+        <span />
+      </PortalIntlProvider>
+    )
+    await waitFor(() => expect(document.documentElement.lang).toBe('zh-cn'))
+    unmount()
+    // The root document owns the baseline; unmount must NOT revert lang/dir to
+    // the captured 'ar'/'rtl' (that would mislabel + RTL-flip the next, English
+    // route on a client navigation).
+    expect(document.documentElement.lang).toBe('zh-cn')
+    expect(document.documentElement.dir).toBe('ltr')
+  })
 })
