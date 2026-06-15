@@ -9,7 +9,13 @@ export interface InitOptions {
   defaultBoard?: string
   /** Set `launcher: false` to hide the default floating button and open programmatically. */
   launcher?: boolean
-  locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | string
+  /**
+   * Override the auto-detected UI language. Accepts any BCP-47 tag — the host
+   * forwards it and the Quackback instance resolves the closest catalog it has.
+   * The literals are autocomplete hints for the languages Quackback ships today;
+   * keep them in sync with `SUPPORTED_LOCALES` in the app's `lib/shared/i18n`.
+   */
+  locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | 'ru' | 'pt-BR' | 'zh-CN' | 'zh-TW' | (string & {})
   /** Bundle identity into init — shorthand for init + identify. */
   identity?: Identity
 }

@@ -1,6 +1,16 @@
 export const DEFAULT_LOCALE = 'en' as const
 
-export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt-br'] as const
+export const SUPPORTED_LOCALES = [
+  'en',
+  'de',
+  'fr',
+  'es',
+  'ar',
+  'ru',
+  'pt-br',
+  'zh-cn',
+  'zh-tw',
+] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -22,6 +32,22 @@ export function normalizeLocale(locale: string): SupportedLocale | null {
 
   // Strip region subtag (e.g. "fr-FR" -> "fr"), but only accept 2-letter base codes
   const parts = lower.split('-')
+
+  // Chinese is script-sensitive: Simplified (zh-cn) and Traditional (zh-tw) are
+  // separate catalogs, so the generic "strip to base" rule below would wrongly
+  // collapse them to a non-existent "zh". Infer the script from CLDR's
+  // likely-subtags data via Intl.Locale.maximize(): an explicit "Hant" script
+  // or a Traditional region (TW/HK/MO, etc.) yields "Hant" → zh-tw; everything
+  // else under "zh" (bare zh, Hans, CN, SG) maximizes to "Hans" → zh-cn.
+  if (parts[0] === 'zh') {
+    try {
+      return new Intl.Locale(lower).maximize().script === 'Hant' ? 'zh-tw' : 'zh-cn'
+    } catch {
+      // Irregular tag Intl can't parse (e.g. "zh-min-nan") → Simplified default.
+      return 'zh-cn'
+    }
+  }
+
   if (parts.length >= 2) {
     const base = parts[0]
     // Only treat as a locale if the base is a 2–3 letter code
@@ -60,6 +86,8 @@ export function resolveLocale(
       const q = qPart ? parseFloat(qPart.replace('q=', '').trim()) : 1.0
       return { tag: tag.trim(), q: isNaN(q) ? 1.0 : q }
     })
+    // q=0 means "not acceptable" (RFC 7231), so drop those entries entirely.
+    .filter((entry) => entry.q > 0)
     .sort((a, b) => b.q - a.q)
 
   for (const { tag } of entries) {
@@ -105,14 +133,11 @@ export function loadMessages(locale: SupportedLocale): Promise<Record<string, st
   if (cached) return cached
 
   const promise = (async () => {
-    if (locale === DEFAULT_LOCALE) {
-      const messages = await import('../../locales/en.json')
-      return messages.default as Record<string, string>
-    }
     try {
       const messages = await import(`../../locales/${locale}.json`)
       return messages.default as Record<string, string>
     } catch {
+      // Locale catalog missing/unparseable — degrade to English rather than crash.
       const fallback = await import('../../locales/en.json')
       return fallback.default as Record<string, string>
     }
