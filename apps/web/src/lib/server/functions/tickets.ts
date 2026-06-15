@@ -67,7 +67,7 @@ import {
 import { listTicketStatuses } from '@/lib/server/domains/tickets/ticket-statuses.service'
 import { hasPermissionForResource } from '@/lib/server/domains/authz/authz.service'
 import type { InboxId } from '@quackback/ids'
-import { db, ticketActivity, principal, eq, and, lt, desc } from '@/lib/server/db'
+import { db, ticketActivity, principal, eq, and, lt, desc, inArray } from '@/lib/server/db'
 import type { AuditJsonValue } from '@/lib/shared/db-types'
 
 // ---------- shared schemas ----------
@@ -322,11 +322,33 @@ export const listThreadsFn = createServerFn({ method: 'GET' })
       throw new ForbiddenError('TICKET_VIEW_DENIED', 'cannot view this ticket')
     }
     const ticket = await getTicket(data.ticketId)
-    return listThreads(data.ticketId, {
+    const threads = await listThreads(data.ticketId, {
       viewerTeamIds: ctx.permissions.teamIds,
       canSeeInternal: canCommentInternal(ctx.permissions, scope),
       isRequester: ticket?.requesterPrincipalId === ctx.principal.id,
     })
+    const principalIds = Array.from(
+      new Set(threads.map((t) => t.principalId).filter((id): id is PrincipalId => id != null))
+    )
+    const principalRows = principalIds.length
+      ? await db
+          .select({
+            id: principal.id,
+            displayName: principal.displayName,
+          })
+          .from(principal)
+          .where(inArray(principal.id, principalIds))
+      : []
+    const principalNames = new Map(
+      principalRows.map((row) => [row.id, row.displayName?.trim() || 'Unknown'])
+    )
+
+    return threads.map((thread) => ({
+      ...thread,
+      principalName: thread.principalId
+        ? (principalNames.get(thread.principalId as PrincipalId) ?? 'Unknown')
+        : null,
+    }))
   })
 
 // ---------- shares ----------

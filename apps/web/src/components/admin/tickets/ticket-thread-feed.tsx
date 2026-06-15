@@ -218,9 +218,7 @@ export function TicketThreadFeed({
           th.audience === 'shared_team' && th.sharedWithTeamId
             ? (teamNames?.[th.sharedWithTeamId] ?? th.sharedWithTeamId)
             : null
-        const author = th.principalId
-          ? (principalNames?.[th.principalId] ?? th.principalId)
-          : 'System'
+        const author = th.principalId ? (principalNames?.[th.principalId] ?? 'Unknown') : 'System'
         return (
           <article key={th.id} className={cn('rounded-md border p-3', audienceStyles[th.audience])}>
             <header className="flex items-center justify-between text-xs mb-2">

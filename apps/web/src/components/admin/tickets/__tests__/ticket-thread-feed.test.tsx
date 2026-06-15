@@ -93,3 +93,54 @@ describe('TicketThreadFeed description editing', () => {
     )
   })
 })
+
+describe('TicketThreadFeed author labels', () => {
+  it('renders principal display names instead of raw principal IDs', () => {
+    render(
+      <TicketThreadFeed
+        threads={[
+          {
+            id: 'ticket_thread_1',
+            ticketId: 'ticket_1' as never,
+            principalId: 'principal_01ktxq7sh1fevtx68ee59xpvx0' as never,
+            audience: 'public',
+            bodyJson: null,
+            bodyText: 'Reply body',
+            sharedWithTeamId: null,
+            createdAt: '2026-06-12T10:00:00.000Z',
+            editedAt: null,
+          },
+        ]}
+        principalNames={{
+          principal_01ktxq7sh1fevtx68ee59xpvx0: 'Meli Sunbul',
+        }}
+      />
+    )
+
+    expect(screen.getByText('Meli Sunbul')).toBeInTheDocument()
+    expect(screen.queryByText(/principal_01ktxq7/i)).not.toBeInTheDocument()
+  })
+
+  it('does not expose raw principal IDs when a display name is missing', () => {
+    render(
+      <TicketThreadFeed
+        threads={[
+          {
+            id: 'ticket_thread_1',
+            ticketId: 'ticket_1' as never,
+            principalId: 'principal_missing_name' as never,
+            audience: 'public',
+            bodyJson: null,
+            bodyText: 'Reply body',
+            sharedWithTeamId: null,
+            createdAt: '2026-06-12T10:00:00.000Z',
+            editedAt: null,
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('Unknown')).toBeInTheDocument()
+    expect(screen.queryByText('principal_missing_name')).not.toBeInTheDocument()
+  })
+})

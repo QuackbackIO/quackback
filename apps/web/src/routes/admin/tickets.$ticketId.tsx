@@ -6,7 +6,7 @@
  * column = tabs (Properties / Participants / Shares / SLA / Activity). All
  * mutations live inside the per-tab components.
  */
-import { Suspense, useCallback } from 'react'
+import { Suspense, useCallback, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createRouteErrorComponent } from '@/components/admin/shared'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -87,6 +87,14 @@ function TicketDetailPage() {
   const { data: participants } = useSuspenseQuery(ticketQueries.participants(ticketId))
   const { data: shares } = useSuspenseQuery(ticketQueries.shares(ticketId))
   const perms = useMyPermissions()
+  const principalNames = useMemo(() => {
+    const names: Record<string, string> = {}
+    for (const thread of threads) {
+      if (!thread.principalId) continue
+      names[thread.principalId] = thread.principalName?.trim() || 'Unknown'
+    }
+    return names
+  }, [threads])
 
   const currentPrincipalId = perms.data?.principalId ?? ticket.assigneePrincipalId ?? ticket.id
   const canPublic = hasAnyPermission(perms.data, 'ticket.reply_public')
@@ -159,6 +167,7 @@ function TicketDetailPage() {
                 createdAt: t.createdAt,
                 editedAt: t.editedAt,
               }))}
+              principalNames={principalNames}
               description={
                 ticket.descriptionText || ticket.descriptionJson
                   ? { text: ticket.descriptionText, json: ticket.descriptionJson }

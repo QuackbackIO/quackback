@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { resolveLocale } from '@/lib/shared/i18n'
+import { resolveLocale, loadMessages, type SupportedLocale } from '@/lib/shared/i18n'
 
 /**
  * Resolve the portal locale from the request's Accept-Language header.
@@ -13,3 +13,21 @@ export const getPortalLocaleFn = createServerFn({ method: 'GET' }).handler(async
   const acceptLanguage = getRequestHeaders().get('accept-language')
   return resolveLocale(acceptLanguage)
 })
+
+/**
+ * Resolve the locale AND load its catalog for a route loader, so the page
+ * renders translated during SSR (and hydrates from the same catalog) instead
+ * of flashing English until the client fetches the messages.
+ *
+ * `loadMessages` runs wherever the loader runs: server-side during SSR, and
+ * client-side (cached, code-split chunk) on client navigation — only the small
+ * locale lookup is ever an RPC.
+ */
+export async function loadPortalIntl(): Promise<{
+  locale: SupportedLocale
+  messages: Record<string, string>
+}> {
+  const locale = await getPortalLocaleFn()
+  const messages = await loadMessages(locale)
+  return { locale, messages }
+}

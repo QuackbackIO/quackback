@@ -39,14 +39,14 @@ describe('buildTicketIssueBody', () => {
     expect(title).toBe('Login button broken on mobile')
   })
 
-  it('includes priority emoji label for non-normal priorities', () => {
-    const { labels } = buildTicketIssueBody(ticketCreatedEvent({ priority: 'urgent' }))
-    expect(labels).toContain('priority:urgent')
+  it('includes priority and channel labels', () => {
+    const { labels } = buildTicketIssueBody(ticketCreatedEvent())
+    expect(labels).toEqual(expect.arrayContaining(['priority:high', 'channel:portal']))
   })
 
-  it('omits priority label for normal priority', () => {
+  it('includes normal priority as a label', () => {
     const { labels } = buildTicketIssueBody(ticketCreatedEvent({ priority: 'normal' }))
-    expect(labels).not.toContain('priority:normal')
+    expect(labels).toContain('priority:normal')
   })
 
   it('includes description text in body', () => {
@@ -54,9 +54,14 @@ describe('buildTicketIssueBody', () => {
     expect(body).toContain('Users report that tapping login does nothing on iOS Safari.')
   })
 
+  it('omits priority and channel metadata from body', () => {
+    const { body } = buildTicketIssueBody(ticketCreatedEvent())
+    expect(body).not.toContain('**Priority:**')
+    expect(body).not.toContain('**Channel:**')
+  })
+
   it('handles null description gracefully', () => {
     const { body } = buildTicketIssueBody(ticketCreatedEvent({ descriptionText: null }))
-    // Should not crash; body should still contain metadata
     expect(body).toBeDefined()
     expect(body).not.toContain('null')
   })
@@ -88,5 +93,11 @@ describe('buildTicketUpdateBody', () => {
   it('includes description in body', () => {
     const { body } = buildTicketUpdateBody(baseTicket)
     expect(body).toContain('Users report that tapping login')
+  })
+
+  it('does not include priority or channel metadata in body', () => {
+    const { body } = buildTicketUpdateBody(baseTicket)
+    expect(body).not.toContain('**Priority:**')
+    expect(body).not.toContain('**Channel:**')
   })
 })

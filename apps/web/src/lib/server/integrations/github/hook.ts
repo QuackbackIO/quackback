@@ -561,8 +561,7 @@ async function handleTicketUpdated(
         `[GitHub] Updating issue #${issueNumber} priority ${oldPriority} -> ${newPriority} in ${ownerRepo}`
       )
 
-      // Remove the old priority label (best-effort)
-      if (oldPriority && oldPriority !== 'normal') {
+      if (oldPriority) {
         await removeLabel(
           ownerRepo,
           issueNumber,
@@ -573,8 +572,7 @@ async function handleTicketUpdated(
         )
       }
 
-      // Add the new priority label (best-effort, skip 'normal' to keep it clean)
-      if (newPriority && newPriority !== 'normal') {
+      if (newPriority) {
         await addLabel(ownerRepo, issueNumber, `priority:${newPriority}`, config.accessToken).catch(
           (err) => console.warn(`[GitHub] Failed to add label "priority:${newPriority}":`, err)
         )

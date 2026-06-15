@@ -1,5 +1,4 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -8,21 +7,14 @@ import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import { type PortalAccessGateError, parseGateError } from '@/lib/shared/types/portal-gate-error'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
-import { resolveLocale } from '@/lib/shared/i18n'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { loadPortalIntl } from '@/lib/server/functions/locale'
 import {
   evaluateMyPortalAccessFn,
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { getSupportSurfaceAccessFn } from '@/lib/server/functions/chat'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
-
-/** Resolve locale from Accept-Language header on the server. */
-const getPortalLocale = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getRequestHeaders } = await import('@tanstack/react-start/server')
-  const acceptLanguage = getRequestHeaders().get('accept-language')
-  return resolveLocale(acceptLanguage)
-})
 
 export const Route = createFileRoute('/_portal')({
   beforeLoad: async ({ context }) => {
@@ -133,7 +125,7 @@ export const Route = createFileRoute('/_portal')({
       customProviderNames: publicPortalConfig?.customProviderNames,
     }
 
-    const locale = await getPortalLocale()
+    const { locale, messages } = await loadPortalIntl()
     const supportAccess = await getSupportSurfaceAccessFn({ data: { surface: 'portal' } })
 
     return {
@@ -150,6 +142,7 @@ export const Route = createFileRoute('/_portal')({
       initialUserData,
       authConfig,
       locale,
+      messages,
       supportAccessGranted: supportAccess.granted,
     }
   },
@@ -226,11 +219,12 @@ function PortalLayout() {
     initialUserData,
     authConfig,
     locale,
+    messages,
     supportAccessGranted,
   } = loaderData
 
   return (
-    <PortalIntlProvider locale={locale}>
+    <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}

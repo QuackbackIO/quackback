@@ -11,7 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const inboxFindFirstMock = vi.fn()
 const insertReturningMock = vi.fn()
+const insertInboxValuesMock = vi.fn()
+const insertMembershipValuesMock = vi.fn()
 const updateReturningMock = vi.fn()
+const insertMock = vi.fn()
+const transactionMock = vi.fn()
 
 const dispatchInboxCreatedMock = vi.fn()
 const dispatchInboxUpdatedMock = vi.fn()
@@ -34,10 +38,8 @@ vi.mock('@/lib/server/db', () => ({
     query: {
       inboxes: { findFirst: inboxFindFirstMock },
     },
-    insert: vi.fn(() => ({
-      values: vi.fn().mockReturnThis(),
-      returning: insertReturningMock,
-    })),
+    insert: insertMock,
+    transaction: transactionMock,
     update: vi.fn(() => ({
       set: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
@@ -52,6 +54,7 @@ vi.mock('@/lib/server/db', () => ({
   or: vi.fn(),
   asc: vi.fn(),
   inboxes: { _name: 'inboxes', id: 'id', slug: 'slug', archivedAt: 'archivedAt' },
+  inboxMemberships: { _name: 'inboxMemberships' },
 }))
 
 vi.mock('@/lib/shared/errors', () => {
@@ -78,6 +81,17 @@ vi.mock('@/lib/server/events/dispatch', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  insertMock.mockImplementation((table) => {
+    const valuesMock =
+      table?._name === 'inboxMemberships' ? insertMembershipValuesMock : insertInboxValuesMock
+    return {
+      values: vi.fn((values) => {
+        valuesMock(values)
+        return { returning: insertReturningMock }
+      }),
+    }
+  })
+  transactionMock.mockImplementation((callback) => callback({ insert: insertMock }))
 })
 
 const ACTOR = { principalId: 'principal_a' as never, userId: 'user_a' as never }
@@ -107,6 +121,12 @@ describe('inbox.service events (Phase 6)', () => {
     const result = await createInbox({ name: 'Support', slug: 'support' }, ACTOR)
 
     expect(result).toEqual(SAMPLE_INBOX)
+    expect(insertMembershipValuesMock).toHaveBeenCalledTimes(1)
+    expect(insertMembershipValuesMock).toHaveBeenCalledWith({
+      inboxId: 'inbox_1',
+      principalId: 'principal_a',
+      role: 'owner',
+    })
     expect(dispatchInboxCreatedMock).toHaveBeenCalledTimes(1)
     expect(dispatchInboxCreatedMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'user', principalId: 'principal_a' }),
@@ -188,6 +208,7 @@ describe('inbox.service events (Phase 6)', () => {
     const { createInbox } = await import('../inbox.service')
     await createInbox({ name: 'Support', slug: 'support' }, { principalId: null })
 
+    expect(insertMembershipValuesMock).not.toHaveBeenCalled()
     expect(dispatchInboxCreatedMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'service', displayName: 'inbox-system' }),
       SAMPLE_INBOX

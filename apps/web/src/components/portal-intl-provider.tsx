@@ -6,11 +6,17 @@ import { onIntlError } from '@/lib/client/intl-error'
 
 interface PortalIntlProviderProps {
   locale: SupportedLocale
+  /** SSR-loaded catalog; enables localized SSR and a hydration-consistent first paint. */
+  messages?: Record<string, string>
   children: ReactNode
 }
 
-export function PortalIntlProvider({ locale, children }: PortalIntlProviderProps) {
-  const messages = useIntlSetup(locale)
+export function PortalIntlProvider({
+  locale,
+  messages: initialMessages,
+  children,
+}: PortalIntlProviderProps) {
+  const messages = useIntlSetup(locale, initialMessages)
 
   return (
     <IntlProvider

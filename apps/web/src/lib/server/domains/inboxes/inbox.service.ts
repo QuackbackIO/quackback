@@ -13,6 +13,7 @@ import {
   or,
   asc,
   inboxes,
+  inboxMemberships,
   type Inbox,
   type TicketPriority,
   type TicketVisibilityScope,
@@ -110,20 +111,33 @@ export async function createInbox(
   const dup = await db.query.inboxes.findFirst({ where: eq(inboxes.slug, slug) })
   if (dup) throw new ConflictError('INBOX_SLUG_TAKEN', `Inbox slug "${slug}" already exists`)
 
-  const [created] = await db
-    .insert(inboxes)
-    .values({
-      name,
-      slug,
-      description: input.description ?? null,
-      primaryTeamId: input.primaryTeamId ?? null,
-      defaultVisibilityScope: input.defaultVisibilityScope ?? 'team',
-      defaultPriority: input.defaultPriority ?? 'normal',
-      defaultStatusId: input.defaultStatusId ?? null,
-      color: input.color ?? null,
-      icon: input.icon ?? null,
-    })
-    .returning()
+  const created = await db.transaction(async (tx) => {
+    const [createdInbox] = await tx
+      .insert(inboxes)
+      .values({
+        name,
+        slug,
+        description: input.description ?? null,
+        primaryTeamId: input.primaryTeamId ?? null,
+        defaultVisibilityScope: input.defaultVisibilityScope ?? 'team',
+        defaultPriority: input.defaultPriority ?? 'normal',
+        defaultStatusId: input.defaultStatusId ?? null,
+        color: input.color ?? null,
+        icon: input.icon ?? null,
+      })
+      .returning()
+
+    if (actor.principalId) {
+      await tx.insert(inboxMemberships).values({
+        inboxId: createdInbox.id,
+        principalId: actor.principalId,
+        role: 'owner',
+      })
+    }
+
+    return createdInbox
+  })
+
   await fireInboxEvent('created', actor, created)
   return created
 }

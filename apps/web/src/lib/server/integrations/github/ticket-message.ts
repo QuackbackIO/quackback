@@ -5,13 +5,6 @@
 import type { EventData, EventTicketRef } from '../../events/types'
 import { truncate } from '../../events/hook-utils'
 
-const PRIORITY_EMOJI: Record<string, string> = {
-  urgent: '🔴',
-  high: '🟠',
-  normal: '🟡',
-  low: '🟢',
-}
-
 /**
  * Build a GitHub issue title and body from a ticket event.
  */
@@ -35,23 +28,12 @@ export function buildTicketIssueBody(event: EventData): {
 function formatTicketBody(ticket: EventTicketRef): string {
   const sections: string[] = []
 
-  // Description
-  if (ticket.descriptionText) {
-    sections.push(ticket.descriptionText)
-    sections.push('')
-    sections.push('---')
-    sections.push('')
+  const description = ticket.descriptionText?.trim()
+  if (description) {
+    sections.push(description)
   }
 
-  // Metadata table
   const meta: string[] = []
-  if (ticket.priority) {
-    const emoji = PRIORITY_EMOJI[ticket.priority] ?? ''
-    meta.push(`**Priority:** ${emoji} ${ticket.priority}`)
-  }
-  if (ticket.channel) {
-    meta.push(`**Channel:** ${ticket.channel}`)
-  }
   if (ticket.statusName) {
     meta.push(`**Status:** ${ticket.statusName}`)
   }
@@ -66,14 +48,21 @@ function formatTicketBody(ticket: EventTicketRef): string {
     meta.push(`**Inbox:** ${ticket.inboxName}`)
   }
 
-  if (meta.length > 0) {
-    sections.push(...meta)
-    sections.push('')
-  }
+  if (meta.length > 0 || ticket.ticketUrl) {
+    if (sections.length > 0) {
+      sections.push('')
+      sections.push('---')
+      sections.push('')
+    }
 
-  // Link back to Quackback
-  if (ticket.ticketUrl) {
-    sections.push(`[View in Quackback](${ticket.ticketUrl})`)
+    sections.push(...meta)
+
+    if (ticket.ticketUrl) {
+      if (meta.length > 0) {
+        sections.push('')
+      }
+      sections.push(`[View in Quackback](${ticket.ticketUrl})`)
+    }
   }
 
   return truncate(sections.join('\n'), 65000)
@@ -81,8 +70,11 @@ function formatTicketBody(ticket: EventTicketRef): string {
 
 function buildTicketLabels(ticket: EventTicketRef): string[] {
   const labels: string[] = []
-  if (ticket.priority && ticket.priority !== 'normal') {
+  if (ticket.priority) {
     labels.push(`priority:${ticket.priority}`)
+  }
+  if (ticket.channel) {
+    labels.push(`channel:${ticket.channel}`)
   }
   return labels
 }
