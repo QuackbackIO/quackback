@@ -226,7 +226,13 @@ export function createSDK(): SDK {
           environment: config.environment,
           hostOrigin: window.location.origin,
         })
-          .then(applyServerTheme)
+          .then((serverCfg) => {
+            if (serverCfg.enabled === false) {
+              dispatch('destroy')
+              return
+            }
+            applyServerTheme(serverCfg)
+          })
           .finally(() => {
             window.clearTimeout(fallback)
             window.setTimeout(reveal, LAUNCHER_REVEAL_DELAY_MS)

@@ -687,7 +687,22 @@ function WidgetApplicationsSection({
   }
 
   const installSnippet = selectedApp
-    ? `<script async src="${baseUrl}/api/widget/sdk.js" data-application-key="${selectedApp.key}" data-environment="${environment}"></script>`
+    ? `<script>
+  (function(w,d){if(w.Quackback)return;w.Quackback=function(){
+  (w.Quackback.q=w.Quackback.q||[]).push(arguments)};
+  var s=d.createElement("script");s.async=true;
+  s.crossOrigin="anonymous";
+  s.dataset.applicationKey=${JSON.stringify(selectedApp.key)};
+  s.dataset.environment=${JSON.stringify(environment)};
+  s.src=${JSON.stringify(`${baseUrl}/api/widget/sdk.js`)};
+  d.head.appendChild(s)})(window,document);
+
+  Quackback("init", {
+    instanceUrl: ${JSON.stringify(baseUrl)},
+    applicationKey: ${JSON.stringify(selectedApp.key)},
+    environment: ${JSON.stringify(environment)}
+  });
+</script>`
     : ''
   const isBusy = saving || isPending
 
@@ -695,9 +710,10 @@ function WidgetApplicationsSection({
     <SettingsCard
       title="Applications & environments"
       description="Scope embedded widget features, content, origins, and support routing per external app."
+      contentClassName="overflow-x-auto"
     >
-      <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+      <div className="min-w-0 space-y-5">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <input
             value={appKey}
             onChange={(e) => setAppKey(e.target.value)}
@@ -718,8 +734,8 @@ function WidgetApplicationsSection({
         </div>
 
         {applications.length > 0 && (
-          <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-            <div className="space-y-2">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-2">
               {applications.map((app) => (
                 <button
                   key={app.id}
@@ -738,7 +754,7 @@ function WidgetApplicationsSection({
               ))}
             </div>
 
-            <div className="space-y-4 rounded-lg border border-border/60 p-4">
+            <div className="min-w-0 space-y-4 rounded-lg border border-border/60 p-4">
               {selectedApp && (
                 <>
                   <div className="flex flex-wrap gap-2">
@@ -766,7 +782,7 @@ function WidgetApplicationsSection({
                     </Button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Environment</Label>
                       <input
@@ -776,7 +792,7 @@ function WidgetApplicationsSection({
                         disabled={isBusy}
                       />
                     </div>
-                    <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
                       <div>
                         <Label className="text-xs font-medium">Enabled</Label>
                         <p className="text-xs text-muted-foreground">Disable to hide this embed.</p>
@@ -796,8 +812,8 @@ function WidgetApplicationsSection({
                     />
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="space-y-3">
+                  <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                    <div className="min-w-0 space-y-3">
                       <Label className="text-xs text-muted-foreground">Features</Label>
                       {(['home', 'feedback', 'changelog', 'help', 'chat'] as const).map((tab) => (
                         <div
@@ -816,7 +832,7 @@ function WidgetApplicationsSection({
                       ))}
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="min-w-0 space-y-3">
                       <Label className="text-xs text-muted-foreground">Allowed boards</Label>
                       <div className="max-h-44 overflow-auto rounded-md border border-border/60 p-2">
                         {boards.map((board) => (
@@ -847,7 +863,7 @@ function WidgetApplicationsSection({
                         onValueChange={(value) => setChangelogMode(value as typeof changelogMode)}
                         disabled={isBusy}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full min-w-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -861,7 +877,7 @@ function WidgetApplicationsSection({
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="min-w-0 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <Label className="text-xs text-muted-foreground">Support categories</Label>
                       <Button
@@ -877,15 +893,18 @@ function WidgetApplicationsSection({
                     </div>
 
                     {supportCategories.map((category, index) => (
-                      <div key={index} className="space-y-3 rounded-md border border-border/60 p-3">
+                      <div
+                        key={index}
+                        className="min-w-0 space-y-3 rounded-md border border-border/60 p-3"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-medium">Category {index + 1}</p>
                             <p className="text-xs text-muted-foreground">
                               Route this widget support option into an inbox.
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex shrink-0 items-center gap-3">
                             <Label className="flex items-center gap-2 text-xs text-muted-foreground">
                               <Switch
                                 checked={category.visible}
@@ -909,8 +928,8 @@ function WidgetApplicationsSection({
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          <div className="space-y-1.5">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Support key</Label>
                             <input
                               value={category.categoryKey}
@@ -922,7 +941,7 @@ function WidgetApplicationsSection({
                               disabled={isBusy}
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Label</Label>
                             <input
                               value={category.label}
@@ -934,14 +953,14 @@ function WidgetApplicationsSection({
                               disabled={isBusy}
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Inbox</Label>
                             <Select
                               value={category.inboxId}
                               onValueChange={(inboxId) => updateSupportCategory(index, { inboxId })}
                               disabled={isBusy}
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="w-full min-w-0">
                                 <SelectValue placeholder="Select inbox" />
                               </SelectTrigger>
                               <SelectContent>
@@ -953,7 +972,7 @@ function WidgetApplicationsSection({
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">
                               Default priority
                             </Label>
@@ -966,7 +985,7 @@ function WidgetApplicationsSection({
                               }
                               disabled={isBusy}
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="w-full min-w-0">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -979,8 +998,8 @@ function WidgetApplicationsSection({
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1.5">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Description</Label>
                             <input
                               value={category.description}
@@ -992,7 +1011,7 @@ function WidgetApplicationsSection({
                               disabled={isBusy}
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="min-w-0 space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Icon</Label>
                             <input
                               value={category.icon}
@@ -1006,8 +1025,8 @@ function WidgetApplicationsSection({
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
-                          <div>
+                        <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                          <div className="min-w-0">
                             <Label className="text-xs font-medium">Priority selector</Label>
                             <p className="text-xs text-muted-foreground">
                               Allow requesters to choose priority for this category.
@@ -1026,7 +1045,7 @@ function WidgetApplicationsSection({
                   </div>
 
                   {installSnippet && (
-                    <pre className="overflow-auto rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    <pre className="max-w-full overflow-x-auto rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                       {installSnippet}
                     </pre>
                   )}

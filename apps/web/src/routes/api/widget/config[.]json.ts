@@ -10,6 +10,7 @@ interface ServerTheme {
 }
 
 interface ServerConfig {
+  enabled?: boolean
   theme?: ServerTheme
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean; home?: boolean }
   imageUploadsInWidget?: boolean
@@ -134,6 +135,7 @@ export const Route = createFileRoute('/api/widget/config.json')({
         }
 
         const config: ServerConfig = {
+          enabled: widgetConfig.enabled,
           theme: Object.keys(theme).length > 0 ? theme : undefined,
           tabs: widgetConfig.tabs,
           imageUploadsInWidget: widgetConfig.imageUploadsInWidget,

@@ -75,6 +75,38 @@ export const Route = createFileRoute('/widget/')({
     const changelogHasVisibleEntries =
       changelogFilter?.mode !== 'selected_entries' || (changelogFilter.entryIds?.length ?? 0) > 0
 
+    const { getBaseUrl } = await import('@/lib/server/config')
+
+    if (!widgetConfig.enabled) {
+      return {
+        widgetEnabled: false,
+        posts: [],
+        postsHasMore: false,
+        statuses: [],
+        boards: [],
+        orgSlug: settings?.slug ?? '',
+        boardPermissions: {},
+        tabs: {
+          feedback: false,
+          changelog: false,
+          help: false,
+          chat: false,
+          home: false,
+        },
+        linkPreviews: false,
+        defaultBoard: undefined,
+        imageUploadsInWidget: false,
+        ticketingEnabled: false,
+        supportCategories: [],
+        chatConfigured: false,
+        portalAccess: {
+          isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
+          widgetSignIn: settings?.publicPortalConfig?.portalAccess?.widgetSignIn ?? false,
+        },
+        portalOrigin: getBaseUrl(),
+      }
+    }
+
     const portalData = await queryClient.ensureQueryData(
       portalQueries.portalData({
         boardSlug: search.board,
@@ -87,8 +119,6 @@ export const Route = createFileRoute('/widget/')({
       widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
       new Set(portalData.votedPostIds)
     )
-
-    const { getBaseUrl } = await import('@/lib/server/config')
 
     const boards = portalData.boards
       .filter((board) => {
@@ -143,6 +173,7 @@ export const Route = createFileRoute('/widget/')({
     }
 
     return {
+      widgetEnabled: true,
       posts: portalData.posts.items
         .map((p) => ({
           id: p.id,
@@ -230,6 +261,15 @@ interface SuccessPost {
   board: { id: string; name: string; slug: string }
 }
 
+interface WidgetListPost {
+  id: string
+  title: string
+  voteCount: number
+  statusId: string | null
+  commentCount: number
+  board: { id: string; name: string; slug: string }
+}
+
 type SupportReturnView = Extract<WidgetView, 'overview' | 'help' | 'messages' | 'feedback'>
 
 function resolveSupportReturnView(tabs: EnabledTabs): SupportReturnView {
@@ -244,9 +284,16 @@ function activeTabForSupportReturnView(view: SupportReturnView): WidgetTab {
   return 'feedback'
 }
 
+type WidgetLoaderData = ReturnType<typeof Route.useLoaderData>
+
 function WidgetPage() {
+  const data = Route.useLoaderData()
+  if (!data.widgetEnabled) return null
+  return <EnabledWidgetPage data={data} />
+}
+
+function EnabledWidgetPage({ data }: { data: WidgetLoaderData }) {
   const {
-    posts,
     postsHasMore,
     statuses,
     boards,
@@ -261,7 +308,9 @@ function WidgetPage() {
     chatConfigured,
     portalAccess,
     portalOrigin,
-  } = Route.useLoaderData()
+  } = data
+  const posts = data.posts as WidgetListPost[]
+
   const { ensureSession, sessionVersion } = useWidgetAuth()
   const { data: chatAccess } = useQuery({
     queryKey: ['widget', 'supportAccess', sessionVersion],
@@ -335,7 +384,7 @@ function WidgetPage() {
     name: string
     icon: string | null
   } | null>(null)
-  const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
+  const [createdPosts, setCreatedPosts] = useState<WidgetListPost[]>([])
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [supportReturnView, setSupportReturnView] = useState<SupportReturnView>(() =>
     resolveSupportReturnView(tabs)
@@ -392,14 +441,14 @@ function WidgetPage() {
   }, [tabs, openChat, openSupport, ticketingEnabled])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
-    setCreatedPosts((prev) => [
+    setCreatedPosts((prev: WidgetListPost[]) => [
       {
-        id: post.id as (typeof prev)[number]['id'],
+        id: post.id,
         title: post.title,
         voteCount: post.voteCount,
-        statusId: post.statusId as (typeof prev)[number]['statusId'],
+        statusId: post.statusId,
         commentCount: 0,
-        board: post.board as (typeof prev)[number]['board'],
+        board: post.board,
       },
       ...prev,
     ])

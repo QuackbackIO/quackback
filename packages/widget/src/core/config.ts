@@ -1,5 +1,6 @@
 /** Server config shape returned from `/api/widget/config.json`. */
 export interface ServerConfig {
+  enabled?: boolean
   /**
    * Theme colors configured in the admin dashboard. Opaque to this package —
    * sdk.ts picks out the primary/foreground fields it needs and pushes them

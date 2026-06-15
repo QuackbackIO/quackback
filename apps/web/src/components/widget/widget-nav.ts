@@ -7,7 +7,8 @@
  * Chat is folded into the Help (support) surface: the bottom bar carries at
  * most home | feedback | changelog | help, and the Help tab hosts both articles
  * and messages. A "content surface" is feedback, changelog, or support (help OR
- * chat); the aggregated Home appears only when 2+ are enabled.
+ * chat); the aggregated Home appears when 2+ are enabled, or when no content
+ * surfaces are enabled and Home is the configured landing surface.
  */
 
 /** Bottom-bar tabs. "help" is the combined support surface (articles + messages). */
@@ -68,11 +69,14 @@ export function contentSurfaceCount(tabs: EnabledTabs): number {
 }
 
 /**
- * The aggregated Home is only worthwhile when 2+ content surfaces are enabled,
- * and only when the admin hasn't opted out of it (defaults to shown).
+ * The aggregated Home is worthwhile when it aggregates 2+ content surfaces, or
+ * when it is the only enabled landing surface. With exactly one content surface,
+ * the widget lands directly there and avoids a redundant Home tab.
  */
 export function homeEnabled(tabs: EnabledTabs): boolean {
-  return (tabs.home ?? true) && contentSurfaceCount(tabs) > 1
+  if (!(tabs.home ?? true)) return false
+  const surfaceCount = contentSurfaceCount(tabs)
+  return surfaceCount === 0 || surfaceCount > 1
 }
 
 /** Ordered tabs the bottom bar should render (Home first, only when enabled). */
