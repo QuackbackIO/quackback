@@ -72,7 +72,9 @@ function getProvider(): EmailProvider {
 }
 
 // Recipient addresses (PII) are never logged here — log provider + ids only.
-const log = createLogger().child({ component: 'email' })
+const log = createLogger({ base: { service_name: 'quackback-email' } }).child({
+  component: 'email',
+})
 
 function getSmtpTransporter(): Transporter {
   if (!smtpTransporter) {
@@ -194,15 +196,10 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
   const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Invitation Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Invitee name: ${inviteeName || '(not provided)'}`)
-    console.log(`│ Invited by: ${invitedByName}`)
-    console.log(`│ Workspace: ${workspaceName}`)
-    console.log(`│ Invite link: ${inviteLink}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'InvitationEmail', to, inviteLink },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -235,13 +232,10 @@ export async function sendPortalInviteEmail(params: SendPortalInviteParams): Pro
   const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Portal Invite Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Workspace: ${workspaceName}`)
-    console.log(`│ Invite link: ${inviteLink}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'PortalInviteEmail', to, inviteLink },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -268,14 +262,10 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
   const { to, name, workspaceName, dashboardUrl, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Welcome Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Name: ${name}`)
-    console.log(`│ Workspace: ${workspaceName}`)
-    console.log(`│ Dashboard: ${dashboardUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'WelcomeEmail', to, dashboardUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -301,13 +291,10 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
   const { to, signInUrl, code, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Sign-in Email (magic link + OTP)')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Link: ${signInUrl}`)
-    console.log(`│ Code: ${code}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'MagicLinkEmail', to, signInUrl, code },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -335,12 +322,10 @@ export async function sendPasswordResetEmail(
   const { to, resetLink, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Password Reset Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Reset link: ${resetLink}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'PasswordResetEmail', to, resetLink },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -376,15 +361,10 @@ export async function sendRecoveryCodeUsedEmail(
   const { to, workspaceName, ipAddress, userAgent, occurredAt, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Recovery Code Used (security alert)')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Workspace: ${workspaceName ?? '<unknown>'}`)
-    console.log(`│ When: ${occurredAt}`)
-    console.log(`│ IP: ${ipAddress ?? '<unknown>'}`)
-    console.log(`│ User agent: ${userAgent ?? '<unknown>'}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'RecoveryCodeUsedEmail', to, occurredAt },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -416,15 +396,10 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
   const { to, workspaceName, occurredAt, ipAddress, userAgent, logoUrl } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] New-device sign-in alert')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Workspace: ${workspaceName ?? '<unknown>'}`)
-    console.log(`│ When: ${occurredAt}`)
-    console.log(`│ IP: ${ipAddress ?? '<unknown>'}`)
-    console.log(`│ Device: ${userAgent ?? '<unknown>'}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'NewSignInEmail', to, occurredAt },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -464,15 +439,10 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
   } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Status Change Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Post: ${postTitle}`)
-    console.log(`│ Status: ${previousStatus} → ${newStatus}`)
-    console.log(`│ URL: ${postUrl}`)
-    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'StatusChangeEmail', to, postUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -523,16 +493,10 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
   } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] New Comment Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Post: ${postTitle}`)
-    console.log(`│ From: ${commenterName}${isTeamMember ? ' (Team)' : ''}`)
-    console.log(`│ Comment: ${commentPreview.substring(0, 50)}...`)
-    console.log(`│ URL: ${postUrl}`)
-    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'NewCommentEmail', to, postUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -617,15 +581,10 @@ export async function sendChatMessageEmail(
       : `New chat message in ${workspaceName}`
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Chat Message Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ ${heading}`)
-    console.log(`│ From: ${senderName}`)
-    console.log(`│ Message: ${messagePreview.substring(0, 50)}`)
-    console.log(`│ URL: ${ctaUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'ChatMessageEmail', to, ctaUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -672,16 +631,10 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
   const subject = `${displayName} mentioned you in "${postTitle}"`
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Post Mention Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Mentioner: ${displayName}`)
-    console.log(`│ Post: ${postTitle}`)
-    console.log(`│ Excerpt: ${excerpt.substring(0, 80)}${excerpt.length > 80 ? '…' : ''}`)
-    console.log(`│ URL: ${postUrl}`)
-    console.log(`│ Unsubscribe: ${unsubscribeUrl ?? '(none)'}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'PostMentionEmail', to, postUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -728,15 +681,10 @@ export async function sendChangelogPublishedEmail(
   } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Changelog Published Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Changelog: ${changelogTitle}`)
-    console.log(`│ Preview: ${contentPreview.substring(0, 50)}...`)
-    console.log(`│ URL: ${changelogUrl}`)
-    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'ChangelogPublishedEmail', to, changelogUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
@@ -784,16 +732,10 @@ export async function sendFeedbackLinkedEmail(
   } = params
 
   if (getProvider() === 'console') {
-    console.log('\n┌────────────────────────────────────────────────────────────')
-    console.log('│ [DEV] Feedback Linked Email')
-    console.log('├────────────────────────────────────────────────────────────')
-    console.log(`│ To: ${to}`)
-    console.log(`│ Name: ${recipientName || '(not provided)'}`)
-    console.log(`│ Post: ${postTitle}`)
-    console.log(`│ Attributed by: ${attributedByName || '(not provided)'}`)
-    console.log(`│ URL: ${postUrl}`)
-    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
-    console.log('└────────────────────────────────────────────────────────────\n')
+    log.debug(
+      { email_type: 'FeedbackLinkedEmail', to, postUrl },
+      '[dev] email preview (console provider)'
+    )
     return { sent: false }
   }
 
