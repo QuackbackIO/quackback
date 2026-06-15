@@ -8,4 +8,5 @@ export {
   getAllAuthProviders,
   isAuthProviderCredentialType,
   credentialTypeForProvider,
+  authProviderCallbackPath,
 } from '@/lib/server/auth/auth-providers'
