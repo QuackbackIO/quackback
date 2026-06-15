@@ -20,14 +20,8 @@ import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { SuspendedView } from '@/components/shared/suspended-view'
 import { isSuspensionExempt } from '@/lib/server/middleware/suspension-paths'
-import { documentLocale } from '@/lib/shared/document-locale'
-import {
-  isRtlLocale,
-  isRtlForced,
-  normalizeLocale,
-  DEFAULT_LOCALE,
-  type SupportedLocale,
-} from '@/lib/shared/i18n'
+import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
+import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -231,7 +225,12 @@ const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup'
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const routeIds = useRouterState({ select: (s) => s.matches.map((m) => m.routeId) })
+  // structuralSharing keeps the array reference stable across store updates that
+  // don't change the matched routes, so RootDocument doesn't re-render every tick.
+  const routeIds = useRouterState({
+    select: (s) => s.matches.map((m) => m.routeId),
+    structuralSharing: true,
+  })
   // The widget honors a `?locale=` override (its SDK appends it); read it so the
   // iframe document advertises the widget's actual language, not just the
   // Accept-Language one. Only the widget route reads this param.
@@ -257,11 +256,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const widgetOverride =
     routeIds.includes('/widget') && widgetLocaleParam ? normalizeLocale(widgetLocaleParam) : null
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
-  const htmlLocale = documentLocale(routeIds, resolvedLocale)
-  const dir = isRtlForced() || isRtlLocale(htmlLocale) ? 'rtl' : 'ltr'
+  const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
   return (
-    <html lang={htmlLocale} dir={dir} suppressHydrationWarning>
+    <html lang={lang} dir={dir} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

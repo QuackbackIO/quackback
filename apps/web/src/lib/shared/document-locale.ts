@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, type SupportedLocale } from './i18n'
+import { DEFAULT_LOCALE, isRtlLocale, isRtlForced, type SupportedLocale } from './i18n'
 
 // The portal layout route. Every page rendered under it (`/`, `/hc`, `/roadmap`,
 // `/settings`, ...) is wrapped in PortalIntlProvider, so it's localized.
@@ -34,4 +34,18 @@ export function documentLocale(
   const localized =
     routeIds.includes(PORTAL_LAYOUT_ROUTE_ID) || routeIds.some((id) => LOCALIZED_ROUTE_IDS.has(id))
   return localized ? resolved : DEFAULT_LOCALE
+}
+
+/**
+ * The `<html lang>`/`dir` attributes for a locale. `lang` is a canonical BCP-47
+ * tag — our locale ids are lowercase (e.g. `zh-cn`), so the region subtag is
+ * upper-cased (`zh-CN`, `pt-BR`). `dir` honors the `?rtl=1` debug override.
+ * Shared by the root document (SSR) and the widget so both format identically.
+ */
+export function htmlLangDir(locale: SupportedLocale): { lang: string; dir: 'ltr' | 'rtl' } {
+  const [language, region] = locale.split('-')
+  return {
+    lang: region ? `${language}-${region.toUpperCase()}` : language,
+    dir: isRtlForced() || isRtlLocale(locale) ? 'rtl' : 'ltr',
+  }
 }

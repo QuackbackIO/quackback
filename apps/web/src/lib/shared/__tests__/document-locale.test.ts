@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { documentLocale } from '../document-locale'
+import { documentLocale, htmlLangDir } from '../document-locale'
 
 // The argument is the matched route-id chain (root -> leaf), as exposed by
 // useRouterState's `matches`.
@@ -30,5 +30,19 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/apps'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/unsubscribe'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/verify-magic-link'], 'zh-cn')).toBe('en')
+  })
+})
+
+describe('htmlLangDir', () => {
+  it('emits a canonical BCP-47 lang (upper-cased region subtag)', () => {
+    expect(htmlLangDir('zh-cn').lang).toBe('zh-CN')
+    expect(htmlLangDir('zh-tw').lang).toBe('zh-TW')
+    expect(htmlLangDir('pt-br').lang).toBe('pt-BR')
+    expect(htmlLangDir('en').lang).toBe('en') // no region subtag, unchanged
+  })
+  it('sets dir from the locale', () => {
+    expect(htmlLangDir('ar').dir).toBe('rtl')
+    expect(htmlLangDir('en').dir).toBe('ltr')
+    expect(htmlLangDir('zh-cn').dir).toBe('ltr')
   })
 })
