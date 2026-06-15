@@ -1,6 +1,25 @@
 // Tenant Quackback URL — e.g. "https://feedback.acme.com"
 export type InstanceUrl = string
 
+/**
+ * Languages Quackback ships catalogs for, as BCP-47 tags (autocomplete hints
+ * for the `locale` option). This is the single source for the `locale` type
+ * below. The widget is a standalone published package and can't import the
+ * app's `SUPPORTED_LOCALES`, so a parity test in apps/web guarantees this list
+ * never drifts from it.
+ */
+export const WIDGET_LOCALES = [
+  'en',
+  'fr',
+  'de',
+  'es',
+  'ar',
+  'ru',
+  'pt-BR',
+  'zh-CN',
+  'zh-TW',
+] as const
+
 /** Passed to `Quackback("init", ...)` or `Quackback.init(...)`. */
 export interface InitOptions {
   /** Tenant Quackback instance URL — required when using the npm package. */
@@ -12,10 +31,10 @@ export interface InitOptions {
   /**
    * Override the auto-detected UI language. Accepts any BCP-47 tag — the host
    * forwards it and the Quackback instance resolves the closest catalog it has.
-   * The literals are autocomplete hints for the languages Quackback ships today;
-   * keep them in sync with `SUPPORTED_LOCALES` in the app's `lib/shared/i18n`.
+   * The literals are autocomplete hints for the languages Quackback ships today
+   * (see WIDGET_LOCALES).
    */
-  locale?: 'en' | 'fr' | 'de' | 'es' | 'ar' | 'ru' | 'pt-BR' | 'zh-CN' | 'zh-TW' | (string & {})
+  locale?: (typeof WIDGET_LOCALES)[number] | (string & {})
   /** Bundle identity into init — shorthand for init + identify. */
   identity?: Identity
 }
