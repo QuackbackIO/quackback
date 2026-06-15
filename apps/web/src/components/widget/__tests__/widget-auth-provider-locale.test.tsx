@@ -37,7 +37,7 @@ function LocaleProbe() {
   return <span data-testid="locale">{useIntl().locale}</span>
 }
 
-function renderWidget(initialLocale?: 'en' | 'de' | 'fr') {
+function renderWidget(initialLocale?: 'en' | 'de' | 'fr' | 'ar') {
   const qc = new QueryClient()
   return render(
     <QueryClientProvider client={qc}>
@@ -62,5 +62,16 @@ describe('WidgetAuthProvider locale (hydration safety #133)', () => {
     // Pre-fix this fell through to navigator.language ('fr'), so a French
     // browser hydrated a French tree over an English SSR tree → React #418.
     expect(renderWidget().getByTestId('locale').textContent).toBe('en')
+  })
+
+  it('owns its iframe document lang/dir (RTL for an RTL locale)', () => {
+    // The widget is a separate document with a runtime-changeable locale, so it
+    // sets its own <html lang>/dir rather than relying on the root document.
+    renderWidget('ar')
+    expect(document.documentElement.lang).toBe('ar')
+    expect(document.documentElement.dir).toBe('rtl')
+    renderWidget('de')
+    expect(document.documentElement.lang).toBe('de')
+    expect(document.documentElement.dir).toBe('ltr')
   })
 })

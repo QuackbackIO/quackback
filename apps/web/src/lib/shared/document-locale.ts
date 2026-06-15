@@ -4,16 +4,17 @@ import { DEFAULT_LOCALE, type SupportedLocale } from './i18n'
 // `/settings`, ...) is wrapped in PortalIntlProvider, so it's localized.
 const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
 
-// Standalone routes (outside the portal layout) that also render translated
-// content. Everything NOT in this set and NOT under the portal layout — the
-// English admin app, onboarding, and auth utility pages like /auth/two-factor —
-// renders hard-coded English with no provider.
+// Standalone routes (outside the portal layout) that render translated content
+// from their first paint. Everything NOT in this set and NOT under the portal
+// layout renders hard-coded English: the admin app, onboarding, the auth utility
+// pages like /auth/two-factor, and /admin/login (its AdminAuthShell heading and
+// email stage are English; only a later stage hands off to a translated form, so
+// the document stays English until that first-render copy is localized).
 const LOCALIZED_ROUTE_IDS = new Set([
   '/auth/login',
   '/auth/signup',
   '/auth/recovery',
   '/auth/reset-password',
-  '/admin/login',
   '/widget',
 ])
 

@@ -9,10 +9,9 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/_portal', '/_portal/hc'], 'zh-cn')).toBe('zh-cn')
     expect(documentLocale(['__root__', '/_portal', '/_portal/roadmap/'], 'zh-tw')).toBe('zh-tw')
   })
-  it('localizes the standalone auth/admin-login/widget routes', () => {
+  it('localizes the standalone auth and widget routes', () => {
     expect(documentLocale(['__root__', '/auth/login'], 'zh-tw')).toBe('zh-tw')
     expect(documentLocale(['__root__', '/auth/reset-password'], 'zh-cn')).toBe('zh-cn')
-    expect(documentLocale(['__root__', '/admin/login'], 'zh-cn')).toBe('zh-cn')
     expect(documentLocale(['__root__', '/widget'], 'ar')).toBe('ar')
   })
   it('keeps untranslated auth utility pages on the default locale', () => {
@@ -22,7 +21,10 @@ describe('documentLocale', () => {
     expect(documentLocale(['__root__', '/auth/auth-complete'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/auth/widget-handoff'], 'zh-tw')).toBe('en')
   })
-  it('keeps the English admin app and standalone system routes on the default', () => {
+  it('keeps the admin app (incl. its English-first login) and system routes on the default', () => {
+    // /admin/login renders an English heading + email stage on first paint, so
+    // it stays English until that copy is localized.
+    expect(documentLocale(['__root__', '/admin/login'], 'ar')).toBe('en')
     expect(documentLocale(['__root__', '/admin/posts'], 'zh-cn')).toBe('en')
     expect(documentLocale(['__root__', '/onboarding'], 'ar')).toBe('en')
     expect(documentLocale(['__root__', '/apps'], 'zh-cn')).toBe('en')
