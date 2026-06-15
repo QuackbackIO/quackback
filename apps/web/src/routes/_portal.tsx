@@ -4,11 +4,12 @@ import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
-import { type PortalAccessGateError, parseGateError } from '@/lib/shared/types/portal-gate-error'
+import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { loadPortalIntl } from '@/lib/server/functions/locale'
+import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import {
   evaluateMyPortalAccessFn,
   recordPortalAccessDeniedFn,
@@ -16,57 +17,51 @@ import {
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 
 export const Route = createFileRoute('/_portal')({
-  beforeLoad: async ({ context }) => {
-    const { settings } = context
+  loader: async ({ context }) => {
+    const { session, settings, userRole, baseUrl } = context
 
-    // Portal-level visibility gate.
-    // Throwing here — in beforeLoad — sets firstBadMatchIndex, which aborts
-    // all child route loaders. No portal data is fetched or dehydrated for a
-    // blocked visitor. (A throw from loader does not abort child loaders.)
+    // Portal-level visibility gate — evaluated here in the loader (NOT
+    // beforeLoad) so the post-sign-in router.invalidate() re-runs it and the
+    // gate clears the instant the visitor becomes authorized. A beforeLoad
+    // result is cached across invalidate for an already-loaded match, which
+    // would otherwise strand the just-signed-in visitor on the gate.
     //
-    // The access decision is evaluated server-side by evaluateMyPortalAccessFn,
-    // which reads the caller's session and the full portal config (including
-    // allowedDomains) entirely on the server. Only the decision is returned —
-    // allowedDomains and widgetSignIn never touch the client context.
+    // On denial we render the sign-in wall from the component at HTTP 200 (the
+    // right status for a login screen — not the 404/500 a throw would force, and
+    // no error/notFound console noise). Not throwing means the child loaders
+    // still run, but nothing leaks: every public portal read fn independently
+    // gates on resolvePortalAccessForRequest() and returns empty for a blocked
+    // visitor (defense in depth). The decision is computed server-side
+    // (session + allowedDomains never leave the server); only it is returned.
     const accessResult = await evaluateMyPortalAccessFn()
-
-    if (!accessResult.granted) {
+    if (!accessResult.granted && accessResult.reason !== 'suspended') {
       // A suspended/deleting workspace is surfaced by the root SuspendedView
-      // overlay (__root.tsx), not the portal access-gate. Skip the gate here —
-      // the public read fns already return empty for a suspended workspace
-      // (resolvePortalAccessForRequest denies), so nothing is dehydrated. This
-      // also narrows `reason` to the auth-denial literals for the rest below.
-      if (accessResult.reason === 'suspended') return
+      // overlay (__root.tsx), not this gate — so only the auth-denial reasons
+      // (unauthenticated | unauthorized) reach here.
 
-      // OWASP authz_fail — emit only for authenticated denials (anonymous denials
-      // are too noisy and lower-signal). Best-effort, never blocks the gate throw.
-      const session = context.session
+      // OWASP authz_fail — emit only for authenticated denials (anonymous
+      // denials are too noisy). Best-effort, fire-and-forget.
       const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
       if (isAuthenticated) {
-        // Best-effort, fire-and-forget. The server fn handles all server-only
-        // imports + actor resolution + the audit emit. `.catch()` suppresses
-        // the unhandled-rejection so the gate throw below is never affected.
         void recordPortalAccessDeniedFn({ data: { reason: accessResult.reason } }).catch(() => {})
       }
 
-      // Both denied cases (unauthenticated + unauthorized) render an in-place
-      // overlay via the route's errorComponent. The gate payload is carried
-      // two ways so it survives SSR serialization — see parseGateError below.
       const org = settings?.settings
       const brandingData = settings?.brandingData ?? null
       const brandingConfig = settings?.brandingConfig ?? {}
       const hasThemeConfig = brandingConfig.light || brandingConfig.dark
-      const gateError: PortalAccessGateError = {
+      // Locale so the gate's auth dialog renders under PortalIntlProvider.
+      const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
+      const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
         reason: accessResult.reason,
         workspaceName: org?.name ?? '',
         logoUrl: brandingData?.logoUrl ?? null,
         themeStyles: hasThemeConfig ? generateThemeCSS(brandingConfig) : '',
         customCss: settings?.customCss ?? '',
-        // Only meaningful for the 'unauthorized' branch — null when the
-        // visitor is anonymous. The overlay uses this to say "you're
-        // signed in as alice@gmail.com, but…" so the admin can sign out
-        // and try a different account.
+        locale,
+        // Only meaningful for 'unauthorized' — null for an anonymous visitor.
+        // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
         authConfig: {
           found: !!settings?.publicPortalConfig,
@@ -74,11 +69,8 @@ export const Route = createFileRoute('/_portal')({
           customProviderNames: settings?.publicPortalConfig?.customProviderNames,
         },
       }
-      throw Object.assign(new Error(JSON.stringify(gateError)), gateError)
+      return { gate }
     }
-  },
-  loader: async ({ context }) => {
-    const { session, settings, userRole, baseUrl } = context
 
     const org = settings?.settings
     if (!org) {
@@ -141,9 +133,21 @@ export const Route = createFileRoute('/_portal')({
       authConfig,
       locale,
       messages,
+      gate: null,
     }
   },
   head: ({ loaderData }) => {
+    // Access gate: a valid 200 sign-in page, but keep it out of search indexes.
+    if (loaderData?.gate) {
+      return {
+        meta: [
+          { title: `Sign in · ${loaderData.gate.workspaceName}` },
+          { name: 'robots', content: 'noindex, nofollow' },
+        ],
+        links: [{ rel: 'icon', href: loaderData.gate.logoUrl || '/logo.png' }],
+      }
+    }
+
     // Favicon priority: dedicated favicon > workspace logo > default logo.png
     const faviconUrl =
       loaderData?.faviconData?.url || loaderData?.brandingData?.logoUrl || '/logo.png'
@@ -167,44 +171,30 @@ export const Route = createFileRoute('/_portal')({
       links: [{ rel: 'icon', href: faviconUrl }],
     }
   },
-  errorComponent: PortalErrorBoundary,
   component: PortalLayout,
 })
 
-/**
- * Catches errors thrown from the _portal loader. When the error is a
- * PortalAccessGateError we render the in-place overlay; anything else falls
- * through to the default error UI.
- *
- * The gate data is carried two ways so it survives SSR serialization:
- *   1. As extra properties on the Error object (works in pure client / dev).
- *   2. As JSON in the error message (survives when only message is preserved).
- */
-function PortalErrorBoundary({ error }: { error: unknown; reset?: () => void }) {
-  const gateErr = parseGateError(error)
-  if (gateErr) {
+function PortalLayout() {
+  const loaderData = Route.useLoaderData()
+
+  // Access denied: render the in-place sign-in wall (a normal 200 page). The
+  // gate is self-contained (it mounts its own PortalIntlProvider).
+  if (loaderData.gate) {
+    const gate = loaderData.gate
     return (
       <PortalAccessGate
-        reason={gateErr.reason}
-        workspaceName={gateErr.workspaceName}
-        logoUrl={gateErr.logoUrl}
-        authConfig={gateErr.authConfig}
-        themeStyles={gateErr.themeStyles}
-        customCss={gateErr.customCss}
-        userEmail={gateErr.userEmail ?? null}
+        reason={gate.reason}
+        workspaceName={gate.workspaceName}
+        logoUrl={gate.logoUrl}
+        authConfig={gate.authConfig}
+        themeStyles={gate.themeStyles}
+        customCss={gate.customCss}
+        userEmail={gate.userEmail ?? null}
+        locale={gate.locale}
       />
     )
   }
-  // Unknown error — do not surface raw error.message (may contain internal detail).
-  return (
-    <div className="flex min-h-screen items-center justify-center p-8 text-center">
-      <p className="text-muted-foreground">Something went wrong. Please try again.</p>
-    </div>
-  )
-}
 
-function PortalLayout() {
-  const loaderData = Route.useLoaderData()
   const {
     org,
     userRole,

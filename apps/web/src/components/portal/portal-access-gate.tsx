@@ -23,6 +23,8 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
+import { PortalIntlProvider } from '@/components/portal-intl-provider'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -222,7 +224,10 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
 export interface PortalAccessGateProps
   extends
     Omit<GateCardProps, 'authConfig'>,
-    Pick<PortalAccessGateError, 'authConfig' | 'themeStyles' | 'customCss' | 'userEmail'> {}
+    Pick<
+      PortalAccessGateError,
+      'authConfig' | 'themeStyles' | 'customCss' | 'userEmail' | 'locale'
+    > {}
 
 export function PortalAccessGate({
   reason,
@@ -232,33 +237,42 @@ export function PortalAccessGate({
   themeStyles,
   customCss,
   userEmail,
+  locale,
 }: PortalAccessGateProps) {
   return (
-    <div className="relative min-h-screen">
-      {/* Theme/custom CSS injected here too so the backdrop looks branded */}
-      {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
-      {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
+    // The gate renders on the route's error path (a beforeLoad throw), which
+    // skips the loader that mounts PortalIntlProvider for the normal portal.
+    // The auth dialog below uses react-intl, so the gate provides its own
+    // provider — without it <FormattedMessage> has no context and crashes.
+    // No SSR catalog here (the error path has no loader data); useIntlSetup
+    // fetches it client-side, which lands well before the user opens the dialog.
+    <PortalIntlProvider locale={locale ?? DEFAULT_LOCALE}>
+      <div className="relative min-h-screen">
+        {/* Theme/custom CSS injected here too so the backdrop looks branded */}
+        {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
+        {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
 
-      {/* Blurred decorative backdrop */}
-      <div className="absolute inset-0 overflow-hidden blur-sm" aria-hidden>
-        <DecorativeBackdrop />
+        {/* Blurred decorative backdrop */}
+        <div className="absolute inset-0 overflow-hidden blur-sm" aria-hidden>
+          <DecorativeBackdrop />
+        </div>
+
+        {/* Darkening scrim */}
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" aria-hidden />
+
+        {/* Centered card */}
+        <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
+          <AuthPopoverProvider>
+            <GateCard
+              reason={reason}
+              workspaceName={workspaceName}
+              logoUrl={logoUrl}
+              authConfig={authConfig}
+              userEmail={userEmail}
+            />
+          </AuthPopoverProvider>
+        </div>
       </div>
-
-      {/* Darkening scrim */}
-      <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" aria-hidden />
-
-      {/* Centered card */}
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <AuthPopoverProvider>
-          <GateCard
-            reason={reason}
-            workspaceName={workspaceName}
-            logoUrl={logoUrl}
-            authConfig={authConfig}
-            userEmail={userEmail}
-          />
-        </AuthPopoverProvider>
-      </div>
-    </div>
+    </PortalIntlProvider>
   )
 }

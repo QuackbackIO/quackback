@@ -5,6 +5,8 @@
  * (_portal.tsx) and unit tests without React or router deps.
  */
 
+import type { SupportedLocale } from '@/lib/shared/i18n'
+
 export interface PortalAccessGateError {
   /** Discriminant — used to identify this error in the route's errorComponent. */
   type: 'portal-access-gate'
@@ -13,6 +15,12 @@ export interface PortalAccessGateError {
   logoUrl: string | null
   themeStyles: string
   customCss: string
+  /**
+   * Locale resolved server-side (Accept-Language) so the gate's auth dialog
+   * renders under the same PortalIntlProvider the portal uses. Optional: older
+   * serialized payloads omit it, and the gate falls back to the default locale.
+   */
+  locale?: SupportedLocale
   /**
    * The signed-in visitor's email when reason === 'unauthorized'. Lets the
    * overlay tell the visitor exactly which account is being blocked so they

@@ -3,6 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { FormError } from '@/components/shared/form-error'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -652,9 +653,9 @@ export function PortalAuthFormInline({
           <>
             <form onSubmit={continueFromEmail} className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="inline-email" className="text-sm font-medium">
+                <Label htmlFor="inline-email">
                   <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
-                </label>
+                </Label>
                 <Input
                   id="inline-email"
                   type="email"
@@ -915,9 +916,9 @@ export function PortalAuthFormInline({
 
           {mode === 'signup' && (
             <div className="space-y-2">
-              <label htmlFor="inline-name" className="text-sm font-medium">
+              <Label htmlFor="inline-name">
                 <FormattedMessage id="portal.auth.name.label" defaultMessage="Name" />
-              </label>
+              </Label>
               <Input
                 id="inline-name"
                 type="text"
@@ -933,13 +934,15 @@ export function PortalAuthFormInline({
             </div>
           )}
 
-          {/* Hidden email keeps password managers happy at the methods step. */}
-          <input type="hidden" name="email" value={email} autoComplete="email" readOnly />
+          {/* Hidden username (the email) pairs with the password field below so
+              password managers — and the browser's a11y form heuristics — treat
+              this as a proper sign-in form. */}
+          <input type="hidden" name="email" value={email} autoComplete="username" readOnly />
 
           <div className="space-y-2">
-            <label htmlFor="inline-password" className="text-sm font-medium">
+            <Label htmlFor="inline-password">
               <FormattedMessage id="portal.auth.password.label" defaultMessage="Password" />
-            </label>
+            </Label>
             <Input
               id="inline-password"
               type="password"
@@ -1103,9 +1106,9 @@ export function PortalAuthFormInline({
           {error && <FormError message={error} />}
 
           <div className="space-y-2">
-            <label htmlFor="inline-forgot-email" className="text-sm font-medium">
+            <Label htmlFor="inline-forgot-email">
               <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
-            </label>
+            </Label>
             <Input
               id="inline-forgot-email"
               type="email"

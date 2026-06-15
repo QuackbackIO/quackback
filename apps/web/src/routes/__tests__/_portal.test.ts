@@ -101,22 +101,21 @@ function makeContext(sessionUser?: {
 }
 
 // ---------------------------------------------------------------------------
-// Extract and invoke the beforeLoad logic directly.
-// Import the route module once at top level (mocks are already set up).
+// Extract and invoke the loader logic directly. The portal-visibility gate
+// lives in the loader (not beforeLoad) so a post-sign-in router.invalidate()
+// re-evaluates it. Import the route module once (mocks are already set up).
 // ---------------------------------------------------------------------------
 
 const { Route: routeOptions } = await import('../_portal')
 
-function getBeforeLoad() {
-  // TanStack route stores the options; beforeLoad is accessible via
-  // the internal `options` property on the RouteApi object.
-  const beforeLoad =
-    (routeOptions as unknown as { options?: { beforeLoad?: unknown } }).options?.beforeLoad ??
-    (routeOptions as unknown as { beforeLoad?: unknown }).beforeLoad
-  if (typeof beforeLoad !== 'function') {
-    throw new Error('Could not find beforeLoad on route options')
+function getLoader() {
+  const loader =
+    (routeOptions as unknown as { options?: { loader?: unknown } }).options?.loader ??
+    (routeOptions as unknown as { loader?: unknown }).loader
+  if (typeof loader !== 'function') {
+    throw new Error('Could not find loader on route options')
   }
-  return beforeLoad as (args: { context: unknown }) => Promise<void>
+  return loader as (args: { context: unknown }) => Promise<unknown>
 }
 
 beforeEach(() => {
@@ -124,24 +123,21 @@ beforeEach(() => {
   mockRecordPortalAccessDeniedFn.mockResolvedValue(undefined)
 })
 
-async function runBeforeLoad(context: ReturnType<typeof makeContext>) {
-  return getBeforeLoad()({ context } as never)
+async function runLoader(context: ReturnType<typeof makeContext>) {
+  return getLoader()({ context } as never)
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('_portal beforeLoad — portal.access.denied audit', () => {
+describe('_portal loader — portal-visibility gate + access.denied audit', () => {
   it('calls recordPortalAccessDeniedFn for an authenticated unauthorized visitor', async () => {
     mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: false, reason: 'unauthorized' })
 
     const context = makeContext({ id: 'user_1', email: 'x@y.com', principalType: 'user' })
-    try {
-      await runBeforeLoad(context)
-    } catch {
-      // expected — gate throws after audit
-    }
+    // The loader returns the gate decision (no throw); the audit still emits.
+    await runLoader(context)
 
     // Wait for the fire-and-forget void promise to settle
     await vi.waitFor(() => expect(mockRecordPortalAccessDeniedFn).toHaveBeenCalled())
@@ -158,11 +154,7 @@ describe('_portal beforeLoad — portal.access.denied audit', () => {
     })
 
     const context = makeContext({ id: 'user_anon', email: '', principalType: 'anonymous' })
-    try {
-      await runBeforeLoad(context)
-    } catch {
-      // expected
-    }
+    await runLoader(context)
 
     // Allow any microtasks to flush
     await new Promise((r) => setTimeout(r, 0))
@@ -174,23 +166,49 @@ describe('_portal beforeLoad — portal.access.denied audit', () => {
 
     const context = makeContext({ id: 'user_1', email: 'admin@y.com', principalType: 'user' })
     // Should not throw when granted
-    await runBeforeLoad(context).catch(() => {})
+    await runLoader(context).catch(() => {})
 
     // Allow any microtasks to flush
     await new Promise((r) => setTimeout(r, 0))
     expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
   })
 
-  it('skips the access-gate (no throw, no audit) for a suspended workspace', async () => {
+  it('does not gate a suspended workspace (left to the root SuspendedView)', async () => {
     // A suspended workspace is surfaced by the root SuspendedView overlay, not
-    // the portal access-gate — so beforeLoad must NOT throw the gate error here,
-    // and it isn't an access-denial worth auditing.
+    // the portal access-gate. The loader falls through to the normal portal load
+    // (which redirects to onboarding in this minimal no-org context) — crucially
+    // it must NOT return a gate or emit the access-denial audit.
     mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: false, reason: 'suspended' })
 
     const context = makeContext({ id: 'user_1', email: 'admin@y.com', principalType: 'user' })
-    await expect(runBeforeLoad(context)).resolves.toBeUndefined()
+    const result = (await runLoader(context).catch((e) => e)) as { gate?: unknown }
+    expect(result?.gate).toBeUndefined()
 
     await new Promise((r) => setTimeout(r, 0))
     expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
+  })
+
+  // The loader denies access WITHOUT throwing: it returns the gate decision so
+  // the _portal component renders the sign-in wall as a normal 200 page (the
+  // right status for a login screen — not the 404/500 a throw would produce, and
+  // no error/notFound console noise). Evaluating in the loader (not beforeLoad)
+  // means a post-sign-in router.invalidate() re-runs it so the gate clears once
+  // authorized. Data stays protected because every portal read fn independently
+  // gates on the access resolver, so the child loaders that run return empty.
+  it('returns the gate decision without throwing, carrying the payload', async () => {
+    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({
+      granted: false,
+      reason: 'unauthenticated',
+    })
+
+    const context = makeContext({ id: 'user_anon', email: '', principalType: 'anonymous' })
+    // Must NOT throw — the component renders the gate at HTTP 200.
+    const result = (await runLoader(context)) as {
+      gate?: { type?: string; locale?: string }
+    }
+
+    expect(result?.gate?.type).toBe('portal-access-gate')
+    // Locale carried so the gate's auth dialog renders under PortalIntlProvider.
+    expect(result?.gate?.locale).toBe('en')
   })
 })
