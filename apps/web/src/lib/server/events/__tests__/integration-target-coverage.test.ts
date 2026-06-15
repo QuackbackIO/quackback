@@ -72,11 +72,12 @@ const { getHookTargets } = await import('../targets')
 const { listIntegrationTypes, getIntegrationHook } = await import('@/lib/server/integrations')
 
 /**
- * The config a connected install has, per hook integration. Slack/Discord store
- * the target in actionConfig.channelId (via addNotificationChannelFn); every
- * other connector stores it in config.channelId. Stripe/Freshdesk/Salesforce use
- * a nominal placeholder — the resolver requires a non-empty channelId, but those
- * hooks ignore the resolved value.
+ * The config a connected install has, for each hook integration that resolves a
+ * delivery target. Slack/Discord store the target in actionConfig.channelId (via
+ * addNotificationChannelFn); every other connector stores it in config.channelId.
+ *
+ * Enrichment hooks that store NO channelId at connect time are listed in
+ * KNOWN_UNRESOLVED below, not here — do not fabricate a channelId for them.
  */
 const CONNECTED_FIXTURES: Record<string, { integrationConfig?: Record<string, unknown>; actionConfig?: Record<string, unknown> }> = {
   slack: { actionConfig: { channelId: 'C1' } },
@@ -96,10 +97,22 @@ const CONNECTED_FIXTURES: Record<string, { integrationConfig?: Record<string, un
   n8n: { integrationConfig: { channelId: 'https://n8n.example.com/webhook/a' } },
   make: { integrationConfig: { channelId: 'https://hook.make.com/a' } },
   zapier: { integrationConfig: { channelId: 'https://hooks.zapier.com/hooks/catch/1/a' } },
-  stripe: { integrationConfig: { channelId: 'stripe' } },
-  freshdesk: { integrationConfig: { channelId: 'freshdesk' } },
-  salesforce: { integrationConfig: { channelId: 'salesforce' } },
 }
+
+/**
+ * Hook-bearing integrations that do NOT currently resolve a delivery target.
+ * These "enrichment" hooks (Stripe/Freshdesk/Salesforce) store no channelId at
+ * connect time — their save paths write neither config.channelId nor
+ * actionConfig.channelId — so getIntegrationTargets() drops them. This is a
+ * separate, known gap (the same bug class, different fix: it needs a
+ * resolver-contract change to allow targetless hooks, not just a key rename) and
+ * is tracked as a follow-up.
+ *
+ * Pinned here so (a) the guard never fabricates a passing fixture for a connector
+ * that is broken in production, and (b) when one of these is genuinely fixed, the
+ * "known-gap" test below trips and forces moving it into CONNECTED_FIXTURES.
+ */
+const KNOWN_UNRESOLVED = new Set(['stripe', 'freshdesk', 'salesforce'])
 
 function makePostCreatedEvent() {
   return {
@@ -121,6 +134,7 @@ function makePostCreatedEvent() {
 }
 
 const hookTypes = listIntegrationTypes().filter((t) => getIntegrationHook(t))
+const resolvingTypes = hookTypes.filter((t) => !KNOWN_UNRESOLVED.has(t))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -128,29 +142,52 @@ beforeEach(() => {
   mockCacheSet.mockResolvedValue(undefined)
 })
 
+/** A single enabled post.created mapping row for one integration. */
+function mappingRow(
+  type: string,
+  fixture: { integrationConfig?: Record<string, unknown>; actionConfig?: Record<string, unknown> }
+) {
+  return {
+    eventType: 'post.created',
+    integrationType: type,
+    secrets: JSON.stringify({ accessToken: 'token' }),
+    integrationConfig: fixture.integrationConfig ?? {},
+    actionConfig: fixture.actionConfig ?? {},
+    filters: null,
+  }
+}
+
 describe('integration target coverage', () => {
-  it('every hook-bearing integration has a connected-state fixture', () => {
+  it('every hook-bearing integration is accounted for (resolving fixture or known gap)', () => {
     expect(hookTypes, 'hookTypes is empty — registry not loaded').not.toHaveLength(0)
-    const missing = hookTypes.filter((t) => !CONNECTED_FIXTURES[t])
-    expect(missing, `add a CONNECTED_FIXTURES entry for: ${missing.join(', ')}`).toEqual([])
+    const unaccounted = hookTypes.filter((t) => !CONNECTED_FIXTURES[t] && !KNOWN_UNRESOLVED.has(t))
+    expect(
+      unaccounted,
+      `classify these hook integrations — add a CONNECTED_FIXTURES entry or list in KNOWN_UNRESOLVED: ${unaccounted.join(', ')}`
+    ).toEqual([])
   })
 
-  it.each(hookTypes)('resolves a delivery target for "%s" when connected', async (type) => {
-    const fixture = CONNECTED_FIXTURES[type] ?? {}
+  it.each(resolvingTypes)('resolves a delivery target for "%s" when connected', async (type) => {
     mockCacheGet
-      .mockResolvedValueOnce([
-        {
-          eventType: 'post.created',
-          integrationType: type,
-          secrets: JSON.stringify({ accessToken: 'token' }),
-          integrationConfig: fixture.integrationConfig ?? {},
-          actionConfig: fixture.actionConfig ?? {},
-          filters: null,
-        },
-      ]) // INTEGRATION_MAPPINGS
+      .mockResolvedValueOnce([mappingRow(type, CONNECTED_FIXTURES[type] ?? {})]) // INTEGRATION_MAPPINGS
       .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
 
     const targets = await getHookTargets(makePostCreatedEvent())
     expect(targets.filter((t) => t.type === type).length).toBeGreaterThan(0)
   })
+
+  // Honest pin of the known gap: these enrichment hooks store no channelId, so
+  // they resolve to nothing today. If a fix makes one resolve, this trips and the
+  // connector must move into CONNECTED_FIXTURES. See KNOWN_UNRESOLVED above.
+  it.each([...KNOWN_UNRESOLVED])(
+    'does NOT yet resolve a target for known-gap enrichment hook "%s"',
+    async (type) => {
+      mockCacheGet
+        .mockResolvedValueOnce([mappingRow(type, {})]) // no channelId, as in production
+        .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
+
+      const targets = await getHookTargets(makePostCreatedEvent())
+      expect(targets.filter((t) => t.type === type)).toHaveLength(0)
+    }
+  )
 })
