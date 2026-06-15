@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { updateHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
+import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/help-center')({
@@ -27,6 +27,7 @@ export const Route = createFileRoute('/admin/settings/help-center')({
 
 function HelpCenterSettingsPage() {
   const router = useRouter()
+  const updateHelpCenterConfig = useUpdateHelpCenterConfig()
   const helpCenterConfigQuery = useSuspenseQuery(settingsQueries.helpCenterConfig())
   const config = helpCenterConfigQuery.data as HelpCenterConfig
 
@@ -51,9 +52,9 @@ function HelpCenterSettingsPage() {
   async function saveField(data: Record<string, unknown>) {
     setSaving(true)
     try {
-      await updateHelpCenterConfigFn({
-        data: data as Parameters<typeof updateHelpCenterConfigFn>[0]['data'],
-      })
+      await updateHelpCenterConfig.mutateAsync(
+        data as Parameters<typeof updateHelpCenterConfig.mutateAsync>[0]
+      )
       startTransition(() => router.invalidate())
     } finally {
       setSaving(false)

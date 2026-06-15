@@ -80,7 +80,7 @@ export function MondayConfig({
 
   const handleBoardChange = (boardId: string) => {
     setSelectedBoard(boardId)
-    updateMutation.mutate({ id: integrationId, config: { boardId } })
+    updateMutation.mutate({ id: integrationId, config: { boardId, channelId: boardId } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {

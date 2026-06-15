@@ -2,12 +2,12 @@ import { useState, useTransition } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
+import { useUpdatePortalConfig, useUpdateModerationDefault } from '@/lib/client/mutations/settings'
 import { ShieldCheckIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
-import { updatePortalConfigFn, updateModerationDefaultFn } from '@/lib/server/functions/settings'
 import {
   requireApprovalToToggles,
   togglesToRequireApproval,
@@ -63,6 +63,8 @@ function PermissionToggle({
 
 function ModerationPage() {
   const router = useRouter()
+  const updatePortalConfig = useUpdatePortalConfig()
+  const updateModerationDefault = useUpdateModerationDefault()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const [isPending, startTransition] = useTransition()
 
@@ -84,7 +86,7 @@ function ModerationPage() {
   async function updateFeature(key: string, value: boolean, revert: () => void) {
     setSavingField(key)
     try {
-      await updatePortalConfigFn({ data: { features: { [key]: value } } })
+      await updatePortalConfig.mutateAsync({ features: { [key]: value } })
       startTransition(() => {
         router.invalidate()
       })
@@ -101,8 +103,8 @@ function ModerationPage() {
     setModerationToggles(next)
     setSavingField(`moderation-${key}`)
     try {
-      await updateModerationDefaultFn({
-        data: { requireApproval: togglesToRequireApproval(next) },
+      await updateModerationDefault.mutateAsync({
+        requireApproval: togglesToRequireApproval(next),
       })
       startTransition(() => router.invalidate())
     } catch {

@@ -13,11 +13,8 @@ import type { OfficeHoursConfig } from '@/lib/shared/chat/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import {
-  getEmailChannelStatusFn,
-  updatePortalConfigFn,
-  updateWidgetConfigFn,
-} from '@/lib/server/functions/settings'
+import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import { getEmailChannelStatusFn } from '@/lib/server/functions/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -157,6 +154,8 @@ function ConversationsSettingsRoute() {
 
 function ConversationsSettingsPage() {
   const router = useRouter()
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const updatePortalConfig = useUpdatePortalConfig()
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const segmentsQuery = useSegments()
@@ -225,12 +224,12 @@ function ConversationsSettingsPage() {
 
   async function persist(
     field: string,
-    data: Parameters<typeof updateWidgetConfigFn>[0]['data'],
+    data: Parameters<typeof updateWidgetConfig.mutateAsync>[0],
     revert?: () => void
   ) {
     setSavingField(field)
     try {
-      await updateWidgetConfigFn({ data })
+      await updateWidgetConfig.mutateAsync(data)
       startTransition(() => router.invalidate())
     } catch {
       revert?.()
@@ -251,7 +250,7 @@ function ConversationsSettingsPage() {
     setPortalSupportEnabled(checked)
     setSavingField('portalSupport')
     try {
-      await updatePortalConfigFn({ data: { support: { enabled: checked } } })
+      await updatePortalConfig.mutateAsync({ support: { enabled: checked } })
       startTransition(() => router.invalidate())
     } catch {
       setPortalSupportEnabled(!checked)
@@ -276,7 +275,7 @@ function ConversationsSettingsPage() {
     if (!canPersistAccess(next)) return
     setSavingField('portalAccess')
     try {
-      await updatePortalConfigFn({ data: { support: { access: next } } })
+      await updatePortalConfig.mutateAsync({ support: { access: next } })
       startTransition(() => router.invalidate())
     } catch {
       setPortalAccess(prev)

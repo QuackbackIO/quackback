@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { OIDC_PRESETS, detectOidcProvider } from '@/lib/shared/oidc-presets'
+import { authProviderCallbackPath } from '@/lib/shared/auth-providers'
 import type { PlatformCredentialField } from '@/lib/shared/integration-types'
 
 interface AuthProviderCredentialsFormProps {
@@ -86,7 +87,9 @@ export function AuthProviderCredentialsForm({
   const saveMutation = useSaveAuthProviderCredentials()
   const deleteMutation = useDeleteAuthProviderCredentials()
 
-  const redirectUri = `${baseUrl}/api/auth/callback/${providerId}`
+  // Generic-OAuth providers (Custom OIDC) register a different callback path
+  // than built-in social providers, so derive it from the provider type. (#233)
+  const redirectUri = `${baseUrl}${authProviderCallbackPath(providerId)}`
 
   const handleStartEdit = () => {
     setValues({})

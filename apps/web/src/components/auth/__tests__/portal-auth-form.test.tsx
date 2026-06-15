@@ -421,3 +421,42 @@ describe('PortalAuthForm — methods step variants', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('PortalAuthForm — OAuth-only Stage 1 (#231)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+  afterEach(() => cleanup())
+
+  // With both email methods off, the email field at Stage 1 has nowhere to
+  // route (Stage 2 has no password/magic-link sub-screen), so it must not
+  // render — only the OAuth provider buttons should show.
+  it('hides the email field, divider, and create-account when only OAuth is enabled', async () => {
+    const oauth = await import('../oauth-buttons')
+    vi.mocked(oauth.getEnabledOAuthProviders).mockReturnValueOnce([
+      { id: 'custom-oidc', name: 'Custom OIDC', type: 'generic-oauth' },
+    ])
+    render(
+      <PortalAuthForm
+        authConfig={{ password: false, magicLink: false, 'custom-oidc': true }}
+        onModeSwitch={() => {}}
+      />
+    )
+    // The provider button is the only sign-in path.
+    expect(screen.getByTestId('oauth-buttons')).toBeInTheDocument()
+    // The dead-end email entry must be gone (the email-submit Continue lives
+    // inside this form, so its absence follows from the field's).
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
+    // No dangling "or" divider under the tiles, and no create-account link.
+    expect(screen.queryByText('or')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create an account/i })).not.toBeInTheDocument()
+  })
+
+  // Defensive: the server blocks saving zero methods, but if it ever happens
+  // the form should explain rather than render a dead-end email field.
+  it('shows a no-methods message when neither email methods nor OAuth are configured', () => {
+    render(<PortalAuthForm authConfig={{ password: false, magicLink: false }} />)
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/no sign-in methods are configured/i)).toBeInTheDocument()
+  })
+})
