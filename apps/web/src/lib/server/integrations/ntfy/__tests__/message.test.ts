@@ -65,7 +65,7 @@ describe('buildNtfyPayload', () => {
     const payload = buildNtfyPayload(statusChangedEvent() as any, TOPIC, ROOT)
     expect(payload).not.toBeNull()
     expect(payload!.title).toBe('Status changed: Dark mode support')
-    expect(payload!.message).toBe('open → in_progress')
+    expect(payload!.message).toBe('Open → In Progress')
     expect(payload!.click).toBe(`${ROOT}/b/features/posts/post_1`)
     expect(payload!.tags).toContain('arrows_counterclockwise')
   })

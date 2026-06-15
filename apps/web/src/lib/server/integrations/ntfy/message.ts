@@ -2,7 +2,8 @@
  * ntfy push notification payload formatting.
  */
 import type { EventData } from '../../events/types'
-import { stripHtml, truncate } from '../../events/hook-utils'
+import { stripHtml, truncate, formatStatus } from '../../events/hook-utils'
+import { buildPostUrl } from '../message-utils'
 
 export interface NtfyPayload {
   topic: string
@@ -21,7 +22,7 @@ export function buildNtfyPayload(event: EventData, topic: string, rootUrl: strin
         topic,
         title: `New feedback: ${post.title}`,
         message: body || post.title,
-        click: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
         tags: ['speech_balloon'],
       }
     }
@@ -31,8 +32,8 @@ export function buildNtfyPayload(event: EventData, topic: string, rootUrl: strin
       return {
         topic,
         title: `Status changed: ${post.title}`,
-        message: `${previousStatus} → ${newStatus}`,
-        click: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+        message: `${formatStatus(previousStatus)} → ${formatStatus(newStatus)}`,
+        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
         tags: ['arrows_counterclockwise'],
       }
     }
@@ -44,7 +45,7 @@ export function buildNtfyPayload(event: EventData, topic: string, rootUrl: strin
         topic,
         title: `New comment: ${post.title}`,
         message: body || `New comment on "${post.title}"`,
-        click: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
+        click: buildPostUrl(rootUrl, post.boardSlug, post.id),
         tags: ['speech_balloon'],
       }
     }

@@ -6,6 +6,7 @@ import type { HookHandler, HookResult } from '../../events/hook-types'
 import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { safeFetch } from '../../content/ssrf-guard'
+import { getErrorMessage } from '../message-utils'
 import { buildNtfyPayload } from './message'
 import { parseNtfyUrl } from './url'
 
@@ -50,7 +51,7 @@ export const ntfyHook: HookHandler = {
       console.log(`[ntfy] ✅ delivered`)
       return { success: true }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      const errorMsg = getErrorMessage(error)
       console.error(`[ntfy] ❌ Exception: ${errorMsg}`)
       return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
     }
