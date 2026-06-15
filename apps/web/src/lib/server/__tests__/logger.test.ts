@@ -68,7 +68,9 @@ describe('logger', () => {
         password: 'hunter2',
         token: 'tok_secret',
         email: 'user@example.com',
+        'set-cookie': 'sid=top-secret',
         req: { headers: { authorization: 'Bearer abc', host: 'localhost' } },
+        res: { headers: { 'set-cookie': 'sid=nested-secret', etag: 'W/keep' } },
         post_id: 'keep_me',
       },
       'auth attempt'
@@ -79,8 +81,13 @@ describe('logger', () => {
     expect(rec.token).toBeUndefined()
     expect(rec.email).toBeUndefined()
     expect(rec.req.headers.authorization).toBeUndefined()
+    // hyphenated set-cookie must be redacted at top level AND nested in headers
+    // (requires Pino bracket-notation redact paths)
+    expect(rec['set-cookie']).toBeUndefined()
+    expect(rec.res.headers['set-cookie']).toBeUndefined()
     // non-secret fields survive
     expect(rec.req.headers.host).toBe('localhost')
+    expect(rec.res.headers.etag).toBe('W/keep')
     expect(rec.post_id).toBe('keep_me')
   })
 

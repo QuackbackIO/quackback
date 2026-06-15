@@ -55,8 +55,15 @@ const REDACT_PATHS = [
   'request.headers.cookie',
   'headers.authorization',
   'headers.cookie',
-  'set-cookie',
-  '*.set-cookie',
+  // Hyphenated keys require bracket notation in Pino redact paths; bare/dotted
+  // `set-cookie` only catches the top level and leaks nested header locations.
+  // set-cookie is a response header, so cover the realistic shapes.
+  '["set-cookie"]',
+  'headers["set-cookie"]',
+  'req.headers["set-cookie"]',
+  'request.headers["set-cookie"]',
+  'res.headers["set-cookie"]',
+  'response.headers["set-cookie"]',
 ]
 
 /**
