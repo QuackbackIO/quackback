@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 
 const mockMutate = vi.fn()
 
@@ -26,15 +26,18 @@ vi.mock('@/components/ui/select', () => ({
   Select: ({
     value,
     onValueChange,
+    disabled,
     children,
   }: {
     value: string
     onValueChange: (v: string) => void
+    disabled?: boolean
     children: React.ReactNode
   }) => (
     <select
       data-testid="board-select"
       value={value}
+      disabled={disabled}
       onChange={(e) => onValueChange(e.target.value)}
     >
       {children}
@@ -65,7 +68,7 @@ describe('<MondayConfig> board selection', () => {
       />
     )
 
-    await waitFor(() => expect(screen.getByText('Roadmap')).toBeTruthy())
+    await screen.findByText('Roadmap')
 
     fireEvent.change(screen.getByTestId('board-select'), { target: { value: '1234567890' } })
 
