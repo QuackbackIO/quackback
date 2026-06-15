@@ -97,6 +97,7 @@ const CONNECTED_FIXTURES: Record<string, { integrationConfig?: Record<string, un
   n8n: { integrationConfig: { channelId: 'https://n8n.example.com/webhook/a' } },
   make: { integrationConfig: { channelId: 'https://hook.make.com/a' } },
   zapier: { integrationConfig: { channelId: 'https://hooks.zapier.com/hooks/catch/1/a' } },
+  ntfy: { integrationConfig: { channelId: 'https://ntfy.sh/a' } },
 }
 
 /**
