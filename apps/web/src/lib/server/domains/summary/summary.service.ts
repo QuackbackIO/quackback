@@ -146,7 +146,7 @@ export async function generateAndSavePostSummary(postId: PostId): Promise<void> 
     summaryJson = JSON.parse(stripCodeFences(responseText))
   } catch {
     log.error(
-      { post_id: postId, response_preview: responseText.slice(0, 200) },
+      { post_id: postId, response_length: responseText.length },
       'failed to parse summary json'
     )
     return

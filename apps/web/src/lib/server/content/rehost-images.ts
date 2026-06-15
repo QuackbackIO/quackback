@@ -67,8 +67,16 @@ type RejectReason =
 
 function logRejection(src: string, reason: RejectReason, opts: RehostOptions, err?: unknown): void {
   const principal = opts.principalId ?? 'unknown'
+  const safeSrc = (() => {
+    try {
+      const u = new URL(src)
+      return u.origin + u.pathname
+    } catch {
+      return '[invalid url]'
+    }
+  })()
   log.warn(
-    { content_type: opts.contentType, principal_id: principal, src, reason, err },
+    { content_type: opts.contentType, principal_id: principal, src: safeSrc, reason, err },
     'skipped image'
   )
 }

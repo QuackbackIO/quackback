@@ -106,7 +106,7 @@ export async function analyzeSentiment(
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{}')
 
     if (!isValidSentiment(parsed.sentiment) || typeof parsed.confidence !== 'number') {
-      log.error({ model_response: parsed }, 'invalid sentiment model response')
+      log.error({ model_response_keys: Object.keys(parsed) }, 'invalid sentiment model response')
       return null
     }
 

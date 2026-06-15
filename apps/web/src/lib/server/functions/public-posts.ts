@@ -812,9 +812,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
             },
       }
     } catch (error) {
-      const errorName = error instanceof Error ? error.name : 'Unknown'
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      log.error({ error_name: errorName, error_msg: errorMsg }, 'get vote sidebar data failed')
+      log.error({ err: error }, 'get vote sidebar data failed')
       throw error
     }
   })

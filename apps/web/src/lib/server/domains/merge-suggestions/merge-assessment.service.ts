@@ -88,7 +88,7 @@ export async function assessMergeCandidates(
   try {
     parsed = JSON.parse(stripCodeFences(responseText))
   } catch {
-    log.error({ response_preview: responseText.slice(0, 200) }, 'failed to parse llm json')
+    log.error({ response_length: responseText.length }, 'failed to parse llm json')
     return []
   }
 

@@ -47,8 +47,13 @@ export async function withRetry<T>(
       retryCount++
       const delay = Math.min(baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000, maxDelayMs)
 
-      log.debug(
-        { attempt: attempt + 1, max_retries: maxRetries, delay_ms: Math.round(delay), err: lastError },
+      log.warn(
+        {
+          attempt: attempt + 1,
+          max_retries: maxRetries,
+          delay_ms: Math.round(delay),
+          err: lastError,
+        },
         'retrying ai call'
       )
 
