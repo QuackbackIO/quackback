@@ -87,7 +87,6 @@ export function logStartupBanner(): void {
 
   const runtime =
     typeof globalThis.Bun !== 'undefined' ? `bun ${Bun.version}` : `node ${process.version}`
-  const env = process.env.NODE_ENV ?? 'development'
   const port = process.env.PORT ?? '3000'
   const baseUrl = process.env.BASE_URL ?? `http://localhost:${port}`
 
@@ -95,7 +94,6 @@ export function logStartupBanner(): void {
     {
       version: __APP_VERSION__,
       commit: __GIT_COMMIT__,
-      env,
       runtime,
       port,
       base_url: baseUrl,
@@ -189,9 +187,7 @@ export function logStartupBanner(): void {
         // so a slow DB or large table doesn't cause premature expiry.
         const ONE_HOUR = 60 * 60 * 1000
         await withSweepLock('audit_prune', ONE_HOUR, async () => {
-          await pruneAuditLog().catch((err) =>
-            log.error({ err }, 'audit-log prune failed')
-          )
+          await pruneAuditLog().catch((err) => log.error({ err }, 'audit-log prune failed'))
         })
         await withSweepLock('invite_sweep', ONE_HOUR, async () => {
           await sweepExpiredPortalInvites().catch((err) =>
@@ -220,17 +216,13 @@ export function logStartupBanner(): void {
       const ONE_HOUR = 60 * 60 * 1000
       setTimeout(() => {
         void withSweepLock('summary_sweep', ONE_HOUR, () =>
-          refreshStaleSummaries().catch((err) =>
-            log.error({ err }, 'initial summary sweep failed')
-          )
+          refreshStaleSummaries().catch((err) => log.error({ err }, 'initial summary sweep failed'))
         )
       }, 5_000) // 5s delay to let other startup tasks finish
       setInterval(
         () => {
           void withSweepLock('summary_sweep', ONE_HOUR, () =>
-            refreshStaleSummaries().catch((err) =>
-              log.error({ err }, 'summary sweep failed')
-            )
+            refreshStaleSummaries().catch((err) => log.error({ err }, 'summary sweep failed'))
           )
         },
         30 * 60 * 1000
