@@ -784,9 +784,9 @@ export function PortalAuthForm({
             </div>
           )}
 
-          {/* Email is fixed at this stage — hidden field keeps password
-              managers happy. */}
-          <input type="hidden" name="email" value={email} autoComplete="email" readOnly />
+          {/* Email is fixed at this stage — hidden username field keeps
+              password managers happy and pairs with the password input. */}
+          <input type="hidden" name="email" value={email} autoComplete="username" readOnly />
 
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium">

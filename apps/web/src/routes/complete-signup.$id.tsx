@@ -304,6 +304,11 @@ function WelcomeContent({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email is fixed by the invite; a hidden username field lets
+              password managers save the credential against it (and pairs
+              with the password input for the a11y heuristic). */}
+          <input type="hidden" name="email" value={invite.email} autoComplete="username" readOnly />
+
           <div className="space-y-2">
             <label htmlFor="name" className="text-sm font-medium">
               Your name

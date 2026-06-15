@@ -166,6 +166,11 @@ function ResetPasswordContent({ token, urlError }: { token: string; urlError: st
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <FormError message={error} />}
 
+        {/* Token-based reset: the account email isn't in scope here, but a
+            hidden username field still pairs with the password inputs so
+            password managers and the a11y heuristic stop complaining. */}
+        <input type="text" name="username" autoComplete="username" hidden readOnly />
+
         <div className="space-y-2">
           <label htmlFor="new-password" className="text-sm font-medium">
             <FormattedMessage

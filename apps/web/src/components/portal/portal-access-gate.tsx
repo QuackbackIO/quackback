@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { FormattedMessage } from 'react-intl'
 import { toast } from 'sonner'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -109,23 +110,30 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
   const queryClient = useQueryClient()
   const { openAuthPopover } = useAuthPopover()
   const [signingOut, setSigningOut] = useState(false)
+  // A one-way latch: true from a successful sign-in until this gate unmounts.
+  // The gate stays mounted during the post-login loader re-run, so it shows a
+  // "Signing in…" state instead of flashing the "Sign in / Register" CTA — the
+  // same window PortalHeader bridges (#249). We deliberately never clear it:
+  // once auth succeeds the gate either unmounts (access granted) or re-renders
+  // into the unauthorized branch, so the CTA is never needed again. Clearing it
+  // would flash the CTA for a frame as the loader settles, before unmount.
+  const [signingIn, setSigningIn] = useState(false)
 
-  // After a successful sign-in, re-evaluate access by re-running the loader.
+  // A successful sign-in (same-tab inline via postAuthSuccess, OAuth popup, or
+  // another tab) re-runs the loader to re-evaluate access. A broadcast only
+  // fires on a real sign-in, so `reason` always moves off 'unauthenticated' and
+  // the latch can't get stuck on this branch.
   useAuthBroadcast({
     onSuccess: () => {
-      router.invalidate()
+      setSigningIn(true)
+      void router.invalidate()
     },
   })
 
+  // The dialog's onAuthSuccess closes the dialog and the broadcast above drives
+  // the loader re-run, so the CTA only needs to open the dialog.
   const handleSignIn = () => {
-    openAuthPopover({
-      mode: 'login',
-      onSuccess: () => {
-        // onAuthSuccess in the context already closes the dialog; invalidate
-        // here so the _portal loader re-runs immediately after.
-        router.invalidate()
-      },
-    })
+    openAuthPopover({ mode: 'login' })
   }
 
   // Sign out + invalidate so the gate re-evaluates as unauthenticated and
@@ -178,9 +186,19 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
                 This portal is private. Sign in or create an account to continue.
               </p>
             </div>
-            <Button className="w-full" onClick={handleSignIn}>
-              Sign in / Register
-            </Button>
+            {signingIn ? (
+              <div
+                className="flex h-9 items-center justify-center gap-2 text-sm text-muted-foreground"
+                aria-live="polite"
+              >
+                <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
+              </div>
+            ) : (
+              <Button className="w-full" onClick={handleSignIn}>
+                Sign in / Register
+              </Button>
+            )}
           </>
         ) : (
           <>
