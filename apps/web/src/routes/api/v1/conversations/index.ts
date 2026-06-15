@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
-import { serializeConversation } from './serialize'
+import { serializeConversation } from './-serialize'
 import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 

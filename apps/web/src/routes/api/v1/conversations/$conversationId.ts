@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import { serializeConversation } from './serialize'
+import { serializeConversation } from './-serialize'
 import type { ConversationId, SegmentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/$conversationId')({

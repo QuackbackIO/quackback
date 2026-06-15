@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { authClient } from '@/lib/client/auth-client'
 import { checkOnboardingState, getPublicAuthConfig } from '@/lib/server/functions/admin'
-import { pickOnboardingStep } from './onboarding-step'
+import { pickOnboardingStep } from './-onboarding-step'
 
 export const Route = createFileRoute('/onboarding/_layout/account')({
   loader: async ({ context }) => {

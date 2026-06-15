@@ -11,7 +11,7 @@ import {
   getBoardOptionsForUseCase,
   getUseCaseLabel,
 } from '@/components/onboarding/default-boards'
-import { pickOnboardingStep } from './onboarding-step'
+import { pickOnboardingStep } from './-onboarding-step'
 
 export const Route = createFileRoute('/onboarding/_layout/boards')({
   loader: async ({ context }) => {

@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useLocation } from '@tanstack/react-router'
 import { getSetupState, isOnboardingComplete } from '@/lib/shared/db-types'
 import { CheckIcon } from '@heroicons/react/24/solid'
-import { ALL_ONBOARDING_STEPS } from './onboarding-steps'
+import { ALL_ONBOARDING_STEPS } from './-onboarding-steps'
 
 /**
  * Shared layout for all onboarding steps.

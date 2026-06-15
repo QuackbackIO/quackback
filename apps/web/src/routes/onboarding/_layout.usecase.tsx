@@ -6,7 +6,7 @@ import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { saveUseCaseFn } from '@/lib/server/functions/onboarding'
 import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import type { UseCaseType } from '@/lib/shared/db-types'
-import { pickOnboardingStep } from './onboarding-step'
+import { pickOnboardingStep } from './-onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
 export const Route = createFileRoute('/onboarding/_layout/usecase')({

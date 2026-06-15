@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickOnboardingStep } from '../onboarding-step'
+import { pickOnboardingStep } from '../-onboarding-step'
 
 describe('pickOnboardingStep', () => {
   it('routes unauthenticated visitors to /onboarding/account', () => {
