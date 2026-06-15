@@ -32,7 +32,7 @@ function parseOrganizationName(organizationUrl: string): string {
 }
 
 export const connectAzureDevOpsFn = createServerFn({ method: 'POST' })
-  .inputValidator(connectSchema)
+  .validator(connectSchema)
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { saveIntegration } = await import('../save')
@@ -86,7 +86,7 @@ const fetchWorkItemTypesSchema = z.object({
 })
 
 export const fetchAzureDevOpsWorkItemTypesFn = createServerFn({ method: 'POST' })
-  .inputValidator(fetchWorkItemTypesSchema)
+  .validator(fetchWorkItemTypesSchema)
   .handler(async ({ data }): Promise<AzureDevOpsWorkItemType[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

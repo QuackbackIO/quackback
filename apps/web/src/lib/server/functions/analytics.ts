@@ -30,7 +30,7 @@ import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 export const getAnalyticsData = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
+  .validator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
   .handler(async ({ data: { period } }) => {
     await requireAuth({ roles: ['admin', 'member'] })
 

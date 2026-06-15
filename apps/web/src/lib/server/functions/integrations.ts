@@ -49,7 +49,7 @@ export type DeleteIntegrationInput = z.infer<typeof deleteIntegrationSchema>
  * Update integration config and event mappings
  */
 export const updateIntegrationFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateIntegrationSchema)
+  .validator(updateIntegrationSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_id: data.id }, 'update integration')
     await requireAuth({ roles: ['admin'] })
@@ -115,7 +115,7 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
  * Delete an integration
  */
 export const deleteIntegrationFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteIntegrationSchema)
+  .validator(deleteIntegrationSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_id: data.id }, 'delete integration')
     await requireAuth({ roles: ['admin'] })
@@ -198,7 +198,7 @@ export type RemoveNotificationChannelInput = z.infer<typeof removeNotificationCh
  * Add a notification channel with event mappings
  */
 export const addNotificationChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(addNotificationChannelSchema)
+  .validator(addNotificationChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'add notification channel')
     await requireAuth({ roles: ['admin'] })
@@ -236,7 +236,10 @@ export const addNotificationChannelFn = createServerFn({ method: 'POST' })
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
     await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
-    log.info({ channel_id: data.channelId, event_count: data.events.length }, 'notification channel added')
+    log.info(
+      { channel_id: data.channelId, event_count: data.events.length },
+      'notification channel added'
+    )
     return { success: true }
   })
 
@@ -244,7 +247,7 @@ export const addNotificationChannelFn = createServerFn({ method: 'POST' })
  * Update a notification channel's event mappings and board filter
  */
 export const updateNotificationChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateNotificationChannelSchema)
+  .validator(updateNotificationChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'update notification channel')
     await requireAuth({ roles: ['admin'] })
@@ -301,7 +304,7 @@ export const updateNotificationChannelFn = createServerFn({ method: 'POST' })
  * Remove a notification channel and all its event mappings
  */
 export const removeNotificationChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(removeNotificationChannelSchema)
+  .validator(removeNotificationChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'remove notification channel')
     await requireAuth({ roles: ['admin'] })
@@ -355,7 +358,7 @@ export type RemoveMonitoredChannelInput = z.infer<typeof removeMonitoredChannelS
  * Add a channel to monitoring. Bot joins the channel automatically (public only).
  */
 export const addMonitoredChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(addMonitoredChannelSchema)
+  .validator(addMonitoredChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'add monitored channel')
     await requireAuth({ roles: ['admin'] })
@@ -408,7 +411,7 @@ export const addMonitoredChannelFn = createServerFn({ method: 'POST' })
  * Update a monitored channel (toggle enabled, change board)
  */
 export const updateMonitoredChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateMonitoredChannelSchema)
+  .validator(updateMonitoredChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'update monitored channel')
     await requireAuth({ roles: ['admin'] })
@@ -438,7 +441,7 @@ export const updateMonitoredChannelFn = createServerFn({ method: 'POST' })
  * Remove a monitored channel
  */
 export const removeMonitoredChannelFn = createServerFn({ method: 'POST' })
-  .inputValidator(removeMonitoredChannelSchema)
+  .validator(removeMonitoredChannelSchema)
   .handler(async ({ data }) => {
     log.debug({ channel_id: data.channelId }, 'remove monitored channel')
     await requireAuth({ roles: ['admin'] })

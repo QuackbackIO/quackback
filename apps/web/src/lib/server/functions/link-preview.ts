@@ -44,7 +44,7 @@ function urlCacheKey(url: string): string {
 }
 
 export const unfurlLinkFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ url: z.string().url().max(2048) }))
+  .validator(z.object({ url: z.string().url().max(2048) }))
   .handler(async ({ data }): Promise<LinkPreview | null> => {
     try {
       // 1. Auth

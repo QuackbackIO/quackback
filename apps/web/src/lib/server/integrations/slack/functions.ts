@@ -69,7 +69,7 @@ const fetchSlackChannelsSchema = z.object({ force: z.boolean().optional().defaul
 type FetchSlackChannelsInput = z.infer<typeof fetchSlackChannelsSchema>
 
 export const fetchSlackChannelsFn = createServerFn({ method: 'GET' })
-  .inputValidator(fetchSlackChannelsSchema)
+  .validator(fetchSlackChannelsSchema)
   .handler(async ({ data }: { data: FetchSlackChannelsInput }): Promise<SlackChannel[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

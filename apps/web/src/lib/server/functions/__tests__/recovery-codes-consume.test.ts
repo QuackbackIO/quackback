@@ -12,7 +12,7 @@ const handlers: AnyHandler[] = []
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: AnyHandler) {
@@ -267,7 +267,7 @@ describe('consumeRecoveryCodeFn', () => {
     vi.doMock('@tanstack/react-start', () => ({
       createServerFn: () => {
         const chain = {
-          inputValidator() {
+          validator() {
             return chain
           },
           handler(fn: AnyHandler) {

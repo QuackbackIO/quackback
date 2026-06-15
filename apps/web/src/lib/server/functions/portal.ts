@@ -105,7 +105,7 @@ async function loadAllowAnonymous(): Promise<boolean> {
 }
 
 export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ userId: z.string() }))
+  .validator(z.object({ userId: z.string() }))
   .handler(async ({ data }): Promise<PrincipalId | null> => {
     log.debug({ user_id: data.userId }, 'get principal id for user')
     try {
@@ -120,7 +120,7 @@ export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   })
 
 export const fetchPortalData = createServerFn({ method: 'GET' })
-  .inputValidator(fetchPortalDataSchema)
+  .validator(fetchPortalDataSchema)
   .handler(async ({ data }) => {
     log.debug({ board_slug: data.boardSlug, sort: data.sort }, 'fetch portal data')
 
@@ -258,7 +258,7 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
 })
 
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ slug: z.string() }))
+  .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ slug: data.slug }, 'fetch public board by slug')
     try {
@@ -288,7 +288,7 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   })
 
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ postId: z.string() }))
+  .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'fetch public post detail')
 
@@ -375,7 +375,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
   })
 
 export const fetchPublicPosts = createServerFn({ method: 'GET' })
-  .inputValidator(fetchPublicPostsSchema)
+  .validator(fetchPublicPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ board_slug: data.boardSlug, sort: data.sort }, 'fetch public posts')
     try {
@@ -434,9 +434,7 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
 })
 
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
-  .inputValidator(
-    z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() })
-  )
+  .validator(z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() }))
   .handler(async ({ data }) => {
     log.debug({ user_id: data.userId }, 'fetch user avatar')
     try {
@@ -462,7 +460,7 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
   })
 
 export const fetchAvatars = createServerFn({ method: 'GET' })
-  .inputValidator(z.array(z.string()))
+  .validator(z.array(z.string()))
   .handler(async ({ data }) => {
     log.debug({ count: data.length }, 'fetch avatars')
     try {
@@ -495,7 +493,7 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
   })
 
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ principalId: z.string(), postId: z.string() }))
+  .validator(z.object({ principalId: z.string(), postId: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId, post_id: data.postId }, 'fetch subscription status')
     try {
@@ -556,7 +554,7 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
 })
 
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
-  .inputValidator(
+  .validator(
     z.object({
       roadmapId: z.string(),
       statusId: z.string().optional(),
@@ -634,7 +632,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
 const getCommentsSectionDataSchema = z.object({ postId: z.string() })
 
 export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
-  .inputValidator(getCommentsSectionDataSchema)
+  .validator(getCommentsSectionDataSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get comments section data')
     const denied = { isMember: false, isTeamMember: false, canComment: false, user: undefined }

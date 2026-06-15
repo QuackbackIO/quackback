@@ -19,21 +19,21 @@ import {
 // ============================================================================
 
 export const getHelpCenterConfigFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({}))
+  .validator(z.object({}))
   .handler(async () => {
     await requireAuth({ roles: ['admin'] })
     return getHelpCenterConfig()
   })
 
 export const updateHelpCenterConfigFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateHelpCenterConfigSchema)
+  .validator(updateHelpCenterConfigSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     return updateHelpCenterConfig(data)
   })
 
 export const updateHelpCenterSeoFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateHelpCenterSeoSchema)
+  .validator(updateHelpCenterSeoSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     const current = await getHelpCenterConfig()

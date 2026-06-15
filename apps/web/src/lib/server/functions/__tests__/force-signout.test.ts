@@ -36,7 +36,7 @@ vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
       _handler: undefined as AnyHandler | undefined,
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: AnyHandler) {

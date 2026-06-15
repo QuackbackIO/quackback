@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: unknown) {

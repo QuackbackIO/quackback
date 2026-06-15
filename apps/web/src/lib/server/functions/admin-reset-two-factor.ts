@@ -26,7 +26,7 @@ const input = z.object({
 })
 
 export const adminResetTwoFactorFn = createServerFn({ method: 'POST' })
-  .inputValidator(input)
+  .validator(input)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     const userId = data.userId as UserId

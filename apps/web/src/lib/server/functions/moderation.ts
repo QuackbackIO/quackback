@@ -144,7 +144,7 @@ export const listPendingCommentsFn = createServerFn({ method: 'GET' }).handler(a
 })
 
 export const approvePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(ApproveInput.parse)
+  .validator(ApproveInput.parse)
   .handler(async ({ data }) => {
     const auth = await requireTeamAuth()
     const before = await db.query.posts.findFirst({ where: eq(posts.id, data.postId as never) })
@@ -188,7 +188,7 @@ export const approvePostFn = createServerFn({ method: 'POST' })
   })
 
 export const approveCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(ApproveCommentInput.parse)
+  .validator(ApproveCommentInput.parse)
   .handler(async ({ data }) => {
     const auth = await requireTeamAuth()
     const before = await db.query.comments.findFirst({
@@ -247,7 +247,7 @@ export const approveCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const rejectCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(RejectCommentInput.parse)
+  .validator(RejectCommentInput.parse)
   .handler(async ({ data }) => {
     const auth = await requireTeamAuth()
     const before = await db.query.comments.findFirst({
@@ -283,7 +283,7 @@ export const rejectCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const rejectPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(RejectInput.parse)
+  .validator(RejectInput.parse)
   .handler(async ({ data }) => {
     const auth = await requireTeamAuth()
     const before = await db.query.posts.findFirst({ where: eq(posts.id, data.postId as never) })

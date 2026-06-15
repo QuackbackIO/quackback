@@ -123,7 +123,7 @@ export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () 
  * Get a single board by ID
  */
 export const fetchBoardFn = createServerFn({ method: 'GET' })
-  .inputValidator(getBoardSchema)
+  .validator(getBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'fetch board')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -141,7 +141,7 @@ export const fetchBoardFn = createServerFn({ method: 'GET' })
  * Create a new board
  */
 export const createBoardFn = createServerFn({ method: 'POST' })
-  .inputValidator(createBoardSchema)
+  .validator(createBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name, preset: data.preset }, 'create board')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -168,7 +168,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
  * override a segments or authenticated tier with a bare public/team one.
  */
 export const updateBoardFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateBoardSchema)
+  .validator(updateBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'update board')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -187,7 +187,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
  * Delete a board
  */
 export const deleteBoardFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteBoardSchema)
+  .validator(deleteBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'delete board')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -211,7 +211,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
  * to seed two would get stuck on /onboarding/boards forever.
  */
 export const createBoardsBatchFn = createServerFn({ method: 'POST' })
-  .inputValidator(createBoardsBatchSchema)
+  .validator(createBoardsBatchSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.boards.length }, 'create boards batch')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -307,7 +307,7 @@ const updateBoardAccessSchema = z.object({
  * `board.access.changed` audit event capturing the before/after access shape.
  */
 export const updateBoardAccessFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateBoardAccessSchema.parse)
+  .validator(updateBoardAccessSchema.parse)
   .handler(async ({ data }) => {
     const auth = await requireAuth()
     if (!isAdmin(auth.principal.role)) {

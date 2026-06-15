@@ -101,7 +101,7 @@ export const fetchTrelloBoardsFn = createServerFn({ method: 'GET' }).handler(
  * Fetch lists for a specific Trello board.
  */
 export const fetchTrelloListsFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ boardId: z.string().min(1) }))
+  .validator(z.object({ boardId: z.string().min(1) }))
   .handler(async ({ data }): Promise<TrelloList[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

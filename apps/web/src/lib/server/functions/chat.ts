@@ -186,7 +186,7 @@ async function assertVisitorChatAccess(role: string | null): Promise<void> {
 
 /** Send a visitor message; creates the conversation on the first message. */
 export const sendChatMessageFn = createServerFn({ method: 'POST' })
-  .inputValidator(sendMessageSchema)
+  .validator(sendMessageSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -272,7 +272,7 @@ const myChatSchema = z.object({ conversationId: z.string().nullish() }).optional
 
 /** The current visitor's active conversation + first page of messages. */
 export const getMyChatFn = createServerFn({ method: 'GET' })
-  .inputValidator(myChatSchema)
+  .validator(myChatSchema)
   .handler(async ({ data }) => {
     try {
       const { getLiveChatConfig } = await import('@/lib/server/domains/settings/settings.widget')
@@ -424,7 +424,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
 
 /** Older messages for a conversation the caller can view (keyset pagination). */
 export const listChatMessagesFn = createServerFn({ method: 'GET' })
-  .inputValidator(listMessagesSchema)
+  .validator(listMessagesSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -459,7 +459,7 @@ export const listChatMessagesFn = createServerFn({ method: 'GET' })
 
 /** Mark a conversation read up to now for the caller's side. */
 export const markChatReadFn = createServerFn({ method: 'POST' })
-  .inputValidator(conversationIdSchema)
+  .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -478,7 +478,7 @@ export const markChatReadFn = createServerFn({ method: 'POST' })
 
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
 export const sendChatTypingFn = createServerFn({ method: 'POST' })
-  .inputValidator(conversationIdSchema)
+  .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -496,7 +496,7 @@ export const sendChatTypingFn = createServerFn({ method: 'POST' })
 
 /** Submit a CSAT rating for a conversation (visitor only). */
 export const submitCsatFn = createServerFn({ method: 'POST' })
-  .inputValidator(csatSchema)
+  .validator(csatSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -515,7 +515,7 @@ const agentAvailabilitySchema = z.object({ availability: z.enum(['online', 'away
 
 /** Agent action: set my manual chat availability ('online' | 'away'). */
 export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
-  .inputValidator(agentAvailabilitySchema)
+  .validator(agentAvailabilitySchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -543,7 +543,7 @@ export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(a
 
 /** Soft-delete a message (team members; or a visitor deleting their own). */
 export const deleteChatMessageFn = createServerFn({ method: 'POST' })
-  .inputValidator(messageIdSchema)
+  .validator(messageIdSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
@@ -585,7 +585,7 @@ export const getCannedRepliesFn = createServerFn({ method: 'GET' }).handler(asyn
 
 /** Inbox feed for the support team. */
 export const listConversationsFn = createServerFn({ method: 'GET' })
-  .inputValidator(listConversationsSchema)
+  .validator(listConversationsSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -616,7 +616,7 @@ const userConversationsSchema = z.object({
 
 /** A single visitor's chat history (status-filterable, paginated) — admin user profile. */
 export const listConversationsForUserFn = createServerFn({ method: 'GET' })
-  .inputValidator(userConversationsSchema)
+  .validator(userConversationsSchema)
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin', 'member'] })
@@ -634,7 +634,7 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
 
 /** A single conversation (agent view) + first page of messages. */
 export const getConversationFn = createServerFn({ method: 'GET' })
-  .inputValidator(listMessagesSchema)
+  .validator(listMessagesSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -669,7 +669,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
 
 /** Agent reply. */
 export const sendAgentMessageFn = createServerFn({ method: 'POST' })
-  .inputValidator(agentSendSchema)
+  .validator(agentSendSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -699,7 +699,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
  * visitor surface needs to be on. The first message is always emailed.
  */
 export const startAgentConversationFn = createServerFn({ method: 'POST' })
-  .inputValidator(startConversationSchema)
+  .validator(startConversationSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -729,7 +729,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
 
 /** Add an agent-only internal note (never sent to the visitor). */
 export const addChatNoteFn = createServerFn({ method: 'POST' })
-  .inputValidator(agentNoteSchema)
+  .validator(agentNoteSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -764,7 +764,7 @@ const convertSchema = z.object({
 
 /** Create a feedback post from a conversation (create new, or upvote existing). */
 export const createPostFromConversationFn = createServerFn({ method: 'POST' })
-  .inputValidator(convertSchema)
+  .validator(convertSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -798,7 +798,7 @@ const captureContactEmailSchema = z.object({
 
 /** Agent action: store a contact email for a conversation's anonymous visitor. */
 export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
-  .inputValidator(captureContactEmailSchema)
+  .validator(captureContactEmailSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -822,7 +822,7 @@ const sharePostSchema = z.object({
 
 /** Agent action: embed an existing feedback post into the conversation (visitor can upvote it). */
 export const sharePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(sharePostSchema)
+  .validator(sharePostSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -844,7 +844,7 @@ export const sharePostFn = createServerFn({ method: 'POST' })
   })
 
 export const setConversationStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(setStatusSchema)
+  .validator(setStatusSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -860,7 +860,7 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
 
 /** Agent action: end a conversation with a reason (+ optional note). */
 export const endConversationFn = createServerFn({ method: 'POST' })
-  .inputValidator(endConversationSchema)
+  .validator(endConversationSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -879,7 +879,7 @@ export const endConversationFn = createServerFn({ method: 'POST' })
   })
 
 export const assignConversationFn = createServerFn({ method: 'POST' })
-  .inputValidator(assignSchema)
+  .validator(assignSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -898,7 +898,7 @@ export const assignConversationFn = createServerFn({ method: 'POST' })
   })
 
 export const setConversationPriorityFn = createServerFn({ method: 'POST' })
-  .inputValidator(setPrioritySchema)
+  .validator(setPrioritySchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -914,7 +914,7 @@ export const setConversationPriorityFn = createServerFn({ method: 'POST' })
 
 /** Add an emoji reaction to a message (agent-only, team-internal). */
 export const addMessageReactionFn = createServerFn({ method: 'POST' })
-  .inputValidator(messageReactionSchema)
+  .validator(messageReactionSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -929,7 +929,7 @@ export const addMessageReactionFn = createServerFn({ method: 'POST' })
 
 /** Remove the caller's own emoji reaction from a message. */
 export const removeMessageReactionFn = createServerFn({ method: 'POST' })
-  .inputValidator(messageReactionSchema)
+  .validator(messageReactionSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -944,7 +944,7 @@ export const removeMessageReactionFn = createServerFn({ method: 'POST' })
 
 /** Set or clear the team-wide flag on a message. */
 export const setMessageFlagFn = createServerFn({ method: 'POST' })
-  .inputValidator(messageFlagSchema)
+  .validator(messageFlagSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -959,7 +959,7 @@ export const setMessageFlagFn = createServerFn({ method: 'POST' })
 
 /** Mark a conversation unread for the agent side, starting at a message. */
 export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POST' })
-  .inputValidator(markUnreadFromMessageSchema)
+  .validator(markUnreadFromMessageSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member'] })
@@ -991,7 +991,7 @@ export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(a
 })
 
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
-  .inputValidator(conversationIdSchema)
+  .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin', 'member'] })
@@ -1004,7 +1004,7 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   })
 
 export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ postId: z.string() }))
+  .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin', 'member'] })

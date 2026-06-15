@@ -86,7 +86,7 @@ export interface SetupWorkspaceResult {
  * but we're creating settings. We manually check auth and handle member creation.
  */
 export const setupWorkspaceFn = createServerFn({ method: 'POST' })
-  .inputValidator(setupWorkspaceSchema)
+  .validator(setupWorkspaceSchema)
   .handler(async ({ data }: { data: SetupWorkspaceInput }): Promise<SetupWorkspaceResult> => {
     log.debug({ workspace_name: data.workspaceName }, 'setup workspace: entry')
     try {
@@ -202,7 +202,10 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             .where(eq(settings.id, existingSettings.id))
             .returning()
           finalSettings = updated
-          log.info({ workspace_name: workspaceName, slug_managed: slugManaged }, 'setup workspace: settings updated')
+          log.info(
+            { workspace_name: workspaceName, slug_managed: slugManaged },
+            'setup workspace: settings updated'
+          )
         }
       } else {
         // Self-hosted: create settings from scratch
@@ -267,7 +270,10 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       }
 
       await invalidateSettingsCache()
-      log.info({ workspace_id: finalSettings!.id, slug: finalSettings!.slug }, 'setup workspace: complete')
+      log.info(
+        { workspace_id: finalSettings!.id, slug: finalSettings!.slug },
+        'setup workspace: complete'
+      )
       return {
         id: finalSettings!.id,
         name: finalSettings!.name,
@@ -284,7 +290,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
  * Called after OTP verification if user doesn't have a name set.
  */
 export const saveUserNameFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       name: z.string().min(2, 'Name must be at least 2 characters').max(100),
     })
@@ -319,7 +325,7 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
  * For fresh installs, creates minimal settings to store the useCase.
  */
 export const saveUseCaseFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ useCase: z.enum(USE_CASE_TYPES) }))
+  .validator(z.object({ useCase: z.enum(USE_CASE_TYPES) }))
   .handler(async ({ data }: { data: { useCase: UseCaseType } }): Promise<void> => {
     log.debug({ use_case: data.useCase }, 'save use case: entry')
     try {

@@ -86,7 +86,7 @@ export const fetchClickUpSpacesFn = createServerFn({ method: 'GET' }).handler(
 )
 
 export const fetchClickUpListsFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ spaceId: z.string().min(1) }))
+  .validator(z.object({ spaceId: z.string().min(1) }))
   .handler(async ({ data: { spaceId } }): Promise<ClickUpList[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

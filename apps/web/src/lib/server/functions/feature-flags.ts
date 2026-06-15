@@ -9,7 +9,7 @@ import type { FeatureFlags } from '@/lib/server/domains/settings/settings.types'
 // flow (aiFeedbackExtraction routes customer text through an LLM).
 // Without a role gate any unauthenticated RPC caller could flip these.
 export const updateFeatureFlagsFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       helpCenter: z.boolean().optional(),
       aiFeedbackExtraction: z.boolean().optional(),

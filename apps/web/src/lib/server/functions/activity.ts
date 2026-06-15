@@ -12,7 +12,7 @@ import { getActivityForPost } from '@/lib/server/domains/activity/activity.servi
  * Get all activity for a post (admin only).
  */
 export const fetchActivityForPost = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ postId: z.string() }))
+  .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     return getActivityForPost(data.postId as PostId)

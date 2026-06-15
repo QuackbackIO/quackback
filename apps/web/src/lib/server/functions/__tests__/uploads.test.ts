@@ -9,7 +9,7 @@ vi.mock('@tanstack/react-start', () => ({
       if (!_handler) throw new Error('handler not registered')
       return _handler(args)
     }
-    fn.inputValidator = () => fn
+    fn.validator = () => fn
     fn.handler = (h: (args: { data: unknown }) => Promise<unknown>) => {
       _handler = h
       return fn

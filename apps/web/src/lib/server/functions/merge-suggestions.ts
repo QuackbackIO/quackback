@@ -32,7 +32,7 @@ const getMergeSuggestionsSchema = z.object({
  * Returns suggestions where the post is either source or target.
  */
 export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
-  .inputValidator(getMergeSuggestionsSchema)
+  .validator(getMergeSuggestionsSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     try {
@@ -64,7 +64,7 @@ export const fetchMergeSuggestionSummaryFn = createServerFn({ method: 'GET' }).h
  * Get merge suggestion counts for a batch of post IDs (for inbox badges).
  */
 export const fetchMergeSuggestionCountsForPostsFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ postIds: z.array(z.string()) }))
+  .validator(z.object({ postIds: z.array(z.string()) }))
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     try {

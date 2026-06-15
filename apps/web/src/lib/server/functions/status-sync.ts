@@ -37,9 +37,12 @@ const updateStatusMappingsSchema = z.object({
  * Enable status sync by registering an inbound webhook with the external platform.
  */
 export const enableStatusSyncFn = createServerFn({ method: 'POST' })
-  .inputValidator(enableStatusSyncSchema)
+  .validator(enableStatusSyncSchema)
   .handler(async ({ data }) => {
-    log.debug({ integration_id: data.integrationId, integration_type: data.integrationType }, 'enable status sync')
+    log.debug(
+      { integration_id: data.integrationId, integration_type: data.integrationType },
+      'enable status sync'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -120,7 +123,10 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
             // shortcut, azure_devops: manual webhook setup — no auto-registration
           }
         } catch (error) {
-          log.error({ err: error, integration_type: data.integrationType }, 'webhook registration failed')
+          log.error(
+            { err: error, integration_type: data.integrationType },
+            'webhook registration failed'
+          )
           throw new Error(
             `Failed to register webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
             { cause: error }
@@ -146,9 +152,12 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
  * Disable status sync by removing the webhook from the external platform.
  */
 export const disableStatusSyncFn = createServerFn({ method: 'POST' })
-  .inputValidator(disableStatusSyncSchema)
+  .validator(disableStatusSyncSchema)
   .handler(async ({ data }) => {
-    log.debug({ integration_id: data.integrationId, integration_type: data.integrationType }, 'disable status sync')
+    log.debug(
+      { integration_id: data.integrationId, integration_type: data.integrationType },
+      'disable status sync'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -207,7 +216,10 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
             }
           }
         } catch (error) {
-          log.error({ err: error, integration_type: data.integrationType }, 'webhook deletion failed')
+          log.error(
+            { err: error, integration_type: data.integrationType },
+            'webhook deletion failed'
+          )
           // Continue with cleanup even if external deletion fails
         }
       }
@@ -224,9 +236,15 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
  * Update status mappings for an integration.
  */
 export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateStatusMappingsSchema)
+  .validator(updateStatusMappingsSchema)
   .handler(async ({ data }) => {
-    log.debug({ integration_id: data.integrationId, mapping_count: Object.keys(data.statusMappings).length }, 'update status mappings')
+    log.debug(
+      {
+        integration_id: data.integrationId,
+        mapping_count: Object.keys(data.statusMappings).length,
+      },
+      'update status mappings'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 

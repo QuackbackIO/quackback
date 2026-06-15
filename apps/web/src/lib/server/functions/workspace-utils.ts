@@ -36,7 +36,7 @@ const requireWorkspaceRoleSchema = z.object({
  * }
  */
 export const requireWorkspaceRole = createServerFn({ method: 'GET' })
-  .inputValidator(requireWorkspaceRoleSchema)
+  .validator(requireWorkspaceRoleSchema)
   .handler(async ({ data }) => {
     log.debug({ allowed_roles: data.allowedRoles }, 'require workspace role')
     // If the route restricts to team roles only, unauthenticated

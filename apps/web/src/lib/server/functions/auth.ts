@@ -45,7 +45,7 @@ export const SSO_UNAVAILABLE_MESSAGE =
   'Single sign-on is configured for your domain but is not currently available. Contact your administrator.'
 
 export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
-  .inputValidator(lookupAuthMethodsInput)
+  .validator(lookupAuthMethodsInput)
   .handler(async ({ data }): Promise<LookupAuthMethodsResult> => {
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
     const { findVerifiedDomainForEmail, isSsoConfigured } =

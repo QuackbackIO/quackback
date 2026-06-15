@@ -137,7 +137,7 @@ const fetchIssueTypesSchema = z.object({
 })
 
 export const fetchJiraIssueTypesFn = createServerFn({ method: 'POST' })
-  .inputValidator(fetchIssueTypesSchema)
+  .validator(fetchIssueTypesSchema)
   .handler(async ({ data }): Promise<JiraIssueType[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

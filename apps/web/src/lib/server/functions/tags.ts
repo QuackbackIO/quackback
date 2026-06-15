@@ -83,7 +83,7 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
  * Get a single tag by ID
  */
 export const fetchTag = createServerFn({ method: 'GET' })
-  .inputValidator(getTagSchema)
+  .validator(getTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'fetch tag')
     try {
@@ -106,7 +106,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
  * Create a new tag
  */
 export const createTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(createTagSchema)
+  .validator(createTagSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create tag')
     try {
@@ -129,7 +129,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
  * Update an existing tag
  */
 export const updateTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateTagSchema)
+  .validator(updateTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'update tag')
     try {
@@ -152,7 +152,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
  * Delete a tag
  */
 export const deleteTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteTagSchema)
+  .validator(deleteTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'delete tag')
     try {

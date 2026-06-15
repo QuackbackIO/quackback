@@ -72,7 +72,7 @@ export type AuditEventRow = {
 }
 
 export const listAuditEventsFn = createServerFn({ method: 'GET' })
-  .inputValidator(listAuditEventsInput)
+  .validator(listAuditEventsInput)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
 

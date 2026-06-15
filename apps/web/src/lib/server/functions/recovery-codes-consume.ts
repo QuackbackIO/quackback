@@ -74,7 +74,7 @@ function getFakeHash(): Promise<string> {
 }
 
 export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
-  .inputValidator(consumeRecoveryCodeInput)
+  .validator(consumeRecoveryCodeInput)
   .handler(async ({ data }): Promise<ConsumeResult> => {
     const headers = getRequestHeaders()
     const actor = { email: data.email }

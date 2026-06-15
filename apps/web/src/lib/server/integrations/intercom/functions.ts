@@ -45,7 +45,7 @@ export const getIntercomConnectUrl = createServerFn({ method: 'GET' }).handler(
 )
 
 export const searchIntercomContactFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ email: z.string().email() }))
+  .validator(z.object({ email: z.string().email() }))
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

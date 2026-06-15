@@ -21,7 +21,7 @@ interface ZendeskIntegrationConfig {
 }
 
 export const getZendeskConnectUrl = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       subdomain: z
         .string()
@@ -59,7 +59,7 @@ export const getZendeskConnectUrl = createServerFn({ method: 'POST' })
   })
 
 export const searchZendeskUserFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ email: z.string().email() }))
+  .validator(z.object({ email: z.string().email() }))
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

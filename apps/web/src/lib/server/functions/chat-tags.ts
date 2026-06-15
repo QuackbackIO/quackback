@@ -77,7 +77,7 @@ export const fetchChatTagsWithCountsFn = createServerFn({ method: 'GET' }).handl
 
 /** Create (or reuse, by name) a conversation label. */
 export const createChatTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(createChatTagSchema)
+  .validator(createChatTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     const tag = await createChatTag({ name: data.name, color: data.color })
@@ -86,7 +86,7 @@ export const createChatTagFn = createServerFn({ method: 'POST' })
 
 /** Rename and/or recolor a conversation label. */
 export const updateChatTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateChatTagSchema)
+  .validator(updateChatTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     return updateChatTag(data.id as ChatTagId, { name: data.name, color: data.color })
@@ -94,7 +94,7 @@ export const updateChatTagFn = createServerFn({ method: 'POST' })
 
 /** Soft-delete a conversation label. */
 export const deleteChatTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteChatTagSchema)
+  .validator(deleteChatTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     await deleteChatTag(data.id as ChatTagId)
@@ -106,7 +106,7 @@ export const deleteChatTagFn = createServerFn({ method: 'POST' })
  * the inline-create flow). Returns the conversation's updated tag list.
  */
 export const addConversationTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(addConversationTagSchema)
+  .validator(addConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     const conversationId = data.conversationId as ConversationId
@@ -121,7 +121,7 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
 
 /** Remove a label from a conversation. Returns the updated tag list. */
 export const removeConversationTagFn = createServerFn({ method: 'POST' })
-  .inputValidator(removeConversationTagSchema)
+  .validator(removeConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     return detachTag(data.conversationId as ConversationId, data.tagId as ChatTagId)

@@ -125,7 +125,7 @@ export const fetchTeamsTeamsFn = createServerFn({ method: 'GET' }).handler(
 )
 
 export const fetchTeamsChannelsFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ teamId: z.string() }))
+  .validator(z.object({ teamId: z.string() }))
   .handler(async ({ data }): Promise<TeamsChannel[]> => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { db, integrations, eq } = await import('@/lib/server/db')

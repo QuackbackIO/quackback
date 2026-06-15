@@ -26,7 +26,7 @@ export interface ExternalStatusItem {
  * Routes to the appropriate platform-specific fetcher.
  */
 export const fetchExternalStatusesFn = createServerFn({ method: 'POST' })
-  .inputValidator(fetchExternalStatusesSchema)
+  .validator(fetchExternalStatusesSchema)
   .handler(async ({ data }): Promise<ExternalStatusItem[]> => {
     log.debug({ integration_type: data.integrationType }, 'fetch external statuses')
     try {

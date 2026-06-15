@@ -35,7 +35,7 @@ const fetchMaskedSchema = z.object({
  * stores encrypted in DB, and resets the auth instance to pick up new providers.
  */
 export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
-  .inputValidator(saveSchema)
+  .validator(saveSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'save auth provider credentials')
     try {
@@ -95,7 +95,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
  * Also disables the provider in portal config if it was enabled.
  */
 export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteSchema)
+  .validator(deleteSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'delete auth provider credentials')
     try {
@@ -133,7 +133,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
  * Fetch auth provider credentials with sensitive values masked.
  */
 export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GET' })
-  .inputValidator(fetchMaskedSchema)
+  .validator(fetchMaskedSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'fetch masked auth provider credentials')
     try {

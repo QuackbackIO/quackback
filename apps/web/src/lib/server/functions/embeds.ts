@@ -176,7 +176,7 @@ export async function resolveEmbed(
 // ---------------------------------------------------------------------------
 
 export const getEmbedPreviewFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ kind: z.enum(['post', 'changelog', 'article']), id: z.string() }))
+  .validator(z.object({ kind: z.enum(['post', 'changelog', 'article']), id: z.string() }))
   .handler(async ({ data }): Promise<EmbedPreview> => {
     try {
       // Outer gate: a private portal serves no embed preview to a denied caller

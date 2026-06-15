@@ -75,7 +75,7 @@ export type UserDeleteCommentInput = z.infer<typeof userDeleteCommentSchema>
 
 // Write Operations
 export const createCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(createCommentSchema)
+  .validator(createCommentSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.postId }, 'create comment')
     try {
@@ -145,7 +145,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const addReactionFn = createServerFn({ method: 'POST' })
-  .inputValidator(reactionSchema)
+  .validator(reactionSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
     try {
@@ -175,7 +175,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
   })
 
 export const removeReactionFn = createServerFn({ method: 'POST' })
-  .inputValidator(reactionSchema)
+  .validator(reactionSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId, emoji: data.emoji }, 'remove reaction')
     try {
@@ -202,7 +202,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
 
 // Read Operations
 export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getCommentPermissionsSchema)
+  .validator(getCommentPermissionsSchema)
   .handler(async ({ data }) => {
     log.debug({ comment_id: data.commentId }, 'get comment permissions')
     try {
@@ -243,7 +243,7 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
   })
 
 export const userEditCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(userEditCommentSchema)
+  .validator(userEditCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'user edit comment')
     try {
@@ -279,7 +279,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const userDeleteCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(userDeleteCommentSchema)
+  .validator(userDeleteCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'user delete comment')
     try {
@@ -312,7 +312,7 @@ const restoreCommentSchema = z.object({
 export type RestoreCommentInput = z.infer<typeof restoreCommentSchema>
 
 export const restoreCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(restoreCommentSchema)
+  .validator(restoreCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'restore comment')
     try {
@@ -348,7 +348,7 @@ export type UnpinCommentInput = z.infer<typeof unpinCommentSchema>
 export type CanPinCommentInput = z.infer<typeof canPinCommentSchema>
 
 export const pinCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(pinCommentSchema)
+  .validator(pinCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'pin comment')
     try {
@@ -375,7 +375,7 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const unpinCommentFn = createServerFn({ method: 'POST' })
-  .inputValidator(unpinCommentSchema)
+  .validator(unpinCommentSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.postId }, 'unpin comment')
     try {
@@ -401,7 +401,7 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
   })
 
 export const canPinCommentFn = createServerFn({ method: 'GET' })
-  .inputValidator(canPinCommentSchema)
+  .validator(canPinCommentSchema)
   .handler(async ({ data }) => {
     log.debug({ comment_id: data.commentId }, 'can pin comment')
     try {

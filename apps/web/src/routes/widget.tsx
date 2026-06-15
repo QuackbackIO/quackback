@@ -20,7 +20,7 @@ const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
  * diverge from SSR and trigger React hydration error #418 (issue #133).
  */
 const getWidgetLocale = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ explicitLocale: z.string().optional() }))
+  .validator(z.object({ explicitLocale: z.string().optional() }))
   .handler(async ({ data }) => {
     const acceptLanguage = getRequestHeaders().get('accept-language')
     return resolveLocale(acceptLanguage, data.explicitLocale)

@@ -45,7 +45,7 @@ const log = logger.child({ component: 'changelog' })
  * Create a new changelog entry
  */
 export const createChangelogFn = createServerFn({ method: 'POST' })
-  .inputValidator(createChangelogSchema)
+  .validator(createChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ title: data.title, publish_state: data.publishState }, 'create changelog')
     try {
@@ -84,7 +84,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
  * Update an existing changelog entry
  */
 export const updateChangelogFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateChangelogSchema)
+  .validator(updateChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'update changelog')
     try {
@@ -114,7 +114,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
  * Delete a changelog entry
  */
 export const deleteChangelogFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteChangelogSchema)
+  .validator(deleteChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'delete changelog')
     try {
@@ -134,7 +134,7 @@ export const deleteChangelogFn = createServerFn({ method: 'POST' })
  * Get a changelog entry by ID (admin view - includes drafts)
  */
 export const getChangelogFn = createServerFn({ method: 'GET' })
-  .inputValidator(getChangelogSchema)
+  .validator(getChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'get changelog')
     try {
@@ -158,7 +158,7 @@ export const getChangelogFn = createServerFn({ method: 'GET' })
  * List changelog entries (admin view - includes drafts and scheduled)
  */
 export const listChangelogsFn = createServerFn({ method: 'GET' })
-  .inputValidator(listChangelogsSchema)
+  .validator(listChangelogsSchema)
   .handler(async ({ data }) => {
     log.debug({ status: data.status, limit: data.limit }, 'list changelogs')
     try {
@@ -193,7 +193,7 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
  * Get a published changelog entry by ID (public view)
  */
 export const getPublicChangelogFn = createServerFn({ method: 'GET' })
-  .inputValidator(getChangelogSchema)
+  .validator(getChangelogSchema)
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'get public changelog')
     try {
@@ -226,7 +226,7 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
  * List published changelog entries (public view)
  */
 export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
-  .inputValidator(listPublicChangelogsSchema)
+  .validator(listPublicChangelogsSchema)
   .handler(async ({ data }) => {
     log.debug({ limit: data.limit }, 'list public changelogs')
     try {
@@ -269,7 +269,7 @@ const searchShippedPostsSchema = z.object({
  * Search posts with status category 'complete' for linking to changelogs
  */
 export const searchShippedPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(searchShippedPostsSchema)
+  .validator(searchShippedPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ query: data.query, board_id: data.boardId }, 'search shipped posts')
     try {

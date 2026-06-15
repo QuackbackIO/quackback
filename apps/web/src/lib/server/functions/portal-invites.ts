@@ -209,7 +209,7 @@ type SendPortalInviteResult = {
  * forwarded to the email template.
  */
 export const sendPortalInviteFn = createServerFn({ method: 'POST' })
-  .inputValidator(sendPortalInviteSchema)
+  .validator(sendPortalInviteSchema)
   .handler(async ({ data }): Promise<SendPortalInviteResult> => {
     const auth = await requireAuth({ roles: ['admin'] })
     const headers = getRequestHeaders()
@@ -255,7 +255,7 @@ export const sendPortalInviteFn = createServerFn({ method: 'POST' })
  * (accepted | canceled). Records a `portal.invite.revoked` audit event.
  */
 export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
-  .inputValidator(portalInviteByIdSchema)
+  .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     const inviteId = data.inviteId as InviteId
@@ -328,7 +328,7 @@ export const cancelPortalInviteFn = createServerFn({ method: 'POST' })
  * Records a `portal.invite.resent` audit event.
  */
 export const resendPortalInviteFn = createServerFn({ method: 'POST' })
-  .inputValidator(portalInviteByIdSchema)
+  .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     const inviteId = data.inviteId as InviteId
@@ -494,7 +494,7 @@ export const fetchPortalInvitesFn = createServerFn({ method: 'GET' }).handler(as
  * Records a `portal.invite.link_minted` audit event on success.
  */
 export const getPortalInviteLinkFn = createServerFn({ method: 'POST' })
-  .inputValidator(portalInviteByIdSchema)
+  .validator(portalInviteByIdSchema)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     const headers = getRequestHeaders()
@@ -572,7 +572,7 @@ export type AcceptPortalInviteResult =
  * Throws on missing session (unauthenticated) or invite not found.
  */
 export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
-  .inputValidator(portalInviteByIdSchema)
+  .validator(portalInviteByIdSchema)
   .handler(async ({ data }): Promise<AcceptPortalInviteResult> => {
     const inviteId = data.inviteId as InviteId
     const headers = getRequestHeaders()
@@ -676,7 +676,11 @@ export const acceptPortalInviteFn = createServerFn({ method: 'POST' })
         throw new Error('PORTAL_INVITE_NOT_FOUND')
       }
       log.debug(
-        { invite_id: inviteId, status: fresh.status, expired: new Date(fresh.expiresAt) < new Date() },
+        {
+          invite_id: inviteId,
+          status: fresh.status,
+          expired: new Date(fresh.expiresAt) < new Date(),
+        },
         'accept portal invite toctou, terminal state'
       )
       if (fresh.status === 'accepted') {

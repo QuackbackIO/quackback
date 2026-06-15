@@ -9,9 +9,7 @@ import { z } from 'zod'
  * Save a Stripe API key as the integration connection.
  */
 export const saveStripeKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(
-    z.object({ apiKey: z.string().startsWith('rk_').or(z.string().startsWith('sk_')) })
-  )
+  .validator(z.object({ apiKey: z.string().startsWith('rk_').or(z.string().startsWith('sk_')) }))
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { saveIntegration } = await import('../save')

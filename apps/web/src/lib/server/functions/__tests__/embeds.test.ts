@@ -7,7 +7,7 @@ import type { StatusId } from '@quackback/ids'
 // — we exercise the pure projection/resolve helpers with injected fakes instead.
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
-    const chain = { inputValidator: () => chain, handler: () => chain }
+    const chain = { validator: () => chain, handler: () => chain }
     return chain
   },
 }))

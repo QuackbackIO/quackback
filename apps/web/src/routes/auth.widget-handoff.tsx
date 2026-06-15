@@ -113,7 +113,7 @@ type HandoffResult =
  * the OUTER request's response — the redirect carries the session cookie.
  */
 const consumeWidgetHandoffFn = createServerFn({ method: 'POST' })
-  .inputValidator(searchSchema)
+  .validator(searchSchema)
   .handler(async ({ data }): Promise<HandoffResult> => {
     const { config } = await import('@/lib/server/config')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
@@ -285,7 +285,7 @@ export const Route = createFileRoute('/auth/widget-handoff')({
   validateSearch: searchSchema.parse,
   loader: async ({ location }): Promise<LoaderData> => {
     // The search schema is shared between validateSearch and the server fn's
-    // inputValidator, so location.search is shape-compatible with the fn's
+    // validator, so location.search is shape-compatible with the fn's
     // expected input.
     const search = location.search as z.infer<typeof searchSchema>
     const result = await consumeWidgetHandoffFn({

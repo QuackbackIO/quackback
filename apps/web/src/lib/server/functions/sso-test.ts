@@ -55,7 +55,7 @@ export type StartSsoTestResult =
   | { error: 'sso-not-configured' | 'no-secret' | 'discovery-unreachable' }
 
 export const startSsoTestFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({}))
+  .validator(z.object({}))
   .handler(async (): Promise<StartSsoTestResult> => {
     const { user } = await requireAuth({ roles: ['admin'] })
 
@@ -188,7 +188,7 @@ export type SsoTestDiagnostic = {
 }
 
 export const getSsoTestResultFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ testId: z.string() }))
+  .validator(z.object({ testId: z.string() }))
   .handler(async ({ data }): Promise<SsoTestDiagnostic | null> => {
     await requireAuth({ roles: ['admin'] })
     const { cacheGet } = await import('@/lib/server/redis')

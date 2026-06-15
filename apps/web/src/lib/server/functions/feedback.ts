@@ -89,9 +89,12 @@ const deleteSourceSchema = z.object({
 // ============================================
 
 export const fetchSuggestions = createServerFn({ method: 'GET' })
-  .inputValidator(listSuggestionsSchema)
+  .validator(listSuggestionsSchema)
   .handler(async ({ data }) => {
-    log.debug({ status: data.status, sort: data.sort, limit: data.limit, offset: data.offset }, 'fetch suggestions')
+    log.debug(
+      { status: data.status, sort: data.sort, limit: data.limit, offset: data.offset },
+      'fetch suggestions'
+    )
     await requireAuth({ roles: ['admin', 'member'] })
 
     return listSuggestions({
@@ -161,7 +164,7 @@ export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(as
 // ============================================
 
 export const acceptSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(acceptSuggestionSchema)
+  .validator(acceptSuggestionSchema)
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id, swap_direction: data.swapDirection }, 'accept suggestion')
     try {
@@ -221,7 +224,7 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   })
 
 export const dismissSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(dismissSuggestionSchema)
+  .validator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id }, 'dismiss suggestion')
     try {
@@ -248,7 +251,7 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
   })
 
 export const restoreSuggestionFn = createServerFn({ method: 'POST' })
-  .inputValidator(dismissSuggestionSchema)
+  .validator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id }, 'restore suggestion')
     try {
@@ -275,7 +278,7 @@ export const restoreSuggestionFn = createServerFn({ method: 'POST' })
   })
 
 export const retryFailedItemFn = createServerFn({ method: 'POST' })
-  .inputValidator(retryItemSchema)
+  .validator(retryItemSchema)
   .handler(async ({ data }) => {
     log.debug({ raw_item_id: data.rawItemId }, 'retry failed item')
     try {
@@ -342,9 +345,12 @@ export const retryAllFailedItemsFn = createServerFn({ method: 'POST' }).handler(
 })
 
 export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
-  .inputValidator(createSourceSchema)
+  .validator(createSourceSchema)
   .handler(async ({ data }) => {
-    log.debug({ source_type: data.sourceType, delivery_mode: data.deliveryMode }, 'create feedback source')
+    log.debug(
+      { source_type: data.sourceType, delivery_mode: data.deliveryMode },
+      'create feedback source'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -366,7 +372,7 @@ export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
   })
 
 export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateSourceSchema)
+  .validator(updateSourceSchema)
   .handler(async ({ data }) => {
     log.debug({ source_id: data.id }, 'update feedback source')
     try {
@@ -391,7 +397,7 @@ export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
   })
 
 export const deleteFeedbackSourceFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteSourceSchema)
+  .validator(deleteSourceSchema)
   .handler(async ({ data }) => {
     log.debug({ source_id: data.id }, 'delete feedback source')
     try {

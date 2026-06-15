@@ -14,7 +14,7 @@ let currentHandlerTarget: AnyHandler[] = publicPostsHandlers
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: AnyHandler) {

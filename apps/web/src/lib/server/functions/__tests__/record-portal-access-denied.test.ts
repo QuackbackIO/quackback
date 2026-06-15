@@ -3,8 +3,8 @@
  *
  * Handler registration order in portal-access.ts:
  *   0  evaluateMyPortalAccessFn      — .handler(...)
- *   1  recordPortalAccessDeniedFn    — .inputValidator(...).handler(...)
- *   2  updatePortalAccessFn          — .inputValidator(...).handler(...)
+ *   1  recordPortalAccessDeniedFn    — .validator(...).handler(...)
+ *   2  updatePortalAccessFn          — .validator(...).handler(...)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -19,7 +19,7 @@ const handlers: AnyHandler[] = []
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: AnyHandler) {

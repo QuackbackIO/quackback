@@ -138,7 +138,7 @@ export type GetVoteSidebarDataInput = z.infer<typeof getVoteSidebarDataSchema>
  * `listPublicPosts` still runs as the inner layer for granted callers.
  */
 export const listPublicPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(listPublicPostsSchema)
+  .validator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
     log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
     try {
@@ -191,7 +191,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
  * Get edit/delete permissions for a post (optional auth).
  */
 export const getPostPermissionsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getPostPermissionsSchema)
+  .validator(getPostPermissionsSchema)
   .handler(
     async ({
       data,
@@ -251,7 +251,7 @@ export const getPostPermissionsFn = createServerFn({ method: 'GET' })
  * User edits their own post.
  */
 export const userEditPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(userEditPostSchema)
+  .validator(userEditPostSchema)
   .handler(async ({ data }: { data: UserEditPostInput }) => {
     log.debug({ post_id: data.postId }, 'user edit post')
     try {
@@ -305,7 +305,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
  * User soft-deletes their own post.
  */
 export const userDeletePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(userDeletePostSchema)
+  .validator(userDeletePostSchema)
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
     log.debug({ post_id: data.postId }, 'user delete post')
     try {
@@ -345,7 +345,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
  * before calling this function.
  */
 export const toggleVoteFn = createServerFn({ method: 'POST' })
-  .inputValidator(toggleVoteSchema)
+  .validator(toggleVoteSchema)
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
       log.debug({ post_id: data.postId }, 'toggle vote')
@@ -412,7 +412,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
  * Create a post on a public board.
  */
 export const createPublicPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(createPublicPostSchema)
+  .validator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
     log.debug({ board_id: data.boardId }, 'create public post')
     try {
@@ -581,7 +581,7 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
  * denied caller.
  */
 export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getPublicRoadmapPostsSchema)
+  .validator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
     log.debug({ roadmap_id: data.roadmapId }, 'get public roadmap posts')
     try {
@@ -645,7 +645,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
  * denied caller.
  */
 export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
-  .inputValidator(getRoadmapPostsByStatusSchema)
+  .validator(getRoadmapPostsByStatusSchema)
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
     log.debug({ status_id: data.statusId }, 'get roadmap posts by status')
     try {
@@ -692,7 +692,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
  * Returns membership status, vote ability, vote status, and subscription status.
  */
 export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
-  .inputValidator(getVoteSidebarDataSchema)
+  .validator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get vote sidebar data')
     try {
@@ -893,7 +893,7 @@ function toRawResult(row: {
  * the admin merge UI are granted by the resolver, so their use is unaffected.
  */
 export const findSimilarPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(findSimilarPostsSchema)
+  .validator(findSimilarPostsSchema)
   .handler(async ({ data }): Promise<SimilarPost[]> => {
     log.debug({ title_length: data.title.length }, 'find similar posts')
     try {

@@ -12,7 +12,7 @@ import { parseNtfyUrl } from './url'
  * Sends a test notification to verify the channel is reachable.
  */
 export const saveNtfyFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       url: z.string().url().startsWith('https://'),
       token: z.string().optional(),
@@ -48,7 +48,8 @@ export const saveNtfyFn = createServerFn({ method: 'POST' })
 
     if (!testResponse.ok) {
       const status = testResponse.status
-      const extra = status === 401 || status === 403 ? ' (check the access token / topic permissions)' : ''
+      const extra =
+        status === 401 || status === 403 ? ' (check the access token / topic permissions)' : ''
       throw new Error(`ntfy test failed: HTTP ${status}${extra}`)
     }
 

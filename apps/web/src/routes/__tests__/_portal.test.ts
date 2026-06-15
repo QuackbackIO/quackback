@@ -40,7 +40,7 @@ vi.mock('@/lib/shared/types/portal-gate-error', () => ({
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator() {
+      validator() {
         return chain
       },
       handler(fn: unknown) {

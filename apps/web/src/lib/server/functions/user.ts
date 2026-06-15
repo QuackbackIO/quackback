@@ -177,7 +177,7 @@ export const getProfileFn = createServerFn({ method: 'GET' }).handler(
  * Only requires authentication - any logged-in user can update their own name.
  */
 export const updateProfileNameFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateProfileNameSchema)
+  .validator(updateProfileNameSchema)
   .handler(async ({ data }: { data: UpdateProfileNameInput }): Promise<UserProfile> => {
     log.debug('update profile name')
     try {
@@ -244,7 +244,7 @@ export const removeAvatarFn = createServerFn({ method: 'POST' }).handler(
  * Called after the client uploads directly to S3 via a presigned URL.
  */
 export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(saveAvatarKeySchema)
+  .validator(saveAvatarKeySchema)
   .handler(async ({ data }: { data: z.infer<typeof saveAvatarKeySchema> }) => {
     log.debug('save avatar key')
     try {
@@ -314,7 +314,7 @@ export const getNotificationPreferencesFn = createServerFn({ method: 'GET' }).ha
  * Update notification preferences.
  */
 export const updateNotificationPreferencesFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateNotificationPreferencesSchema)
+  .validator(updateNotificationPreferencesSchema)
   .handler(
     async ({
       data,

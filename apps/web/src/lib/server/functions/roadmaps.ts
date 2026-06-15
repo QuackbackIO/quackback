@@ -127,7 +127,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
  * Get a single roadmap by ID
  */
 export const fetchRoadmap = createServerFn({ method: 'GET' })
-  .inputValidator(getRoadmapSchema)
+  .validator(getRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'get roadmap')
     try {
@@ -159,7 +159,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
  * Create a new roadmap
  */
 export const createRoadmapFn = createServerFn({ method: 'POST' })
-  .inputValidator(createRoadmapSchema)
+  .validator(createRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name, slug: data.slug }, 'create roadmap')
     try {
@@ -192,7 +192,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
  * Update an existing roadmap
  */
 export const updateRoadmapFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateRoadmapSchema)
+  .validator(updateRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'update roadmap')
     try {
@@ -224,7 +224,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
  * Delete a roadmap
  */
 export const deleteRoadmapFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteRoadmapSchema)
+  .validator(deleteRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'delete roadmap')
     try {
@@ -242,7 +242,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
  * Add a post to a roadmap
  */
 export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
-  .inputValidator(addPostToRoadmapSchema)
+  .validator(addPostToRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'add post to roadmap')
     try {
@@ -266,7 +266,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
  * Remove a post from a roadmap
  */
 export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
-  .inputValidator(removePostFromRoadmapSchema)
+  .validator(removePostFromRoadmapSchema)
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'remove post from roadmap')
     try {
@@ -288,7 +288,7 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
  * Reorder roadmaps
  */
 export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
-  .inputValidator(reorderRoadmapsSchema)
+  .validator(reorderRoadmapsSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.roadmapIds.length }, 'reorder roadmaps')
     try {
@@ -306,9 +306,12 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
  * Get posts for a roadmap
  */
 export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getRoadmapPostsSchema)
+  .validator(getRoadmapPostsSchema)
   .handler(async ({ data }) => {
-    log.debug({ roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset }, 'get roadmap posts')
+    log.debug(
+      { roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset },
+      'get roadmap posts'
+    )
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 

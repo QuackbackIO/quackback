@@ -7,7 +7,7 @@ const createWidgetIdentifyTokenSchema = z.object({
 })
 
 export const createWidgetIdentifyTokenFn = createServerFn({ method: 'POST' })
-  .inputValidator(createWidgetIdentifyTokenSchema)
+  .validator(createWidgetIdentifyTokenSchema)
   .handler(async ({ data }) => {
     const { getWidgetConfig, getWidgetSecret } =
       await import('@/lib/server/domains/settings/settings.widget')

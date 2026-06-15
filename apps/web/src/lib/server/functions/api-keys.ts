@@ -73,7 +73,7 @@ export const fetchApiKeys = createServerFn({ method: 'GET' }).handler(async () =
  * Get a single API key by ID
  */
 export const fetchApiKey = createServerFn({ method: 'GET' })
-  .inputValidator(getApiKeySchema)
+  .validator(getApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'get api key')
     try {
@@ -98,7 +98,7 @@ export const fetchApiKey = createServerFn({ method: 'GET' })
  * Returns the full key only once - store it securely!
  */
 export const createApiKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(createApiKeySchema)
+  .validator(createApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create api key')
     try {
@@ -124,7 +124,7 @@ export const createApiKeyFn = createServerFn({ method: 'POST' })
  * Update an API key's name
  */
 export const updateApiKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateApiKeySchema)
+  .validator(updateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'update api key')
     try {
@@ -145,7 +145,7 @@ export const updateApiKeyFn = createServerFn({ method: 'POST' })
  * Returns the new full key only once - store it securely!
  */
 export const rotateApiKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(rotateApiKeySchema)
+  .validator(rotateApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'rotate api key')
     try {
@@ -165,7 +165,7 @@ export const rotateApiKeyFn = createServerFn({ method: 'POST' })
  * Revoke an API key (soft delete)
  */
 export const revokeApiKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(revokeApiKeySchema)
+  .validator(revokeApiKeySchema)
   .handler(async ({ data }) => {
     log.debug({ api_key_id: data.id }, 'revoke api key')
     try {

@@ -65,7 +65,7 @@ export type GetPostMergeInfoInput = z.infer<typeof getPostMergeInfoSchema>
  * Requires admin/member role.
  */
 export const mergePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(mergePostSchema)
+  .validator(mergePostSchema)
   .handler(async ({ data }) => {
     log.debug(
       { duplicate_post_id: data.duplicatePostId, canonical_post_id: data.canonicalPostId },
@@ -92,7 +92,7 @@ export const mergePostFn = createServerFn({ method: 'POST' })
  * Requires admin/member role.
  */
 export const unmergePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(unmergePostSchema)
+  .validator(unmergePostSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'unmerge post')
     const auth = await requireAuth({ roles: ['admin', 'member'] })
@@ -112,7 +112,7 @@ export const unmergePostFn = createServerFn({ method: 'POST' })
  * Requires admin/member role.
  */
 export const getMergedPostsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getMergedPostsSchema)
+  .validator(getMergedPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ canonical_post_id: data.canonicalPostId }, 'get merged posts')
     await requireAuth({ roles: ['admin', 'member'] })
@@ -140,7 +140,7 @@ export const getMergedPostsFn = createServerFn({ method: 'GET' })
  * the "doesn't exist" shape used elsewhere to avoid leaking existence.
  */
 export const getPostMergeInfoFn = createServerFn({ method: 'GET' })
-  .inputValidator(getPostMergeInfoSchema)
+  .validator(getPostMergeInfoSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get post merge info')
     try {
@@ -174,7 +174,7 @@ export const getPostMergeInfoFn = createServerFn({ method: 'GET' })
  * Requires admin/member role.
  */
 export const fetchMergePreviewFn = createServerFn({ method: 'GET' })
-  .inputValidator(mergePreviewSchema)
+  .validator(mergePreviewSchema)
   .handler(async ({ data }) => {
     log.debug(
       { canonical_post_id: data.canonicalPostId, duplicate_post_id: data.duplicatePostId },

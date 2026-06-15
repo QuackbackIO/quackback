@@ -15,7 +15,7 @@ const hoisted = vi.hoisted(() => ({ handlers: [] as Handler[] }))
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      inputValidator(parse: (data: unknown) => unknown) {
+      validator(parse: (data: unknown) => unknown) {
         // Capture the validator so we can drive it at the handler call site —
         // a Zod schema gates inputs, and we need real validation errors to
         // bubble out (not silently bypass).

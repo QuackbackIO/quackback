@@ -34,7 +34,7 @@ const fetchPlatformCredentialsMaskedSchema = z.object({
  * Save platform credentials for an integration type.
  */
 export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
-  .inputValidator(savePlatformCredentialsSchema)
+  .validator(savePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'save platform credentials')
     try {
@@ -83,7 +83,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
  * Delete platform credentials for an integration type.
  */
 export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
-  .inputValidator(deletePlatformCredentialsSchema)
+  .validator(deletePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'delete platform credentials')
     try {
@@ -103,7 +103,7 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
  * Non-sensitive fields shown in full, sensitive fields masked to last 4 chars.
  */
 export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' })
-  .inputValidator(fetchPlatformCredentialsMaskedSchema)
+  .validator(fetchPlatformCredentialsMaskedSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'fetch masked platform credentials')
     try {

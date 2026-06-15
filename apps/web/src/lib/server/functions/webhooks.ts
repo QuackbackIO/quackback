@@ -80,7 +80,7 @@ export const fetchWebhooks = createServerFn({ method: 'GET' }).handler(async () 
  * Returns the webhook with secret (only shown once)
  */
 export const createWebhookFn = createServerFn({ method: 'POST' })
-  .inputValidator(createWebhookSchema)
+  .validator(createWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ url: data.url }, 'create webhook')
     try {
@@ -108,7 +108,7 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
  * Update a webhook
  */
 export const updateWebhookFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateWebhookSchema)
+  .validator(updateWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'update webhook')
     try {
@@ -134,7 +134,7 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
  * Delete a webhook
  */
 export const deleteWebhookFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteWebhookSchema)
+  .validator(deleteWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'delete webhook')
     try {
@@ -156,7 +156,7 @@ export const deleteWebhookFn = createServerFn({ method: 'POST' })
  * Returns the new secret (only shown once)
  */
 export const rotateWebhookSecretFn = createServerFn({ method: 'POST' })
-  .inputValidator(rotateWebhookSecretSchema)
+  .validator(rotateWebhookSecretSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'rotate webhook secret')
     try {

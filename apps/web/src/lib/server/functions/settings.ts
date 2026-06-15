@@ -207,7 +207,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
 )
 
 export const fetchUserProfile = createServerFn({ method: 'GET' })
-  .inputValidator(userIdSchema)
+  .validator(userIdSchema)
   .handler(async ({ data }) => {
     log.debug({ user_id: data }, 'fetch user profile')
     try {
@@ -338,7 +338,7 @@ export type UpdateHeaderDisplayModeInput = z.infer<typeof updateHeaderDisplayMod
 export type UpdateHeaderDisplayNameInput = z.infer<typeof updateHeaderDisplayNameSchema>
 
 export const updateThemeFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateThemeSchema)
+  .validator(updateThemeSchema)
   .handler(async ({ data }) => {
     log.info('update theme')
     try {
@@ -351,7 +351,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
-  .inputValidator(updatePortalConfigSchema)
+  .validator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
     log.info('update portal config')
     try {
@@ -434,7 +434,7 @@ const AUDIT_TRACKED_OAUTH_KEYS: Array<{
 ]
 
 export const updateAuthConfigFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateAuthConfigSchema)
+  .validator(updateAuthConfigSchema)
   .handler(async ({ data }) => {
     log.info('update auth config')
     try {
@@ -535,7 +535,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
   })
 
 export const saveLogoKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(saveLogoKeySchema)
+  .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save logo key')
     try {
@@ -559,7 +559,7 @@ export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () 
 })
 
 export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(saveLogoKeySchema)
+  .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save header logo key')
     try {
@@ -583,7 +583,7 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateHeaderDisplayModeSchema)
+  .validator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
     log.info({ mode: data.mode }, 'update header display mode')
     try {
@@ -596,7 +596,7 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   })
 
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateHeaderDisplayNameSchema)
+  .validator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update header display name')
     try {
@@ -615,7 +615,7 @@ const updateWorkspaceNameSchema = z.object({
 export type UpdateWorkspaceNameInput = z.infer<typeof updateWorkspaceNameSchema>
 
 export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateWorkspaceNameSchema)
+  .validator(updateWorkspaceNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update workspace name')
     try {
@@ -650,7 +650,7 @@ export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async 
 })
 
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateCustomCssSchema)
+  .validator(updateCustomCssSchema)
   .handler(async ({ data }) => {
     log.info({ css_length: data.customCss.length }, 'update custom css')
     try {
@@ -671,7 +671,7 @@ const updateDeveloperConfigSchema = z.object({
 })
 
 export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateDeveloperConfigSchema)
+  .validator(updateDeveloperConfigSchema)
   .handler(async ({ data }) => {
     log.info({ mcp_enabled: data.mcpEnabled }, 'update developer config')
     try {
@@ -768,7 +768,7 @@ const updateWidgetConfigSchema = z.object({
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateWidgetConfigSchema)
+  .validator(updateWidgetConfigSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
     try {
@@ -826,7 +826,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
 })
 
 export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
-  .inputValidator(moderationDefaultSchema.parse)
+  .validator(moderationDefaultSchema.parse)
   .handler(async ({ data }) => {
     log.info({ require_approval: data.requireApproval }, 'update moderation default')
     const auth = await requireAuth()

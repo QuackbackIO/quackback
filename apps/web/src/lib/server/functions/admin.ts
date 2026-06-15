@@ -129,7 +129,7 @@ const portalUserByIdSchema = z.object({
  * Fetch inbox posts with filters for admin feedback view
  */
 export const fetchInboxPosts = createServerFn({ method: 'GET' })
-  .inputValidator(inboxPostListSchema)
+  .validator(inboxPostListSchema)
   .handler(async ({ data }) => {
     log.debug({ sort: data.sort, cursor: data.cursor ?? 'none' }, 'fetch inbox posts')
     try {
@@ -250,7 +250,7 @@ const searchMembersSchema = z.object({
 })
 
 export const searchMembersFn = createServerFn({ method: 'GET' })
-  .inputValidator(searchMembersSchema)
+  .validator(searchMembersSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     return searchMembers(data)
@@ -270,7 +270,7 @@ const updatePrincipalRoleSchema = z.object({
  * Update a team member's role (admin only)
  */
 export const updateMemberRoleFn = createServerFn({ method: 'POST' })
-  .inputValidator(updatePrincipalRoleSchema)
+  .validator(updatePrincipalRoleSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId, role: data.role }, 'update member role')
     try {
@@ -310,7 +310,7 @@ const forceSignOutInput = z.object({
  * and the affected-row count. The actor is the calling admin.
  */
 export const forceSignOutUserFn = createServerFn({ method: 'POST' })
-  .inputValidator(forceSignOutInput)
+  .validator(forceSignOutInput)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
     const targetUserId = data.userId as UserId
@@ -340,7 +340,7 @@ export const forceSignOutUserFn = createServerFn({ method: 'POST' })
  * Remove a team member (converts to portal user, admin only)
  */
 export const removeTeamMemberFn = createServerFn({ method: 'POST' })
-  .inputValidator(principalIdSchema)
+  .validator(principalIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'remove team member')
     try {
@@ -448,7 +448,7 @@ export const fetchIntegrationCatalog = createServerFn({ method: 'GET' }).handler
  * Fetch a single integration by type (e.g., 'slack') with event mappings
  */
 export const fetchIntegrationByType = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ type: z.string() }))
+  .validator(z.object({ type: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ type: data.type }, 'fetch integration by type')
     try {
@@ -580,7 +580,7 @@ export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(asy
  * Note: This function is called during onboarding and may create member records
  */
 export const checkOnboardingState = createServerFn({ method: 'GET' })
-  .inputValidator(z.string().optional())
+  .validator(z.string().optional())
   .handler(async ({ data }) => {
     log.debug('check onboarding state')
     try {
@@ -671,7 +671,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
  * List portal users (users with role 'user').
  */
 export const listPortalUsersFn = createServerFn({ method: 'GET' })
-  .inputValidator(listPortalUsersSchema)
+  .validator(listPortalUsersSchema)
   .handler(async ({ data }) => {
     log.debug('list portal users')
     try {
@@ -713,7 +713,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
  * Get a portal user's details.
  */
 export const getPortalUserFn = createServerFn({ method: 'GET' })
-  .inputValidator(portalUserByIdSchema)
+  .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId }, 'get portal user')
     try {
@@ -754,7 +754,7 @@ const updatePortalUserSchema = z.object({
 })
 
 export const updatePortalUserFn = createServerFn({ method: 'POST' })
-  .inputValidator(updatePortalUserSchema)
+  .validator(updatePortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'update portal user')
     try {
@@ -820,7 +820,7 @@ const createPortalUserSchema = z.object({
 })
 
 export const createPortalUserFn = createServerFn({ method: 'POST' })
-  .inputValidator(createPortalUserSchema)
+  .validator(createPortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create portal user')
     try {
@@ -876,7 +876,7 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
  * Delete (remove) a portal user.
  */
 export const deletePortalUserFn = createServerFn({ method: 'POST' })
-  .inputValidator(portalUserByIdSchema)
+  .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'delete portal user')
     try {
@@ -904,7 +904,7 @@ const sendInvitationSchema = z.object({
 
 const invitationByIdSchema = z.object({
   // Use plain z.string() for TanStack Start compatibility
-  // TypeID validation with .refine() creates ZodEffects which isn't supported in inputValidator
+  // TypeID validation with .refine() creates ZodEffects which isn't supported in validator
   invitationId: z.string(),
 })
 
@@ -915,7 +915,7 @@ export type InvitationByIdInput = z.infer<typeof invitationByIdSchema>
  * Send a team invitation
  */
 export const sendInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(sendInvitationSchema)
+  .validator(sendInvitationSchema)
   .handler(async ({ data }) => {
     log.info({ role: data.role }, 'send invitation')
     try {
@@ -1012,7 +1012,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
  * Cancel a pending invitation
  */
 export const cancelInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(invitationByIdSchema)
+  .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'cancel invitation')
     try {
@@ -1073,7 +1073,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
  * Resend an invitation email
  */
 export const resendInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(invitationByIdSchema)
+  .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'resend invitation')
     try {
@@ -1280,7 +1280,7 @@ const fetchSegmentAttributeValuesSchema = z.object({
 })
 
 export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
-  .inputValidator(fetchSegmentAttributeValuesSchema)
+  .validator(fetchSegmentAttributeValuesSchema)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     const { getAttributeValueSuggestions } =
@@ -1312,7 +1312,7 @@ export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async ()
  * Create a new segment.
  */
 export const createSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(createSegmentSchema)
+  .validator(createSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create segment')
     try {
@@ -1343,7 +1343,7 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
  * Update an existing segment.
  */
 export const updateSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateSegmentSchema)
+  .validator(updateSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'update segment')
     try {
@@ -1381,7 +1381,7 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
  * Delete a segment.
  */
 export const deleteSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(segmentByIdSchema)
+  .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'delete segment')
     try {
@@ -1400,7 +1400,7 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
  * Assign users to a manual segment.
  */
 export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(assignUsersSchema)
+  .validator(assignUsersSchema)
   .handler(async ({ data }) => {
     log.info(
       { segment_id: data.segmentId, count: data.principalIds.length },
@@ -1427,7 +1427,7 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
  * Remove users from a manual segment.
  */
 export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(assignUsersSchema)
+  .validator(assignUsersSchema)
   .handler(async ({ data }) => {
     log.info(
       { segment_id: data.segmentId, count: data.principalIds.length },
@@ -1454,7 +1454,7 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
  * Trigger re-evaluation of a dynamic segment.
  */
 export const evaluateSegmentFn = createServerFn({ method: 'POST' })
-  .inputValidator(segmentByIdSchema)
+  .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'evaluate segment')
     try {
@@ -1532,7 +1532,7 @@ export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(as
  * Create a new user attribute definition.
  */
 export const createUserAttributeFn = createServerFn({ method: 'POST' })
-  .inputValidator(createUserAttributeSchema)
+  .validator(createUserAttributeSchema)
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin'] })
@@ -1554,7 +1554,7 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
  * Update an existing user attribute definition.
  */
 export const updateUserAttributeFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateUserAttributeSchema)
+  .validator(updateUserAttributeSchema)
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin'] })
@@ -1575,7 +1575,7 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
  * Delete a user attribute definition.
  */
 export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
-  .inputValidator(userAttributeIdSchema)
+  .validator(userAttributeIdSchema)
   .handler(async ({ data }) => {
     try {
       await requireAuth({ roles: ['admin'] })

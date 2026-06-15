@@ -38,7 +38,7 @@ export type UpdateSubscriptionLevelInput = z.infer<typeof updateSubscriptionLeve
 
 // Read Operations
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
-  .inputValidator(getSubscriptionStatusSchema)
+  .validator(getSubscriptionStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'fetch subscription status')
     try {
@@ -84,7 +84,7 @@ async function gateSubscriptionWrite(
 
 // Write Operations
 export const subscribeToPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(subscribeToPostSchema)
+  .validator(subscribeToPostSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'subscribe to post')
     try {
@@ -105,7 +105,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
   })
 
 export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(unsubscribeFromPostSchema)
+  .validator(unsubscribeFromPostSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'unsubscribe from post')
     try {
@@ -124,7 +124,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   })
 
 export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateSubscriptionLevelSchema)
+  .validator(updateSubscriptionLevelSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'update subscription level')
     try {
@@ -156,9 +156,12 @@ const adminUpdateVoterSubscriptionSchema = z.object({
 export type AdminUpdateVoterSubscriptionInput = z.infer<typeof adminUpdateVoterSubscriptionSchema>
 
 export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
-  .inputValidator(adminUpdateVoterSubscriptionSchema)
+  .validator(adminUpdateVoterSubscriptionSchema)
   .handler(async ({ data }) => {
-    log.debug({ post_id: data.postId, principal_id: data.principalId, level: data.level }, 'admin update voter subscription')
+    log.debug(
+      { post_id: data.postId, principal_id: data.principalId, level: data.level },
+      'admin update voter subscription'
+    )
     try {
       await requireAuth({ roles: ['admin', 'member'] })
 
@@ -216,7 +219,7 @@ export interface UnsubscribeResult {
 }
 
 export const processUnsubscribeTokenFn = createServerFn({ method: 'POST' })
-  .inputValidator(processUnsubscribeTokenSchema)
+  .validator(processUnsubscribeTokenSchema)
   .handler(async ({ data }): Promise<UnsubscribeResult> => {
     log.debug('process unsubscribe token')
     try {

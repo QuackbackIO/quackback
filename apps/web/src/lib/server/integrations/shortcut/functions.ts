@@ -10,7 +10,7 @@ export interface ShortcutProject {
 }
 
 export const saveShortcutTokenFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ apiToken: z.string().min(1) }))
+  .validator(z.object({ apiToken: z.string().min(1) }))
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { saveIntegration } = await import('../save')

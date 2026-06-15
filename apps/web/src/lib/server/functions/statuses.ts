@@ -97,7 +97,7 @@ export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async (
  * Get a single status by ID
  */
 export const fetchStatusFn = createServerFn({ method: 'GET' })
-  .inputValidator(getStatusSchema)
+  .validator(getStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'fetch status')
     try {
@@ -120,7 +120,7 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
  * Create a new status
  */
 export const createStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(createStatusSchema)
+  .validator(createStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ category: data.category }, 'create status')
     try {
@@ -139,7 +139,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
  * Update an existing status
  */
 export const updateStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateStatusSchema)
+  .validator(updateStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'update status')
     try {
@@ -163,7 +163,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
  * Delete a status
  */
 export const deleteStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(deleteStatusSchema)
+  .validator(deleteStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'delete status')
     try {
@@ -182,7 +182,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
  * Reorder statuses
  */
 export const reorderStatusesFn = createServerFn({ method: 'POST' })
-  .inputValidator(reorderStatusesSchema)
+  .validator(reorderStatusesSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.statusIds.length }, 'reorder statuses')
     try {

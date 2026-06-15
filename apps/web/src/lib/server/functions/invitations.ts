@@ -18,7 +18,7 @@ const log = logger.child({ component: 'invitations' })
  * accessible to newly authenticated users who may not yet have a member record.
  */
 export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
-  .inputValidator((invitationId: string) => invitationId)
+  .validator((invitationId: string) => invitationId)
   .handler(async ({ data: invitationId }) => {
     log.debug({ invitation_id: invitationId }, 'get invitation details: entry')
 
@@ -46,10 +46,16 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
       )
     }
 
-    log.debug({ invitation_id: invitationId, status: inv.status }, 'get invitation details: invitation found')
+    log.debug(
+      { invitation_id: invitationId, status: inv.status },
+      'get invitation details: invitation found'
+    )
 
     if (inv.status !== 'pending') {
-      log.warn({ invitation_id: invitationId, status: inv.status }, 'get invitation details: invalid status')
+      log.warn(
+        { invitation_id: invitationId, status: inv.status },
+        'get invitation details: invalid status'
+      )
       throw new Error(
         inv.status === 'accepted'
           ? "This invitation has already been accepted. If you're having trouble accessing the dashboard, try signing in."
@@ -64,7 +70,10 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
 
     // Verify the authenticated user's email matches the invitation
     if (inv.email.toLowerCase() !== session.user.email?.toLowerCase()) {
-      log.warn({ invitation_id: invitationId, user_id: session.user.id }, 'get invitation details: email mismatch')
+      log.warn(
+        { invitation_id: invitationId, user_id: session.user.id },
+        'get invitation details: email mismatch'
+      )
       throw new Error(
         'This invitation was sent to a different email address. Please sign in with the email address that received the invitation, or ask your administrator to send a new invitation to your current email.'
       )
@@ -76,7 +85,14 @@ export const getInvitationDetailsFn = createServerFn({ method: 'GET' })
     const isExistingUser = new Date(session.user.createdAt) < inv.createdAt
     const passwordEnabled = !isExistingUser && (authConfig.oauth.password ?? true)
 
-    log.debug({ invitation_id: invitationId, password_enabled: passwordEnabled, is_existing_user: isExistingUser }, 'get invitation details: ok')
+    log.debug(
+      {
+        invitation_id: invitationId,
+        password_enabled: passwordEnabled,
+        is_existing_user: isExistingUser,
+      },
+      'get invitation details: ok'
+    )
 
     return {
       invite: {
@@ -106,7 +122,7 @@ const acceptInvitationSchema = z.object({
  * accessible to newly authenticated users who may not yet have a member record.
  */
 export const acceptInvitationFn = createServerFn({ method: 'POST' })
-  .inputValidator(acceptInvitationSchema)
+  .validator(acceptInvitationSchema)
   .handler(async ({ data }) => {
     const { invitationId, name } = data
     log.debug({ invitation_id: invitationId }, 'accept invitation: entry')
@@ -151,7 +167,10 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         const inv = await db.query.invitation.findFirst({
           where: and(eq(invitation.id, invitationId as InviteId), eq(invitation.kind, 'team')),
         })
-        log.warn({ invitation_id: invitationId, exists: !!inv, status: inv?.status }, 'accept invitation: claim failed')
+        log.warn(
+          { invitation_id: invitationId, exists: !!inv, status: inv?.status },
+          'accept invitation: claim failed'
+        )
         if (!inv) throw new Error('This invitation could not be found. It may have been cancelled.')
         throw new Error(
           inv.status === 'accepted'
@@ -264,7 +283,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
  * so we must call auth.api.setPassword() from a server function.
  */
 export const setPasswordFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ newPassword: z.string().min(8) }))
+  .validator(z.object({ newPassword: z.string().min(8) }))
   .handler(async ({ data }) => {
     const { auth } = await import('@/lib/server/auth')
     await auth.api.setPassword({
@@ -279,7 +298,7 @@ export const setPasswordFn = createServerFn({ method: 'POST' })
  * Public - no authentication required.
  */
 export const getInviteBrandingFn = createServerFn({ method: 'GET' })
-  .inputValidator((invitationId: string) => invitationId)
+  .validator((invitationId: string) => invitationId)
   .handler(async ({ data: invitationId }) => {
     const [settings, inv] = await Promise.all([
       db.query.settings.findFirst(),

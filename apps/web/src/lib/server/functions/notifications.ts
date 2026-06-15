@@ -39,7 +39,7 @@ const notificationIdSchema = z.object({
  * Get notifications for the current user with pagination
  */
 export const getNotificationsFn = createServerFn({ method: 'GET' })
-  .inputValidator(getNotificationsSchema)
+  .validator(getNotificationsSchema)
   .handler(async ({ data }) => {
     log.debug(
       { limit: data.limit, offset: data.offset, unread_only: data.unreadOnly },
@@ -115,7 +115,7 @@ export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async 
  * Mark a single notification as read
  */
 export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
-  .inputValidator(notificationIdSchema)
+  .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification marked read')
     try {
@@ -147,7 +147,7 @@ export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).h
  * Archive (soft delete) a notification
  */
 export const archiveNotificationFn = createServerFn({ method: 'POST' })
-  .inputValidator(notificationIdSchema)
+  .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification archived')
     try {

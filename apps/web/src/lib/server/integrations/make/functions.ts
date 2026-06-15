@@ -10,7 +10,7 @@ import { safeFetch } from '../../content/ssrf-guard'
  * Save a Make webhook URL as the integration connection.
  */
 export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ webhookUrl: z.string().url().startsWith('https://') }))
+  .validator(z.object({ webhookUrl: z.string().url().startsWith('https://') }))
   .handler(async ({ data }) => {
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { saveIntegration } = await import('../save')

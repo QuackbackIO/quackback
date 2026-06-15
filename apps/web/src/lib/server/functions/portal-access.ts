@@ -280,7 +280,7 @@ const recordPortalAccessDeniedSchema = z.object({
  * is rejected by Vite's import-protection plugin in client-bundled code).
  */
 export const recordPortalAccessDeniedFn = createServerFn({ method: 'POST' })
-  .inputValidator(recordPortalAccessDeniedSchema)
+  .validator(recordPortalAccessDeniedSchema)
   .handler(async ({ data }) => {
     const { getRequestHeaders } = await import('@tanstack/react-start/server')
     const { auth } = await import('@/lib/server/auth/index')
@@ -368,7 +368,7 @@ export const updatePortalVisibilitySchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const updatePortalAccessFn = createServerFn({ method: 'POST' })
-  .inputValidator(updatePortalVisibilitySchema.parse)
+  .validator(updatePortalVisibilitySchema.parse)
   .handler(async ({ data }) => {
     const [{ requireAuth }, { getRequestHeaders }, { actorFromAuth, recordAuditEvent }] =
       await Promise.all([

@@ -9,7 +9,7 @@ import { z } from 'zod'
  * Save Freshdesk API key and subdomain.
  */
 export const saveFreshdeskKeyFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       apiKey: z.string().min(1),
       subdomain: z

@@ -43,7 +43,7 @@ export type TestSsoConnectionResult = { ok: true; issuer: string } | { ok: false
  * Returns a structured result so the UI can render a friendly status.
  */
 export const testSsoConnectionFn = createServerFn({ method: 'POST' })
-  .inputValidator(testSsoConnectionInput)
+  .validator(testSsoConnectionInput)
   .handler(async ({ data }): Promise<TestSsoConnectionResult> => {
     await requireAuth({ roles: ['admin'] })
     const { discoveryUrl } = data
@@ -163,7 +163,7 @@ const setVerifiedDomainEnforcedInput = z.object({
  * Disable skips both — any admin can turn enforcement off on any row.
  */
 export const setVerifiedDomainEnforcedFn = createServerFn({ method: 'POST' })
-  .inputValidator(setVerifiedDomainEnforcedInput)
+  .validator(setVerifiedDomainEnforcedInput)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
 
@@ -354,7 +354,7 @@ const setSsoClientSecretInput = z.object({
  * IdP — Azure Entra, Okta, Auth0, Keycloak — to *their* application).
  */
 export const setSsoClientSecretFn = createServerFn({ method: 'POST' })
-  .inputValidator(setSsoClientSecretInput)
+  .validator(setSsoClientSecretInput)
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
 
@@ -544,7 +544,7 @@ const addVerifiedDomainInput = z.object({
  * and IDN labels are rejected before we hit the writer.
  */
 export const addVerifiedDomainFn = createServerFn({ method: 'POST' })
-  .inputValidator(addVerifiedDomainInput)
+  .validator(addVerifiedDomainInput)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
 
@@ -566,7 +566,7 @@ const removeVerifiedDomainInput = z.object({ id: verifiedDomainId })
 
 /** Remove a verified-domain row by id. No-op if it doesn't exist. */
 export const removeVerifiedDomainFn = createServerFn({ method: 'POST' })
-  .inputValidator(removeVerifiedDomainInput)
+  .validator(removeVerifiedDomainInput)
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin'] })
     const { removeVerifiedDomain } = await import('@/lib/server/domains/settings/settings.service')
@@ -587,7 +587,7 @@ export type VerifyDomainResult =
  * specific guidance.
  */
 export const verifyDomainFn = createServerFn({ method: 'POST' })
-  .inputValidator(verifyDomainInput)
+  .validator(verifyDomainInput)
   .handler(async ({ data }): Promise<VerifyDomainResult> => {
     await requireAuth({ roles: ['admin'] })
 

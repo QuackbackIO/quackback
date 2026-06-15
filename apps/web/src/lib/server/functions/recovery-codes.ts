@@ -26,7 +26,7 @@ import { requireAuth } from './auth-helpers'
 const RECOVERY_CODE_BATCH_SIZE = 10
 
 export const generateRecoveryCodesFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({}).default({}))
+  .validator(z.object({}).default({}))
   .handler(async () => {
     const auth = await requireAuth({ roles: ['admin'] })
     const userId = auth.user.id as UserId
@@ -60,7 +60,7 @@ export const generateRecoveryCodesFn = createServerFn({ method: 'POST' })
   })
 
 export const listRecoveryCodesFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({}).default({}))
+  .validator(z.object({}).default({}))
   .handler(async () => {
     const auth = await requireAuth({ roles: ['admin'] })
     const userId = auth.user.id as UserId

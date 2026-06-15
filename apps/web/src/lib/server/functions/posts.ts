@@ -168,7 +168,7 @@ export type RestorePostInput = z.infer<typeof restorePostSchema>
  * List inbox posts with filtering, sorting, and pagination
  */
 export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
-  .inputValidator(listInboxPostsSchema)
+  .validator(listInboxPostsSchema)
   .handler(async ({ data }) => {
     log.debug('fetch inbox posts for admin')
     try {
@@ -214,7 +214,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
  * Get a single post with full details including comments
  */
 export const fetchPostWithDetails = createServerFn({ method: 'GET' })
-  .inputValidator(getPostSchema)
+  .validator(getPostSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post with details')
     try {
@@ -293,7 +293,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
  * Get voters for a post (admin/member only)
  */
 export const fetchPostVotersFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     const voters = await getPostVoters(data.id as PostId)
@@ -307,7 +307,7 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
  * Get feedback source for a post (if created from feedback pipeline)
  */
 export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ roles: ['admin', 'member'] })
     const source = await getPostFeedbackSource(data.id as PostId)
@@ -326,7 +326,7 @@ export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
  * Create a new post
  */
 export const createPostFn = createServerFn({ method: 'POST' })
-  .inputValidator(createPostSchema)
+  .validator(createPostSchema)
   .handler(async ({ data }) => {
     log.info({ board_id: data.boardId }, 'create post')
     try {
@@ -396,7 +396,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
  * Update an existing post
  */
 export const updatePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(updatePostSchema)
+  .validator(updatePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'update post')
     try {
@@ -430,7 +430,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
  * Note: softDeletePost already dispatches post.deleted — no duplicate dispatch here.
  */
 export const deletePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(deletePostSchema)
+  .validator(deletePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'delete post')
     try {
@@ -479,7 +479,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
  * Fetch external links for a post (for cascade delete dialog)
  */
 export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
-  .inputValidator(z.object({ id: z.string() }))
+  .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post external links')
     try {
@@ -497,7 +497,7 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
  * Change post status
  */
 export const changePostStatusFn = createServerFn({ method: 'POST' })
-  .inputValidator(changeStatusSchema)
+  .validator(changeStatusSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, status_id: data.statusId }, 'change post status')
     try {
@@ -523,7 +523,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
  * Move a post to a different board
  */
 export const changePostBoardFn = createServerFn({ method: 'POST' })
-  .inputValidator(changePostBoardSchema)
+  .validator(changePostBoardSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, board_id: data.boardId }, 'change post board')
     try {
@@ -546,7 +546,7 @@ export const changePostBoardFn = createServerFn({ method: 'POST' })
  * Restore a deleted post
  */
 export const restorePostFn = createServerFn({ method: 'POST' })
-  .inputValidator(restorePostSchema)
+  .validator(restorePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'restore post')
     try {
@@ -565,7 +565,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
  * Update post tags
  */
 export const updatePostTagsFn = createServerFn({ method: 'POST' })
-  .inputValidator(updateTagsSchema)
+  .validator(updateTagsSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, tag_count: data.tagIds.length }, 'update post tags')
     try {
@@ -595,7 +595,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
  * Proxy vote: admin votes on behalf of another user
  */
 export const proxyVoteFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
+  .validator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member'] })
     const postId = data.postId as PostId
@@ -630,7 +630,7 @@ export const proxyVoteFn = createServerFn({ method: 'POST' })
  * Remove a vote: admin removes any user's vote from a post
  */
 export const removeVoteFn = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
+  .validator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin', 'member'] })
     const postId = data.postId as PostId
@@ -658,7 +658,7 @@ export const removeVoteFn = createServerFn({ method: 'POST' })
  * Toggle comments lock on a post
  */
 export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
-  .inputValidator(toggleCommentsLockSchema)
+  .validator(toggleCommentsLockSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, locked: data.locked }, 'toggle comments lock')
     try {

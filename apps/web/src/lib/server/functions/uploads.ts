@@ -54,9 +54,12 @@ export const checkS3ConfiguredFn = createServerFn({ method: 'GET' }).handler(asy
  * Requires authentication (admin or member role).
  */
 export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(getPresignedUploadUrlSchema)
+  .validator(getPresignedUploadUrlSchema)
   .handler(async ({ data }) => {
-    log.debug({ prefix: data.prefix, content_type: data.contentType, file_size: data.fileSize }, 'presigned upload url requested')
+    log.debug(
+      { prefix: data.prefix, content_type: data.contentType, file_size: data.fileSize },
+      'presigned upload url requested'
+    )
     try {
       // Require admin or member authentication
       await requireAuth({ roles: ['admin', 'member'] })
@@ -91,7 +94,7 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
  * Validates that the file is an allowed image type.
  */
 export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       filename: z.string().min(1).max(255),
       contentType: z.string().min(1).max(100),
@@ -99,7 +102,10 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'changelog image upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'changelog image upload url requested'
+    )
     try {
       // Require admin authentication for changelog images
       await requireAuth({ roles: ['admin'] })
@@ -134,7 +140,7 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
  * Validates that the file is an allowed image type.
  */
 export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       filename: z.string().min(1).max(255),
       contentType: z.string().min(1).max(100),
@@ -142,7 +148,10 @@ export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'post image upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'post image upload url requested'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -169,7 +178,7 @@ export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
  * Requires an active widget Bearer token session — anonymous users are blocked server-side.
  */
 export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       filename: z.string().min(1).max(255),
       contentType: z.string().min(1).max(100),
@@ -177,7 +186,10 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
     })
   )
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'widget image upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'widget image upload url requested'
+    )
     try {
       const session = await getWidgetSession()
       if (!session) {
@@ -219,9 +231,12 @@ const brandingImageSchema = z.object({
  * Get a presigned URL for uploading the workspace logo.
  */
 export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(brandingImageSchema)
+  .validator(brandingImageSchema)
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'logo upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'logo upload url requested'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -247,9 +262,12 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
  * Get a presigned URL for uploading the workspace favicon.
  */
 export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(brandingImageSchema)
+  .validator(brandingImageSchema)
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'favicon upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'favicon upload url requested'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -275,9 +293,12 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
  * Get a presigned URL for uploading the workspace header logo.
  */
 export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(brandingImageSchema)
+  .validator(brandingImageSchema)
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'header logo upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'header logo upload url requested'
+    )
     try {
       await requireAuth({ roles: ['admin'] })
 
@@ -303,9 +324,12 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
  * Get a presigned URL for uploading user avatars.
  */
 export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
-  .inputValidator(brandingImageSchema)
+  .validator(brandingImageSchema)
   .handler(async ({ data }) => {
-    log.debug({ content_type: data.contentType, file_size: data.fileSize }, 'avatar upload url requested')
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'avatar upload url requested'
+    )
     try {
       // Any authenticated user can upload their own avatar
       await requireAuth()
