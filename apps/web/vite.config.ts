@@ -22,7 +22,14 @@ function stubServerLoggerInClient(): PluginOption {
     resolveId(id) {
       // `this.environment` is available in per-environment plugin pipelines.
       if (this.environment?.name !== 'client') return null
-      if (id === '@/lib/server/logger' || /\/lib\/server\/logger(\.ts)?$/.test(id)) {
+      if (
+        id === '@/lib/server/logger' ||
+        id === '@/lib/server/log-context' ||
+        id === '@quackback/logger' ||
+        id === '@quackback/logger/context' ||
+        /\/lib\/server\/logger(\.ts)?$/.test(id) ||
+        /\/lib\/server\/log-context(\.ts)?$/.test(id)
+      ) {
         return stub
       }
       return null

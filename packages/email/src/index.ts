@@ -11,6 +11,7 @@ import { render } from '@react-email/components'
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
+import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
 import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
@@ -70,12 +71,15 @@ function getProvider(): EmailProvider {
   return 'console'
 }
 
+// Recipient addresses (PII) are never logged here — log provider + ids only.
+const log = createLogger().child({ component: 'email' })
+
 function getSmtpTransporter(): Transporter {
   if (!smtpTransporter) {
     const host = getEnv('EMAIL_SMTP_HOST')
     const port = parseInt(getEnv('EMAIL_SMTP_PORT') || '587', 10)
     const secure = getEnv('EMAIL_SMTP_SECURE') === 'true'
-    console.log(`[Email] Initializing SMTP transporter: ${host}:${port} (secure=${secure})`)
+    log.info({ host, port, secure }, 'initializing smtp transporter')
     smtpTransporter = nodemailer.createTransport({
       host,
       port,
@@ -97,7 +101,7 @@ function getSmtpTransporter(): Transporter {
 
 function getResend(): Resend {
   if (!resendClient) {
-    console.log('[Email] Initializing Resend client')
+    log.info('initializing resend client')
     resendClient = new Resend(getResendApiKey())
   }
   return resendClient
@@ -118,7 +122,7 @@ async function sendEmail(options: {
   // (temp-<id>@anon.quackback.io) is never deliverable. Callers sanitize via
   // realEmail(), but if one slips through, drop it here rather than bounce.
   if (isSyntheticAnonEmail(options.to)) {
-    console.warn(`[Email] Refusing to send to synthetic anonymous address: ${options.to}`)
+    log.warn('refusing to send to synthetic anonymous address')
     return { sent: false }
   }
 
@@ -134,7 +138,7 @@ async function sendEmail(options: {
         html,
         replyTo: options.replyTo,
       })
-      console.log(`[Email] Sent via SMTP to ${options.to}, messageId: ${result.messageId}`)
+      log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
     } catch (error) {
       // Reset transporter on connection errors so next attempt creates a fresh connection
       if (
@@ -144,10 +148,7 @@ async function sendEmail(options: {
       ) {
         smtpTransporter = null
       }
-      console.error(
-        `[Email] SMTP send failed to ${options.to}:`,
-        error instanceof Error ? error.message : error
-      )
+      log.error({ err: error, provider: 'smtp' }, 'email send failed')
       throw error
     }
     return { sent: true }
@@ -162,10 +163,13 @@ async function sendEmail(options: {
       replyTo: options.replyTo,
     })
     if (result.error) {
-      console.error(`[Email] Resend API error:`, JSON.stringify(result.error, null, 2))
+      log.error(
+        { provider: 'resend', error_name: result.error.name, error_message: result.error.message },
+        'email send failed'
+      )
       throw new Error(`Resend API error: ${result.error.message} (${result.error.name})`)
     }
-    console.log(`[Email] Sent via Resend to ${options.to}, id: ${result.data?.id}`)
+    log.info({ provider: 'resend', message_id: result.data?.id }, 'email sent')
     return { sent: true }
   }
 
@@ -307,7 +311,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
     return { sent: false }
   }
 
-  console.log(`[Email] Sending sign-in email to ${to}`)
+  log.debug('sending sign-in email')
   return sendEmail({
     to,
     subject: 'Your Quackback sign-in link',
@@ -340,7 +344,7 @@ export async function sendPasswordResetEmail(
     return { sent: false }
   }
 
-  console.log(`[Email] Sending password reset to ${to}`)
+  log.debug('sending password reset email')
   return sendEmail({
     to,
     subject: 'Reset your Quackback password',
@@ -384,7 +388,7 @@ export async function sendRecoveryCodeUsedEmail(
     return { sent: false }
   }
 
-  console.log(`[Email] Sending recovery-code-used alert to ${to}`)
+  log.debug('sending recovery-code-used alert')
   return sendEmail({
     to,
     subject: 'A recovery code on your account was just used',
@@ -424,7 +428,7 @@ export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<E
     return { sent: false }
   }
 
-  console.log(`[Email] Sending new-sign-in alert to ${to}`)
+  log.debug('sending new-sign-in alert')
   return sendEmail({
     to,
     subject: 'New sign-in to your account',

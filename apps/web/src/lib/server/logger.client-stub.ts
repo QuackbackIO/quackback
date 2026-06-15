@@ -44,3 +44,12 @@ export const logger: StubLogger = makeStub()
 export function createLogger(): StubLogger {
   return makeStub()
 }
+
+// Context helpers are no-ops in the browser (there is no per-request scope).
+export function getLogContext(): undefined {
+  return undefined
+}
+export function runWithLogContext<T>(_context: unknown, fn: () => T): T {
+  return fn()
+}
+export function setLogContext(_partial: unknown): void {}
