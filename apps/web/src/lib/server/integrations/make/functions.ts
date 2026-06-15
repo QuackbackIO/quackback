@@ -40,7 +40,7 @@ export const saveMakeWebhookFn = createServerFn({ method: 'POST' })
     await saveIntegration('make', {
       principalId: auth.principal.id,
       accessToken: data.webhookUrl,
-      config: { webhookUrl: data.webhookUrl, workspaceName: 'Make' },
+      config: { webhookUrl: data.webhookUrl, channelId: data.webhookUrl, workspaceName: 'Make' },
     })
 
     return { success: true }
