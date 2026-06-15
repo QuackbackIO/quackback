@@ -7,6 +7,7 @@ import type { EventData } from '../../events/types'
 import { isRetryableError } from '../../events/hook-utils'
 import { safeFetch } from '../../content/ssrf-guard'
 import { buildNtfyPayload } from './message'
+import { parseNtfyUrl } from './url'
 
 export interface NtfyTarget {
   channelId: string // full ntfy URL, e.g. https://ntfy.sh/<topic>
@@ -22,16 +23,11 @@ export const ntfyHook: HookHandler = {
     const { channelId } = target as NtfyTarget
     const { accessToken, rootUrl } = config as NtfyConfig
 
-    let origin: string
-    let topic: string
-    try {
-      const u = new URL(channelId)
-      origin = u.origin
-      topic = u.pathname.replace(/^\/+/, '')
-    } catch {
-      return { success: false, error: 'Invalid ntfy URL', shouldRetry: false }
+    const parsed = parseNtfyUrl(channelId)
+    if (!parsed) {
+      return { success: false, error: 'Invalid ntfy URL or topic', shouldRetry: false }
     }
-    if (!topic) return { success: false, error: 'ntfy URL is missing a topic', shouldRetry: false }
+    const { origin, topic } = parsed
 
     const payload = buildNtfyPayload(event, topic, rootUrl)
     if (!payload) return { success: true } // event type we do not notify on

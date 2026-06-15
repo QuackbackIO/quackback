@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,11 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
   const [showSuccess, setShowSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false)
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (successTimer.current) clearTimeout(successTimer.current)
+  }, [])
 
   const handleSave = async () => {
     if (!url.trim()) return
@@ -35,8 +40,8 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
         },
       })
       setShowSuccess(true)
-      const timer = setTimeout(() => setShowSuccess(false), 3000)
-      return () => clearTimeout(timer)
+      if (successTimer.current) clearTimeout(successTimer.current)
+      successTimer.current = setTimeout(() => setShowSuccess(false), 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save ntfy settings')
     } finally {

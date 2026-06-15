@@ -39,10 +39,11 @@ export function buildNtfyPayload(event: EventData, topic: string, rootUrl: strin
 
     case 'comment.created': {
       const { comment, post } = event.data
+      const body = truncate(stripHtml(comment.content ?? ''), 500)
       return {
         topic,
         title: `New comment: ${post.title}`,
-        message: truncate(stripHtml(comment.content ?? ''), 500),
+        message: body || `New comment on "${post.title}"`,
         click: `${rootUrl}/b/${post.boardSlug}/posts/${post.id}`,
         tags: ['speech_balloon'],
       }

@@ -87,4 +87,12 @@ describe('saveNtfyFn', () => {
     const fetchCall = hoisted.mockSafeFetch.mock.calls[0]
     expect(fetchCall[1].headers['Authorization']).toBeUndefined()
   })
+
+  it('rejects an invalid topic URL before publishing or saving', async () => {
+    await expect(handlers[0]({ data: { url: 'https://ntfy.sh/a/b' } })).rejects.toThrow(
+      /valid ntfy topic URL/
+    )
+    expect(hoisted.mockSafeFetch).not.toHaveBeenCalled()
+    expect(hoisted.mockSaveIntegration).not.toHaveBeenCalled()
+  })
 })

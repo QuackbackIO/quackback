@@ -5,6 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { safeFetch } from '../../content/ssrf-guard'
+import { parseNtfyUrl } from './url'
 
 /**
  * Save an ntfy topic URL (and optional access token) as the integration connection.
@@ -23,16 +24,18 @@ export const saveNtfyFn = createServerFn({ method: 'POST' })
 
     const auth = await requireAuth({ roles: ['admin'] })
 
-    const u = new URL(data.url)
-    const topic = u.pathname.replace(/^\/+/, '')
-    if (!topic) {
-      throw new Error('The ntfy URL must include a topic, e.g. https://ntfy.sh/my-topic')
+    const parsed = parseNtfyUrl(data.url)
+    if (!parsed) {
+      throw new Error(
+        'Enter a valid ntfy topic URL, e.g. https://ntfy.sh/my-topic (topics may only contain letters, numbers, - and _)'
+      )
     }
+    const { origin, topic } = parsed
 
     const testHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
     if (data.token) testHeaders['Authorization'] = `Bearer ${data.token}`
 
-    const testResponse = await safeFetch(`${u.origin}/`, {
+    const testResponse = await safeFetch(`${origin}/`, {
       method: 'POST',
       headers: testHeaders,
       body: JSON.stringify({
