@@ -89,7 +89,9 @@ export interface CreateLoggerOptions {
 function defaultLevel(): LogLevel {
   const raw = process.env.LOG_LEVEL?.toLowerCase()
   const allowed: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']
-  const fallback: LogLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug'
+  // info everywhere except tests, which default to silent to keep test output
+  // clean (LOG_LEVEL still overrides). Bump to debug locally when tracing.
+  const fallback: LogLevel = process.env.NODE_ENV === 'test' ? 'silent' : 'info'
   if (!raw) return fallback
   if ((allowed as string[]).includes(raw)) return raw as LogLevel
   console.warn(`[logger] invalid LOG_LEVEL "${raw}", falling back to ${fallback}`)
