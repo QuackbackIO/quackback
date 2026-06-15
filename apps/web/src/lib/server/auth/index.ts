@@ -16,7 +16,7 @@ import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'auth' })
+const log = logger.child({ component: 'auth-config' })
 
 // Plugin callbacks (magicLink, emailOTP) stash tokens here instead of
 // emailing — callers that own the email template (invitations,
@@ -754,11 +754,7 @@ export const auth = {
     const authInstance = await getAuth()
     const response = await authInstance.handler(request)
     if (isMagicLink) {
-      const location = response.headers.get('location')
-      log.debug(
-        { status: response.status, location: location ?? null },
-        'magic-link response'
-      )
+      log.debug({ status: response.status }, 'magic-link response')
     }
     return response
   },

@@ -19,7 +19,7 @@ import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'admin' })
+const log = logger.child({ component: 'admin-2fa-reset' })
 
 const input = z.object({
   userId: z.string().regex(/^user_/),

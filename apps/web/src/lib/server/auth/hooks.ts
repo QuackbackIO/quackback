@@ -40,7 +40,7 @@ import {
 } from './signin-device-tracker'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'auth' })
+const log = logger.child({ component: 'auth-hooks' })
 
 /**
  * Provider id resolved from the Better-Auth endpoint template + ctx.
