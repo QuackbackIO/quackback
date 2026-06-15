@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
-import { getPortalLocaleFn } from '@/lib/server/functions/locale'
+import { loadPortalIntl } from '@/lib/server/functions/locale'
 
 // Pre-check codes (password_method_not_allowed, rate_limited, etc.)
 // share copy with the portal-side auth-client hook via
@@ -71,15 +71,16 @@ export const Route = createFileRoute('/admin/login')({
 
     // `<TeamLoginForm>` hands off to `<PortalAuthForm>`, which calls
     // `useIntl()` — so the page needs a `PortalIntlProvider` ancestor just
-    // like /auth/login. Resolve the locale here so the provider has it on
-    // first paint (no flash of the wrong language).
-    const locale = await getPortalLocaleFn()
+    // like /auth/login. Resolve the locale AND load its catalog here so the
+    // provider renders translated on first paint (no flash of English).
+    const { locale, messages } = await loadPortalIntl()
 
     return {
       errorMessage,
       safeCallbackUrl,
       authConfig,
       locale,
+      messages,
     }
   },
   component: AdminLoginPage,
@@ -103,10 +104,10 @@ export const Route = createFileRoute('/admin/login')({
  * path here.
  */
 function AdminLoginPage() {
-  const { errorMessage, safeCallbackUrl, authConfig, locale } = Route.useLoaderData()
+  const { errorMessage, safeCallbackUrl, authConfig, locale, messages } = Route.useLoaderData()
 
   return (
-    <PortalIntlProvider locale={locale}>
+    <PortalIntlProvider locale={locale} messages={messages}>
       <AdminAuthShell heading="Sign in to your workspace">
         {errorMessage && (
           <Alert variant="destructive">

@@ -8,23 +8,23 @@ import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/solid'
 import { authClient } from '@/lib/client/auth-client'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { getPortalLocaleFn } from '@/lib/server/functions/locale'
+import { loadPortalIntl } from '@/lib/server/functions/locale'
 
 export const Route = createFileRoute('/auth/reset-password')({
   validateSearch: (search: Record<string, unknown>) => ({
     token: (search.token as string) || '',
     error: (search.error as string) || '',
   }),
-  loader: async () => ({ locale: await getPortalLocaleFn() }),
+  loader: async () => await loadPortalIntl(),
   component: ResetPasswordPage,
 })
 
 function ResetPasswordPage() {
-  const { locale } = Route.useLoaderData()
+  const { locale, messages } = Route.useLoaderData()
   const { token, error: urlError } = Route.useSearch()
 
   return (
-    <PortalIntlProvider locale={locale}>
+    <PortalIntlProvider locale={locale} messages={messages}>
       <ResetPasswordContent token={token} urlError={urlError} />
     </PortalIntlProvider>
   )

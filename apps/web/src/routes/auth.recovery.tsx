@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { getPortalLocaleFn } from '@/lib/server/functions/locale'
+import { loadPortalIntl } from '@/lib/server/functions/locale'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -16,15 +16,15 @@ import { consumeRecoveryCodeFn } from '@/lib/server/functions/recovery-codes-con
  * better-auth's standard verify endpoint.
  */
 export const Route = createFileRoute('/auth/recovery')({
-  loader: async () => ({ locale: await getPortalLocaleFn() }),
+  loader: async () => await loadPortalIntl(),
   component: RecoveryPage,
 })
 
 function RecoveryPage() {
-  const { locale } = Route.useLoaderData()
+  const { locale, messages } = Route.useLoaderData()
 
   return (
-    <PortalIntlProvider locale={locale}>
+    <PortalIntlProvider locale={locale} messages={messages}>
       <RecoveryContent />
     </PortalIntlProvider>
   )

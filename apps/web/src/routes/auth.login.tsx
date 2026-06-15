@@ -7,7 +7,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { PortalAuthForm } from '@/components/auth/portal-auth-form'
 import { PortalAuthShell } from '@/components/auth/portal-auth-shell'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
-import { getPortalLocaleFn } from '@/lib/server/functions/locale'
+import { loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
@@ -31,15 +31,15 @@ export const Route = createFileRoute('/auth/login')({
     await queryClient.ensureQueryData(settingsQueries.publicPortalConfig())
 
     const safeCallbackUrl = isSafeCallbackUrl(deps.callbackUrl) ? deps.callbackUrl : '/'
-    const locale = await getPortalLocaleFn()
+    const { locale, messages } = await loadPortalIntl()
 
-    return { safeCallbackUrl, locale }
+    return { safeCallbackUrl, locale, messages }
   },
   component: LoginPage,
 })
 
 function LoginPage() {
-  const { safeCallbackUrl, locale } = Route.useLoaderData()
+  const { safeCallbackUrl, locale, messages } = Route.useLoaderData()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const portalConfig = portalConfigQuery.data
   const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
@@ -50,7 +50,7 @@ function LoginPage() {
   const workspaceName = ctx.settings?.brandingData?.name
 
   return (
-    <PortalIntlProvider locale={locale}>
+    <PortalIntlProvider locale={locale} messages={messages}>
       <PortalAuthShell
         heading={<FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />}
         subheading={
