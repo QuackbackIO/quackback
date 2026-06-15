@@ -9,6 +9,9 @@ import { safeFetch } from '../../content/ssrf-guard'
 import { getErrorMessage } from '../message-utils'
 import { buildNtfyPayload } from './message'
 import { parseNtfyUrl } from './url'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ntfy' })
 
 export interface NtfyTarget {
   channelId: string // full ntfy URL, e.g. https://ntfy.sh/<topic>
@@ -36,7 +39,7 @@ export const ntfyHook: HookHandler = {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
 
-    console.log(`[ntfy] Processing ${event.type} → topic ${topic}`)
+    log.debug({ event_type: event.type, topic }, 'processing notification')
     try {
       const response = await safeFetch(`${origin}/`, {
         method: 'POST',
@@ -45,14 +48,14 @@ export const ntfyHook: HookHandler = {
       })
       if (!response.ok) {
         const status = response.status
-        console.error(`[ntfy] ❌ ntfy returned ${status}`)
+        log.error({ status, topic }, 'ntfy delivery failed')
         return { success: false, error: `ntfy returned ${status}`, shouldRetry: status === 429 || status >= 500 }
       }
-      console.log(`[ntfy] ✅ delivered`)
+      log.info({ topic }, 'notification delivered')
       return { success: true }
     } catch (error) {
       const errorMsg = getErrorMessage(error)
-      console.error(`[ntfy] ❌ Exception: ${errorMsg}`)
+      log.error({ err: error }, 'ntfy request failed')
       return { success: false, error: errorMsg, shouldRetry: isRetryableError(error) }
     }
   },
