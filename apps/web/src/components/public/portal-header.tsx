@@ -18,6 +18,7 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import {
+  ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   Cog6ToothIcon,
   ComputerDesktopIcon,
@@ -79,6 +80,11 @@ export function PortalHeader({
   const openAuthPopover = authPopover?.openAuthPopover
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  // True while a just-completed sign-in is being applied (router.invalidate
+  // refetches the session). Bridges the window where the old session is still
+  // logged-out so the header shows "Signing in…" instead of flashing the
+  // Log in / Sign up buttons.
+  const [signingIn, setSigningIn] = useState(false)
 
   // Avoid hydration mismatch for theme toggle
   useEffect(() => {
@@ -88,10 +94,13 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
+      setSigningIn(true)
       // Invalidate user-scoped queries so reaction highlights and vote data refresh
       queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
       queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
-      router.invalidate() // Refetch loaders (includes session and userRole)
+      // Refetch loaders (includes session and userRole); clear the transitional
+      // state once the new session has loaded.
+      void router.invalidate().finally(() => setSigningIn(false))
     },
   })
 
@@ -279,6 +288,16 @@ export function PortalHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : signingIn ? (
+        // Sign-in just succeeded; the session refetch is in flight. Show a
+        // transitional state instead of flashing the Log in / Sign up buttons.
+        <div
+          className="flex items-center gap-2 px-3 text-sm text-muted-foreground"
+          aria-live="polite"
+        >
+          <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+          <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
+        </div>
       ) : openAuthPopover && portalAuthEnabled ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
