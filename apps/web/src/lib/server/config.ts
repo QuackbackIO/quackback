@@ -115,12 +115,6 @@ const configSchema = z.object({
 
   // Telemetry (optional)
   disableTelemetry: envBoolean,
-
-  // Observability — structured logging verbosity. Default is applied in the
-  // getter (info in prod, debug otherwise) so it can stay env-aware.
-  logLevel: z
-    .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
-    .optional(),
 })
 
 type Config = z.infer<typeof configSchema>
@@ -182,9 +176,6 @@ function buildConfigFromEnv(): unknown {
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
-
-    // Observability
-    logLevel: process.env.LOG_LEVEL?.toLowerCase() || undefined,
   }
 }
 
@@ -210,7 +201,7 @@ function loadConfig(): Config {
   if (!result.success) {
     const issues = result.error.issues.map((i) => ({
       path: i.path.join('.'),
-      message: i.message,
+      code: i.code,
     }))
     log.error({ issues }, 'config validation failed')
     throw new Error('Configuration validation failed')
@@ -343,11 +334,6 @@ export const config = {
   // Telemetry
   get disableTelemetry() {
     return loadConfig().disableTelemetry
-  },
-
-  // Observability — logger verbosity. Env-aware default when LOG_LEVEL unset.
-  get logLevel(): 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent' {
-    return loadConfig().logLevel ?? (this.isProd ? 'info' : 'debug')
   },
 
   // Help center

@@ -13,15 +13,13 @@
  * Downstream code enriches the context with tenant_id / user_id via
  * setLogContext() once auth resolves.
  */
-import type { Logger } from 'pino'
+import type { AppLogger } from '@quackback/logger'
 import { createMiddleware } from '@tanstack/react-start'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 
 function deriveRequestId(request: Request): string {
-  const header =
-    request.headers.get('x-request-id') ??
-    request.headers.get('x-correlation-id')
+  const header = request.headers.get('x-request-id') ?? request.headers.get('x-correlation-id')
   // Cap to keep a malicious/huge header out of every log line.
   if (header) return header.slice(0, 200)
   return crypto.randomUUID()
@@ -43,7 +41,7 @@ export async function handleRequestWithContext<T extends NextResult>({
 }: {
   request: Request
   next: () => Promise<T>
-  log?: Logger
+  log?: AppLogger
 }): Promise<T> {
   const requestId = deriveRequestId(request)
   const route = `${request.method} ${new URL(request.url).pathname}`
@@ -60,10 +58,7 @@ export async function handleRequestWithContext<T extends NextResult>({
         // Some responses have immutable headers; correlation still works
         // via the logged request_id.
       }
-      log.info(
-        { status: result.response.status, duration_ms: durationMs },
-        'request completed',
-      )
+      log.info({ status: result.response.status, duration_ms: durationMs }, 'request completed')
       return result
     } catch (err) {
       const durationMs = Math.round(performance.now() - start)
@@ -75,9 +70,8 @@ export async function handleRequestWithContext<T extends NextResult>({
   })
 }
 
-export const requestContextMiddleware = createMiddleware().server(
-  ({ next, request }) =>
-    // Wrap next() so its (awaitable) result is a real Promise; T then infers
-    // from the framework's own result type, keeping the return type aligned.
-    handleRequestWithContext({ request, next: () => Promise.resolve(next()) }),
+export const requestContextMiddleware = createMiddleware().server(({ next, request }) =>
+  // Wrap next() so its (awaitable) result is a real Promise; T then infers
+  // from the framework's own result type, keeping the return type aligned.
+  handleRequestWithContext({ request, next: () => Promise.resolve(next()) })
 )

@@ -33,10 +33,14 @@ const REDACT_PATHS = [
   'token',
   '*.token',
   'accessToken',
+  '*.accessToken',
   'refreshToken',
+  '*.refreshToken',
   'apiKey',
+  '*.apiKey',
   'api_key',
   'secret',
+  '*.secret',
   'widgetSecret',
   'email',
   '*.email',
@@ -47,6 +51,8 @@ const REDACT_PATHS = [
   '*.cookie',
   'req.headers.authorization',
   'req.headers.cookie',
+  'request.headers.authorization',
+  'request.headers.cookie',
   'headers.authorization',
   'headers.cookie',
   'set-cookie',
@@ -83,9 +89,15 @@ export interface CreateLoggerOptions {
 function defaultLevel(): LogLevel {
   const raw = process.env.LOG_LEVEL?.toLowerCase()
   const allowed: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']
-  if (raw && (allowed as string[]).includes(raw)) return raw as LogLevel
-  return process.env.NODE_ENV === 'production' ? 'info' : 'debug'
+  const fallback: LogLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug'
+  if (!raw) return fallback
+  if ((allowed as string[]).includes(raw)) return raw as LogLevel
+  console.warn(`[logger] invalid LOG_LEVEL "${raw}", falling back to ${fallback}`)
+  return fallback
 }
+
+/** Opaque logger type — use this instead of importing directly from pino. */
+export type AppLogger = pino.Logger
 
 /**
  * Build a logger instance. Consumers usually pass `base.service_name`; the

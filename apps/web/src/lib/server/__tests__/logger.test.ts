@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest'
 import { createLogger } from '../logger'
 import { runWithLogContext } from '../log-context'
+import * as clientStub from '../logger.client-stub'
 
 /** Collect emitted lines into parsed JSON objects. */
 function capture() {
@@ -70,7 +71,7 @@ describe('logger', () => {
         req: { headers: { authorization: 'Bearer abc', host: 'localhost' } },
         post_id: 'keep_me',
       },
-      'auth attempt',
+      'auth attempt'
     )
 
     const rec = sink.last()
@@ -93,5 +94,41 @@ describe('logger', () => {
     const recs = sink.records()
     expect(recs).toHaveLength(1)
     expect(recs[0].msg).toBe('should appear')
+  })
+
+  it('serializes err with message, stack, and type', () => {
+    const sink = capture()
+    const log = createLogger({ destination: sink.destination, level: 'error' })
+
+    log.error({ err: new Error('boom') }, 'failed')
+
+    const rec = sink.last()
+    expect(rec.msg).toBe('failed')
+    expect(rec.err).toBeDefined()
+    expect(rec.err.message).toBe('boom')
+    expect(typeof rec.err.stack).toBe('string')
+    expect(rec.err.type).toBe('Error')
+  })
+})
+
+describe('logger client stub', () => {
+  it('exposes no-op methods and child() chains without pino', () => {
+    const { logger: stub } = clientStub
+
+    // All log methods are callable and silent (no throw)
+    expect(() => stub.trace('t')).not.toThrow()
+    expect(() => stub.debug('d')).not.toThrow()
+    expect(() => stub.info('i')).not.toThrow()
+    expect(() => stub.warn('w')).not.toThrow()
+    expect(() => stub.error('e')).not.toThrow()
+    expect(() => stub.fatal('f')).not.toThrow()
+
+    // child() returns another stub whose methods are also no-ops
+    const child = stub.child({ component: 'test' })
+    expect(() => child.info('nested')).not.toThrow()
+
+    // child of child also works (unbounded chaining)
+    const grandchild = child.child({ sub: 'x' })
+    expect(() => grandchild.warn('deep')).not.toThrow()
   })
 })

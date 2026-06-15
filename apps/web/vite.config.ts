@@ -164,6 +164,8 @@ export default defineConfig(({ mode }) => {
               'bullmq',
               'ioredis',
               'openai',
+              '@quackback/logger',
+              'pino',
             ],
           },
         },
