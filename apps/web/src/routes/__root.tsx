@@ -20,6 +20,8 @@ import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
 import { SuspendedView } from '@/components/shared/suspended-view'
 import { isSuspensionExempt } from '@/lib/server/middleware/suspension-paths'
+import { documentLocale } from '@/lib/shared/document-locale'
+import { isRtlLocale, isRtlForced, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 
 export interface RouterContext {
   queryClient: QueryClient
@@ -31,6 +33,7 @@ export interface RouterContext {
   managedFieldPaths?: string[]
   state?: 'active' | 'suspended' | 'deleting'
   registeredAuthProviders?: string[]
+  acceptLanguageLocale?: SupportedLocale
 }
 
 // Paths that are allowed before onboarding is complete
@@ -61,6 +64,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       managedFieldPaths,
       state,
       registeredAuthProviders,
+      acceptLanguageLocale,
     } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
@@ -116,6 +120,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       managedFieldPaths,
       state,
       registeredAuthProviders,
+      acceptLanguageLocale,
     }
   },
   head: () => ({
@@ -218,7 +223,7 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings, themeCookie } = Route.useRouteContext()
+  const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
 
   // Portal routes can force a specific theme (light/dark) via branding config.
@@ -231,8 +236,14 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // We pass the resolved default so the script knows what to apply.
   const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
 
+  // Advertise the rendered language on the document during SSR so non-English
+  // visitors don't get an English `<html lang>` (and so RTL locales aren't laid
+  // out LTR until hydration). The admin app stays English; see documentLocale.
+  const htmlLocale = documentLocale(pathname, acceptLanguageLocale ?? DEFAULT_LOCALE)
+  const dir = isRtlForced() || isRtlLocale(htmlLocale) ? 'rtl' : 'ltr'
+
   return (
-    <html suppressHydrationWarning>
+    <html lang={htmlLocale} dir={dir} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
