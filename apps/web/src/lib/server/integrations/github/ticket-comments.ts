@@ -242,6 +242,7 @@ export async function upsertThreadExternalLink(args: {
   status?: 'active' | 'deleted'
 }): Promise<void> {
   const { db, ticketThreadExternalLinks, eq, and, sql } = await import('@/lib/server/db')
+  const now = new Date()
   const values = {
     ticketId: args.ticketId as TicketId,
     threadId: args.threadId as TicketThreadId,
@@ -252,8 +253,8 @@ export async function upsertThreadExternalLink(args: {
     externalUrl: args.externalUrl ?? null,
     syncDirection: args.syncDirection,
     status: args.status ?? 'active',
-    lastSyncedAt: new Date(),
-    updatedAt: new Date(),
+    lastSyncedAt: now,
+    updatedAt: now,
   }
   const updateValues = {
     ticketId: values.ticketId,
@@ -267,34 +268,29 @@ export async function upsertThreadExternalLink(args: {
     updatedAt: values.updatedAt,
   }
 
-  const existingByComment = await db.query.ticketThreadExternalLinks.findFirst({
-    where: and(
-      eq(ticketThreadExternalLinks.integrationId, args.integrationId as IntegrationId),
-      eq(ticketThreadExternalLinks.externalCommentId, args.externalCommentId)
-    ),
-    columns: { id: true },
-  })
-  if (existingByComment) {
+  try {
     await db
-      .update(ticketThreadExternalLinks)
-      .set(updateValues)
-      .where(
-        and(
-          eq(ticketThreadExternalLinks.integrationId, args.integrationId as IntegrationId),
-          eq(ticketThreadExternalLinks.externalCommentId, args.externalCommentId)
-        )
-      )
-    return
-  }
+      .insert(ticketThreadExternalLinks)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          ticketThreadExternalLinks.integrationId,
+          ticketThreadExternalLinks.externalCommentId,
+        ],
+        set: {
+          threadId: sql`excluded.thread_id`,
+          ticketId: sql`excluded.ticket_id`,
+          externalIssueId: sql`excluded.external_issue_id`,
+          externalUrl: sql`excluded.external_url`,
+          syncDirection: sql`excluded.sync_direction`,
+          status: sql`excluded.status`,
+          lastSyncedAt: now,
+          updatedAt: now,
+        },
+      })
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error
 
-  const existingByThread = await db.query.ticketThreadExternalLinks.findFirst({
-    where: and(
-      eq(ticketThreadExternalLinks.integrationId, args.integrationId as IntegrationId),
-      eq(ticketThreadExternalLinks.threadId, args.threadId as TicketThreadId)
-    ),
-    columns: { id: true },
-  })
-  if (existingByThread) {
     await db
       .update(ticketThreadExternalLinks)
       .set(updateValues)
@@ -304,28 +300,17 @@ export async function upsertThreadExternalLink(args: {
           eq(ticketThreadExternalLinks.threadId, args.threadId as TicketThreadId)
         )
       )
-    return
   }
+}
 
-  await db
-    .insert(ticketThreadExternalLinks)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [
-        ticketThreadExternalLinks.integrationId,
-        ticketThreadExternalLinks.externalCommentId,
-      ],
-      set: {
-        threadId: sql`excluded.thread_id`,
-        ticketId: sql`excluded.ticket_id`,
-        externalIssueId: sql`excluded.external_issue_id`,
-        externalUrl: sql`excluded.external_url`,
-        syncDirection: sql`excluded.sync_direction`,
-        status: sql`excluded.status`,
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    })
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    ('code' in error || 'cause' in error) &&
+    ((error as { code?: unknown }).code === '23505' ||
+      isUniqueViolation((error as { cause?: unknown }).cause))
+  )
 }
 
 export async function markThreadLinkDeleted(args: {

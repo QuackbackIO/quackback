@@ -26,7 +26,7 @@ const contactIdSchema = z.string().min(1) as z.ZodType<ContactId>
 const organizationIdSchema = z.string().min(1) as z.ZodType<OrganizationId>
 const userIdSchema = z.string().min(1) as z.ZodType<UserId>
 
-export const searchContactsFn = createServerFn({ method: 'GET' })
+export const searchContactsFn = createServerFn({ method: 'POST' })
   .inputValidator(
     z.object({
       query: z.string().max(200).optional(),

@@ -118,6 +118,7 @@ async function handleGitHubInboundWebhook(
   }
 
   const githubEvent = request.headers.get('X-GitHub-Event') ?? ''
+  let ticketHandlerError: unknown
 
   // Try ticket path first for issue metadata events.
   // A GitHub issue can also be linked to a feedback post, so don't let ticket
@@ -135,8 +136,7 @@ async function handleGitHubInboundWebhook(
       )
     } catch (error) {
       console.error('[Inbound] GitHub ticket handler error:', error)
-      // Continue to post status sync. The webhook still returns 200 below so
-      // GitHub does not retry a ticket-only failure indefinitely.
+      ticketHandlerError = error
     }
   }
 
@@ -153,6 +153,7 @@ async function handleGitHubInboundWebhook(
       )
     } catch (error) {
       console.error('[Inbound] GitHub issue_comment handler error:', error)
+      return new Response('GitHub ticket comment sync failed', { status: 500 })
     }
     return new Response('OK', { status: 200 })
   }
@@ -161,6 +162,9 @@ async function handleGitHubInboundWebhook(
   const secrets = matched.secrets ? decryptSecrets(matched.secrets) : {}
   const result = await definition!.inbound!.parseStatusChange(body, config, secrets)
   if (!result) {
+    if (ticketHandlerError) {
+      return new Response('GitHub ticket sync failed', { status: 500 })
+    }
     return new Response('OK', { status: 200 })
   }
 

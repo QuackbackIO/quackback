@@ -205,6 +205,15 @@ export const updateTicketFn = createServerFn({ method: 'POST' })
       descriptionJson: data.descriptionJson as never,
       expectedUpdatedAt: new Date(data.expectedUpdatedAt),
       actorPrincipalId: ctx.principal.id,
+      allowStaleDescriptionUpdate:
+        (data.descriptionJson !== undefined || data.descriptionText !== undefined) &&
+        data.subject === undefined &&
+        data.priority === undefined &&
+        data.visibilityScope === undefined &&
+        data.primaryTeamId === undefined &&
+        data.organizationId === undefined &&
+        data.requesterContactId === undefined &&
+        data.inboxId === undefined,
     })
   })
 

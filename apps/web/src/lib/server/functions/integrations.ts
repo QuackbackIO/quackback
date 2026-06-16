@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import {
@@ -20,6 +21,10 @@ import { logger } from '@/lib/server/logger'
 // cacheDel/CACHE_KEYS are imported dynamically inside handlers to keep ioredis out of the client bundle
 
 const log = logger.child({ component: 'integrations' })
+
+function isInboundGitHubSync(config: Record<string, unknown>): boolean {
+  return config.syncDirection === 'inbound' || config.syncDirection === 'bidirectional'
+}
 
 // ============================================
 // Schemas
@@ -83,12 +88,64 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
       updates.status = data.enabled ? 'active' : 'paused'
     }
 
+    let previousConfig = (integration.config as Record<string, unknown>) || {}
+    let nextConfig = previousConfig
+
     if (data.config) {
       const existingConfig = (integration.config as Record<string, unknown>) || {}
-      updates.config = { ...existingConfig, ...data.config }
+      previousConfig = existingConfig
+      nextConfig = { ...existingConfig, ...data.config }
+      updates.config = nextConfig
+    }
+
+    if (
+      integration.integrationType === 'github' &&
+      typeof data.config?.channelId === 'string' &&
+      previousConfig.channelId &&
+      previousConfig.channelId !== data.config.channelId
+    ) {
+      try {
+        const { deleteConfiguredGitHubWebhook } =
+          await import('@/lib/server/integrations/github/webhook-registration')
+        await deleteConfiguredGitHubWebhook({
+          secrets: integration.secrets,
+          config: previousConfig,
+        })
+        nextConfig = {
+          ...nextConfig,
+          externalWebhookId: undefined,
+          webhookSecret: undefined,
+          githubWebhookEventsVersion: undefined,
+        }
+        updates.config = nextConfig
+      } catch (error) {
+        log.warn({ err: error, integration_id: data.id }, 'failed to delete stale GitHub webhook')
+      }
     }
 
     await db.update(integrations).set(updates).where(eq(integrations.id, integrationId))
+
+    const nextStatus =
+      data.enabled === undefined ? integration.status : data.enabled ? 'active' : 'paused'
+    if (
+      integration.integrationType === 'github' &&
+      nextStatus === 'active' &&
+      isInboundGitHubSync(nextConfig)
+    ) {
+      const { ensureGitHubWebhookForIntegration } =
+        await import('@/lib/server/integrations/github/webhook-registration')
+      await ensureGitHubWebhookForIntegration({
+        integrationId,
+        requestHeaders: getRequestHeaders(),
+      })
+    }
+
+    let mappingsReconciled = false
+    if (integration.integrationType === 'github' && nextStatus === 'active') {
+      const { ensureGitHubEventMappings } =
+        await import('@/lib/server/integrations/github/event-mappings')
+      mappingsReconciled = await ensureGitHubEventMappings({ integrationId, config: nextConfig })
+    }
 
     // Batch upsert all event mappings in a single query
     if (data.eventMappings && data.eventMappings.length > 0) {
@@ -137,7 +194,9 @@ export const updateIntegrationFn = createServerFn({ method: 'POST' })
     }
 
     const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-    await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
+    if (data.eventMappings || mappingsReconciled) {
+      await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
+    }
     log.info({ integration_id: data.id }, 'integration updated')
     return { success: true }
   })

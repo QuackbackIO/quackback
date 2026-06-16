@@ -115,9 +115,7 @@ async function initializeQueue() {
 
       if (result.success) {
         if (result.externalId) {
-          persistExternalLink(job.data, result).catch((err) =>
-            log.error({ err }, 'failed to persist external link')
-          )
+          await persistExternalLink(job.data, result)
         }
         return
       }

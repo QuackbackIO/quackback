@@ -479,7 +479,12 @@ type WidgetProfileRow = {
   }
   contentFilters?: {
     feedback?: { boardIds?: string[] }
-    changelog?: { mode?: 'all_published' | 'linked_to_allowed_feedback' | 'selected_entries' }
+    changelog?: {
+      mode?: 'all_published' | 'linked_to_allowed_feedback' | 'selected_entries'
+      categoryIds?: string[]
+      productIds?: string[]
+    }
+    help?: { categoryIds?: string[] }
   }
   supportConfig?: {
     categories?: WidgetSupportCategoryRow[]

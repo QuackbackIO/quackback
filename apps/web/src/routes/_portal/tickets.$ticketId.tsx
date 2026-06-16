@@ -61,6 +61,11 @@ function TicketDetailPage() {
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: portalTicketQueries.detail(ticketId).queryKey })
 
+  const latestExpectedUpdatedAt = useCallback(() => {
+    const latest = qc.getQueryData<typeof data>(portalTicketQueries.detail(ticketId).queryKey)
+    return latest?.ticket.updatedAt ?? data.ticket.updatedAt
+  }, [data, qc, ticketId])
+
   const closeMutation = useMutation({
     mutationFn: () => closeMyTicketFn({ data: { ticketId } }),
     onSuccess: () => {
@@ -86,12 +91,17 @@ function TicketDetailPage() {
       updateMyTicketDescriptionFn({
         data: {
           ticketId,
-          expectedUpdatedAt: data.ticket.updatedAt,
+          expectedUpdatedAt: latestExpectedUpdatedAt(),
           descriptionJson: patch.descriptionJson as { type: 'doc'; content?: unknown[] } | null,
           descriptionText: patch.descriptionText,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      qc.setQueryData<typeof data>(portalTicketQueries.detail(ticketId).queryKey, (current) =>
+        current
+          ? { ...current, ticket: { ...current.ticket, updatedAt: updated.updatedAt } }
+          : current
+      )
       qc.invalidateQueries({ queryKey: portalTicketQueries.detail(ticketId).queryKey })
       toast.success('Description updated')
     },

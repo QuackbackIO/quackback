@@ -318,6 +318,7 @@ export async function updatePortalTicketDescription(
     actorPrincipalId: member.id as PrincipalId,
     descriptionJson: opts.descriptionJson,
     descriptionText: opts.descriptionText,
+    allowStaleDescriptionUpdate: true,
   })
 }
 

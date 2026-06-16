@@ -113,17 +113,25 @@ function TicketDetailPage() {
     qc.invalidateQueries({ queryKey: ['tickets', 'list'] })
   }, [qc, ticketId])
 
+  const latestExpectedUpdatedAt = useCallback(() => {
+    const latest = qc.getQueryData<{ updatedAt: Date | string }>(
+      ticketQueries.detail(ticketId).queryKey
+    )
+    return new Date(latest?.updatedAt ?? ticket.updatedAt).toISOString()
+  }, [qc, ticket.updatedAt, ticketId])
+
   const descriptionMutation = useMutation({
     mutationFn: (patch: { descriptionJson: JSONContent | null; descriptionText: string | null }) =>
       updateTicketFn({
         data: {
           ticketId,
-          expectedUpdatedAt: new Date(ticket.updatedAt).toISOString(),
+          expectedUpdatedAt: latestExpectedUpdatedAt(),
           descriptionJson: patch.descriptionJson as { type: 'doc'; content?: unknown[] } | null,
           descriptionText: patch.descriptionText,
         },
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      qc.setQueryData(ticketQueries.detail(ticketId).queryKey, updated)
       invalidateTicket()
       toast.success('Description updated')
     },

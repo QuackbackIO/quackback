@@ -380,12 +380,23 @@ export interface UpdateTicketInput {
   inboxId?: InboxId | null
   /** Set by integration inbound handlers to prevent echo loops. */
   syncSourceIntegrationId?: string | null
+  /** Allow single-field description edits to merge over unrelated freshness drift. */
+  allowStaleDescriptionUpdate?: boolean
 }
 
 export async function updateTicket(ticketId: TicketId, input: UpdateTicketInput): Promise<Ticket> {
-  const existing = await getTicket(ticketId)
+  let existing = await getTicket(ticketId)
   if (!existing) throw new NotFoundError('TICKET_NOT_FOUND', `ticket ${ticketId} not found`)
-  ensureFresh(existing.updatedAt, input.expectedUpdatedAt)
+  const stale = existing.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+  if (stale && !canMergeStaleDescriptionUpdate(input)) {
+    ensureFresh(existing.updatedAt, input.expectedUpdatedAt)
+  }
+
+  if (stale) {
+    const latest = await getTicket(ticketId)
+    if (!latest) throw new NotFoundError('TICKET_NOT_FOUND', `ticket ${ticketId} not found`)
+    existing = latest
+  }
 
   const patch: Partial<typeof existing> = {}
   const diff: Record<string, { from: unknown; to: unknown }> = {}
@@ -442,11 +453,17 @@ export async function updateTicket(ticketId: TicketId, input: UpdateTicketInput)
   if (Object.keys(patch).length === 0) return existing
 
   patch.lastActivityAt = new Date()
+  const mergeStaleDescription = canMergeStaleDescriptionUpdate(input)
   const [updated] = await db
     .update(tickets)
     .set(patch)
-    .where(and(eq(tickets.id, ticketId), eq(tickets.updatedAt, existing.updatedAt)))
+    .where(
+      mergeStaleDescription
+        ? and(eq(tickets.id, ticketId), isNull(tickets.deletedAt))
+        : and(eq(tickets.id, ticketId), eq(tickets.updatedAt, existing.updatedAt))
+    )
     .returning()
+
   if (!updated) {
     throw new ConflictError('TICKET_STALE', 'ticket was modified concurrently')
   }
@@ -802,6 +819,20 @@ function ensureFresh(actualUpdatedAt: Date, expectedUpdatedAt: Date): void {
   if (actualUpdatedAt.getTime() !== expectedUpdatedAt.getTime()) {
     throw new ConflictError('TICKET_STALE', 'ticket was modified concurrently — refresh and retry')
   }
+}
+
+function canMergeStaleDescriptionUpdate(input: UpdateTicketInput): boolean {
+  if (!input.allowStaleDescriptionUpdate) return false
+  return (
+    input.subject === undefined &&
+    input.priority === undefined &&
+    input.visibilityScope === undefined &&
+    input.primaryTeamId === undefined &&
+    input.organizationId === undefined &&
+    input.requesterContactId === undefined &&
+    input.inboxId === undefined &&
+    (input.descriptionJson !== undefined || input.descriptionText !== undefined)
+  )
 }
 
 /** Convert a `{ field: { from, to } }` shaped diff to the AuditDiff shape. */

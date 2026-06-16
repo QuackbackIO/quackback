@@ -1,15 +1,18 @@
 import { useCallback, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { JSONContent } from '@tiptap/react'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { TicketThreadFeed, type ThreadRow } from '@/components/admin/tickets/ticket-thread-feed'
 import {
   getWidgetTicket,
   replyToWidgetTicket,
   reopenWidgetTicket,
   resolveWidgetTicket,
+  updateWidgetTicketDescription,
   WidgetTicketError,
   type WidgetTicketDetailResponse,
   type WidgetTicketThread,
@@ -44,6 +47,8 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
   const [resolveError, setResolveError] = useState<string | null>(null)
   const [reopening, setReopening] = useState(false)
   const [reopenError, setReopenError] = useState<string | null>(null)
+  const [savingDescription, setSavingDescription] = useState(false)
+  const [descriptionError, setDescriptionError] = useState<string | null>(null)
 
   const isResolved = data ? RESOLVED_CATEGORIES.has(data.ticket.statusCategory) : false
   const canReopen = data ? REOPENABLE_CATEGORIES.has(data.ticket.statusCategory) : false
@@ -124,6 +129,41 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
     }
   }, [reopening, canReopen, ticketId, emitEvent, queryClient, queryKey, intl])
 
+  const handleDescriptionUpdate = useCallback(
+    async (json: JSONContent | null, text: string | null) => {
+      if (!data || savingDescription) return
+      setSavingDescription(true)
+      setDescriptionError(null)
+      try {
+        const latest = queryClient.getQueryData<WidgetTicketDetailResponse>(queryKey)
+        const result = await updateWidgetTicketDescription(ticketId, {
+          expectedUpdatedAt: latest?.ticket.updatedAt ?? data.ticket.updatedAt,
+          descriptionJson: json as { type: 'doc'; content?: unknown[] } | null,
+          descriptionText: text,
+        })
+        emitEvent('ticket:description_updated', { ticketId, updatedAt: result.updatedAt })
+        queryClient.setQueryData<WidgetTicketDetailResponse | undefined>(queryKey, (current) =>
+          current
+            ? { ...current, ticket: { ...current.ticket, updatedAt: result.updatedAt } }
+            : current
+        )
+        await queryClient.invalidateQueries({ queryKey })
+      } catch (err) {
+        setDescriptionError(
+          err instanceof WidgetTicketError
+            ? err.message
+            : intl.formatMessage({
+                id: 'widget.support.detail.errorDescription',
+                defaultMessage: 'Could not update the description.',
+              })
+        )
+      } finally {
+        setSavingDescription(false)
+      }
+    },
+    [data, savingDescription, ticketId, emitEvent, queryClient, queryKey, intl]
+  )
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full px-3 pt-3">
@@ -150,6 +190,17 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
   }
 
   const { ticket, threads, principalNames, viewerPrincipalId } = data
+  const feedThreads: ThreadRow[] = threads.map((t) => ({
+    id: t.id,
+    ticketId: ticket.id,
+    principalId: t.principalId,
+    audience: 'public',
+    bodyJson: t.bodyJson,
+    bodyText: threadText(t),
+    sharedWithTeamId: null,
+    createdAt: t.createdAt,
+    editedAt: t.editedAt,
+  }))
 
   return (
     <div className="flex flex-col h-full">
@@ -207,41 +258,28 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
 
       <ScrollArea className="flex-1 min-h-0">
         <div className="px-3 py-3 space-y-3">
-          {ticket.descriptionText && (
-            <ThreadBubble
-              authorName={principalNames[ticket.id] ?? ''}
-              fallbackName={intl.formatMessage({
-                id: 'widget.support.detail.youLabel',
-                defaultMessage: 'You',
-              })}
-              isViewer
-              createdAt={ticket.createdAt}
-              bodyText={ticket.descriptionText}
-            />
-          )}
-
-          {threads.length === 0 && !ticket.descriptionText && (
-            <p className="text-xs text-muted-foreground/70 text-center py-6">
-              <FormattedMessage
-                id="widget.support.detail.threadEmpty"
-                defaultMessage="No replies yet."
-              />
-            </p>
-          )}
-
-          {threads.map((t) => (
-            <ThreadBubble
-              key={t.id}
-              authorName={t.principalId ? (principalNames[t.principalId] ?? '') : ''}
-              fallbackName={intl.formatMessage({
-                id: 'widget.support.detail.youLabel',
-                defaultMessage: 'You',
-              })}
-              isViewer={!!viewerPrincipalId && t.principalId === viewerPrincipalId}
-              createdAt={t.createdAt}
-              bodyText={threadText(t)}
-            />
-          ))}
+          {descriptionError && <p className="text-[11px] text-destructive">{descriptionError}</p>}
+          <TicketThreadFeed
+            threads={feedThreads}
+            principalNames={{
+              ...principalNames,
+              ...(viewerPrincipalId
+                ? {
+                    [viewerPrincipalId]: intl.formatMessage({
+                      id: 'widget.support.detail.youLabel',
+                      defaultMessage: 'You',
+                    }),
+                  }
+                : {}),
+            }}
+            description={
+              ticket.descriptionText || ticket.descriptionJson
+                ? { text: ticket.descriptionText, json: ticket.descriptionJson }
+                : null
+            }
+            onDescriptionUpdate={!isResolved ? handleDescriptionUpdate : undefined}
+            isDescriptionSaving={savingDescription}
+          />
         </div>
       </ScrollArea>
 
@@ -287,39 +325,4 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
 function threadText(t: WidgetTicketThread): string {
   if (t.bodyText) return t.bodyText
   return ''
-}
-
-interface ThreadBubbleProps {
-  authorName: string
-  fallbackName: string
-  isViewer: boolean
-  createdAt: string
-  bodyText: string
-}
-
-function ThreadBubble({
-  authorName,
-  fallbackName,
-  isViewer,
-  createdAt,
-  bodyText,
-}: ThreadBubbleProps) {
-  const displayName = isViewer ? fallbackName : authorName || ''
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground">{displayName || '\u00A0'}</span>
-        <span className="text-muted-foreground/60">·</span>
-        <TimeAgo date={createdAt} className="text-muted-foreground/60" />
-      </div>
-      <div
-        className={
-          'rounded-md border border-border/40 px-2.5 py-2 text-xs whitespace-pre-wrap break-words ' +
-          (isViewer ? 'bg-primary/5' : 'bg-muted/20')
-        }
-      >
-        {bodyText}
-      </div>
-    </div>
-  )
 }

@@ -65,9 +65,15 @@ const VISIBILITY_LABELS: Record<(typeof VISIBILITY)[number], string> = {
 
 export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
   const qc = useQueryClient()
-  const expectedUpdatedAt = new Date(ticket.updatedAt).toISOString()
   const [editingSubject, setEditingSubject] = useState(false)
   const [subjectDraft, setSubjectDraft] = useState(ticket.subject)
+
+  const expectedUpdatedAt = () => {
+    const latest = qc.getQueryData<{ updatedAt: Date | string }>(
+      ticketQueries.detail(ticket.id).queryKey
+    )
+    return new Date(latest?.updatedAt ?? ticket.updatedAt).toISOString()
+  }
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ticketQueries.detail(ticket.id).queryKey })
@@ -87,9 +93,10 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
   const assignMutation = useMutation({
     mutationFn: (assigneePrincipalId: PrincipalId | null) =>
       assignTicketFn({
-        data: { ticketId: ticket.id, expectedUpdatedAt, assigneePrincipalId },
+        data: { ticketId: ticket.id, expectedUpdatedAt: expectedUpdatedAt(), assigneePrincipalId },
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      qc.setQueryData(ticketQueries.detail(ticket.id).queryKey, updated)
       invalidate()
       toast.success('Assignee updated')
     },
@@ -99,9 +106,10 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
   const statusMutation = useMutation({
     mutationFn: (statusId: TicketStatusId) =>
       transitionTicketStatusFn({
-        data: { ticketId: ticket.id, expectedUpdatedAt, statusId },
+        data: { ticketId: ticket.id, expectedUpdatedAt: expectedUpdatedAt(), statusId },
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      qc.setQueryData(ticketQueries.detail(ticket.id).queryKey, updated)
       invalidate()
       toast.success('Status updated')
     },
@@ -110,8 +118,9 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
 
   const updateMutation = useMutation({
     mutationFn: (patch: Parameters<typeof updateTicketFn>[0]['data']) =>
-      updateTicketFn({ data: patch }),
-    onSuccess: () => {
+      updateTicketFn({ data: { ...patch, expectedUpdatedAt: expectedUpdatedAt() } }),
+    onSuccess: (updated) => {
+      qc.setQueryData(ticketQueries.detail(ticket.id).queryKey, updated)
       invalidate()
       toast.success('Ticket updated')
     },
@@ -133,7 +142,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
               onClick={() => {
                 updateMutation.mutate({
                   ticketId: ticket.id,
-                  expectedUpdatedAt,
+                  expectedUpdatedAt: expectedUpdatedAt(),
                   subject: subjectDraft,
                 })
                 setEditingSubject(false)
@@ -183,7 +192,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(v) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               priority: v as (typeof PRIORITIES)[number],
             })
           }
@@ -207,7 +216,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(v) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               visibilityScope: v as (typeof VISIBILITY)[number],
             })
           }
@@ -231,7 +240,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(id) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               inboxId: id ?? null,
             })
           }
@@ -245,7 +254,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(id) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               primaryTeamId: id ?? null,
             })
           }
@@ -259,7 +268,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(id) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               organizationId: id ?? null,
             })
           }
@@ -273,7 +282,7 @@ export function TicketPropertiesPanel({ ticket }: TicketPropertiesPanelProps) {
           onValueChange={(id) =>
             updateMutation.mutate({
               ticketId: ticket.id,
-              expectedUpdatedAt,
+              expectedUpdatedAt: expectedUpdatedAt(),
               requesterContactId: id ?? null,
             })
           }

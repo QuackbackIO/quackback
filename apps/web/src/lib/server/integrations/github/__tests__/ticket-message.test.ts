@@ -54,6 +54,23 @@ describe('buildTicketIssueBody', () => {
     expect(body).toContain('Users report that tapping login does nothing on iOS Safari.')
   })
 
+  it('includes a Quackback ticket link from rootUrl when enrichment omitted ticketUrl', () => {
+    const { body } = buildTicketIssueBody(ticketCreatedEvent(), 'https://app.example.test/')
+    expect(body).toContain(
+      '[View in Quackback](https://app.example.test/admin/tickets/ticket_01test)'
+    )
+  })
+
+  it('preserves an enriched ticketUrl when present', () => {
+    const { body } = buildTicketIssueBody(
+      ticketCreatedEvent({ ticketUrl: 'https://tenant.example.test/admin/tickets/ticket_01test' }),
+      'https://app.example.test'
+    )
+    expect(body).toContain(
+      '[View in Quackback](https://tenant.example.test/admin/tickets/ticket_01test)'
+    )
+  })
+
   it('omits priority and channel metadata from body', () => {
     const { body } = buildTicketIssueBody(ticketCreatedEvent())
     expect(body).not.toContain('**Priority:**')
@@ -93,6 +110,13 @@ describe('buildTicketUpdateBody', () => {
   it('includes description in body', () => {
     const { body } = buildTicketUpdateBody(baseTicket)
     expect(body).toContain('Users report that tapping login')
+  })
+
+  it('includes a Quackback ticket link from rootUrl on update bodies', () => {
+    const { body } = buildTicketUpdateBody(baseTicket, 'https://app.example.test')
+    expect(body).toContain(
+      '[View in Quackback](https://app.example.test/admin/tickets/ticket_01test)'
+    )
   })
 
   it('does not include priority or channel metadata in body', () => {

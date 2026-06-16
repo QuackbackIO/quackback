@@ -52,6 +52,7 @@ const findFirstThreadLinkMock = vi.fn()
 const findFirstThreadMock = vi.fn()
 const findFirstStatusMock = vi.fn()
 const findFirstMappingMock = vi.fn()
+const findFirstTicketMock = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -63,6 +64,7 @@ vi.mock('@/lib/server/db', () => ({
         findFirst: (...a: unknown[]) => findFirstThreadLinkMock(...a),
       },
       ticketThreads: { findFirst: (...a: unknown[]) => findFirstThreadMock(...a) },
+      tickets: { findFirst: (...a: unknown[]) => findFirstTicketMock(...a) },
       ticketStatuses: { findFirst: (...a: unknown[]) => findFirstStatusMock(...a) },
       integrationUserMappings: { findFirst: (...a: unknown[]) => findFirstMappingMock(...a) },
     },
@@ -85,6 +87,7 @@ vi.mock('@/lib/server/db', () => ({
     updatedAt: 'updatedAt',
   },
   ticketThreads: { id: 'id' },
+  tickets: { id: 'id', deletedAt: 'deletedAt' },
   ticketStatuses: { category: 'category', deletedAt: 'deletedAt' },
   integrationUserMappings: { integrationId: 'integrationId', externalUsername: 'externalUsername' },
   integrationSyncLog: {},
@@ -175,6 +178,7 @@ beforeEach(() => {
   findFirstThreadMock.mockResolvedValue(null)
   findFirstStatusMock.mockResolvedValue(null)
   findFirstMappingMock.mockResolvedValue(null)
+  findFirstTicketMock.mockResolvedValue(null)
   addThreadMock.mockResolvedValue({ id: 'ticket_thread_1' })
   editThreadMock.mockResolvedValue({ id: 'ticket_thread_1' })
   softDeleteThreadMock.mockResolvedValue({ id: 'ticket_thread_1' })
@@ -492,25 +496,14 @@ describe('handleGitHubIssueCommentEvent', () => {
     expect(addThreadMock).not.toHaveBeenCalled()
   })
 
-  it('creates a public ticket thread when status sync is enabled with outbound direction', async () => {
-    findFirstLinkMock.mockResolvedValueOnce({ ticketId: 'ticket_linked1' })
-    findFirstThreadLinkMock.mockResolvedValueOnce(null)
-    addThreadMock.mockResolvedValueOnce({ id: 'ticket_thread_1' })
-
+  it('returns false when status sync is enabled with outbound direction', async () => {
     const result = await handleGitHubIssueCommentEvent(
       makeCommentPayload('created'),
       makeIntegration({ syncDirection: 'outbound', statusSyncEnabled: true })
     )
 
-    expect(result).toBe(true)
-    expect(addThreadMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ticketId: 'ticket_linked1',
-        audience: 'public',
-        bodyText: 'GitHub reply from octocat:\n\nThis is a GitHub comment',
-        syncSourceIntegrationId: 'integration_gh1',
-      })
-    )
+    expect(result).toBe(false)
+    expect(addThreadMock).not.toHaveBeenCalled()
   })
 
   it('creates a public ticket thread and link row on issue_comment.created', async () => {
@@ -556,6 +549,64 @@ describe('handleGitHubIssueCommentEvent', () => {
 
     const result = await handleGitHubIssueCommentEvent(
       makeCommentPayload('created'),
+      makeIntegration()
+    )
+
+    expect(result).toBe(true)
+    expect(addThreadMock).not.toHaveBeenCalled()
+  })
+
+  it('skips issue_comment.created when no linked ticket exists', async () => {
+    findFirstLinkMock.mockResolvedValueOnce(null)
+
+    const result = await handleGitHubIssueCommentEvent(
+      makeCommentPayload('created'),
+      makeIntegration()
+    )
+
+    expect(result).toBe(true)
+    expect(addThreadMock).not.toHaveBeenCalled()
+  })
+
+  it('recovers a missing issue link from the Quackback ticket URL in the issue body', async () => {
+    findFirstLinkMock.mockResolvedValueOnce(null)
+    findFirstTicketMock.mockResolvedValueOnce({ id: 'ticket_linked1' })
+    findFirstThreadLinkMock.mockResolvedValueOnce(null)
+    addThreadMock.mockResolvedValueOnce({ id: 'ticket_thread_1' })
+
+    const result = await handleGitHubIssueCommentEvent(
+      {
+        ...makeCommentPayload('created'),
+        issue: {
+          number: 42,
+          html_url: 'https://github.com/org/repo/issues/42',
+          body: '[View in Quackback](https://example.test/admin/tickets/ticket_linked1)',
+        },
+      },
+      makeIntegration()
+    )
+
+    expect(result).toBe(true)
+    expect(addThreadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ticketId: 'ticket_linked1', audience: 'public' })
+    )
+    expect(insertValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketId: 'ticket_linked1',
+        integrationType: 'github',
+        externalId: '42',
+        externalDisplayId: '#42',
+        syncDirection: 'outbound',
+      })
+    )
+  })
+
+  it('skips issue_comment.created when the GitHub comment body is empty', async () => {
+    findFirstLinkMock.mockResolvedValueOnce({ ticketId: 'ticket_linked1' })
+    findFirstThreadLinkMock.mockResolvedValueOnce(null)
+
+    const result = await handleGitHubIssueCommentEvent(
+      makeCommentPayload('created', '   '),
       makeIntegration()
     )
 

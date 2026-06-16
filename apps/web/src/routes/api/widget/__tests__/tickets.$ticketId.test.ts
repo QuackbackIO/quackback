@@ -19,8 +19,10 @@ vi.mock('@/lib/server/widget/ticketing-gate', () => ({
 }))
 
 const getTicketForPortalUserMock = vi.fn()
+const updatePortalTicketDescriptionMock = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket.portal-query', () => ({
   getTicketForPortalUser: (...args: unknown[]) => getTicketForPortalUserMock(...args),
+  updatePortalTicketDescription: (...args: unknown[]) => updatePortalTicketDescriptionMock(...args),
 }))
 
 const listPublicThreadsForTicketMock = vi.fn()
@@ -31,24 +33,26 @@ vi.mock('@/lib/server/domains/tickets/ticket.threads', () => ({
 const findFirstStatusMock = vi.fn()
 const findFirstPrincipalMock = vi.fn()
 const selectMock = vi.fn()
-vi.mock('@/lib/server/db', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/server/db')>('@/lib/server/db')
-  return {
-    ...actual,
-    db: {
-      query: {
-        ticketStatuses: { findFirst: (...args: unknown[]) => findFirstStatusMock(...args) },
-        principal: { findFirst: (...args: unknown[]) => findFirstPrincipalMock(...args) },
-      },
-      select: (...args: unknown[]) => selectMock(...args),
+vi.mock('@/lib/server/db', () => ({
+  eq: (...args: unknown[]) => ({ op: 'eq', args }),
+  inArray: (...args: unknown[]) => ({ op: 'inArray', args }),
+  principal: { id: 'principal.id', userId: 'principal.userId' },
+  ticketStatuses: { id: 'ticketStatuses.id' },
+  user: { name: 'user.name' },
+  db: {
+    query: {
+      ticketStatuses: { findFirst: (...args: unknown[]) => findFirstStatusMock(...args) },
+      principal: { findFirst: (...args: unknown[]) => findFirstPrincipalMock(...args) },
     },
-  }
-})
+    select: (...args: unknown[]) => selectMock(...args),
+  },
+}))
 
 import { getWidgetSession } from '@/lib/server/functions/widget-auth'
-import { handleGetWidgetTicket } from '../tickets.$ticketId'
+import { handleGetWidgetTicket, handlePatchWidgetTicket } from '../tickets.$ticketId'
 
 const URL_BASE = 'http://localhost/api/widget/tickets/ticket_42'
+const getWidgetSessionMock = getWidgetSession as unknown as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -69,7 +73,7 @@ beforeEach(() => {
 
 describe('GET /api/widget/tickets/:ticketId', () => {
   it('returns 401 when no widget session', async () => {
-    vi.mocked(getWidgetSession).mockResolvedValueOnce(null)
+    getWidgetSessionMock.mockResolvedValueOnce(null)
     const res = await handleGetWidgetTicket({
       request: makeRequest(URL_BASE),
       params: { ticketId: 'ticket_42' },
@@ -78,9 +82,7 @@ describe('GET /api/widget/tickets/:ticketId', () => {
   })
 
   it('returns 403 when session is anonymous', async () => {
-    vi.mocked(getWidgetSession).mockResolvedValueOnce(
-      makeWidgetSession({ principalType: 'anonymous' })
-    )
+    getWidgetSessionMock.mockResolvedValueOnce(makeWidgetSession({ principalType: 'anonymous' }))
     const res = await handleGetWidgetTicket({
       request: makeRequest(URL_BASE),
       params: { ticketId: 'ticket_42' },
@@ -89,7 +91,7 @@ describe('GET /api/widget/tickets/:ticketId', () => {
   })
 
   it('returns 404 when ownership predicate yields no row (NotFoundError)', async () => {
-    vi.mocked(getWidgetSession).mockResolvedValueOnce(makeWidgetSession())
+    getWidgetSessionMock.mockResolvedValueOnce(makeWidgetSession())
     getTicketForPortalUserMock.mockRejectedValueOnce(
       new NotFoundError('TICKET_NOT_FOUND', 'ticket ticket_42 not found')
     )
@@ -102,7 +104,7 @@ describe('GET /api/widget/tickets/:ticketId', () => {
   })
 
   it('returns ticket + public threads, strips requesterPrincipalId from response', async () => {
-    vi.mocked(getWidgetSession).mockResolvedValueOnce(makeWidgetSession())
+    getWidgetSessionMock.mockResolvedValueOnce(makeWidgetSession())
     getTicketForPortalUserMock.mockResolvedValueOnce({
       id: 'ticket_42',
       subject: 'Help',
@@ -154,7 +156,7 @@ describe('GET /api/widget/tickets/:ticketId', () => {
   })
 
   it('sets CORS header on success', async () => {
-    vi.mocked(getWidgetSession).mockResolvedValueOnce(makeWidgetSession())
+    getWidgetSessionMock.mockResolvedValueOnce(makeWidgetSession())
     getTicketForPortalUserMock.mockResolvedValueOnce({
       id: 'ticket_42',
       subject: 'Help',
@@ -173,6 +175,45 @@ describe('GET /api/widget/tickets/:ticketId', () => {
       params: { ticketId: 'ticket_42' },
     })
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
+  })
+})
+
+describe('PATCH /api/widget/tickets/:ticketId', () => {
+  it('updates the description through the portal access-managed helper', async () => {
+    getWidgetSessionMock.mockResolvedValueOnce(makeWidgetSession())
+    getTicketForPortalUserMock.mockResolvedValueOnce({
+      id: 'ticket_42',
+      sourceWidgetProfileId: null,
+      inboxId: 'inbox_1',
+    })
+    updatePortalTicketDescriptionMock.mockResolvedValueOnce({
+      id: 'ticket_42',
+      updatedAt: new Date('2026-04-02T00:00:01Z'),
+    })
+
+    const res = await handlePatchWidgetTicket({
+      request: makeRequest(URL_BASE, {
+        method: 'PATCH',
+        body: {
+          expectedUpdatedAt: '2026-04-02T00:00:00.000Z',
+          descriptionJson: { type: 'doc', content: [] },
+          descriptionText: 'Updated description',
+        },
+      }),
+      params: { ticketId: 'ticket_42' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(updatePortalTicketDescriptionMock).toHaveBeenCalledWith({
+      userId: 'user_test1',
+      ticketId: 'ticket_42',
+      expectedUpdatedAt: new Date('2026-04-02T00:00:00.000Z'),
+      descriptionJson: { type: 'doc', content: [] },
+      descriptionText: 'Updated description',
+    })
+    await expect(res.json()).resolves.toMatchObject({
+      data: { id: 'ticket_42', updatedAt: '2026-04-02T00:00:01.000Z' },
+    })
   })
 })
 

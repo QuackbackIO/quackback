@@ -22,11 +22,11 @@ describe('OAuth public origin resolution', () => {
     const headers = new Headers({
       host: 'localhost:3000',
       referer:
-        'https://galaxy-highly-sizes-refurbished.trycloudflare.com/admin/settings/integrations/github',
+        'https://epic-shoppers-automotive-invited.trycloudflare.com/admin/settings/integrations/github',
     })
 
     expect(getPublicOriginFromHeaders(headers, 'http://localhost:3000/oauth/github/connect')).toBe(
-      'https://galaxy-highly-sizes-refurbished.trycloudflare.com'
+      'https://epic-shoppers-automotive-invited.trycloudflare.com'
     )
   })
 
@@ -43,12 +43,12 @@ describe('OAuth public origin resolution', () => {
       headers: {
         host: 'localhost:3000',
         referer:
-          'https://galaxy-highly-sizes-refurbished.trycloudflare.com/admin/settings/integrations/github',
+          'https://epic-shoppers-automotive-invited.trycloudflare.com/admin/settings/integrations/github',
       },
     })
 
     expect(buildCallbackUri('github', request)).toBe(
-      'https://galaxy-highly-sizes-refurbished.trycloudflare.com/oauth/github/callback'
+      'https://epic-shoppers-automotive-invited.trycloudflare.com/oauth/github/callback'
     )
   })
 })

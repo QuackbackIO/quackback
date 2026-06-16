@@ -21,8 +21,11 @@ import {
   resolvePrincipalsForContacts,
 } from '../domains/tickets/ticket.recipients'
 import { canViewTicket, toResourceScope } from '../domains/tickets/ticket.permissions'
-import { loadPermissionSet } from '../authz/authz.service'
-import { batchGenerateUnsubscribeTokens } from '../domains/subscriptions/subscription.service'
+import { loadPermissionSet } from '../domains/authz/authz.service'
+import {
+  batchGenerateUnsubscribeTokens,
+  batchGetNotificationPreferences,
+} from '../domains/subscriptions/subscription.service'
 import type { HookContext } from './hook-context'
 
 function getCategoryForEvent(eventType: string): TicketSubscriptionEvent | null {
@@ -111,7 +114,7 @@ export async function getTicketEmailTargets(
   event: EventData,
   context: HookContext
 ): Promise<HookTarget[]> {
-  const ticketData = event.data.ticket as EventTicketRef | undefined
+  const ticketData = (event.data as any).ticket as EventTicketRef | undefined
   if (!ticketData) return []
   const ticketId = ticketData.id as TicketId
 
@@ -291,7 +294,7 @@ function buildTicketEmailEventConfig(
   rootUrl: string,
   subject: string | null
 ): Record<string, unknown> {
-  const ticket = event.data.ticket as EventTicketRef
+  const ticket = (event.data as any).ticket as EventTicketRef
   const ticketUrl = `${rootUrl}/inbox/tickets/${ticket.id}`
   const ticketSubject = subject ?? 'ticket'
 

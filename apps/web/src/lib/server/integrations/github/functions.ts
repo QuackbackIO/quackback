@@ -2,6 +2,7 @@
  * GitHub-specific server functions.
  */
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { PrincipalId, IntegrationId } from '@quackback/ids'
 
@@ -171,7 +172,7 @@ export const fetchGitHubIntegrationsFn = createServerFn({ method: 'GET' }).handl
     with: { eventMappings: true },
     orderBy: (int, { desc }) => [desc(int.connectedAt)],
   })
-  await repairGitHubWebhookEventSubscriptions(allGithub)
+  await repairGitHubSyncConfiguration(allGithub)
 
   const connections = allGithub.map((int) => {
     const config = (int.config ?? {}) as Record<string, string | number | boolean | null>
@@ -193,7 +194,7 @@ export const fetchGitHubIntegrationsFn = createServerFn({ method: 'GET' }).handl
   return { connections, platformCredentialFields, platformCredentialsConfigured }
 })
 
-async function repairGitHubWebhookEventSubscriptions(
+async function repairGitHubSyncConfiguration(
   connections: Array<{
     id: string
     status: string
@@ -211,36 +212,49 @@ async function repairGitHubWebhookEventSubscriptions(
 
     const ownerRepo = typeof config.channelId === 'string' ? config.channelId : ''
     const webhookId = typeof config.externalWebhookId === 'string' ? config.externalWebhookId : ''
-    if (
-      connection.status !== 'active' ||
-      config.statusSyncEnabled !== true ||
-      config.githubWebhookEventsVersion === 2 ||
-      !ownerRepo ||
-      !webhookId ||
-      !connection.secrets
-    ) {
+    const syncDirection = config.syncDirection ?? 'outbound'
+    const needsInboundWebhook = syncDirection === 'inbound' || syncDirection === 'bidirectional'
+    if (connection.status !== 'active' || !ownerRepo || !connection.secrets) {
       return
     }
 
     try {
       const { db, integrations, eq } = await import('@/lib/server/db')
       const { decryptSecrets } = await import('../encryption')
-      const { ensureGitHubWebhookEvents, GITHUB_WEBHOOK_EVENTS_VERSION } =
-        await import('./webhook-registration')
+      const {
+        ensureGitHubWebhookEvents,
+        ensureGitHubWebhookForIntegration,
+        GITHUB_WEBHOOK_EVENTS_VERSION,
+      } = await import('./webhook-registration')
+      const { ensureGitHubEventMappings } = await import('./event-mappings')
       const secrets = decryptSecrets<{ accessToken?: string }>(connection.secrets)
       if (!secrets.accessToken) return
 
-      await ensureGitHubWebhookEvents(secrets.accessToken, ownerRepo, webhookId)
-      await db
-        .update(integrations)
-        .set({
-          config: { ...config, githubWebhookEventsVersion: GITHUB_WEBHOOK_EVENTS_VERSION },
-          updatedAt: new Date(),
+      await ensureGitHubEventMappings({ integrationId: connection.id as IntegrationId, config })
+
+      if (needsInboundWebhook) {
+        await ensureGitHubWebhookForIntegration({
+          integrationId: connection.id as IntegrationId,
+          requestHeaders: getRequestHeaders(),
         })
-        .where(eq(integrations.id, connection.id as IntegrationId))
+      } else if (config.statusSyncEnabled === true && webhookId) {
+        await ensureGitHubWebhookEvents(secrets.accessToken, ownerRepo, webhookId, {
+          callbackUrl: (
+            await import('@/lib/server/integrations/webhook-registration')
+          ).buildWebhookCallbackUrl('github', { requestHeaders: getRequestHeaders() }),
+          secret: typeof config.webhookSecret === 'string' ? config.webhookSecret : undefined,
+        })
+        await db
+          .update(integrations)
+          .set({
+            config: { ...config, githubWebhookEventsVersion: GITHUB_WEBHOOK_EVENTS_VERSION },
+            updatedAt: new Date(),
+          })
+          .where(eq(integrations.id, connection.id as IntegrationId))
+      }
     } catch (error) {
       console.warn(
-        `[GitHub] Failed to repair webhook event subscriptions for integration ${connection.id}:`,
+        `[GitHub] Failed to repair sync configuration for integration ${connection.id}:`,
         error
       )
     }

@@ -12,6 +12,7 @@ import {
   listWidgetTickets,
   replyToWidgetTicket,
   resolveWidgetTicket,
+  updateWidgetTicketDescription,
   WidgetTicketError,
 } from '../tickets-api'
 
@@ -86,6 +87,35 @@ describe('widget tickets-api', () => {
     await replyToWidgetTicket('t_1', 'hello')
     expect(capturedUrl).toBe('/api/widget/tickets/t_1/replies')
     expect(JSON.parse(capturedBody)).toEqual({ bodyText: 'hello' })
+  })
+
+  it('updateWidgetTicketDescription PATCHes description with optimistic timestamp', async () => {
+    let capturedUrl = ''
+    let capturedMethod = ''
+    let capturedBody = ''
+    mockFetch(async (input, init) => {
+      capturedUrl = String(input)
+      capturedMethod = init?.method ?? ''
+      capturedBody = init?.body as string
+      return new Response(
+        JSON.stringify({ data: { id: 't_1', updatedAt: '2026-01-01T00:00:01Z' } }),
+        {
+          status: 200,
+        }
+      )
+    })
+    await updateWidgetTicketDescription('t_1', {
+      expectedUpdatedAt: '2026-01-01T00:00:00Z',
+      descriptionJson: { type: 'doc', content: [] },
+      descriptionText: 'updated',
+    })
+    expect(capturedUrl).toBe('/api/widget/tickets/t_1')
+    expect(capturedMethod).toBe('PATCH')
+    expect(JSON.parse(capturedBody)).toEqual({
+      expectedUpdatedAt: '2026-01-01T00:00:00Z',
+      descriptionJson: { type: 'doc', content: [] },
+      descriptionText: 'updated',
+    })
   })
 
   it('resolveWidgetTicket POSTs to /resolve and returns alreadyResolved', async () => {

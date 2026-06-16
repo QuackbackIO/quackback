@@ -129,6 +129,7 @@ export interface GitHubIssueCommentPayload {
   issue: {
     number: number
     html_url: string
+    body?: string | null
   }
   comment: GitHubIssueComment & {
     id: number | string
@@ -253,8 +254,7 @@ export async function handleGitHubIssueCommentEvent(
   const config = integration.config
   const syncDirection = config.syncDirection ?? 'outbound'
   const inboundTicketSync = syncDirection === 'inbound' || syncDirection === 'bidirectional'
-  const inboundWebhookSync = config.statusSyncEnabled === true || Boolean(config.webhookSecret)
-  if (!inboundTicketSync && !inboundWebhookSync) {
+  if (!inboundTicketSync) {
     return false
   }
 
@@ -315,25 +315,33 @@ export async function handleGitHubIssueCommentEvent(
     }
 
     const ticketId = await findLinkedTicket(issueNumber, integration.id)
-    if (!ticketId) {
+    const linkedTicketId =
+      ticketId ??
+      (await recoverLinkedTicketFromIssueBody({
+        issueNumber,
+        issueUrl: payload.issue.html_url,
+        issueBody: payload.issue.body ?? null,
+        integrationId: integration.id,
+      }))
+    if (!linkedTicketId) {
       await logResult('skipped')
       return true
     }
 
     switch (payload.action) {
       case 'created':
-        await handleIssueCommentCreated(payload, integration, ticketId, issueNumber)
-        await logResult('success', ticketId)
+        await handleIssueCommentCreated(payload, integration, linkedTicketId, issueNumber)
+        await logResult('success', linkedTicketId)
         await touchLinkSyncedAt(issueNumber, integration.id)
         return true
       case 'edited':
-        await handleIssueCommentEdited(payload, integration, ticketId, issueNumber)
-        await logResult('success', ticketId)
+        await handleIssueCommentEdited(payload, integration, linkedTicketId, issueNumber)
+        await logResult('success', linkedTicketId)
         await touchLinkSyncedAt(issueNumber, integration.id)
         return true
       case 'deleted':
-        await handleIssueCommentDeleted(payload, integration, ticketId)
-        await logResult('success', ticketId)
+        await handleIssueCommentDeleted(payload, integration, linkedTicketId)
+        await logResult('success', linkedTicketId)
         await touchLinkSyncedAt(issueNumber, integration.id)
         return true
       default:
@@ -697,6 +705,44 @@ export async function findLinkedTicket(
     return null
   }
   return link.ticketId as TicketId
+}
+
+async function recoverLinkedTicketFromIssueBody(args: {
+  issueNumber: string
+  issueUrl: string
+  issueBody: string | null
+  integrationId: string
+}): Promise<TicketId | null> {
+  const ticketId = extractTicketIdFromGitHubIssueBody(args.issueBody)
+  if (!ticketId) return null
+
+  const { db, ticketExternalLinks, tickets, eq, and, isNull } = await import('@/lib/server/db')
+  const ticket = await db.query.tickets.findFirst({
+    where: and(eq(tickets.id, ticketId as TicketId), isNull(tickets.deletedAt)),
+    columns: { id: true },
+  })
+  if (!ticket) return null
+
+  await db
+    .insert(ticketExternalLinks)
+    .values({
+      ticketId: ticketId as TicketId,
+      integrationId: args.integrationId as IntegrationId,
+      integrationType: 'github',
+      externalId: args.issueNumber,
+      externalDisplayId: `#${args.issueNumber}`,
+      externalUrl: args.issueUrl,
+      syncDirection: 'outbound',
+      lastSyncedAt: new Date(),
+    })
+    .onConflictDoNothing()
+
+  return ticketId as TicketId
+}
+
+function extractTicketIdFromGitHubIssueBody(body: string | null): string | null {
+  if (!body) return null
+  return body.match(/\/admin\/tickets\/(ticket_[A-Za-z0-9]+)/)?.[1] ?? null
 }
 
 /**

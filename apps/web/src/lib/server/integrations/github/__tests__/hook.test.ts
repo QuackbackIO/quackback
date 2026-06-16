@@ -63,6 +63,8 @@ vi.mock('@/lib/server/db', () => ({
 
 import { githubHook } from '../hook'
 
+const originalFetch = globalThis.fetch
+
 function mockFetch(status: number, body: unknown = {}) {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -70,6 +72,10 @@ function mockFetch(status: number, body: unknown = {}) {
     json: async () => body,
     text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
   })
+}
+
+function setFetch(fetchMock: ReturnType<typeof vi.fn>) {
+  globalThis.fetch = fetchMock as unknown as typeof fetch
 }
 
 function makePostCreatedEvent(): PostCreatedEvent {
@@ -184,10 +190,46 @@ function makeTicketCreatedEvent(): EventData {
   } as EventData
 }
 
+function makeTicketUpdatedEvent(
+  overrides: {
+    changedFields?: string[]
+    diff?: Record<string, { from: unknown; to: unknown }>
+    ticket?: Partial<NonNullable<Extract<EventData, { type: 'ticket.updated' }>['data']['ticket']>>
+  } = {}
+): EventData {
+  return {
+    id: 'evt-ticket-updated',
+    type: 'ticket.updated',
+    timestamp: '2026-06-12T00:00:00Z',
+    actor: { type: 'user', principalId: 'principal_agent1' },
+    data: {
+      ticket: {
+        id: 'ticket_1',
+        subject: 'Updated login issue',
+        descriptionText: 'The portal description changed.',
+        statusId: null,
+        statusCategory: 'open',
+        priority: 'urgent',
+        channel: 'portal',
+        visibility: 'team',
+        inboxId: 'inbox_support',
+        primaryTeamId: null,
+        assigneePrincipalId: null,
+        assigneeTeamId: null,
+        requesterPrincipalId: 'principal_customer1',
+        requesterContactId: null,
+        ...overrides.ticket,
+      },
+      changedFields: overrides.changedFields ?? ['descriptionText'],
+      diff: overrides.diff ?? {},
+    },
+  } as EventData
+}
+
 describe('githubHook sync logging', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllGlobals()
+    globalThis.fetch = originalFetch
     findFirstInboxMock.mockResolvedValue(null)
     findFirstTicketLinkMock.mockResolvedValue({ externalId: '42' })
     findFirstThreadLinkMock.mockResolvedValue(null)
@@ -208,8 +250,7 @@ describe('githubHook sync logging', () => {
   })
 
   it('logs successful post issue syncs', async () => {
-    vi.stubGlobal(
-      'fetch',
+    setFetch(
       mockFetch(201, {
         number: 42,
         html_url: 'https://github.com/org/repo/issues/42',
@@ -238,7 +279,7 @@ describe('githubHook sync logging', () => {
   })
 
   it('logs failed post issue syncs', async () => {
-    vi.stubGlobal('fetch', mockFetch(401, { message: 'Bad credentials' }))
+    setFetch(mockFetch(401, { message: 'Bad credentials' }))
 
     const result = await githubHook.run(makePostCreatedEvent(), target, config)
 
@@ -276,7 +317,7 @@ describe('githubHook sync logging', () => {
 describe('githubHook ticket issue creation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllGlobals()
+    globalThis.fetch = originalFetch
     findFirstInboxMock.mockResolvedValue({ slug: 'support' })
   })
 
@@ -285,7 +326,7 @@ describe('githubHook ticket issue creation', () => {
       number: 42,
       html_url: 'https://github.com/org/repo/issues/42',
     })
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const result = await githubHook.run(makeTicketCreatedEvent(), target, {
       ...config,
@@ -309,10 +350,74 @@ describe('githubHook ticket issue creation', () => {
   })
 })
 
+describe('githubHook ticket update sync', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    globalThis.fetch = originalFetch
+    findFirstTicketLinkMock.mockResolvedValue({ externalId: '42' })
+    findFirstInboxMock.mockResolvedValue(null)
+  })
+
+  it('patches the linked GitHub issue when the ticket description changes', async () => {
+    const fetchMock = mockFetch(200, {})
+    setFetch(fetchMock)
+
+    const result = await githubHook.run(makeTicketUpdatedEvent(), target, config)
+
+    expect(result).toEqual({ success: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/repos/org/repo/issues/42',
+      expect.objectContaining({ method: 'PATCH', body: expect.any(String) })
+    )
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({
+      title: 'Updated login issue',
+      body: expect.stringContaining('The portal description changed.'),
+    })
+  })
+
+  it('syncs priority changes as GitHub priority labels', async () => {
+    const fetchMock = mockFetch(200, {})
+    setFetch(fetchMock)
+
+    const result = await githubHook.run(
+      makeTicketUpdatedEvent({
+        changedFields: ['priority'],
+        diff: { priority: { from: 'high', to: 'urgent' } },
+      }),
+      target,
+      config
+    )
+
+    expect(result).toEqual({ success: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/repos/org/repo/issues/42/labels/priority%3Ahigh',
+      expect.objectContaining({ method: 'DELETE' })
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/repos/org/repo/issues/42/labels',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ labels: ['priority:urgent'] }),
+      })
+    )
+  })
+
+  it('skips update sync when the ticket has no linked GitHub issue', async () => {
+    findFirstTicketLinkMock.mockResolvedValueOnce(null)
+    const fetchMock = vi.fn()
+    setFetch(fetchMock)
+
+    const result = await githubHook.run(makeTicketUpdatedEvent(), target, config)
+
+    expect(result).toEqual({ success: true, skipped: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('githubHook ticket comment sync', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.unstubAllGlobals()
+    globalThis.fetch = originalFetch
     findFirstInboxMock.mockResolvedValue(null)
     findFirstTicketLinkMock.mockResolvedValue({ externalId: '42' })
     findFirstThreadLinkMock.mockResolvedValue(null)
@@ -337,7 +442,7 @@ describe('githubHook ticket comment sync', () => {
       id: 1001,
       html_url: 'https://github.com/org/repo/issues/42#issuecomment-1001',
     })
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const result = await githubHook.run(makeThreadEvent('ticket.thread_added'), target, config)
 
@@ -370,7 +475,7 @@ describe('githubHook ticket comment sync', () => {
 
   it('skips internal and shared-team threads', async () => {
     const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const internalResult = await githubHook.run(
       makeThreadEvent('ticket.thread_added', 'internal'),
@@ -399,7 +504,7 @@ describe('githubHook ticket comment sync', () => {
     const fetchMock = mockFetch(200, {
       html_url: 'https://github.com/org/repo/issues/42#issuecomment-1001',
     })
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const result = await githubHook.run(makeThreadEvent('ticket.thread_updated'), target, config)
 
@@ -426,7 +531,7 @@ describe('githubHook ticket comment sync', () => {
       status: 'active',
     })
     const fetchMock = mockFetch(204, {})
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const result = await githubHook.run(makeThreadEvent('ticket.thread_deleted'), target, config)
 
@@ -443,7 +548,7 @@ describe('githubHook ticket comment sync', () => {
   it('skips public threads when the ticket has no linked GitHub issue', async () => {
     findFirstTicketLinkMock.mockResolvedValueOnce(null)
     const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+    setFetch(fetchMock)
 
     const result = await githubHook.run(makeThreadEvent('ticket.thread_added'), target, config)
 

@@ -76,6 +76,17 @@ export interface WidgetTicketCreateInput {
   categoryKey?: string
 }
 
+export interface WidgetTicketDescriptionUpdateInput {
+  expectedUpdatedAt: string
+  descriptionJson: { type: 'doc'; content?: unknown[] } | null
+  descriptionText: string | null
+}
+
+export interface WidgetTicketDescriptionUpdateResponse {
+  id: TicketId
+  updatedAt: string
+}
+
 export interface WidgetTicketCreateResponse {
   id: TicketId
   subject: string
@@ -199,6 +210,16 @@ export async function replyToWidgetTicket(
   return widgetFetch(`/api/widget/tickets/${encodeURIComponent(ticketId)}/replies`, {
     method: 'POST',
     jsonBody: { bodyText },
+  })
+}
+
+export async function updateWidgetTicketDescription(
+  ticketId: TicketId | string,
+  input: WidgetTicketDescriptionUpdateInput
+): Promise<WidgetTicketDescriptionUpdateResponse> {
+  return widgetFetch(`/api/widget/tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'PATCH',
+    jsonBody: input,
   })
 }
 

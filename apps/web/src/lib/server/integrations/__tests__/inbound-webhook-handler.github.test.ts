@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
+const mocks = {
   ensureNotSuspended: vi.fn(),
   findManyIntegrations: vi.fn(),
   findFirstPostExternalLink: vi.fn(),
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   decryptSecrets: vi.fn(),
   eq: vi.fn(),
   and: vi.fn(),
-}))
+}
 
 vi.mock('@/lib/server/middleware/suspension-guard', () => ({
   ensureNotSuspended: (...args: unknown[]) => mocks.ensureNotSuspended(...args),
@@ -183,5 +183,46 @@ describe('handleInboundWebhook — GitHub post status sync', () => {
     expect(mocks.handleGitHubTicketEvent).not.toHaveBeenCalled()
     expect(mocks.parseStatusChange).not.toHaveBeenCalled()
     expect(mocks.changeStatus).not.toHaveBeenCalled()
+  })
+
+  it('returns 500 when issue_comment ticket sync fails', async () => {
+    mocks.handleGitHubIssueCommentEvent.mockRejectedValueOnce(new Error('comment sync failed'))
+
+    const response = await handleInboundWebhook(
+      makeSignedGitHubRequest(makeGitHubIssueCommentPayload('created'), 'issue_comment'),
+      'github'
+    )
+
+    expect(response.status).toBe(500)
+    expect(mocks.parseStatusChange).not.toHaveBeenCalled()
+  })
+
+  it('returns 500 when issue ticket sync fails and no post status mapping applies', async () => {
+    mocks.handleGitHubTicketEvent.mockRejectedValueOnce(new Error('ticket sync failed'))
+    mocks.parseStatusChange.mockResolvedValueOnce(null)
+
+    const response = await handleInboundWebhook(
+      makeSignedGitHubRequest(makeGitHubIssuePayload('edited')),
+      'github'
+    )
+
+    expect(response.status).toBe(500)
+    expect(mocks.parseStatusChange).toHaveBeenCalled()
+  })
+
+  it('keeps legacy post status sync working when issue ticket sync fails', async () => {
+    mocks.handleGitHubTicketEvent.mockRejectedValueOnce(new Error('ticket sync failed'))
+
+    const response = await handleInboundWebhook(
+      makeSignedGitHubRequest(makeGitHubIssuePayload('closed')),
+      'github'
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.changeStatus).toHaveBeenCalledWith(
+      'post_1',
+      'status_closed',
+      expect.objectContaining({ principalId: 'principal_bot1' })
+    )
   })
 })

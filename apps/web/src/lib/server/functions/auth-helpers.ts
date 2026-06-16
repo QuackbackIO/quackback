@@ -90,7 +90,7 @@ function readRequestContext(): { ipAddress: string | null; userAgent: string | n
   try {
     const headers = getRequestHeaders()
     const get = (k: string): string | null => {
-      const v = (headers as Record<string, string | string[] | undefined>)[k]
+      const v = (headers as unknown as Record<string, string | string[] | undefined>)[k]
       if (!v) return null
       return Array.isArray(v) ? (v[0] ?? null) : v
     }

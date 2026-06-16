@@ -406,7 +406,7 @@ async function handleTicketCreated(
   if (event.type !== 'ticket.created') return { success: true }
 
   log.debug(`Creating issue for ticket -> repo ${ownerRepo}`)
-  const { title, body, labels } = buildTicketIssueBody(event)
+  const { title, body, labels } = buildTicketIssueBody(event, config.rootUrl)
   const configuredInboxSlug = await findConfiguredInboxSlug(config, event.data.ticket)
   const issueLabels = configuredInboxSlug
     ? Array.from(new Set([...labels, configuredInboxSlug]))
@@ -556,20 +556,24 @@ async function handleTicketUpdated(
   const hasPriorityChange = changedFields.includes('priority')
 
   if (!hasContentChange && !hasPriorityChange) {
-    return { success: true }
+    return skipped()
   }
 
   const issueNumber = await findTicketIssueNumber(ticket.id, config.integrationId)
-  if (!issueNumber) return { success: true }
+  if (!issueNumber) return skipped()
 
   try {
     // Sync subject/description if changed
     if (hasContentChange) {
       log.debug(`Updating issue #${issueNumber} content in ${ownerRepo}`)
-      const update = buildTicketUpdateBody(ticket)
+      const update = buildTicketUpdateBody(ticket, config.rootUrl)
       const patchBody: Record<string, unknown> = {}
       if (update.title) patchBody.title = update.title
       if (update.body) patchBody.body = update.body
+
+      if (Object.keys(patchBody).length === 0) {
+        return hasPriorityChange ? { success: true } : skipped()
+      }
 
       const response = await fetch(`${GITHUB_API}/repos/${ownerRepo}/issues/${issueNumber}`, {
         method: 'PATCH',

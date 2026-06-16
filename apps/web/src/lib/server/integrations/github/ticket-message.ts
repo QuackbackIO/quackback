@@ -8,7 +8,10 @@ import { truncate } from '../../events/hook-utils'
 /**
  * Build a GitHub issue title and body from a ticket event.
  */
-export function buildTicketIssueBody(event: EventData): {
+export function buildTicketIssueBody(
+  event: EventData,
+  rootUrl?: string
+): {
   title: string
   body: string
   labels: string[]
@@ -19,13 +22,13 @@ export function buildTicketIssueBody(event: EventData): {
 
   const { ticket } = event.data
   const title = ticket.subject || 'Untitled ticket'
-  const body = formatTicketBody(ticket)
+  const body = formatTicketBody(ticket, rootUrl)
   const labels = buildTicketLabels(ticket)
 
   return { title, body, labels }
 }
 
-function formatTicketBody(ticket: EventTicketRef): string {
+function formatTicketBody(ticket: EventTicketRef, rootUrl?: string): string {
   const sections: string[] = []
 
   const description = ticket.descriptionText?.trim()
@@ -48,7 +51,9 @@ function formatTicketBody(ticket: EventTicketRef): string {
     meta.push(`**Inbox:** ${ticket.inboxName}`)
   }
 
-  if (meta.length > 0 || ticket.ticketUrl) {
+  const ticketUrl = ticket.ticketUrl ?? buildTicketUrl(rootUrl, ticket.id)
+
+  if (meta.length > 0 || ticketUrl) {
     if (sections.length > 0) {
       sections.push('')
       sections.push('---')
@@ -57,11 +62,11 @@ function formatTicketBody(ticket: EventTicketRef): string {
 
     sections.push(...meta)
 
-    if (ticket.ticketUrl) {
+    if (ticketUrl) {
       if (meta.length > 0) {
         sections.push('')
       }
-      sections.push(`[View in Quackback](${ticket.ticketUrl})`)
+      sections.push(`[View in Quackback](${ticketUrl})`)
     }
   }
 
@@ -83,12 +88,20 @@ function buildTicketLabels(ticket: EventTicketRef): string[] {
  * Build an updated issue body for ticket.updated events.
  * Only called when subject or description changed.
  */
-export function buildTicketUpdateBody(ticket: EventTicketRef): {
+export function buildTicketUpdateBody(
+  ticket: EventTicketRef,
+  rootUrl?: string
+): {
   title?: string
   body?: string
 } {
   return {
     title: ticket.subject || undefined,
-    body: formatTicketBody(ticket),
+    body: formatTicketBody(ticket, rootUrl),
   }
+}
+
+function buildTicketUrl(rootUrl: string | undefined, ticketId: string): string | null {
+  if (!rootUrl) return null
+  return `${rootUrl.replace(/\/+$/, '')}/admin/tickets/${ticketId}`
 }

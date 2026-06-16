@@ -827,6 +827,20 @@
       "when": 1782777600000,
       "tag": "0117_changelog_taxonomy",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1782864000000,
+      "tag": "0118_ticket_email_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0119_github_sync_mapping_repair",
+      "breakpoints": true
     }
   ]
 }
