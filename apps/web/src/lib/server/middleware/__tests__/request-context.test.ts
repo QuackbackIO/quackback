@@ -70,6 +70,51 @@ describe('handleRequestWithContext', () => {
     expect(completed.request_id).toBeDefined()
   })
 
+  it('does NOT log completion for a healthy /api/health probe', async () => {
+    const cap = capture()
+    const request = new Request('http://localhost/api/health')
+
+    await handleRequestWithContext({
+      request,
+      log: cap.log,
+      next: async () => ({ response: new Response('ok', { status: 200 }) }),
+    })
+
+    expect(cap.records().find((r) => r.msg === 'request completed')).toBeUndefined()
+  })
+
+  it('still logs /api/health when the probe is unhealthy (status >= 400)', async () => {
+    const cap = capture()
+    const request = new Request('http://localhost/api/health')
+
+    await handleRequestWithContext({
+      request,
+      log: cap.log,
+      next: async () => ({ response: new Response('unhealthy', { status: 503 }) }),
+    })
+
+    const completed = cap.records().find((r) => r.msg === 'request completed')
+    expect(completed).toBeDefined()
+    expect(completed.status).toBe(503)
+  })
+
+  it('still logs failure when /api/health throws', async () => {
+    const cap = capture()
+    const request = new Request('http://localhost/api/health')
+
+    await expect(
+      handleRequestWithContext({
+        request,
+        log: cap.log,
+        next: async () => {
+          throw new Error('probe boom')
+        },
+      })
+    ).rejects.toThrow('probe boom')
+
+    expect(cap.records().find((r) => r.msg === 'request failed')).toBeDefined()
+  })
+
   it('logs failure and rethrows when next() throws', async () => {
     const cap = capture()
     const request = new Request('http://localhost/boom')
@@ -82,7 +127,7 @@ describe('handleRequestWithContext', () => {
         next: async () => {
           throw boom
         },
-      }),
+      })
     ).rejects.toThrow('kaboom')
 
     const failed = cap.records().find((r) => r.msg === 'request failed')
