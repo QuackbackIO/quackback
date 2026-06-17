@@ -2,16 +2,9 @@ import { createServerFn } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { requireAuthWithPermissions } from '@/lib/server/auth/session'
 import { ticketIdSchema } from '@/lib/shared/validation/ids'
-import { loadScope } from '@/lib/server/domains/tickets/ticket.authz'
 import { canViewTicket } from '@/lib/server/domains/tickets/ticket.acl'
 import { loadPermissionSet } from '@/lib/server/domains/authz/authz.service'
-import {
-  getTicket,
-  listSharesForTicket,
-  toResourceScope,
-  getThread,
-  listForThread,
-} from '@/lib/server/domains/tickets'
+import { getTicket, listSharesForTicket, toResourceScope } from '@/lib/server/domains/tickets'
 import type { TeamId, PrincipalId, TicketId } from '@quackback/ids'
 
 /**

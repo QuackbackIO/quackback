@@ -64,8 +64,6 @@ export function TicketThreadComposer({
   const [bodyText, setBodyText] = useState('')
   const [sharedTeamId, setSharedTeamId] = useState<TeamId | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({})
 
   const postMutation = useMutation({
     mutationFn: async () => {
@@ -84,7 +82,6 @@ export function TicketThreadComposer({
         const threadId = thread.id as TicketThreadId
         for (const file of selectedFiles) {
           try {
-            setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }))
             const formData = new FormData()
             formData.append('file', file)
             const res = await fetch(`/api/v1/tickets/${ticketId}/threads/${threadId}/attachments`, {
@@ -93,13 +90,10 @@ export function TicketThreadComposer({
             })
             if (!res.ok) {
               const error = await res.text()
-              setUploadErrors((prev) => ({ ...prev, [file.name]: error }))
               throw new Error(`Upload failed: ${error}`)
             }
-            setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
           } catch (e) {
             const msg = e instanceof Error ? e.message : 'Upload failed'
-            setUploadErrors((prev) => ({ ...prev, [file.name]: msg }))
             toast.error(`Failed to upload ${file.name}: ${msg}`)
           }
         }
@@ -113,8 +107,6 @@ export function TicketThreadComposer({
       setBody(null)
       setBodyText('')
       setSelectedFiles([])
-      setUploadProgress({})
-      setUploadErrors({})
       qc.invalidateQueries({ queryKey: ticketQueries.threads(ticketId).queryKey })
       qc.invalidateQueries({ queryKey: ticketQueries.detail(ticketId).queryKey })
       qc.invalidateQueries({ queryKey: ['tickets', 'list'] })

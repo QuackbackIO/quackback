@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { FileIcon, Download, Eye, Loader2 } from 'lucide-react'
+import { Download, Eye, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/client/utils'
 
 interface Attachment {
   id: string

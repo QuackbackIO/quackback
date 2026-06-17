@@ -28,7 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import type { TicketId } from '@quackback/ids'
 
 const searchSchema = z.object({
   status: z.enum(['open', 'pending', 'solved', 'closed', 'all']).optional().default('open'),
@@ -92,8 +91,6 @@ function TicketsListPage() {
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal')
   const [descriptionJson, setDescriptionJson] = useState<JSONContent | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({})
   const { upload: uploadImage } = usePortalImageUpload()
 
   const descriptionText = useMemo(() => plainTextFromJson(descriptionJson), [descriptionJson])
@@ -132,7 +129,6 @@ function TicketsListPage() {
           // Step 3: Upload files to the thread
           for (let i = 0; i < selectedFiles.length; i++) {
             const file = selectedFiles[i]
-            const fileKey = `file-${i}`
             try {
               const formData = new FormData()
               formData.append('file', file)
@@ -147,22 +143,10 @@ function TicketsListPage() {
               )
 
               if (!attachmentRes.ok) {
-                const error = await attachmentRes.text()
-                setUploadErrors((prev) => ({
-                  ...prev,
-                  [fileKey]: `Failed to upload ${file.name}`,
-                }))
-              } else {
-                setUploadProgress((prev) => ({
-                  ...prev,
-                  [fileKey]: 100,
-                }))
+                await attachmentRes.text()
               }
-            } catch (err) {
-              setUploadErrors((prev) => ({
-                ...prev,
-                [fileKey]: `Error uploading ${file.name}`,
-              }))
+            } catch {
+              // Best-effort upload: ticket is already created.
             }
           }
         } catch (err) {
@@ -177,8 +161,6 @@ function TicketsListPage() {
       setDescriptionJson(null)
       setPriority('normal')
       setSelectedFiles([])
-      setUploadProgress({})
-      setUploadErrors({})
       setIsComposerOpen(false)
       navigate({ to: '/tickets/$ticketId', params: { ticketId: created.id } })
     } catch (err) {

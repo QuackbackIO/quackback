@@ -11,11 +11,10 @@
 import { db, eq, and, isNull, ticketThreads } from '@/lib/server/db'
 import type { TicketId, TicketThreadId, PrincipalId } from '@quackback/ids'
 import { addThread } from './ticket.threads'
-import { NotFoundError } from '@/lib/shared/errors'
 
 export async function findOrCreateInitialThread(
   ticketId: TicketId,
-  requesterPrincipalId: PrincipalId | null
+  _requesterPrincipalId: PrincipalId | null
 ): Promise<TicketThreadId> {
   // Look for the first public thread on the ticket (typically created by
   // the requester during creation flow if they added a description).

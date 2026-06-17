@@ -6,7 +6,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { useReplyToMyTicket } from '@/lib/client/queries/portal-tickets'
 import type { TicketId, TicketThreadId } from '@quackback/ids'
 import { X, Upload } from 'lucide-react'
-import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { portalTicketQueries } from '@/lib/client/queries/portal-tickets'
 import { ticketQueries } from '@/lib/client/queries/tickets'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -36,7 +36,6 @@ export function PortalTicketReplyComposer({ ticketId, isClosed }: PortalTicketRe
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [body, setBody] = useState<JSONContent | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({})
   const reply = useReplyToMyTicket(ticketId)
 
   const placeholder = intl.formatMessage({
@@ -49,11 +48,6 @@ export function PortalTicketReplyComposer({ ticketId, isClosed }: PortalTicketRe
 
   const handleReply = async () => {
     try {
-      // Get the last thread to extract threadId
-      const ticketData = await qc.ensureQueryData(portalTicketQueries.detail(ticketId))
-      const threads = ticketData.threads || []
-      const lastThread = threads[threads.length - 1]
-
       // Post the reply
       await reply.mutateAsync({ bodyJson: body, bodyText: text })
 
@@ -80,23 +74,15 @@ export function PortalTicketReplyComposer({ ticketId, isClosed }: PortalTicketRe
                 }
               )
               if (!res.ok) {
-                const error = await res.text()
-                setUploadErrors((prev) => ({ ...prev, [file.name]: error }))
+                await res.text()
               } else {
-                // Clear error for this file if upload succeeded
-                setUploadErrors((prev) => {
-                  const next = { ...prev }
-                  delete next[file.name]
-                  return next
-                })
                 // Invalidate attachments query
                 qc.invalidateQueries({
                   queryKey: ticketQueries.attachments(ticketId, threadId).queryKey,
                 })
               }
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Upload failed'
-              setUploadErrors((prev) => ({ ...prev, [file.name]: msg }))
+            } catch {
+              // Best-effort upload: reply is already created.
             }
           }
         }
@@ -104,8 +90,7 @@ export function PortalTicketReplyComposer({ ticketId, isClosed }: PortalTicketRe
 
       setBody(null)
       setSelectedFiles([])
-      setUploadErrors({})
-    } catch (error) {
+    } catch {
       // Error handling is done by the mutation
     }
   }
