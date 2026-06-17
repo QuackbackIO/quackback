@@ -34,7 +34,7 @@
 
 ## Get Started
 
-**Cloud** coming soon at [quackback.io](https://quackback.io). Join the waitlist.
+**Cloud** — start free at [app.quackback.io](https://app.quackback.io/signup). We host, scale, and maintain it for you. No setup required.
 
 **Self-hosted** anywhere with [Docker](#docker) or [one click on Railway](#one-click-deploy).
 

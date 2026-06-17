@@ -18,6 +18,14 @@ import { createMiddleware } from '@tanstack/react-start'
 import { logger } from '@/lib/server/logger'
 import { runWithLogContext } from '@/lib/server/log-context'
 
+/**
+ * k8s liveness/readiness probe path. Hit every ~2s per pod, so a successful
+ * probe is pure access-log noise (~40k lines/day/tenant). We skip the
+ * completion line for healthy probes only — an unhealthy probe (status >= 400)
+ * or a thrown error is still logged, since those are the signal we care about.
+ */
+const HEALTH_PATH = '/api/health'
+
 function deriveRequestId(request: Request): string {
   const header = request.headers.get('x-request-id') ?? request.headers.get('x-correlation-id')
   // Cap to keep a malicious/huge header out of every log line.
@@ -44,7 +52,8 @@ export async function handleRequestWithContext<T extends NextResult>({
   log?: AppLogger
 }): Promise<T> {
   const requestId = deriveRequestId(request)
-  const route = `${request.method} ${new URL(request.url).pathname}`
+  const pathname = new URL(request.url).pathname
+  const route = `${request.method} ${pathname}`
   const start = performance.now()
 
   return runWithLogContext({ request_id: requestId, route }, async () => {
@@ -58,7 +67,12 @@ export async function handleRequestWithContext<T extends NextResult>({
         // Some responses have immutable headers; correlation still works
         // via the logged request_id.
       }
-      log.info({ status: result.response.status, duration_ms: durationMs }, 'request completed')
+      const status = result.response.status
+      // Suppress the completion line for successful health probes (see
+      // HEALTH_PATH). Everything else — and unhealthy probes — still logs.
+      if (!(pathname === HEALTH_PATH && status < 400)) {
+        log.info({ status, duration_ms: durationMs }, 'request completed')
+      }
       return result
     } catch (err) {
       const durationMs = Math.round(performance.now() - start)
