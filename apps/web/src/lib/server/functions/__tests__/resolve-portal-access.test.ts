@@ -98,18 +98,6 @@ vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
   segmentIdsForPrincipal: (...args: unknown[]) => mockSegmentIdsForPrincipal(...args),
 }))
 
-// --- Mock: suspension guard (the resolver denies portal data when suspended) ---
-
-class SuspendedError extends Error {}
-class DeletingError extends Error {}
-const mockEnsureNotSuspended = vi.fn()
-
-vi.mock('@/lib/server/middleware/suspension-guard', () => ({
-  ensureNotSuspended: () => mockEnsureNotSuspended(),
-  SuspendedError,
-  DeletingError,
-}))
-
 import { resolvePortalAccessForRequest } from '../portal-access'
 import { NotFoundError } from '@/lib/shared/errors'
 
@@ -123,40 +111,6 @@ beforeEach(() => {
   mockGetWidgetConfig.mockResolvedValue({ identifyVerification: false })
   // Default: no segment memberships.
   mockSegmentIdsForPrincipal.mockResolvedValue(new Set())
-  // Default: workspace active (guard resolves without throwing).
-  mockEnsureNotSuspended.mockResolvedValue(undefined)
-})
-
-describe('resolvePortalAccessForRequest — suspension', () => {
-  it('denies (granted:false, reason:suspended) when the workspace is suspended', async () => {
-    mockGetSession.mockResolvedValue(null)
-    mockGetPortalConfig.mockResolvedValue({ access: { visibility: 'public' } })
-    mockEnsureNotSuspended.mockRejectedValue(new SuspendedError())
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result).toEqual({ granted: false, reason: 'suspended' })
-  })
-
-  it('denies when the workspace is deleting', async () => {
-    mockGetSession.mockResolvedValue(null)
-    mockEnsureNotSuspended.mockRejectedValue(new DeletingError())
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result).toEqual({ granted: false, reason: 'suspended' })
-  })
-
-  it('fails OPEN (proceeds to normal eval) when the suspension state read errors', async () => {
-    // A settings-read blip must not block a healthy public workspace.
-    mockGetSession.mockResolvedValue(null)
-    mockGetPortalConfig.mockResolvedValue({ access: { visibility: 'public' } })
-    mockEnsureNotSuspended.mockRejectedValue(new Error('db blip'))
-
-    const result = await resolvePortalAccessForRequest()
-
-    expect(result).toEqual({ granted: true, reason: 'public' })
-  })
 })
 
 describe('resolvePortalAccessForRequest — config-throw contract', () => {

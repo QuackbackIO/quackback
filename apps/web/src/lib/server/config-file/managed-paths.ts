@@ -29,7 +29,6 @@ export function computeManagedPaths(spec: QuackbackConfigSpec): string[] {
       paths.push(`features.${key}`)
     }
   }
-  if (spec.state !== undefined) paths.push('state')
   if (spec.auth) {
     if (spec.auth.oauth) {
       for (const key of Object.keys(spec.auth.oauth)) {

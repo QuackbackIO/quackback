@@ -25,20 +25,6 @@ export async function handleInboundWebhook(
   request: Request,
   integrationType: string
 ): Promise<Response> {
-  // Block inbound writes when the workspace is suspended / deleting.
-  // No-op when settings.state is 'active' (the default with no
-  // declarative config file present).
-  const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
-  try {
-    await ensureNotSuspended()
-  } catch (err) {
-    if (err && typeof err === 'object' && 'statusCode' in err) {
-      const e = err as { statusCode: number; message: string }
-      return new Response(e.message, { status: e.statusCode })
-    }
-    throw err
-  }
-
   const definition = getIntegration(integrationType)
   if (!definition?.inbound) {
     return new Response('Unknown integration type', { status: 404 })

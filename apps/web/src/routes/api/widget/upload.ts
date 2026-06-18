@@ -1,20 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { auth } from '@/lib/server/auth'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
-import { handleDomainError } from '@/lib/server/domains/api/responses'
-import { DomainException } from '@/lib/shared/errors'
 
 export async function handleWidgetUpload({ request }: { request: Request }): Promise<Response> {
-  // Block writes from suspended/deleting workspaces. Read-only widget
-  // routes (config, search, kb-search) stay open so end-users see a
-  // working portal even while the workspace is past-due.
-  try {
-    const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
-    await ensureNotSuspended()
-  } catch (e) {
-    if (e instanceof DomainException) return handleDomainError(e)
-    throw e
-  }
   // Any valid widget session may attach images — identified or anonymous. We
   // resolve the Bearer the same way server functions do: the better-auth bearer
   // plugin strips the token signature and looks up the session (a raw

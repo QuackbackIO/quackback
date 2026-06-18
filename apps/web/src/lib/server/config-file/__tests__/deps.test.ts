@@ -71,7 +71,6 @@ describe('createSettings', () => {
       slug: 'acme',
       setupState: '{}',
       managedFieldPaths: [],
-      state: 'active',
     })
 
     expect(hoisted.insertValuesCalls).toHaveLength(1)

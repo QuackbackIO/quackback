@@ -105,13 +105,6 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       throw new Error('Workspace not configured')
     }
 
-    // Suspended / deleting workspaces are blocked at the server-fn
-    // chokepoint with 402 / 410. Page-level routes have their own
-    // beforeLoad guard via SUSPENSION_EXEMPT_PATHS; this catches the
-    // server-fn write path the page guard can't see.
-    const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
-    await ensureNotSuspended()
-
     const principalRecord = await db.query.principal.findFirst({
       where: eq(principal.userId, userId),
     })

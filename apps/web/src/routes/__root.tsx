@@ -18,8 +18,6 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
-import { SuspendedView } from '@/components/shared/suspended-view'
-import { isSuspensionExempt } from '@/lib/server/middleware/suspension-paths'
 import { documentLocale, htmlLangDir } from '@/lib/shared/document-locale'
 import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/shared/i18n'
 
@@ -31,7 +29,6 @@ export interface RouterContext {
   userRole?: 'admin' | 'member' | 'user' | null
   themeCookie?: BootstrapData['themeCookie']
   managedFieldPaths?: string[]
-  state?: 'active' | 'suspended' | 'deleting'
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
 }
@@ -62,7 +59,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       userRole,
       themeCookie,
       managedFieldPaths,
-      state,
       registeredAuthProviders,
       acceptLanguageLocale,
     } = await getBootstrapData()
@@ -73,13 +69,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         throw redirect({ to: '/onboarding' })
       }
     }
-
-    // Suspension renders inline in RootComponent rather than redirecting
-    // to /suspended — same URL, content reflects state. When CP flips
-    // state back to active, the next render shows the actual page
-    // without the user having to navigate. Exempt paths (login,
-    // oauth callbacks, magic-link landing) skip the inline overlay
-    // so suspended owners can still get back in.
 
     // Redact allowedDomains and widgetSignIn from the portalConfig placed
     // into the router context. Both fields are server-only policy: the
@@ -118,7 +107,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       userRole,
       themeCookie,
       managedFieldPaths,
-      state,
       registeredAuthProviders,
       acceptLanguageLocale,
     }
@@ -170,15 +158,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootComponent() {
-  const ctx = Route.useRouteContext()
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const overlayState =
-    ctx.state && ctx.state !== 'active' && !isSuspensionExempt(pathname) ? ctx.state : null
-
   return (
     <RootDocument>
       <OttHandler />
-      {overlayState ? <SuspendedView state={overlayState} /> : <Outlet />}
+      <Outlet />
     </RootDocument>
   )
 }

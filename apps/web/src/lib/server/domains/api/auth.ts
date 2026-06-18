@@ -93,13 +93,6 @@ export async function withApiKeyAuth(
   request: Request,
   options: { role: AuthLevel }
 ): Promise<ApiAuthContext> {
-  // Suspended / deleting workspaces are read-blocked at the API
-  // chokepoint with 402 / 410. Self-hosters never set this — state
-  // stays 'active' with no config file. Runs before rate-limit so a
-  // suspended tenant can't burn the rate-limit budget.
-  const { ensureNotSuspended } = await import('@/lib/server/middleware/suspension-guard')
-  await ensureNotSuspended()
-
   const clientIp = getClientIp(request)
   const wantsImportMode = request.headers.get('x-import-mode') === 'true'
   const rateLimit = await checkRateLimit(clientIp, wantsImportMode)

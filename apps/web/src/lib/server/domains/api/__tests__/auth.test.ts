@@ -27,12 +27,6 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
 }))
 
-// `ensureNotSuspended()` lazy-imports `getTenantSettings`; stub it as `null`
-// so the suspension guard treats the workspace as 'active' (the default).
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: vi.fn().mockResolvedValue(null),
-}))
-
 describe('API Auth', () => {
   const mockApiKey: ApiKey = {
     id: 'apikey_01h455vb4pex5vsknk084sn02q' as ApiKeyId,
