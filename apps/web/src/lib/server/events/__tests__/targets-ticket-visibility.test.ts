@@ -23,17 +23,17 @@ vi.mock('@/lib/server/redis', () => ({
   },
 }))
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real module (db is a lazy Proxy ⇒ no connection) so transitively
+  // imported exports like `ticketSubscriptions` resolve; the explicit overrides
+  // below still win for everything this test inspects.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
-    select: vi
-      .fn()
-      .mockReturnValue({
-        from: vi
-          .fn()
-          .mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-          }),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
       }),
+    }),
     query: {
       webhooks: { findMany: vi.fn().mockResolvedValue([]) },
     },
@@ -106,6 +106,14 @@ vi.mock('../hook-context', () => ({
 vi.mock('../hook-utils', () => ({
   stripHtml: vi.fn((s: string) => s),
   truncate: vi.fn((s: string) => s),
+}))
+// Ticket *email* targets are a separate, DB-backed concern out of scope here.
+// Left unmocked they throw on the unmocked DB for every ticket.* event, and
+// getHookTargets swallows that into [] — which vacuously "passed" the block
+// assertions while breaking the allow ones. Stub to [] so the webhook/
+// integration visibility assertions below are actually exercised.
+vi.mock('../ticket-targets', () => ({
+  getTicketEmailTargets: vi.fn().mockResolvedValue([]),
 }))
 
 // Import after mocks

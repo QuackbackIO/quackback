@@ -9,7 +9,7 @@ import {
   principal,
   user,
 } from '@/lib/server/db'
-import type { PrincipalId, TeamId, TicketId } from '@quackback/ids'
+import type { PrincipalId, TeamId, TicketId, UserId } from '@quackback/ids'
 import type { EventData, EventTicketRef } from './types'
 import type { HookTarget } from './hook-types'
 import {
@@ -238,7 +238,7 @@ export async function getTicketEmailTargets(
     ? await db
         .select({ id: principal.id, userId: principal.userId })
         .from(principal)
-        .where(inArray(principal.userId, Array.from(new Set(userIds))))
+        .where(inArray(principal.userId, Array.from(new Set(userIds)) as UserId[]))
     : []
 
   const siblingsByUser = new Map<string, PrincipalId[]>()

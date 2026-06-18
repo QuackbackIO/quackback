@@ -1,14 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mockSession, mockImageFile } from '../../__tests__/upload-fixtures'
+import { mockSession, mockImageFile, mockPrincipal } from '../../__tests__/upload-fixtures'
 
-vi.mock('@/lib/server/auth', () => ({
-  auth: { api: { getSession: vi.fn() } },
+// The route resolves auth via direct DB lookups (session token + principal),
+// not better-auth's getSession. Mock `@/lib/server/db` so the route's
+// `db.query.session.findFirst` / `db.query.principal.findFirst` are
+// test-controlled, while keeping the real schema tables + drizzle operators
+// (eq/and/gt) — the operators just build `where` clauses our stubbed
+// findFirst ignores.
+// Hoisted so the vi.mock factory (also hoisted) can close over them.
+const { sessionFindFirst, principalFindFirst } = vi.hoisted(() => ({
+  sessionFindFirst: vi.fn(),
+  principalFindFirst: vi.fn(),
 }))
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/db')>()
+  return {
+    ...actual,
+    db: {
+      query: {
+        session: { findFirst: sessionFindFirst },
+        principal: { findFirst: principalFindFirst },
+      },
+    },
+  }
+})
 
 vi.mock('@/lib/server/storage/s3', async () => {
   const { createS3MockFactory } = await import('../../__tests__/s3-upload-mock')
   return createS3MockFactory()
 })
+
+// The route gates uploads on widget config; only `imageUploadsInWidget`
+// matters for these tests, so resolve it enabled.
+vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
+  getWidgetConfig: vi.fn().mockResolvedValue({ imageUploadsInWidget: true }),
+}))
 
 // `ensureNotSuspended()` lazy-imports `getTenantSettings`; stub it as `null`
 // so the suspension guard treats the workspace as 'active' (the default).
@@ -16,7 +42,6 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getTenantSettings: vi.fn().mockResolvedValue(null),
 }))
 
-import { auth } from '@/lib/server/auth'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
 import { handleWidgetUpload } from '../upload'
 
@@ -32,19 +57,29 @@ function makeRequest(file?: File, token?: string): Request {
 
 const validSession = mockSession()
 
-/** Stub the better-auth session resolution as a valid widget visitor. */
+/**
+ * Stub the DB-backed auth resolution as a valid, non-anonymous widget visitor:
+ * an unexpired session whose userId maps to a `user`-type principal.
+ */
 function authAs() {
-  vi.mocked(auth.api.getSession).mockResolvedValueOnce(validSession)
+  const { token, userId, expiresAt } = validSession.session
+  sessionFindFirst.mockResolvedValueOnce({ token, userId, expiresAt })
+  principalFindFirst.mockResolvedValueOnce(mockPrincipal({ type: 'user' }))
 }
 
 describe('POST /api/widget/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks resets call history but not queued mockResolvedValueOnce
+    // implementations; reset the auth lookups so no leftover queued value
+    // from a prior test leaks into the next.
+    sessionFindFirst.mockReset()
+    principalFindFirst.mockReset()
     vi.mocked(isS3Configured).mockReturnValue(true)
   })
 
   it('returns 401 when there is no valid widget session', async () => {
-    vi.mocked(auth.api.getSession).mockResolvedValueOnce(null)
+    // No Bearer header → unauthorized before any session lookup runs.
     const res = await handleWidgetUpload({ request: makeRequest() })
     expect(res.status).toBe(401)
     expect(await res.json()).toMatchObject({ error: 'Unauthorized' })

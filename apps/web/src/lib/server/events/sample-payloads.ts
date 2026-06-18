@@ -124,6 +124,35 @@ const SAMPLE_ORG_REF = {
   updatedAt: SAMPLE_TIMESTAMP,
 }
 
+const SAMPLE_CONVERSATION_REF = {
+  id: 'conv_sample',
+  status: 'open' as const,
+  channel: 'live_chat' as const,
+  priority: 'medium' as const,
+}
+
+const SAMPLE_CONVERSATION_DATA = {
+  ...SAMPLE_CONVERSATION_REF,
+  subject: 'Sample conversation — please ignore',
+  visitorPrincipalId: 'principal_sample_visitor',
+  visitorEmail: '[email protected]',
+  assignedAgentPrincipalId: null,
+  createdAt: SAMPLE_TIMESTAMP,
+  lastMessageAt: SAMPLE_TIMESTAMP,
+  resolvedAt: null,
+}
+
+const SAMPLE_MESSAGE_DATA = {
+  id: 'msg_sample',
+  conversationId: 'conv_sample',
+  senderType: 'visitor' as const,
+  authorPrincipalId: 'principal_sample_visitor',
+  authorName: 'Sample Visitor',
+  authorEmail: '[email protected]',
+  content: 'Sample message body.',
+  createdAt: SAMPLE_TIMESTAMP,
+}
+
 const SAMPLES: Partial<{ [K in EventType]: EventData }> & Record<string, EventData> = {
   'post.created': {
     ...envelope('post.created', 'evt_sample_post_created'),
@@ -165,6 +194,17 @@ const SAMPLES: Partial<{ [K in EventType]: EventData }> & Record<string, EventDa
     data: {
       post: SAMPLE_POST_REF,
       formerCanonicalPost: { ...SAMPLE_POST_REF, id: 'post_sample_canonical' },
+    },
+  },
+  'post.mentioned': {
+    ...envelope('post.mentioned', 'evt_sample_post_mentioned'),
+    data: {
+      postId: 'post_sample',
+      postTitle: 'Sample feedback post',
+      postUrl: 'https://app.example.test/posts/post_sample',
+      mentionedPrincipalId: 'principal_sample_mentioned',
+      mentioningPrincipalId: 'principal_sample_author',
+      excerpt: 'Hey @sample, can you take a look at this sample feedback post?',
     },
   },
   'comment.created': {
@@ -466,6 +506,72 @@ const SAMPLES: Partial<{ [K in EventType]: EventData }> & Record<string, EventDa
   'organization.unarchived': {
     ...envelope('organization.unarchived', 'evt_sample_organization_unarchived'),
     data: { organization: SAMPLE_ORG_REF },
+  },
+  'conversation.created': {
+    ...envelope('conversation.created', 'evt_sample_conversation_created'),
+    data: { conversation: SAMPLE_CONVERSATION_DATA },
+  },
+  'conversation.status_changed': {
+    ...envelope('conversation.status_changed', 'evt_sample_conversation_status_changed'),
+    data: {
+      conversation: SAMPLE_CONVERSATION_REF,
+      previousStatus: 'open',
+      newStatus: 'pending',
+    },
+  },
+  'conversation.assigned': {
+    ...envelope('conversation.assigned', 'evt_sample_conversation_assigned'),
+    data: {
+      conversation: SAMPLE_CONVERSATION_REF,
+      assignedAgentPrincipalId: 'principal_sample_agent',
+      previousAgentPrincipalId: null,
+    },
+  },
+  'conversation.priority_changed': {
+    ...envelope('conversation.priority_changed', 'evt_sample_conversation_priority_changed'),
+    data: {
+      conversation: SAMPLE_CONVERSATION_REF,
+      previousPriority: 'medium',
+      newPriority: 'high',
+    },
+  },
+  'conversation.csat_submitted': {
+    ...envelope('conversation.csat_submitted', 'evt_sample_conversation_csat_submitted'),
+    data: {
+      conversation: SAMPLE_CONVERSATION_REF,
+      rating: 5,
+      comment: 'Great support, thank you!',
+      submittedAt: SAMPLE_TIMESTAMP,
+    },
+  },
+  'message.created': {
+    ...envelope('message.created', 'evt_sample_message_created'),
+    data: {
+      message: SAMPLE_MESSAGE_DATA,
+      conversation: SAMPLE_CONVERSATION_REF,
+    },
+  },
+  'message.note_created': {
+    ...envelope('message.note_created', 'evt_sample_message_note_created'),
+    data: {
+      message: {
+        ...SAMPLE_MESSAGE_DATA,
+        id: 'msg_sample_note',
+        senderType: 'agent',
+        authorPrincipalId: 'principal_sample_agent',
+        authorName: 'Sample Agent',
+        authorEmail: '[email protected]',
+        content: 'Internal note — visitor mentioned a billing issue.',
+      },
+      conversation: SAMPLE_CONVERSATION_REF,
+    },
+  },
+  'message.deleted': {
+    ...envelope('message.deleted', 'evt_sample_message_deleted'),
+    data: {
+      message: { id: 'msg_sample', conversationId: 'conv_sample' },
+      conversation: SAMPLE_CONVERSATION_REF,
+    },
   },
 }
 

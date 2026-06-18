@@ -1,7 +1,35 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactElement } from 'react'
 import type { JSONContent } from '@tiptap/react'
 import { TicketThreadFeed } from '../ticket-thread-feed'
+
+// Thread rows render a `ThreadAttachmentsLoader` that calls
+// `useQuery(ticketQueries.attachments(...))`. Stub the query options so the
+// loader resolves to an empty attachment list (and renders nothing) instead of
+// hitting a real server function.
+vi.mock('@/lib/client/queries/tickets', () => ({
+  ticketQueries: {
+    attachments: vi.fn((ticketId: string, threadId: string) => ({
+      queryKey: ['tickets', ticketId, 'threads', threadId, 'attachments'],
+      queryFn: async () => [],
+    })),
+  },
+}))
+
+// TicketAttachments uses react-intl <FormattedMessage>, which needs an
+// IntlProvider this test doesn't supply. The attachment list is not under
+// test here (these tests assert on author labels), so stub it out.
+vi.mock('@/components/tickets/ticket-attachments', () => ({
+  TicketAttachments: () => null,
+}))
+
+function renderWithClient(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>)
+}
 
 vi.mock('@/components/ui/rich-text-editor', () => {
   function textFromDoc(content: unknown): string {
@@ -59,7 +87,7 @@ vi.mock('@/components/ui/rich-text-editor', () => {
 
 describe('TicketThreadFeed description editing', () => {
   it('renders a read-only description when no update callback is provided', () => {
-    render(
+    renderWithClient(
       <TicketThreadFeed threads={[]} description={{ text: 'Original description', json: null }} />
     )
 
@@ -69,7 +97,7 @@ describe('TicketThreadFeed description editing', () => {
 
   it('calls onDescriptionUpdate with edited rich text content', () => {
     const onDescriptionUpdate = vi.fn()
-    render(
+    renderWithClient(
       <TicketThreadFeed threads={[]} description={null} onDescriptionUpdate={onDescriptionUpdate} />
     )
 
@@ -96,7 +124,7 @@ describe('TicketThreadFeed description editing', () => {
 
 describe('TicketThreadFeed author labels', () => {
   it('renders principal display names instead of raw principal IDs', () => {
-    render(
+    renderWithClient(
       <TicketThreadFeed
         threads={[
           {
@@ -122,7 +150,7 @@ describe('TicketThreadFeed author labels', () => {
   })
 
   it('does not expose raw principal IDs when a display name is missing', () => {
-    render(
+    renderWithClient(
       <TicketThreadFeed
         threads={[
           {

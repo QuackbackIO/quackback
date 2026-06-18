@@ -43,6 +43,11 @@ vi.mock('@tanstack/react-start', () => ({
       validator() {
         return chain
       },
+      // Support the newer inputValidator() chain step too (some server fns use
+      // it instead of validator()).
+      inputValidator() {
+        return chain
+      },
       handler(fn: unknown) {
         return fn
       },

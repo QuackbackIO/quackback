@@ -371,8 +371,8 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
         entryIds,
         categoryIds: portalCategoryId,
         productIds: portalProductId,
-        visibilityCategoryIds: data.visibilityCategoryIds ?? null,
-        visibilityProductIds: data.visibilityProductIds ?? null,
+        visibilityCategoryIds: (data.visibilityCategoryIds as ChangelogCategoryId[]) ?? null,
+        visibilityProductIds: (data.visibilityProductIds as ChangelogProductId[]) ?? null,
       })
 
       const filteredItems = result.items

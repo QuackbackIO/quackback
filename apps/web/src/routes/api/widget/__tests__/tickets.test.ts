@@ -24,6 +24,14 @@ vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   createTicket: (...args: unknown[]) => createTicketMock(...args),
 }))
 
+// The create handler opens an initial public thread (attachment storage flow)
+// via the tickets barrel. Mock addThread so the handler doesn't hit the real
+// DB-backed implementation.
+const addThreadMock = vi.fn()
+vi.mock('@/lib/server/domains/tickets', () => ({
+  addThread: (...args: unknown[]) => addThreadMock(...args),
+}))
+
 const listTicketsForPortalUserMock = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket.portal-query', () => ({
   listTicketsForPortalUser: (...args: unknown[]) => listTicketsForPortalUserMock(...args),
@@ -61,6 +69,7 @@ beforeEach(() => {
     category: 'open',
   })
   findManyStatusesMock.mockResolvedValue([])
+  addThreadMock.mockResolvedValue({ id: 'thread_initial', audience: 'public' })
 })
 
 describe('POST /api/widget/tickets', () => {

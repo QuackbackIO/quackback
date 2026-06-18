@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { render, screen } from '@testing-library/react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

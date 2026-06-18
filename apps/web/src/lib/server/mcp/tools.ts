@@ -46,6 +46,19 @@ import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
+import {
+  listSegments,
+  getSegment,
+  createSegment,
+  updateSegment,
+  deleteSegment,
+} from '@/lib/server/domains/segments/segment.service'
+import {
+  listUserAttributes,
+  createUserAttribute,
+  updateUserAttribute,
+  deleteUserAttribute,
+} from '@/lib/server/domains/user-attributes/user-attribute.service'
 import { voteOnPost, addVoteOnBehalf, removeVote } from '@/lib/server/domains/posts/post.voting'
 import { mergePost, unmergePost, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
@@ -71,6 +84,14 @@ import {
   getChangelogById,
 } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
+import {
+  getOrgChangelogVisibility,
+  setOrgChangelogVisibility,
+  getAllSegmentChangelogVisibilities,
+  getSegmentChangelogVisibility,
+  setSegmentChangelogVisibility,
+  deleteSegmentChangelogVisibility,
+} from '@/lib/server/domains/changelog/changelog-visibility.service'
 import { publishedAtToPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import {
   addPostToRoadmap,
@@ -272,6 +293,8 @@ const SCOPE_IMPLIES: Partial<Record<McpScope, readonly McpScope[]>> = {
   'manage:tickets': ['write:tickets', 'read:tickets'],
   'write:tickets': ['read:tickets'],
   'write:contacts': ['read:contacts'],
+  'write:config': ['read:config'],
+  'manage:admin': ['read:admin'],
 }
 
 /** True when `granted` either equals `required` or transitively implies it. */
@@ -372,6 +395,9 @@ function categoryResult(category: {
   icon: string | null
   parentId: string | null
   isPublic: boolean
+  visibility: 'public' | 'targeted'
+  allowedSegmentIds: string[]
+  allowedPrincipalIds: string[]
   position: number
   createdAt: Date
   updatedAt: Date
@@ -384,6 +410,9 @@ function categoryResult(category: {
     icon: category.icon,
     parentId: category.parentId,
     isPublic: category.isPublic,
+    visibility: category.visibility,
+    allowedSegmentIds: category.allowedSegmentIds,
+    allowedPrincipalIds: category.allowedPrincipalIds,
     position: category.position,
     createdAt: category.createdAt,
     updatedAt: category.updatedAt,
@@ -746,6 +775,20 @@ const manageCategorySchema = {
     .optional()
     .describe('Parent category TypeID, or null for top-level'),
   isPublic: z.boolean().optional().describe('Whether category is publicly visible'),
+  visibility: z
+    .enum(['public', 'targeted'])
+    .optional()
+    .describe('"public" shows to everyone; "targeted" restricts to allowed segments/principals'),
+  allowedSegmentIds: z
+    .array(z.string())
+    .max(200)
+    .optional()
+    .describe('Segment TypeIDs allowed to see this category when visibility is "targeted"'),
+  allowedPrincipalIds: z
+    .array(z.string())
+    .max(200)
+    .optional()
+    .describe('Principal TypeIDs allowed to see this category when visibility is "targeted"'),
 }
 
 // ============================================================================
@@ -911,6 +954,9 @@ type ManageCategoryArgs = {
   icon?: string | null
   parentId?: string | null
   isPublic?: boolean
+  visibility?: 'public' | 'targeted'
+  allowedSegmentIds?: string[]
+  allowedPrincipalIds?: string[]
 }
 
 // ============================================================================
@@ -2110,6 +2156,9 @@ Examples:
               icon: args.icon ?? undefined,
               parentId: args.parentId ?? undefined,
               isPublic: args.isPublic,
+              visibility: args.visibility,
+              allowedSegmentIds: args.allowedSegmentIds,
+              allowedPrincipalIds: args.allowedPrincipalIds,
             })
             return categoryResult(category)
           }
@@ -2138,12 +2187,399 @@ Examples:
     }
   )
 
+  // Changelog audience/visibility configuration
+  registerChangelogVisibilityTools(server, auth)
+
+  // Audience segments
+  registerSegmentTools(server, auth)
+
+  // Custom user-attribute definitions
+  registerUserAttributeTools(server, auth)
+
   // Ticketing — Phase 2 lifecycle tools
   registerTicketTools(server, auth)
   // Ticketing status catalogue + CRM — Phase 4
   registerTicketStatusTools(server, auth)
   registerContactTools(server, auth)
   registerOrganizationTools(server, auth)
+}
+
+// ============================================================================
+// Audience segment tools — list / get / create / update / delete
+// ============================================================================
+
+function segmentResult(s: {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  type: string
+  color: string
+  rules: unknown
+  evaluationSchedule: unknown
+  weightConfig: unknown
+  createdAt: Date
+  updatedAt: Date
+  memberCount?: number
+}): CallToolResult {
+  return jsonResult({
+    id: s.id,
+    name: s.name,
+    slug: s.slug,
+    description: s.description,
+    type: s.type,
+    color: s.color,
+    rules: s.rules,
+    evaluationSchedule: s.evaluationSchedule,
+    weightConfig: s.weightConfig,
+    memberCount: s.memberCount,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+  })
+}
+
+function registerSegmentTools(server: McpServer, auth: McpAuthContext) {
+  // list_segments
+  server.tool(
+    'list_segments',
+    `List all audience segments with member counts.
+
+Example: list_segments({})`,
+    {},
+    READ_ONLY,
+    async (): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:config')
+      if (denied) return denied
+      try {
+        const rows = await listSegments()
+        return jsonResult({ segments: rows.map((s) => ({ ...s })) })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // get_segment
+  server.tool(
+    'get_segment',
+    `Get one audience segment by TypeID.
+
+Example: get_segment({ segmentId: "segment_01..." })`,
+    { segmentId: z.string().describe('Segment TypeID') },
+    READ_ONLY,
+    async (args: { segmentId: string }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:config')
+      if (denied) return denied
+      try {
+        const segment = await getSegment(args.segmentId as SegmentId)
+        if (!segment) return errorResult(new Error(`Segment ${args.segmentId} not found`))
+        return segmentResult(segment)
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // manage_segment
+  server.tool(
+    'manage_segment',
+    `Create, update, or delete an audience segment. Dynamic segments require at least one rule
+condition; manual segments are populated by assigning members.
+
+Examples:
+- Create manual: manage_segment({ action: "create", name: "VIPs", type: "manual" })
+- Create dynamic: manage_segment({ action: "create", name: "EU users", type: "dynamic", rules: { match: "all", conditions: [{ attribute: "country", operator: "eq", value: "DE" }] } })
+- Update: manage_segment({ action: "update", segmentId: "segment_01...", name: "New name" })
+- Delete: manage_segment({ action: "delete", segmentId: "segment_01..." })`,
+    {
+      action: z.enum(['create', 'update', 'delete']).describe('Operation to perform'),
+      segmentId: z.string().optional().describe('Required for update and delete'),
+      name: z.string().optional().describe('Required for create'),
+      description: z.string().nullable().optional(),
+      type: z.enum(['manual', 'dynamic']).optional().describe('Required for create'),
+      color: z.string().optional(),
+      rules: z
+        .object({
+          match: z.enum(['all', 'any']),
+          conditions: z.array(z.record(z.string(), z.unknown())),
+        })
+        .nullable()
+        .optional()
+        .describe('Membership rules for dynamic segments'),
+    },
+    DESTRUCTIVE,
+    async (args: {
+      action: 'create' | 'update' | 'delete'
+      segmentId?: string
+      name?: string
+      description?: string | null
+      type?: 'manual' | 'dynamic'
+      color?: string
+      rules?: unknown
+    }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:config') ?? requireTeamRole(auth)
+      if (denied) return denied
+      try {
+        switch (args.action) {
+          case 'create': {
+            if (!args.name || !args.type) {
+              return errorResult(new Error('name and type are required when action is "create"'))
+            }
+            const segment = await createSegment({
+              name: args.name,
+              type: args.type,
+              description: args.description ?? undefined,
+              color: args.color,
+              rules: args.rules as never,
+            })
+            return segmentResult(segment)
+          }
+          case 'update': {
+            if (!args.segmentId) {
+              return errorResult(new Error('segmentId is required when action is "update"'))
+            }
+            const segment = await updateSegment(args.segmentId as SegmentId, {
+              name: args.name,
+              description: args.description,
+              color: args.color,
+              rules: args.rules as never,
+            })
+            return segmentResult(segment)
+          }
+          case 'delete': {
+            if (!args.segmentId) {
+              return errorResult(new Error('segmentId is required when action is "delete"'))
+            }
+            await deleteSegment(args.segmentId as SegmentId)
+            return jsonResult({ deleted: true, id: args.segmentId })
+          }
+        }
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+}
+
+// ============================================================================
+// Changelog visibility tools — org defaults + per-segment overrides
+// ============================================================================
+
+const changelogVisibilityConfigShape = {
+  restrictCategories: z
+    .boolean()
+    .optional()
+    .describe('When true, only allowedCategoryIds (plus uncategorized) are visible'),
+  allowedCategoryIds: z
+    .array(z.string())
+    .max(500)
+    .optional()
+    .describe('Changelog category TypeIDs visible when restrictCategories is true'),
+  restrictProducts: z
+    .boolean()
+    .optional()
+    .describe('When true, only allowedProductIds (plus no-product) are visible'),
+  allowedProductIds: z
+    .array(z.string())
+    .max(500)
+    .optional()
+    .describe('Changelog product TypeIDs visible when restrictProducts is true'),
+}
+
+function registerUserAttributeTools(server: McpServer, auth: McpAuthContext) {
+  // list_user_attributes
+  server.tool(
+    'list_user_attributes',
+    `List custom user-attribute definitions (key, label, type, currency, external mapping key).
+
+Example: list_user_attributes({})`,
+    {},
+    READ_ONLY,
+    async (): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:config')
+      if (denied) return denied
+      try {
+        const rows = await listUserAttributes()
+        return jsonResult({ attributes: rows.map((a) => ({ ...a })) })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // manage_user_attribute
+  server.tool(
+    'manage_user_attribute',
+    `Create, update, or delete a custom user-attribute definition. Currency attributes require a
+currencyCode (ISO 4217). The key is normalised to lower_snake_case on create.
+
+Examples:
+- Create: manage_user_attribute({ action: "create", key: "plan_tier", label: "Plan Tier", type: "string" })
+- Currency: manage_user_attribute({ action: "create", key: "mrr", label: "MRR", type: "currency", currencyCode: "USD" })
+- Update: manage_user_attribute({ action: "update", attributeId: "user_attr_01...", label: "New Label" })
+- Delete: manage_user_attribute({ action: "delete", attributeId: "user_attr_01..." })`,
+    {
+      action: z.enum(['create', 'update', 'delete']).describe('Operation to perform'),
+      attributeId: z.string().optional().describe('Required for update and delete'),
+      key: z.string().max(100).optional().describe('Required for create'),
+      label: z.string().max(200).optional().describe('Required for create'),
+      description: z.string().max(1000).nullable().optional(),
+      type: z
+        .enum(['string', 'number', 'boolean', 'date', 'currency'])
+        .optional()
+        .describe('Required for create'),
+      currencyCode: z
+        .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
+        .nullable()
+        .optional(),
+      externalKey: z.string().max(200).nullable().optional(),
+    },
+    DESTRUCTIVE,
+    async (args: {
+      action: 'create' | 'update' | 'delete'
+      attributeId?: string
+      key?: string
+      label?: string
+      description?: string | null
+      type?: 'string' | 'number' | 'boolean' | 'date' | 'currency'
+      currencyCode?: string | null
+      externalKey?: string | null
+    }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:config') ?? requireTeamRole(auth)
+      if (denied) return denied
+      try {
+        switch (args.action) {
+          case 'create': {
+            if (!args.key || !args.label || !args.type) {
+              return errorResult(
+                new Error('key, label and type are required when action is "create"')
+              )
+            }
+            const attribute = await createUserAttribute({
+              key: args.key,
+              label: args.label,
+              description: args.description,
+              type: args.type,
+              currencyCode: args.currencyCode as never,
+              externalKey: args.externalKey,
+            })
+            return jsonResult(attribute)
+          }
+          case 'update': {
+            if (!args.attributeId) {
+              return errorResult(new Error('attributeId is required when action is "update"'))
+            }
+            const attribute = await updateUserAttribute(args.attributeId as UserAttributeId, {
+              label: args.label,
+              description: args.description,
+              type: args.type,
+              currencyCode: args.currencyCode as never,
+              externalKey: args.externalKey,
+            })
+            return jsonResult(attribute)
+          }
+          case 'delete': {
+            if (!args.attributeId) {
+              return errorResult(new Error('attributeId is required when action is "delete"'))
+            }
+            await deleteUserAttribute(args.attributeId as UserAttributeId)
+            return jsonResult({ deleted: true, id: args.attributeId })
+          }
+        }
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+}
+
+function registerChangelogVisibilityTools(server: McpServer, auth: McpAuthContext) {
+  // get_changelog_visibility
+  server.tool(
+    'get_changelog_visibility',
+    `Read changelog audience visibility configuration. Without a segmentId, returns the org-level
+default and the list of per-segment overrides. With a segmentId, returns that segment's override.
+
+Examples:
+- Org defaults + all overrides: get_changelog_visibility({})
+- One segment: get_changelog_visibility({ segmentId: "segment_01..." })`,
+    { segmentId: z.string().optional().describe('Segment TypeID to read a single override') },
+    READ_ONLY,
+    async (args: { segmentId?: string }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:feedback')
+      if (denied) return denied
+      try {
+        if (args.segmentId) {
+          const config = await getSegmentChangelogVisibility(args.segmentId as SegmentId)
+          return jsonResult({ segmentId: args.segmentId, config })
+        }
+        const [org, segments] = await Promise.all([
+          getOrgChangelogVisibility(),
+          getAllSegmentChangelogVisibilities(),
+        ])
+        return jsonResult({ org, segments })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // set_changelog_visibility
+  server.tool(
+    'set_changelog_visibility',
+    `Set changelog audience visibility. Without a segmentId, replaces the org-level default. With a
+segmentId, upserts that segment's override.
+
+Examples:
+- Restrict org to two categories: set_changelog_visibility({ restrictCategories: true, allowedCategoryIds: ["changelog_cat_01...","changelog_cat_02..."] })
+- Per-segment override: set_changelog_visibility({ segmentId: "segment_01...", restrictProducts: true, allowedProductIds: ["changelog_prod_01..."] })`,
+    { segmentId: z.string().optional(), ...changelogVisibilityConfigShape },
+    WRITE,
+    async (args: {
+      segmentId?: string
+      restrictCategories?: boolean
+      allowedCategoryIds?: string[]
+      restrictProducts?: boolean
+      allowedProductIds?: string[]
+    }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:changelog') ?? requireTeamRole(auth)
+      if (denied) return denied
+      try {
+        const { segmentId, ...config } = args
+        if (segmentId) {
+          await setSegmentChangelogVisibility(segmentId as SegmentId, config)
+          return jsonResult({
+            segmentId,
+            config: await getSegmentChangelogVisibility(segmentId as SegmentId),
+          })
+        }
+        await setOrgChangelogVisibility(config)
+        return jsonResult({ org: await getOrgChangelogVisibility() })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // delete_changelog_segment_visibility
+  server.tool(
+    'delete_changelog_segment_visibility',
+    `Remove a per-segment changelog visibility override (the segment falls back to org defaults).
+
+Example: delete_changelog_segment_visibility({ segmentId: "segment_01..." })`,
+    { segmentId: z.string().describe('Segment TypeID whose override to remove') },
+    DESTRUCTIVE,
+    async (args: { segmentId: string }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:changelog') ?? requireTeamRole(auth)
+      if (denied) return denied
+      try {
+        await deleteSegmentChangelogVisibility(args.segmentId as SegmentId)
+        return jsonResult({ deleted: true, segmentId: args.segmentId })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
 }
 
 // ============================================================================

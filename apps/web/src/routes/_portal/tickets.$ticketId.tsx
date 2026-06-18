@@ -13,7 +13,10 @@ import {
 } from '@/lib/server/functions/portal-tickets'
 import { Button } from '@/components/ui/button'
 import { PortalTicketDetailHeader } from '@/components/public/tickets/portal-ticket-detail-header'
-import { PortalTicketThreadFeed } from '@/components/public/tickets/portal-ticket-thread-feed'
+import {
+  PortalTicketThreadFeed,
+  type PortalThread,
+} from '@/components/public/tickets/portal-ticket-thread-feed'
 import { PortalTicketReplyComposer } from '@/components/public/tickets/portal-ticket-reply-composer'
 import { toast } from 'sonner'
 
@@ -166,7 +169,7 @@ function TicketDetailPage() {
       )}
 
       <PortalTicketThreadFeed
-        threads={data.threads}
+        threads={data.threads as PortalThread[]}
         principalNames={data.principalNames}
         viewerPrincipalId={data.viewerPrincipalId}
         description={

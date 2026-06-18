@@ -6,7 +6,19 @@
  * Errors are caught and logged rather than propagated to the caller.
  */
 
-import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
+import type {
+  BoardId,
+  ChangelogId,
+  CommentId,
+  PostId,
+  PrincipalId,
+  UserId,
+  TicketStatusId,
+  InboxId,
+  TeamId,
+  ContactId,
+  OrganizationId,
+} from '@quackback/ids'
 
 import type {
   EventActor,
@@ -24,6 +36,10 @@ import type {
 } from './types.js'
 
 import { logger } from '@/lib/server/logger'
+import { realEmail } from '@/lib/shared/anonymous-email'
+import { db, eq, ticketStatuses, inboxes, teams, contacts, organizations } from '@/lib/server/db'
+import { getBaseUrl } from '@/lib/server/config'
+import { toIsoString } from '@/lib/shared/utils/date'
 
 // Re-export EventActor for API routes that need to construct actor objects
 export type { EventActor } from './types.js'
@@ -45,7 +61,12 @@ export function buildEventActor(actor: {
       type: 'user',
       principalId: actor.principalId,
       userId: actor.userId,
-      email: actor.email,
+      // Strip the synthetic anonymous placeholder ("temp-<id>@anon.quackback.io")
+      // so it never rides along into event payloads / webhook deliveries. Real
+      // user emails pass through unchanged. (Regression guard:
+      // build-event-actor.test.ts — this stripping exists on main and must not
+      // be lost when dispatch.ts is rewritten.)
+      email: realEmail(actor.email) ?? undefined,
     }
   }
   return { type: 'service', principalId: actor.principalId, displayName: actor.displayName }
@@ -334,6 +355,108 @@ function ticketRef(t: Record<string, unknown>): EventTicketRef {
   }
 }
 
+/**
+ * Enrich a bare {@link ticketRef} with snapshot fields that downstream
+ * consumers (webhook deliveries, ticket-targets notification builders) read
+ * directly off the event payload — the related-entity display names, the
+ * requester's contact details, the organization, the created-at ISO string,
+ * and a deep-link `ticketUrl`. Each lookup is guarded by the presence of its
+ * id, so null ids cost no queries. The whole enrichment is best-effort: if any
+ * query throws we log and fall back to the bare ref rather than dropping the
+ * event, since the snapshot fields are convenience metadata, not load-bearing.
+ *
+ * Regression coverage: dispatch-enrichment.test.ts pins the lookup/skip/
+ * fallback/team-reuse behaviour exercised here.
+ */
+async function buildTicketRef(t: Record<string, unknown>): Promise<EventTicketRef> {
+  const base = ticketRef(t)
+  try {
+    const enriched: EventTicketRef = { ...base }
+
+    // Status name
+    enriched.statusName = base.statusId
+      ? ((
+          await db.query.ticketStatuses.findFirst({
+            where: eq(ticketStatuses.id, base.statusId as TicketStatusId),
+            columns: { name: true },
+          })
+        )?.name ?? null)
+      : null
+
+    // Inbox name + slug
+    if (base.inboxId) {
+      const inbox = await db.query.inboxes.findFirst({
+        where: eq(inboxes.id, base.inboxId as InboxId),
+        columns: { name: true, slug: true },
+      })
+      enriched.inboxName = inbox?.name ?? null
+      enriched.inboxSlug = inbox?.slug ?? null
+    } else {
+      enriched.inboxName = null
+      enriched.inboxSlug = null
+    }
+
+    // Team names — fetch each distinct team id once, then reuse for both the
+    // primary team and the assignee team (they are frequently the same).
+    const teamNameCache = new Map<string, string | null>()
+    const teamName = async (id: string | null): Promise<string | null> => {
+      if (!id) return null
+      if (teamNameCache.has(id)) return teamNameCache.get(id) ?? null
+      const row = await db.query.teams.findFirst({
+        where: eq(teams.id, id as TeamId),
+        columns: { name: true },
+      })
+      const name = row?.name ?? null
+      teamNameCache.set(id, name)
+      return name
+    }
+    enriched.primaryTeamName = await teamName(base.primaryTeamId)
+    enriched.assigneeTeamName = await teamName(base.assigneeTeamId)
+
+    // Requester contact (name + email, plus its organization for the org snapshot)
+    let contactOrgId: string | null = null
+    if (base.requesterContactId) {
+      const contact = await db.query.contacts.findFirst({
+        where: eq(contacts.id, base.requesterContactId as ContactId),
+        columns: { name: true, email: true, organizationId: true },
+      })
+      enriched.requesterName = contact?.name ?? null
+      // Never leak a synthetic anonymous placeholder address into the payload.
+      enriched.requesterEmail = realEmail(contact?.email) ?? null
+      contactOrgId = (contact?.organizationId as string | null) ?? null
+    } else {
+      enriched.requesterName = null
+      enriched.requesterEmail = null
+    }
+
+    // Organization — prefer the ticket's own org, else the requester contact's.
+    const organizationId = ((t.organizationId as string | null) ?? null) || contactOrgId
+    if (organizationId) {
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, organizationId as OrganizationId),
+        columns: { name: true, domain: true },
+      })
+      enriched.organizationName = org?.name ?? null
+      enriched.organizationDomain = org?.domain ?? null
+    } else {
+      enriched.organizationName = null
+      enriched.organizationDomain = null
+    }
+
+    // Created-at snapshot (ISO) + admin deep link.
+    if (t.createdAt) enriched.createdAt = toIsoString(t.createdAt as Date | string)
+    enriched.ticketUrl = `${getBaseUrl()}/admin/tickets/${base.id}`
+
+    return enriched
+  } catch (err) {
+    // Best-effort: a failed snapshot lookup must not drop the event. Use
+    // console.warn (not the structured logger) so the failure is always
+    // surfaced even before logger transports are wired.
+    console.warn('[dispatch] ticket ref enrichment failed; using bare ref', err)
+    return base
+  }
+}
+
 export async function dispatchTicketCreated(
   actor: EventActor,
   ticket: Record<string, unknown>,
@@ -343,7 +466,7 @@ export async function dispatchTicketCreated(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.created',
-    data: { ticket: ticketRef(ticket) },
+    data: { ticket: await buildTicketRef(ticket) },
   })
 }
 
@@ -359,7 +482,7 @@ export async function dispatchTicketAssigned(
     ...sourceFields(options),
     type: 'ticket.assigned',
     data: {
-      ticket: ticketRef(ticket),
+      ticket: await buildTicketRef(ticket),
       previousAssigneePrincipalId,
       newAssigneePrincipalId,
     },
@@ -376,7 +499,7 @@ export async function dispatchTicketUnassigned(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.unassigned',
-    data: { ticket: ticketRef(ticket), previousAssigneePrincipalId },
+    data: { ticket: await buildTicketRef(ticket), previousAssigneePrincipalId },
   })
 }
 
@@ -391,7 +514,7 @@ export async function dispatchTicketStatusChanged(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.status_changed',
-    data: { ticket: ticketRef(ticket), previousStatusCategory, newStatusCategory },
+    data: { ticket: await buildTicketRef(ticket), previousStatusCategory, newStatusCategory },
   })
 }
 
@@ -430,7 +553,7 @@ export async function dispatchTicketThreadAdded(
     ...sourceFields(options),
     type: 'ticket.thread_added',
     data: {
-      ticket: ticketRef(ticket),
+      ticket: await buildTicketRef(ticket),
       threadId,
       audience,
       sharedWithTeamId,
@@ -461,7 +584,7 @@ export async function dispatchTicketThreadUpdated(
     ...sourceFields(options),
     type: 'ticket.thread_updated',
     data: {
-      ticket: ticketRef(ticket),
+      ticket: await buildTicketRef(ticket),
       threadId,
       audience,
       sharedWithTeamId,
@@ -523,7 +646,7 @@ export async function dispatchTicketThreadDeleted(
     ...sourceFields(options),
     type: 'ticket.thread_deleted',
     data: {
-      ticket: ticketRef(ticket),
+      ticket: await buildTicketRef(ticket),
       threadId,
       audience,
       sharedWithTeamId,
@@ -542,7 +665,7 @@ export async function dispatchTicketParticipantAdded(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.participant_added',
-    data: { ticket: ticketRef(ticket), addedPrincipalId, role },
+    data: { ticket: await buildTicketRef(ticket), addedPrincipalId, role },
   })
 }
 
@@ -554,7 +677,7 @@ export async function dispatchTicketParticipantRemoved(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.participant_removed',
-    data: { ticket: ticketRef(ticket), removedPrincipalId },
+    data: { ticket: await buildTicketRef(ticket), removedPrincipalId },
   })
 }
 
@@ -567,7 +690,7 @@ export async function dispatchTicketShared(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.shared',
-    data: { ticket: ticketRef(ticket), teamId, accessLevel },
+    data: { ticket: await buildTicketRef(ticket), teamId, accessLevel },
   })
 }
 
@@ -579,7 +702,7 @@ export async function dispatchTicketUnshared(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.unshared',
-    data: { ticket: ticketRef(ticket), teamId },
+    data: { ticket: await buildTicketRef(ticket), teamId },
   })
 }
 
@@ -592,7 +715,7 @@ export async function dispatchTicketSlaWarning(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.sla_warning',
-    data: { ticket: ticketRef(ticket), kind, ruleName },
+    data: { ticket: await buildTicketRef(ticket), kind, ruleName },
   })
 }
 
@@ -604,7 +727,7 @@ export async function dispatchTicketSlaBreach(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.sla_breach',
-    data: { ticket: ticketRef(ticket), kind },
+    data: { ticket: await buildTicketRef(ticket), kind },
   })
 }
 
@@ -616,7 +739,7 @@ export async function dispatchTicketRestored(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.restored',
-    data: { ticket: ticketRef(ticket), restoredByPrincipalId },
+    data: { ticket: await buildTicketRef(ticket), restoredByPrincipalId },
   })
 }
 
@@ -631,7 +754,7 @@ export async function dispatchTicketUpdated(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.updated',
-    data: { ticket: ticketRef(ticket), changedFields, diff },
+    data: { ticket: await buildTicketRef(ticket), changedFields, diff },
   })
 }
 
@@ -646,7 +769,7 @@ export async function dispatchTicketFirstResponse(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.first_response',
-    data: { ticket: ticketRef(ticket), threadId, firstResponseAt },
+    data: { ticket: await buildTicketRef(ticket), threadId, firstResponseAt },
   })
 }
 
@@ -666,7 +789,7 @@ export async function dispatchTicketAttachmentAdded(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.attachment_added',
-    data: { ticket: ticketRef(ticket), attachment },
+    data: { ticket: await buildTicketRef(ticket), attachment },
   })
 }
 
@@ -679,7 +802,7 @@ export async function dispatchTicketAttachmentRemoved(
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.attachment_removed',
-    data: { ticket: ticketRef(ticket), attachment, removedByPrincipalId },
+    data: { ticket: await buildTicketRef(ticket), attachment, removedByPrincipalId },
   })
 }
 
@@ -693,7 +816,7 @@ export async function dispatchTicketDeleted(
     ...eventEnvelope(actor),
     ...sourceFields(options),
     type: 'ticket.deleted',
-    data: { ticket: ticketRef(ticket), deletedByPrincipalId },
+    data: { ticket: await buildTicketRef(ticket), deletedByPrincipalId },
   })
 }
 

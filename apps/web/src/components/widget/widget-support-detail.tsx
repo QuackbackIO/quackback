@@ -191,7 +191,7 @@ export function WidgetSupportDetail({ ticketId }: WidgetSupportDetailProps) {
 
   const { ticket, threads, principalNames, viewerPrincipalId } = data
   const feedThreads: ThreadRow[] = threads.map((t) => ({
-    id: t.id,
+    id: t.id as ThreadRow['id'],
     ticketId: ticket.id,
     principalId: t.principalId,
     audience: 'public',

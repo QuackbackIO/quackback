@@ -77,7 +77,11 @@ describe('PortalTabConfig utilities', () => {
 
       expect(result.feedback).toBe(true)
       expect(result.roadmap).toBe(true) // enabled in config2
-      expect(result.changelog).toBe(false)
+      // Union semantics: config1 omits `changelog` (= default true), so even
+      // though config2 sets it false the tab stays enabled — matches the
+      // `configs.some(c => c[tab] !== false)` rule and the default-true sibling
+      // test below. (The previous `toBe(false)` was an intersection-style slip.)
+      expect(result.changelog).toBe(true)
     })
 
     it('treats missing fields as enabled (default true)', () => {

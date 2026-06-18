@@ -19,6 +19,9 @@ vi.mock('@tanstack/react-start', () => ({
       validator() {
         return chain
       },
+      inputValidator() {
+        return chain
+      },
       handler() {
         return chain
       },

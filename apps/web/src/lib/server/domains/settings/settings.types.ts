@@ -831,7 +831,7 @@ export const LAB_SECTIONS: Array<{
   {
     title: 'Support',
     description: 'Support your customers with live chat and a self-serve help center.',
-    flags: ['supportInbox', 'helpCenter', 'linkPreviews'],
+    flags: ['supportInbox', 'tickets', 'helpCenter', 'linkPreviews'],
   },
   {
     title: 'Feedback',

@@ -19,6 +19,39 @@ vi.mock('../widget-auth-provider', () => ({
 
 const createWidgetTicket = vi.hoisted(() => vi.fn())
 
+// The body field is a TipTap RichTextEditor, which renders its placeholder as a
+// ProseMirror `data-placeholder` rather than a native `placeholder` attribute
+// and is far too heavy to mount in a unit test. Stub it with a <textarea> that
+// exposes the same native placeholder and emits TipTap-shaped JSON on change.
+vi.mock('@/components/ui/rich-text-editor', () => ({
+  RichTextEditor: ({
+    onChange,
+    placeholder,
+    disabled,
+  }: {
+    onChange: (json: unknown) => void
+    placeholder?: string
+    disabled?: boolean
+  }) => (
+    <textarea
+      placeholder={placeholder}
+      disabled={disabled}
+      onChange={(event) => {
+        const text = event.currentTarget.value
+        onChange({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: text ? [{ type: 'text', text }] : [],
+            },
+          ],
+        })
+      }}
+    />
+  ),
+}))
+
 vi.mock('@/lib/client/widget/tickets-api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/client/widget/tickets-api')>(
     '@/lib/client/widget/tickets-api'
@@ -69,10 +102,19 @@ describe('WidgetSupportNew', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(createWidgetTicket).toHaveBeenCalledTimes(1))
+    // The composer now sends the rich-text body as `bodyJson` (TipTap doc)
+    // alongside the derived `bodyText`, plus the resolved `categoryKey`
+    // (undefined here — no categories configured). bodyJson mirrors what the
+    // RichTextEditor mock emits for the typed text.
     expect(createWidgetTicket).toHaveBeenCalledWith({
       subject: 'Hello',
+      bodyJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'world' }] }],
+      },
       bodyText: 'world',
       priority: 'normal',
+      categoryKey: undefined,
     })
     await waitFor(() =>
       expect(mockAuth.emitEvent).toHaveBeenCalledWith('ticket:created', expect.any(Object))

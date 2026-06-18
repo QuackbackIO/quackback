@@ -15,6 +15,7 @@ import { useIntl } from 'react-intl'
 
 vi.mock('@/lib/client/widget-auth', () => ({
   setWidgetToken: vi.fn(),
+  setWidgetContextToken: vi.fn(),
   clearWidgetToken: vi.fn(),
   getWidgetToken: vi.fn(() => null),
   persistAnonymousToken: vi.fn(),

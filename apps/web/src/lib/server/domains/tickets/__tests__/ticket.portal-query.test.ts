@@ -9,6 +9,7 @@ const addThreadMock = vi.fn()
 
 const ticketsFindFirstMock = vi.fn()
 const ticketStatusesFindFirstMock = vi.fn()
+const ticketParticipantsFindFirstMock = vi.fn()
 const rowsResultMock = vi.fn<() => unknown[]>()
 const countResultMock = vi.fn<() => Array<{ count: number }>>()
 /** Captures the WHERE arg for top-level rows / count queries (in call order). */
@@ -68,6 +69,7 @@ vi.mock('@/lib/server/db', () => {
       query: {
         tickets: { findFirst: ticketsFindFirstMock },
         ticketStatuses: { findFirst: ticketStatusesFindFirstMock },
+        ticketParticipants: { findFirst: ticketParticipantsFindFirstMock },
       },
       select: vi.fn(() => makeChain()),
       insert: vi.fn(),
@@ -131,6 +133,7 @@ beforeEach(() => {
   addThreadMock.mockReset()
   ticketsFindFirstMock.mockReset()
   ticketStatusesFindFirstMock.mockReset()
+  ticketParticipantsFindFirstMock.mockReset()
   rowsResultMock.mockReset()
   countResultMock.mockReset()
   capturedWhereCalls.length = 0
@@ -271,6 +274,7 @@ describe('addPortalReply', () => {
       statusId: 'ticket_status_open',
     })
     ticketStatusesFindFirstMock.mockResolvedValueOnce({ category: 'open' })
+    ticketParticipantsFindFirstMock.mockResolvedValueOnce({ role: 'collaborator' })
     addThreadMock.mockResolvedValueOnce({ id: 'thread_1', audience: 'public' })
     const { addPortalReply } = await import('../ticket.portal-query')
     const result = await addPortalReply({

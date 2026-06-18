@@ -51,6 +51,29 @@ export const PERMISSIONS = {
   ADMIN_MANAGE_ROLES: 'admin.manage_roles',
   ADMIN_MANAGE_API_KEYS: 'admin.manage_api_keys',
   ADMIN_MANAGE_SETTINGS: 'admin.manage_settings',
+
+  // Teams (workspace structure)
+  TEAM_VIEW: 'team.view',
+  TEAM_MANAGE: 'team.manage',
+
+  // Audience & segmentation
+  SEGMENT_VIEW: 'segment.view',
+  SEGMENT_MANAGE: 'segment.manage',
+  USER_ATTRIBUTE_VIEW: 'user_attribute.view',
+  USER_ATTRIBUTE_MANAGE: 'user_attribute.manage',
+
+  // Portal & widget configuration
+  PORTAL_MANAGE: 'portal.manage',
+  WIDGET_VIEW: 'widget.view',
+  WIDGET_MANAGE: 'widget.manage',
+
+  // Conversations / live chat
+  CHAT_VIEW: 'chat.view',
+  CHAT_MANAGE: 'chat.manage',
+
+  // Content moderation
+  MODERATION_VIEW: 'moderation.view',
+  MODERATION_MANAGE: 'moderation.manage',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -96,6 +119,16 @@ export const PERMISSION_CATEGORIES: Record<string, readonly PermissionKey[]> = {
     PERMISSIONS.ADMIN_MANAGE_API_KEYS,
     PERMISSIONS.ADMIN_MANAGE_SETTINGS,
   ],
+  team: [PERMISSIONS.TEAM_VIEW, PERMISSIONS.TEAM_MANAGE],
+  audience: [
+    PERMISSIONS.SEGMENT_VIEW,
+    PERMISSIONS.SEGMENT_MANAGE,
+    PERMISSIONS.USER_ATTRIBUTE_VIEW,
+    PERMISSIONS.USER_ATTRIBUTE_MANAGE,
+  ],
+  portal: [PERMISSIONS.PORTAL_MANAGE, PERMISSIONS.WIDGET_VIEW, PERMISSIONS.WIDGET_MANAGE],
+  chat: [PERMISSIONS.CHAT_VIEW, PERMISSIONS.CHAT_MANAGE],
+  moderation: [PERMISSIONS.MODERATION_VIEW, PERMISSIONS.MODERATION_MANAGE],
 }
 
 /**
@@ -151,6 +184,20 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly PermissionK
     PERMISSIONS.INBOX_CHANNEL_MANAGE,
     PERMISSIONS.ROUTING_RULE_MANAGE,
     PERMISSIONS.TICKET_BULK_OPERATE,
+    // Workspace structure + operational config (admin.* stays owner-only)
+    PERMISSIONS.TEAM_VIEW,
+    PERMISSIONS.TEAM_MANAGE,
+    PERMISSIONS.SEGMENT_VIEW,
+    PERMISSIONS.SEGMENT_MANAGE,
+    PERMISSIONS.USER_ATTRIBUTE_VIEW,
+    PERMISSIONS.USER_ATTRIBUTE_MANAGE,
+    PERMISSIONS.PORTAL_MANAGE,
+    PERMISSIONS.WIDGET_VIEW,
+    PERMISSIONS.WIDGET_MANAGE,
+    PERMISSIONS.CHAT_VIEW,
+    PERMISSIONS.CHAT_MANAGE,
+    PERMISSIONS.MODERATION_VIEW,
+    PERMISSIONS.MODERATION_MANAGE,
   ],
 
   [SYSTEM_ROLES.AGENT]: [
@@ -165,6 +212,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly PermissionK
     PERMISSIONS.SLA_VIEW,
     PERMISSIONS.INBOX_VIEW,
     PERMISSIONS.TICKET_BULK_OPERATE,
+    // Front-line agents handle conversations and need read context
+    PERMISSIONS.CHAT_VIEW,
+    PERMISSIONS.CHAT_MANAGE,
+    PERMISSIONS.TEAM_VIEW,
+    PERMISSIONS.SEGMENT_VIEW,
   ],
 
   [SYSTEM_ROLES.COLLABORATOR]: [

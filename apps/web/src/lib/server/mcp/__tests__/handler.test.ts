@@ -14,7 +14,13 @@ vi.mock('better-auth/oauth2', () => ({
 
 const mockFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', () => {
+// Base the mock on the REAL module via importOriginal so every named export the
+// MCP tool/resource registration transitively imports (tables, enums like
+// TICKET_STATUS_CATEGORIES, operators, etc.) resolves. The `db` export is a lazy
+// Proxy, so importOriginal opens NO database connection. The spread satisfies
+// transitive imports while our explicit `db`/table/operator overrides below
+// preserve the query-shape assertions this file depends on.
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const updateChain = {
     set: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
@@ -28,6 +34,7 @@ vi.mock('@/lib/server/db', () => {
     limit: vi.fn().mockResolvedValue([]),
   }
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
@@ -845,14 +852,25 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('manage_ticket_status')
       expect(toolNames).toContain('manage_contact')
       expect(toolNames).toContain('manage_organization')
-      expect(toolNames).toHaveLength(57)
       expect(toolNames).toContain('list_conversations')
       expect(toolNames).toContain('get_conversation')
       expect(toolNames).toContain('reply_to_conversation')
       expect(toolNames).toContain('suggest_post')
       expect(toolNames).toContain('share_post')
       expect(toolNames).toContain('set_conversation_status')
-      expect(toolNames).toHaveLength(33)
+      // Audience / configuration tools (external-surface coverage)
+      expect(toolNames).toContain('list_segments')
+      expect(toolNames).toContain('manage_segment')
+      expect(toolNames).toContain('list_user_attributes')
+      expect(toolNames).toContain('manage_user_attribute')
+      expect(toolNames).toContain('get_changelog_visibility')
+      expect(toolNames).toContain('set_changelog_visibility')
+      // Total registered tool count for an admin OAuth session with all
+      // surfaces enabled. Pins the count so an accidental tool add/remove is
+      // caught. (The two contradictory toHaveLength(57)/(33) assertions here
+      // were a merge artifact.) 71 = 69 prior + list_user_attributes +
+      // manage_user_attribute (external-surface coverage).
+      expect(toolNames).toHaveLength(71)
     })
 
     it('should handle resources/list request', async () => {

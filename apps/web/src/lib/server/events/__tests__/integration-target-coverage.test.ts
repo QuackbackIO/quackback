@@ -28,7 +28,11 @@ vi.mock('@/lib/server/redis', () => ({
 }))
 
 // --- DB mock (mappings come from the cache mock, so the select chain is unused) ---
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real module (db is a lazy Proxy ⇒ no connection) so transitively
+  // imported exports like `ticketSubscriptions` resolve; the explicit overrides
+  // below still win for everything this test inspects.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: () => ({ from: () => ({ innerJoin: () => ({ where: () => [] }) }) }),
     query: { webhooks: { findMany: vi.fn().mockResolvedValue([]) } },

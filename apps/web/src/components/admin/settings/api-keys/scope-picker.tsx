@@ -23,6 +23,11 @@ const CATEGORY_LABELS: Record<string, string> = {
   audit: 'Audit',
   inbox: 'Inboxes & routing',
   admin: 'Admin',
+  team: 'Teams',
+  audience: 'Audience & segments',
+  portal: 'Portal & widget',
+  chat: 'Conversations',
+  moderation: 'Moderation',
 }
 
 function humanize(key: string): string {

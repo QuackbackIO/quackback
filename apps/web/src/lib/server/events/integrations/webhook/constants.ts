@@ -82,6 +82,12 @@ export const WEBHOOK_EVENT_CONFIG = [
     category: 'posts',
   },
   {
+    id: 'post.mentioned',
+    label: 'Post Mention',
+    description: 'When a principal is mentioned in a post body',
+    category: 'posts',
+  },
+  {
     id: 'comment.created',
     label: 'New Comment',
     description: 'When a comment is posted',

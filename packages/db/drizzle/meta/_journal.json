@@ -876,6 +876,13 @@
       "when": 1783382400000,
       "tag": "0124_visibility_metadata_normalization",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0125_external_surface_permissions",
+      "breakpoints": true
     }
   ]
 }

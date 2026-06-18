@@ -130,6 +130,14 @@ export function buildNavSections(flags?: {
     sections.push({ label: 'Support', items: supportItems })
   }
 
+  // Customers — entry point to the CRM people directory. Always present and
+  // anchored last (after Support), so customer management is reachable from
+  // settings regardless of which support flags are on.
+  sections.push({
+    label: 'Customers',
+    items: [{ label: 'People', to: '/admin/customers/people', icon: UsersIcon }],
+  })
+
   return sections
 }
 

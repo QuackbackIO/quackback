@@ -20,11 +20,12 @@
  *   6  fetchPublicStatuses
  *   7  fetchPublicTags
  *   8  fetchUserAvatar
- *   9  fetchAvatars
- *  10  fetchSubscriptionStatus
- *  11  fetchPublicRoadmaps
- *  12  fetchPublicRoadmapPosts
- *  13  getCommentsSectionDataFn
+ *   9  getEffectivePortalTabConfigForCurrentUserFn
+ *  10  fetchAvatars
+ *  11  fetchSubscriptionStatus
+ *  12  fetchPublicRoadmaps
+ *  13  fetchPublicRoadmapPosts
+ *  14  getCommentsSectionDataFn
  *
  * Handler registration order (changelog.ts):
  *   0  createChangelogFn
@@ -260,10 +261,10 @@ const FETCH_PUBLIC_POST_DETAIL = 4
 const FETCH_PUBLIC_POSTS = 5
 const FETCH_PUBLIC_STATUSES = 6
 const FETCH_PUBLIC_TAGS = 7
-const FETCH_PUBLIC_ROADMAPS = 11
-const FETCH_PUBLIC_ROADMAP_POSTS = 12
+const FETCH_PUBLIC_ROADMAPS = 12
+const FETCH_PUBLIC_ROADMAP_POSTS = 13
 // Declared last in portal.ts (appended to preserve the indices above).
-const FETCH_BOARD_CAPABILITIES = 14
+const FETCH_BOARD_CAPABILITIES = 15
 
 // Changelog handler indices
 const CHANGELOG = '@/lib/server/functions/changelog' as const

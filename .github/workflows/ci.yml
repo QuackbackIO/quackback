@@ -44,7 +44,31 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so the differential-coverage gate can diff against the
+          # PR base ref.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run db:migrate
-      - run: bun run test --run
+      # Runs the full suite AND emits coverage/coverage-final.json (v8). Test
+      # failures fail this step (and the job) as before.
+      - run: bun run test:coverage
+      # Enforce 100% line + branch coverage on the lines this PR changed. No-op
+      # on pushes to main (empty diff). Never masked with continue-on-error.
+      - name: Differential coverage gate
+        if: github.event_name == 'pull_request'
+        env:
+          DIFF_COVERAGE_BASE: ${{ github.event.pull_request.base.sha }}
+          DIFF_COVERAGE_THRESHOLD: '100'
+          DIFF_COVERAGE_REPORT: diff-coverage.md
+        run: bun run test:diff-coverage
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage/
+            diff-coverage.md
+          if-no-files-found: ignore

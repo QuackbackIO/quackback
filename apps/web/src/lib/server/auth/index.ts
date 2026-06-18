@@ -13,6 +13,7 @@ import {
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
+import { MCP_SCOPES } from '@/lib/server/mcp/types'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import { rewriteUrlToPublicBaseUrl } from '@/lib/server/public-url'
@@ -547,48 +548,18 @@ async function createAuth() {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
 
-        // Quackback-specific scopes
-        scopes: [
-          'openid',
-          'profile',
-          'email',
-          'offline_access',
-          'read:feedback',
-          'write:feedback',
-          'write:changelog',
-          'read:help-center',
-          'write:help-center',
-          'read:tickets',
-          'write:tickets',
-          'manage:tickets',
-          'read:contacts',
-          'write:contacts',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
-        ],
+        // Quackback-specific scopes (OIDC + the full MCP scope catalogue).
+        scopes: ['openid', 'profile', 'email', 'offline_access', ...MCP_SCOPES],
 
-        // Default scopes for dynamically registered clients
+        // Default scopes for dynamically registered clients. Mirrors the full
+        // catalogue minus `manage:admin`, which is sensitive (role/API-key/
+        // webhook management) and must be granted explicitly via consent.
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
           'email',
-          'read:feedback',
           'offline_access',
-          'write:feedback',
-          'write:changelog',
-          'read:help-center',
-          'write:help-center',
-          'read:tickets',
-          'write:tickets',
-          'manage:tickets',
-          'read:contacts',
-          'write:contacts',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
+          ...MCP_SCOPES.filter((s) => s !== 'manage:admin'),
         ],
 
         // MCP endpoint is a valid token audience

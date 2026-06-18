@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * Phase 6 housekeeping: lock in that no webhook event category — including
  * `configuration` — is auto-selected. The create-webhook dialog initializes

@@ -29,6 +29,7 @@ export const ID_PREFIXES = {
   changelog: 'changelog',
   changelog_category: 'changelog_cat',
   changelog_product: 'changelog_prod',
+  changelog_segment_visibility: 'clseg_vis',
 
   // Widget embedding
   widget_application: 'widget_app',

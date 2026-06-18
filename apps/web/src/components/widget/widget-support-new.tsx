@@ -124,7 +124,7 @@ export function WidgetSupportNew({
         await ensureSessionThen(async () => {
           created = await createWidgetTicket({
             subject: subject.trim(),
-            bodyJson,
+            bodyJson: bodyJson as { type: 'doc'; content?: unknown[] } | null,
             bodyText,
             priority: showPrioritySelector ? priority : undefined,
             categoryKey: selectedCategory?.categoryKey,

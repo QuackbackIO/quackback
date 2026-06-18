@@ -28,7 +28,11 @@ const mockInnerJoin = vi.fn()
 const mockDbWhere = vi.fn()
 const mockFindMany = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real module (db is a lazy Proxy ⇒ no connection) so transitively
+  // imported exports like `ticketSubscriptions` resolve; the explicit overrides
+  // below still win for everything this test inspects.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
     query: {
@@ -68,6 +72,14 @@ vi.mock('../hook-context', () => ({
 vi.mock('../hook-utils', () => ({
   stripHtml: vi.fn((s: string) => s),
   truncate: vi.fn((s: string) => s),
+}))
+// Out of scope for this suite: ticket *email* targets are a separate concern
+// (own DB queries). Left unmocked, getTicketEmailTargets runs for every
+// ticket.* event and throws on the unmocked DB, which getHookTargets swallows
+// into an empty result — silently zeroing the webhook/integration targets this
+// suite asserts on. Stub it to [] so we isolate inbox-filter behaviour.
+vi.mock('../ticket-targets', () => ({
+  getTicketEmailTargets: vi.fn().mockResolvedValue([]),
 }))
 
 const { getHookTargets } = await import('../targets')
@@ -129,15 +141,20 @@ function makePostCreatedEvent() {
 }
 
 function setActiveWebhooks(rows: unknown[]) {
-  mockCacheGet
-    .mockResolvedValueOnce([]) // INTEGRATION_MAPPINGS
-    .mockResolvedValueOnce(rows) // ACTIVE_WEBHOOKS
+  // Key the cache by its actual key rather than call order — getHookTargets
+  // issues several cacheGet calls (integration mappings, then webhooks) and the
+  // intermediate ordering is not stable, so an ordered mockResolvedValueOnce
+  // queue mis-assigns the webhook rows. '[]' for every other key is a safe
+  // empty cache hit (avoids unmocked DB fallbacks).
+  mockCacheGet.mockImplementation((key: string) =>
+    Promise.resolve(key === 'hooks:webhooks-active' ? rows : [])
+  )
 }
 
 function setActiveIntegrationMappings(rows: unknown[]) {
-  mockCacheGet
-    .mockResolvedValueOnce(rows) // INTEGRATION_MAPPINGS
-    .mockResolvedValueOnce([]) // ACTIVE_WEBHOOKS
+  mockCacheGet.mockImplementation((key: string) =>
+    Promise.resolve(key === 'hooks:integration-mappings' ? rows : [])
+  )
 }
 
 function makeGitHubTicketMapping(filters: { inboxIds?: string[] } | null) {

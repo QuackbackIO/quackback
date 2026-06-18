@@ -15,8 +15,12 @@ vi.mock('@/lib/server/widget/ticketing-gate', () => ({
 }))
 
 const addPortalReplyMock = vi.fn()
+// The handler re-checks ownership via getTicketForPortalUser before replying,
+// then scopes the ticket against the widget context.
+const getTicketForPortalUserMock = vi.fn()
 vi.mock('@/lib/server/domains/tickets/ticket.portal-query', () => ({
   addPortalReply: (...args: unknown[]) => addPortalReplyMock(...args),
+  getTicketForPortalUser: (...args: unknown[]) => getTicketForPortalUserMock(...args),
 }))
 
 import { getWidgetSession } from '@/lib/server/functions/widget-auth'
@@ -26,6 +30,14 @@ const URL_BASE = 'http://localhost/api/widget/tickets/ticket_42/replies'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Ownership re-check succeeds by default; individual tests drive behaviour
+  // through addPortalReplyMock. The widget context carries no profileId in
+  // these requests, so assertTicketMatchesWidgetContext is a no-op.
+  getTicketForPortalUserMock.mockResolvedValue({
+    id: 'ticket_42',
+    sourceWidgetProfileId: null,
+    inboxId: null,
+  })
 })
 
 describe('POST /api/widget/tickets/:ticketId/replies', () => {

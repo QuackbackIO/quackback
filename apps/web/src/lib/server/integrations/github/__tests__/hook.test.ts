@@ -17,14 +17,16 @@ const findFirstPrincipalMock = vi.fn()
 const findFirstInboxMock = vi.fn()
 const findFirstTicketMock = vi.fn()
 const selectWhereMock = vi.fn()
-const selectInnerJoinMock = vi.fn(() => ({
+const selectInnerJoinMock = vi.fn((..._args: unknown[]) => ({
   where: (...args: unknown[]) => selectWhereMock(...args),
 }))
-const selectFromMock = vi.fn(() => ({
+const selectFromMock = vi.fn((..._args: unknown[]) => ({
   innerJoin: (...args: unknown[]) => selectInnerJoinMock(...args),
   where: (...args: unknown[]) => selectWhereMock(...args),
 }))
-const selectMock = vi.fn(() => ({ from: (...args: unknown[]) => selectFromMock(...args) }))
+const selectMock = vi.fn((..._args: unknown[]) => ({
+  from: (...args: unknown[]) => selectFromMock(...args),
+}))
 
 vi.mock('@/lib/server/db', () => ({
   db: {

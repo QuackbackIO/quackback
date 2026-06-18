@@ -13,6 +13,7 @@ import {
   type WidgetProfileSupportConfig,
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils/date'
 import type { WidgetApplicationId, WidgetProfileId } from '@quackback/ids'
 
 function normalizeKey(value: string): string {
@@ -23,10 +24,6 @@ function normalizeKey(value: string): string {
 }
 
 type JsonObject = Record<string, any>
-
-function iso(value: Date | null): string | null {
-  return value ? value.toISOString() : null
-}
 
 function serializeProfile(profile: typeof widgetEnvironmentProfiles.$inferSelect) {
   return {
@@ -39,9 +36,9 @@ function serializeProfile(profile: typeof widgetEnvironmentProfiles.$inferSelect
     configOverrides: profile.configOverrides as JsonObject,
     contentFilters: profile.contentFilters as JsonObject,
     supportConfig: profile.supportConfig as JsonObject,
-    archivedAt: iso(profile.archivedAt),
-    createdAt: profile.createdAt.toISOString(),
-    updatedAt: profile.updatedAt.toISOString(),
+    archivedAt: toIsoStringOrNull(profile.archivedAt),
+    createdAt: toIsoString(profile.createdAt),
+    updatedAt: toIsoString(profile.updatedAt),
   }
 }
 
@@ -55,9 +52,9 @@ function serializeApplication(
     key: app.key,
     name: app.name,
     description: app.description,
-    archivedAt: iso(app.archivedAt),
-    createdAt: app.createdAt.toISOString(),
-    updatedAt: app.updatedAt.toISOString(),
+    archivedAt: toIsoStringOrNull(app.archivedAt),
+    createdAt: toIsoString(app.createdAt),
+    updatedAt: toIsoString(app.updatedAt),
     profiles: (app.profiles ?? []).map(serializeProfile),
   }
 }
