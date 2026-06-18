@@ -221,18 +221,42 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('keeps the session for a portal user (SSO is role-agnostic; verified-domain surfacing gates access)', async () => {
+  it('keeps the session for a portal user at a verified domain', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'sso',
       userId: 'user_1',
-      email: 'a@acme.com',
+      email: 'staff@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await handleCallbackPolicyCleanup(
+      ctx,
+      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
+    )
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('revokes a portal user signing in via SSO from a non-verified domain', async () => {
+    // A direct /sign-in/oauth2 start skips the verified-domain routing the
+    // login UI applies, so the callback is the gate that keeps portal SSO
+    // scoped to verified domains.
+    mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
+    const ctx = ctxFor({
+      path: '/oauth2/callback/:providerId',
+      providerParam: 'sso',
+      userId: 'user_1',
+      email: 'guest@external.com',
+      token: 'tok',
+    })
+    await expect(
+      handleCallbackPolicyCleanup(
+        ctx,
+        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
+      )
+    ).rejects.toThrow(/\/auth\/login\?error=oauth_method_not_allowed/)
+    expect(mockSessionDeleteWhere).toHaveBeenCalled()
   })
 })
 

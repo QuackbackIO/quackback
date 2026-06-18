@@ -56,9 +56,11 @@ export async function isAuthMethodAllowed(
    *  redundant Redis round-trip per sign-in attempt. */
   tenantSettings?: Awaited<ReturnType<typeof getTenantSettings>>
 ): Promise<AuthMethodResult> {
-  // SSO is role-agnostic: a role governs what a user can do once signed
-  // in, not whether they may authenticate. Which emails are offered SSO is
-  // gated upstream by verified-domain routing and provider registration.
+  // SSO is enabled as a method for every role; role governs what a user can
+  // do once signed in, not whether the method exists. Eligibility is gated
+  // elsewhere: verified-domain routing and provider registration upstream,
+  // and — because the email isn't known here — a verified-domain check for
+  // portal users at the OAuth callback (`handleCallbackPolicyCleanup`).
   if (provider === 'sso') return { allowed: true }
 
   if (role === 'user') {

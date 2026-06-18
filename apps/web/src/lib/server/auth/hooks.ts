@@ -571,7 +571,8 @@ export async function handleCallbackPolicyCleanup(
   } = await import('@/lib/server/db')
   type UserId = `user_${string}`
 
-  const { isHardBound, isAuthMethodAllowed } = await import('./auth-restrictions')
+  const { isHardBound, isAuthMethodAllowed, isEmailAtVerifiedDomain } =
+    await import('./auth-restrictions')
   const verifiedDomains = tenant?.verifiedDomains
 
   // Look up the principal once — both the role-aware redirect (for the
@@ -629,6 +630,22 @@ export async function handleCallbackPolicyCleanup(
   }
 
   if (!principalRow) return
+
+  // Portal users (role 'user') may use SSO only from a verified domain.
+  // The email-first login UI only offers SSO to verified-domain addresses,
+  // but a direct /sign-in/oauth2 start skips that routing — so this is the
+  // gate that keeps portal SSO scoped to verified domains. Team roles are
+  // assigned deliberately (invitation / provisioning), so their SSO is
+  // unconditional, matching the policy oracle.
+  if (
+    provider === 'sso' &&
+    role === 'user' &&
+    !isEmailAtVerifiedDomain(userEmail, verifiedDomains)
+  ) {
+    await revokeSession(ctx as SessionCtx, token)
+    await wipeBrandNewShellsIfFresh()
+    throw blockedRedirect('oauth_method_not_allowed')
+  }
 
   const result = await isAuthMethodAllowed(provider, role, tenant)
   if (result.allowed) return
