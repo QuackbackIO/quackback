@@ -10,12 +10,6 @@ vi.mock('@/lib/server/storage/s3', async () => {
   return createS3MockFactory()
 })
 
-// `ensureNotSuspended()` lazy-imports `getTenantSettings`; stub it as `null`
-// so the suspension guard treats the workspace as 'active' (the default).
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: vi.fn().mockResolvedValue(null),
-}))
-
 import { auth } from '@/lib/server/auth'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
 import { handleWidgetUpload } from '../upload'

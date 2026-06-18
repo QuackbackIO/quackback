@@ -82,17 +82,6 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       return { success: false as const, error: 'Settings not found', status: 403 as const }
     }
 
-    // Block writes/reads through this chokepoint when the workspace
-    // isn't active. Suspended → 402, deleting → 410. With no config
-    // file present, settings.state stays 'active' and this is a no-op.
-    const state = (appSettings.state ?? 'active') as 'active' | 'suspended' | 'deleting'
-    if (state === 'suspended') {
-      return { success: false as const, error: 'Workspace is suspended.', status: 402 as const }
-    }
-    if (state === 'deleting') {
-      return { success: false as const, error: 'Workspace is being deleted.', status: 410 as const }
-    }
-
     return {
       success: true as const,
       settings: appSettings,

@@ -18,9 +18,6 @@ export interface BootstrapData {
    *  in-app form controls render disabled when the path appears here.
    *  Empty list = nothing locked. */
   managedFieldPaths: string[]
-  /** Workspace state, written by the config-file reconciler. Defaults
-   *  to 'active' when no config file is present. */
-  state: 'active' | 'suspended' | 'deleting'
   /** Provider IDs that Better-Auth would register at boot — used by
    *  the admin login UI to gate CTAs on actually-usable providers, not
    *  just DB intent. A stale `ssoOidc.enabled=true` with no
@@ -159,7 +156,6 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     userRole,
     themeCookie,
     managedFieldPaths: settings?.managedFieldPaths ?? [],
-    state: settings?.state ?? 'active',
     registeredAuthProviders,
     acceptLanguageLocale,
   }

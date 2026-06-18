@@ -34,11 +34,7 @@ export const Route = createFileRoute('/_portal')({
     // visitor (defense in depth). The decision is computed server-side
     // (session + allowedDomains never leave the server); only it is returned.
     const accessResult = await evaluateMyPortalAccessFn()
-    if (!accessResult.granted && accessResult.reason !== 'suspended') {
-      // A suspended/deleting workspace is surfaced by the root SuspendedView
-      // overlay (__root.tsx), not this gate — so only the auth-denial reasons
-      // (unauthenticated | unauthorized) reach here.
-
+    if (!accessResult.granted) {
       // OWASP authz_fail — emit only for authenticated denials (anonymous
       // denials are too noisy). Best-effort, fire-and-forget.
       const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'

@@ -10,7 +10,6 @@ export interface SettingsRow {
   featureFlags: string | null
   authConfig: string | null
   managedFieldPaths: string[]
-  state: 'active' | 'suspended' | 'deleting'
 }
 
 export interface SettingsUpdate {
@@ -21,7 +20,6 @@ export interface SettingsUpdate {
   featureFlags?: string
   authConfig?: string
   managedFieldPaths: string[]
-  state?: 'active' | 'suspended' | 'deleting'
 }
 
 /**
@@ -38,7 +36,6 @@ export interface SettingsInsert {
   featureFlags?: string
   authConfig?: string
   managedFieldPaths: string[]
-  state: 'active' | 'suspended' | 'deleting'
 }
 
 export interface ReconcileDeps {
@@ -97,7 +94,6 @@ export async function reconcileFileIntoDb(
       featureFlags: spec.features !== undefined ? JSON.stringify(spec.features) : undefined,
       authConfig,
       managedFieldPaths: computeManagedPaths(spec),
-      state: spec.state ?? 'active',
     })
     await deps.invalidateSettingsCache()
     await deps.invalidateTierLimitsCache()
@@ -145,10 +141,6 @@ export async function reconcileFileIntoDb(
       update.authConfig = serialized
       touchedAuth = true
     }
-  }
-
-  if (spec.state !== undefined && spec.state !== current.state) {
-    update.state = spec.state
   }
 
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)

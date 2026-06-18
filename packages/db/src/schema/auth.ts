@@ -306,12 +306,11 @@ export const settings = pgTable('settings', {
    */
   managedFieldPaths: jsonb('managed_field_paths').$type<string[]>().notNull().default([]),
   /**
-   * Workspace state — written by the config-file reconciler when
-   * spec.state is set. With no config file present, the column keeps
-   * its `'active'` default. The middleware in
-   * `lib/server/middleware/suspension-guard.ts` returns 402 / 410 for
-   * non-`active` workspaces, and the root route redirects HTML hits to
-   * `/suspended`.
+   * Workspace state. INERT: app-level suspension enforcement was removed —
+   * dormant workspaces are now scaled to 0 by the control plane and a
+   * gateway catch-all serves their hostnames, so the OSS pod no longer
+   * reads or acts on this column. Retained (no DROP migration) for
+   * back-compat; safe to remove in a future migration.
    */
   state: text('state').$type<'active' | 'suspended' | 'deleting'>().notNull().default('active'),
   /**
