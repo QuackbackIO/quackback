@@ -711,9 +711,9 @@ export interface TenantSettings {
    *  have been added. The auth runtime reads this to decide routing
    *  (sso-default vs methods) and hard-binding (per-row `enforced`). */
   verifiedDomains: VerifiedDomain[]
-  /** Workspace state, written by the config-file reconciler when
-   *  spec.state is set. Defaults to 'active' when the column has never
-   *  been written. */
+  /** Workspace state. INERT — app-level suspension enforcement was removed
+   *  (dormant workspaces are scaled to 0 by the control plane; the gateway
+   *  serves their hostnames). Nothing reads this anymore. */
   state: 'active' | 'suspended' | 'deleting'
 }
 
