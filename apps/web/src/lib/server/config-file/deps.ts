@@ -24,7 +24,7 @@ export function makeReconcileDeps(): ReconcileDeps {
         featureFlags: row.featureFlags,
         authConfig: row.authConfig ?? null,
         managedFieldPaths: (row.managedFieldPaths as string[] | null) ?? [],
-        state: (row.state as 'active' | 'suspended' | 'deleting' | null) ?? 'active',
+        state: (row.state as 'active' | 'suspended' | 'deleting' | 'deleted' | null) ?? 'active',
       } satisfies SettingsRow
     },
     updateSettings: async (update: SettingsUpdate) => {

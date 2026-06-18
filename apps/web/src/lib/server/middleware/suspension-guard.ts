@@ -2,8 +2,8 @@
  * Suspension guard — server-only chokepoint helper for declarative
  * workspace suspension.
  *
- * `settings.state` carries the trinary 'active' | 'suspended' |
- * 'deleting' and is written by the config-file reconciler. With no
+ * `settings.state` carries 'active' | 'suspended' | 'deleting' |
+ * 'deleted' and is written by the config-file reconciler. With no
  * config file present, the column stays at its 'active' DB default and
  * this guard is a no-op for every request.
  *
@@ -49,16 +49,16 @@ export async function ensureNotSuspended(): Promise<void> {
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
   await _internalEnsureNotSuspended(async () => {
     const s = await getTenantSettings()
-    return (s?.state ?? 'active') as 'active' | 'suspended' | 'deleting'
+    return (s?.state ?? 'active') as 'active' | 'suspended' | 'deleting' | 'deleted'
   })
 }
 
 /** Test seam — accepts an injected reader so the unit tests stay
  *  free of DB / Redis imports. */
 export async function _internalEnsureNotSuspended(
-  readState: () => Promise<'active' | 'suspended' | 'deleting'>
+  readState: () => Promise<'active' | 'suspended' | 'deleting' | 'deleted'>
 ): Promise<void> {
   const state = await readState()
   if (state === 'suspended') throw new SuspendedError()
-  if (state === 'deleting') throw new DeletingError()
+  if (state === 'deleting' || state === 'deleted') throw new DeletingError()
 }

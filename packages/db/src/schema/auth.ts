@@ -313,7 +313,10 @@ export const settings = pgTable('settings', {
    * non-`active` workspaces, and the root route redirects HTML hits to
    * `/suspended`.
    */
-  state: text('state').$type<'active' | 'suspended' | 'deleting'>().notNull().default('active'),
+  state: text('state')
+    .$type<'active' | 'suspended' | 'deleting' | 'deleted'>()
+    .notNull()
+    .default('active'),
   /**
    * Monotonic version bumped on every auth-instance-affecting write
    * (authConfig, ssoOidc, oauth toggles, platform credentials, tier

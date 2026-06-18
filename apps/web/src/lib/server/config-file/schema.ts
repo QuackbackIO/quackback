@@ -91,7 +91,7 @@ const featuresSchema = z.record(z.string(), z.boolean())
 
 // Workspace runtime state. The reconciler writes whatever the file
 // declares; absent → `settings.state` keeps its DB default of 'active'.
-const stateSchema = z.enum(['active', 'suspended', 'deleting'])
+const stateSchema = z.enum(['active', 'suspended', 'deleting', 'deleted'])
 
 // Auth surface: OAuth provider toggles + openSignup + optional OIDC SSO.
 // Provider secrets are never declared here — both OAuth client secrets

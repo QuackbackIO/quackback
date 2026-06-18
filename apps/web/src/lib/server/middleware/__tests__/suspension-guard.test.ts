@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   _internalEnsureNotSuspended,
+  DeletingError,
   isSuspensionExempt,
   SUSPENSION_EXEMPT_PATHS,
 } from '../suspension-guard'
@@ -25,6 +26,14 @@ describe('_internalEnsureNotSuspended', () => {
       statusCode: 410,
       code: 'WORKSPACE_DELETING',
     })
+  })
+})
+
+describe('ensureNotSuspended — deleted state', () => {
+  it("treats 'deleted' as gone (410), like 'deleting'", async () => {
+    await expect(_internalEnsureNotSuspended(async () => 'deleted')).rejects.toBeInstanceOf(
+      DeletingError
+    )
   })
 })
 

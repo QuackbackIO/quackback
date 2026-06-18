@@ -10,7 +10,7 @@ export interface SettingsRow {
   featureFlags: string | null
   authConfig: string | null
   managedFieldPaths: string[]
-  state: 'active' | 'suspended' | 'deleting'
+  state: 'active' | 'suspended' | 'deleting' | 'deleted'
 }
 
 export interface SettingsUpdate {
@@ -21,7 +21,7 @@ export interface SettingsUpdate {
   featureFlags?: string
   authConfig?: string
   managedFieldPaths: string[]
-  state?: 'active' | 'suspended' | 'deleting'
+  state?: 'active' | 'suspended' | 'deleting' | 'deleted'
 }
 
 /**
@@ -38,7 +38,7 @@ export interface SettingsInsert {
   featureFlags?: string
   authConfig?: string
   managedFieldPaths: string[]
-  state: 'active' | 'suspended' | 'deleting'
+  state: 'active' | 'suspended' | 'deleting' | 'deleted'
 }
 
 export interface ReconcileDeps {
