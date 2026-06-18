@@ -190,7 +190,7 @@ describe('handleCallbackPolicyCleanup — guards', () => {
 })
 
 // ============================================================
-// SSO callback — always allowed for team
+// SSO callback — allowed for every role (team + portal)
 // ============================================================
 
 describe('handleCallbackPolicyCleanup — SSO provider', () => {
@@ -221,39 +221,17 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('blocks portal user when portalConfig.oauth.sso is not enabled', async () => {
+  it('keeps the session for a portal user (SSO is role-agnostic; verified-domain surfacing gates access)', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'sso',
       userId: 'user_1',
-      email: 'a@external.com',
-      token: 'tok',
-    })
-
-    await expect(handleCallbackPolicyCleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /\/auth\/login\?error=oauth_method_not_allowed/
-    )
-    expect(mockSessionDeleteWhere).toHaveBeenCalled()
-    expect(mockDeleteSessionCookie).toHaveBeenCalled()
-  })
-
-  it('allows portal user when portalConfig.oauth.sso is enabled', async () => {
-    mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, sso: true },
-    })
-    const ctx = ctxFor({
-      path: '/oauth2/callback/:providerId',
-      providerParam: 'sso',
-      userId: 'user_1',
-      email: 'a@external.com',
+      email: 'a@acme.com',
       token: 'tok',
     })
     await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 })

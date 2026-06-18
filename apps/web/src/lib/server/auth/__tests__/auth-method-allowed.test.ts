@@ -170,20 +170,9 @@ describe('isAuthMethodAllowed — portal role (user)', () => {
     expect(r).toEqual({ allowed: true })
   })
 
-  it('blocks sso for portal when not in portal oauth map', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
-    const r = await isAuthMethodAllowed('sso', 'user')
-    expect(r).toEqual({ allowed: false, error: 'oauth_method_not_allowed' })
-  })
-
-  it('allows sso for portal when explicitly enabled', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, sso: true },
-    })
-    const r = await isAuthMethodAllowed('sso', 'user')
-    expect(r).toEqual({ allowed: true })
+  it('allows sso for portal users regardless of the portal oauth map (SSO is role-agnostic)', async () => {
+    mockGetPublicPortalConfig.mockResolvedValue({ oauth: {} })
+    expect(await isAuthMethodAllowed('sso', 'user')).toEqual({ allowed: true })
   })
 
   it('allows OAuth provider for portal when explicitly enabled', async () => {

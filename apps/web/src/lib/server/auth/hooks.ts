@@ -1128,17 +1128,13 @@ export async function handleCountryCapture(ctx: {
  *
  *  1. `handleSsoCallbackAfter` — bootstrap admin promotion +
  *     lastSsoSignInAt stamp. Only fires on SSO callbacks.
- *  2. `handleAutoProvisionAfter` — promote brand-new verified-domain
- *     sign-ins from `role='user'` (default) up to `member`/`admin`
- *     per the workspace's autoProvisionRole / attributeMapping
- *     config. MUST run before the policy cleanup, otherwise the
- *     cleanup sees role='user' and runs `checkPortalAuthMethod('sso')`,
- *     which blocks the sign-in because `portalConfig.oauth.sso`
- *     isn't set (SSO is configured on the team side, not the portal).
+ *  2. `handleAutoProvisionAfter` — for SSO callbacks, set a verified-domain
+ *     user's role from the workspace's autoProvisionRole / attributeMapping
+ *     config (brand-new sign-ins default to `role='user'`).
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate
- *     per-domain enforcement or workspace policy. Now sees the
- *     post-provision role, so SSO callbacks for verified-domain
- *     users are correctly classified as team and allowed through.
+ *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
+ *     allowed for every role, so verified-domain users pass this step; it
+ *     gates the non-SSO providers.
  *  4. `handleCredentialPostSignInGate` — Require-2FA gate for the
  *     password path.
  *  5. `handleMagicLinkPostSignInGate` — Require-2FA gate for magic-
