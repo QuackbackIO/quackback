@@ -142,7 +142,7 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
         description: 'Customer-support tickets, threads, participants, shares, bulk ops',
       },
       { name: 'Support Config', description: 'Inboxes, channels, memberships' },
-      { name: 'Routing', description: 'Routing rules + dry-run preview' },
+      { name: 'Routing', description: 'Ticket routing rules and ordering' },
       {
         name: 'SLA',
         description: 'Business hours, SLA policies, escalation rules, internal cron tick',
@@ -153,6 +153,10 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       { name: 'API Keys', description: 'Scoped API keys (legacy compat + per-key scopes)' },
       { name: 'Webhooks', description: 'Webhook delivery audit log' },
       { name: 'Conversations', description: 'Manage support conversations' },
+      { name: 'Moderation', description: 'Review pending posts and comments' },
+      { name: 'Settings', description: 'Workspace feature and help-center settings' },
+      { name: 'Suggestions', description: 'Feedback and merge suggestions' },
+      { name: 'Apps', description: 'App integration endpoints for embedded surfaces' },
     ],
     paths: registeredPaths,
     components: {

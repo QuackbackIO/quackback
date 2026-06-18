@@ -217,7 +217,13 @@ import {
   editThread,
   softDeleteThread,
   listThreads,
+  getThread,
 } from '@/lib/server/domains/tickets/ticket.threads'
+import {
+  attachToThread,
+  listForThread as listAttachmentsForThread,
+  removeAttachment,
+} from '@/lib/server/domains/tickets/ticket.attachments'
 import {
   addParticipant,
   removeParticipant,
@@ -238,6 +244,7 @@ import {
   canViewTicket,
   canReplyPublic,
   canCommentInternal,
+  canEditFields,
   canShareCrossTeam,
   canManageParticipants,
 } from '@/lib/server/domains/tickets/ticket.permissions'
@@ -274,6 +281,7 @@ import type {
   TicketId,
   TicketStatusId,
   TicketThreadId,
+  TicketAttachmentId,
   TicketShareId,
   TicketParticipantId,
   TeamId,
@@ -281,6 +289,7 @@ import type {
   UserId,
   OrganizationId,
   InboxId,
+  RoutingRuleId,
   ConversationId,
   SegmentId,
 } from '@quackback/ids'
@@ -2704,6 +2713,140 @@ Examples:
       }
     }
   )
+
+  server.tool(
+    'manage_routing_rule',
+    `Create, update, delete, or reorder ticket routing rules.
+Rules contain a condition set and one or more actions; use list_routing_rules to inspect current
+rules and action payloads.
+
+Examples:
+- Create: manage_routing_rule({ action: "create", name: "VIP urgent", conditions: { match: "all", conditions: [{ field: "priority", op: "eq", value: "urgent" }] }, actions: [{ type: "assignToTeam", value: "team_01..." }] })
+- Update: manage_routing_rule({ action: "update", ruleId: "route_rule_01...", enabled: false })
+- Reorder: manage_routing_rule({ action: "reorder", orderedIds: ["route_rule_01...", "route_rule_02..."] })
+- Delete: manage_routing_rule({ action: "delete", ruleId: "route_rule_01..." })`,
+    {
+      action: z.enum(['create', 'update', 'delete', 'reorder']),
+      ruleId: z.string().optional(),
+      name: z.string().min(1).max(200).optional(),
+      description: z.string().max(1000).nullable().optional(),
+      priority: z.number().int().min(0).max(1_000_000).optional(),
+      enabled: z.boolean().optional(),
+      conditions: z
+        .object({
+          match: z.enum(['all', 'any']).optional(),
+          conditions: z
+            .array(
+              z.object({
+                field: z.enum([
+                  'subject',
+                  'descriptionText',
+                  'channel',
+                  'priority',
+                  'organizationDomain',
+                  'requesterEmail',
+                  'inboxChannelKind',
+                ]),
+                op: z.enum(['eq', 'contains', 'matches', 'in']),
+                value: z.union([z.string(), z.array(z.string())]),
+              })
+            )
+            .min(1),
+        })
+        .optional(),
+      actions: z
+        .array(
+          z.object({
+            type: z.enum([
+              'assignToInbox',
+              'assignToTeam',
+              'assignToPrincipal',
+              'setPriority',
+              'setVisibility',
+              'addParticipant',
+            ]),
+            value: z.string().min(1),
+          })
+        )
+        .min(1)
+        .optional(),
+      inboxIdScope: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Optional inbox TypeID scope; null means workspace-wide'),
+      orderedIds: z.array(z.string().min(1)).min(1).optional(),
+    },
+    DESTRUCTIVE,
+    async (args: {
+      action: 'create' | 'update' | 'delete' | 'reorder'
+      ruleId?: string
+      name?: string
+      description?: string | null
+      priority?: number
+      enabled?: boolean
+      conditions?: unknown
+      actions?: unknown
+      inboxIdScope?: string | null
+      orderedIds?: string[]
+    }): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'write:config') ?? requireTeamRole(auth)
+      if (denied) return denied
+      try {
+        const svc = await import('@/lib/server/domains/inboxes')
+        switch (args.action) {
+          case 'create': {
+            if (!args.name || !args.conditions || !args.actions) {
+              return errorResult(
+                new Error('name, conditions, and actions are required for action "create"')
+              )
+            }
+            const created = await svc.createRoutingRule({
+              name: args.name,
+              description: args.description,
+              priority: args.priority,
+              enabled: args.enabled,
+              conditions: args.conditions as never,
+              actions: args.actions as never,
+              inboxIdScope: args.inboxIdScope as InboxId | null | undefined,
+            })
+            return jsonResult(created)
+          }
+          case 'update': {
+            if (!args.ruleId) {
+              return errorResult(new Error('ruleId is required for action "update"'))
+            }
+            const updated = await svc.updateRoutingRule(args.ruleId as RoutingRuleId, {
+              name: args.name,
+              description: args.description,
+              priority: args.priority,
+              enabled: args.enabled,
+              conditions: args.conditions as never,
+              actions: args.actions as never,
+              inboxIdScope: args.inboxIdScope as InboxId | null | undefined,
+            })
+            return jsonResult(updated)
+          }
+          case 'delete': {
+            if (!args.ruleId) {
+              return errorResult(new Error('ruleId is required for action "delete"'))
+            }
+            await svc.deleteRoutingRule(args.ruleId as RoutingRuleId)
+            return jsonResult({ deleted: true, id: args.ruleId })
+          }
+          case 'reorder': {
+            if (!args.orderedIds?.length) {
+              return errorResult(new Error('orderedIds is required for action "reorder"'))
+            }
+            await svc.reorderRoutingRules(args.orderedIds as RoutingRuleId[])
+            return jsonResult({ ok: true, orderedIds: args.orderedIds })
+          }
+        }
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
 }
 
 // ============================================================================
@@ -4868,6 +5011,149 @@ Examples:
       try {
         const updated = await softDeleteThread(args.threadId as TicketThreadId, auth.principalId)
         return jsonResult({ deleted: true, id: updated.id, deletedAt: updated.deletedAt })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // list_ticket_attachments
+  server.tool(
+    'list_ticket_attachments',
+    `List file-attachment metadata for one ticket thread.
+
+Examples:
+- list_ticket_attachments({ ticketId: "ticket_01...", threadId: "ticket_thread_01..." })`,
+    {
+      ticketId: ticketIdSchema,
+      threadId: z.string().min(1),
+    },
+    READ_ONLY,
+    async (args): Promise<CallToolResult> => {
+      const denied = requireScope(auth, 'read:tickets')
+      if (denied) return denied
+      try {
+        const loaded = await loadTicketResourceScope(args.ticketId as TicketId)
+        if (!loaded) return errorResult(new Error(`ticket ${args.ticketId} not found`))
+        const thread = await getThread(args.threadId as TicketThreadId)
+        if (!thread || thread.ticketId !== args.ticketId) {
+          return errorResult(
+            new Error(`thread ${args.threadId} not found for ticket ${args.ticketId}`)
+          )
+        }
+        const set = await loadPermissionSet(auth.principalId)
+        if (!canViewTicket(set, loaded.scope)) {
+          return errorResult(new Error('cannot view this ticket'))
+        }
+        const attachments = await listAttachmentsForThread(args.threadId as TicketThreadId)
+        return compactJsonResult({ attachments })
+      } catch (err) {
+        return errorResult(err)
+      }
+    }
+  )
+
+  // manage_ticket_attachment
+  server.tool(
+    'manage_ticket_attachment',
+    `Add or remove ticket attachment metadata. The file object must already exist in storage; this tool
+does not upload bytes. Use storageKey/publicUrl from your upload pipeline.
+
+Examples:
+- Add metadata: manage_ticket_attachment({ action: "add", ticketId: "ticket_01...", threadId: "ticket_thread_01...", filename: "logs.txt", mimeType: "text/plain", sizeBytes: 2048, storageKey: "ticket-attachments/..." })
+- Remove metadata: manage_ticket_attachment({ action: "remove", ticketId: "ticket_01...", threadId: "ticket_thread_01...", attachmentId: "ticket_att_01..." })`,
+    {
+      action: z.enum(['add', 'remove']),
+      ticketId: ticketIdSchema,
+      threadId: z.string().min(1),
+      attachmentId: z.string().min(1).optional(),
+      filename: z.string().min(1).max(256).optional(),
+      mimeType: z.string().min(1).optional(),
+      sizeBytes: z
+        .number()
+        .int()
+        .positive()
+        .max(50 * 1024 * 1024)
+        .optional(),
+      storageKey: z.string().min(1).optional(),
+      publicUrl: z.string().nullable().optional(),
+    },
+    DESTRUCTIVE,
+    async (args: {
+      action: 'add' | 'remove'
+      ticketId: string
+      threadId: string
+      attachmentId?: string
+      filename?: string
+      mimeType?: string
+      sizeBytes?: number
+      storageKey?: string
+      publicUrl?: string | null
+    }): Promise<CallToolResult> => {
+      const scopeDenied = requireScope(auth, 'write:tickets')
+      if (scopeDenied) return scopeDenied
+      const roleDenied = requireTeamRole(auth)
+      if (roleDenied) return roleDenied
+      try {
+        const loaded = await loadTicketResourceScope(args.ticketId as TicketId)
+        if (!loaded) return errorResult(new Error(`ticket ${args.ticketId} not found`))
+        const thread = await getThread(args.threadId as TicketThreadId)
+        if (!thread || thread.deletedAt || thread.ticketId !== args.ticketId) {
+          return errorResult(
+            new Error(`thread ${args.threadId} not found for ticket ${args.ticketId}`)
+          )
+        }
+
+        const set = await loadPermissionSet(auth.principalId)
+        if (!canViewTicket(set, loaded.scope)) {
+          return errorResult(new Error('cannot view this ticket'))
+        }
+
+        if (args.action === 'add') {
+          if (!args.filename || !args.mimeType || !args.sizeBytes || !args.storageKey) {
+            return errorResult(
+              new Error(
+                'filename, mimeType, sizeBytes, and storageKey are required for action "add"'
+              )
+            )
+          }
+          if (thread.audience === 'public' && !canReplyPublic(set, loaded.scope)) {
+            return errorResult(new Error('cannot attach to public replies on this ticket'))
+          }
+          if (thread.audience === 'internal' && !canCommentInternal(set, loaded.scope)) {
+            return errorResult(new Error('cannot attach to internal notes on this ticket'))
+          }
+          if (thread.audience === 'shared_team' && !canShareCrossTeam(set, loaded.scope)) {
+            return errorResult(new Error('cannot attach to shared-team notes on this ticket'))
+          }
+          const attachment = await attachToThread({
+            threadId: args.threadId as TicketThreadId,
+            uploadedByPrincipalId: auth.principalId,
+            filename: args.filename,
+            mimeType: args.mimeType,
+            sizeBytes: args.sizeBytes,
+            storageKey: args.storageKey,
+            publicUrl: args.publicUrl ?? null,
+          })
+          return jsonResult(attachment)
+        }
+
+        if (!args.attachmentId) {
+          return errorResult(new Error('attachmentId is required for action "remove"'))
+        }
+        const attachments = await listAttachmentsForThread(args.threadId as TicketThreadId)
+        const attachment = attachments.find((a) => a.id === args.attachmentId)
+        if (!attachment) {
+          return errorResult(new Error(`attachment ${args.attachmentId} not found on this thread`))
+        }
+        const isUploader =
+          attachment.uploadedByPrincipalId !== null &&
+          attachment.uploadedByPrincipalId === auth.principalId
+        if (!isUploader && !canEditFields(set, loaded.scope)) {
+          return errorResult(new Error('must be the uploader or hold ticket.edit_fields'))
+        }
+        await removeAttachment(args.attachmentId as TicketAttachmentId, auth.principalId)
+        return jsonResult({ removed: true, id: args.attachmentId })
       } catch (err) {
         return errorResult(err)
       }

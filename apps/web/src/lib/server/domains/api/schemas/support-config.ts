@@ -199,12 +199,24 @@ registerPath('/routing-rules/{ruleId}', {
   },
 })
 
-registerPath('/routing-rules/preview', {
+registerPath('/routing-rules/reorder', {
   post: {
     tags: ['Routing'],
-    summary: 'Stateless routing dry-run',
-    description: 'Returns the matched rule + resolved decision for a hypothetical incoming ticket.',
-    responses: { 200: { description: 'Decision' } },
+    summary: 'Reorder routing rules',
+    description: 'Replace routing-rule evaluation order by passing the rule IDs in desired order.',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: asSchema(
+            z.object({ orderedIds: z.array(TypeIdSchema).min(1) }).meta({
+              description: 'Routing-rule IDs in desired evaluation order',
+            })
+          ),
+        },
+      },
+    },
+    responses: { 200: { description: 'Rules reordered' } },
   },
 })
 

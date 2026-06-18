@@ -918,10 +918,13 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('manage_inbox')
       expect(toolNames).toContain('manage_sla_policy')
       expect(toolNames).toContain('manage_business_hours')
+      expect(toolNames).toContain('manage_routing_rule')
+      expect(toolNames).toContain('list_ticket_attachments')
+      expect(toolNames).toContain('manage_ticket_attachment')
       // Total registered tool count for an admin OAuth session with all
       // surfaces enabled. Pins the count so an accidental tool add/remove is
-      // caught. 116 = 110 prior + 3 moderation + manage_inbox/sla_policy/business_hours.
-      expect(toolNames).toHaveLength(116)
+      // caught. 119 = 116 prior + manage_routing_rule + ticket attachment list/manage.
+      expect(toolNames).toHaveLength(119)
     })
 
     it('should handle resources/list request', async () => {
