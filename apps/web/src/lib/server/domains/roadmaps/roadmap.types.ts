@@ -2,7 +2,7 @@
  * Input/Output types for RoadmapService operations
  */
 
-import type { PostRoadmap } from '@/lib/server/db'
+import type { PostRoadmap, RoadmapAccess } from '@/lib/server/db'
 import type { PostId, RoadmapId, StatusId, BoardId, TagId, SegmentId } from '@quackback/ids'
 
 /**
@@ -12,7 +12,7 @@ export interface CreateRoadmapInput {
   name: string
   slug: string
   description?: string
-  isPublic?: boolean
+  access?: RoadmapAccess
 }
 
 /**
@@ -21,7 +21,7 @@ export interface CreateRoadmapInput {
 export interface UpdateRoadmapInput {
   name?: string
   description?: string
-  isPublic?: boolean
+  access?: RoadmapAccess
 }
 
 /**

@@ -17,7 +17,7 @@ import {
 } from '@/lib/server/db'
 import { type RoadmapId, type PostId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
-import { ANONYMOUS_ACTOR, boardViewFilter, type Actor } from '@/lib/server/policy'
+import { ANONYMOUS_ACTOR, boardViewFilter, canViewRoadmap, type Actor } from '@/lib/server/policy'
 import type { SQL } from 'drizzle-orm'
 import type { RoadmapPostsListResult, RoadmapPostsQueryOptions } from './roadmap.types'
 
@@ -162,7 +162,7 @@ export async function getRoadmapPosts(
  * Get public roadmap posts.
  *
  * Authorization layers:
- *   - Only `isPublic` roadmaps are reachable here.
+ *   - Only roadmaps the actor may view (canViewRoadmap) are reachable here.
  *   - Only `moderationState='published'` posts surface (admins on the
  *     team-facing getRoadmapPosts see pending; this is the public path).
  *   - `boardViewFilter(actor)` filters posts whose linked board the
@@ -175,12 +175,16 @@ export async function getPublicRoadmapPosts(
   options: RoadmapPostsQueryOptions,
   actor: Actor = ANONYMOUS_ACTOR
 ): Promise<RoadmapPostsListResult> {
-  // Verify roadmap exists and is public
-  const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, roadmapId) })
+  // Verify roadmap exists, is not soft-deleted, and the actor may view it.
+  // A denied (or tombstoned) roadmap returns 404 — never 403 — so callers
+  // can't probe which roadmaps exist behind a restricted tier.
+  const roadmap = await db.query.roadmaps.findFirst({
+    where: and(eq(roadmaps.id, roadmapId), isNull(roadmaps.deletedAt)),
+  })
   if (!roadmap) {
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${roadmapId} not found`)
   }
-  if (!roadmap.isPublic) {
+  if (!canViewRoadmap(actor, roadmap).allowed) {
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${roadmapId} not found`)
   }
 

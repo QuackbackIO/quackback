@@ -18,13 +18,33 @@ import {
   ValidationErrorSchema,
 } from './common'
 
+// Roadmap visibility access (view-only mirror of the board access model)
+const RoadmapAccessSchema = z
+  .object({
+    view: z.enum(['anonymous', 'authenticated', 'segments', 'team']).meta({
+      description:
+        'Visibility tier: anonymous (public), authenticated, segments, or team (private)',
+    }),
+    segments: z.object({
+      view: z.array(z.string()).max(50).meta({
+        description:
+          'Segment IDs allowed to view (used when view is "segments"). Must be non-empty when view is "segments" — an empty allowlist is rejected (it would hide the roadmap from everyone).',
+      }),
+    }),
+  })
+  .meta({ description: 'Roadmap visibility controls' })
+
 // Roadmap schema
 const RoadmapSchema = z.object({
   id: TypeIdSchema.meta({ example: 'roadmap_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'Product Roadmap' }),
   slug: SlugSchema.meta({ example: 'product-roadmap' }),
   description: z.string().nullable().meta({ example: 'Our product development roadmap' }),
-  isPublic: z.boolean().meta({ description: 'Whether the roadmap is publicly visible' }),
+  isPublic: z.boolean().meta({
+    description:
+      'Whether the roadmap is publicly visible. Derived from access.view === "anonymous".',
+  }),
+  access: RoadmapAccessSchema,
   position: z.number().meta({ description: 'Display order' }),
   createdAt: TimestampSchema,
 })
@@ -58,7 +78,9 @@ const CreateRoadmapSchema = z
       .regex(/^[a-z0-9-]+$/)
       .meta({ description: 'URL-friendly slug', example: 'product-roadmap' }),
     description: z.string().max(500).optional().meta({ description: 'Roadmap description' }),
-    isPublic: z.boolean().optional().meta({ description: 'Make roadmap public', default: true }),
+    // `isPublic` is legacy (maps to access.view); `access` wins when both given.
+    isPublic: z.boolean().optional().meta({ description: 'Legacy: make public', default: true }),
+    access: RoadmapAccessSchema.optional().meta({ description: 'Visibility (overrides isPublic)' }),
   })
   .meta({ description: 'Create roadmap request body' })
 
@@ -66,7 +88,8 @@ const UpdateRoadmapSchema = z
   .object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(500).nullable().optional(),
-    isPublic: z.boolean().optional(),
+    isPublic: z.boolean().optional().meta({ description: 'Legacy: make public' }),
+    access: RoadmapAccessSchema.optional().meta({ description: 'Visibility (overrides isPublic)' }),
   })
   .meta({ description: 'Update roadmap request body' })
 

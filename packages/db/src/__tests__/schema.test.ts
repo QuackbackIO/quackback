@@ -52,9 +52,16 @@ describe('Schema definitions', () => {
       expect(columns).toContain('slug')
       expect(columns).toContain('name')
       expect(columns).toContain('description')
-      expect(columns).toContain('isPublic')
+      expect(columns).toContain('access')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
+    })
+
+    it('no longer has the legacy isPublic column', () => {
+      // Regression guard for migration 0114, which dropped is_public in favour
+      // of the `access` jsonb. New code reads access exclusively.
+      const columns = Object.keys(getTableColumns(roadmaps))
+      expect(columns).not.toContain('isPublic')
     })
   })
 
@@ -226,6 +233,7 @@ describe('Schema definitions', () => {
       expect(columns).toContain('title')
       expect(columns).toContain('content')
       expect(columns).toContain('publishedAt')
+      expect(columns).toContain('access')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
     })

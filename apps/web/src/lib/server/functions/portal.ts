@@ -536,13 +536,19 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
       return []
     }
 
-    const roadmaps = await listPublicRoadmaps()
+    // Resolve the actor so authenticated- and segment-restricted roadmaps
+    // surface to the right viewers (the outer gate above only decides portal
+    // entry; roadmapViewFilter is the finer per-roadmap gate).
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+    const actor = await policyActorFromAuth(auth)
+
+    const roadmaps = await listPublicRoadmaps(actor)
     return roadmaps.map((r) => ({
       id: r.id,
       name: r.name,
       slug: r.slug,
       description: r.description,
-      isPublic: r.isPublic,
+      access: r.access,
       position: r.position,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),

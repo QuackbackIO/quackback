@@ -13,6 +13,23 @@ import {
   PaginationMetaSchema,
 } from './common'
 
+// Audience visibility (independent of publish lifecycle), view-only mirror of
+// the roadmap access model.
+const ChangelogAccessSchema = z
+  .object({
+    view: z.enum(['anonymous', 'authenticated', 'segments', 'team']).meta({
+      description:
+        'Visibility tier: anonymous (public), authenticated, segments, or team (private)',
+    }),
+    segments: z.object({
+      view: z.array(z.string()).max(50).meta({
+        description:
+          'Segment IDs allowed to view (used when view is "segments"). Must be non-empty when view is "segments" — an empty allowlist is rejected (it would hide the entry from everyone).',
+      }),
+    }),
+  })
+  .meta({ description: 'Changelog audience visibility' })
+
 // Changelog entry schema (API response)
 const ChangelogEntrySchema = z.object({
   id: TypeIdSchema.meta({ example: 'changelog_01h455vb4pex5vsknk084sn02q' }),
@@ -21,6 +38,7 @@ const ChangelogEntrySchema = z.object({
   publishedAt: NullableTimestampSchema.meta({
     description: 'When the entry was published (null if draft)',
   }),
+  access: ChangelogAccessSchema,
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 })
@@ -39,6 +57,9 @@ const CreateChangelogEntrySchema = z
       .datetime()
       .optional()
       .meta({ description: 'Publish date (omit to save as draft)' }),
+    access: ChangelogAccessSchema.optional().meta({
+      description: 'Audience visibility (defaults to public)',
+    }),
   })
   .meta({ description: 'Create changelog entry request body' })
 
@@ -52,6 +73,9 @@ const UpdateChangelogEntrySchema = z
       .nullable()
       .optional()
       .meta({ description: 'Set to null to unpublish' }),
+    access: ChangelogAccessSchema.optional().meta({
+      description: 'Audience visibility',
+    }),
   })
   .meta({ description: 'Update changelog entry request body' })
 

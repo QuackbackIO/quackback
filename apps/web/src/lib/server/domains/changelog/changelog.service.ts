@@ -19,6 +19,7 @@ import {
   and,
   isNull,
   inArray,
+  DEFAULT_CHANGELOG_ACCESS,
 } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
@@ -85,6 +86,7 @@ export async function createChangelog(
       contentJson,
       principalId: author.principalId,
       publishedAt,
+      access: input.access ?? DEFAULT_CHANGELOG_ACCESS,
     })
     .returning()
 
@@ -171,6 +173,11 @@ export async function updateChangelog(
   // Handle publish state change
   if (input.publishState !== undefined) {
     updateData.publishedAt = getPublishedAtFromState(input.publishState)
+  }
+
+  // Handle audience visibility change
+  if (input.access !== undefined) {
+    updateData.access = input.access
   }
 
   // Update the entry
@@ -334,6 +341,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     publishedAt: entry.publishedAt,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    access: entry.access,
     author,
     linkedPosts,
     status: computeStatus(entry.publishedAt),

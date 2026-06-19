@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod'
+import { ACCESS_TIERS } from '@/lib/shared/db-types'
 import { tiptapContentSchema } from './posts'
 
 /**
@@ -17,6 +18,32 @@ export const publishStateSchema = z.discriminatedUnion('type', [
 ])
 
 /**
+ * Changelog audience visibility schema.
+ *
+ * The view-only mirror of the roadmap access schema. A changelog entry has a
+ * single `view` action across the full tier surface (Public / Signed-in /
+ * Segments / Private). The only rule is that selecting the `segments` tier
+ * requires a non-empty allowlist (an empty list would hide the entry from
+ * everyone). This gate is orthogonal to publish lifecycle.
+ */
+export const changelogAccessSchema = z
+  .object({
+    view: z.enum(ACCESS_TIERS),
+    segments: z.object({
+      view: z.array(z.string()).max(50, 'At most 50 segments per changelog entry.'),
+    }),
+  })
+  .superRefine((val, ctx) => {
+    if (val.view === 'segments' && val.segments.view.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['segments', 'view'],
+        message: 'Pick at least one segment — an empty allowlist hides the entry.',
+      })
+    }
+  })
+
+/**
  * Create changelog input schema
  */
 export const createChangelogSchema = z.object({
@@ -25,6 +52,7 @@ export const createChangelogSchema = z.object({
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
+  access: changelogAccessSchema.optional(),
 })
 
 /**
@@ -37,6 +65,7 @@ export const updateChangelogSchema = z.object({
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
+  access: changelogAccessSchema.optional(),
 })
 
 /**

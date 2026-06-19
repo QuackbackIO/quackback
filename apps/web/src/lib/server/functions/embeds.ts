@@ -216,7 +216,7 @@ export const getEmbedPreviewFn = createServerFn({ method: 'GET' })
         {
           getPostDetail: getPublicPostDetail,
           listStatuses: listPublicStatuses,
-          getChangelog: getPublicChangelogMetaById,
+          getChangelog: (id: ChangelogId) => getPublicChangelogMetaById(id, actor),
           getArticle: async (slug: string) => {
             try {
               return await getPublicArticleBySlug(slug)

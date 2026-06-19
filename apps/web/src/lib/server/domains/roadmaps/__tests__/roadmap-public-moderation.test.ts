@@ -78,7 +78,10 @@ beforeEach(() => {
       }),
     }),
   })
-  mockRoadmapFindFirst.mockResolvedValue({ id: 'rm_1' as RoadmapId, isPublic: true })
+  mockRoadmapFindFirst.mockResolvedValue({
+    id: 'rm_1' as RoadmapId,
+    access: { view: 'anonymous', segments: { view: [] } },
+  })
 })
 
 describe('getPublicRoadmapPosts — moderation state filter', () => {
@@ -111,7 +114,10 @@ describe('getPublicRoadmapPosts — moderation state filter', () => {
       }),
     })
     mockEq.mockClear()
-    mockRoadmapFindFirst.mockResolvedValue({ id: 'rm_1' as RoadmapId, isPublic: false })
+    mockRoadmapFindFirst.mockResolvedValue({
+      id: 'rm_1' as RoadmapId,
+      access: { view: 'team', segments: { view: [] } },
+    })
 
     const { getRoadmapPosts } = await import('../roadmap.query')
     await getRoadmapPosts('rm_1' as RoadmapId, { limit: 20, offset: 0 })

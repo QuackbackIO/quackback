@@ -553,8 +553,11 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
       return []
     }
 
-    // No auth needed - this is public data
-    const result = await listPublicRoadmaps()
+    // Resolve the actor so authenticated- and segment-restricted roadmaps
+    // surface to the right viewers (anonymous callers still see public ones).
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+    const actor = await policyActorFromAuth(auth)
+    const result = await listPublicRoadmaps(actor)
 
     log.debug({ count: result.length }, 'list public roadmaps results')
     // Serialize branded types to plain strings for turbo-stream
@@ -563,7 +566,7 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
       name: roadmap.name,
       slug: roadmap.slug,
       description: roadmap.description,
-      isPublic: roadmap.isPublic,
+      access: roadmap.access,
       position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),

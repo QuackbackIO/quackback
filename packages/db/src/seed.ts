@@ -443,7 +443,7 @@ async function seed() {
         slug: r.slug,
         name: r.name,
         description: r.description,
-        isPublic: true,
+        access: { view: 'anonymous', segments: { view: [] } },
         position: i,
         createdAt: randomDate(30),
       })

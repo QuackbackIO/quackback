@@ -109,6 +109,37 @@ export const DEFAULT_BOARD_ACCESS: BoardAccess = {
   moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
 }
 
+/** Roadmap visibility — a single `view` action. Unlike BoardAccess there is
+ *  no vote/comment/submit on a roadmap itself, so this is the minimal slice
+ *  of the board access model: one tier plus one segment allowlist. The
+ *  allowlist is used only when `view` is 'segments'; an empty list there
+ *  fails closed (the roadmap is hidden) and is rejected on save. */
+export interface RoadmapAccess {
+  view: AccessTier
+  segments: { view: string[] }
+}
+
+export const DEFAULT_ROADMAP_ACCESS: RoadmapAccess = {
+  view: 'anonymous',
+  segments: { view: [] },
+}
+
+/** Changelog visibility — a single `view` action, like RoadmapAccess. This is
+ *  orthogonal to publish lifecycle (publishedAt): publish state decides
+ *  whether/when an entry is live, `access` decides who may see a live entry.
+ *  Supports the full AccessTier surface (anonymous / authenticated / segments /
+ *  team), matching roadmaps. The segments allowlist is used only when `view` is
+ *  'segments'; an empty list there fails closed and is rejected on save. */
+export interface ChangelogAccess {
+  view: AccessTier
+  segments: { view: string[] }
+}
+
+export const DEFAULT_CHANGELOG_ACCESS: ChangelogAccess = {
+  view: 'anonymous',
+  segments: { view: [] },
+}
+
 // Integration config (stored in integrations.config JSONB column)
 // Each integration defines its own typed config at the integration layer.
 export type IntegrationConfig = Record<string, unknown>

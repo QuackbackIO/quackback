@@ -1,7 +1,13 @@
-import { pgTable, text, timestamp, boolean, jsonb, integer, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, jsonb, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault } from '@quackback/ids/drizzle'
-import { type BoardSettings, type BoardAccess, DEFAULT_BOARD_ACCESS } from '../types'
+import {
+  type BoardSettings,
+  type BoardAccess,
+  DEFAULT_BOARD_ACCESS,
+  type RoadmapAccess,
+  DEFAULT_ROADMAP_ACCESS,
+} from '../types'
 
 export const boards = pgTable(
   'boards',
@@ -10,9 +16,6 @@ export const boards = pgTable(
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
-    // v1 access controls — per-action tier matrix. Replaces the legacy
-    // `audience` jsonb column (dropped in migration 0080) and the older
-    // `is_public` boolean before that.
     access: jsonb('access').$type<BoardAccess>().default(DEFAULT_BOARD_ACCESS).notNull(),
     settings: jsonb('settings').$type<BoardSettings>().default({}).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -33,7 +36,9 @@ export const roadmaps = pgTable(
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     description: text('description'),
-    isPublic: boolean('is_public').default(true).notNull(),
+    // v1 access controls — single `view` action tier + segment allowlist.
+    // Replaces the legacy `is_public` boolean (dropped in migration 0114).
+    access: jsonb('access').$type<RoadmapAccess>().default(DEFAULT_ROADMAP_ACCESS).notNull(),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -43,7 +48,6 @@ export const roadmaps = pgTable(
   (table) => [
     // Note: roadmaps_slug_unique constraint already provides uniqueness; no separate index needed
     index('roadmaps_position_idx').on(table.position),
-    index('roadmaps_is_public_idx').on(table.isPublic),
     index('roadmaps_deleted_at_idx').on(table.deletedAt),
   ]
 )

@@ -25,10 +25,14 @@ import {
 import { cn } from '@/lib/shared/utils'
 import type { PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
+import type { ChangelogAccess } from '@/lib/shared/db-types'
+import { ChangelogAccessControl } from './changelog-access-control'
 
 interface ChangelogMetadataSidebarContentProps {
   publishState: PublishState
   onPublishStateChange: (state: PublishState) => void
+  access: ChangelogAccess
+  onAccessChange: (access: ChangelogAccess) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
   authorName?: string | null
@@ -43,6 +47,8 @@ const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
 export function ChangelogMetadataSidebarContent({
   publishState,
   onPublishStateChange,
+  access,
+  onAccessChange,
   linkedPostIds,
   onLinkedPostsChange,
   authorName,
@@ -114,6 +120,9 @@ export function ChangelogMetadataSidebarContent({
           onChange={handleStatusChange}
         />
       </div>
+
+      {/* Audience visibility — independent of publish state */}
+      <ChangelogAccessControl value={access} onChange={onAccessChange} />
 
       {/* Author */}
       {authorName && (

@@ -14,6 +14,7 @@ import { Form } from '@/components/ui/form'
 import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
+import { DEFAULT_CHANGELOG_ACCESS, type ChangelogAccess } from '@/lib/shared/db-types'
 import type { JSONContent } from '@tiptap/react'
 import type { PostId } from '@quackback/ids'
 
@@ -29,6 +30,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [access, setAccess] = useState<ChangelogAccess>(DEFAULT_CHANGELOG_ACCESS)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
 
@@ -50,7 +52,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     [form]
   )
 
+  const accessInvalid = access.view === 'segments' && access.segments.view.length === 0
+
   const handleSubmit = form.handleSubmit((data) => {
+    if (accessInvalid) return
     createChangelogMutation.mutate(
       {
         title: data.title,
@@ -58,6 +63,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
+        access,
       },
       {
         onSuccess: () => {
@@ -66,6 +72,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
           setContentJson(null)
           setLinkedPostIds([])
           setPublishState({ type: 'draft' })
+          setAccess(DEFAULT_CHANGELOG_ACCESS)
           onChangelogCreated?.()
         },
       }
@@ -79,6 +86,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
       setContentJson(null)
       setLinkedPostIds([])
       setPublishState({ type: 'draft' })
+      setAccess(DEFAULT_CHANGELOG_ACCESS)
       createChangelogMutation.reset()
     }
   }
@@ -136,6 +144,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
               <ChangelogMetadataSidebar
                 publishState={publishState}
                 onPublishStateChange={setPublishState}
+                access={access}
+                onAccessChange={setAccess}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
               />
@@ -146,6 +156,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
               onCancel={() => setOpen(false)}
               submitLabel={getSubmitButtonText()}
               isPending={createChangelogMutation.isPending}
+              submitDisabled={accessInvalid}
             >
               {/* Mobile settings button */}
               <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
@@ -163,6 +174,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                     <ChangelogMetadataSidebarContent
                       publishState={publishState}
                       onPublishStateChange={setPublishState}
+                      access={access}
+                      onAccessChange={setAccess}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
                     />

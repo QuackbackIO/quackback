@@ -9,7 +9,12 @@ import type { BoardId, ChangelogId, PostId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { NotFoundError } from '@/lib/shared/errors'
-import { requireAuth } from './auth-helpers'
+import {
+  requireAuth,
+  getOptionalAuth,
+  hasAuthCredentials,
+  policyActorFromAuth,
+} from './auth-helpers'
 import { resolvePortalAccessForRequest } from './portal-access'
 import {
   createChangelog,
@@ -61,6 +66,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : null,
           linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
           publishState: data.publishState as PublishState,
+          access: data.access,
         },
         {
           principalId: auth.principal.id,
@@ -96,6 +102,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
         contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
         linkedPostIds: data.linkedPostIds as PostId[] | undefined,
         publishState: data.publishState as PublishState | undefined,
+        access: data.access,
       })
 
       return {
@@ -210,7 +217,12 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
         )
       }
 
-      const entry = await getPublicChangelogById(data.id as ChangelogId)
+      // Resolve the actor so segment-restricted entries surface only to the
+      // right viewers (the gate above only decides portal entry).
+      const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+      const actor = await policyActorFromAuth(auth)
+
+      const entry = await getPublicChangelogById(data.id as ChangelogId, actor)
 
       return {
         ...entry,
@@ -237,10 +249,16 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
         return { items: [], nextCursor: null, hasMore: false }
       }
 
-      const result = await listPublicChangelogs({
-        cursor: data.cursor,
-        limit: data.limit,
-      })
+      const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+      const actor = await policyActorFromAuth(auth)
+
+      const result = await listPublicChangelogs(
+        {
+          cursor: data.cursor,
+          limit: data.limit,
+        },
+        actor
+      )
 
       return {
         ...result,
