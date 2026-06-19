@@ -14,7 +14,6 @@ const baseDeps = (): ReconcileDeps => ({
     featureFlags: null,
     authConfig: null,
     managedFieldPaths: [],
-    state: 'active' as const,
   })),
   updateSettings: vi.fn(async () => {}),
   createSettings: vi.fn(async () => {}),
@@ -79,7 +78,6 @@ describe('reconcileFileIntoDb', () => {
       featureFlags: null,
       authConfig: null,
       managedFieldPaths: ['workspace.name', 'workspace.slug'],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb(
       { workspace: { name: 'Acme', slug: 'acme', onboardingComplete: true } },
@@ -117,7 +115,6 @@ describe('reconcileFileIntoDb', () => {
       featureFlags: JSON.stringify({ helpCenter: false, other: true }),
       authConfig: null,
       managedFieldPaths: [],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({ features: { helpCenter: true } }, deps)
     const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
@@ -136,7 +133,6 @@ describe('reconcileFileIntoDb', () => {
       featureFlags: null,
       authConfig: null,
       managedFieldPaths: ['tierLimits', 'workspace.name'],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({}, deps)
     const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
@@ -176,18 +172,9 @@ describe('reconcileFileIntoDb', () => {
       featureFlags: null,
       authConfig: null,
       managedFieldPaths: ['workspace.name', 'workspace.slug'],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
     expect(deps.updateSettings).not.toHaveBeenCalled()
-  })
-
-  it('writes state when spec.state is set', async () => {
-    const deps = baseDeps()
-    await reconcileFileIntoDb({ state: 'suspended' }, deps)
-    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg.state).toBe('suspended')
-    expect(arg.managedFieldPaths).toEqual(['state'])
   })
 
   it('per-key merges auth.oauth over existing config', async () => {
@@ -204,7 +191,6 @@ describe('reconcileFileIntoDb', () => {
         openSignup: true,
       }),
       managedFieldPaths: [],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({ auth: { oauth: { google: true } } }, deps)
     const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
@@ -229,7 +215,6 @@ describe('reconcileFileIntoDb', () => {
         openSignup: false,
       }),
       managedFieldPaths: [],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({ auth: { openSignup: true } }, deps)
     const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
@@ -294,7 +279,6 @@ describe('reconcileFileIntoDb', () => {
         },
       }),
       managedFieldPaths: [],
-      state: 'active' as const,
     }))
     // File flips enabled=true and bumps the clientId; everything else
     // in the existing block (discoveryUrl, autoCreateUsers, ...) is
@@ -325,7 +309,7 @@ describe('reconcileFileIntoDb', () => {
   it('creates a settings row when none exists and spec has workspace.name + slug', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => null)
-    await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' }, state: 'active' }, deps)
+    await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
     expect(deps.createSettings).toHaveBeenCalledTimes(1)
     expect(deps.updateSettings).not.toHaveBeenCalled()
     const arg = (deps.createSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
@@ -333,8 +317,7 @@ describe('reconcileFileIntoDb', () => {
       expect.objectContaining({
         name: 'Acme',
         slug: 'acme',
-        state: 'active',
-        managedFieldPaths: ['workspace.name', 'workspace.slug', 'state'],
+        managedFieldPaths: ['workspace.name', 'workspace.slug'],
       })
     )
     // setupState marks workspace step done because the file declares it
@@ -382,14 +365,6 @@ describe('reconcileFileIntoDb', () => {
     expect(deps.resetAuth).toHaveBeenCalledTimes(1)
   })
 
-  it('defaults state to active on create when spec.state is omitted', async () => {
-    const deps = baseDeps()
-    deps.readSettings = vi.fn(async () => null)
-    await reconcileFileIntoDb({ workspace: { name: 'Acme', slug: 'acme' } }, deps)
-    const arg = (deps.createSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
-    expect(arg.state).toBe('active')
-  })
-
   it('sanitizes malformed authConfig JSON instead of propagating it', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => ({
@@ -403,7 +378,6 @@ describe('reconcileFileIntoDb', () => {
       // discarded rather than written back to the column.
       authConfig: JSON.stringify({ oauth: 'not-an-object', openSignup: 42 }),
       managedFieldPaths: [],
-      state: 'active' as const,
     }))
     await reconcileFileIntoDb({ auth: { oauth: { google: true } } }, deps)
     const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]

@@ -89,10 +89,6 @@ const tierLimitsSchema = z
 // validates against; here the shape just needs to be string→boolean.
 const featuresSchema = z.record(z.string(), z.boolean())
 
-// Workspace runtime state. The reconciler writes whatever the file
-// declares; absent → `settings.state` keeps its DB default of 'active'.
-const stateSchema = z.enum(['active', 'suspended', 'deleting'])
-
 // Auth surface: OAuth provider toggles + openSignup + optional OIDC SSO.
 // Provider secrets are never declared here — both OAuth client secrets
 // (Google/GitHub/etc.) and the SSO OIDC client secret live encrypted
@@ -148,7 +144,6 @@ export const quackbackConfigSchema = z
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
         features: featuresSchema.optional(),
-        state: stateSchema.optional(),
         auth: authSchema.optional(),
       })
       .strict(),

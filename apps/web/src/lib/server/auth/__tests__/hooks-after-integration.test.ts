@@ -14,13 +14,11 @@
  *     workspace-recovery primitive, provision is the role-policy
  *     primitive), and reversing it would surprise readers.
  *
- *  2. `handleAutoProvisionAfter` runs BEFORE `handleCallbackPolicyCleanup`.
- *     Reversed, cleanup sees `role='user'` on a brand-new verified-
- *     domain SSO sign-in and routes through `checkPortalAuthMethod`,
- *     which blocks because portal `oauth.sso` isn't set (SSO is a
- *     team-side method only). The user's just-created session gets
- *     revoked and they bounce to `/auth/login`. This is the bug the
- *     ordering was introduced to fix.
+ *  2. For a successful SSO sign-in, `handleAutoProvisionAfter` sets the
+ *     verified-domain user's role from config and `handleCallbackPolicyCleanup`
+ *     leaves the session intact — the composition must not revoke a
+ *     legitimate sign-in. (SSO is allowed for every role, so verified-domain
+ *     users pass the policy cleanup.)
  *
  * We assert these by exercising `hooksAfter` end-to-end against a fully
  * mocked dependency graph and checking the side-effect tape.
@@ -165,7 +163,7 @@ beforeEach(() => {
   mockTxPrincipalFindFirst.mockResolvedValue({ id: 'principal_existing_admin' })
   mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 60 * 60_000) })
   mockGetPublicPortalConfig.mockResolvedValue({
-    oauth: { password: true, magicLink: false /* sso NOT enabled */ },
+    oauth: { password: true, magicLink: false },
   })
 })
 
@@ -184,7 +182,7 @@ describe('hooksAfter — successful SSO sign-in by brand-new verified-domain use
     state.role = 'user'
   })
 
-  it('does NOT revoke the session (proves auto-provision ran before cleanup)', async () => {
+  it('does NOT revoke the session on a successful SSO sign-in', async () => {
     await hooksAfter(ssoCallbackCtx({ userId: 'user_new', email: 'alice@acme.com', token: 'tok' }))
 
     expect(mockDelete).not.toHaveBeenCalledWith(expect.objectContaining({ __name: 'session' }))

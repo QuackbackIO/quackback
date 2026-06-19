@@ -571,7 +571,8 @@ export async function handleCallbackPolicyCleanup(
   } = await import('@/lib/server/db')
   type UserId = `user_${string}`
 
-  const { isHardBound, isAuthMethodAllowed } = await import('./auth-restrictions')
+  const { isHardBound, isAuthMethodAllowed, isSsoBlockedForRole } =
+    await import('./auth-restrictions')
   const verifiedDomains = tenant?.verifiedDomains
 
   // Look up the principal once — both the role-aware redirect (for the
@@ -602,6 +603,14 @@ export async function handleCallbackPolicyCleanup(
     await db.delete(userTable).where(eq(userTable.id, userId as UserId))
   }
 
+  // Revoke the just-created session, drop brand-new shells, and redirect.
+  // Shared by every reject branch below.
+  const blockSignIn = async (errorCode: string): Promise<never> => {
+    await revokeSession(ctx as SessionCtx, token)
+    await wipeBrandNewShellsIfFresh()
+    throw blockedRedirect(errorCode)
+  }
+
   // Pre-compute viability so `isHardBound` fails open on runtime
   // unavailability (tier downgrade, secret missing). See the
   // `isHardBound` docstring for the self-lockout rationale.
@@ -623,9 +632,17 @@ export async function handleCallbackPolicyCleanup(
     typeof userEmail === 'string' &&
     isHardBound(provider, userEmail, role, tenant?.authConfig, verifiedDomains, ssoRegistered)
   ) {
-    await revokeSession(ctx as SessionCtx, token)
-    await wipeBrandNewShellsIfFresh()
-    throw blockedRedirect('verified_domain_requires_sso')
+    await blockSignIn('verified_domain_requires_sso')
+  }
+
+  // Portal SSO requires a verified domain (see `isSsoBlockedForRole`). The
+  // login UI only offers SSO on a verified-domain match, but a direct
+  // /sign-in/oauth2 start skips that routing, so this callback is the gate.
+  // Sits with the hard-binding gate above the principal-row guard: it's an
+  // email-driven policy, and `role` defaulting to 'user' (the most
+  // restrictive audience) keeps it fail-closed if the principal is missing.
+  if (provider === 'sso' && isSsoBlockedForRole(role, userEmail, verifiedDomains)) {
+    await blockSignIn('oauth_method_not_allowed')
   }
 
   if (!principalRow) return
@@ -633,9 +650,7 @@ export async function handleCallbackPolicyCleanup(
   const result = await isAuthMethodAllowed(provider, role, tenant)
   if (result.allowed) return
 
-  await revokeSession(ctx as SessionCtx, token)
-  await wipeBrandNewShellsIfFresh()
-  throw blockedRedirect(result.error ?? 'auth_method_blocked')
+  await blockSignIn(result.error ?? 'auth_method_blocked')
 }
 
 /**
@@ -1128,17 +1143,13 @@ export async function handleCountryCapture(ctx: {
  *
  *  1. `handleSsoCallbackAfter` — bootstrap admin promotion +
  *     lastSsoSignInAt stamp. Only fires on SSO callbacks.
- *  2. `handleAutoProvisionAfter` — promote brand-new verified-domain
- *     sign-ins from `role='user'` (default) up to `member`/`admin`
- *     per the workspace's autoProvisionRole / attributeMapping
- *     config. MUST run before the policy cleanup, otherwise the
- *     cleanup sees role='user' and runs `checkPortalAuthMethod('sso')`,
- *     which blocks the sign-in because `portalConfig.oauth.sso`
- *     isn't set (SSO is configured on the team side, not the portal).
+ *  2. `handleAutoProvisionAfter` — for SSO callbacks, set a verified-domain
+ *     user's role from the workspace's autoProvisionRole / attributeMapping
+ *     config (brand-new sign-ins default to `role='user'`).
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate
- *     per-domain enforcement or workspace policy. Now sees the
- *     post-provision role, so SSO callbacks for verified-domain
- *     users are correctly classified as team and allowed through.
+ *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
+ *     allowed for every role, so verified-domain users pass this step; it
+ *     gates the non-SSO providers.
  *  4. `handleCredentialPostSignInGate` — Require-2FA gate for the
  *     password path.
  *  5. `handleMagicLinkPostSignInGate` — Require-2FA gate for magic-

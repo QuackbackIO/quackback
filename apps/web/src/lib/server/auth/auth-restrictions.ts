@@ -26,6 +26,7 @@ import {
   getTenantSettings,
 } from '@/lib/server/domains/settings/settings.service'
 import { emailDomain } from '@/lib/server/auth/normalize-domain'
+import { isTeamMember } from '@/lib/shared/roles'
 import type { AuthConfig, VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 
 export type AuthProvider = 'email' | 'credential' | 'magic-link' | 'sso' | string
@@ -37,10 +38,11 @@ interface AuthMethodResult {
 }
 
 /**
- * Per-method enablement check for the team surface. Hard-binding for
- * verified-domain emails is handled separately by
- * {@link isHardBoundByVerifiedDomain} in `hooks.before` / `hooks.after`;
- * this function just answers "is method X turned on for the team?"
+ * Per-method enablement check. Answers "is method X allowed for role Y?"
+ * Team and portal roles take different paths ({@link checkPortalAuthMethod}
+ * handles `role: 'user'`), except SSO which is allowed for every role up
+ * front. Hard-binding for verified-domain emails is handled separately by
+ * {@link isHardBoundByVerifiedDomain} in `hooks.before` / `hooks.after`.
  *
  * @param provider - Path-derived provider id ('credential' | 'magic-link' | 'sso' | provider id)
  * @param role - The principal's role
@@ -55,6 +57,11 @@ export async function isAuthMethodAllowed(
    *  redundant Redis round-trip per sign-in attempt. */
   tenantSettings?: Awaited<ReturnType<typeof getTenantSettings>>
 ): Promise<AuthMethodResult> {
+  // SSO is a method for every role; role governs authorization, not whether
+  // the method exists. Portal-side eligibility (verified domain) is enforced
+  // at the callback — see `isSsoBlockedForRole` / `handleCallbackPolicyCleanup`.
+  if (provider === 'sso') return { allowed: true }
+
   if (role === 'user') {
     return checkPortalAuthMethod(provider)
   }
@@ -63,11 +70,11 @@ export async function isAuthMethodAllowed(
   const authConfig = tenant?.authConfig
 
   // Magic-link is gated by the team-side `authConfig.oauth.magicLink`
-  // toggle, mirroring the password toggle. Defaults to enabled — pre-
-  // 0.12 tenants had no `magicLink` key and we keep their team sign-in
-  // working post-upgrade. Verified-domain hard-binding can still block
-  // magic-link for a specific email; that check runs in hooks before
-  // this function is reached.
+  // toggle, mirroring the password toggle. An absent key defaults to
+  // enabled, so a tenant that never set it keeps team sign-in working.
+  // Verified-domain hard-binding can still block magic-link for a
+  // specific email; that check runs in hooks before this function is
+  // reached.
   //
   // Internal token-mint paths (invitations, recovery-code-mint,
   // password-reset) bypass this gate entirely because they write the
@@ -78,14 +85,10 @@ export async function isAuthMethodAllowed(
     return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
   }
 
-  if (provider === 'sso') return { allowed: true }
-
-  // Password is gated by the team-side authConfig.oauth.password.
-  // Defaults to enabled when the key is absent so v0.9.9 tenants who
-  // never had `password` in their stored authConfig keep their team
-  // sign-in working after upgrade. Explicit `false` blocks.
-  // toggle. Default-false in DEFAULT_AUTH_CONFIG matches the previous
-  // hardcoded /admin/login behavior.
+  // Password is gated by the team-side `authConfig.oauth.password`
+  // toggle. An absent key defaults to enabled, so a tenant that never
+  // set it keeps team sign-in working; an explicit `false` blocks it.
+  // (`DEFAULT_AUTH_CONFIG` seeds it off, so fresh tenants opt in.)
   if (provider === 'credential' || provider === 'password') {
     const enabled = authConfig?.oauth?.password !== false
     return enabled ? { allowed: true } : { allowed: false, error: 'password_method_not_allowed' }
@@ -125,7 +128,9 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
     return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
   }
 
-  // Any OAuth provider — check if enabled (already filtered by credential availability)
+  // Any other OAuth provider (google, github, custom-oidc, …) — enabled iff
+  // its portal toggle is on (already filtered by credential availability).
+  // SSO is handled in isAuthMethodAllowed and never reaches here.
   const enabled = portalConfig.oauth[provider]
   return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
 }
@@ -158,6 +163,24 @@ export function isEmailAtVerifiedDomain(
   verifiedDomains: readonly VerifiedDomain[] | undefined
 ): boolean {
   return findVerifiedDomainForEmail(email, verifiedDomains) !== null
+}
+
+/**
+ * Portal-side SSO eligibility gate. A non-team role (portal user) may
+ * complete an SSO sign-in only from a verified domain; team roles
+ * (admin/member) are granted deliberately (bootstrap / invitation), so
+ * their SSO is unconditional. Evaluated at the OAuth callback where the
+ * IdP-asserted email is finally known: the login UI only *offers* SSO on a
+ * verified-domain match, but a direct OAuth start skips that routing, so
+ * this is the enforcing gate. Sibling of {@link isHardBound} — same inputs
+ * (email + verifiedDomains), complementary concern (SSO is never hard-bound).
+ */
+export function isSsoBlockedForRole(
+  role: Role,
+  email: string | null | undefined,
+  verifiedDomains: readonly VerifiedDomain[] | undefined
+): boolean {
+  return !isTeamMember(role) && !isEmailAtVerifiedDomain(email, verifiedDomains)
 }
 
 /**

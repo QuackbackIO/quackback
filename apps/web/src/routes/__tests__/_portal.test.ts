@@ -178,21 +178,6 @@ describe('_portal loader — portal-visibility gate + access.denied audit', () =
     expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
   })
 
-  it('does not gate a suspended workspace (left to the root SuspendedView)', async () => {
-    // A suspended workspace is surfaced by the root SuspendedView overlay, not
-    // the portal access-gate. The loader falls through to the normal portal load
-    // (which redirects to onboarding in this minimal no-org context) — crucially
-    // it must NOT return a gate or emit the access-denial audit.
-    mockEvaluateMyPortalAccessFn.mockResolvedValueOnce({ granted: false, reason: 'suspended' })
-
-    const context = makeContext({ id: 'user_1', email: 'admin@y.com', principalType: 'user' })
-    const result = (await runLoader(context).catch((e) => e)) as { gate?: unknown }
-    expect(result?.gate).toBeUndefined()
-
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockRecordPortalAccessDeniedFn).not.toHaveBeenCalled()
-  })
-
   // The loader denies access WITHOUT throwing: it returns the gate decision so
   // the _portal component renders the sign-in wall as a normal 200 page (the
   // right status for a login screen — not the 404/500 a throw would produce, and
