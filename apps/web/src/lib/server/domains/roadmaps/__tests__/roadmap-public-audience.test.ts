@@ -77,7 +77,10 @@ beforeEach(() => {
       }),
     }),
   })
-  mockRoadmapFindFirst.mockResolvedValue({ id: 'rm_1' as RoadmapId, isPublic: true })
+  mockRoadmapFindFirst.mockResolvedValue({
+    id: 'rm_1' as RoadmapId,
+    access: { view: 'anonymous', segments: { view: [] } },
+  })
 })
 
 describe('getPublicRoadmapPosts — board audience filter', () => {

@@ -5,7 +5,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Roadmap } from '@/lib/shared/db-types'
+import type { Roadmap, RoadmapAccess } from '@/lib/shared/db-types'
 import type { RoadmapId } from '@quackback/ids'
 import {
   createRoadmapFn,
@@ -23,13 +23,13 @@ interface CreateRoadmapInput {
   name: string
   slug: string
   description?: string
-  isPublic?: boolean
+  access?: RoadmapAccess
 }
 
 interface UpdateRoadmapInput {
   name?: string
   description?: string
-  isPublic?: boolean
+  access?: RoadmapAccess
 }
 
 // ============================================================================
@@ -49,7 +49,7 @@ export function useCreateRoadmap() {
           name: input.name,
           slug: input.slug,
           description: input.description,
-          isPublic: input.isPublic,
+          access: input.access,
         },
       }) as unknown as Promise<Roadmap>,
     onSuccess: () => {
@@ -71,7 +71,7 @@ export function useUpdateRoadmap() {
           id: roadmapId,
           name: input.name,
           description: input.description,
-          isPublic: input.isPublic,
+          access: input.access,
         },
       }) as unknown as Promise<Roadmap>,
     onSuccess: () => {

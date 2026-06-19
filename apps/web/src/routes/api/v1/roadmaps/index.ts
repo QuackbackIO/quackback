@@ -7,8 +7,11 @@ import {
   badRequestResponse,
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
+import { roadmapAccessSchema } from '@/lib/shared/schemas/roadmaps'
 
-// Input validation schema
+// Input validation schema. `isPublic` is the legacy boolean (kept for backward
+// compatibility); `access` is the richer tier+segments control. When both are
+// present, `access` wins.
 const createRoadmapSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   slug: z
@@ -17,7 +20,8 @@ const createRoadmapSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
   description: z.string().max(500).optional(),
-  isPublic: z.boolean().optional().default(true),
+  isPublic: z.boolean().optional(),
+  access: roadmapAccessSchema.optional(),
 })
 
 export const Route = createFileRoute('/api/v1/roadmaps/')({
@@ -32,7 +36,8 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
           await withApiKeyAuth(request, { role: 'team' })
 
           // Import service function
-          const { listRoadmaps } = await import('@/lib/server/domains/roadmaps/roadmap.service')
+          const { listRoadmaps, roadmapAccessToIsPublic } =
+            await import('@/lib/server/domains/roadmaps/roadmap.service')
 
           const roadmaps = await listRoadmaps()
 
@@ -42,7 +47,8 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
               name: roadmap.name,
               slug: roadmap.slug,
               description: roadmap.description,
-              isPublic: roadmap.isPublic,
+              isPublic: roadmapAccessToIsPublic(roadmap.access),
+              access: roadmap.access,
               position: roadmap.position,
               createdAt: roadmap.createdAt.toISOString(),
             }))
@@ -71,13 +77,18 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
           }
 
           // Import service function
-          const { createRoadmap } = await import('@/lib/server/domains/roadmaps/roadmap.service')
+          const { createRoadmap, roadmapAccessToIsPublic, isPublicToRoadmapAccess } =
+            await import('@/lib/server/domains/roadmaps/roadmap.service')
+
+          // `access` takes precedence; otherwise map the legacy `isPublic`
+          // (defaulting to public when neither is supplied).
+          const access = parsed.data.access ?? isPublicToRoadmapAccess(parsed.data.isPublic ?? true)
 
           const roadmap = await createRoadmap({
             name: parsed.data.name,
             slug: parsed.data.slug,
             description: parsed.data.description,
-            isPublic: parsed.data.isPublic,
+            access,
           })
 
           return createdResponse({
@@ -85,7 +96,8 @@ export const Route = createFileRoute('/api/v1/roadmaps/')({
             name: roadmap.name,
             slug: roadmap.slug,
             description: roadmap.description,
-            isPublic: roadmap.isPublic,
+            isPublic: roadmapAccessToIsPublic(roadmap.access),
+            access: roadmap.access,
             position: roadmap.position,
             createdAt: roadmap.createdAt.toISOString(),
           })

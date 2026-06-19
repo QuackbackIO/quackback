@@ -11,8 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { RoadmapAccessControl } from '@/components/admin/roadmaps/roadmap-access-control'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import {
@@ -35,7 +35,14 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { cn, slugify } from '@/lib/shared/utils'
 import { useRoadmaps } from '@/lib/client/hooks/use-roadmaps-query'
 import { useCreateRoadmap, useUpdateRoadmap, useDeleteRoadmap } from '@/lib/client/mutations'
-import type { Roadmap } from '@/lib/shared/db-types'
+import type { Roadmap, RoadmapAccess } from '@/lib/shared/db-types'
+import { DEFAULT_ROADMAP_ACCESS } from '@/lib/shared/db-types'
+
+/** A roadmap with the segments allowlist filled but hidden behind a non-segments
+ *  tier is still valid; the only invalid state is segments + empty list. */
+function isAccessValid(access: RoadmapAccess): boolean {
+  return access.view !== 'segments' || access.segments.view.length > 0
+}
 
 interface RoadmapSidebarProps {
   selectedRoadmapId: string | null
@@ -48,6 +55,10 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingRoadmap, setEditingRoadmap] = useState<Roadmap | null>(null)
   const [deletingRoadmap, setDeletingRoadmap] = useState<Roadmap | null>(null)
+  // Visibility is a controlled value (the segments allowlist can't be captured
+  // by uncontrolled FormData). Name/description stay on FormData.
+  const [createAccess, setCreateAccess] = useState<RoadmapAccess>(DEFAULT_ROADMAP_ACCESS)
+  const [editAccess, setEditAccess] = useState<RoadmapAccess>(DEFAULT_ROADMAP_ACCESS)
 
   const { data: roadmaps, isLoading } = useRoadmaps()
   const createRoadmap = useCreateRoadmap()
@@ -56,17 +67,17 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
 
   const handleCreateSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (!isAccessValid(createAccess)) return
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
     const description = formData.get('description') as string
-    const isPublic = formData.get('isPublic') === 'on'
 
     try {
       const newRoadmap = await createRoadmap.mutateAsync({
         name,
         slug: slugify(name),
         description: description || undefined,
-        isPublic,
+        access: createAccess,
       })
       setIsCreateDialogOpen(false)
       onSelectRoadmap(newRoadmap.id)
@@ -78,11 +89,11 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
   const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!editingRoadmap) return
+    if (!isAccessValid(editAccess)) return
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get('name') as string
     const description = formData.get('description') as string
-    const isPublic = formData.get('isPublic') === 'on'
 
     try {
       await updateRoadmap.mutateAsync({
@@ -90,7 +101,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
         input: {
           name,
           description,
-          isPublic,
+          access: editAccess,
         },
       })
       setIsEditDialogOpen(false)
@@ -117,6 +128,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
 
   const openEditDialog = (roadmap: Roadmap) => {
     setEditingRoadmap(roadmap)
+    setEditAccess(roadmap.access)
     setIsEditDialogOpen(true)
   }
 
@@ -140,7 +152,13 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
             title="Roadmaps"
             collapsible={false}
             action={
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <Dialog
+                open={isCreateDialogOpen}
+                onOpenChange={(open) => {
+                  setIsCreateDialogOpen(open)
+                  if (open) setCreateAccess(DEFAULT_ROADMAP_ACCESS)
+                }}
+              >
                 <DialogTrigger asChild>
                   <button
                     type="button"
@@ -169,10 +187,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                         placeholder="Our upcoming features and improvements"
                       />
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch id="isPublic" name="isPublic" defaultChecked />
-                      <Label htmlFor="isPublic">Public</Label>
-                    </div>
+                    <RoadmapAccessControl value={createAccess} onChange={setCreateAccess} />
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"
@@ -181,7 +196,10 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={createRoadmap.isPending}>
+                      <Button
+                        type="submit"
+                        disabled={createRoadmap.isPending || !isAccessValid(createAccess)}
+                      >
                         {createRoadmap.isPending && (
                           <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
                         )}
@@ -224,7 +242,7 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                       )}
                     />
                     <span className="flex-1 text-xs truncate">{roadmap.name}</span>
-                    {!roadmap.isPublic && (
+                    {roadmap.access.view !== 'anonymous' && (
                       <LockClosedIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                     )}
                     <DropdownMenu>
@@ -282,19 +300,15 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                   defaultValue={editingRoadmap.description || ''}
                 />
               </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="edit-isPublic"
-                  name="isPublic"
-                  defaultChecked={editingRoadmap.isPublic}
-                />
-                <Label htmlFor="edit-isPublic">Public</Label>
-              </div>
+              <RoadmapAccessControl value={editAccess} onChange={setEditAccess} />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={updateRoadmap.isPending}>
+                <Button
+                  type="submit"
+                  disabled={updateRoadmap.isPending || !isAccessValid(editAccess)}
+                >
                   {updateRoadmap.isPending && (
                     <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
                   )}

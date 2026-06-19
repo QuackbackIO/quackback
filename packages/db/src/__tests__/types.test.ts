@@ -67,7 +67,7 @@ describe('Type definitions', () => {
       expectTypeOf<Roadmap>().toHaveProperty('id')
       expectTypeOf<Roadmap>().toHaveProperty('slug')
       expectTypeOf<Roadmap>().toHaveProperty('name')
-      expectTypeOf<Roadmap>().toHaveProperty('isPublic')
+      expectTypeOf<Roadmap>().toHaveProperty('access')
       expectTypeOf<Roadmap>().toHaveProperty('position')
     })
 

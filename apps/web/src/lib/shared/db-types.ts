@@ -21,6 +21,7 @@ export {
   ACCESS_TIERS,
   ACCESS_TIER_RANK,
   DEFAULT_BOARD_ACCESS,
+  DEFAULT_ROADMAP_ACCESS,
   MODERATION_RULE_VALUES,
   CONVERSATION_STATUSES,
   CONVERSATION_END_REASONS,
@@ -28,6 +29,7 @@ export {
 export type {
   AccessTier,
   BoardAccess,
+  RoadmapAccess,
   ModerationRuleValue,
   ConversationEndReason,
 } from '@quackback/db/types'

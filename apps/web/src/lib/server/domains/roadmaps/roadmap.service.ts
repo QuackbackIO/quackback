@@ -20,10 +20,13 @@ import {
   posts,
   postRoadmaps,
   type Roadmap,
+  type RoadmapAccess,
+  DEFAULT_ROADMAP_ACCESS,
 } from '@/lib/server/db'
 import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import { roadmapViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'roadmaps' })
@@ -81,7 +84,7 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<Roadmap>
       name: input.name.trim(),
       slug: input.slug.trim(),
       description: input.description?.trim() || null,
-      isPublic: input.isPublic ?? true,
+      access: input.access ?? DEFAULT_ROADMAP_ACCESS,
       position,
     })
     .returning()
@@ -106,7 +109,7 @@ export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): P
   const updateData: Partial<Omit<Roadmap, 'id' | 'createdAt'>> = {}
   if (input.name !== undefined) updateData.name = input.name.trim()
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
-  if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
+  if (input.access !== undefined) updateData.access = input.access
 
   // Update the roadmap (single update, no transaction needed)
   const [updated] = await db.update(roadmaps).set(updateData).where(eq(roadmaps.id, id)).returning()
@@ -173,13 +176,29 @@ export async function listRoadmaps(): Promise<Roadmap[]> {
 }
 
 /**
- * List public roadmaps (for portal view, excludes soft-deleted)
+ * List roadmaps visible to a portal actor.
+ *
+ * Applies `roadmapViewFilter(actor)`, which already excludes soft-deleted
+ * rows and enforces the per-roadmap access tier (anonymous / authenticated /
+ * segments / team). Defaults to an anonymous actor — pass the resolved actor
+ * so authenticated- and segment-restricted roadmaps surface to the right
+ * viewers.
  */
-export async function listPublicRoadmaps(): Promise<Roadmap[]> {
+export async function listPublicRoadmaps(actor: Actor = ANONYMOUS_ACTOR): Promise<Roadmap[]> {
   return db.query.roadmaps.findMany({
-    where: and(eq(roadmaps.isPublic, true), isNull(roadmaps.deletedAt)),
+    where: roadmapViewFilter(actor),
     orderBy: [asc(roadmaps.position)],
   })
+}
+
+/** Derive the legacy `isPublic` boolean from access for the REST API. */
+export function roadmapAccessToIsPublic(access: RoadmapAccess): boolean {
+  return access.view === 'anonymous'
+}
+
+/** Map the legacy `isPublic` boolean onto an access object for REST writers. */
+export function isPublicToRoadmapAccess(isPublic: boolean): RoadmapAccess {
+  return { view: isPublic ? 'anonymous' : 'team', segments: { view: [] } }
 }
 
 /**
@@ -213,10 +232,7 @@ export async function addPostToRoadmap(
   input: AddPostToRoadmapInput,
   actorPrincipalId?: PrincipalId
 ): Promise<void> {
-  log.debug(
-    { post_id: input.postId, roadmap_id: input.roadmapId },
-    'add post to roadmap'
-  )
+  log.debug({ post_id: input.postId, roadmap_id: input.roadmapId }, 'add post to roadmap')
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {
@@ -300,10 +316,7 @@ export async function removePostFromRoadmap(
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<void> {
-  log.debug(
-    { roadmap_id: input.roadmapId, count: input.postIds.length },
-    'reorder posts in column'
-  )
+  log.debug({ roadmap_id: input.roadmapId, count: input.postIds.length }, 'reorder posts in column')
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {

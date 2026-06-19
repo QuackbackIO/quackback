@@ -24,6 +24,7 @@ import {
   updateRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
+import { roadmapAccessSchema } from '@/lib/shared/schemas/roadmaps'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'roadmaps' })
@@ -36,7 +37,7 @@ const createRoadmapSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(1).max(100),
   description: z.string().optional(),
-  isPublic: z.boolean().optional(),
+  access: roadmapAccessSchema.optional(),
 })
 
 const getRoadmapSchema = z.object({
@@ -47,7 +48,7 @@ const updateRoadmapSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
-  isPublic: z.boolean().optional(),
+  access: roadmapAccessSchema.optional(),
 })
 
 const deleteRoadmapSchema = z.object({
@@ -112,7 +113,7 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
       name: roadmap.name,
       slug: roadmap.slug,
       description: roadmap.description,
-      isPublic: roadmap.isPublic,
+      access: roadmap.access,
       position: roadmap.position,
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
@@ -140,7 +141,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
         name: roadmap.name,
         slug: roadmap.slug,
         description: roadmap.description,
-        isPublic: roadmap.isPublic,
+        access: roadmap.access,
         position: roadmap.position,
         createdAt: roadmap.createdAt.toISOString(),
         updatedAt: roadmap.updatedAt.toISOString(),
@@ -169,7 +170,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
         name: data.name,
         slug: data.slug,
         description: data.description,
-        isPublic: data.isPublic,
+        access: data.access,
       })
       // Serialize branded types to plain strings for turbo-stream
       return {
@@ -177,7 +178,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
         name: roadmap.name,
         slug: roadmap.slug,
         description: roadmap.description,
-        isPublic: roadmap.isPublic,
+        access: roadmap.access,
         position: roadmap.position,
         createdAt: roadmap.createdAt.toISOString(),
         updatedAt: roadmap.updatedAt.toISOString(),
@@ -201,7 +202,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
       const roadmap = await updateRoadmap(data.id as RoadmapId, {
         name: data.name,
         description: data.description,
-        isPublic: data.isPublic,
+        access: data.access,
       })
       // Serialize branded types to plain strings for turbo-stream
       return {
@@ -209,7 +210,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
         name: roadmap.name,
         slug: roadmap.slug,
         description: roadmap.description,
-        isPublic: roadmap.isPublic,
+        access: roadmap.access,
         position: roadmap.position,
         createdAt: roadmap.createdAt.toISOString(),
         updatedAt: roadmap.updatedAt.toISOString(),
