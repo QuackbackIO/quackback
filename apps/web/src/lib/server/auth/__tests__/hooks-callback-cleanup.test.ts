@@ -238,11 +238,48 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('revokes a portal user signing in via SSO from a non-verified domain', async () => {
-    // A direct /sign-in/oauth2 start skips the verified-domain routing the
-    // login UI applies, so the callback is the gate that keeps portal SSO
-    // scoped to verified domains.
+  it('keeps the session for a portal user at an enforced (Require SSO) domain', async () => {
+    // Require-SSO (enforced=true) hard-binds other methods but must still
+    // admit SSO itself — the lockout this feature was added to fix.
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
+    const ctx = ctxFor({
+      path: '/oauth2/callback/:providerId',
+      providerParam: 'sso',
+      userId: 'user_1',
+      email: 'staff@acme.com',
+      token: 'tok',
+    })
+    await handleCallbackPolicyCleanup(
+      ctx,
+      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
+    )
+    expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('revokes a portal user signing in via SSO from a non-verified domain', async () => {
+    mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
+    const ctx = ctxFor({
+      path: '/oauth2/callback/:providerId',
+      providerParam: 'sso',
+      userId: 'user_1',
+      email: 'guest@external.com',
+      token: 'tok',
+    })
+    await expect(
+      handleCallbackPolicyCleanup(
+        ctx,
+        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
+      )
+    ).rejects.toThrow(/\/auth\/login\?error=oauth_method_not_allowed/)
+    expect(mockSessionDeleteWhere).toHaveBeenCalled()
+  })
+
+  it('revokes an SSO sign-in from a non-verified domain even when no principal row exists', async () => {
+    // With no principal, role defaults to 'user' (most restrictive). The
+    // verified-domain SSO gate must still fire, fail-closed, rather than
+    // being skipped by the principal-row guard.
+    mockPrincipalFindFirst.mockResolvedValue(null)
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'sso',

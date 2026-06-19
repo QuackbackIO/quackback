@@ -26,6 +26,7 @@ import {
   getTenantSettings,
 } from '@/lib/server/domains/settings/settings.service'
 import { emailDomain } from '@/lib/server/auth/normalize-domain'
+import { isTeamMember } from '@/lib/shared/roles'
 import type { AuthConfig, VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 
 export type AuthProvider = 'email' | 'credential' | 'magic-link' | 'sso' | string
@@ -56,11 +57,9 @@ export async function isAuthMethodAllowed(
    *  redundant Redis round-trip per sign-in attempt. */
   tenantSettings?: Awaited<ReturnType<typeof getTenantSettings>>
 ): Promise<AuthMethodResult> {
-  // SSO is enabled as a method for every role; role governs what a user can
-  // do once signed in, not whether the method exists. Eligibility is gated
-  // elsewhere: verified-domain routing and provider registration upstream,
-  // and — because the email isn't known here — a verified-domain check for
-  // portal users at the OAuth callback (`handleCallbackPolicyCleanup`).
+  // SSO is a method for every role; role governs authorization, not whether
+  // the method exists. Portal-side eligibility (verified domain) is enforced
+  // at the callback — see `isSsoBlockedForRole` / `handleCallbackPolicyCleanup`.
   if (provider === 'sso') return { allowed: true }
 
   if (role === 'user') {
@@ -129,10 +128,9 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
     return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
   }
 
-  // Any other OAuth provider (google, github, custom-oidc, …) — enabled
-  // iff its portal toggle is on (already filtered by credential
-  // availability). SSO never reaches here: it's allowed for every role in
-  // isAuthMethodAllowed.
+  // Any other OAuth provider (google, github, custom-oidc, …) — enabled iff
+  // its portal toggle is on (already filtered by credential availability).
+  // SSO is handled in isAuthMethodAllowed and never reaches here.
   const enabled = portalConfig.oauth[provider]
   return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
 }
@@ -165,6 +163,24 @@ export function isEmailAtVerifiedDomain(
   verifiedDomains: readonly VerifiedDomain[] | undefined
 ): boolean {
   return findVerifiedDomainForEmail(email, verifiedDomains) !== null
+}
+
+/**
+ * Portal-side SSO eligibility gate. A non-team role (portal user) may
+ * complete an SSO sign-in only from a verified domain; team roles
+ * (admin/member) are granted deliberately (bootstrap / invitation), so
+ * their SSO is unconditional. Evaluated at the OAuth callback where the
+ * IdP-asserted email is finally known: the login UI only *offers* SSO on a
+ * verified-domain match, but a direct OAuth start skips that routing, so
+ * this is the enforcing gate. Sibling of {@link isHardBound} — same inputs
+ * (email + verifiedDomains), complementary concern (SSO is never hard-bound).
+ */
+export function isSsoBlockedForRole(
+  role: Role,
+  email: string | null | undefined,
+  verifiedDomains: readonly VerifiedDomain[] | undefined
+): boolean {
+  return !isTeamMember(role) && !isEmailAtVerifiedDomain(email, verifiedDomains)
 }
 
 /**
