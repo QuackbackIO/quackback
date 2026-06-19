@@ -3,7 +3,7 @@ import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 import { posts } from './posts'
-import type { TiptapContent } from '../types'
+import { type TiptapContent, type ChangelogAccess, DEFAULT_CHANGELOG_ACCESS } from '../types'
 
 export const changelogEntries = pgTable(
   'changelog_entries',
@@ -18,6 +18,7 @@ export const changelogEntries = pgTable(
       onDelete: 'set null',
     }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    access: jsonb('access').$type<ChangelogAccess>().default(DEFAULT_CHANGELOG_ACCESS).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support

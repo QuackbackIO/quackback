@@ -20,6 +20,7 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
+import { DEFAULT_CHANGELOG_ACCESS, type ChangelogAccess } from '@/lib/shared/db-types'
 import { Route } from '@/routes/admin/changelog'
 import { type ChangelogId, type PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
@@ -37,6 +38,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [access, setAccess] = useState<ChangelogAccess>(DEFAULT_CHANGELOG_ACCESS)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -66,6 +68,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       setContentJson(entry.contentJson as JSONContent | null)
       setLinkedPostIds(entry.linkedPosts.map((p) => p.id))
       setPublishState(toPublishState(entry.status, entry.publishedAt))
+      setAccess(entry.access)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -78,7 +81,10 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     [form]
   )
 
+  const accessInvalid = access.view === 'segments' && access.segments.view.length === 0
+
   const handleSubmit = form.handleSubmit((data) => {
+    if (accessInvalid) return
     updateChangelogMutation.mutate(
       {
         id: entryId,
@@ -87,6 +93,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
+        access,
       },
       {
         onSuccess: () => {
@@ -149,6 +156,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
           <ChangelogMetadataSidebar
             publishState={publishState}
             onPublishStateChange={setPublishState}
+            access={access}
+            onAccessChange={setAccess}
             linkedPostIds={linkedPostIds}
             onLinkedPostsChange={setLinkedPostIds}
             authorName={entry?.author?.name}
@@ -160,6 +169,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
           onCancel={onClose}
           submitLabel={getSubmitButtonText()}
           isPending={updateChangelogMutation.isPending}
+          submitDisabled={accessInvalid}
         >
           {/* Mobile settings button */}
           <Sheet open={mobileSettingsOpen} onOpenChange={setMobileSettingsOpen}>
@@ -177,6 +187,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                 <ChangelogMetadataSidebarContent
                   publishState={publishState}
                   onPublishStateChange={setPublishState}
+                  access={access}
+                  onAccessChange={setAccess}
                   linkedPostIds={linkedPostIds}
                   onLinkedPostsChange={setLinkedPostIds}
                   authorName={entry?.author?.name}

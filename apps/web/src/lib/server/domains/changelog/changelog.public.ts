@@ -18,19 +18,25 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogId, StatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
+import { ANONYMOUS_ACTOR, changelogViewFilter, type Actor } from '@/lib/server/policy'
 import { computeStatus } from './changelog.service'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 
 /**
- * Predicates that make a changelog entry publicly visible: not soft-deleted
- * and published at or before `now`. Shared by every public read path so the
- * filter stays consistent.
+ * Predicates that make a changelog entry publicly visible: not soft-deleted,
+ * published at or before `now`, AND viewable by the actor's audience tier.
+ * Shared by every public read path so the filter stays consistent.
+ *
+ * The audience gate (`changelogViewFilter`) is independent of publish
+ * lifecycle: publish state decides whether/when an entry is live, the audience
+ * gate decides who may see a live entry. Defaults to an anonymous actor.
  */
-export function publicChangelogConditions(now: Date) {
+export function publicChangelogConditions(now: Date, actor: Actor = ANONYMOUS_ACTOR) {
   return [
     isNull(changelogEntries.deletedAt),
     isNotNull(changelogEntries.publishedAt),
     lte(changelogEntries.publishedAt, now),
+    changelogViewFilter(actor),
   ]
 }
 
@@ -42,11 +48,12 @@ export function publicChangelogConditions(now: Date) {
  * Returns null (no throw) when the entry isn't publicly visible.
  */
 export async function getPublicChangelogMetaById(
-  id: ChangelogId
+  id: ChangelogId,
+  actor: Actor = ANONYMOUS_ACTOR
 ): Promise<{ id: ChangelogId; title: string; publishedAt: Date } | null> {
   const now = new Date()
   const entry = await db.query.changelogEntries.findFirst({
-    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
+    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now, actor)),
     columns: { id: true, title: true, publishedAt: true },
   })
   if (!entry || !entry.publishedAt) return null
@@ -59,11 +66,14 @@ export async function getPublicChangelogMetaById(
  * @param id - Changelog entry ID
  * @returns Public changelog entry
  */
-export async function getPublicChangelogById(id: ChangelogId): Promise<PublicChangelogEntry> {
+export async function getPublicChangelogById(
+  id: ChangelogId,
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<PublicChangelogEntry> {
   const now = new Date()
 
   const entry = await db.query.changelogEntries.findFirst({
-    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
+    where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now, actor)),
   })
 
   if (!entry || !entry.publishedAt) {
@@ -151,14 +161,17 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
  * @param params - List parameters
  * @returns Paginated list of public changelog entries
  */
-export async function listPublicChangelogs(params: {
-  cursor?: string
-  limit?: number
-}): Promise<PublicChangelogListResult> {
+export async function listPublicChangelogs(
+  params: {
+    cursor?: string
+    limit?: number
+  },
+  actor: Actor = ANONYMOUS_ACTOR
+): Promise<PublicChangelogListResult> {
   const { cursor, limit = 20 } = params
   const now = new Date()
 
-  const conditions = publicChangelogConditions(now)
+  const conditions = publicChangelogConditions(now, actor)
 
   // Cursor-based pagination. The lookup does NOT filter on deletedAt:
   // if an admin deleted the cursor row between page load and "Load

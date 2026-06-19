@@ -2,7 +2,7 @@
  * Input/Output types for Changelog Service operations
  */
 
-import type { TiptapContent } from '@/lib/server/db'
+import type { TiptapContent, ChangelogAccess } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
@@ -23,6 +23,8 @@ export interface CreateChangelogInput {
   linkedPostIds?: PostId[]
   /** Publish state */
   publishState: PublishState
+  /** Audience visibility (defaults to public) */
+  access?: ChangelogAccess
 }
 
 /**
@@ -36,6 +38,8 @@ export interface UpdateChangelogInput {
   linkedPostIds?: PostId[]
   /** Publish state (if changing) */
   publishState?: PublishState
+  /** Audience visibility (if changing) */
+  access?: ChangelogAccess
 }
 
 /**
@@ -66,6 +70,8 @@ export interface ChangelogEntryWithDetails {
   publishedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  /** Audience visibility */
+  access: ChangelogAccess
   /** Author information - only shown in admin views */
   author: ChangelogAuthor | null
   /** Linked posts */

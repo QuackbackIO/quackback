@@ -233,6 +233,7 @@ describe('Schema definitions', () => {
       expect(columns).toContain('title')
       expect(columns).toContain('content')
       expect(columns).toContain('publishedAt')
+      expect(columns).toContain('access')
       expect(columns).toContain('createdAt')
       expect(columns).toContain('updatedAt')
     })

@@ -806,6 +806,13 @@
       "when": 1782518400000,
       "tag": "0114_roadmap_access",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1782604800000,
+      "tag": "0115_changelog_access",
+      "breakpoints": true
     }
   ]
 }

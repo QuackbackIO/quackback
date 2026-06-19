@@ -13,14 +13,17 @@ import {
   updateChangelog,
   deleteChangelog,
 } from '@/lib/server/domains/changelog/changelog.service'
-import type { PublishState } from '@/lib/shared/schemas/changelog'
+import { changelogAccessSchema, type PublishState } from '@/lib/shared/schemas/changelog'
+import type { ChangelogAccess } from '@/lib/server/db'
 import type { ChangelogId } from '@quackback/ids'
 
-// Input validation schema
+// Input validation schema. `access` is the optional audience visibility
+// control; it's independent of the publish lifecycle (publishedAt).
 const updateChangelogSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  access: changelogAccessSchema.optional(),
 })
 
 function formatChangelogResponse(entry: {
@@ -28,6 +31,7 @@ function formatChangelogResponse(entry: {
   title: string
   content: string
   publishedAt: Date | null
+  access: ChangelogAccess
   createdAt: Date
   updatedAt: Date
 }) {
@@ -36,6 +40,7 @@ function formatChangelogResponse(entry: {
     title: entry.title,
     content: entry.content,
     publishedAt: entry.publishedAt?.toISOString() || null,
+    access: entry.access,
     createdAt: entry.createdAt.toISOString(),
     updatedAt: entry.updatedAt.toISOString(),
   }
@@ -106,6 +111,7 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             title: parsed.data.title,
             content: parsed.data.content,
             ...(publishState && { publishState }),
+            ...(parsed.data.access && { access: parsed.data.access }),
           })
 
           return successResponse(formatChangelogResponse(updated))

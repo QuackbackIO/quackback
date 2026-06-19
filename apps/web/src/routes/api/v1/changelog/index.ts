@@ -9,16 +9,18 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { createChangelog } from '@/lib/server/domains/changelog/changelog.service'
 import { listChangelogs } from '@/lib/server/domains/changelog/changelog.query'
-import { publishedAtToPublishState } from '@/lib/shared/schemas/changelog'
+import { publishedAtToPublishState, changelogAccessSchema } from '@/lib/shared/schemas/changelog'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PostId } from '@quackback/ids'
 
-// Input validation schema
+// Input validation schema. `access` is the optional audience visibility
+// control (defaults to public); it's independent of the publish lifecycle.
 const createChangelogSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
   linkedPostIds: z.array(z.string()).optional(),
+  access: changelogAccessSchema.optional(),
 })
 
 export const Route = createFileRoute('/api/v1/changelog/')({
@@ -54,6 +56,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               title: entry.title,
               content: entry.content,
               publishedAt: entry.publishedAt?.toISOString() || null,
+              access: entry.access,
               createdAt: entry.createdAt.toISOString(),
               updatedAt: entry.updatedAt.toISOString(),
             })),
@@ -102,6 +105,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               content: parsed.data.content,
               publishState,
               linkedPostIds: parsed.data.linkedPostIds as PostId[] | undefined,
+              access: parsed.data.access,
             },
             {
               principalId: authResult.principalId,
@@ -114,6 +118,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             title: entry.title,
             content: entry.content,
             publishedAt: entry.publishedAt?.toISOString() || null,
+            access: entry.access,
             createdAt: entry.createdAt.toISOString(),
             updatedAt: entry.updatedAt.toISOString(),
           })

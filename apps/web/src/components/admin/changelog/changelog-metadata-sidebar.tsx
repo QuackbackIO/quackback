@@ -2,12 +2,15 @@ import { SidebarContainer, SidebarSkeleton } from '@/components/shared/sidebar-p
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import type { PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
+import type { ChangelogAccess } from '@/lib/shared/db-types'
 
 export { SidebarSkeleton as ChangelogMetadataSidebarSkeleton }
 
 interface ChangelogMetadataSidebarProps {
   publishState: PublishState
   onPublishStateChange: (state: PublishState) => void
+  access: ChangelogAccess
+  onAccessChange: (access: ChangelogAccess) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
   authorName?: string | null
@@ -16,6 +19,8 @@ interface ChangelogMetadataSidebarProps {
 export function ChangelogMetadataSidebar({
   publishState,
   onPublishStateChange,
+  access,
+  onAccessChange,
   linkedPostIds,
   onLinkedPostsChange,
   authorName,
@@ -25,6 +30,8 @@ export function ChangelogMetadataSidebar({
       <ChangelogMetadataSidebarContent
         publishState={publishState}
         onPublishStateChange={onPublishStateChange}
+        access={access}
+        onAccessChange={onAccessChange}
         linkedPostIds={linkedPostIds}
         onLinkedPostsChange={onLinkedPostsChange}
         authorName={authorName}
