@@ -1,4 +1,5 @@
 import { db, eq, settings, ssoVerifiedDomain } from '@/lib/server/db'
+import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
 import { ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -102,9 +103,8 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * reached via the email-first SSO routing, so they're excluded here.
  */
 async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
-  const { listIdentityProviders, shouldRenderPublicButton } = await import(
-    './identity-providers.service'
-  )
+  const { listIdentityProviders, shouldRenderPublicButton } =
+    await import('./identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
 
   const providers = await listIdentityProviders()
@@ -439,9 +439,19 @@ function generateVerificationToken(): string {
  * Insert a verified-domain row for `name`. Idempotent: if a row with
  * that name already exists, returns the existing row (preserves its
  * pending/verified state and token). Caps at MAX_VERIFIED_DOMAINS.
+ *
+ * `providerId` links the domain to an identity provider. On insert it is
+ * stamped onto the new row; on the idempotent path an already-existing
+ * but *unlinked* row is adopted by the given provider (a previously
+ * global / backfilled domain). A row already owned by another provider is
+ * returned untouched — `name` is globally unique, so a domain belongs to
+ * exactly one provider.
  */
-export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain> {
-  log.info({ name }, 'insert verified domain')
+export async function insertVerifiedDomain(
+  name: string,
+  providerId?: IdentityProviderId
+): Promise<VerifiedDomain> {
+  log.info({ name, providerId }, 'insert verified domain')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -452,7 +462,18 @@ export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain
         .from(ssoVerifiedDomain)
         .where(eq(ssoVerifiedDomain.name, name))
       if (existing.length > 0) {
-        return { row: existing[0], created: false }
+        const current = existing[0]
+        // Adopt a previously-unlinked domain into the requesting provider.
+        if (providerId && current.providerId === null) {
+          const [relinked] = await tx
+            .update(ssoVerifiedDomain)
+            .set({ providerId })
+            .where(eq(ssoVerifiedDomain.id, current.id))
+            .returning()
+          await bumpAuthConfigVersionInTx(tx)
+          return { row: relinked, changed: true }
+        }
+        return { row: current, changed: false }
       }
       const count = await tx.$count(ssoVerifiedDomain)
       if (count >= MAX_VERIFIED_DOMAINS) {
@@ -466,12 +487,13 @@ export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain
         .values({
           name,
           verificationToken: generateVerificationToken(),
+          providerId: providerId ?? null,
         })
         .returning()
       await bumpAuthConfigVersionInTx(tx)
-      return { row, created: true }
+      return { row, changed: true }
     })
-    if (inserted.created) {
+    if (inserted.changed) {
       resetAuth()
       await invalidateSettingsCache()
     }

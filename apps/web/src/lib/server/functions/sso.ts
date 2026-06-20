@@ -26,7 +26,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { ConflictError, ForbiddenError } from '@/lib/shared/errors'
+import type { IdentityProviderId } from '@quackback/ids'
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { SSO_OAUTH_CALLBACK_PATH } from '@/lib/shared/sso-test-keys'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
@@ -637,3 +638,340 @@ export const getVerifiedDomainsFn = createServerFn({ method: 'GET' }).handler(as
   const tenant = await getTenantSettings()
   return tenant?.verifiedDomains ?? []
 })
+
+// =============================================================================
+// Identity-provider CRUD (multi-provider, Task 15)
+//
+// Admin-gated wrappers over `identity-providers.service` — the data logic
+// (version bump + resetAuth + cache invalidation, credential cleanup) lives
+// in the service; these add the auth gate, the audit row, and provider-scoped
+// verified-domain handling on top.
+// =============================================================================
+
+/** TypeID validator for an identity-provider row id. */
+const identityProviderId = z.string().regex(/^idp_/) as z.ZodType<IdentityProviderId>
+
+const idpRole = z.enum(['admin', 'member', 'user'])
+
+/** Claim-to-role mapping mirror of `IdentityProviderAttributeMapping`. */
+const attributeMappingSchema = z.object({
+  claimPath: z.string(),
+  rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
+  defaultRole: idpRole,
+  syncOnEverySignIn: z.boolean().optional(),
+})
+
+const upsertIdentityProviderInput = z.object({
+  // Present when editing; absent on create (matched by registrationId).
+  id: identityProviderId.optional(),
+  registrationId: z.string().min(1).max(64),
+  label: z.string().min(1).max(120),
+  clientId: z.string().min(1).max(512),
+  discoveryUrl: httpsUrl.nullable().optional(),
+  authorizationUrl: httpsUrl.nullable().optional(),
+  tokenUrl: httpsUrl.nullable().optional(),
+  userInfoUrl: httpsUrl.nullable().optional(),
+  scopes: z.string().max(512).nullable().optional(),
+  enabled: z.boolean().optional(),
+  autoCreateUsers: z.boolean().optional(),
+  autoProvisionRole: idpRole.nullable().optional(),
+  attributeMapping: attributeMappingSchema.nullable().optional(),
+  showButton: z.boolean().optional(),
+})
+
+/** Read-only listing of every identity provider with its linked domains. */
+export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ roles: ['admin'] })
+  const { listIdentityProviders } =
+    await import('@/lib/server/domains/settings/identity-providers.service')
+  return listIdentityProviders()
+})
+
+/**
+ * Create or update a provider (matched by `id`, else by `registrationId`).
+ * Emits `idp.created` / `idp.updated` based on whether a matching row
+ * already exists; the underlying service bumps the auth-config version and
+ * resets the local auth instance so the new config registers.
+ */
+export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
+  .validator(upsertIdentityProviderInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+
+    const { listIdentityProviders, upsertIdentityProvider } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const existing = await listIdentityProviders()
+    const prior = data.id
+      ? existing.find((p) => p.id === data.id)
+      : existing.find((p) => p.registrationId === data.registrationId)
+
+    return withAuditEvent(
+      {
+        event: prior ? 'idp.updated' : 'idp.created',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: prior?.id ?? data.registrationId },
+        before: prior ? { label: prior.label, enabled: prior.enabled } : null,
+        after: {
+          registrationId: data.registrationId,
+          label: data.label,
+          enabled: data.enabled ?? false,
+        },
+        headers: getRequestHeaders(),
+      },
+      async () => upsertIdentityProvider(data)
+    )
+  })
+
+const deleteIdentityProviderInput = z.object({ id: identityProviderId })
+
+/**
+ * Delete a provider by id. The service cascades its linked domains via the
+ * FK and removes the `auth_<registrationId>` credential explicitly (no FK
+ * to cascade), then resets auth.
+ */
+export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
+  .validator(deleteIdentityProviderInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+
+    return withAuditEvent(
+      {
+        event: 'idp.deleted',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: data.id },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { deleteIdentityProvider } =
+          await import('@/lib/server/domains/settings/identity-providers.service')
+        await deleteIdentityProvider(data.id)
+        return { success: true }
+      }
+    )
+  })
+
+const setProviderCredentialsInput = z.object({
+  id: identityProviderId,
+  clientSecret: z.string().min(1).max(2048),
+})
+
+/**
+ * Persist a provider's IdP-issued client secret to `platform_credentials`
+ * at key `auth_<registrationId>` (the auth runtime reads the secret from
+ * there; clientId / discoveryUrl come from the provider row). The secret is
+ * a connection-affecting field, so stamp `detailsChangedAt` on the provider
+ * to invalidate any prior test sign-in until the admin re-tests.
+ */
+export const setProviderCredentialsFn = createServerFn({ method: 'POST' })
+  .validator(setProviderCredentialsInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+
+    const { listIdentityProviders, stampDetailsChanged } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const provider = (await listIdentityProviders()).find((p) => p.id === data.id)
+    if (!provider) {
+      throw new ValidationError('IDP_NOT_FOUND', 'Identity provider not found.')
+    }
+
+    return withAuditEvent(
+      {
+        event: 'idp.credentials.changed',
+        actor: actorFromAuth(auth),
+        target: { type: 'identity_provider', id: provider.id },
+        metadata: { field: 'clientSecret', action: 'set' },
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        const { savePlatformCredentials } =
+          await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+        const { AUTH_CREDENTIAL_PREFIX } = await import('@/lib/server/auth/auth-providers')
+        await savePlatformCredentials({
+          integrationType: `${AUTH_CREDENTIAL_PREFIX}${provider.registrationId}`,
+          credentials: { clientSecret: data.clientSecret.trim() },
+          principalId: auth.principal.id,
+        })
+        await stampDetailsChanged(provider.id)
+        return { success: true }
+      }
+    )
+  })
+
+const addProviderDomainInput = z.object({
+  providerId: identityProviderId,
+  name: z.string().min(1).max(253),
+})
+
+/**
+ * Insert a pending verified-domain row linked to `providerId`. Idempotent
+ * on `name` (globally unique); a previously-unlinked domain is adopted by
+ * the provider. Normalisation runs through the shared `verifiableDomain`
+ * transformer (reserved suffixes, IP literals, IDN labels rejected).
+ */
+export const addProviderDomainFn = createServerFn({ method: 'POST' })
+  .validator(addProviderDomainInput)
+  .handler(async ({ data }) => {
+    await requireAuth({ roles: ['admin'] })
+
+    const { verifiableDomain } = await import('@/lib/server/auth/normalize-domain')
+    const parsed = verifiableDomain.safeParse(data.name)
+    if (!parsed.success) {
+      throw new ValidationError(
+        'INVALID_DOMAIN',
+        parsed.error.issues[0]?.message ?? 'Invalid domain'
+      )
+    }
+
+    const { insertVerifiedDomain } = await import('@/lib/server/domains/settings/settings.service')
+    return insertVerifiedDomain(parsed.data, data.providerId)
+  })
+
+const verifyProviderDomainInput = z.object({
+  providerId: identityProviderId,
+  id: verifiedDomainId,
+})
+
+/**
+ * Resolve the DNS TXT record for a provider's pending domain and stamp
+ * `verified_at` on match. Provider-scoped: the domain must belong to
+ * `providerId`. Per-domain rate-limited; never throws on lookup failure —
+ * returns a structured `reason`.
+ */
+export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
+  .validator(verifyProviderDomainInput)
+  .handler(async ({ data }): Promise<VerifyDomainResult> => {
+    await requireAuth({ roles: ['admin'] })
+
+    const { getTenantSettings, stampVerifiedDomain } =
+      await import('@/lib/server/domains/settings/settings.service')
+    const tenant = await getTenantSettings()
+    if (!tenant?.settings?.id) {
+      return { verified: false, reason: 'no-pending-domain' }
+    }
+    const dom = tenant.verifiedDomains.find(
+      (d) => d.id === data.id && d.providerId === data.providerId
+    )
+    if (!dom) {
+      return { verified: false, reason: 'no-pending-domain' }
+    }
+    await assertVerifyDomainRateLimit(tenant.settings.id, dom.id)
+
+    const { lookupVerificationTxt } = await import('@/lib/server/auth/dns-verify')
+    const expected = `qb-domain-verify=${dom.verificationToken}`
+    const result = await lookupVerificationTxt(`_quackback-verify.${dom.name}`)
+    if (!result.ok) {
+      return { verified: false, reason: result.reason }
+    }
+    if (!result.values.includes(expected)) {
+      return { verified: false, reason: 'mismatch' }
+    }
+
+    const verifiedAt = new Date().toISOString()
+    try {
+      await stampVerifiedDomain({
+        id: dom.id,
+        expectedToken: dom.verificationToken,
+        verifiedAt,
+      })
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === 'STALE_VERIFICATION_TOKEN') {
+        return { verified: false, reason: 'lookup-failed' }
+      }
+      throw err
+    }
+    return { verified: true, verifiedAt }
+  })
+
+const setDomainEnforcedInput = z.object({
+  id: verifiedDomainId,
+  enforced: z.boolean(),
+})
+
+/**
+ * Flip a provider-scoped domain's `enforced` flag. Enabling preconditions
+ * mirror the workspace gate but key off the OWNING provider's freshness
+ * (`detailsChangedAt` / `lastSuccessfulTestAt` — Task 13's per-provider
+ * signature):
+ *  1. SSO proven working since the provider's last details change —
+ *     `isSsoEnforcementUnlocked(provider, maxTeamSsoSignIn)`.
+ *  2. Magic-link delivery configured (break-glass for the rest of the team).
+ * Disabling skips both.
+ */
+export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
+  .validator(setDomainEnforcedInput)
+  .handler(async ({ data }) => {
+    const auth = await requireAuth({ roles: ['admin'] })
+
+    const { listIdentityProviders } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const { setVerifiedDomainEnforced } =
+      await import('@/lib/server/domains/settings/settings.service')
+    const { db, principal: principalTable, sql, inArray } = await import('@/lib/server/db')
+
+    // Load providers (for the owning provider's freshness + the audit before
+    // snapshot) and, when enabling, the team-wide max SSO sign-in — the
+    // alternative gate proof to a test sign-in — in parallel.
+    const [providers, maxRow] = await Promise.all([
+      listIdentityProviders(),
+      data.enforced
+        ? db
+            .select({ ts: principalTable.lastSsoSignInAt })
+            .from(principalTable)
+            .where(inArray(principalTable.role, ['admin', 'member']))
+            .orderBy(sql`${principalTable.lastSsoSignInAt} DESC NULLS LAST`)
+            .limit(1)
+            .then((rows) => rows[0] ?? null)
+        : Promise.resolve(null),
+    ])
+
+    let owningProvider: (typeof providers)[number] | undefined
+    let dom: (typeof providers)[number]['domains'][number] | undefined
+    for (const p of providers) {
+      const match = p.domains.find((d) => d.id === data.id)
+      if (match) {
+        owningProvider = p
+        dom = match
+        break
+      }
+    }
+
+    return withAuditEvent(
+      {
+        event: data.enforced ? 'idp.domain.enforced' : 'idp.domain.unenforced',
+        actor: actorFromAuth(auth),
+        target: { type: 'sso_verified_domain', id: data.id },
+        before: dom ? { enforced: dom.enforced } : null,
+        after: { enforced: data.enforced },
+        metadata: owningProvider ? { providerId: owningProvider.id } : undefined,
+        headers: getRequestHeaders(),
+      },
+      async () => {
+        if (data.enforced) {
+          if (!owningProvider) {
+            throw new ValidationError(
+              'VERIFIED_DOMAIN_NOT_FOUND',
+              'Domain is not linked to an identity provider.'
+            )
+          }
+          const { isSsoEnforcementUnlocked } = await import('@/lib/server/auth/sso-gates')
+          if (!isSsoEnforcementUnlocked(owningProvider, maxRow?.ts ?? null)) {
+            throw new ForbiddenError(
+              'SSO_TEST_REQUIRED',
+              'Run a successful test sign-in before enabling enforcement.'
+            )
+          }
+
+          const { isEmailConfigured } = await import('@quackback/email')
+          if (!isEmailConfigured()) {
+            throw new ConflictError(
+              'SSO_NO_BREAKGLASS',
+              'Configure email delivery (SMTP/Resend) before requiring SSO. Magic-link is the only fallback when SSO breaks.'
+            )
+          }
+        }
+
+        return setVerifiedDomainEnforced(data.id, data.enforced)
+      }
+    )
+  })
