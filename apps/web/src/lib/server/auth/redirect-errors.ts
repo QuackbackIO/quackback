@@ -33,6 +33,12 @@ export type AuthBlockCode =
   | 'rate_limited'
   | 'verified_domain_requires_sso'
   | 'require_two_factor'
+  | 'token_expired'
+  | 'invalid_token'
+  | 'signup_disabled'
+  | 'OAUTH_CALLBACK_ERROR'
+  | 'oauth_signin_error'
+  | 'not_team_member'
 
 export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   password_method_not_allowed:
@@ -44,6 +50,16 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
   verified_domain_requires_sso:
     'Your email is on a domain that requires single sign-on. Use the SSO option to continue.',
   require_two_factor: 'Two-factor authentication is required. Please verify your second factor.',
+  token_expired: 'Your login link has expired. Please request a new one.',
+  invalid_token: 'Your login link is invalid or has been tampered with. Please try again.',
+  signup_disabled:
+    "Your account isn't pre-provisioned for SSO. Ask an administrator to invite you first.",
+  OAUTH_CALLBACK_ERROR:
+    'Sign-in failed. Your identity provider rejected the request — check the app configuration in your IdP and try again.',
+  oauth_signin_error:
+    'Sign-in failed. Your identity provider rejected the request — check the app configuration in your IdP and try again.',
+  not_team_member:
+    "This account doesn't have team access. Team membership is by invitation only. Please contact your administrator.",
 }
 
 const LOGIN_PATHS = new Set(['/admin/login', '/auth/login'])

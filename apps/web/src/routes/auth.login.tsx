@@ -10,9 +10,16 @@ import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
+
+const GENERIC_ERROR_MESSAGE =
+  'Sign-in failed. Try again or contact your administrator if the problem persists.'
 
 const searchSchema = z.object({
   callbackUrl: z.string().optional(),
+  error: z.string().optional(),
 })
 
 /**
@@ -22,7 +29,7 @@ const searchSchema = z.object({
  */
 export const Route = createFileRoute('/auth/login')({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => ({ callbackUrl: search.callbackUrl }),
+  loaderDeps: ({ search }) => ({ callbackUrl: search.callbackUrl, error: search.error }),
   loader: async ({ context, deps }) => {
     const { settings, queryClient } = context
     if (!settings) {
@@ -33,13 +40,18 @@ export const Route = createFileRoute('/auth/login')({
     const safeCallbackUrl = isSafeCallbackUrl(deps.callbackUrl) ? deps.callbackUrl : '/'
     const { locale, messages } = await loadPortalIntl()
 
-    return { safeCallbackUrl, locale, messages }
+    const errorMessage = deps.error
+      ? (AUTH_BLOCK_MESSAGES[deps.error as keyof typeof AUTH_BLOCK_MESSAGES] ??
+          GENERIC_ERROR_MESSAGE)
+      : null
+
+    return { safeCallbackUrl, locale, messages, errorMessage }
   },
   component: LoginPage,
 })
 
 function LoginPage() {
-  const { safeCallbackUrl, locale, messages } = Route.useLoaderData()
+  const { safeCallbackUrl, locale, messages, errorMessage } = Route.useLoaderData()
   const portalConfigQuery = useSuspenseQuery(settingsQueries.publicPortalConfig())
   const portalConfig = portalConfigQuery.data
   const authConfig = portalConfig.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
@@ -83,6 +95,12 @@ function LoginPage() {
           </p>
         }
       >
+        {errorMessage && (
+          <Alert variant="destructive">
+            <ExclamationCircleIcon className="h-4 w-4" />
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
         <PortalAuthForm
           mode="login"
           callbackUrl={safeCallbackUrl}

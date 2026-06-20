@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { detectAuthBlockRedirect, AuthBlockedError } from '../redirect-errors'
+import {
+  detectAuthBlockRedirect,
+  AuthBlockedError,
+  AUTH_BLOCK_MESSAGES,
+  type AuthBlockCode,
+} from '../redirect-errors'
 
 describe('detectAuthBlockRedirect', () => {
   it('returns null for a non-redirected response', () => {
@@ -53,5 +58,13 @@ describe('detectAuthBlockRedirect', () => {
 
   it('tolerates a malformed url instead of throwing', () => {
     expect(detectAuthBlockRedirect({ redirected: true, url: 'not-a-url' })).toBeNull()
+  })
+})
+
+describe('AUTH_BLOCK_MESSAGES', () => {
+  it('covers the migrated admin-only codes', () => {
+    for (const code of ['token_expired', 'signup_disabled', 'OAUTH_CALLBACK_ERROR', 'not_team_member'] as AuthBlockCode[]) {
+      expect(AUTH_BLOCK_MESSAGES[code]).toBeTruthy()
+    }
   })
 })
