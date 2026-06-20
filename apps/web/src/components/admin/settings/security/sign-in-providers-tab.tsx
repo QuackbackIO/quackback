@@ -2,7 +2,7 @@ import { useState, useTransition } from 'react'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowPathIcon, EnvelopeIcon, KeyIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, EnvelopeIcon, KeyIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
 import { OAuthProviderGrid } from '@/components/admin/settings/auth-shared/oauth-provider-grid'
 import { AuthProviderCredentialsDialog } from '@/components/admin/settings/portal-auth/auth-provider-credentials-dialog'
@@ -225,6 +225,27 @@ export function SignInProvidersTab({
     }
   }
 
+  // ---------- 2FA requirement (child of Password) ----------
+  /**
+   * Require-2FA is a team-side policy that builds on top of password
+   * sign-in. Only writes to auth config (no portal side), and is
+   * disabled when password is off (TOTP enrollment requires a password).
+   */
+  const saveTwoFactor = async (checked: boolean) => {
+    setSaving(true)
+    try {
+      const updated = await updateAuthConfigFn({ data: { twoFactor: { required: checked } } })
+      setTeamAuthConfig(updated)
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'authConfig'] })
+      startTransition(() => router.invalidate())
+      toast.success('Authentication settings saved.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save settings.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ---------- Credentials dialog (shared across all providers) ----------
   const [configDialog, setConfigDialog] = useState<{
     credentialType: string
@@ -299,6 +320,24 @@ export function SignInProvidersTab({
               : undefined
           }
         />
+        {/* Nested: 2FA enforcement lives here because TOTP enrols on
+            top of a password. Indented to signal it is a child setting
+            of the Password row above, not a peer method. */}
+        <div className="ml-[52px] space-y-4 border-l border-border pl-4">
+          <MethodRow
+            icon={ShieldCheckIcon}
+            label="Require 2FA for team members"
+            description={
+              passwordEnabled
+                ? 'Members must pass a TOTP challenge to sign in. Recovery codes are the break-glass.'
+                : 'Enable Password sign-in first — enrolling 2FA requires a password.'
+            }
+            checked={twoFactorRequired}
+            onCheckedChange={(v) => void saveTwoFactor(v)}
+            disabled={busy || isManaged('auth.twoFactor.required') || !passwordEnabled}
+            badge={isManaged('auth.twoFactor.required') ? 'Managed' : undefined}
+          />
+        </div>
         <MethodRow
           icon={EnvelopeIcon}
           label="Email magic link"

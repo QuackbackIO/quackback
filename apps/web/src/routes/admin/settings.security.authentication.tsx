@@ -13,11 +13,16 @@ const searchSchema = z.object({
   // The Security/authentication page splits by CONCERN, not by surface:
   //   - portal-access: who can view the portal (visibility, domains,
   //                    invites, segments, widget sign-in)
-  //   - team-access:   team-admin access policy (2FA, SSO summary)
   //   - sign-in:       authentication methods for both surfaces in one
-  //                    place (password + magic link + social + custom OIDC),
+  //                    place (password + 2FA, magic link, social, OIDC)
   //                    with per-surface toggles inline.
-  tab: z.enum(['portal-access', 'team-access', 'sign-in']).optional(),
+  //
+  // Backward compat: the old `team-access` tab is coerced to `sign-in`
+  // so stale bookmarks don't crash.
+  tab: z.preprocess(
+    (v) => (v === 'team-access' ? 'sign-in' : v),
+    z.enum(['portal-access', 'sign-in']).optional()
+  ),
 })
 
 export const Route = createFileRoute('/admin/settings/security/authentication')({
@@ -34,8 +39,6 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
       queryClient.ensureQueryData(settingsQueries.authConfig()),
       queryClient.ensureQueryData(settingsQueries.portalConfig()),
       queryClient.ensureQueryData(adminQueries.authProviderStatus()),
-      // Prefetch for <AuthSettingsSsoCallout> which suspends on this query.
-      queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
       // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
       queryClient.ensureQueryData(settingsQueries.identityProviders()),
     ])

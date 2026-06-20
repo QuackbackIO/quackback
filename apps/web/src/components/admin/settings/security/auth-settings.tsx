@@ -1,23 +1,18 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowRightOnRectangleIcon, GlobeAltIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
+import { ArrowRightOnRectangleIcon, GlobeAltIcon } from '@heroicons/react/24/solid'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TeamAuthMethodsSection } from './team-auth-methods-section'
 import { PortalAuthTab } from './portal-auth-tab'
 import { SignInProvidersTab } from './sign-in-providers-tab'
-import { SsoPageCallout } from './sso-page-callout'
-import { settingsQueries } from '@/lib/client/queries/settings'
 import type { AuthConfig, PortalAuthMethods, PortalConfig } from '@/lib/shared/types/settings'
 
 /**
  * The Security/authentication page tabs split by concern, not by surface:
  *  - `portal-access` — who can view the portal (visibility, domains, invites, segments, widget)
- *  - `team-access`   — team admin access policy (2FA, SSO summary card)
  *  - `sign-in`       — authentication providers for both surfaces in one place
- *                       (password, magic link, social, custom OIDC) with
- *                       per-surface toggles inline.
+ *                       (password + 2FA enforcement, magic link, social, custom OIDC)
+ *                       with per-surface toggles inline.
  */
-export type AuthTab = 'portal-access' | 'team-access' | 'sign-in'
+export type AuthTab = 'portal-access' | 'sign-in'
 
 interface AuthSettingsProps {
   /** Current selected tab. URL-driven via `?tab=` so the choice is
@@ -37,7 +32,7 @@ interface AuthSettingsProps {
 /**
  * Unified Authentication settings page.
  *
- * Three concern-scoped tabs sit on top of the same provider catalog and
+ * Two concern-scoped tabs sit on top of the same provider catalog and
  * `platform_credentials` rows. Selecting a tab shows the cards for that
  * concern; surface scope is communicated within the cards themselves
  * (e.g. per-surface toggles on the Sign-in tab).
@@ -78,10 +73,6 @@ export function AuthSettings({
           <GlobeAltIcon />
           Portal access
         </TabsTrigger>
-        <TabsTrigger value="team-access">
-          <ShieldCheckIcon />
-          Team access
-        </TabsTrigger>
         <TabsTrigger value="sign-in">
           <ArrowRightOnRectangleIcon />
           Sign-in providers
@@ -90,11 +81,6 @@ export function AuthSettings({
 
       <TabsContent value="portal-access">
         <PortalAuthTab portalConfig={portalConfig} />
-      </TabsContent>
-
-      <TabsContent value="team-access" className="space-y-6">
-        <TeamAuthMethodsSection initialConfig={teamAuthConfig} />
-        <AuthSettingsSsoCallout teamAuthConfig={teamAuthConfig} />
       </TabsContent>
 
       <TabsContent value="sign-in">
@@ -108,9 +94,4 @@ export function AuthSettings({
       </TabsContent>
     </Tabs>
   )
-}
-
-function AuthSettingsSsoCallout({ teamAuthConfig }: { teamAuthConfig: AuthConfig }) {
-  const verifiedDomainsQuery = useSuspenseQuery(settingsQueries.verifiedDomains())
-  return <SsoPageCallout authConfig={teamAuthConfig} verifiedDomains={verifiedDomainsQuery.data} />
 }
