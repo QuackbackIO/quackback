@@ -309,8 +309,22 @@ export function ProviderEditor({
                 placeholder={provider ? 'Leave blank to keep the current secret' : ''}
                 disabled={saving}
               />
-              <TestSignInButton disabled={saving || !provider} />
+              {/* TODO(per-provider-test): The test flow (startSsoTestFn) reads
+                  authConfig.ssoOidc, not the per-provider row. A successful test
+                  would stamp ssoOidc.lastSuccessfulTestAt instead of this
+                  provider's lastSuccessfulTestAt, leaving enforcement gates
+                  unsatisfied. Only the legacy 'sso' registrationId is safe to
+                  test here. */}
+              <TestSignInButton
+                disabled={saving || !provider || provider.registrationId !== 'sso'}
+              />
             </div>
+            {provider && provider.registrationId !== 'sso' && (
+              <p className="text-xs text-muted-foreground">
+                Per-provider test sign-in is coming soon — this connection cannot be
+                verified here yet.
+              </p>
+            )}
           </div>
 
           <RedirectUriCallout

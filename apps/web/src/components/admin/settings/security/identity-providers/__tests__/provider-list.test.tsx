@@ -44,8 +44,13 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // The connection "Test sign-in" affordance rides on the legacy single-SSO
 // modal; stub it so the editor doesn't drag the test-flow server fns in.
+// Pass `disabled` through so tests can assert button state.
 vi.mock('../../sso/test-sign-in-button', () => ({
-  TestSignInButton: () => <button type="button">Test sign-in</button>,
+  TestSignInButton: ({ disabled }: { disabled?: boolean }) => (
+    <button type="button" disabled={disabled}>
+      Test sign-in
+    </button>
+  ),
 }))
 vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({ open: vi.fn() }),
@@ -145,5 +150,29 @@ describe('<IdentityProvidersSection>', () => {
     fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
     expect(await screen.findByText(/also show a/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
+  })
+})
+
+describe('Test sign-in button in ProviderEditor', () => {
+  // The legacy startSsoTestFn reads authConfig.ssoOidc, not the
+  // per-provider row. Showing an enabled Test button for providers
+  // with registrationId !== 'sso' gives false confidence: a success
+  // stamps ssoOidc.lastSuccessfulTestAt, not the provider's own
+  // lastSuccessfulTestAt, so enforcement gates are never satisfied.
+
+  it('is disabled for a provider with a non-"sso" registrationId', async () => {
+    renderSection()
+    fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
+    await screen.findByText(/edit identity provider/i)
+    const testBtn = screen.getByRole('button', { name: /test sign-in/i })
+    expect(testBtn).toBeDisabled()
+  })
+
+  it('is enabled for the legacy "sso" registrationId provider', async () => {
+    renderSection()
+    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
+    await screen.findByText(/edit identity provider/i)
+    const testBtn = screen.getByRole('button', { name: /test sign-in/i })
+    expect(testBtn).not.toBeDisabled()
   })
 })
