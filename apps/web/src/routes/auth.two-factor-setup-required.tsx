@@ -32,7 +32,9 @@ function TwoFactorSetupRequiredPage() {
         </p>
       </div>
       <Button asChild className="w-full">
-        <Link to="/admin/login">Continue with magic link</Link>
+        <Link to="/auth/login" search={{ callbackUrl: '/admin' }}>
+          Continue with magic link
+        </Link>
       </Button>
       <p className="text-center text-xs text-muted-foreground">
         Already enrolled? Sign in again to enter your code.

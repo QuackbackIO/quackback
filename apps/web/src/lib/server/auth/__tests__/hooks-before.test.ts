@@ -187,7 +187,7 @@ describe('handleSignInPreCheck — per-domain enforced', () => {
     const ctx = ctxFor('/sign-in/email', { email: 'a@acme.com' })
 
     await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
-      'REDIRECT:/admin/login?error=verified_domain_requires_sso'
+      'REDIRECT:/auth/login?callbackUrl=/admin&error=verified_domain_requires_sso'
     )
   })
 
@@ -271,14 +271,14 @@ describe('handleSignInPreCheck — isAuthMethodAllowed gate', () => {
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('redirects team-role blocks to /admin/login', async () => {
+  it('redirects team-role blocks to the unified login with a /admin callback', async () => {
     mockGetTenantSettings.mockResolvedValue(tenant({ passwordEnabled: false }))
     mockUserFindFirst.mockResolvedValue({ id: 'user_1' })
     mockPrincipalFindFirst.mockResolvedValue({ role: 'admin' })
     const ctx = ctxFor('/sign-in/email', { email: 'a@anywhere.com' })
 
     await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
-      /\/admin\/login\?error=password_method_not_allowed/
+      /\/auth\/login\?callbackUrl=\/admin&error=password_method_not_allowed/
     )
   })
 

@@ -271,7 +271,7 @@ export async function handleSignInPreCheck(ctx: {
   if (
     isHardBound(provider, email, role, tenant?.authConfig, tenant?.verifiedDomains, ssoRegistered)
   ) {
-    throw ctx.redirect('/admin/login?error=verified_domain_requires_sso')
+    throw ctx.redirect('/auth/login?callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
   if (!principalRow) return
@@ -279,8 +279,16 @@ export async function handleSignInPreCheck(ctx: {
   const result = await isAuthMethodAllowed(provider, role, tenant)
   if (!result.allowed) {
     const isTeamRole = role === 'admin' || role === 'member'
-    const target = isTeamRole ? '/admin/login' : '/auth/login'
-    throw ctx.redirect(`${target}?error=${result.error ?? 'auth_method_blocked'}`)
+    const errorCode = result.error ?? 'auth_method_blocked'
+    // Team roles land on the unified login with a `/admin` callback (the
+    // break-glass form); the error rides as a second param via `&` — a
+    // second `?` would silently drop it. Portal roles keep the plain
+    // `/auth/login?error=` shape.
+    throw ctx.redirect(
+      isTeamRole
+        ? `/auth/login?callbackUrl=/admin&error=${errorCode}`
+        : `/auth/login?error=${errorCode}`
+    )
   }
 
   // NB: the workspace-wide Require-2FA gate used to live here, but
@@ -583,8 +591,15 @@ export async function handleCallbackPolicyCleanup(
   })
   const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
   const isTeamRole = role === 'admin' || role === 'member'
+  // Team roles route to the unified login carrying a `/admin` callback
+  // (the break-glass form); the error joins with `&` so it isn't lost
+  // behind a second `?`. Portal roles keep the plain `?error=` shape.
   const blockedRedirect = (errorCode: string) =>
-    ctx.redirect(`${isTeamRole ? '/admin/login' : '/auth/login'}?error=${errorCode}`)
+    ctx.redirect(
+      isTeamRole
+        ? `/auth/login?callbackUrl=/admin&error=${errorCode}`
+        : `/auth/login?error=${errorCode}`
+    )
 
   // Drop the user/account/principal rows iff the user record is brand-
   // new (created within the last 60s). Both blocking branches below
@@ -756,8 +771,8 @@ export async function handleCredentialPostSignInGate(
  * Two outcomes for team-role users when the workspace requires 2FA:
  *   - **No 2FA enrolled** — same as the credential gate: revoke the
  *     just-created session and redirect to `/auth/two-factor-setup-required`.
- *   - **2FA enrolled** — refuse and redirect to `/admin/login?error=
- *     use_password_for_2fa`. The user must complete the password+TOTP
+ *   - **2FA enrolled** — refuse and redirect to `/auth/login?callbackUrl=
+ *     /admin&error=use_password_for_2fa`. The user must complete the password+TOTP
  *     flow where Better-Auth's plugin handles the challenge. Recovery
  *     codes remain the documented break-glass for lost authenticators.
  *
@@ -826,7 +841,7 @@ export async function handleMagicLinkPostSignInGate(
   throw ctx.redirect(
     outcome === 'setup-required'
       ? '/auth/two-factor-setup-required'
-      : '/admin/login?error=use_password_for_2fa'
+      : '/auth/login?callbackUrl=/admin&error=use_password_for_2fa'
   )
 }
 

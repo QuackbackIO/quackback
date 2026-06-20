@@ -10,7 +10,7 @@ export const Route = createFileRoute('/admin/signup')({
   loader: () => {
     // Team signup now uses magic links sent via email
     // Direct navigation to this route should go to login
-    throw redirect({ to: '/admin/login' })
+    throw redirect({ to: '/auth/login', search: { callbackUrl: '/admin' } })
   },
   component: () => null,
 })

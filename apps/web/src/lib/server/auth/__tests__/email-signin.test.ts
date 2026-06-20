@@ -37,10 +37,10 @@ import { requestEmailSignin } from '../email-signin'
 describe('requestEmailSignin — failed-verify redirect', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('routes admin callbacks to /admin/login on failed verify', async () => {
+  it('routes admin callbacks to the unified login on failed verify', async () => {
     await requestEmailSignin({ email: 'jess@example.com', callbackURL: '/admin/feedback' })
     expect(hoisted.mockMintMagicLinkUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ errorCallbackPath: '/admin/login' })
+      expect.objectContaining({ errorCallbackPath: '/auth/login?callbackUrl=/admin' })
     )
   })
 

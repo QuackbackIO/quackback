@@ -332,7 +332,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
 
     await expect(
       handleCallbackPolicyCleanup(ctx, tenantSettings({ googleEnabled: false }))
-    ).rejects.toThrow(/\/admin\/login\?error=oauth_method_not_allowed/)
+    ).rejects.toThrow(/\/auth\/login\?callbackUrl=\/admin&error=oauth_method_not_allowed/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -470,7 +470,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
           verifiedDomains: [makeVerifiedDomain('acme.com', true)],
         })
       )
-    ).rejects.toThrow(/\/admin\/login\?error=verified_domain_requires_sso/)
+    ).rejects.toThrow(/\/auth\/login\?callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -586,7 +586,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
         ctx,
         tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
       )
-    ).rejects.toThrow(/\/admin\/login\?error=verified_domain_requires_sso/)
+    ).rejects.toThrow(/\/auth\/login\?callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockUserDeleteWhere).toHaveBeenCalled()

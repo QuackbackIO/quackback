@@ -22,9 +22,11 @@ const requireWorkspaceRoleSchema = z.object({
 
 /**
  * Route guard: require authenticated user with specific workspace role.
- * Unauthenticated callers go to `/admin/login` when guarding admin
- * routes (so a session expiry takes the customer back to a sign-in
- * surface, not the public portal); other callers fall back to '/'.
+ * Unauthenticated callers go to `/auth/login?callbackUrl=/admin` when
+ * guarding admin routes (the unified login renders the team break-glass
+ * form for the `/admin` callback, so a session expiry takes the customer
+ * back to a sign-in surface, not the public portal); other callers fall
+ * back to '/'.
  *
  * Use in route beforeLoad:
  * @example
@@ -40,11 +42,13 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ allowed_roles: data.allowedRoles }, 'require workspace role')
     // If the route restricts to team roles only, unauthenticated
-    // callers belong on /admin/login. If the route also allows
-    // role='user' (public portal), fall back to '/' for the regular
-    // sign-in flow.
+    // callers belong on the unified login with a `/admin` callback (the
+    // team break-glass form). If the route also allows role='user'
+    // (public portal), fall back to '/' for the regular sign-in flow.
     const teamOnly = data.allowedRoles.every(isTeamMember)
-    const unauthRedirect = teamOnly ? { to: '/admin/login' as const } : { to: '/' as const }
+    const unauthRedirect = teamOnly
+      ? { to: '/auth/login' as const, search: { callbackUrl: '/admin' } }
+      : { to: '/' as const }
     try {
       const session = await getSession()
       if (!session?.user) {
@@ -66,7 +70,10 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
       }
 
       if (!data.allowedRoles.includes(principalRecord.role)) {
-        throw redirect({ to: '/admin/login', search: { error: 'not_team_member' } })
+        throw redirect({
+          to: '/auth/login',
+          search: { callbackUrl: '/admin', error: 'not_team_member' },
+        })
       }
 
       return {
