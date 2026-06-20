@@ -122,6 +122,7 @@ export {
   sessionRelations,
   settings,
   settingsRelations,
+  identityProvider,
   ssoVerifiedDomain,
   twoFactor,
   user,
