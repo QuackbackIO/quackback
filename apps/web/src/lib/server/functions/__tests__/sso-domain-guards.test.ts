@@ -48,6 +48,9 @@ const hoisted = vi.hoisted(() => ({
   mockDeletePlatformCredentials: vi.fn(),
   mockHasSsoClientSecret: vi.fn(),
   mockGetTierLimits: vi.fn(),
+  mockListIdentityProviders: vi.fn(),
+  mockGetRegisteredOidcProviderIds: vi.fn(),
+  mockGetConfiguredIntegrationTypes: vi.fn(),
   mockIsEmailConfigured: vi.fn().mockReturnValue(true),
   mockCheckUrlSafety: vi.fn().mockResolvedValue({ safe: true }),
   mockSafeFetch: vi.fn(),
@@ -93,6 +96,21 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   deletePlatformCredentials: hoisted.mockDeletePlatformCredentials,
+  getConfiguredIntegrationTypes: hoisted.mockGetConfiguredIntegrationTypes,
+}))
+
+// Task 13: lookupAuthMethodsFn now routes via the identity-provider registry
+// (listIdentityProviders) and the canonical registration gate
+// (getRegisteredOidcProviderIds), instead of reading authConfig.ssoOidc +
+// verifiedDomains directly. The mocks below synthesize a single 'sso' provider
+// from the same getTenantSettings / tier / secret knobs the tests already
+// toggle, so the migrated single-provider scenarios stay green.
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: hoisted.mockListIdentityProviders,
+}))
+
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: hoisted.mockGetRegisteredOidcProviderIds,
 }))
 
 vi.mock('@quackback/email', () => ({
@@ -173,6 +191,41 @@ beforeEach(() => {
   hoisted.mockHasSsoClientSecret.mockResolvedValue(true)
   hoisted.mockGetTierLimits.mockResolvedValue({
     features: { customOidcProvider: true },
+  })
+
+  // Synthesize the 'sso' provider + its registration/creds snapshot from the
+  // tenant/tier/secret knobs each test sets, mirroring how the real registry
+  // would derive them for a single migrated 'sso' provider.
+  hoisted.mockListIdentityProviders.mockImplementation(async () => {
+    const tenant = await hoisted.mockGetTenantSettings()
+    const sso = tenant?.authConfig?.ssoOidc
+    if (!sso) return []
+    return [
+      {
+        id: 'idp_sso',
+        registrationId: 'sso',
+        enabled: sso.enabled === true,
+        autoCreateUsers: sso.autoCreateUsers ?? true,
+        autoProvisionRole: sso.autoProvisionRole ?? null,
+        attributeMapping: sso.attributeMapping ?? null,
+        domains: tenant?.verifiedDomains ?? [],
+      },
+    ]
+  })
+  hoisted.mockGetRegisteredOidcProviderIds.mockImplementation(async () => {
+    const tenant = await hoisted.mockGetTenantSettings()
+    const sso = tenant?.authConfig?.ssoOidc
+    const tier = await hoisted.mockGetTierLimits()
+    const ids = new Set<string>()
+    if (!tier?.features?.customOidcProvider) return ids
+    if (sso?.enabled !== true) return ids
+    if (!(await hoisted.mockHasSsoClientSecret())) return ids
+    ids.add('sso')
+    return ids
+  })
+  hoisted.mockGetConfiguredIntegrationTypes.mockImplementation(async () => {
+    const has = await hoisted.mockHasSsoClientSecret()
+    return new Set<string>(has ? ['auth_sso'] : [])
   })
 })
 
@@ -345,7 +398,7 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-redirect' })
+    expect(result).toEqual({ kind: 'sso-redirect', providerId: 'sso' })
   })
 
   it('returns sso-default for verified-domain email when that domain row is not enforced', async () => {
@@ -358,6 +411,7 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
     expect(result).toEqual({
       kind: 'sso-default',
+      providerId: 'sso',
       authConfig: { password: false, google: true },
     })
   })
@@ -471,11 +525,13 @@ describe('testSsoConnectionFn — SSRF-checks discovery endpoints', () => {
 })
 
 describe('lookupAuthMethodsFn — SSO registration drift', () => {
-  // Verified-domain users would otherwise be redirected to a non-
-  // registered SSO provider. The runtime only registers SSO when the
-  // tier flag is on AND a client secret is present, so the lookup must
-  // mirror those preconditions.
-  it('returns sso-unavailable when tier flag is off (downgrade scenario)', async () => {
+  // The owning provider's liveness gate (`enabled && registered &&
+  // credsPresent`) decides routing. When the tier flag is off or the secret
+  // is missing, the provider isn't registered, so routing falls THROUGH to
+  // the methods form rather than dead-redirecting (or showing
+  // "sso-unavailable"). This matches `isHardBound`, which fails open — scoped
+  // to the owner — so password/magic-link stay usable when the IdP is dead.
+  it('falls through to methods when tier flag is off (downgrade scenario)', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue({
       features: { customOidcProvider: false },
     })
@@ -486,10 +542,14 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-unavailable', reason: 'not-registered' })
+    expect(result).toEqual({
+      kind: 'methods',
+      authConfig: { password: false },
+      ssoEnabled: false,
+    })
   })
 
-  it('returns sso-unavailable when client secret is missing', async () => {
+  it('falls through to methods when client secret is missing', async () => {
     hoisted.mockHasSsoClientSecret.mockResolvedValue(false)
     hoisted.mockGetTenantSettings.mockResolvedValue({
       authConfig: { ssoOidc: ssoConfig },
@@ -498,7 +558,11 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-unavailable', reason: 'not-registered' })
+    expect(result).toEqual({
+      kind: 'methods',
+      authConfig: { password: false },
+      ssoEnabled: false,
+    })
   })
 
   it('still returns sso-redirect when all preconditions hold (enforced row)', async () => {
@@ -509,7 +573,7 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-redirect' })
+    expect(result).toEqual({ kind: 'sso-redirect', providerId: 'sso' })
   })
 })
 

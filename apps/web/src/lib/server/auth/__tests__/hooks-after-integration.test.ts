@@ -137,13 +137,38 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: async () => ({ features: { customOidcProvider: true } }),
 }))
 
-// Task 12: hooksAfter loads the provider registry on callback paths and
+// Task 12/13: hooksAfter loads the provider registry on callback paths and
 // threads it to the after-hooks. Mock both; derive the single owning
-// provider 'sso' from the tenant's verified domains so the enforced /
-// not-enforced scenarios carry through to handleCallbackPolicyCleanup.
+// provider 'sso' from the tenant's verified domains AND its ssoOidc config so
+// the enforced / not-enforced scenarios carry through to
+// handleCallbackPolicyCleanup, and so handleAutoProvisionAfter reads the
+// provider's per-provider provisioning config (autoCreateUsers / role).
 const mockListIdentityProviders = vi.fn(async () => {
-  const tenant = (await mockGetTenantSettings()) as { verifiedDomains?: unknown[] } | undefined
-  return [{ id: 'idp_sso', registrationId: 'sso', domains: tenant?.verifiedDomains ?? [] }]
+  const tenant = (await mockGetTenantSettings()) as
+    | {
+        verifiedDomains?: unknown[]
+        authConfig?: {
+          ssoOidc?: {
+            enabled?: boolean
+            autoCreateUsers?: boolean
+            autoProvisionRole?: 'admin' | 'member' | 'user' | null
+            attributeMapping?: unknown
+          }
+        }
+      }
+    | undefined
+  const sso = tenant?.authConfig?.ssoOidc
+  return [
+    {
+      id: 'idp_sso',
+      registrationId: 'sso',
+      enabled: sso?.enabled !== false,
+      autoCreateUsers: sso?.autoCreateUsers ?? true,
+      autoProvisionRole: sso?.autoProvisionRole ?? null,
+      attributeMapping: sso?.attributeMapping ?? null,
+      domains: tenant?.verifiedDomains ?? [],
+    },
+  ]
 })
 vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   listIdentityProviders: () => mockListIdentityProviders(),

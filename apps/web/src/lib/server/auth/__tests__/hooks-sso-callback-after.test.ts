@@ -60,21 +60,43 @@ vi.mock('@/lib/server/db', () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
 }))
 
-const { handleSsoCallbackAfter: realHandleSsoCallbackAfter } = await import('../hooks')
+const { handleSsoCallbackAfter: realHandleSsoCallbackAfter, shouldBootstrapPromote } =
+  await import('../hooks')
 
-// Task 12: handleSsoCallbackAfter now takes the registered-OIDC set and fires
-// for any registered OIDC provider (not only literal 'sso'). The default
-// providerParam in these tests is 'sso'; the "not sso (google)" guard test
-// relies on 'google' being absent from this set.
-const handleSsoCallbackAfter = (ctx: Parameters<typeof realHandleSsoCallbackAfter>[0]) =>
-  realHandleSsoCallbackAfter(ctx, new Set(['sso']))
+// Task 13 (H8): handleSsoCallbackAfter now also takes the provider registry,
+// and bootstrap promotion fires only when the IdP-asserted email is at a
+// verified domain OWNED BY the callback provider. The default provider 'sso'
+// owns the verified domain `acme.com`, and the default ctx email is at that
+// domain, so the legitimate bootstrap path stays exercised.
+type Providers = Parameters<typeof realHandleSsoCallbackAfter>[2]
+const ssoOwnsAcme: Providers = [
+  {
+    id: 'idp_sso',
+    registrationId: 'sso',
+    domains: [{ name: 'acme.com', verifiedAt: '2026-05-01T00:00:00.000Z', enforced: true }],
+  },
+]
 
-function ctxFor(opts: { path?: string; providerParam?: string; userId?: string }) {
+// Task 12: handleSsoCallbackAfter takes the registered-OIDC set and fires for
+// any registered OIDC provider (not only literal 'sso'). The default
+// providerParam is 'sso'; the "not sso (google)" guard test relies on 'google'
+// being absent from this set.
+const handleSsoCallbackAfter = (
+  ctx: Parameters<typeof realHandleSsoCallbackAfter>[0],
+  providers: Providers = ssoOwnsAcme
+) => realHandleSsoCallbackAfter(ctx, new Set(['sso']), providers)
+
+function ctxFor(opts: { path?: string; providerParam?: string; userId?: string; email?: string }) {
   return {
     path: opts.path,
     params: opts.providerParam ? { providerId: opts.providerParam } : {},
     context: {
-      newSession: opts.userId ? { user: { id: opts.userId }, session: { token: 'tok' } } : null,
+      newSession: opts.userId
+        ? {
+            user: { id: opts.userId, email: opts.email ?? 'alice@acme.com' },
+            session: { token: 'tok' },
+          }
+        : null,
     },
   }
 }
@@ -188,6 +210,102 @@ describe('handleSsoCallbackAfter — bootstrap admin promotion', () => {
     expect(mockTxUpdate).toHaveBeenCalledTimes(1)
     const setArg = mockTxUpdateSet.mock.calls[0][0] as { lastSsoSignInAt?: Date }
     expect(setArg.lastSsoSignInAt).toBeInstanceOf(Date)
+  })
+})
+
+describe('handleSsoCallbackAfter — H8 privilege-escalation guard', () => {
+  it('does NOT promote on a public button-only provider (no verified domains) even with no admin', async () => {
+    mockTxFindFirst.mockResolvedValue(null) // no human admin exists
+
+    // Button-only provider: registered + enabled but owns NO verified domain.
+    // The first internet visitor must NOT become admin.
+    const buttonOnly: Providers = [{ id: 'idp_pub', registrationId: 'sso', domains: [] }]
+
+    await handleSsoCallbackAfter(
+      ctxFor({
+        path: '/oauth2/callback/:providerId',
+        providerParam: 'sso',
+        userId: 'user_stranger',
+        email: 'stranger@gmail.com',
+      }),
+      buttonOnly
+    )
+
+    // No admin-role write; the existing-admin lookup is skipped entirely.
+    expect(mockTxUpdateSet).not.toHaveBeenCalledWith({ role: 'admin' })
+    expect(mockTxFindFirst).not.toHaveBeenCalled()
+    // The provider-independent lastSsoSignInAt stamp still runs.
+    expect(mockTxUpdateSet).toHaveBeenCalledTimes(1)
+    expect(mockTxUpdateSet.mock.calls[0][0]).toHaveProperty('lastSsoSignInAt')
+  })
+
+  it('does NOT promote when the email is NOT at the callback provider’s verified domain', async () => {
+    mockTxFindFirst.mockResolvedValue(null)
+
+    // Provider owns acme.com, but the IdP asserted an outside email.
+    await handleSsoCallbackAfter(
+      ctxFor({
+        path: '/oauth2/callback/:providerId',
+        providerParam: 'sso',
+        userId: 'user_outsider',
+        email: 'outsider@evil.com',
+      }),
+      ssoOwnsAcme
+    )
+
+    expect(mockTxUpdateSet).not.toHaveBeenCalledWith({ role: 'admin' })
+    expect(mockTxFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('DOES promote when the callback provider OWNS the verified domain matching the email', async () => {
+    mockTxFindFirst.mockResolvedValue(null) // no human admin yet
+
+    await handleSsoCallbackAfter(
+      ctxFor({
+        path: '/oauth2/callback/:providerId',
+        providerParam: 'sso',
+        userId: 'user_first',
+        email: 'alice@acme.com',
+      }),
+      ssoOwnsAcme
+    )
+
+    // Legitimate bootstrap path preserved: admin promotion fires.
+    expect(mockTxUpdateSet).toHaveBeenNthCalledWith(1, { role: 'admin' })
+    expect(mockTxUpdateSet.mock.calls[1][0]).toHaveProperty('lastSsoSignInAt')
+  })
+})
+
+describe('shouldBootstrapPromote — pure H8 decision', () => {
+  const owner = {
+    id: 'idp_sso',
+    registrationId: 'sso',
+    domains: [{ name: 'acme.com', verifiedAt: '2026-05-01T00:00:00.000Z', enforced: false }],
+  }
+
+  it('true when the email is at one of the provider’s verified domains', () => {
+    expect(shouldBootstrapPromote('alice@acme.com', owner)).toBe(true)
+  })
+
+  it('false for a button-only provider with no verified domains', () => {
+    expect(shouldBootstrapPromote('alice@acme.com', { ...owner, domains: [] })).toBe(false)
+  })
+
+  it('false when the email is at a different domain', () => {
+    expect(shouldBootstrapPromote('alice@other.com', owner)).toBe(false)
+  })
+
+  it('false when no callback provider resolved', () => {
+    expect(shouldBootstrapPromote('alice@acme.com', undefined)).toBe(false)
+  })
+
+  it('false when the domain is unverified (verifiedAt=null)', () => {
+    expect(
+      shouldBootstrapPromote('alice@acme.com', {
+        ...owner,
+        domains: [{ name: 'acme.com', verifiedAt: null, enforced: false }],
+      })
+    ).toBe(false)
   })
 })
 

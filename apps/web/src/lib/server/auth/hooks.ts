@@ -22,7 +22,11 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import { isRegisteredOidcProvider } from './provider-ids'
+import {
+  findProviderForDomainEmail,
+  isRegisteredOidcProvider,
+  type ProviderWithDomains,
+} from './provider-ids'
 import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
 import { handleRefreshGraceHeal } from './refresh-grace'
 import { captureCountryFromHeaders } from './country-capture'
@@ -327,20 +331,27 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
  *    newSession and are correctly skipped — explicit account-link
  *    isn't a sign-in.
  *
- * NOTE (Task 13 / H8): bootstrap promotion currently fires for ANY
- * registered OIDC provider's first sign-in. Restricting it to providers
- * that own a verified domain is a follow-up — not implemented here.
+ * H8 (Task 13): bootstrap promotion is restricted to a callback whose
+ * IdP-asserted email is at a verified domain OWNED BY THE CALLBACK
+ * PROVIDER (see {@link shouldBootstrapPromote}). A public, button-only
+ * provider (no verified domains) never triggers promotion — otherwise the
+ * first internet visitor to a declared public provider would seize admin
+ * on a fresh / recovered workspace. The `lastSsoSignInAt` stamp is
+ * provider-independent (it lives on `principal`) and runs unconditionally.
  */
 export async function handleSsoCallbackAfter(
   ctx: {
     path?: string
     params?: Record<string, unknown>
     context?: {
-      newSession?: { user?: { id?: string }; session?: { token?: string } } | null
+      newSession?: { user?: { id?: string; email?: string }; session?: { token?: string } } | null
     }
   },
   /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
-  registeredOidcIds: Set<string>
+  registeredOidcIds: Set<string>,
+  /** Identity providers + their verified domains (from listIdentityProviders).
+   *  Used to resolve the callback provider for the H8 promotion gate. */
+  providers: readonly ProviderWithDomains[]
 ): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
   const providerId = ctx.params?.providerId
@@ -348,6 +359,13 @@ export async function handleSsoCallbackAfter(
     return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
+  const email = ctx.context?.newSession?.user?.email
+
+  // H8: resolve the callback provider and decide promotion eligibility BEFORE
+  // the lock window. Eligible only when the email is at one of THIS provider's
+  // verified domains — a button-only provider yields `false`.
+  const callbackProvider = providers.find((p) => p.registrationId === providerId)
+  const eligibleForBootstrap = shouldBootstrapPromote(email, callbackProvider)
 
   const { db, principal: principalTable, and, eq, sql } = await import('@/lib/server/db')
   // Cast through the typeid-branded type so Drizzle's eq() narrows.
@@ -359,23 +377,25 @@ export async function handleSsoCallbackAfter(
     // serialise. Hash key is stable across pods. Released on commit.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('quackback:sso_bootstrap'))`)
 
-    // Bootstrap admin promotion: only fires when no human admin
-    // exists. A healthy workspace post-/admin/setup always has one,
-    // so this branch is recovery-scoped (deleted admin, skipped
-    // onboarding, config-file provisioning before any admin
-    // existed). Filter to type='user' so a service-principal admin
-    // (e.g. a config-file-provisioned API key) doesn't block the
-    // first real user from self-promoting.
-    const existingAdmin = await tx.query.principal.findFirst({
-      where: and(eq(principalTable.role, 'admin'), eq(principalTable.type, 'user')),
-      columns: { id: true },
-    })
-    if (!existingAdmin) {
-      await tx
-        .update(principalTable)
-        .set({ role: 'admin' })
-        .where(eq(principalTable.userId, userIdTyped))
-      log.info({ user_id: userId }, 'sso bootstrap admin promotion')
+    // Bootstrap admin promotion: only fires when the H8 gate passed AND no
+    // human admin exists. A healthy workspace post-/admin/setup always has
+    // one, so this branch is recovery-scoped (deleted admin, skipped
+    // onboarding, config-file provisioning before any admin existed). Filter
+    // to type='user' so a service-principal admin (e.g. a config-file-
+    // provisioned API key) doesn't block the first real user from self-
+    // promoting.
+    if (eligibleForBootstrap) {
+      const existingAdmin = await tx.query.principal.findFirst({
+        where: and(eq(principalTable.role, 'admin'), eq(principalTable.type, 'user')),
+        columns: { id: true },
+      })
+      if (!existingAdmin) {
+        await tx
+          .update(principalTable)
+          .set({ role: 'admin' })
+          .where(eq(principalTable.userId, userIdTyped))
+        log.info({ user_id: userId }, 'sso bootstrap admin promotion')
+      }
     }
 
     // Stamp lastSsoSignInAt for the bootstrap guard's window check.
@@ -390,6 +410,23 @@ export async function handleSsoCallbackAfter(
 }
 
 /**
+ * H8 decision (pure) — may the first OIDC sign-in via `callbackProvider`
+ * claim bootstrap admin? Only when the IdP-asserted `email` is at one of
+ * THIS provider's VERIFIED domains. A button-only provider (no verified
+ * domains) always returns `false`, so a public IdP can never seize admin.
+ *
+ * Extracted so the privilege-escalation rule is unit-testable without a
+ * full DB exercise. {@link handleSsoCallbackAfter} consults it.
+ */
+export function shouldBootstrapPromote(
+  email: string | null | undefined,
+  callbackProvider: ProviderWithDomains | undefined
+): boolean {
+  if (!callbackProvider) return false
+  return findProviderForDomainEmail(email, [callbackProvider]) !== null
+}
+
+/**
  * Auto-provision verified-domain users to a configurable role on first
  * OIDC sign-in (defaults to `member`).
  *
@@ -400,13 +437,16 @@ export async function handleSsoCallbackAfter(
  * callbacks are likewise blocked. Without the IdP attestation, mere inbox
  * control isn't enough to claim team membership.
  *
- * NOTE (Task 13 / H8): the verified-domain check below still matches ANY
- * workspace verified domain, not just the callback provider's. Scoping it to
- * the owning provider's domains is a Task 13 follow-up.
+ * Task 13: provisioning config is read from the MATCHED PROVIDER ROW
+ * (`autoCreateUsers` / `autoProvisionRole` / `attributeMapping`), not the
+ * legacy workspace `ssoOidc` blob, and the verified-domain check is scoped
+ * to the CALLBACK provider's own domains — a sign-in via provider X only
+ * provisions when the email is at one of X's verified domains, never
+ * another provider's.
  *
  * Invariants:
  *  - Only upgrades from `role='user'`; `admin` and `member` are left
- *    alone. The target role is `authConfig.ssoOidc.autoProvisionRole`
+ *    alone. The target role is the provider's `autoProvisionRole`
  *    (default `'member'`), and the special value `'user'` disables
  *    promotion entirely.
  *  - `autoCreateUsers=false` short-circuits — the admin opted out.
@@ -421,9 +461,12 @@ export async function handleAutoProvisionAfter(
       newSession?: { user?: { id?: string; email?: string } } | null
     }
   },
-  /** Settings already fetched by the parent middleware. */
-  tenant: Awaited<
-    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
+  /** Identity providers + their verified domains (from listIdentityProviders).
+   *  The matched row supplies the per-provider provisioning config. */
+  providers: Awaited<
+    ReturnType<
+      typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+    >
   >,
   /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
   registeredOidcIds: Set<string>
@@ -437,11 +480,16 @@ export async function handleAutoProvisionAfter(
   const email = ctx.context?.newSession?.user?.email
   if (typeof userId !== 'string' || typeof email !== 'string') return
 
-  const sso = tenant?.authConfig?.ssoOidc
-  if (!sso?.autoCreateUsers) return
+  // Read the matched provider row — provisioning config is per-provider.
+  const provider = providers.find((p) => p.registrationId === providerId)
+  if (!provider) return
+  if (!provider.autoCreateUsers) return
 
-  const { isEmailAtVerifiedDomain } = await import('./auth-restrictions')
-  if (!isEmailAtVerifiedDomain(email, tenant?.verifiedDomains)) return
+  // Scope the verified-domain check to the CALLBACK provider's own domains:
+  // the email must be at one of THIS provider's verified domains, not any
+  // workspace domain. Without the IdP attestation at the owning domain,
+  // mere inbox control isn't enough to claim team membership.
+  if (findProviderForDomainEmail(email, [provider]) === null) return
 
   const { db, principal: principalTable, eq } = await import('@/lib/server/db')
   type UserId = `user_${string}`
@@ -456,18 +504,19 @@ export async function handleAutoProvisionAfter(
   // legacy autoProvisionRole field. When mapping returns null, fall
   // back to the legacy field.
   let targetRole: 'admin' | 'member' | 'user'
-  if (sso.attributeMapping) {
+  if (provider.attributeMapping) {
     const claims = await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
-    targetRole = resolveSsoRole(claims, sso.attributeMapping) ?? sso.autoProvisionRole ?? 'member'
+    targetRole =
+      resolveSsoRole(claims, provider.attributeMapping) ?? provider.autoProvisionRole ?? 'member'
   } else {
-    targetRole = sso.autoProvisionRole ?? 'member'
+    targetRole = provider.autoProvisionRole ?? 'member'
   }
 
   // Sync mode: re-apply on every sign-in, including for existing
   // admin/member users. Without sync, JIT semantics — only first
   // sign-in (role='user') gets touched.
-  const syncOnEverySignIn = sso.attributeMapping?.syncOnEverySignIn === true
+  const syncOnEverySignIn = provider.attributeMapping?.syncOnEverySignIn === true
   if (!syncOnEverySignIn && p?.role !== 'user') return
 
   // 'user' as the target is the explicit no-promote choice — only
@@ -490,7 +539,7 @@ export async function handleAutoProvisionAfter(
       target: { type: 'user', id: userIdTyped },
       before: { role: p.role },
       after: { role: targetRole },
-      metadata: { source: sso.attributeMapping ? 'attribute_mapping' : 'auto_provision' },
+      metadata: { source: provider.attributeMapping ? 'attribute_mapping' : 'auto_provision' },
     })
   }
 
@@ -1186,9 +1235,10 @@ export async function handleCountryCapture(ctx: {
  *
  *  1. `handleSsoCallbackAfter` — bootstrap admin promotion +
  *     lastSsoSignInAt stamp. Only fires on SSO callbacks.
- *  2. `handleAutoProvisionAfter` — for SSO callbacks, set a verified-domain
- *     user's role from the workspace's autoProvisionRole / attributeMapping
- *     config (brand-new sign-ins default to `role='user'`).
+ *  2. `handleAutoProvisionAfter` — for SSO callbacks, set the user's role
+ *     from the CALLBACK PROVIDER's autoProvisionRole / attributeMapping
+ *     config, scoped to that provider's own verified domains (brand-new
+ *     sign-ins default to `role='user'`).
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
@@ -1233,7 +1283,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
 
   await handleSsoCallbackAfter(
     ctx as Parameters<typeof handleSsoCallbackAfter>[0],
-    registeredOidcIds
+    registeredOidcIds,
+    providers
   )
 
   // One settings fetch shared across all helpers below so we don't
@@ -1243,7 +1294,7 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
 
   await handleAutoProvisionAfter(
     ctx as Parameters<typeof handleAutoProvisionAfter>[0],
-    tenant,
+    providers,
     registeredOidcIds
   )
   await handleCallbackPolicyCleanup(

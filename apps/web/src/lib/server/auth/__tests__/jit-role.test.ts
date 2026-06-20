@@ -1,10 +1,16 @@
 /**
  * Tests for `handleAutoProvisionAfter` role assignment.
  *
- * Phase 1, Task 1.2: the JIT auto-provision hook must read
- * `authConfig.ssoOidc.autoProvisionRole` and use it as the target role,
- * defaulting to 'member' for backwards compatibility. Setting 'user'
- * explicitly disables promotion.
+ * Task 13: the JIT auto-provision hook reads provisioning config from the
+ * MATCHED PROVIDER ROW (`autoCreateUsers` / `autoProvisionRole` /
+ * `attributeMapping`) and scopes the verified-domain check to that
+ * provider's own domains. The target role defaults to 'member'; setting
+ * 'user' disables promotion.
+ *
+ * The domain scoping uses the real `findProviderForDomainEmail` (over the
+ * synthesized provider row's domains), so tests drive the "email not at a
+ * verified domain" case by supplying a non-matching email rather than
+ * mocking a predicate.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -14,7 +20,6 @@ const mockAccountFindFirst = vi.fn()
 const mockSet = vi.fn()
 const mockWhere = vi.fn()
 const mockRecordAuditEvent = vi.fn()
-const mockIsEmailAtVerifiedDomain = vi.fn((_email: unknown, _domains: unknown): boolean => true)
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -30,11 +35,6 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
 }))
 
-vi.mock('../auth-restrictions', () => ({
-  isEmailAtVerifiedDomain: (email: unknown, domains: unknown) =>
-    mockIsEmailAtVerifiedDomain(email, domains),
-}))
-
 vi.mock('@/lib/server/audit/log', () => ({
   recordAuditEvent: (...args: unknown[]) => mockRecordAuditEvent(...args),
 }))
@@ -43,7 +43,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockSet.mockReturnValue({ where: mockWhere })
   mockWhere.mockResolvedValue(undefined)
-  mockIsEmailAtVerifiedDomain.mockReturnValue(true)
   mockRecordAuditEvent.mockResolvedValue(undefined)
 })
 
@@ -70,50 +69,58 @@ type CallOpts = {
 }
 
 const callHandlerWith = async (opts: CallOpts = {}) => {
-  const mod = (await import('../hooks')) as typeof import('../hooks') & {
-    handleAutoProvisionAfter?: (
-      ctx: {
-        path?: string
-        params?: Record<string, unknown>
-        context?: { newSession?: { user?: { id?: string; email?: string } } }
-      },
-      tenant: Record<string, unknown>,
-      registeredOidcIds: Set<string>
-    ) => Promise<void>
+  const mod = await import('../hooks')
+  // Loose cast: the real 2nd param is IdentityProvider[]; the synthesized row
+  // below carries only the fields the handler reads.
+  const handler = mod.handleAutoProvisionAfter as unknown as (
+    ctx: {
+      path?: string
+      params?: Record<string, unknown>
+      context?: { newSession?: { user?: { id?: string; email?: string } } }
+    },
+    providers: ReadonlyArray<Record<string, unknown>>,
+    registeredOidcIds: Set<string>
+  ) => Promise<void>
+  const providerId = opts.providerId ?? 'sso'
+  const ssoOidc = {
+    enabled: true,
+    discoveryUrl: 'https://idp/well-known',
+    clientId: 'c',
+    autoCreateUsers: true,
+    ...opts.ssoOidc,
   }
-  const handler = mod.handleAutoProvisionAfter
-  if (!handler) throw new Error('handleAutoProvisionAfter must be exported for testing')
   await handler(
     {
       path: opts.path ?? '/oauth2/callback/:providerId',
-      params: { providerId: opts.providerId ?? 'sso' },
+      params: { providerId },
       context: {
         newSession: {
           user: { id: opts.userId ?? 'user_abc', email: opts.email ?? 'alice@acme.com' },
         },
       },
     },
-    {
-      authConfig: {
-        ssoOidc: {
-          enabled: true,
-          discoveryUrl: 'https://idp/well-known',
-          clientId: 'c',
-          autoCreateUsers: true,
-          ...opts.ssoOidc,
-        },
+    // The matched provider row supplies the per-provider provisioning config
+    // and the verified domains the email is scoped against.
+    [
+      {
+        id: 'idp_sso',
+        registrationId: providerId,
+        enabled: true,
+        autoCreateUsers: ssoOidc.autoCreateUsers,
+        autoProvisionRole: ssoOidc.autoProvisionRole ?? null,
+        attributeMapping: ssoOidc.attributeMapping ?? null,
+        domains: [
+          {
+            id: 'domain_1',
+            name: 'acme.com',
+            verificationToken: 't',
+            verifiedAt: '2026-01-01',
+            enforced: false,
+            createdAt: '2026-01-01',
+          },
+        ],
       },
-      verifiedDomains: [
-        {
-          id: 'domain_1',
-          name: 'acme.com',
-          verificationToken: 't',
-          verifiedAt: '2026-01-01',
-          enforced: false,
-          createdAt: '2026-01-01',
-        },
-      ],
-    },
+    ],
     // Task 12: the default provider id 'sso' must be in the registered-OIDC
     // set for the handler to fire; a 'google' callback (the skip test) is
     // absent and short-circuits via isRegisteredOidcProvider.
@@ -182,8 +189,9 @@ describe('handleAutoProvisionAfter -- guards (no-op short-circuits)', () => {
     expect(mockSet).not.toHaveBeenCalled()
   })
 
-  it('skips when the user email is not at a verified domain', async () => {
-    mockIsEmailAtVerifiedDomain.mockReturnValue(false)
+  it('skips when the user email is not at the callback provider’s verified domain', async () => {
+    // Provider owns acme.com; the email is at a different domain, so the
+    // scoped findProviderForDomainEmail check returns null and we bail.
     await callHandlerWith({ email: 'alice@other.com' })
     expect(mockFindFirst).not.toHaveBeenCalled()
     expect(mockSet).not.toHaveBeenCalled()
