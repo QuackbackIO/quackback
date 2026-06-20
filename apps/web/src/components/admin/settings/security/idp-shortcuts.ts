@@ -62,7 +62,7 @@ const OKTA: IdpShortcutDef = {
   parse: (url) => {
     const m = /^https:\/\/([^/]+)\/\.well-known\/openid-configuration$/.exec(url)
     if (!m) return null
-    if (!/\.okta\.com$|\.oktapreview\.com$/.test(m[1]) && !m[1].startsWith('auth.')) return null
+    if (!/\.okta\.com$|\.oktapreview\.com$/.test(m[1])) return null
     return { domain: m[1] }
   },
   docUrl: 'https://developer.okta.com/docs/guides/sign-into-web-app-redirect/',
