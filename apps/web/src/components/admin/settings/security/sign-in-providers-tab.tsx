@@ -9,6 +9,7 @@ import { AuthProviderCredentialsDialog } from '@/components/admin/settings/porta
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WarningBox } from '@/components/shared/warning-box'
 import { IdentityProvidersSection } from '@/components/admin/settings/security/identity-providers/provider-list'
+import { RecoveryCodesSection } from '@/components/admin/settings/security/sso/recovery-codes-section'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 import { updateAuthConfigFn, updatePortalConfigFn } from '@/lib/server/functions/settings'
@@ -274,14 +275,7 @@ export function SignInProvidersTab({
         <WarningBox
           variant="warning"
           title="No sign-in method enabled"
-          description={
-            <>
-              Visitors and team admins can&apos;t sign in. Enable at least one provider below — or
-              set up SSO on the{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-[0.85em]">/sso</code> page for the
-              team.
-            </>
-          }
+          description="Visitors and team admins can't sign in. Enable at least one provider or configure an identity provider below."
         />
       )}
 
@@ -387,6 +381,10 @@ export function SignInProvidersTab({
           editor (connection + verified domains + visibility + role
           provisioning). Supersedes the former single Custom OIDC card. */}
       <IdentityProvidersSection tierEnabled={customOidcProviderTier} />
+
+      {/* Card 4: Recovery & break-glass. One-time codes for sign-in when
+          SSO is unavailable. Formerly on the retired /sso page. */}
+      <RecoveryCodesSection />
 
       {busy && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

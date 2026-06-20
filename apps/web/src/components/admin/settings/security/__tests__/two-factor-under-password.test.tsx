@@ -30,6 +30,10 @@ vi.mock('@/components/admin/settings/security/identity-providers/provider-list',
   IdentityProvidersSection: () => <div data-testid="identity-providers-section" />,
 }))
 
+vi.mock('@/components/admin/settings/security/sso/recovery-codes-section', () => ({
+  RecoveryCodesSection: () => <div data-testid="recovery-codes-section" />,
+}))
+
 vi.mock('@/components/admin/settings/auth-shared/oauth-provider-grid', () => ({
   OAuthProviderGrid: () => <div data-testid="oauth-provider-grid" />,
 }))
@@ -75,6 +79,11 @@ function renderTab(teamAuth: AuthConfig, portalOauth: PortalAuthMethods = basePo
 }
 
 describe('2FA nested under Password in <SignInProvidersTab>', () => {
+  it('renders the RecoveryCodesSection at the bottom of the tab', () => {
+    renderTab(baseTeamAuth)
+    expect(screen.getByTestId('recovery-codes-section')).toBeInTheDocument()
+  })
+
   it('renders the "Require 2FA" row when password is enabled', () => {
     renderTab(baseTeamAuth)
     expect(screen.getByText(/require 2fa for team members/i)).toBeInTheDocument()

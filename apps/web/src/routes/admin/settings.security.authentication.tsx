@@ -41,6 +41,8 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
       queryClient.ensureQueryData(adminQueries.authProviderStatus()),
       // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
       queryClient.ensureQueryData(settingsQueries.identityProviders()),
+      // Prefetch for <RecoveryCodesSection> (Sign-in tab) which suspends.
+      queryClient.ensureQueryData(adminQueries.recoveryCodes()),
     ])
 
     return {}
