@@ -410,6 +410,7 @@ function rowToVerifiedDomain(row: typeof ssoVerifiedDomain.$inferSelect): Verifi
     verificationToken: row.verificationToken,
     verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
     enforced: row.enforced,
+    providerId: row.providerId,
     createdAt: row.createdAt.toISOString(),
   }
 }

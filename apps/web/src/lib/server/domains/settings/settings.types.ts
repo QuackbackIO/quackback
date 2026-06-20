@@ -126,6 +126,13 @@ export interface VerifiedDomain {
   verifiedAt: string | null
   /** Per-domain hard-binding switch. Default false. */
   enforced: boolean
+  /**
+   * Owning identity provider (`idp` TypeID). Null/absent until the
+   * provider backfill links it — routing/eligibility code resolves the
+   * provider from this. Optional so legacy callers that build a domain
+   * without it still typecheck.
+   */
+  providerId?: `idp_${string}` | null
   /** ISO-8601 UTC. */
   createdAt: string
 }

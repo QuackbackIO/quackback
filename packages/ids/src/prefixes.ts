@@ -91,6 +91,7 @@ export const ID_PREFIXES = {
   two_factor: 'two_factor',
   audit_log: 'audit',
   sso_recovery_code: 'rcode',
+  identity_provider: 'idp',
 
   // ============================================
   // Billing

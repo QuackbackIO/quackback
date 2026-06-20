@@ -328,6 +328,69 @@ export const settings = pgTable('settings', {
 })
 
 /**
+ * Role-mapping rules applied to an OIDC claim at sign-in.
+ *
+ * Mirrors `AuthConfig.ssoOidc.attributeMapping` (kept in the web app's
+ * settings types). Declared here so the jsonb column is typed without
+ * coupling the db package to the app layer.
+ */
+export type IdentityProviderAttributeMapping = {
+  /** Dotted path or namespaced claim on the ID token. */
+  claimPath: string
+  /** First-match-wins role assignment from the resolved claim. */
+  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+  /** Used when no rule matches. */
+  defaultRole: 'admin' | 'member' | 'user'
+  /** When true, every sign-in re-resolves and may demote/promote. */
+  syncOnEverySignIn?: boolean
+}
+
+/**
+ * Identity provider — the single source of truth for an OIDC IdP.
+ *
+ * Consolidates the two legacy OIDC config models. `id` is the internal
+ * TypeID FK target and never appears in URLs. `registrationId` is the
+ * Better-Auth `providerId` string (`'sso'` / `'custom-oidc'` for
+ * backfilled rows, `'oidc_<id>'` for net-new) — it drives the OAuth
+ * redirect URI and `account.provider_id`, so it stays stable across the
+ * migration. Discovery-doc installs leave the manual endpoint columns
+ * null; manual installs leave `discoveryUrl` null.
+ */
+export const identityProvider = pgTable(
+  'identity_provider',
+  {
+    id: typeIdWithDefault('idp')('id').primaryKey(),
+    /** Better-Auth providerId; drives redirect URI + account.provider_id. */
+    registrationId: text('registration_id').notNull(),
+    label: text('label').notNull(),
+    /** Null for manual-endpoint installs (no discovery document). */
+    discoveryUrl: text('discovery_url'),
+    /** Manual-endpoint fallback when there is no discovery document. */
+    authorizationUrl: text('authorization_url'),
+    tokenUrl: text('token_url'),
+    userInfoUrl: text('user_info_url'),
+    clientId: text('client_id').notNull(),
+    /** Space- or comma-joined custom scopes; `openid email profile` when null. */
+    scopes: text('scopes'),
+    enabled: boolean('enabled').notNull().default(false),
+    /** JIT signup toggle — preserves the legacy auto-provision opt-out. */
+    autoCreateUsers: boolean('auto_create_users').notNull().default(true),
+    autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
+    attributeMapping: jsonb('attribute_mapping').$type<IdentityProviderAttributeMapping>(),
+    showButton: boolean('show_button').notNull().default(false),
+    /** Bumped when redirect-affecting details change; freshness baseline. */
+    detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
+    lastSuccessfulTestAt: timestamp('last_successful_test_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    registrationIdUnique: uniqueIndex('identity_provider_registration_id_uniq').on(
+      t.registrationId
+    ),
+  })
+)
+
+/**
  * Verified SSO domains for the workspace.
  *
  * Each row pairs an email domain with the workspace's OIDC IdP:
@@ -352,6 +415,15 @@ export const ssoVerifiedDomain = pgTable(
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     /** When true: emails at this domain are hard-bound to SSO. */
     enforced: boolean('enforced').notNull().default(false),
+    /**
+     * Owning identity provider. Nullable during migration — existing
+     * domains stay unlinked until the backfill (Task 9) attaches them.
+     * Cascades so removing a provider clears its domain bindings.
+     */
+    providerId: typeIdColumnNullable('idp')('provider_id').references(
+      () => identityProvider.id,
+      { onDelete: 'cascade' }
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

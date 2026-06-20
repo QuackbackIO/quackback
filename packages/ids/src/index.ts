@@ -120,6 +120,7 @@ export type {
   TransferTokenId,
   AuditLogId,
   SsoRecoveryCodeId,
+  IdentityProviderId,
   ApiKeyId,
   WebhookId,
   // Billing
