@@ -36,6 +36,8 @@ export const Route = createFileRoute('/admin/settings/security/authentication')(
       queryClient.ensureQueryData(adminQueries.authProviderStatus()),
       // Prefetch for <AuthSettingsSsoCallout> which suspends on this query.
       queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
+      // Prefetch for <IdentityProvidersSection> (Sign-in tab) which suspends.
+      queryClient.ensureQueryData(settingsQueries.identityProviders()),
     ])
 
     return {}
