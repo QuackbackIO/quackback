@@ -92,6 +92,48 @@ export function flushMagicLinkRateLimit(): void {
   }
 }
 
+/** Config for {@link seedIdentityProvider} (mirrors the seed script's input). */
+export interface SeedIdpConfig {
+  registrationId: string
+  label: string
+  clientId: string
+  discoveryUrl?: string
+  enabled?: boolean
+  showButton?: boolean
+  clientSecret?: string
+  domain?: { name: string; verified?: boolean; enforced?: boolean }
+}
+
+/**
+ * Drop the tenant-settings + configured-integration-types Redis caches so the
+ * running dev server immediately reflects a raw-SQL provider mutation (these
+ * caches normally only invalidate via the app's own write paths).
+ */
+function invalidateAuthCaches(): void {
+  for (const key of ['settings:tenant', 'platform-cred:configured-types']) {
+    execFileSync('docker', ['exec', 'quackback-dragonfly', 'redis-cli', 'del', key], {
+      stdio: 'pipe',
+    })
+  }
+}
+
+/**
+ * Seed an identity_provider row (+ encrypted credential + optional verified
+ * domain) and bust the auth caches. Idempotent on `registrationId`. Pair with
+ * {@link removeIdentityProvider} in an `afterAll`/`finally` so the workspace is
+ * left clean.
+ */
+export function seedIdentityProvider(cfg: SeedIdpConfig): void {
+  runScript('../scripts/seed-identity-provider.ts', ['seed', JSON.stringify(cfg)])
+  invalidateAuthCaches()
+}
+
+/** Remove a seeded identity provider (cascades its domains, drops its credential). */
+export function removeIdentityProvider(registrationId: string): void {
+  runScript('../scripts/seed-identity-provider.ts', ['remove', registrationId])
+  invalidateAuthCaches()
+}
+
 /**
  * Sign `email` into `context` via the magic-link flow (auto-creates the user if
  * new). After this the context's cookies carry the session. Pass `role:'admin'`
