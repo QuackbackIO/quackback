@@ -113,6 +113,13 @@ const oauthProvidersSchema = z
 // in platform_credentials (auth_sso, encrypted). The admin login page
 // is email-first: typing an email at a verified domain auto-redirects
 // to the IdP, so there's no "default CTA" knob.
+//
+// DEPRECATED: superseded by `identityProviders` (the multi-provider
+// list below). Kept as a tolerated-optional field for one release so
+// already-deployed config files that still declare `ssoOidc` keep
+// parsing under `.strict()` — removing it here would reject those files
+// outright. New config files should declare a single-element
+// `identityProviders` list instead.
 const ssoOidcSchema = z
   .object({
     enabled: z.boolean(),
@@ -123,14 +130,50 @@ const ssoOidcSchema = z
   })
   .strict()
 
-// SSO enforcement is per-domain (sso_verified_domain.enforced), not
-// declared here. A config-file shape for that can be added later.
+// Role auto-provisioned for users created on first sign-in via a
+// config-declared provider. Mirrors the IdP-role enum used by the
+// identity-provider service / server fns.
+const autoProvisionRoleSchema = z.enum(['admin', 'member', 'user'])
+
+// A verified domain attached to a config-declared identity provider.
+// Domains listed here are reconciled into `sso_verified_domain` rows and
+// marked verified WITHOUT the DNS TXT challenge: the operator who owns
+// the config file is, by definition, the authority for the domains they
+// declare (operator-trusted bypass — see reconciler.ts).
+const identityProviderDomainSchema = z
+  .object({
+    name: z.string().min(1),
+    /** Force users at this domain through the provider (no password fallback). */
+    enforced: z.boolean().optional(),
+  })
+  .strict()
+
+// One OIDC identity provider, declared as a list entry. Reconciled into
+// an `identity_provider` row (+ its `sso_verified_domain` rows). The
+// client *secret* is never declared here — it lives encrypted in
+// platform_credentials, exactly like ssoOidc. Providers are matched
+// across reconciles by `label` (the config carries no id), so renaming a
+// provider's label creates a new row rather than renaming the old one.
+const identityProviderSchema = z
+  .object({
+    label: z.string().min(1),
+    discoveryUrl: httpsUrl,
+    clientId: z.string().min(1),
+    enabled: z.boolean().optional(),
+    autoCreateUsers: z.boolean().optional(),
+    autoProvisionRole: autoProvisionRoleSchema.optional(),
+    scopes: z.string().optional(),
+    domains: z.array(identityProviderDomainSchema).optional(),
+  })
+  .strict()
 
 const authSchema = z
   .object({
     oauth: oauthProvidersSchema.optional(),
     openSignup: z.boolean().optional(),
+    // DEPRECATED — see ssoOidcSchema. Prefer `identityProviders`.
     ssoOidc: ssoOidcSchema.optional(),
+    identityProviders: z.array(identityProviderSchema).optional(),
   })
   .strict()
 

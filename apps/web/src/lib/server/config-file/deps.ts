@@ -81,5 +81,58 @@ export function makeReconcileDeps(): ReconcileDeps {
       resetAuth()
     },
     reportStatus: makeReportStatus(),
+    upsertIdentityProviders: async (specs) => {
+      if (specs.length === 0) return
+      // Services are imported lazily: this path only runs when the file
+      // declares providers, and the identity-providers service pulls in
+      // the auth runtime — keep it off the common reconcile path and out
+      // of deps.ts's load-time import graph.
+      const { listIdentityProviders, upsertIdentityProvider } = await import(
+        '@/lib/server/domains/settings/identity-providers.service'
+      )
+      const { insertVerifiedDomain, stampVerifiedDomain, setVerifiedDomainEnforced } = await import(
+        '@/lib/server/domains/settings/settings.service'
+      )
+
+      // The config carries no id, so providers are matched to existing
+      // rows by `label`. A net-new provider gets a stable, unique
+      // `oidc_<id>` registrationId minted once; later reconciles reuse it
+      // via the label match (so renaming a label forks a new provider).
+      const existing = await listIdentityProviders()
+      for (const spec of specs) {
+        const prior = existing.find((p) => p.label === spec.label)
+        const registrationId = prior?.registrationId ?? `oidc_${generateId('idp')}`
+        const saved = await upsertIdentityProvider({
+          id: prior?.id,
+          registrationId,
+          label: spec.label,
+          clientId: spec.clientId,
+          discoveryUrl: spec.discoveryUrl,
+          scopes: spec.scopes ?? null,
+          enabled: spec.enabled,
+          autoCreateUsers: spec.autoCreateUsers,
+          autoProvisionRole: spec.autoProvisionRole ?? null,
+        })
+
+        for (const domain of spec.domains) {
+          // Link (or adopt) the domain under this provider.
+          const row = await insertVerifiedDomain(domain.name, saved.id)
+          // Operator-trusted DNS bypass: the operator who owns the config
+          // file is the authority for the domains it declares, so mark
+          // them verified WITHOUT the DNS TXT challenge. Skip if a prior
+          // (e.g. UI-driven) verification already stamped it.
+          if (!row.verifiedAt) {
+            await stampVerifiedDomain({
+              id: row.id,
+              expectedToken: row.verificationToken,
+              verifiedAt: new Date().toISOString(),
+            })
+          }
+          if (domain.enforced !== undefined && domain.enforced !== row.enforced) {
+            await setVerifiedDomainEnforced(row.id, domain.enforced)
+          }
+        }
+      }
+    },
   }
 }
