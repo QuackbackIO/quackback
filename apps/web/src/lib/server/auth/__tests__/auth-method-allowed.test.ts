@@ -29,7 +29,19 @@ vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service',
   hasPlatformCredentials: (...a: unknown[]) => mockHasPlatformCredentials(...a),
 }))
 
-const { isAuthMethodAllowed } = await import('../auth-restrictions')
+const { isAuthMethodAllowed: realIsAuthMethodAllowed } = await import('../auth-restrictions')
+
+// Task 12 added a `registeredOidcProviderIds` set param (3rd) that
+// short-circuits any registered OIDC provider to allowed. These tests never
+// exercise an OIDC provider id except 'sso', so a fixed set containing 'sso'
+// reproduces the prior `provider === 'sso'` early-return; every other tested
+// id (credential, magic-link, google, …) is absent and falls through.
+const reg = new Set(['sso'])
+const isAuthMethodAllowed = (
+  provider: string,
+  role: 'admin' | 'member' | 'user',
+  tenant?: Parameters<typeof realIsAuthMethodAllowed>[3]
+) => realIsAuthMethodAllowed(provider, role, reg, tenant)
 
 const tenant = (oauth: OAuthProviders) =>
   makeTenant({ authConfig: makeAuthConfig({ oauth, ssoOidc: null }) })

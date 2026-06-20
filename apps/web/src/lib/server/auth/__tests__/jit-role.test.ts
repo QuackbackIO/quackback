@@ -77,7 +77,8 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
         params?: Record<string, unknown>
         context?: { newSession?: { user?: { id?: string; email?: string } } }
       },
-      tenant: Record<string, unknown>
+      tenant: Record<string, unknown>,
+      registeredOidcIds: Set<string>
     ) => Promise<void>
   }
   const handler = mod.handleAutoProvisionAfter
@@ -112,7 +113,11 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
           createdAt: '2026-01-01',
         },
       ],
-    }
+    },
+    // Task 12: the default provider id 'sso' must be in the registered-OIDC
+    // set for the handler to fire; a 'google' callback (the skip test) is
+    // absent and short-circuits via isRegisteredOidcProvider.
+    new Set(['sso'])
   )
 }
 

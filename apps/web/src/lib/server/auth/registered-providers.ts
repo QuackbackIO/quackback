@@ -22,31 +22,58 @@
 import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
-import { listIdentityProviders } from '@/lib/server/domains/settings/identity-providers.service'
+import {
+  listIdentityProviders,
+  type IdentityProvider,
+} from '@/lib/server/domains/settings/identity-providers.service'
 import { AUTH_CREDENTIAL_PREFIX, getAllAuthProviders } from './auth-providers'
 
-export async function getRegisteredAuthProviders(): Promise<string[]> {
-  const ids: string[] = []
-
-  const [tenantSettings, tierLimits, configuredTypes, identityProviders] = await Promise.all([
-    getTenantSettings(),
+/**
+ * The set of OIDC provider `registrationId`s the auth runtime registers
+ * right now. Mirrors `buildGenericOAuthConfigs`' gate exactly: the
+ * `customOidcProvider` tier flag is on, the provider row is `enabled`, and a
+ * credential row exists. "Credential present" uses the cached
+ * configured-types Set rather than decrypting the secret — a saved
+ * credential row always carries the secret.
+ *
+ * This is THE shared definition of "registered OIDC provider" consulted by
+ * the enforcement / dispatch code (`isHardBound`, `isAuthMethodAllowed`,
+ * `isRegisteredOidcProvider`) and by the UI mirror below. Keeping a single
+ * source avoids the bootstrap UI reporting a provider the runtime declined.
+ *
+ * @param providers - Optional pre-fetched provider list to avoid a redundant
+ *   `listIdentityProviders()` round-trip when the caller already has it.
+ */
+export async function getRegisteredOidcProviderIds(
+  providers?: IdentityProvider[]
+): Promise<Set<string>> {
+  const [tierLimits, configuredTypes, identityProviders] = await Promise.all([
     getTierLimits(),
+    getConfiguredIntegrationTypes(),
+    providers ? Promise.resolve(providers) : listIdentityProviders(),
+  ])
+
+  const ids = new Set<string>()
+  if (!tierLimits.features.customOidcProvider) return ids
+  for (const provider of identityProviders) {
+    if (!provider.enabled) continue
+    if (!configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${provider.registrationId}`)) continue
+    ids.add(provider.registrationId)
+  }
+  return ids
+}
+
+export async function getRegisteredAuthProviders(): Promise<string[]> {
+  const [tenantSettings, configuredTypes, identityProviders] = await Promise.all([
+    getTenantSettings(),
     getConfiguredIntegrationTypes(),
     listIdentityProviders(),
   ])
 
-  // OIDC providers from the identity_provider list. Mirror
-  // buildGenericOAuthConfigs' gate: tier-allowed + row enabled + a
-  // credential row present. "Credential present" uses the cached
-  // configured-types Set rather than decrypting the secret (this is the
-  // hot bootstrap path); a saved credential row always carries the secret.
-  if (tierLimits.features.customOidcProvider) {
-    for (const provider of identityProviders) {
-      if (!provider.enabled) continue
-      if (!configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${provider.registrationId}`)) continue
-      ids.push(provider.registrationId)
-    }
-  }
+  // OIDC providers from the identity_provider list — the same gate the auth
+  // runtime applies (tier + enabled + credential present), via the shared
+  // helper so the UI mirror never diverges from registration.
+  const ids: string[] = [...(await getRegisteredOidcProviderIds(identityProviders))]
 
   // Layer A registration filter: a social provider is registered globally
   // on the Better-Auth instance only when at least one surface enables it.

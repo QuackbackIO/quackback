@@ -227,44 +227,34 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
       // Resolve once server-side so the page doesn't fan out to
       // listAccounts on the client + so we can hide sections that aren't
       // meaningful for this user.
-      const [userRecord, credentialAccount, principalRow, { getTenantSettings }] =
-        await Promise.all([
-          db.query.user.findFirst({
-            where: eq(user.id, userId),
-            columns: { imageKey: true, image: true, twoFactorEnabled: true, email: true },
-          }),
-          db.query.account.findFirst({
-            where: and(eq(account.userId, userId), eq(account.providerId, 'credential')),
-            columns: { id: true },
-          }),
-          db.query.principal.findFirst({
-            where: eq(principal.userId, userId),
-            columns: { role: true },
-          }),
-          import('@/lib/server/domains/settings/settings.service'),
-        ])
+      const [userRecord, credentialAccount] = await Promise.all([
+        db.query.user.findFirst({
+          where: eq(user.id, userId),
+          columns: { imageKey: true, image: true, twoFactorEnabled: true, email: true },
+        }),
+        db.query.account.findFirst({
+          where: and(eq(account.userId, userId), eq(account.providerId, 'credential')),
+          columns: { id: true },
+        }),
+      ])
 
       const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
-      const { isSsoActuallyRegistered } = await import('@/lib/server/auth/sso-secret')
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const tenant = await getTenantSettings()
-      const ssoRegistered = await isSsoActuallyRegistered(
-        tenant?.authConfig?.ssoOidc,
-        await getTierLimits()
+      const { listIdentityProviders } = await import(
+        '@/lib/server/domains/settings/identity-providers.service'
       )
-      const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+      const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+      const providers = await listIdentityProviders()
+      const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
       // Use the full predicate so the profile page hides the password
-      // section for users at an enforced verified domain. When SSO isn't
-      // actually viable (tier downgrade, missing secret) the predicate
-      // fails open — the UI then surfaces the password section as a
-      // fallback, mirroring the sign-in flow.
+      // section for users whose email is at an enforced verified domain.
+      // When the owning IdP isn't viable (tier downgrade, missing secret)
+      // the predicate fails open — the UI then surfaces the password section
+      // as a fallback, mirroring the sign-in flow.
       const ssoEnforced = isHardBound(
         'credential',
         userRecord?.email ?? null,
-        role,
-        tenant?.authConfig,
-        tenant?.verifiedDomains,
-        ssoRegistered
+        providers,
+        registeredOidcIds
       )
 
       const hasCustomAvatar = !!userRecord?.imageKey

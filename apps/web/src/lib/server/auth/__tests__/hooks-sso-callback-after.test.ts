@@ -60,7 +60,14 @@ vi.mock('@/lib/server/db', () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
 }))
 
-const { handleSsoCallbackAfter } = await import('../hooks')
+const { handleSsoCallbackAfter: realHandleSsoCallbackAfter } = await import('../hooks')
+
+// Task 12: handleSsoCallbackAfter now takes the registered-OIDC set and fires
+// for any registered OIDC provider (not only literal 'sso'). The default
+// providerParam in these tests is 'sso'; the "not sso (google)" guard test
+// relies on 'google' being absent from this set.
+const handleSsoCallbackAfter = (ctx: Parameters<typeof realHandleSsoCallbackAfter>[0]) =>
+  realHandleSsoCallbackAfter(ctx, new Set(['sso']))
 
 function ctxFor(opts: { path?: string; providerParam?: string; userId?: string }) {
   return {

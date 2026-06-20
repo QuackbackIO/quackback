@@ -137,6 +137,22 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: async () => ({ features: { customOidcProvider: true } }),
 }))
 
+// Task 12: hooksAfter loads the provider registry on callback paths and
+// threads it to the after-hooks. Mock both; derive the single owning
+// provider 'sso' from the tenant's verified domains so the enforced /
+// not-enforced scenarios carry through to handleCallbackPolicyCleanup.
+const mockListIdentityProviders = vi.fn(async () => {
+  const tenant = (await mockGetTenantSettings()) as { verifiedDomains?: unknown[] } | undefined
+  return [{ id: 'idp_sso', registrationId: 'sso', domains: tenant?.verifiedDomains ?? [] }]
+})
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: () => mockListIdentityProviders(),
+}))
+const mockGetRegisteredOidcProviderIds = vi.fn(async () => new Set(['sso']))
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: () => mockGetRegisteredOidcProviderIds(),
+}))
+
 const { hooksAfter } = (await import('../hooks')) as unknown as {
   hooksAfter: (ctx: unknown) => Promise<void>
 }

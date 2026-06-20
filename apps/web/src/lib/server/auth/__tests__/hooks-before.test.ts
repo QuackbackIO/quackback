@@ -61,19 +61,20 @@ vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
 }))
 
-// Default mirrors the production conditions: registered iff the admin
-// has SSO enabled (so existing enforcement tests see the same blocking
-// behavior). Tests for tier-downgrade / missing-secret override this.
-const mockIsSsoActuallyRegistered = vi.fn(
-  async (sso: { enabled?: boolean } | undefined, _tier: unknown) => sso?.enabled === true
-)
-vi.mock('@/lib/server/auth/sso-secret', () => ({
-  isSsoActuallyRegistered: (sso: { enabled?: boolean } | undefined, tier: unknown) =>
-    mockIsSsoActuallyRegistered(sso, tier),
+// Task 12: handleSignInPreCheck now resolves the owning provider + the
+// registered-OIDC set from the provider registry (instead of
+// isSsoActuallyRegistered). Mock both. The single-provider regression
+// baseline maps every verified domain onto one owning provider 'sso';
+// `getRegisteredOidcProviderIds` returns {'sso'} when SSO is "registered".
+// Tests for tier-downgrade / missing-secret override the set to empty.
+const mockListIdentityProviders = vi.fn()
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: (...a: unknown[]) => mockListIdentityProviders(...a),
 }))
 
-vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
-  getTierLimits: async () => ({ features: { customOidcProvider: true } }),
+const mockGetRegisteredOidcProviderIds = vi.fn()
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: (...a: unknown[]) => mockGetRegisteredOidcProviderIds(...a),
 }))
 
 // auth-restrictions stays unmocked — we want the real predicates to
@@ -89,8 +90,9 @@ type Knobs = {
   verifiedDomains?: ReturnType<typeof makeVerifiedDomain>[]
 }
 
-const tenant = (k: Knobs = {}) =>
-  makeTenant({
+const tenant = (k: Knobs = {}) => {
+  const verifiedDomains = k.verifiedDomains ?? []
+  const t = makeTenant({
     authConfig: makeAuthConfig({
       oauth: { password: k.passwordEnabled, magicLink: k.magicLinkEnabled },
       ssoOidc: {
@@ -100,8 +102,20 @@ const tenant = (k: Knobs = {}) =>
         enabled: k.ssoEnabled ?? true,
       },
     }),
-    verifiedDomains: k.verifiedDomains ?? [],
+    verifiedDomains,
   })
+  // Side-effect: mirror this tenant's verified domains onto the single
+  // owning provider 'sso' and derive its registered-set membership from
+  // ssoEnabled (matching the prior isSsoActuallyRegistered default). Tests
+  // exercising the fail-open path override mockGetRegisteredOidcProviderIds.
+  mockListIdentityProviders.mockResolvedValue([
+    { id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains },
+  ])
+  mockGetRegisteredOidcProviderIds.mockResolvedValue(
+    (k.ssoEnabled ?? true) ? new Set(['sso']) : new Set<string>()
+  )
+  return t
+}
 
 const ctxFor = (path: string, body?: Record<string, unknown>): Ctx => ({
   path,
@@ -117,9 +131,7 @@ beforeEach(() => {
   mockGetPublicPortalConfig.mockResolvedValue({
     oauth: { password: true, magicLink: false },
   })
-  // Default mock returns true when sso.enabled is true (mirrors prod).
-  // Tier-downgrade / missing-secret tests override with mockResolvedValue.
-  mockIsSsoActuallyRegistered.mockImplementation(async (sso) => sso?.enabled === true)
+  // The provider-registry mocks are seeded by the `tenant()` call above.
   mockCheckSignInRateLimit.mockResolvedValue({ allowed: true })
   mockCheckMagicLinkRateLimit.mockResolvedValue({ allowed: true })
 })
@@ -380,7 +392,7 @@ describe('handleSignInPreCheck — tier-downgrade / missing-secret fail-open', (
     mockGetTenantSettings.mockResolvedValue(
       tenant({ ssoEnabled: true, verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
     )
-    mockIsSsoActuallyRegistered.mockResolvedValue(false)
+    mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set<string>())
     mockUserFindFirst.mockResolvedValue({ id: 'user_1' })
     mockPrincipalFindFirst.mockResolvedValue({ role: 'admin' })
     const ctx = ctxFor('/sign-in/email', { email: 'a@acme.com' })
@@ -396,7 +408,7 @@ describe('handleSignInPreCheck — tier-downgrade / missing-secret fail-open', (
         verifiedDomains: [makeVerifiedDomain('acme.com', true)],
       })
     )
-    mockIsSsoActuallyRegistered.mockResolvedValue(false)
+    mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set<string>())
     mockUserFindFirst.mockResolvedValue({ id: 'user_1' })
     mockPrincipalFindFirst.mockResolvedValue({ role: 'admin' })
     const ctx = ctxFor('/sign-in/magic-link', { email: 'a@acme.com' })
@@ -415,7 +427,7 @@ describe('handleSignInPreCheck — tier-downgrade / missing-secret fail-open', (
         verifiedDomains: [makeVerifiedDomain('acme.com', true)],
       })
     )
-    mockIsSsoActuallyRegistered.mockResolvedValue(true)
+    mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['sso']))
     mockUserFindFirst.mockResolvedValue({ id: 'user_1' })
     mockPrincipalFindFirst.mockResolvedValue({ role: 'admin' })
     const ctx = ctxFor('/sign-in/email', { email: 'a@acme.com' })

@@ -50,14 +50,29 @@ const enforcedDomain: VerifiedDomain = {
 
 const verifiedDomain: VerifiedDomain = { ...enforcedDomain, enforced: false }
 
+// Task 12 migrated isHardBound from
+//   (provider, email, role, authConfig, verifiedDomains, ssoActuallyRegistered)
+// to
+//   (provider, email, providers, registeredProviderIds).
+// This wrapper preserves the legacy single-provider call shape used
+// throughout this file by mapping the verified domains onto a single owning
+// provider 'sso' and the boolean onto that provider's registered-set
+// membership. Every case below therefore remains the migrated
+// single-provider regression baseline (role / authConfig are now inert).
 const callIsHardBound = (
   provider: AuthProvider | string,
   email: string | null | undefined,
-  role: 'admin' | 'member' | 'user',
-  authConfig: AuthConfig | undefined,
+  _role: 'admin' | 'member' | 'user',
+  _authConfig: AuthConfig | undefined,
   verifiedDomains: readonly VerifiedDomain[] | undefined,
   ssoRegistered = true
-) => isHardBound(provider, email, role, authConfig, verifiedDomains, ssoRegistered)
+) =>
+  isHardBound(
+    provider,
+    email,
+    [{ id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains ?? [] }],
+    ssoRegistered ? new Set(['sso']) : new Set<string>()
+  )
 
 describe('isSsoConfigured — master-switch helper', () => {
   it('returns true when ssoOidc.enabled === true', () => {

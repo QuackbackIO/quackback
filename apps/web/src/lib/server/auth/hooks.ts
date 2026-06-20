@@ -22,6 +22,7 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { isRegisteredOidcProvider } from './provider-ids'
 import { AUTH_BLOCK_MESSAGES } from './redirect-errors'
 import { handleRefreshGraceHeal } from './refresh-grace'
 import { captureCountryFromHeaders } from './country-capture'
@@ -253,30 +254,29 @@ export async function handleSignInPreCheck(ctx: {
     : null
   const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
 
-  // Pre-compute "is SSO actually viable right now?" so `isHardBound`
-  // can fail open on tier-downgrade / missing-secret states (else team
-  // admins lock themselves out the moment an upstream condition flips).
-  const { isSsoActuallyRegistered } = await import('./sso-secret')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const ssoRegistered = await isSsoActuallyRegistered(
-    tenant?.authConfig?.ssoOidc,
-    await getTierLimits()
+  // Load the provider registry once: both the owning-provider resolution
+  // for hard-binding and the per-method gate consult it. `registeredOidcIds`
+  // lets `isHardBound` fail open (scoped to the owning provider) on
+  // tier-downgrade / missing-secret states so admins aren't self-locked-out.
+  const { listIdentityProviders } = await import(
+    '@/lib/server/domains/settings/identity-providers.service'
   )
+  const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+  const providers = await listIdentityProviders()
+  const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
 
   // Hard-binding: refuses password / magic-link / email-OTP for
   // emails at a verified-domain row marked enforced (per-domain).
   // The verified-domain branch fires before user lookup matters —
   // inbox control at the verified domain shouldn't bypass the IdP's
   // attestations even for brand-new sign-ups.
-  if (
-    isHardBound(provider, email, role, tenant?.authConfig, tenant?.verifiedDomains, ssoRegistered)
-  ) {
+  if (isHardBound(provider, email, providers, registeredOidcIds)) {
     throw ctx.redirect('/auth/login?callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
   if (!principalRow) return
 
-  const result = await isAuthMethodAllowed(provider, role, tenant)
+  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, tenant)
   if (!result.allowed) {
     const isTeamRole = role === 'admin' || role === 'member'
     const errorCode = result.error ?? 'auth_method_blocked'
@@ -306,35 +306,46 @@ export const hooksBefore = createAuthMiddleware(async (ctx) => {
 })
 
 /**
- * SSO callback post-processing — runs only for the SSO provider id.
+ * OIDC callback post-processing — runs for any registered OIDC provider's
+ * callback (the genericOAuth path `/oauth2/callback/:providerId`).
  *
  * Two responsibilities:
  *
  * 1. **Bootstrap-only admin promotion.** Replaces the buggy
  *    `databaseHooks.account.create.after` block in auth/index.ts that
  *    upgraded *every* SSO sign-in to admin. The new behavior: only the
- *    first SSO sign-in into a workspace with no existing admin claims
+ *    first OIDC sign-in into a workspace with no existing admin claims
  *    admin. Wraps in a transaction with `pg_advisory_xact_lock` so
- *    concurrent first-SSO sign-ins don't race the existing-admin
+ *    concurrent first-sign-ins don't race the existing-admin
  *    check. Recovery-scoped — a healthy workspace post-onboarding
  *    always has an admin so this is a no-op.
  *
  * 2. **`lastSsoSignInAt` write.** Read by `setVerifiedDomainEnforcedFn`'s
  *    bootstrap guard to refuse turning per-domain enforcement on
  *    without a recent SSO sign-in. Written here on every successful
- *    SSO callback (newSession exists). Link callbacks have no
+ *    OIDC callback (newSession exists). Link callbacks have no
  *    newSession and are correctly skipped — explicit account-link
- *    isn't an SSO sign-in.
+ *    isn't a sign-in.
+ *
+ * NOTE (Task 13 / H8): bootstrap promotion currently fires for ANY
+ * registered OIDC provider's first sign-in. Restricting it to providers
+ * that own a verified domain is a follow-up — not implemented here.
  */
-export async function handleSsoCallbackAfter(ctx: {
-  path?: string
-  params?: Record<string, unknown>
-  context?: {
-    newSession?: { user?: { id?: string }; session?: { token?: string } } | null
-  }
-}): Promise<void> {
+export async function handleSsoCallbackAfter(
+  ctx: {
+    path?: string
+    params?: Record<string, unknown>
+    context?: {
+      newSession?: { user?: { id?: string }; session?: { token?: string } } | null
+    }
+  },
+  /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
+  registeredOidcIds: Set<string>
+): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
-  if (ctx.params?.providerId !== 'sso') return
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
+    return
   const userId = ctx.context?.newSession?.user?.id
   if (typeof userId !== 'string' || userId.length === 0) return
 
@@ -380,14 +391,18 @@ export async function handleSsoCallbackAfter(ctx: {
 
 /**
  * Auto-provision verified-domain users to a configurable role on first
- * SSO sign-in (defaults to `member`).
+ * OIDC sign-in (defaults to `member`).
  *
- * Fires only on the SSO callback (`/oauth2/callback/sso`). The IdP's
- * assertion of email + identity is the trust source; magic-link to a
- * verified-domain email is hard-bound in `hooksBefore` so it never
- * reaches this path, and password/other-OAuth callbacks are likewise
- * blocked. Without the IdP attestation, mere inbox control isn't
- * enough to claim team membership.
+ * Fires on any registered OIDC provider's callback
+ * (`/oauth2/callback/:providerId`). The IdP's assertion of email + identity
+ * is the trust source; magic-link to a verified-domain email is hard-bound
+ * in `hooksBefore` so it never reaches this path, and password/social
+ * callbacks are likewise blocked. Without the IdP attestation, mere inbox
+ * control isn't enough to claim team membership.
+ *
+ * NOTE (Task 13 / H8): the verified-domain check below still matches ANY
+ * workspace verified domain, not just the callback provider's. Scoping it to
+ * the owning provider's domains is a Task 13 follow-up.
  *
  * Invariants:
  *  - Only upgrades from `role='user'`; `admin` and `member` are left
@@ -409,10 +424,14 @@ export async function handleAutoProvisionAfter(
   /** Settings already fetched by the parent middleware. */
   tenant: Awaited<
     ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
-  >
+  >,
+  /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
+  registeredOidcIds: Set<string>
 ): Promise<void> {
   if (ctx.path !== '/oauth2/callback/:providerId') return
-  if (ctx.params?.providerId !== 'sso') return
+  const providerId = ctx.params?.providerId
+  if (typeof providerId !== 'string' || !isRegisteredOidcProvider(providerId, registeredOidcIds))
+    return
 
   const userId = ctx.context?.newSession?.user?.id
   const email = ctx.context?.newSession?.user?.email
@@ -438,7 +457,7 @@ export async function handleAutoProvisionAfter(
   // back to the legacy field.
   let targetRole: 'admin' | 'member' | 'user'
   if (sso.attributeMapping) {
-    const claims = await readSsoClaims(userIdTyped)
+    const claims = await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
     targetRole = resolveSsoRole(claims, sso.attributeMapping) ?? sso.autoProvisionRole ?? 'member'
   } else {
@@ -479,15 +498,23 @@ export async function handleAutoProvisionAfter(
 }
 
 /**
- * Read the latest stored ID-token claims for a user's SSO account.
+ * Read the latest stored ID-token claims for a user's OIDC account.
  * Returns an empty object when no token is stored or the token is
  * malformed — caller should fall back to the legacy auto-provision
  * field in that case.
+ *
+ * `providerId` is the callback provider's registrationId (the account's
+ * `provider_id`). It must match what just authenticated, else the row
+ * lookup misses and attribute mapping silently returns {} → default role
+ * for every non-`sso` provider.
  */
-async function readSsoClaims(userId: `user_${string}`): Promise<Record<string, unknown>> {
+async function readSsoClaims(
+  userId: `user_${string}`,
+  providerId: string
+): Promise<Record<string, unknown>> {
   const { db, account, and, eq } = await import('@/lib/server/db')
   const row = await db.query.account.findFirst({
-    where: and(eq(account.userId, userId), eq(account.providerId, 'sso')),
+    where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
     columns: { idToken: true },
   })
   if (!row?.idToken) return {}
@@ -559,7 +586,15 @@ export async function handleCallbackPolicyCleanup(
   },
   tenant: Awaited<
     ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
-  >
+  >,
+  /** Identity providers + their verified domains (from listIdentityProviders). */
+  providers: Awaited<
+    ReturnType<
+      typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+    >
+  >,
+  /** OIDC provider ids registered right now (from getRegisteredOidcProviderIds). */
+  registeredOidcIds: Set<string>
 ): Promise<void> {
   if (!SESSION_CREATING_CALLBACK_PATHS.has(ctx.path ?? '')) return
   const userId = ctx.context?.newSession?.user?.id
@@ -581,7 +616,6 @@ export async function handleCallbackPolicyCleanup(
 
   const { isHardBound, isAuthMethodAllowed, isSsoBlockedForRole } =
     await import('./auth-restrictions')
-  const verifiedDomains = tenant?.verifiedDomains
 
   // Look up the principal once — both the role-aware redirect (for the
   // hard-binding branch) and the role-based policy check (below) need it.
@@ -626,43 +660,37 @@ export async function handleCallbackPolicyCleanup(
     throw blockedRedirect(errorCode)
   }
 
-  // Pre-compute viability so `isHardBound` fails open on runtime
-  // unavailability (tier downgrade, secret missing). See the
-  // `isHardBound` docstring for the self-lockout rationale.
-  const { isSsoActuallyRegistered } = await import('./sso-secret')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const ssoRegistered = await isSsoActuallyRegistered(
-    tenant?.authConfig?.ssoOidc,
-    await getTierLimits()
-  )
-
-  // Hard-binding for non-SSO callbacks: per-domain enforcement only
-  // (verified-domain row with enforced=true). `isHardBound` treats
-  // every provider except `sso` as hard-bindable, so this is the gate
-  // that actually blocks social / generic-OAuth sign-ins for emails at
-  // an enforced verified domain — Layer B can't (no email pre-session
-  // on callback paths).
+  // Hard-binding: blocks any callback whose email is at an enforced verified
+  // domain UNLESS the callback IS that domain's owning provider. This is the
+  // gate that catches social / a *different* OIDC provider for emails at an
+  // enforced domain — Layer B can't (no email pre-session on callback paths).
+  // `isHardBound` exempts the owning provider's own callback internally, so
+  // no `provider !== 'sso'` guard is needed; it also fails open (scoped to
+  // the owner) when the owning IdP isn't registered, per its docstring.
   if (
-    provider !== 'sso' &&
     typeof userEmail === 'string' &&
-    isHardBound(provider, userEmail, role, tenant?.authConfig, verifiedDomains, ssoRegistered)
+    isHardBound(provider, userEmail, providers, registeredOidcIds)
   ) {
     await blockSignIn('verified_domain_requires_sso')
   }
 
-  // Portal SSO requires a verified domain (see `isSsoBlockedForRole`). The
-  // login UI only offers SSO on a verified-domain match, but a direct
+  // Portal OIDC eligibility: a portal user completing provider X's callback
+  // must be at one of X's verified domains (see `isSsoBlockedForRole`). The
+  // login UI only offers a provider on a verified-domain match, but a direct
   // /sign-in/oauth2 start skips that routing, so this callback is the gate.
   // Sits with the hard-binding gate above the principal-row guard: it's an
   // email-driven policy, and `role` defaulting to 'user' (the most
   // restrictive audience) keeps it fail-closed if the principal is missing.
-  if (provider === 'sso' && isSsoBlockedForRole(role, userEmail, verifiedDomains)) {
+  if (
+    isRegisteredOidcProvider(provider, registeredOidcIds) &&
+    isSsoBlockedForRole(role, userEmail, provider, providers)
+  ) {
     await blockSignIn('oauth_method_not_allowed')
   }
 
   if (!principalRow) return
 
-  const result = await isAuthMethodAllowed(provider, role, tenant)
+  const result = await isAuthMethodAllowed(provider, role, registeredOidcIds, tenant)
   if (result.allowed) return
 
   await blockSignIn(result.error ?? 'auth_method_blocked')
@@ -1183,17 +1211,46 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     const provider = inferProvider(ctx as Parameters<typeof inferProvider>[0])
     log.debug({ path: ctx.path, provider: provider ?? null }, 'after-hook')
   }
-  await handleSsoCallbackAfter(ctx as Parameters<typeof handleSsoCallbackAfter>[0])
+
+  // The provider registry is only consulted by the OAuth-callback after-hooks
+  // (bootstrap promotion, auto-provision, policy cleanup). Skip the DB read on
+  // password / magic-link success paths — those callbacks early-return before
+  // touching `providers` / `registeredOidcIds`, so the empty defaults are safe.
+  let providers: Awaited<
+    ReturnType<
+      typeof import('@/lib/server/domains/settings/identity-providers.service').listIdentityProviders
+    >
+  > = []
+  let registeredOidcIds = new Set<string>()
+  if (SESSION_CREATING_CALLBACK_PATHS.has(ctx.path ?? '')) {
+    const { listIdentityProviders } = await import(
+      '@/lib/server/domains/settings/identity-providers.service'
+    )
+    const { getRegisteredOidcProviderIds } = await import('./registered-providers')
+    providers = await listIdentityProviders()
+    registeredOidcIds = await getRegisteredOidcProviderIds(providers)
+  }
+
+  await handleSsoCallbackAfter(
+    ctx as Parameters<typeof handleSsoCallbackAfter>[0],
+    registeredOidcIds
+  )
 
   // One settings fetch shared across all helpers below so we don't
   // make 2-3 sequential cache round-trips per sign-in.
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
   const tenant = await getTenantSettings()
 
-  await handleAutoProvisionAfter(ctx as Parameters<typeof handleAutoProvisionAfter>[0], tenant)
+  await handleAutoProvisionAfter(
+    ctx as Parameters<typeof handleAutoProvisionAfter>[0],
+    tenant,
+    registeredOidcIds
+  )
   await handleCallbackPolicyCleanup(
     ctx as Parameters<typeof handleCallbackPolicyCleanup>[0],
-    tenant
+    tenant,
+    providers,
+    registeredOidcIds
   )
   // Workspace Require-2FA gate for password sign-in success — closes
   // the pre-auth enumeration oracle that used to live in hooksBefore.
