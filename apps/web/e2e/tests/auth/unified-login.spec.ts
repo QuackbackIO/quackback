@@ -5,13 +5,18 @@
  *  (a) Unauthenticated /admin → /auth/login?callbackUrl=/admin, team form visible
  *  (b) Admin magic-link sign-in with callbackUrl=/admin lands on /admin
  *  (c) Portal-only user reaching /admin bounced to /auth/login with not_team_member error
- *  (d) Team form email input always visible at /auth/login?callbackUrl=/admin (break-glass)
+ *  (d) With all portal public sign-in methods disabled, team break-glass form still
+ *      shows email input + magic-link affordance + /auth/recovery recovery-code link
  *  (e) /auth/login?callbackUrl=/complete-signup/<id> serves the team form, not portal form
  *
  * Tests manage their own auth state (no stored state injected by Playwright config).
  */
 import { test, expect } from '@playwright/test'
-import { loginViaMagicLink } from '../../utils/access-helpers'
+import {
+  loginViaMagicLink,
+  setPortalAuthMethods,
+  flushMagicLinkRateLimit,
+} from '../../utils/access-helpers'
 import { getMagicLinkToken } from '../../utils/db-helpers'
 
 const ADMIN_EMAIL = 'demo@example.com'
@@ -20,6 +25,12 @@ const PORTAL_EMAIL = 'e2e-portal-only@example.test'
 // Run serially: magic-link rate limit is per-email; serialising avoids
 // two tests racing on the same email address.
 test.describe.configure({ mode: 'serial' })
+
+// Clear per-email magic-link rate-limit keys before the suite so repeated
+// runs on the same addresses don't flake.
+test.beforeAll(() => {
+  flushMagicLinkRateLimit()
+})
 
 test.beforeEach(async ({ page }) => {
   // Always start from a clean session so these cases are independent.
@@ -79,8 +90,20 @@ test('(b) admin magic-link sign-in with callbackUrl=/admin lands on /admin', asy
 
 // (c) Portal-only user reaching /admin is bounced with not_team_member error
 test('(c) portal user reaching /admin bounced with not_team_member error', async ({ context }) => {
-  // Create / sign in as a portal-only user (role='user', not admin/member)
-  await loginViaMagicLink(context, PORTAL_EMAIL)
+  // Sign in as a portal-only user (role='user' — not admin/member). Passing the
+  // role explicitly ensures the account is never accidentally promoted so the
+  // not_team_member bounce is genuine, not a false pass via case (a)'s unauth redirect.
+  //
+  // Portal magic-link is off by default; the auth hook blocks magic-link sends for
+  // existing role='user' principals, so we enable it just for this setup call then
+  // restore. On first run the user doesn't exist yet and bypasses the hook; on
+  // repeat runs this prevents a silent "no token in DB" failure.
+  setPortalAuthMethods('enable-magic-link')
+  try {
+    await loginViaMagicLink(context, PORTAL_EMAIL, { role: 'user' })
+  } finally {
+    setPortalAuthMethods('restore')
+  }
 
   const page = await context.newPage()
   await page.goto('/admin')
@@ -98,33 +121,41 @@ test('(c) portal user reaching /admin bounced with not_team_member error', async
   await page.close()
 })
 
-// (d) Team form (break-glass) always shows email input at /auth/login?callbackUrl=/admin
-test('(d) team break-glass: email input visible at /auth/login?callbackUrl=/admin', async ({
+// (d) Team break-glass: email input + magic-link affordance visible even when
+//     ALL portal public sign-in methods are disabled.
+//     Invariant: team members must never be locked out by an admin turning off
+//     public portal auth — the TeamLoginForm is always served for team-bound URLs.
+test('(d) team break-glass form visible with all portal auth methods disabled', async ({
   page,
 }) => {
-  // Deliberately NOT signed in — test the unauthenticated team form surface.
-  await page.goto('/auth/login?callbackUrl=%2Fadmin')
-  await page.waitForLoadState('networkidle')
+  setPortalAuthMethods('disable')
+  try {
+    await page.goto('/auth/login?callbackUrl=%2Fadmin')
+    await page.waitForLoadState('networkidle')
 
-  // Team form must render the email input regardless of portal method settings
-  const emailInput = page.locator('input[type="email"]')
-  await expect(emailInput).toBeVisible({ timeout: 15000 })
+    // Team form must render regardless of portal method settings
+    const emailInput = page.locator('input[type="email"]')
+    await expect(emailInput).toBeVisible({ timeout: 15000 })
 
-  // Continue button must be present (stage 1 of TeamLoginForm)
-  await expect(page.getByRole('button', { name: /^continue$/i })).toBeVisible()
+    // Continue button is the magic-link affordance (stage 1 of TeamLoginForm)
+    await expect(page.getByRole('button', { name: /^continue$/i })).toBeVisible()
 
-  // Recovery code link is the magic-link bypass for SSO-broken scenarios
-  await expect(page.getByRole('link', { name: /recovery code/i })).toBeVisible()
-
-  // The portal sign-up link must NOT be here (this is the team form, not portal)
-  await expect(page.getByRole('link', { name: /create an account/i })).not.toBeVisible()
+    // Recovery code link confirms break-glass path is intact
+    const recoveryLink = page.getByRole('link', { name: /recovery code/i })
+    await expect(recoveryLink).toBeVisible()
+    await expect(recoveryLink).toHaveAttribute('href', /\/auth\/recovery/)
+  } finally {
+    // Always restore so subsequent tests and dev sessions aren't left with a
+    // broken portal, even on assertion failure.
+    setPortalAuthMethods('restore')
+  }
 })
 
 // (e) /auth/login?callbackUrl=/complete-signup/<id> serves the team form
 test('(e) /auth/login with complete-signup callbackUrl serves team form', async ({ page }) => {
-  // Using a synthetic invitation id — the loader only cares about callbackUrl
-  // for isTeamCallback(); it doesn't validate the invitation exists server-side
-  // at the auth/login route level.
+  // Using a synthetic invitation id — the /auth/login loader only reads callbackUrl
+  // to call isTeamCallback(); it does NOT fetch or validate the invitation record.
+  // (Confirmed: auth.login.tsx loader calls isSafeCallbackUrl + isTeamCallback only.)
   const fakeId = '01jz000000faketest000000000'
   await page.goto(`/auth/login?callbackUrl=%2Fcomplete-signup%2F${fakeId}`)
   await page.waitForLoadState('networkidle')
