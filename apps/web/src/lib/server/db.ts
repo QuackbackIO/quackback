@@ -275,6 +275,7 @@ export {
 
 // Re-export schema types not covered by @quackback/db/types
 export type { ServiceMetadata } from '@quackback/db'
+export type { IdentityProviderAttributeMapping } from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)
 export * from '@quackback/db/types'
