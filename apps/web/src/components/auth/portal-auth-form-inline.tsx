@@ -18,6 +18,7 @@ import {
   getEnabledOAuthProviders,
   getOAuthRedirectUrl,
   type OAuthProviderEntry,
+  type OidcProviderEntry,
 } from '@/components/auth/oauth-buttons'
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
@@ -35,7 +36,8 @@ interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
-  customProviderNames?: Record<string, string>
+  /** Public OIDC sign-in buttons from the identity_provider list. */
+  oidcProviders?: OidcProviderEntry[]
 }
 
 interface InvitationInfo {
@@ -150,7 +152,7 @@ export function PortalAuthFormInline({
   type View =
     | { stage: 'email' }
     | { stage: 'methods-step'; step: AuthFormStep }
-    | { stage: 'sso-default' }
+    | { stage: 'sso-default'; providerId: string }
     | { stage: 'sso-unavailable' }
     | { stage: 'closed-signup' }
     | { stage: 'sso-redirecting' }
@@ -265,11 +267,11 @@ export function PortalAuthFormInline({
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: '/' })
         return
       }
       if (result.kind === 'sso-default') {
-        setView({ stage: 'sso-default' })
+        setView({ stage: 'sso-default', providerId: result.providerId })
         return
       }
       if (result.kind === 'sso-unavailable') {
@@ -526,7 +528,7 @@ export function PortalAuthFormInline({
   // Derive which auth methods are enabled
   const enabledProviders = getEnabledOAuthProviders(
     authConfig?.oauth ?? {},
-    authConfig?.customProviderNames
+    authConfig?.oidcProviders
   )
   const showOAuth = enabledProviders.length > 0
   // Email entry (and the "or" divider + create-account link) only makes sense
@@ -785,7 +787,7 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
-              await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: '/' })
             } catch (err) {
               setError(
                 (err as Error).message ||
@@ -794,7 +796,7 @@ export function PortalAuthFormInline({
                     defaultMessage: 'Could not start SSO sign-in.',
                   })
               )
-              setView({ stage: 'sso-default' })
+              setView({ stage: 'sso-default', providerId: view.providerId })
               setLoadingAction(null)
             }
           }}

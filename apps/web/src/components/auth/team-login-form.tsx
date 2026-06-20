@@ -44,6 +44,10 @@ export function TeamLoginForm({ callbackUrl, authConfig }: TeamLoginFormProps) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [methodsAuthConfig, setMethodsAuthConfig] = useState<PortalAuthMethods>(authConfig)
+  // registrationId of the provider owning the email's verified domain;
+  // carried from the lookup so the deferred "Continue with SSO" button
+  // starts the right provider (the routing already resolved it).
+  const [ssoProviderId, setSsoProviderId] = useState('')
 
   function applyMethodsConfig(serverAuthConfig: Record<string, boolean | undefined>) {
     // Bring forward the live config from the server in case it diverged
@@ -70,7 +74,7 @@ export function TeamLoginForm({ callbackUrl, authConfig }: TeamLoginFormProps) {
     setLoading(true)
     try {
       await authClient.signIn.oauth2({
-        providerId: 'sso',
+        providerId: ssoProviderId,
         callbackURL: callbackUrl,
         additionalData: email.trim() ? { loginHint: email.trim() } : undefined,
       })
@@ -89,7 +93,7 @@ export function TeamLoginForm({ callbackUrl, authConfig }: TeamLoginFormProps) {
       const result = await lookup({ data: { email: email.trim(), surface: 'team' } })
       if (result.kind === 'sso-redirect') {
         await authClient.signIn.oauth2({
-          providerId: 'sso',
+          providerId: result.providerId,
           callbackURL: callbackUrl,
           // Pass the typed email so the IdP pre-selects that
           // account; combined with `prompt=select_account` server-
@@ -100,6 +104,7 @@ export function TeamLoginForm({ callbackUrl, authConfig }: TeamLoginFormProps) {
       }
       if (result.kind === 'sso-default') {
         applyMethodsConfig(result.authConfig)
+        setSsoProviderId(result.providerId)
         setStage('sso-default')
         return
       }

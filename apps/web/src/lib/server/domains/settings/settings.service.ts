@@ -86,36 +86,35 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
 }
 
 /**
- * Display-name overrides for generic OAuth providers (currently only
- * `custom-oidc`, which is exposed on the portal surface only). Returns
- * a map of providerId → displayName when an admin has set one.
+ * Public OIDC sign-in buttons for the portal, sourced from the
+ * `identity_provider` table (NOT the static AUTH_PROVIDERS map). Each
+ * button's `id` is the provider's `registrationId`, so a click drives
+ * `signIn.oauth2({ providerId: registrationId })` → the matching
+ * `/oauth2/callback/<registrationId>`.
+ *
+ * A provider yields a button only when it is BOTH:
+ *   - button-eligible (`shouldRenderPublicButton`): no verified domain,
+ *     or the admin opted a routed provider back in via `showButton`.
+ *   - registered (`getRegisteredOidcProviderIds`): the same gate the auth
+ *     runtime applies (enabled + creds + tier) so a button never 404s.
+ *
+ * Routed-only providers (verified domain + `showButton:false`) are
+ * reached via the email-first SSO routing, so they're excluded here.
  */
-async function getCustomProviderNames(
-  oauth: Record<string, boolean | undefined>,
-  configuredTypes: Set<string>
-): Promise<Record<string, string> | undefined> {
-  const { getAllAuthProviders } = await import('@/lib/server/auth/auth-providers')
-  const { getPlatformCredentials } =
-    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-
-  const genericProviders = getAllAuthProviders().filter(
-    (p) => p.type === 'generic-oauth' && oauth[p.id] && configuredTypes.has(p.credentialType)
+async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
+  const { listIdentityProviders, shouldRenderPublicButton } = await import(
+    './identity-providers.service'
   )
+  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
 
-  if (genericProviders.length === 0) return undefined
+  const providers = await listIdentityProviders()
+  // No providers → no buttons; skip the tier + credential round-trips.
+  if (providers.length === 0) return []
+  const registered = await getRegisteredOidcProviderIds(providers)
 
-  const names: Record<string, string> = {}
-  const credResults = await Promise.all(
-    genericProviders.map((p) => getPlatformCredentials(p.credentialType))
-  )
-  for (let i = 0; i < genericProviders.length; i++) {
-    const displayName = credResults[i]?.displayName
-    if (displayName) {
-      names[genericProviders[i].id] = displayName
-    }
-  }
-
-  return Object.keys(names).length > 0 ? names : undefined
+  return providers
+    .filter((p) => registered.has(p.registrationId) && shouldRenderPublicButton(p))
+    .map((p) => ({ id: p.registrationId, name: p.label }))
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
@@ -763,12 +762,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
       configuredTypes,
       passthroughKeys
     )
-    const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
       oauth: filteredOAuth,
       features: portalConfig.features,
-      ...(customProviderNames && { customProviderNames }),
+      ...(oidcProviders.length > 0 && { oidcProviders }),
       ...(welcome && { welcomeCard: welcome }),
       portalAccess: {
         isPrivate: portalConfig.access?.visibility === 'private',
@@ -823,9 +822,9 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       configuredTypes,
       passthroughKeys
     )
-    // Only portal exposes generic-oauth providers, so display-name overrides
-    // are computed for the portal surface only.
-    const portalCustomNames = await getCustomProviderNames(filteredPortalOAuth, configuredTypes)
+    // Public OIDC buttons come from the identity_provider table (portal
+    // surface only); the static map supplies social providers only.
+    const portalOidcProviders = await getPublicOidcProviders()
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -855,7 +854,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         return {
           oauth: filteredPortalOAuth,
           features: portalConfig.features,
-          ...(portalCustomNames && { customProviderNames: portalCustomNames }),
+          ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
           ...(welcome && { welcomeCard: welcome }),
           portalAccess: {
             isPrivate: portalConfig.access?.visibility === 'private',

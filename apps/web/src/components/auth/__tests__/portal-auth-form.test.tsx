@@ -200,7 +200,7 @@ describe('PortalAuthForm — Stage 1 → Stage 2 dispatch', () => {
   })
 
   it('redirects to SSO when the lookup returns sso-redirect', async () => {
-    lookupMock.mockResolvedValue({ kind: 'sso-redirect' })
+    lookupMock.mockResolvedValue({ kind: 'sso-redirect', providerId: 'sso' })
     signInOauth2Mock.mockResolvedValue({ data: { url: 'https://idp.example/' }, error: null })
     render(<PortalAuthForm authConfig={{ password: true, magicLink: false }} />)
     fireEvent.change(screen.getByLabelText(/email/i), {
@@ -221,11 +221,15 @@ describe('PortalAuthForm — Stage 1 → Stage 2 dispatch', () => {
     await screen.findByText(/signing you in/i)
   })
 
-  it('shows the sso-default branch when the lookup returns sso-default', async () => {
+  it('shows the sso-default branch and carries the resolved providerId to the deferred SSO start', async () => {
+    // A non-default registrationId proves the deferred "Continue with SSO"
+    // button uses the providerId from the lookup, not a hardcoded 'sso'.
     lookupMock.mockResolvedValue({
       kind: 'sso-default',
+      providerId: 'workos',
       authConfig: { password: true, magicLink: false },
     })
+    signInOauth2Mock.mockResolvedValue({ data: { url: 'https://idp.example/' }, error: null })
     render(
       <PortalAuthForm authConfig={{ password: true, magicLink: false }} workspaceName="Acme" />
     )
@@ -235,8 +239,14 @@ describe('PortalAuthForm — Stage 1 → Stage 2 dispatch', () => {
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
     await screen.findByText(/Acme/i)
-    expect(screen.getByRole('button', { name: /continue with sso/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign in another way/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /continue with sso/i }))
+
+    await waitFor(() =>
+      expect(signInOauth2Mock).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: 'workos' })
+      )
+    )
   })
 
   it('shows sso-unavailable copy when the lookup returns sso-unavailable', async () => {

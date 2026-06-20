@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
-import { OAuthButtons, getEnabledOAuthProviders } from './oauth-buttons'
+import { OAuthButtons, getEnabledOAuthProviders, type OidcProviderEntry } from './oauth-buttons'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
@@ -40,8 +40,8 @@ interface PortalAuthFormProps {
   callbackUrl?: string
   /** Auth method configuration (which methods are enabled) */
   authConfig?: PortalAuthMethods
-  /** Display name overrides for generic OAuth providers */
-  customProviderNames?: Record<string, string>
+  /** Public OIDC sign-in buttons from the identity_provider list. */
+  oidcProviders?: OidcProviderEntry[]
   /** Pre-filled email — used by the team-login dispatcher when the
    *  user's email didn't match the verified SSO domain and we hand
    *  control off to the methods form. Presence of this prop skips
@@ -86,7 +86,7 @@ export function PortalAuthForm({
   invitationId,
   callbackUrl = '/',
   authConfig,
-  customProviderNames,
+  oidcProviders,
   initialEmail,
   workspaceName,
   openSignup,
@@ -95,7 +95,7 @@ export function PortalAuthForm({
   const intl = useIntl()
   const passwordEnabled = authConfig?.password ?? true
   const magicLinkEnabled = authConfig?.magicLink ?? false
-  const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig, customProviderNames) : []
+  const oauthProviders = authConfig ? getEnabledOAuthProviders(authConfig, oidcProviders) : []
 
   // Stage 1 + Stage 2 sub-screens. `methods-step` carries the inner
   // step (the existing `AuthFormStep` union — credentials | email | code
@@ -103,7 +103,7 @@ export function PortalAuthForm({
   type View =
     | { stage: 'email' }
     | { stage: 'methods-step'; step: AuthFormStep }
-    | { stage: 'sso-default' }
+    | { stage: 'sso-default'; providerId: string }
     | { stage: 'sso-unavailable' }
     | { stage: 'closed-signup' }
     | { stage: 'sso-redirecting' }
@@ -202,14 +202,14 @@ export function PortalAuthForm({
         // that account in its picker.
         setView({ stage: 'sso-redirecting' })
         await authClient.signIn.oauth2({
-          providerId: 'sso',
+          providerId: result.providerId,
           callbackURL: callbackUrl,
           additionalData: { loginHint: trimmed },
         })
         return
       }
       if (result.kind === 'sso-default') {
-        setView({ stage: 'sso-default' })
+        setView({ stage: 'sso-default', providerId: result.providerId })
         return
       }
       if (result.kind === 'sso-unavailable') {
@@ -630,7 +630,7 @@ export function PortalAuthForm({
               setView({ stage: 'sso-redirecting' })
               const trimmed = email.trim()
               await authClient.signIn.oauth2({
-                providerId: 'sso',
+                providerId: view.providerId,
                 callbackURL: callbackUrl,
                 additionalData: trimmed ? { loginHint: trimmed } : undefined,
               })
@@ -642,7 +642,7 @@ export function PortalAuthForm({
                     defaultMessage: 'Could not start SSO sign-in.',
                   })
               )
-              setView({ stage: 'sso-default' })
+              setView({ stage: 'sso-default', providerId: view.providerId })
               setLoading(false)
             }
           }}

@@ -62,7 +62,7 @@ export const Route = createFileRoute('/_portal')({
         authConfig: {
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
-          customProviderNames: settings?.publicPortalConfig?.customProviderNames,
+          oidcProviders: settings?.publicPortalConfig?.oidcProviders,
         },
       }
       return { gate }
@@ -109,7 +109,7 @@ export const Route = createFileRoute('/_portal')({
     const authConfig = {
       found: true,
       oauth: publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
-      customProviderNames: publicPortalConfig?.customProviderNames,
+      oidcProviders: publicPortalConfig?.oidcProviders,
     }
 
     const { locale, messages } = await loadPortalIntl()

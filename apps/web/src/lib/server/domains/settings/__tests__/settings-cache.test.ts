@@ -62,6 +62,7 @@ vi.mock('@/lib/server/db', () => {
     eq: vi.fn(),
     settings: { id: 'id', tierLimits: 'tier_limits', authConfigVersion: 'auth_config_version' },
     ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
+    identityProvider: { id: 'id', createdAt: 'created_at' },
   }
 })
 

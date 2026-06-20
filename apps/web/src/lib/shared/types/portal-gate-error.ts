@@ -32,7 +32,7 @@ export interface PortalAccessGateError {
   authConfig: {
     found: boolean
     oauth: Record<string, boolean | undefined>
-    customProviderNames?: Record<string, string>
+    oidcProviders?: { id: string; name: string }[]
   }
 }
 

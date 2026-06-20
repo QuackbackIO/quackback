@@ -653,8 +653,14 @@ export interface PublicAuthConfig {
 export interface PublicPortalConfig {
   oauth: PortalAuthMethods
   features: PortalFeatures
-  /** Display name overrides for generic OAuth providers (e.g. custom-oidc → "Okta") */
-  customProviderNames?: Record<string, string>
+  /**
+   * Public OIDC sign-in buttons from the identity_provider table. Each
+   * `id` is a provider's `registrationId` (drives
+   * `signIn.oauth2({ providerId })`); `name` is its display label. Only
+   * button-eligible, registered providers appear — routed-only providers
+   * (verified domain + showButton:false) are omitted.
+   */
+  oidcProviders?: { id: string; name: string }[]
   /** Welcome card on the portal index. Absent / disabled = nothing rendered. */
   welcomeCard?: PortalWelcomeCard
   /**

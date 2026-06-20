@@ -74,6 +74,7 @@ export function PortalHeader({
   const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
     ssoEnabled: registeredAuthProviders?.includes('sso') ?? false,
     hasVerifiedDomain: (settings?.verifiedDomains ?? []).some((d) => d.verifiedAt !== null),
+    oidcProviders: settings?.publicPortalConfig?.oidcProviders,
   })
 
   const authPopover = useAuthPopoverSafe()

@@ -159,21 +159,32 @@ export function OAuthButtons({ callbackUrl = '/', providers, onSuccess }: OAuthB
  */
 export function hasAnyPortalAuthMethod(
   authConfig: Record<string, boolean | undefined>,
-  opts?: { ssoEnabled?: boolean; hasVerifiedDomain?: boolean }
+  opts?: {
+    ssoEnabled?: boolean
+    hasVerifiedDomain?: boolean
+    oidcProviders?: OidcProviderEntry[]
+  }
 ): boolean {
   if (authConfig.password || authConfig.magicLink) return true
-  if (getEnabledOAuthProviders(authConfig).length > 0) return true
+  if (getEnabledOAuthProviders(authConfig, opts?.oidcProviders).length > 0) return true
   if (opts?.ssoEnabled && opts.hasVerifiedDomain) return true
   return false
 }
 
+/** A public OIDC button from the identity_provider list: `id` is the
+ *  provider's registrationId, `name` its display label. */
+export type OidcProviderEntry = { id: string; name: string }
+
 /**
- * Build provider list from PortalAuthMethods config.
- * Filters to only enabled OAuth providers (excludes 'email').
+ * Build the portal sign-in button list. Social providers (google/github/…)
+ * come from the static AUTH_PROVIDERS map keyed by the `authConfig` record;
+ * OIDC providers come from `oidcProviders` (the identity_provider table).
+ * Generic-oauth entries in the static map are skipped — OIDC buttons have
+ * a single source now, so the static path never double-emits one.
  */
 export function getEnabledOAuthProviders(
   authConfig: Record<string, boolean | undefined>,
-  customProviderNames?: Record<string, string>
+  oidcProviders?: OidcProviderEntry[]
 ): OAuthProviderEntry[] {
   const providerMap = new Map(AUTH_PROVIDERS.map((p) => [p.id, p]))
   const result: OAuthProviderEntry[] = []
@@ -181,13 +192,14 @@ export function getEnabledOAuthProviders(
   for (const [key, enabled] of Object.entries(authConfig)) {
     if (key === 'email' || key === 'password' || !enabled) continue
     const provider = providerMap.get(key)
-    if (provider) {
-      result.push({
-        id: provider.id,
-        name: customProviderNames?.[provider.id] || provider.name,
-        type: provider.type === 'generic-oauth' ? 'generic-oauth' : 'social',
-      })
-    }
+    // OIDC/generic-oauth buttons are sourced from `oidcProviders`; skip
+    // them here so the static map can't render a duplicate or stale one.
+    if (!provider || provider.type === 'generic-oauth') continue
+    result.push({ id: provider.id, name: provider.name, type: 'social' })
+  }
+
+  for (const p of oidcProviders ?? []) {
+    result.push({ id: p.id, name: p.name, type: 'generic-oauth' })
   }
 
   return result

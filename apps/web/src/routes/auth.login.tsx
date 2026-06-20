@@ -180,7 +180,7 @@ function LoginPageInner() {
           mode="login"
           callbackUrl={safeCallbackUrl}
           authConfig={authConfig}
-          customProviderNames={portalConfig.customProviderNames}
+          oidcProviders={portalConfig.oidcProviders}
           workspaceName={workspaceName}
         />
       </PortalAuthShell>
