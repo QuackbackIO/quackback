@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { db } from '@/lib/server/db'
 
 /**
  * `requireWorkspaceRole` guards team routes in `beforeLoad`. When an
  * unauthenticated caller hits a team-only route it must land on the
- * unified login carrying `callbackUrl=/admin` (so `isTeamCallback`
- * renders the team break-glass form), not the legacy `/admin/login`
- * redirect stub. Portal-allowed routes still fall back to `/`.
+ * portal sign-in dialog (portal root with `signin=1`) carrying
+ * `callbackUrl=/admin`. Portal-allowed routes still fall back to `/`.
  *
  * The handler is a `createServerFn`, so we stub `createServerFn` to
  * capture the raw handler and invoke it directly — the same pattern the
@@ -46,6 +46,12 @@ vi.mock('@tanstack/react-start', () => ({
   },
 }))
 
+type RedirectErr = {
+  to?: string
+  search?: { callbackUrl?: string; signin?: string; error?: string }
+  options?: { to?: string; search?: { callbackUrl?: string; signin?: string; error?: string } }
+}
+
 let requireWorkspaceRole: AnyHandler
 
 beforeEach(async () => {
@@ -55,15 +61,16 @@ beforeEach(async () => {
 })
 
 describe('requireWorkspaceRole redirect target', () => {
-  it('sends unauthenticated team-only callers to /auth/login?callbackUrl=/admin', async () => {
+  it('sends unauthenticated team-only callers to the sign-in dialog with callbackUrl=/admin', async () => {
     hoisted.mockGetSession.mockResolvedValue(null)
 
     const err = await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
       .then(() => null)
-      .catch((e) => e as { to?: string; search?: { callbackUrl?: string }; options?: { to?: string; search?: { callbackUrl?: string } } })
+      .catch((e) => e as RedirectErr)
 
-    expect(err?.to ?? err?.options?.to).toBe('/auth/login')
+    expect(err?.to ?? err?.options?.to).toBe('/')
     const search = err?.search ?? err?.options?.search
+    expect(search?.signin).toBe('1')
     expect(search?.callbackUrl).toBe('/admin')
   })
 
@@ -75,5 +82,21 @@ describe('requireWorkspaceRole redirect target', () => {
       .catch((e) => e as { to?: string; options?: { to?: string } })
 
     expect(err?.to ?? err?.options?.to).toBe('/')
+  })
+
+  it('redirects wrong-role callers to sign-in dialog with not_team_member error', async () => {
+    hoisted.mockGetSession.mockResolvedValue({ user: { id: 'user_001' } })
+    ;(db.query.settings.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 1 })
+    ;(db.query.principal.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ role: 'user' })
+
+    const err = await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
+      .then(() => null)
+      .catch((e) => e as RedirectErr)
+
+    expect(err?.to ?? err?.options?.to).toBe('/')
+    const search = err?.search ?? err?.options?.search
+    expect(search?.signin).toBe('1')
+    expect(search?.callbackUrl).toBe('/admin')
+    expect(search?.error).toBe('not_team_member')
   })
 })

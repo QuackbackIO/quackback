@@ -4,14 +4,14 @@ import { adminLoginRedirectTarget } from '../admin.login'
 describe('admin.login redirect', () => {
   it('defaults callbackUrl to /admin and preserves error', () => {
     expect(adminLoginRedirectTarget({ callbackUrl: undefined, error: 'token_expired' }))
-      .toEqual({ to: '/auth/login', search: { callbackUrl: '/admin', error: 'token_expired' } })
+      .toEqual({ to: '/', search: { signin: '1', callbackUrl: '/admin', error: 'token_expired' } })
   })
   it('keeps a safe team callbackUrl', () => {
     expect(adminLoginRedirectTarget({ callbackUrl: '/admin/settings', error: undefined }))
-      .toEqual({ to: '/auth/login', search: { callbackUrl: '/admin/settings' } })
+      .toEqual({ to: '/', search: { signin: '1', callbackUrl: '/admin/settings' } })
   })
   it('rejects unsafe callbackUrl, falls back to /admin', () => {
     expect(adminLoginRedirectTarget({ callbackUrl: 'https://evil.test', error: undefined }))
-      .toEqual({ to: '/auth/login', search: { callbackUrl: '/admin' } })
+      .toEqual({ to: '/', search: { signin: '1', callbackUrl: '/admin' } })
   })
 })
