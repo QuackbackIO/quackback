@@ -102,7 +102,7 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
  * Routed-only providers (verified domain + `showButton:false`) are
  * reached via the email-first SSO routing, so they're excluded here.
  */
-async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
+export async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
   const { listIdentityProviders, shouldRenderPublicButton } =
     await import('./identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')

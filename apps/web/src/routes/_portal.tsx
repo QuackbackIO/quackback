@@ -17,6 +17,7 @@ import {
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
 import { useAutoOpenAuthDialog } from '@/lib/client/hooks/use-auto-open-auth'
+import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 
 export const Route = createFileRoute('/_portal')({
   // Only type the auth-prompt keys; child routes receive their own params from
@@ -76,6 +77,14 @@ export const Route = createFileRoute('/_portal')({
       // Parse the auth-prompt search params once; Task 4 will reuse this binding
       // to add an instant-SSO redirect above the gate build.
       const prompt = parseAuthPromptSearch((deps ?? {}) as Record<string, unknown>)
+      // Instant-SSO: when the workspace has exactly one public OIDC provider
+      // and no public password/magic-link, redirect anonymous visitors straight
+      // to the IdP. Skip when `?prompt=login` is set — that always escapes to
+      // the sign-in dialog so the user can pick an alternative if needed.
+      if (prompt.prompt !== 'login') {
+        const instant = await resolveInstantSsoRedirectFn({ data: { callbackUrl: prompt.callbackUrl } })
+        if (instant) throw redirect({ href: instant.url })
+      }
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
         reason: accessResult.reason,
@@ -88,7 +97,7 @@ export const Route = createFileRoute('/_portal')({
         // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
         callbackUrl: prompt.callbackUrl,
-        autoOpenSignin: prompt.signin,
+        autoOpenSignin: prompt.signin ?? (prompt.prompt === 'login' ? 'login' : undefined),
         authConfig: {
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
@@ -245,7 +254,7 @@ function PortalLayout() {
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
-        <PortalAuthAutoOpen signin={prompt.signin} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
+        <PortalAuthAutoOpen signin={prompt.signin} prompt={prompt.prompt} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -271,6 +280,7 @@ function PortalLayout() {
 /** Mounts inside AuthPopoverProvider so the hook can access its context. */
 function PortalAuthAutoOpen(props: {
   signin?: 'login' | 'signup'
+  prompt?: 'login'
   callbackUrl?: string
   error?: string
   isAuthenticated: boolean
