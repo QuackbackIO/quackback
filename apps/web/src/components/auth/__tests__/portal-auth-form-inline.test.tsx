@@ -165,4 +165,30 @@ describe('PortalAuthFormInline — recovery-code break-glass link', () => {
     renderForm({ mode: 'login', callbackUrl: '/roadmap' })
     expect(screen.queryByRole('link', { name: /use a recovery code/i })).toBeNull()
   })
+
+  it('hides the recovery-code link when callbackUrl is undefined', () => {
+    renderForm({ mode: 'login' })
+    expect(screen.queryByRole('link', { name: /use a recovery code/i })).toBeNull()
+  })
+
+  // Regression: SSO-only workspaces (password + magic-link both disabled) must
+  // still surface the break-glass link in Stage 1 when the context is team-bound.
+  it('shows the recovery-code link in an SSO-only Stage 1 with a team callbackUrl', () => {
+    getEnabledOAuthProvidersMock.mockReturnValue([
+      { id: 'test-oidc', name: 'Test OIDC', type: 'generic-oauth' },
+    ])
+    renderForm({
+      mode: 'login',
+      callbackUrl: '/admin',
+      authConfig: {
+        found: true,
+        oauth: { password: false, magicLink: false },
+        oidcProviders: [{ id: 'test-oidc', name: 'Test OIDC' }],
+      },
+    })
+    expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
+      'href',
+      '/auth/recovery'
+    )
+  })
 })

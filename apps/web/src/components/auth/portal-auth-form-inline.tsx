@@ -740,9 +740,13 @@ export function PortalAuthFormInline({
                 )}
               </p>
             )}
-            {recoveryLink}
           </>
         )}
+
+        {/* Break-glass link visible in every stable Stage-1 state (including
+            SSO-only, where emailEntryEnabled is false and the block above is
+            skipped). The element is null when showRecoveryLink is false. */}
+        {recoveryLink}
 
         {/* Misconfiguration safety net — updatePortalConfig blocks saving zero
             methods, but never strand the user on a blank card if it happens. */}
