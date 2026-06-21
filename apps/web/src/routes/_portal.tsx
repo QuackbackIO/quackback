@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { createFileRoute, redirect, Outlet, useSearch } from '@tanstack/react-router'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -15,8 +15,28 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
+import { useAutoOpenAuthDialog } from '@/lib/client/hooks/use-auto-open-auth'
 
 export const Route = createFileRoute('/_portal')({
+  // Only type the auth-prompt keys; child routes receive their own params from
+  // the raw URL independently (TanStack Router does not chain parent
+  // validateSearch into child validateSearch).
+  //
+  // Return type uses optional keys (?: not T|undefined) so that `{}` satisfies
+  // the schema — TanStack Router's IsRequiredParams checks `{} extends TParams`
+  // and only makes `search` required when the schema has required keys.
+  validateSearch: (search: Record<string, unknown>): {
+    signin?: string
+    prompt?: 'login'
+    callbackUrl?: string
+    error?: string
+  } => ({
+    signin: search.signin === '1' || search.signin === 'signup' ? (search.signin as string) : undefined,
+    prompt: search.prompt === 'login' ? 'login' : undefined,
+    callbackUrl: typeof search.callbackUrl === 'string' ? search.callbackUrl : undefined,
+    error: typeof search.error === 'string' ? search.error : undefined,
+  }),
   loader: async ({ context }) => {
     const { session, settings, userRole, baseUrl } = context
 
@@ -194,6 +214,7 @@ function PortalLayout() {
   const {
     org,
     userRole,
+    session,
     brandingData,
     themeStyles,
     customCss,
@@ -205,9 +226,14 @@ function PortalLayout() {
     messages,
   } = loaderData
 
+  const rawSearch = useSearch({ from: '/_portal' }) as Record<string, unknown>
+  const prompt = parseAuthPromptSearch(rawSearch)
+  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
+
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
+        <PortalAuthAutoOpen signin={prompt.signin} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -228,4 +254,15 @@ function PortalLayout() {
       </AuthPopoverProvider>
     </PortalIntlProvider>
   )
+}
+
+/** Mounts inside AuthPopoverProvider so the hook can access its context. */
+function PortalAuthAutoOpen(props: {
+  signin?: 'login' | 'signup'
+  callbackUrl?: string
+  error?: string
+  isAuthenticated: boolean
+}) {
+  useAutoOpenAuthDialog(props)
+  return null
 }
