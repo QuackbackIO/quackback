@@ -11,7 +11,13 @@
  * one place.
  */
 export function isSafeCallbackUrl(url: unknown): url is string {
-  return typeof url === 'string' && url.length > 0 && url.startsWith('/') && !url.startsWith('//')
+  return (
+    typeof url === 'string' &&
+    url.length > 0 &&
+    url.startsWith('/') &&
+    !url.startsWith('//') &&
+    !url.includes('\\')
+  )
 }
 
 /** True when a (safe, relative) callback URL targets a team surface, so the

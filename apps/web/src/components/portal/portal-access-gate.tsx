@@ -24,6 +24,7 @@ import { AuthDialog } from '@/components/auth/auth-dialog'
 import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
@@ -112,6 +113,9 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callb
   const queryClient = useQueryClient()
   const { openAuthPopover } = useAuthPopover()
   const [signingOut, setSigningOut] = useState(false)
+  // Guard: only propagate a callback URL that passes the same-origin safety
+  // check — never trust the prop directly at the navigation site.
+  const safeCallback = isSafeCallbackUrl(callbackUrl) ? callbackUrl : undefined
   // A one-way latch: true from a successful sign-in until this gate unmounts.
   // The gate stays mounted during the post-login loader re-run, so it shows a
   // "Signing in…" state instead of flashing the "Sign in / Register" CTA — the
@@ -129,7 +133,7 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callb
     onSuccess: () => {
       setSigningIn(true)
       void router.invalidate().then(() => {
-        if (callbackUrl) router.navigate({ to: callbackUrl })
+        if (safeCallback) router.navigate({ to: safeCallback })
       })
     },
   })
@@ -143,10 +147,10 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callb
     autoOpened.current = true
     openAuthPopover({
       mode: autoOpenSignin,
-      callbackUrl,
-      onSuccess: callbackUrl ? () => router.navigate({ to: callbackUrl }) : undefined,
+      callbackUrl: safeCallback,
+      onSuccess: safeCallback ? () => router.navigate({ to: safeCallback }) : undefined,
     })
-  }, [autoOpenSignin, callbackUrl, openAuthPopover, router])
+  }, [autoOpenSignin, safeCallback, openAuthPopover, router])
 
   // The dialog's onAuthSuccess closes the dialog and the broadcast above drives
   // the loader re-run, so the CTA only needs to open the dialog.

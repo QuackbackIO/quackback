@@ -55,6 +55,19 @@ describe('isSafeCallbackUrl', () => {
   it('rejects a number', () => {
     expect(isSafeCallbackUrl(42)).toBe(false)
   })
+
+  // Backslash open-redirect: some browsers normalise /\evil.com → //evil.com
+  it('rejects "/\\evil.com" (backslash redirect)', () => {
+    expect(isSafeCallbackUrl('/\\evil.com')).toBe(false)
+  })
+
+  it('rejects "/\\\\evil.com" (double-backslash redirect)', () => {
+    expect(isSafeCallbackUrl('/\\\\evil.com')).toBe(false)
+  })
+
+  it('still accepts "/admin" (regression)', () => {
+    expect(isSafeCallbackUrl('/admin')).toBe(true)
+  })
 })
 
 describe('isTeamCallback', () => {
