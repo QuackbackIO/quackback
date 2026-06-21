@@ -9,8 +9,6 @@ const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
 // layout renders hard-coded English: the admin app, onboarding, and the auth
 // utility pages like /auth/two-factor and /admin/login.
 const LOCALIZED_ROUTE_IDS = new Set([
-  '/auth/login',
-  '/auth/signup',
   '/auth/recovery',
   '/auth/reset-password',
   '/widget',

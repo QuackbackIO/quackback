@@ -143,14 +143,14 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callb
   // re-opening if the component re-renders while the dialog is open.
   const autoOpened = useRef(false)
   useEffect(() => {
-    if (autoOpened.current || !autoOpenSignin) return
+    if (autoOpened.current || !autoOpenSignin || reason !== 'unauthenticated') return
     autoOpened.current = true
     openAuthPopover({
       mode: autoOpenSignin,
       callbackUrl: safeCallback,
       onSuccess: safeCallback ? () => router.navigate({ to: safeCallback }) : undefined,
     })
-  }, [autoOpenSignin, safeCallback, openAuthPopover, router])
+  }, [autoOpenSignin, safeCallback, openAuthPopover, router, reason])
 
   // The dialog's onAuthSuccess closes the dialog and the broadcast above drives
   // the loader re-run, so the CTA only needs to open the dialog.

@@ -29,6 +29,14 @@ vi.mock('@/components/auth/portal-auth-form-inline', () => ({
   PortalAuthFormInline: () => null,
 }))
 
+const openAuthPopover = vi.fn()
+vi.mock('@/components/auth/auth-popover-context', async (orig) => ({
+  ...(await orig<typeof import('@/components/auth/auth-popover-context')>()),
+  // Pass-through wrapper so GateCard renders without a real context provider.
+  AuthPopoverProvider: ({ children }: { children: unknown }) => children,
+  useAuthPopover: () => ({ openAuthPopover }),
+}))
+
 import { PortalAccessGate } from '../portal-access-gate'
 
 const baseProps = {
@@ -45,7 +53,24 @@ const baseProps = {
 beforeEach(() => {
   navigate.mockClear()
   invalidate.mockClear()
+  openAuthPopover.mockClear()
   broadcastOnSuccess = undefined
+})
+
+describe('PortalAccessGate — autoOpenSignin guard', () => {
+  it('does NOT call openAuthPopover when reason is "unauthorized"', async () => {
+    await act(async () => {
+      render(<PortalAccessGate {...baseProps} reason="unauthorized" autoOpenSignin="login" />)
+    })
+    expect(openAuthPopover).not.toHaveBeenCalled()
+  })
+
+  it('DOES call openAuthPopover when reason is "unauthenticated"', async () => {
+    await act(async () => {
+      render(<PortalAccessGate {...baseProps} reason="unauthenticated" autoOpenSignin="login" />)
+    })
+    expect(openAuthPopover).toHaveBeenCalledWith(expect.objectContaining({ mode: 'login' }))
+  })
 })
 
 describe('PortalAccessGate — callbackUrl', () => {
