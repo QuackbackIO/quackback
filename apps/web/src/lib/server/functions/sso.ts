@@ -907,23 +907,10 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
       await import('@/lib/server/domains/settings/identity-providers.service')
     const { setVerifiedDomainEnforced } =
       await import('@/lib/server/domains/settings/settings.service')
-    const { db, principal: principalTable, sql, inArray } = await import('@/lib/server/db')
 
-    // Load providers (for the owning provider's freshness + the audit before
-    // snapshot) and, when enabling, the team-wide max SSO sign-in — the
-    // alternative gate proof to a test sign-in — in parallel.
-    const [providers, maxRow] = await Promise.all([
-      listIdentityProviders(),
-      data.enforced
-        ? db
-            .select({ ts: principalTable.lastSsoSignInAt })
-            .from(principalTable)
-            .where(inArray(principalTable.role, ['admin', 'member']))
-            .orderBy(sql`${principalTable.lastSsoSignInAt} DESC NULLS LAST`)
-            .limit(1)
-            .then((rows) => rows[0] ?? null)
-        : Promise.resolve(null),
-    ])
+    // Load providers for the owning provider's freshness gate + the audit
+    // before-snapshot.
+    const providers = await listIdentityProviders()
 
     let owningProvider: (typeof providers)[number] | undefined
     let dom: (typeof providers)[number]['domains'][number] | undefined
@@ -955,7 +942,11 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             )
           }
           const { isSsoEnforcementUnlocked } = await import('@/lib/server/auth/sso-gates')
-          if (!isSsoEnforcementUnlocked(owningProvider, maxRow?.ts ?? null)) {
+          // Pass null (no team-wide sign-in fallback): enforcement requires a
+          // successful TEST through THIS provider. `principal.lastSsoSignInAt`
+          // is provider-independent, so accepting it would let a sign-in via
+          // provider B unlock never-validated provider A.
+          if (!isSsoEnforcementUnlocked(owningProvider, null)) {
             throw new ForbiddenError(
               'SSO_TEST_REQUIRED',
               'Run a successful test sign-in before enabling enforcement.'

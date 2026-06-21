@@ -206,7 +206,15 @@ export function isSsoBlockedForRole(
   const callbackProvider = providers?.find((p) => p.registrationId === provider)
   // Unknown provider → not eligible (fail closed for portal users).
   if (!callbackProvider) return true
-  // Eligible iff the email is at one of THIS provider's verified domains.
+  // A button-only provider (no verified domains) is a public sign-in option:
+  // portal users are eligible by virtue of its (registered, button-enabled)
+  // presence, not a domain match. Requiring a domain here would block every
+  // portal user — and the brand-new-shell cleanup would then delete their
+  // just-created account on first sign-in.
+  const hasVerifiedDomain = callbackProvider.domains.some((d) => d.verifiedAt)
+  if (!hasVerifiedDomain) return false
+  // Routed provider: eligible iff the email is at one of THIS provider's
+  // verified domains.
   return findProviderForDomainEmail(email, [callbackProvider]) === null
 }
 

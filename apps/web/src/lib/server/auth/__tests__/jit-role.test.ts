@@ -20,6 +20,9 @@ const mockAccountFindFirst = vi.fn()
 const mockSet = vi.fn()
 const mockWhere = vi.fn()
 const mockRecordAuditEvent = vi.fn()
+// Recordable so a test can assert `readSsoClaims` queries by the CALLBACK
+// provider id rather than a hardcoded 'sso'.
+const mockEq = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -32,7 +35,7 @@ vi.mock('@/lib/server/db', () => ({
   principal: { userId: 'user_id', role: 'role' },
   account: { userId: 'account.userId', providerId: 'account.providerId' },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
-  eq: vi.fn(),
+  eq: (...args: unknown[]) => mockEq(...args),
 }))
 
 vi.mock('@/lib/server/audit/log', () => ({
@@ -66,6 +69,7 @@ type CallOpts = {
   userId?: string
   email?: string
   ssoOidc?: Partial<SsoOidc>
+  registeredIds?: Set<string>
 }
 
 const callHandlerWith = async (opts: CallOpts = {}) => {
@@ -124,7 +128,7 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
     // Task 12: the default provider id 'sso' must be in the registered-OIDC
     // set for the handler to fire; a 'google' callback (the skip test) is
     // absent and short-circuits via isRegisteredOidcProvider.
-    new Set(['sso'])
+    opts.registeredIds ?? new Set(['sso'])
   )
 }
 
@@ -264,6 +268,24 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     expect(call.before.role).toBe('user')
     expect(call.after.role).toBe('member')
     expect(call.metadata.source).toBe('auto_provision')
+  })
+
+  it('readSsoClaims queries the account by the CALLBACK provider id (not a hardcoded "sso")', async () => {
+    // Regression guard: a revert to `eq(account.providerId, 'sso')` would make
+    // attribute-mapping silently fall back to the default role for every
+    // non-sso provider. The other mapping tests all run with providerId='sso',
+    // so they can't catch it — this one drives a 'custom-oidc' callback.
+    mockFindFirst.mockResolvedValue({ role: 'user' })
+    mockAccountFindFirst.mockResolvedValue({ idToken: null })
+    await callHandlerWith({
+      providerId: 'custom-oidc',
+      registeredIds: new Set(['custom-oidc']),
+      ssoOidc: {
+        attributeMapping: { claimPath: 'roles', rules: [], defaultRole: 'member' },
+      },
+    })
+    expect(mockEq).toHaveBeenCalledWith('account.providerId', 'custom-oidc')
+    expect(mockEq).not.toHaveBeenCalledWith('account.providerId', 'sso')
   })
 
   it('marks audit source=attribute_mapping when role came from claim resolution', async () => {

@@ -4,7 +4,7 @@ import {
   isRegisteredOidcProvider,
   type ProviderWithDomains,
 } from '../provider-ids'
-import { isHardBound } from '../auth-restrictions'
+import { isHardBound, isSsoBlockedForRole } from '../auth-restrictions'
 
 describe('isRegisteredOidcProvider', () => {
   const reg = new Set(['sso', 'custom-oidc', 'oidc_idp_abc'])
@@ -109,5 +109,39 @@ describe('isHardBound — C2 owning-provider rule', () => {
 
   it('email at no verified domain is never hard-bound', () => {
     expect(isHardBound('credential', 'alice@nowhere.com', providers, registered)).toBe(false)
+  })
+})
+
+describe('isSsoBlockedForRole — portal eligibility', () => {
+  // A public, button-only provider has no verified domains.
+  const buttonOnly: ProviderWithDomains = {
+    id: 'idp_pub',
+    registrationId: 'custom-oidc',
+    domains: [],
+  }
+  const all = [...providers, buttonOnly]
+
+  it('does NOT block a portal user on a button-only provider (C2 regression)', () => {
+    // Regression: generalizing the team-SSO domain gate to all OIDC providers
+    // blocked every portal user on a button-only provider — and the brand-new
+    // shell cleanup then deleted their just-created account.
+    expect(isSsoBlockedForRole('user', 'anyone@anywhere.com', 'custom-oidc', all)).toBe(false)
+  })
+
+  it('blocks a portal user whose email is NOT at a routed provider’s verified domain', () => {
+    expect(isSsoBlockedForRole('user', 'eve@evil.com', 'sso', all)).toBe(true)
+  })
+
+  it('allows a portal user whose email IS at the routed provider’s verified domain', () => {
+    expect(isSsoBlockedForRole('user', 'alice@acme.com', 'sso', all)).toBe(false)
+  })
+
+  it('never blocks a team member, regardless of provider/domain', () => {
+    expect(isSsoBlockedForRole('admin', 'eve@evil.com', 'sso', all)).toBe(false)
+    expect(isSsoBlockedForRole('member', 'eve@evil.com', 'custom-oidc', all)).toBe(false)
+  })
+
+  it('blocks an unknown provider (fail closed for portal users)', () => {
+    expect(isSsoBlockedForRole('user', 'alice@acme.com', 'oidc_unknown', all)).toBe(true)
   })
 })

@@ -4,8 +4,12 @@ import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-li
 import { resetAuth } from '@/lib/server/auth/index'
 import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { generateId } from '@quackback/ids'
+import { normalizeDomain } from '@/lib/server/auth/normalize-domain'
+import { logger } from '@/lib/server/logger'
 import type { ReconcileDeps, SettingsInsert, SettingsRow, SettingsUpdate } from './reconciler'
 import { makeReportStatus } from './report-status'
+
+const log = logger.child({ component: 'config-file-deps' })
 
 /** Production wiring of `ReconcileDeps`. The reconciler is db-agnostic
  *  to keep its tests fast; this is the only place that touches Drizzle
@@ -115,8 +119,20 @@ export function makeReconcileDeps(): ReconcileDeps {
         })
 
         for (const domain of spec.domains) {
+          // Canonicalise the declared name the same way the UI path does
+          // (`verifiableDomain`), so routing/enforcement — which compare
+          // against the normalized email domain — actually match. A raw
+          // "Acme.com" / trailing-dot / IDN name would silently never route.
+          const name = normalizeDomain(domain.name)
+          if (!name) {
+            log.warn(
+              { provider: spec.label, domain: domain.name },
+              'config-file: skipping invalid identity-provider domain'
+            )
+            continue
+          }
           // Link (or adopt) the domain under this provider.
-          const row = await insertVerifiedDomain(domain.name, saved.id)
+          const row = await insertVerifiedDomain(name, saved.id)
           // Operator-trusted DNS bypass: the operator who owns the config
           // file is the authority for the domains it declares, so mark
           // them verified WITHOUT the DNS TXT challenge. Skip if a prior

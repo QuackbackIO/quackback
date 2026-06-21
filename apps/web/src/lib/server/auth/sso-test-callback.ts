@@ -106,6 +106,15 @@ export async function handleSsoTestCallback(
   if (result.ok) {
     const { markSsoTestSucceeded } = await import('@/lib/server/domains/settings/settings.service')
     await markSsoTestSucceeded()
+    // Also stamp the migrated `sso` identity_provider row: the per-provider
+    // enforcement gate (`setDomainEnforcedFn` → `isSsoEnforcementUnlocked`)
+    // reads the row's `lastSuccessfulTestAt`, not the legacy JSON. The legacy
+    // test flow exercises the provider registered under `'sso'`.
+    const { listIdentityProviders, markTestSucceeded } = await import(
+      '@/lib/server/domains/settings/identity-providers.service'
+    )
+    const ssoProvider = (await listIdentityProviders()).find((p) => p.registrationId === 'sso')
+    if (ssoProvider) await markTestSucceeded(ssoProvider.id)
     log.info({ admin_user_id: session.adminUserId }, 'sso test succeeded; sso gates unlocked')
 
     if (result.claims.email) {

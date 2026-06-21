@@ -16,6 +16,8 @@ const hoisted = vi.hoisted(() => ({
   runHandshake: vi.fn(),
   userFindFirst: vi.fn(),
   markSsoTestSucceeded: vi.fn(),
+  listIdentityProviders: vi.fn(),
+  markTestSucceeded: vi.fn(),
 }))
 
 vi.mock('@/lib/server/redis', () => ({
@@ -39,10 +41,15 @@ vi.mock('@/lib/server/db', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
 }))
 
-// The identity-match path stamps `ssoOidc.lastSuccessfulTestAt` via the
-// settings service rather than touching `principal` directly.
+// A successful test stamps the legacy blob via the settings service AND the
+// migrated `sso` identity_provider row via the identity-providers service.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   markSsoTestSucceeded: hoisted.markSsoTestSucceeded,
+}))
+
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: hoisted.listIdentityProviders,
+  markTestSucceeded: hoisted.markTestSucceeded,
 }))
 
 import { handleSsoTestCallback, renderSsoTestCallbackHtml } from '../sso-test-callback'
@@ -67,6 +74,8 @@ const validSession = {
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.markSsoTestSucceeded.mockResolvedValue(undefined)
+  hoisted.listIdentityProviders.mockResolvedValue([])
+  hoisted.markTestSucceeded.mockResolvedValue(undefined)
 })
 
 describe('handleSsoTestCallback', () => {
@@ -258,6 +267,27 @@ describe('handleSsoTestCallback', () => {
     expect(handled?.identityMatched).toBe(false)
     expect(hoisted.userFindFirst).not.toHaveBeenCalled()
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it('stamps the migrated `sso` identity_provider row (per-provider enforcement gate)', async () => {
+    // The enforcement gate reads the provider ROW's lastSuccessfulTestAt, not
+    // the legacy JSON — so a successful test must stamp the row too.
+    hoisted.cacheGet.mockResolvedValueOnce(validSession)
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+      { id: 'idp_other', registrationId: 'oidc_other', domains: [] },
+    ])
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: true,
+      steps: [],
+      claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+    })
+
+    await handleSsoTestCallback({ state: 'state-xyz', code: 'authcode', error: null, errorDescription: null })
+
+    expect(hoisted.markTestSucceeded).toHaveBeenCalledWith('idp_sso')
+    expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
   })
 
   it('failed handshake does not stamp lastSuccessfulTestAt', async () => {
