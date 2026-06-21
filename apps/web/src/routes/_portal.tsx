@@ -37,7 +37,12 @@ export const Route = createFileRoute('/_portal')({
     callbackUrl: typeof search.callbackUrl === 'string' ? search.callbackUrl : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
-  loader: async ({ context }) => {
+  loaderDeps: ({ search }) => ({
+    signin: (search as Record<string, unknown>).signin,
+    prompt: (search as Record<string, unknown>).prompt,
+    callbackUrl: (search as Record<string, unknown>).callbackUrl,
+  }),
+  loader: async ({ context, deps }) => {
     const { session, settings, userRole, baseUrl } = context
 
     // Portal-level visibility gate — evaluated here in the loader (NOT
@@ -68,6 +73,9 @@ export const Route = createFileRoute('/_portal')({
       const hasThemeConfig = brandingConfig.light || brandingConfig.dark
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
+      // Parse the auth-prompt search params once; Task 4 will reuse this binding
+      // to add an instant-SSO redirect above the gate build.
+      const prompt = parseAuthPromptSearch((deps ?? {}) as Record<string, unknown>)
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
         reason: accessResult.reason,
@@ -79,6 +87,8 @@ export const Route = createFileRoute('/_portal')({
         // Only meaningful for 'unauthorized' — null for an anonymous visitor.
         // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
+        callbackUrl: prompt.callbackUrl,
+        autoOpenSignin: prompt.signin,
         authConfig: {
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
@@ -207,6 +217,8 @@ function PortalLayout() {
         customCss={gate.customCss}
         userEmail={gate.userEmail ?? null}
         locale={gate.locale}
+        callbackUrl={gate.callbackUrl}
+        autoOpenSignin={gate.autoOpenSignin}
       />
     )
   }

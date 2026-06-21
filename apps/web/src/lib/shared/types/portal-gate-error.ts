@@ -29,6 +29,10 @@ export interface PortalAccessGateError {
    * when reason === 'unauthenticated' — no session means no email to show.
    */
   userEmail?: string | null
+  /** Pending destination to navigate to once access is granted post-sign-in. */
+  callbackUrl?: string
+  /** When set, the gate opens the sign-in dialog automatically on mount. */
+  autoOpenSignin?: 'login' | 'signup'
   authConfig: {
     found: boolean
     oauth: Record<string, boolean | undefined>

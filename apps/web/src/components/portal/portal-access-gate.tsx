@@ -11,7 +11,7 @@
  * After a successful sign-in the router is invalidated so the _portal loader
  * re-runs; if the visitor is now authorized, the real portal replaces this.
  */
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
@@ -103,9 +103,11 @@ interface GateCardProps {
   authConfig: PortalAccessGateError['authConfig']
   /** Signed-in visitor's email when reason === 'unauthorized'. */
   userEmail?: string | null
+  callbackUrl?: string
+  autoOpenSignin?: 'login' | 'signup'
 }
 
-function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: GateCardProps) {
+function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callbackUrl, autoOpenSignin }: GateCardProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { openAuthPopover } = useAuthPopover()
@@ -126,9 +128,25 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail }: Gat
   useAuthBroadcast({
     onSuccess: () => {
       setSigningIn(true)
-      void router.invalidate()
+      void router.invalidate().then(() => {
+        if (callbackUrl) router.navigate({ to: callbackUrl })
+      })
     },
   })
+
+  // Auto-open the sign-in dialog on mount when requested (e.g. redirected here
+  // from a private URL that carries ?signin=1). One-shot: the ref prevents
+  // re-opening if the component re-renders while the dialog is open.
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    if (autoOpened.current || !autoOpenSignin) return
+    autoOpened.current = true
+    openAuthPopover({
+      mode: autoOpenSignin,
+      callbackUrl,
+      onSuccess: callbackUrl ? () => router.navigate({ to: callbackUrl }) : undefined,
+    })
+  }, [autoOpenSignin, callbackUrl, openAuthPopover, router])
 
   // The dialog's onAuthSuccess closes the dialog and the broadcast above drives
   // the loader re-run, so the CTA only needs to open the dialog.
@@ -256,6 +274,8 @@ export function PortalAccessGate({
   customCss,
   userEmail,
   locale,
+  callbackUrl,
+  autoOpenSignin,
 }: PortalAccessGateProps) {
   return (
     // The gate renders on the route's error path (a beforeLoad throw), which
@@ -287,6 +307,8 @@ export function PortalAccessGate({
               logoUrl={logoUrl}
               authConfig={authConfig}
               userEmail={userEmail}
+              callbackUrl={callbackUrl}
+              autoOpenSignin={autoOpenSignin}
             />
           </AuthPopoverProvider>
         </div>
