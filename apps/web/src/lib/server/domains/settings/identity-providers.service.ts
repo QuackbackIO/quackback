@@ -28,6 +28,7 @@ import {
   deletePlatformCredentials,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
+import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
 import type { VerifiedDomain } from './settings.types'
 import { invalidateSettingsCache, wrapDbError } from './settings.helpers'
 
@@ -96,14 +97,14 @@ export interface UpsertIdentityProviderInput {
 
 // ============================================================================
 // Pure predicates (no DB) — THE canonical visibility logic.
-// Routing, the admin badge, and the public-button list all import these;
-// the logic is defined here once and never duplicated downstream.
+// Routing, the admin badge, the public-button list, AND the portal-eligibility
+// gate (`isSsoBlockedForRole`) all use these. `verifiedDomainCount` and
+// `shouldRenderPublicButton` live in `auth/provider-ids.ts` (DB-free) so the
+// enforcement gate can share them without importing this service; re-exported
+// here so existing settings/UI consumers keep their import path.
 // ============================================================================
 
-/** Count of linked domains that have been verified (truthy `verifiedAt`). */
-export function verifiedDomainCount(p: { domains: { verifiedAt: string | null }[] }): number {
-  return p.domains.filter((d) => d.verifiedAt).length
-}
+export { verifiedDomainCount, shouldRenderPublicButton }
 
 /**
  * `routed` when at least one linked domain is verified (emails at that
@@ -114,18 +115,6 @@ export function deriveVisibility(p: {
   domains: { verifiedAt: string | null }[]
 }): 'button' | 'routed' {
   return verifiedDomainCount(p) > 0 ? 'routed' : 'button'
-}
-
-/**
- * Whether to render the provider's public sign-in button. Button-only
- * providers (no verified domain) always show; routed providers show only
- * when the admin opts them back in via `showButton`.
- */
-export function shouldRenderPublicButton(p: {
-  domains: { verifiedAt: string | null }[]
-  showButton: boolean
-}): boolean {
-  return verifiedDomainCount(p) === 0 || p.showButton
 }
 
 // ============================================================================

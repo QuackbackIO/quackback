@@ -45,6 +45,35 @@ export interface ProviderWithDomains {
   id: string
   registrationId: string
   domains: readonly DomainLike[]
+  /** Admin opt-in to also show a public sign-in button for a routed provider.
+   *  Drives {@link shouldRenderPublicButton}; required so the enforcement gate
+   *  and the button-render decision share one predicate and can't drift. */
+  showButton: boolean
+}
+
+/** Count of a provider's domains that are actually verified. */
+export function verifiedDomainCount(p: {
+  domains: readonly { verifiedAt: string | null }[]
+}): number {
+  return p.domains.filter((d) => d.verifiedAt).length
+}
+
+/**
+ * Whether the provider is offered as a public sign-in button — button-only
+ * providers (no verified domain) always show; a routed provider shows only
+ * when the admin opts it back in via `showButton`.
+ *
+ * THE canonical predicate: shared by the public-button list
+ * (`getPublicOidcProviders`), the admin UI, and the portal-eligibility gate
+ * (`isSsoBlockedForRole`). Lives here (DB-free) so the gate doesn't pull in the
+ * settings service — and so "what renders a button" and "who may sign in via
+ * it" can never drift apart.
+ */
+export function shouldRenderPublicButton(p: {
+  domains: readonly { verifiedAt: string | null }[]
+  showButton: boolean
+}): boolean {
+  return verifiedDomainCount(p) === 0 || p.showButton
 }
 
 /** The owning provider of the email's matched verified domain. */

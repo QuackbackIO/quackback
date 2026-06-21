@@ -310,6 +310,9 @@ describe('handleSsoTestCallback', () => {
     expect(handled?.identityMatched).toBe(false)
     expect(hoisted.userFindFirst).not.toHaveBeenCalled()
     expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
+    // Neither stamp may fire on failure (guards the stamp block staying inside
+    // `if (result.ok)` — moving it out would unlock enforcement without a pass).
+    expect(hoisted.markTestSucceeded).not.toHaveBeenCalled()
   })
 
   it('forwards IdP-side error params to the handshake', async () => {

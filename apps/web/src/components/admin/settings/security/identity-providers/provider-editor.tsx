@@ -550,6 +550,10 @@ function DomainsSection({
 
   const domains = provider?.domains ?? []
   const hasVerified = domains.some((d) => d.verifiedAt)
+  // Only the migrated `sso` provider can be test-verified today, and the
+  // enforcement gate requires a successful per-provider test — so enforcement
+  // is offered only for `sso` until per-provider test sign-in ships.
+  const enforceable = provider?.registrationId === 'sso'
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
 
@@ -591,16 +595,29 @@ function DomainsSection({
           ) : (
             <div className="divide-y divide-border/50 rounded-md border border-border/50">
               {domains.map((d) => (
-                <DomainRow key={d.id} domain={d} disabled={disabled} onChanged={refresh} />
+                <DomainRow
+                  key={d.id}
+                  domain={d}
+                  disabled={disabled}
+                  enforceable={enforceable}
+                  onChanged={refresh}
+                />
               ))}
             </div>
           )}
 
-          {hasVerified && (
+          {hasVerified && enforceable && (
             <WarningBox
               variant="warning"
               title="Before you enforce"
               description="Enforcing requires email delivery (break-glass) + one successful sign-in through this provider first."
+            />
+          )}
+          {hasVerified && !enforceable && (
+            <WarningBox
+              variant="warning"
+              title="Enforcement not available yet"
+              description="Per-provider test sign-in is coming soon. Until then, enforcement can only be enabled for the primary SSO connection."
             />
           )}
 
@@ -640,10 +657,17 @@ function DomainsSection({
 function DomainRow({
   domain,
   disabled,
+  enforceable,
   onChanged,
 }: {
   domain: VerifiedDomain
   disabled: boolean
+  /** Whether enforcement can actually be enabled for this provider. Only the
+   *  migrated `sso` provider can be test-verified today, and the enforcement
+   *  gate requires a successful per-provider test — so the toggle is disabled
+   *  for other providers until per-provider test sign-in ships (see the
+   *  TODO(per-provider-test) on the Test button). */
+  enforceable: boolean
   onChanged: () => Promise<unknown> | void
 }) {
   const verify = useServerFn(verifyProviderDomainFn)
@@ -724,7 +748,7 @@ function DomainRow({
               <Checkbox
                 checked={domain.enforced}
                 onCheckedChange={(v) => void handleEnforce(v === true)}
-                disabled={pending || disabled}
+                disabled={pending || disabled || !enforceable}
                 aria-label={`Require SSO for ${domain.name}`}
               />
               Enforce SSO

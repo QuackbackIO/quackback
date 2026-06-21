@@ -74,6 +74,7 @@ const ssoOwnsAcme: Providers = [
     id: 'idp_sso',
     registrationId: 'sso',
     domains: [{ name: 'acme.com', verifiedAt: '2026-05-01T00:00:00.000Z', enforced: true }],
+    showButton: false,
   },
 ]
 
@@ -219,7 +220,9 @@ describe('handleSsoCallbackAfter — H8 privilege-escalation guard', () => {
 
     // Button-only provider: registered + enabled but owns NO verified domain.
     // The first internet visitor must NOT become admin.
-    const buttonOnly: Providers = [{ id: 'idp_pub', registrationId: 'sso', domains: [] }]
+    const buttonOnly: Providers = [
+      { id: 'idp_pub', registrationId: 'sso', domains: [], showButton: false },
+    ]
 
     await handleSsoCallbackAfter(
       ctxFor({
@@ -281,6 +284,7 @@ describe('shouldBootstrapPromote — pure H8 decision', () => {
     id: 'idp_sso',
     registrationId: 'sso',
     domains: [{ name: 'acme.com', verifiedAt: '2026-05-01T00:00:00.000Z', enforced: false }],
+    showButton: false,
   }
 
   it('true when the email is at one of the provider’s verified domains', () => {

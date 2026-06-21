@@ -31,6 +31,7 @@ import { emailDomain } from '@/lib/server/auth/normalize-domain'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
+  shouldRenderPublicButton,
   type ProviderWithDomains,
 } from '@/lib/server/auth/provider-ids'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -206,15 +207,17 @@ export function isSsoBlockedForRole(
   const callbackProvider = providers?.find((p) => p.registrationId === provider)
   // Unknown provider → not eligible (fail closed for portal users).
   if (!callbackProvider) return true
-  // A button-only provider (no verified domains) is a public sign-in option:
-  // portal users are eligible by virtue of its (registered, button-enabled)
-  // presence, not a domain match. Requiring a domain here would block every
-  // portal user — and the brand-new-shell cleanup would then delete their
-  // just-created account on first sign-in.
-  const hasVerifiedDomain = callbackProvider.domains.some((d) => d.verifiedAt)
-  if (!hasVerifiedDomain) return false
-  // Routed provider: eligible iff the email is at one of THIS provider's
-  // verified domains.
+  // If the provider is offered as a public sign-in button, portal users are
+  // eligible by virtue of that — the SAME predicate that decides whether the
+  // button renders (`shouldRenderPublicButton`: no verified domain, OR a routed
+  // provider the admin opted back in via `showButton`). Requiring a domain
+  // match for a button provider would block every portal user who clicks it —
+  // and the brand-new-shell cleanup would then DELETE their just-created
+  // account. The gate and the button-render must share this predicate so they
+  // can never disagree.
+  if (shouldRenderPublicButton(callbackProvider)) return false
+  // Routed-only provider: eligible iff the email is at one of its verified
+  // domains.
   return findProviderForDomainEmail(email, [callbackProvider]) === null
 }
 

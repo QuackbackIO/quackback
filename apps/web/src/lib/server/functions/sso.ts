@@ -890,11 +890,13 @@ const setDomainEnforcedInput = z.object({
 
 /**
  * Flip a provider-scoped domain's `enforced` flag. Enabling preconditions
- * mirror the workspace gate but key off the OWNING provider's freshness
- * (`detailsChangedAt` / `lastSuccessfulTestAt` — Task 13's per-provider
- * signature):
- *  1. SSO proven working since the provider's last details change —
- *     `isSsoEnforcementUnlocked(provider, maxTeamSsoSignIn)`.
+ * key off the OWNING provider's freshness (`detailsChangedAt` /
+ * `lastSuccessfulTestAt`):
+ *  1. A successful TEST through this provider since its last details change —
+ *     `isSsoEnforcementUnlocked(provider, null)`. We pass `null` (no team-wide
+ *     sign-in fallback) deliberately: `principal.lastSsoSignInAt` is
+ *     provider-independent, so accepting it would let a sign-in via provider B
+ *     unlock never-validated provider A.
  *  2. Magic-link delivery configured (break-glass for the rest of the team).
  * Disabling skips both.
  */

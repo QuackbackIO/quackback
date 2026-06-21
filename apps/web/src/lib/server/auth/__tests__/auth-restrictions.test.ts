@@ -70,7 +70,7 @@ const callIsHardBound = (
   isHardBound(
     provider,
     email,
-    [{ id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains ?? [] }],
+    [{ id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains ?? [], showButton: false }],
     ssoRegistered ? new Set(['sso']) : new Set<string>()
   )
 

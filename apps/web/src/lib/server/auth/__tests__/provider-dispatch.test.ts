@@ -33,11 +33,13 @@ const providerA: ProviderWithDomains = {
   id: 'idp_a',
   registrationId: 'sso',
   domains: [verified('acme.com', true)],
+  showButton: false,
 }
 const providerB: ProviderWithDomains = {
   id: 'idp_b',
   registrationId: 'oidc_idp_b',
   domains: [verified('beta.com', true)],
+  showButton: false,
 }
 const providers = [providerA, providerB]
 const registered = new Set(['sso', 'oidc_idp_b'])
@@ -56,6 +58,7 @@ describe('findProviderForDomainEmail', () => {
       id: 'idp_p',
       registrationId: 'oidc_pending',
       domains: [{ name: 'acme.com', verifiedAt: null, enforced: true }],
+      showButton: false,
     }
     expect(findProviderForDomainEmail('alice@acme.com', [pending])).toBeNull()
   })
@@ -103,6 +106,7 @@ describe('isHardBound — C2 owning-provider rule', () => {
       id: 'idp_a',
       registrationId: 'sso',
       domains: [verified('acme.com', false)],
+      showButton: false,
     }
     expect(isHardBound('credential', 'alice@acme.com', [routingOnly], registered)).toBe(false)
   })
@@ -118,17 +122,34 @@ describe('isSsoBlockedForRole — portal eligibility', () => {
     id: 'idp_pub',
     registrationId: 'custom-oidc',
     domains: [],
+    showButton: false,
   }
-  const all = [...providers, buttonOnly]
+  // A ROUTED provider (verified domain) the admin ALSO opted into a public
+  // button via showButton — renders a button AND has a domain.
+  const routedWithButton: ProviderWithDomains = {
+    id: 'idp_rb',
+    registrationId: 'oidc_rb',
+    domains: [verified('corp.com', true)],
+    showButton: true,
+  }
+  const all = [...providers, buttonOnly, routedWithButton]
 
-  it('does NOT block a portal user on a button-only provider (C2 regression)', () => {
+  it('does NOT block a portal user on a button-only provider (account-wipe regression)', () => {
     // Regression: generalizing the team-SSO domain gate to all OIDC providers
     // blocked every portal user on a button-only provider — and the brand-new
     // shell cleanup then deleted their just-created account.
     expect(isSsoBlockedForRole('user', 'anyone@anywhere.com', 'custom-oidc', all)).toBe(false)
   })
 
-  it('blocks a portal user whose email is NOT at a routed provider’s verified domain', () => {
+  it('does NOT block a portal user on a routed provider that also shows a public button', () => {
+    // The gate must mirror shouldRenderPublicButton (no verified domain OR
+    // showButton). A routed+showButton provider renders a public button to
+    // everyone, so an off-domain portal user clicking it must not be blocked
+    // (and wiped). This is the case the first fix missed.
+    expect(isSsoBlockedForRole('user', 'someone@elsewhere.com', 'oidc_rb', all)).toBe(false)
+  })
+
+  it('blocks a portal user whose email is NOT at a routed-only provider’s verified domain', () => {
     expect(isSsoBlockedForRole('user', 'eve@evil.com', 'sso', all)).toBe(true)
   })
 
@@ -142,6 +163,6 @@ describe('isSsoBlockedForRole — portal eligibility', () => {
   })
 
   it('blocks an unknown provider (fail closed for portal users)', () => {
-    expect(isSsoBlockedForRole('user', 'alice@acme.com', 'oidc_unknown', all)).toBe(true)
+    expect(isSsoBlockedForRole('user', 'x@x.com', 'oidc_unknown', all)).toBe(true)
   })
 })
