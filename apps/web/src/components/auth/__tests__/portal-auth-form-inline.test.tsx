@@ -7,6 +7,23 @@ import { IntlProvider } from 'react-intl'
 // lookup is only invoked on Continue; the Stage-1 render under test never calls it.
 vi.mock('@tanstack/react-start', () => ({ useServerFn: () => vi.fn() }))
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    to,
+    children,
+    className,
+  }: {
+    to: string
+    children: React.ReactNode
+    className?: string
+  }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
+  useRouter: () => ({ navigate: vi.fn() }),
+}))
+
 vi.mock('@/lib/server/functions/auth', () => ({
   lookupAuthMethodsFn: vi.fn(),
   SSO_UNAVAILABLE_MESSAGE: 'SSO unavailable',
@@ -57,6 +74,10 @@ function render(ui: React.ReactElement) {
       {ui}
     </IntlProvider>
   )
+}
+
+function renderForm(props: React.ComponentProps<typeof PortalAuthFormInline>) {
+  return render(<PortalAuthFormInline {...props} />)
 }
 
 describe('PortalAuthFormInline — OAuth-only Stage 1 (#231)', () => {
@@ -122,5 +143,26 @@ describe('PortalAuthFormInline — OAuth-only Stage 1 (#231)', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /sign in with custom oidc/i }))
     expect(await screen.findByText(/failed to initiate sign in/i)).toBeInTheDocument()
+  })
+})
+
+describe('PortalAuthFormInline — recovery-code break-glass link', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getEnabledOAuthProvidersMock.mockReturnValue([])
+  })
+  afterEach(() => cleanup())
+
+  it('shows the recovery-code link when callbackUrl is team-bound', () => {
+    renderForm({ mode: 'login', callbackUrl: '/admin' })
+    expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
+      'href',
+      '/auth/recovery'
+    )
+  })
+
+  it('hides the recovery-code link for a non-team callbackUrl', () => {
+    renderForm({ mode: 'login', callbackUrl: '/roadmap' })
+    expect(screen.queryByRole('link', { name: /use a recovery code/i })).toBeNull()
   })
 })

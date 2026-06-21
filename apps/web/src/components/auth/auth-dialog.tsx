@@ -34,7 +34,7 @@ interface FormContext {
  * adapts to the form's current step (e.g. flips to "Check your email"
  * after the user submits their email). */
 export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
-  const { isOpen, mode, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
+  const { isOpen, mode, callbackUrl, closeAuthPopover, setMode, onAuthSuccess } = useAuthPopover()
   const [formContext, setFormContext] = useState<FormContext>({ step: 'credentials', email: '' })
 
   // Listen for auth success broadcasts from popup windows
@@ -65,6 +65,7 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
           mode={mode}
           authConfig={authConfig}
           workspaceName={workspaceName}
+          callbackUrl={callbackUrl}
           onModeSwitch={setMode}
           onContextChange={setFormContext}
         />

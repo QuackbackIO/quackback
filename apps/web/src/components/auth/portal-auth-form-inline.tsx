@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
@@ -23,6 +24,7 @@ import {
 import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
 import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
+import { isTeamCallback } from '@/lib/shared/routing'
 import {
   lookupAuthMethodsFn,
   SSO_UNAVAILABLE_MESSAGE,
@@ -54,6 +56,7 @@ interface PortalAuthFormInlineProps {
   invitationId?: string | null
   /** Workspace display name shown in Stage 1 / Stage 2 copy. */
   workspaceName?: string
+  callbackUrl?: string
   onModeSwitch?: (mode: 'login' | 'signup') => void
   /** Lets the surrounding dialog adapt its header to the form's step. */
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
@@ -136,10 +139,13 @@ export function PortalAuthFormInline({
   authConfig,
   invitationId,
   workspaceName,
+  callbackUrl,
   onModeSwitch,
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const intl = useIntl()
+  const router = useRouter()
+  const showRecoveryLink = isTeamCallback(callbackUrl)
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
   const openSignup = authConfig?.openSignup
@@ -174,10 +180,11 @@ export function PortalAuthFormInline({
   const lookupAuthMethods = useServerFn(lookupAuthMethodsFn)
 
   const emailSignin = useEmailSignin({
-    callbackUrl: '/',
+    callbackUrl: callbackUrl ?? '/',
     onSuccess: async () => {
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
+      if (callbackUrl) router.navigate({ to: callbackUrl })
     },
   })
 
@@ -267,7 +274,7 @@ export function PortalAuthFormInline({
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: '/' })
+        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: callbackUrl ?? '/' })
         return
       }
       if (result.kind === 'sso-default') {
@@ -369,6 +376,7 @@ export function PortalAuthFormInline({
       }
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
+      if (callbackUrl) router.navigate({ to: callbackUrl })
     } catch (err) {
       setError(
         err instanceof Error
@@ -607,6 +615,17 @@ export function PortalAuthFormInline({
     </div>
   )
 
+  const recoveryLink = showRecoveryLink ? (
+    <div className="text-center">
+      <Link
+        to="/auth/recovery"
+        className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+      >
+        <FormattedMessage id="portal.auth.useRecoveryCode" defaultMessage="Use a recovery code" />
+      </Link>
+    </div>
+  ) : null
+
   // ============================================================
   // Stage 1 — email entry
   // ============================================================
@@ -721,6 +740,7 @@ export function PortalAuthFormInline({
                 )}
               </p>
             )}
+            {recoveryLink}
           </>
         )}
 
@@ -787,7 +807,7 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
-              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: '/' })
+              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: callbackUrl ?? '/' })
             } catch (err) {
               setError(
                 (err as Error).message ||
@@ -1019,6 +1039,7 @@ export function PortalAuthFormInline({
               </button>
             </div>
           )}
+          {recoveryLink}
         </form>
       )}
 
