@@ -277,6 +277,14 @@ export function PortalHeader({
               <UserStatsBar />
             </div>
             <DropdownMenuSeparator />
+            {canAccessAdmin && (
+              <DropdownMenuItem asChild>
+                <Link to="/admin">
+                  <ShieldCheckIcon className="me-2 h-4 w-4" />
+                  <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
               <Link to="/settings">
                 <Cog6ToothIcon className="me-2 h-4 w-4" />
