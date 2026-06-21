@@ -716,7 +716,12 @@ function DomainRow({
       await setEnforced({ data: { id: domain.id, enforced: next } })
       await onChanged()
     } catch (err) {
-      setEnforceError(err instanceof Error ? err.message : 'Could not change enforcement.')
+      const msg = err instanceof Error ? err.message : ''
+      setEnforceError(
+        msg === 'recovery_codes_required'
+          ? 'Generate recovery codes before enforcing SSO — they are the only break-glass way back in.'
+          : msg || 'Could not update enforcement.'
+      )
     } finally {
       setPending(false)
     }

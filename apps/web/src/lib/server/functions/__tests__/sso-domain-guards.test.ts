@@ -60,6 +60,7 @@ const hoisted = vi.hoisted(() => ({
   mockResetAuth: vi.fn(),
   mockDbTransaction: vi.fn(),
   mockDbUpdate: vi.fn(),
+  mockHasActiveRecoveryCodes: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -144,6 +145,10 @@ vi.mock('@/lib/server/auth', () => ({
   resetAuth: hoisted.mockResetAuth,
 }))
 
+vi.mock('@/lib/server/auth/recovery-codes-status', () => ({
+  hasActiveRecoveryCodes: hoisted.mockHasActiveRecoveryCodes,
+}))
+
 vi.mock('@/lib/server/db', () => {
   const setMock = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
   const updateMock = vi.fn().mockReturnValue({ set: setMock })
@@ -187,8 +192,9 @@ beforeEach(() => {
     user: { id: 'user_1' },
     principal: { id: 'principal_1', role: 'admin' },
   })
-  // Defaults: SSO is fully registered. Drift-specific cases override.
+  // Defaults: SSO is fully registered; recovery codes present. Drift-specific cases override.
   hoisted.mockHasSsoClientSecret.mockResolvedValue(true)
+  hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(true)
   hoisted.mockGetTierLimits.mockResolvedValue({
     features: { customOidcProvider: true },
   })
@@ -259,12 +265,20 @@ const enforcedDomainRow = { ...verifiedDomainRow, enforced: true }
 //   7: removeVerifiedDomainFn
 //   8: verifyDomainFn
 //   9: getVerifiedDomainsFn
+//  10: listIdentityProvidersFn
+//  11: upsertIdentityProviderFn
+//  12: deleteIdentityProviderFn
+//  13: setProviderCredentialsFn
+//  14: addProviderDomainFn
+//  15: verifyProviderDomainFn
+//  16: setDomainEnforcedFn
 currentModule = 'sso'
 await import('../sso')
 const ssoHandlers = handlersByModule.get('sso')!
 const testSsoConnection = ssoHandlers[0]
 const switchSsoProvider = ssoHandlers[4]
 const clearSsoClientSecret = ssoHandlers[5]
+const setDomainEnforced = ssoHandlers[16]
 
 currentModule = 'auth'
 await import('../auth')
@@ -683,5 +697,50 @@ describe('lookupAuthMethodsFn — ssoOidc.required is inert (workspace-wide mode
       data: { email: 'newhire@example.com', surface: 'team' },
     })
     expect((result as { kind: string }).kind).toBe('methods')
+  })
+})
+
+describe('setDomainEnforcedFn — recovery-code guard', () => {
+  // A provider with lastSuccessfulTestAt > detailsChangedAt so that
+  // isSsoEnforcementUnlocked (pure function, not mocked) returns true,
+  // letting us drive the hasActiveRecoveryCodes check in isolation.
+  const domainId = 'domain_acme' as `domain_${string}`
+  const testProvider = {
+    id: 'idp_sso',
+    lastSuccessfulTestAt: '2026-01-02T00:00:00Z',
+    detailsChangedAt: '2026-01-01T00:00:00Z',
+    domains: [{ id: domainId, enforced: false }],
+  }
+
+  beforeEach(() => {
+    hoisted.mockListIdentityProviders.mockResolvedValue([testProvider])
+    mockSetVerifiedDomainEnforced.mockResolvedValue(undefined)
+  })
+
+  it('throws recovery_codes_required when no active recovery codes exist', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(false)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: true } })
+    ).rejects.toThrow('recovery_codes_required')
+    expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
+  })
+
+  it('allows enabling enforcement and does not throw on the recovery-code check when codes exist', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(true)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: true } })
+    ).resolves.not.toThrow()
+    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith(domainId, true)
+  })
+
+  it('skips the recovery-code check entirely when disabling enforcement', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(false)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: false } })
+    ).resolves.not.toThrow()
+    expect(hoisted.mockHasActiveRecoveryCodes).not.toHaveBeenCalled()
   })
 })

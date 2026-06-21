@@ -962,6 +962,13 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
               'Configure email delivery (SMTP/Resend) before requiring SSO. Magic-link is the only fallback when SSO breaks.'
             )
           }
+
+          const { hasActiveRecoveryCodes } = await import(
+            '@/lib/server/auth/recovery-codes-status'
+          )
+          if (!(await hasActiveRecoveryCodes())) {
+            throw new Error('recovery_codes_required')
+          }
         }
 
         return setVerifiedDomainEnforced(data.id, data.enforced)
