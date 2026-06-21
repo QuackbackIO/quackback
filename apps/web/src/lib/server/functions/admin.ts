@@ -558,19 +558,20 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  * account-creation step can offer the one-click button instead of the
  * manual Jane-Doe form. Only non-secret signals are returned.
  *
- * `ssoEnabled` reflects whether the runtime would register at least one OIDC
- * identity provider — the same `getRegisteredOidcProviderIds` gate the auth
- * engine, enforcement, and the portal buttons use (enabled + credentials +
- * `customOidcProvider` tier). Reading the provider registry (not the legacy
- * `authConfig.ssoOidc` blob) means a provider configured via the editor or the
- * config file surfaces the onboarding button too, and the legacy-config cleanup
- * can run without breaking it. In practice this is rarely true at first
- * onboarding (no admin yet to configure SSO) — but a re-onboard against an
- * existing tenant DB will use SSO when a provider is registered.
+ * `ssoEnabled` reflects whether the `sso` provider is registered — the same
+ * `getRegisteredOidcProviderIds` gate the auth engine and enforcement use
+ * (enabled + credentials + `customOidcProvider` tier). It is scoped to `'sso'`
+ * specifically because the onboarding button hardcodes
+ * `signIn.oauth2({ providerId: 'sso' })`: a true here must mean *that* provider
+ * is callable, not merely that some other (`custom-oidc` / `oidc_*`) provider
+ * exists. Reading the registry (not the legacy `authConfig.ssoOidc` blob) means
+ * the legacy-config cleanup can run without breaking the button. In practice
+ * this is rarely true at first onboarding (no admin yet to configure SSO) — but
+ * a re-onboard against an existing tenant DB will use SSO when it's registered.
  */
 export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
-  const ssoEnabled = (await getRegisteredOidcProviderIds()).size > 0
+  const ssoEnabled = (await getRegisteredOidcProviderIds()).has('sso')
   return { ssoEnabled }
 })
 

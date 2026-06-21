@@ -104,16 +104,19 @@ export async function handleSsoTestCallback(
   // but it does not gate anything.
   let identityMatched = false
   if (result.ok) {
+    // A successful test unlocks the enforcement gate in two places that must
+    // stay in sync: the legacy `ssoOidc.lastSuccessfulTestAt` JSON (read by the
+    // legacy single-provider path) and the migrated `sso` identity_provider
+    // row's `lastSuccessfulTestAt` (read by the per-provider
+    // `setDomainEnforcedFn` → `isSsoEnforcementUnlocked`). The legacy test flow
+    // only exercises the provider registered under `'sso'`. The two reads are
+    // independent, so fetch the provider list alongside the legacy stamp.
     const { markSsoTestSucceeded } = await import('@/lib/server/domains/settings/settings.service')
-    await markSsoTestSucceeded()
-    // Also stamp the migrated `sso` identity_provider row: the per-provider
-    // enforcement gate (`setDomainEnforcedFn` → `isSsoEnforcementUnlocked`)
-    // reads the row's `lastSuccessfulTestAt`, not the legacy JSON. The legacy
-    // test flow exercises the provider registered under `'sso'`.
     const { listIdentityProviders, markTestSucceeded } = await import(
       '@/lib/server/domains/settings/identity-providers.service'
     )
-    const ssoProvider = (await listIdentityProviders()).find((p) => p.registrationId === 'sso')
+    const [, providers] = await Promise.all([markSsoTestSucceeded(), listIdentityProviders()])
+    const ssoProvider = providers.find((p) => p.registrationId === 'sso')
     if (ssoProvider) await markTestSucceeded(ssoProvider.id)
     log.info({ admin_user_id: session.adminUserId }, 'sso test succeeded; sso gates unlocked')
 
