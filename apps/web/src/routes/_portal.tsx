@@ -16,7 +16,7 @@ import {
 } from '@/lib/server/functions/portal-access'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
-import { useAutoOpenAuthDialog } from '@/lib/client/hooks/use-auto-open-auth'
+import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 
 export const Route = createFileRoute('/_portal')({
