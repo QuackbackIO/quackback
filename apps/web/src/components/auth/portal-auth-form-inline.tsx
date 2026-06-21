@@ -116,7 +116,7 @@ function OAuthButton({
 /**
  * Inline Portal Auth Form for use in dialogs/popovers.
  *
- * Email-first two-stage flow matching `<PortalAuthForm>`:
+ * Email-first two-stage flow:
  *
  *  Stage 1 (`email`): OAuth tiles + email field + Continue. OAuth tiles
  *    bypass Stage 2 entirely (popup-driven, not redirect-driven, since

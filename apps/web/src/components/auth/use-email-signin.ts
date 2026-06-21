@@ -25,9 +25,9 @@ interface UseEmailSigninResult {
 }
 
 /**
- * Drives the combined magic-link + OTP sign-in flow. Both the full-page
- * (PortalAuthForm) and the inline dialog (PortalAuthFormInline) consume
- * this so the request/verify/resend logic stays in one place.
+ * Drives the combined magic-link + OTP sign-in flow. The inline dialog
+ * (PortalAuthFormInline) consumes this so the request/verify/resend
+ * logic stays in one place.
  */
 export function useEmailSignin({
   callbackUrl,

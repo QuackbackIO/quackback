@@ -53,6 +53,9 @@ vi.mock('@tanstack/react-start', () => ({
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
 }))
+vi.mock('@/lib/server/functions/instant-sso', () => ({
+  resolveInstantSsoRedirectFn: vi.fn(),
+}))
 
 // ---------------------------------------------------------------------------
 // Helpers
