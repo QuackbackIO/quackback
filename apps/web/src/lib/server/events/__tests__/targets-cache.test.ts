@@ -34,7 +34,11 @@ const mockInnerJoin = vi.fn()
 const mockDbWhere = vi.fn()
 const mockFindMany = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  // Spread the real module (db is a lazy Proxy ⇒ no connection) so transitively
+  // imported exports like `ticketSubscriptions` resolve; the explicit overrides
+  // below still win for everything this test inspects.
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: (...args: unknown[]) => mockSelect(...args),
     query: {

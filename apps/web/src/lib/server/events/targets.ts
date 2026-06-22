@@ -29,16 +29,16 @@ import {
   type Subscriber,
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
-import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { buildHookContext, type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
 import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getTicketEmailTargets } from './ticket-targets'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'targets' })
-
 /**
  * Drop subscribers who can't view the post under its current board
  * audience + moderation state. Used by every notification fan-out path
@@ -153,6 +153,26 @@ const SUBSCRIBER_EVENT_TYPES = [
 const MENTION_EVENT_TYPES = ['post.mentioned'] as const
 const AI_EVENT_TYPES = ['post.created'] as const
 const SUMMARY_EVENT_TYPES = ['post.created', 'comment.created'] as const
+const EXTERNAL_TICKET_THREAD_EVENTS = [
+  'ticket.thread_added',
+  'ticket.thread_updated',
+  'ticket.thread_deleted',
+] as const
+
+function isExternalTicketThreadEvent(event: EventData): boolean {
+  return EXTERNAL_TICKET_THREAD_EVENTS.includes(
+    event.type as (typeof EXTERNAL_TICKET_THREAD_EVENTS)[number]
+  )
+}
+
+function isNonPublicTicketThreadEvent(event: EventData): boolean {
+  return (
+    isExternalTicketThreadEvent(event) &&
+    ((event.data as { audience?: string }).audience === 'internal' ||
+      (event.data as { audience?: string }).audience === 'shared_team')
+  )
+}
+
 /**
  * Get all hook targets for an event.
  * Gracefully handles errors - returns empty array on failure.
@@ -189,6 +209,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       targets.push(...mentionTargets)
     }
 
+    // Ticket Email Targets
+    if (event.type.startsWith('ticket.')) {
+      const ticketEmailTargets = await getTicketEmailTargets(event, context)
+      targets.push(...ticketEmailTargets)
+    }
+
     // AI targets (sentiment, embeddings) - only when AI is configured
     if (getOpenAI() && AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
       targets.push({
@@ -222,12 +248,43 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
 }
 
 type CachedIntegrationMapping = {
+  integrationId: string
   eventType: string
   integrationType: string
   secrets: string | null
   integrationConfig: unknown
   actionConfig: unknown
   filters: unknown
+}
+
+async function reconcileGitHubMappingsBestEffort(): Promise<void> {
+  try {
+    const githubIntegrations = await db
+      .select({
+        id: integrations.id,
+        config: integrations.config,
+      })
+      .from(integrations)
+      .where(and(eq(integrations.integrationType, 'github'), eq(integrations.status, 'active')))
+
+    if (githubIntegrations.length === 0) return
+
+    const { ensureGitHubEventMappings } =
+      await import('@/lib/server/integrations/github/event-mappings')
+    await Promise.allSettled(
+      githubIntegrations.map((integration) =>
+        ensureGitHubEventMappings({
+          integrationId: integration.id,
+          config: (integration.config as Record<string, unknown> | null) ?? undefined,
+        })
+      )
+    )
+  } catch (error) {
+    log.warn(
+      { err: error },
+      'failed to reconcile GitHub event mappings during target cache refresh'
+    )
+  }
 }
 
 async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[]> {
@@ -237,8 +294,11 @@ async function getCachedIntegrationMappings(): Promise<CachedIntegrationMapping[
     return cached
   }
 
+  await reconcileGitHubMappingsBestEffort()
+
   const mappings = await db
     .select({
+      integrationId: integrations.id,
       eventType: integrationEventMappings.eventType,
       integrationType: integrations.integrationType,
       secrets: integrations.secrets,
@@ -272,9 +332,26 @@ async function getIntegrationTargets(
     return []
   }
 
+  // Never forward internal or shared-team ticket threads to external integrations.
+  // Internal threads are private agent-only context; shared-team threads are
+  // inter-team collaboration not meant for external consumers.
+  if (isNonPublicTicketThreadEvent(event)) {
+    return []
+  }
+
   // Get all active mappings from cache or DB, then filter by event type
-  const allMappings = await getCachedIntegrationMappings()
-  const mappings = allMappings.filter((m) => m.eventType === event.type)
+  let allMappings = await getCachedIntegrationMappings()
+  let mappings = allMappings.filter((m) => m.eventType === event.type)
+
+  if (
+    mappings.length === 0 &&
+    (event.type === 'ticket.attachment_added' || event.type === 'ticket.attachment_removed')
+  ) {
+    await reconcileGitHubMappingsBestEffort()
+    await cacheDel(CACHE_KEYS.INTEGRATION_MAPPINGS)
+    allMappings = await getCachedIntegrationMappings()
+    mappings = allMappings.filter((m) => m.eventType === event.type)
+  }
 
   if (mappings.length === 0) {
     return []
@@ -282,19 +359,33 @@ async function getIntegrationTargets(
 
   const targets: HookTarget[] = []
   const boardIds = extractBoardIds(event)
+  const inboxIds = extractInboxIds(event)
 
   // Track seen (integrationType, channelId) pairs to deduplicate
   const seen = new Set<string>()
 
   for (const m of mappings) {
+    // Loop prevention: skip integrations that sourced this event
+    if (event.syncSourceIntegrationId && m.integrationId === event.syncSourceIntegrationId) {
+      continue
+    }
+
     // Apply board filter — match if any event board overlaps with filter
-    const filters = m.filters as { boardIds?: string[] } | null
+    const filters = m.filters as { boardIds?: string[]; inboxIds?: string[] } | null
     if (
       filters?.boardIds?.length &&
       boardIds.length > 0 &&
       !boardIds.some((id) => filters.boardIds!.includes(id))
     ) {
       continue
+    }
+
+    // Apply inbox filter to ticket events. A scoped integration is opt-in:
+    // ticket events without an inbox must not fan out to inbox-scoped targets.
+    if (filters?.inboxIds?.length && event.type.startsWith('ticket.')) {
+      if (inboxIds.length === 0 || !inboxIds.some((id) => filters.inboxIds!.includes(id))) {
+        continue
+      }
     }
 
     const integrationConfig = (m.integrationConfig as Record<string, unknown>) || {}
@@ -317,7 +408,10 @@ async function getIntegrationTargets(
         const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
         accessToken = secrets.accessToken
       } catch (error) {
-        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
+        log.error(
+          { err: error, integration_type: m.integrationType },
+          'failed to decrypt integration secrets'
+        )
         continue
       }
     }
@@ -325,7 +419,12 @@ async function getIntegrationTargets(
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken, rootUrl: context.portalBaseUrl },
+      config: {
+        ...integrationConfig,
+        accessToken,
+        rootUrl: context.portalBaseUrl,
+        integrationId: m.integrationId,
+      },
     })
   }
 
@@ -882,6 +981,13 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
     return []
   }
 
+  // Never deliver internal or shared-team ticket notes to external webhooks —
+  // internal threads are private agent-only context; shared-team threads are
+  // inter-team collaboration not meant for external consumers.
+  if (isNonPublicTicketThreadEvent(event)) {
+    return []
+  }
+
   try {
     // Get all active, non-deleted webhooks from cache or DB (filter in JS)
     let activeWebhooks = await cacheGet<(typeof webhooks.$inferSelect)[]>(
@@ -903,15 +1009,39 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
 
     // Extract boardId(s) from event for filtering
     const boardIds = extractBoardIds(event)
+    // Extract inboxId(s) from event for filtering (Phase 4 — ticket events)
+    const inboxIds = extractInboxIds(event)
 
-    // Filter by event-type subscription and (board-bearing events only) board.
-    const matchingWebhooks = activeWebhooks.filter((webhook) =>
-      webhookSubscriptionMatches(webhook, event)
-    )
+    // Filter webhooks by event type and board
+    const matchingWebhooks = activeWebhooks.filter((webhook) => {
+      // Must be subscribed to this event type
+      if (!webhook.events.includes(event.type)) {
+        return false
+      }
 
-    log.debug(
-      { count: matchingWebhooks.length, event_type: event.type, board_ids: boardIds },
-      'found matching webhooks for event'
+      // If webhook has board filter, must match at least one event board
+      if (webhook.boardIds && webhook.boardIds.length > 0) {
+        if (boardIds.length === 0 || !boardIds.some((id) => webhook.boardIds!.includes(id))) {
+          return false
+        }
+      }
+
+      // If webhook has inbox filter, must match at least one event inbox.
+      // Scope: only applies to ticket.* events. Non-ticket subscriptions
+      // (e.g. post.created) on the same webhook are NOT constrained.
+      // Opt-in semantics for tickets: an event with no inboxId is excluded
+      // by an inbox-filtered webhook (better to drop than over-deliver).
+      if (webhook.inboxIds && webhook.inboxIds.length > 0 && event.type.startsWith('ticket.')) {
+        if (inboxIds.length === 0 || !inboxIds.some((id) => webhook.inboxIds!.includes(id))) {
+          return false
+        }
+      }
+
+      return true
+    })
+
+    console.log(
+      `[Targets] Found ${matchingWebhooks.length} webhook(s) for ${event.type}${boardIds.length ? ` (boards: ${boardIds.join(', ')})` : ''}${inboxIds.length ? ` (inboxes: ${inboxIds.join(', ')})` : ''}`
     )
 
     // Build targets - decrypt secrets for delivery
@@ -954,4 +1084,17 @@ function extractBoardIds(event: EventData): string[] {
     return [...ids]
   }
   return []
+}
+
+/**
+ * Extract inbox ID(s) from event data (Phase 4 — ticket events).
+ * Returns the ticket's `inboxId` for any event whose payload embeds an
+ * `EventTicketRef`. Configuration-plane events (inbox/team/status CRUD) and
+ * non-ticket events return an empty array — webhooks with an `inboxIds`
+ * filter will simply not constrain those event types.
+ */
+function extractInboxIds(event: EventData): string[] {
+  const data = event.data as { ticket?: { inboxId?: string | null } }
+  const inboxId = data.ticket?.inboxId
+  return inboxId ? [inboxId] : []
 }

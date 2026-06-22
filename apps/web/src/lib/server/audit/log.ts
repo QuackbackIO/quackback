@@ -61,6 +61,8 @@ export type AuditEventType =
   | 'moderation.default.changed'
   | 'portal.visibility.changed'
   | 'portal.allowed_domains.changed'
+  | 'portal_tabs.config_changed'
+  | 'portal_tabs.segment_override_changed'
   | 'post.moderation.approved'
   | 'post.moderation.rejected'
   | 'post.moderation.held'
@@ -83,6 +85,9 @@ export type AuditEventType =
   | 'team.invite.expired'
   // v1 portal segment allowlist
   | 'portal.allowed_segments.changed'
+  // v1 support surface access policies
+  | 'widget.chat_access.changed'
+  | 'portal.support_access.changed'
   // v1 portal widget sign-in toggle
   | 'portal.widget_signin.changed'
   // v1 widget OTT handoff
