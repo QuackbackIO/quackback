@@ -5,13 +5,23 @@
  */
 import { describe, it, expect } from 'vitest'
 import { redactSettingsForClient } from '../redact-portal-config'
-import type { PortalConfig } from '@/lib/server/domains/settings/settings.types'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type {
+  PortalConfig,
+  SupportAccessConfig,
+} from '@/lib/server/domains/settings/settings.types'
 
 const ACCESS_POLICY = {
   visibility: 'private' as const,
   allowedDomains: ['acme.example', 'beta.example'],
   widgetSignIn: true,
   allowedSegmentIds: [],
+}
+
+const SUPPORT_ACCESS: SupportAccessConfig = {
+  mode: 'selected',
+  segmentIds: ['segment_vip' as SegmentId],
+  principalIds: ['principal_vip' as PrincipalId],
 }
 
 const FULL_PORTAL_CONFIG: PortalConfig = {
@@ -108,6 +118,39 @@ describe('redactSettingsForClient — JSON-string portalConfig (raw DB row)', ()
     const result = redactSettingsForClient(row)
 
     expect(result).toBe(row)
+  })
+})
+
+describe('redactSettingsForClient — portal support access redaction', () => {
+  it('strips support.access from the parsed PortalConfig', () => {
+    const row = {
+      portalConfig: {
+        ...FULL_PORTAL_CONFIG,
+        support: { enabled: true, access: SUPPORT_ACCESS },
+      },
+      name: 'Acme',
+    }
+    const result = redactSettingsForClient(row)
+
+    expect(result.portalConfig.support).toEqual({ enabled: true })
+    expect(JSON.stringify(result)).not.toContain('segment_vip')
+    expect(JSON.stringify(result)).not.toContain('principal_vip')
+  })
+
+  it('strips support.access from the raw JSON-string portalConfig', () => {
+    const row = {
+      name: 'Acme',
+      portalConfig: JSON.stringify({
+        ...FULL_PORTAL_CONFIG,
+        support: { enabled: true, access: SUPPORT_ACCESS },
+      }),
+    }
+    const result = redactSettingsForClient(row)
+
+    const parsed = JSON.parse(result.portalConfig as string) as PortalConfig
+    expect(parsed.support).toEqual({ enabled: true })
+    expect(result.portalConfig).not.toContain('segment_vip')
+    expect(result.portalConfig).not.toContain('principal_vip')
   })
 })
 
