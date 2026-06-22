@@ -15,7 +15,7 @@ import {
   type BoardSettings,
 } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, requireAuthWithPermissions } from './auth-helpers'
 import { getSettings } from './workspace'
 import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
@@ -30,6 +30,7 @@ import {
 } from '@/lib/server/domains/principals/principal.service'
 import { listPortalUsers, removePortalUser } from '@/lib/server/domains/users/user.service'
 import { getPortalUserDetail } from '@/lib/server/domains/users/user.detail'
+import { listCustomerPeople } from '@/lib/server/domains/customers'
 import {
   listSegments,
   createSegment,
@@ -53,9 +54,12 @@ import {
   updateUserAttribute,
   deleteUserAttribute,
 } from '@/lib/server/domains/user-attributes/user-attribute.service'
+import { PERMISSIONS } from '@/lib/server/domains/authz'
+import { hasPermission } from '@/lib/server/domains/authz/authz.service'
 import type { UserAttributeId } from '@quackback/ids'
 import { sendInvitationEmail } from '@quackback/email'
-import { getBaseUrl } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils/date'
 import {
   INVITATION_EXPIRY_MS,
   generateInvitationMagicLink,
@@ -125,6 +129,14 @@ const portalUserByIdSchema = z.object({
   principalId: z.string(),
 })
 
+const listCustomerPeopleSchema = z.object({
+  search: z.string().optional(),
+  includeArchived: z.boolean().optional(),
+  segmentIds: z.array(z.string()).optional(),
+  limit: z.number().optional(),
+  offset: z.number().optional(),
+})
+
 /**
  * Fetch inbox posts with filters for admin feedback view
  */
@@ -160,9 +172,9 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
         items: result.items.map((p) => ({
           ...p,
           contentJson: (p.contentJson ?? {}) as TiptapContent,
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-          deletedAt: p.deletedAt?.toISOString() || null,
+          createdAt: toIsoString(p.createdAt),
+          updatedAt: toIsoString(p.updatedAt),
+          deletedAt: toIsoStringOrNull(p.deletedAt),
         })),
       }
     } catch (error) {
@@ -184,8 +196,8 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
     return result.map((b) => ({
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
+      createdAt: toIsoString(b.createdAt),
+      updatedAt: toIsoString(b.updatedAt),
     }))
   } catch (error) {
     log.error({ err: error }, 'fetch boards list failed')
@@ -202,8 +214,12 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listTags()
-    log.debug({ count: result.length }, 'fetch tags list')
-    return result
+    log.debug(`[fn:admin] fetchTagsList: count=${result.length}`)
+    return result.map((tag) => ({
+      ...tag,
+      createdAt: toIsoString(tag.createdAt),
+      deletedAt: toIsoStringOrNull(tag.deletedAt),
+    }))
   } catch (error) {
     log.error({ err: error }, 'fetch tags list failed')
     throw error
@@ -219,8 +235,12 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listStatuses()
-    log.debug({ count: result.length }, 'fetch statuses list')
-    return result
+    log.debug(`[fn:admin] fetchStatusesList: count=${result.length}`)
+    return result.map((status) => ({
+      ...status,
+      createdAt: toIsoString(status.createdAt),
+      deletedAt: toIsoStringOrNull(status.deletedAt),
+    }))
   } catch (error) {
     log.error({ err: error }, 'fetch statuses list failed')
     throw error
@@ -236,8 +256,12 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
     await requireAuth({ roles: ['admin', 'member'] })
 
     const result = await listTeamMembers()
-    log.debug({ count: result.length }, 'fetch team members')
-    return result
+    log.debug(`[fn:admin] fetchTeamMembers: count=${result.length}`)
+    return result.map((member) => ({
+      ...member,
+      createdAt: toIsoString(member.createdAt),
+      lastSignInAt: toIsoStringOrNull(member.lastSignInAt),
+    }))
   } catch (error) {
     log.error({ err: error }, 'fetch team members failed')
     throw error
@@ -404,8 +428,8 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
     return orgBoards.map((b) => ({
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
+      createdAt: toIsoString(b.createdAt),
+      updatedAt: toIsoString(b.updatedAt),
     }))
   } catch (error) {
     log.error({ err: error }, 'fetch boards for settings failed')
@@ -700,7 +724,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         ...result,
         items: result.items.map((user) => ({
           ...user,
-          joinedAt: user.joinedAt.toISOString(),
+          joinedAt: toIsoString(user.joinedAt),
         })),
       }
     } catch (error) {
@@ -730,16 +754,56 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
       log.debug({ principal_id: data.principalId }, 'get portal user found')
       return {
         ...result,
-        joinedAt: result.joinedAt.toISOString(),
-        createdAt: result.createdAt.toISOString(),
+        joinedAt: toIsoString(result.joinedAt),
+        createdAt: toIsoString(result.createdAt),
         engagedPosts: result.engagedPosts.map((post) => ({
           ...post,
-          createdAt: post.createdAt.toISOString(),
-          engagedAt: post.engagedAt.toISOString(),
+          createdAt: toIsoString(post.createdAt),
+          engagedAt: toIsoString(post.engagedAt),
         })),
       }
     } catch (error) {
       log.error({ err: error }, 'get portal user failed')
+      throw error
+    }
+  })
+
+/**
+ * List unified customer people (contacts + linked portal users + portal-only users).
+ */
+export const listCustomerPeopleFn = createServerFn({ method: 'GET' })
+  .inputValidator(listCustomerPeopleSchema)
+  .handler(async ({ data }) => {
+    console.log(`[fn:admin] listCustomerPeopleFn`)
+    try {
+      const ctx = await requireAuthWithPermissions()
+      if (ctx.principal.role !== 'admin' && ctx.principal.role !== 'member') {
+        throw new Error('Access denied: Requires [admin, member]')
+      }
+      const canViewCrm = hasPermission(ctx.permissions, PERMISSIONS.ORG_VIEW)
+      const canViewTicketCounts = hasPermission(ctx.permissions, PERMISSIONS.TICKET_VIEW_ALL)
+      const result = await listCustomerPeople({
+        search: data.search,
+        includeArchived: data.includeArchived,
+        segmentIds: data.segmentIds as SegmentId[] | undefined,
+        includeCrm: canViewCrm,
+        includeTicketCounts: canViewTicketCounts,
+        limit: data.limit,
+        offset: data.offset,
+      })
+      return {
+        ...result,
+        items: result.items.map((item) => ({
+          ...item,
+          archivedAt: toIsoStringOrNull(item.archivedAt),
+          linkedUsers: item.linkedUsers.map((linkedUser) => ({
+            ...linkedUser,
+            joinedAt: toIsoString(linkedUser.joinedAt),
+          })),
+        })),
+      }
+    } catch (error) {
+      console.error(`[fn:admin] ❌ listCustomerPeopleFn failed:`, error)
       throw error
     }
   })
@@ -964,7 +1028,8 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
       // Mint the magic link before the insert so the row records its token in
       // its token set (cancel revokes every token in the set). invitationId is
       // fixed above, so the callback path is already known.
-      const portalUrl = getBaseUrl()
+      const headers = getRequestHeaders()
+      const portalUrl = resolvePublicBaseUrl(headers)
       const callbackURL = `/complete-signup/${invitationId}`
       const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
         email,
@@ -1124,7 +1189,8 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
       // old and new links work until the invite is accepted, cancelled, or
       // expires. The token is recorded the moment it's minted, so even if the
       // send below fails or the worker restarts, cancellation still revokes it.
-      const portalUrl = getBaseUrl()
+      const headers = getRequestHeaders()
+      const portalUrl = resolvePublicBaseUrl(headers)
       const callbackURL = `/complete-signup/${invitationId}`
       const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
         invitationRecord.email,
@@ -1177,89 +1243,15 @@ const segmentByIdSchema = z.object({
 })
 
 // Shared condition schema used by both create and update
-export const segmentConditionSchema = z.object({
-  attribute: z.enum([
-    'email',
-    'email_verified',
-    'created_at_days_ago',
-    'post_count',
-    'vote_count',
-    'comment_count',
-    'metadata_key',
-    'name',
-    'locale',
-    'country',
-    'last_active_days_ago',
-    'signup_source',
-    'principal_type',
-  ]),
-  operator: z.enum([
-    'eq',
-    'neq',
-    'lt',
-    'lte',
-    'gt',
-    'gte',
-    'contains',
-    'starts_with',
-    'ends_with',
-    'in',
-    'is_set',
-    'is_not_set',
-  ]),
-  // value is optional for presence operators (is_set / is_not_set)
-  value: z
-    .union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))])
-    .optional(),
-  metadataKey: z.string().optional(),
-})
-
-const segmentRulesSchema = z.object({
-  match: z.enum(['all', 'any']),
-  conditions: z.array(segmentConditionSchema),
-})
-
-const CRON_REGEX =
-  /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)(\s+(\*|[0-9,\-/]+))?$/
-
-const evaluationScheduleSchema = z.object({
-  enabled: z.boolean(),
-  pattern: z.string().min(1).regex(CRON_REGEX, 'Must be a valid cron expression'),
-})
-
-const userAttributeDefinitionSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
-  type: z.enum(['string', 'number', 'boolean', 'date', 'currency']),
-  currencyCode: z
-    .enum(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'BRL'])
-    .optional(),
-})
-
-const weightConfigSchema = z.object({
-  attribute: userAttributeDefinitionSchema,
-  aggregation: z.enum(['sum', 'average', 'count', 'median']),
-})
-
-export const createSegmentSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  type: z.enum(['manual', 'dynamic']),
-  color: z.string().optional(),
-  rules: segmentRulesSchema.optional(),
-  evaluationSchedule: evaluationScheduleSchema.optional(),
-  weightConfig: weightConfigSchema.optional(),
-})
-
-const updateSegmentSchema = z.object({
-  segmentId: z.string(),
-  name: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  color: z.string().optional(),
-  rules: segmentRulesSchema.nullable().optional(),
-  evaluationSchedule: evaluationScheduleSchema.nullable().optional(),
-  weightConfig: weightConfigSchema.nullable().optional(),
-})
+// Segment rule/condition schemas now live in a shared module so the REST and
+// MCP surfaces can reuse them without importing this server-functions file.
+// Re-exported here to preserve the public import path used by existing tests.
+import {
+  segmentConditionSchema,
+  createSegmentSchema,
+  updateSegmentSchema,
+} from '@/lib/shared/schemas/segments'
+export { segmentConditionSchema, createSegmentSchema, updateSegmentSchema }
 
 const assignUsersSchema = z.object({
   segmentId: z.string(),
@@ -1274,7 +1266,16 @@ const assignUsersSchema = z.object({
  * values are actually present in their workspace as they type.
  */
 const fetchSegmentAttributeValuesSchema = z.object({
-  attribute: z.enum(['country', 'locale', 'name', 'email', 'signup_source']),
+  attribute: z.enum([
+    'country',
+    'locale',
+    'name',
+    'email',
+    'signup_source',
+    'contact_title',
+    'organization_domain',
+    'organization_external_id',
+  ]),
   query: z.string().max(200).default(''),
   limit: z.number().int().min(1).max(50).default(20),
 })
@@ -1299,8 +1300,8 @@ export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async ()
     log.debug({ count: result.length }, 'list segments')
     return result.map((seg) => ({
       ...seg,
-      createdAt: seg.createdAt.toISOString(),
-      updatedAt: seg.updatedAt.toISOString(),
+      createdAt: toIsoString(seg.createdAt),
+      updatedAt: toIsoString(seg.updatedAt),
     }))
   } catch (error) {
     log.error({ err: error }, 'list segments failed')
@@ -1330,8 +1331,8 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
       log.info({ segment_id: segment.id }, 'segment created')
       return {
         ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
+        createdAt: toIsoString(segment.createdAt),
+        updatedAt: toIsoString(segment.updatedAt),
       }
     } catch (error) {
       log.error({ err: error }, 'create segment failed')
@@ -1368,8 +1369,8 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
       log.info({ segment_id: segment.id }, 'segment updated')
       return {
         ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
+        createdAt: toIsoString(segment.createdAt),
+        updatedAt: toIsoString(segment.updatedAt),
       }
     } catch (error) {
       log.error({ err: error }, 'update segment failed')

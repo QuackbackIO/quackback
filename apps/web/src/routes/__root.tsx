@@ -89,12 +89,20 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           portalConfig: settings.portalConfig?.access
             ? {
                 ...settings.portalConfig,
+                ...(settings.portalConfig.support && {
+                  support: { enabled: settings.portalConfig.support.enabled },
+                }),
                 access: {
                   // Only expose visibility — keep allowedDomains and widgetSignIn off the wire.
                   visibility: settings.portalConfig.access.visibility,
                 },
               }
-            : settings.portalConfig,
+            : settings.portalConfig?.support?.access
+              ? {
+                  ...settings.portalConfig,
+                  support: { enabled: settings.portalConfig.support.enabled },
+                }
+              : settings.portalConfig,
           // 2. Raw DB row — portalConfig column is a JSON string; redact inline.
           settings: redactSettingsForClient(settings.settings as Record<string, unknown>),
         } as TenantSettings)

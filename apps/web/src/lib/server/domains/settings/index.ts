@@ -17,6 +17,8 @@ export type {
   PortalFeatures,
   PortalConfig,
   PortalAccessConfig,
+  SupportAccessMode,
+  SupportAccessConfig,
   PortalWelcomeCard,
   HeaderDisplayMode,
   ThemeColors,
@@ -41,6 +43,8 @@ export { PORTAL_WELCOME_CARD_TITLE_MAX } from './settings.types'
 export {
   DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_WIDGET_SUPPORT_ACCESS,
+  DEFAULT_PORTAL_SUPPORT_ACCESS,
   DEFAULT_DEVELOPER_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_HELP_CENTER_CONFIG,

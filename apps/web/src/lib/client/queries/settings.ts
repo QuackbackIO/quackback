@@ -19,6 +19,7 @@ import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
 } from '@/lib/server/functions/settings-utils'
+import { listWidgetApplicationsFn } from '@/lib/server/functions/widget-profiles'
 
 const STALE_TIME_SHORT = 30 * 1000
 const STALE_TIME_MEDIUM = 60 * 1000
@@ -121,6 +122,13 @@ export const settingsQueries = {
       queryKey: ['settings', 'widgetSecret'],
       queryFn: fetchWidgetSecret,
       staleTime: STALE_TIME_LONG,
+    }),
+
+  widgetApplications: () =>
+    queryOptions({
+      queryKey: ['settings', 'widgetApplications'],
+      queryFn: () => listWidgetApplicationsFn(),
+      staleTime: STALE_TIME_SHORT,
     }),
 
   helpCenterConfig: () =>

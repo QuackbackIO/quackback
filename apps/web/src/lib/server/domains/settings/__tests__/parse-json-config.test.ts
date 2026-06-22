@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { parseJsonConfig } from '../settings.helpers'
 import {
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_PORTAL_SUPPORT_ACCESS,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_WIDGET_SUPPORT_ACCESS,
   workspaceAllowsAnonymous,
   type PublicPortalConfig,
 } from '../settings.types'
@@ -14,6 +16,18 @@ describe('DEFAULT_PORTAL_CONFIG', () => {
 
   it('DEFAULT_PORTAL_CONFIG has widgetSignIn defaulting to false', () => {
     expect(DEFAULT_PORTAL_CONFIG.access?.widgetSignIn).toBe(false)
+  })
+
+  it('DEFAULT_PORTAL_CONFIG keeps portal support signed-in by default', () => {
+    expect(DEFAULT_PORTAL_CONFIG.support?.access).toEqual(DEFAULT_PORTAL_SUPPORT_ACCESS)
+    expect(DEFAULT_PORTAL_CONFIG.support?.access?.mode).toBe('authenticated')
+  })
+})
+
+describe('DEFAULT_WIDGET_CONFIG', () => {
+  it('DEFAULT_WIDGET_CONFIG keeps widget chat available to anyone by default', () => {
+    expect(DEFAULT_WIDGET_CONFIG.chat?.access).toEqual(DEFAULT_WIDGET_SUPPORT_ACCESS)
+    expect(DEFAULT_WIDGET_CONFIG.chat?.access?.mode).toBe('anonymous')
   })
 })
 
@@ -93,6 +107,24 @@ describe('parseJsonConfig', () => {
 
     expect(result.enabled).toBe(true)
     expect(result.identifyVerification).toBe(false)
+  })
+
+  it('deep merges widget chat support access defaults into old widget configs', () => {
+    const stored = JSON.stringify({ chat: { enabled: true } })
+
+    const result = parseJsonConfig(stored, DEFAULT_WIDGET_CONFIG)
+
+    expect(result.chat?.enabled).toBe(true)
+    expect(result.chat?.access).toEqual(DEFAULT_WIDGET_SUPPORT_ACCESS)
+  })
+
+  it('deep merges portal support access defaults into old portal configs', () => {
+    const stored = JSON.stringify({ support: { enabled: true } })
+
+    const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
+
+    expect(result.support?.enabled).toBe(true)
+    expect(result.support?.access).toEqual(DEFAULT_PORTAL_SUPPORT_ACCESS)
   })
 
   it('preserves default oauth.password when stored oauth omits it (bug fix)', () => {

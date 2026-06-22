@@ -4,12 +4,16 @@ import { tiptapContentSchema } from '@/lib/shared/schemas/posts'
 // Import types from barrel export (client-safe)
 import {
   DEFAULT_PORTAL_CONFIG,
+  DEFAULT_PORTAL_SUPPORT_ACCESS,
+  DEFAULT_WIDGET_SUPPORT_ACCESS,
   type BrandingConfig,
+  type SupportAccessConfig,
   type UpdatePortalConfigInput,
+  type UpdateWidgetConfigInput,
 } from '@/lib/server/domains/settings'
 import { isAdmin } from '@/lib/shared/roles'
-import { ForbiddenError } from '@/lib/shared/errors'
-import { userIdSchema, type UserId } from '@quackback/ids'
+import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { userIdSchema, type PrincipalId, type SegmentId, type UserId } from '@quackback/ids'
 import {
   getPortalConfig,
   getPublicPortalConfig,
@@ -35,11 +39,23 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
-import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
+import {
+  db,
+  principal,
+  user,
+  invitation,
+  account,
+  segments,
+  eq,
+  ne,
+  and,
+  inArray,
+  isNull,
+} from '@/lib/server/db'
+import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils/date'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'settings' })
-
 // ============================================
 // Read Operations
 // ============================================
@@ -161,14 +177,13 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         .from(principal)
         .innerJoin(user, eq(principal.userId, user.id))
         .leftJoin(lastSession, eq(lastSession.userId, user.id))
-        .where(ne(principal.role, 'user'))
+        .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
 
       // Serialise to ISO string on the boundary so the client type
       // stays narrow (`string | null`). `toIsoStringOrNull` handles
       // both the Date and string shapes — postgres-js returns the
       // `max()` aggregate as a string, plain timestamp selects come
       // back as Date.
-      const { toIsoStringOrNull } = await import('@/lib/shared/utils/date')
       const members = membersRaw.map((m) => ({
         ...m,
         lastSignInAt: toIsoStringOrNull(m.lastSignInAt),
@@ -193,9 +208,9 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
         email: inv.email,
         name: inv.name,
         role: inv.role,
-        createdAt: inv.createdAt.toISOString(),
-        lastSentAt: inv.lastSentAt?.toISOString() ?? null,
-        expiresAt: inv.expiresAt.toISOString(),
+        createdAt: toIsoString(inv.createdAt),
+        lastSentAt: toIsoStringOrNull(inv.lastSentAt),
+        expiresAt: toIsoString(inv.expiresAt),
       }))
 
       return { members, avatarMap, formattedInvitations }
@@ -296,6 +311,87 @@ const updateThemeSchema = z.object({
   brandingConfig: z.record(z.string(), z.unknown()),
 })
 
+const supportAccessSchema = z
+  .object({
+    mode: z.enum(['anonymous', 'authenticated', 'selected', 'team']),
+    segmentIds: z.array(z.string()).max(50).optional().default([]),
+    principalIds: z.array(z.string()).max(100).optional().default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === 'selected' && value.segmentIds.length + value.principalIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Selected access requires at least one user or segment',
+        path: ['mode'],
+      })
+    }
+  })
+
+function normalizeSupportAccessForCompare(
+  access: SupportAccessConfig | undefined,
+  fallback: SupportAccessConfig
+): SupportAccessConfig {
+  return {
+    mode: access?.mode ?? fallback.mode,
+    segmentIds: [...(access?.segmentIds ?? [])].sort(),
+    principalIds: [...(access?.principalIds ?? [])].sort(),
+  }
+}
+
+async function validateSupportAccessInput(
+  access: SupportAccessConfig | undefined,
+  options: { allowAnonymous: boolean }
+): Promise<SupportAccessConfig | undefined> {
+  if (!access) return undefined
+  if (!options.allowAnonymous && access.mode === 'anonymous') {
+    throw new ValidationError(
+      'INVALID_SUPPORT_ACCESS',
+      'Portal Support cannot be available to anonymous visitors'
+    )
+  }
+
+  const segmentIds = Array.from(new Set(access.segmentIds ?? [])) as SegmentId[]
+  const principalIds = Array.from(new Set(access.principalIds ?? [])) as PrincipalId[]
+  if (access.mode === 'selected' && segmentIds.length + principalIds.length === 0) {
+    throw new ValidationError(
+      'INVALID_SUPPORT_ACCESS',
+      'Selected access requires at least one user or segment'
+    )
+  }
+
+  if (segmentIds.length > 0) {
+    const found = await db
+      .select({ id: segments.id })
+      .from(segments)
+      .where(and(inArray(segments.id, segmentIds), isNull(segments.deletedAt)))
+    const valid = new Set(found.map((row) => row.id))
+    const missing = segmentIds.filter((id) => !valid.has(id))
+    if (missing.length > 0) {
+      throw new ValidationError('INVALID_SUPPORT_ACCESS', 'Unknown or deleted segment selected')
+    }
+  }
+
+  if (principalIds.length > 0) {
+    const found = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(
+        and(
+          inArray(principal.id, principalIds),
+          eq(principal.role, 'user'),
+          eq(principal.type, 'user')
+        )
+      )
+    const valid = new Set(found.map((row) => row.id))
+    const missing = principalIds.filter((id) => !valid.has(id))
+    if (missing.length > 0) {
+      throw new ValidationError('INVALID_SUPPORT_ACCESS', 'Unknown portal user selected')
+    }
+  }
+
+  return { mode: access.mode, segmentIds, principalIds }
+}
+
 const updatePortalConfigSchema = z.object({
   oauth: z.record(z.string(), z.boolean().optional()).optional(),
   features: z
@@ -315,6 +411,7 @@ const updatePortalConfigSchema = z.object({
   support: z
     .object({
       enabled: z.boolean().optional(),
+      access: supportAccessSchema.optional(),
     })
     .optional(),
 })
@@ -355,8 +452,42 @@ export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update portal config')
     try {
-      await requireAuth({ roles: ['admin'] })
-      return await updatePortalConfig(data as UpdatePortalConfigInput)
+      const auth = await requireAuth({ roles: ['admin'] })
+      const supportAccessInput = data.support?.access as SupportAccessConfig | undefined
+      const before = supportAccessInput ? await getPortalConfig() : null
+      const validatedAccess = await validateSupportAccessInput(supportAccessInput, {
+        allowAnonymous: false,
+      })
+      const nextData = {
+        ...data,
+        ...(data.support && {
+          support: {
+            ...data.support,
+            ...(validatedAccess && { access: validatedAccess }),
+          },
+        }),
+      }
+      const updated = await updatePortalConfig(nextData as UpdatePortalConfigInput)
+      if (before && validatedAccess) {
+        const beforeAccess = normalizeSupportAccessForCompare(
+          before.support?.access,
+          DEFAULT_PORTAL_SUPPORT_ACCESS
+        )
+        const afterAccess = normalizeSupportAccessForCompare(
+          updated.support?.access,
+          DEFAULT_PORTAL_SUPPORT_ACCESS
+        )
+        if (JSON.stringify(beforeAccess) !== JSON.stringify(afterAccess)) {
+          await recordAuditEvent({
+            event: 'portal.support_access.changed',
+            actor: actorFromAuth(auth),
+            target: { type: 'settings', id: 'portal-config' },
+            before: { access: beforeAccess },
+            after: { access: afterAccess },
+          })
+        }
+      }
+      return updated
     } catch (error) {
       log.error({ err: error }, 'update portal config failed')
       throw error
@@ -728,6 +859,7 @@ const updateWidgetConfigSchema = z.object({
   chat: z
     .object({
       enabled: z.boolean().optional(),
+      access: supportAccessSchema.optional(),
       welcomeMessage: z.string().max(500).optional(),
       offlineMessage: z.string().max(500).optional(),
       teamName: z.string().max(80).optional(),
@@ -765,6 +897,11 @@ const updateWidgetConfigSchema = z.object({
         .optional(),
     })
     .optional(),
+  ticketing: z
+    .object({
+      enabled: z.boolean().optional(),
+    })
+    .optional(),
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
@@ -772,9 +909,44 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
     try {
-      await requireAuth({ roles: ['admin'] })
-      const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-      return await updateWidgetConfig(data)
+      const auth = await requireAuth({ roles: ['admin'] })
+      const accessInput = data.chat?.access as SupportAccessConfig | undefined
+      const { getWidgetConfig, updateWidgetConfig } =
+        await import('@/lib/server/domains/settings/settings.widget')
+      const before = accessInput ? await getWidgetConfig() : null
+      const validatedAccess = await validateSupportAccessInput(accessInput, {
+        allowAnonymous: true,
+      })
+      const nextData = {
+        ...data,
+        ...(data.chat && {
+          chat: {
+            ...data.chat,
+            ...(validatedAccess && { access: validatedAccess }),
+          },
+        }),
+      }
+      const updated = await updateWidgetConfig(nextData as UpdateWidgetConfigInput)
+      if (before && validatedAccess) {
+        const beforeAccess = normalizeSupportAccessForCompare(
+          before.chat?.access,
+          DEFAULT_WIDGET_SUPPORT_ACCESS
+        )
+        const afterAccess = normalizeSupportAccessForCompare(
+          updated.chat?.access,
+          DEFAULT_WIDGET_SUPPORT_ACCESS
+        )
+        if (JSON.stringify(beforeAccess) !== JSON.stringify(afterAccess)) {
+          await recordAuditEvent({
+            event: 'widget.chat_access.changed',
+            actor: actorFromAuth(auth),
+            target: { type: 'settings', id: 'widget-config' },
+            before: { access: beforeAccess },
+            after: { access: afterAccess },
+          })
+        }
+      }
+      return updated
     } catch (error) {
       log.error({ err: error }, 'update widget config failed')
       throw error
@@ -843,4 +1015,79 @@ export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
       after: { moderationDefault: updated.moderationDefault },
     })
     return { moderationDefault: updated.moderationDefault }
+  })
+
+// ============================================
+// Portal Tab Configuration
+// ============================================
+
+export const getPortalTabConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch portal tab config')
+  try {
+    await requireAuth({ roles: ['admin'] })
+    const { getOrgPortalTabConfig } = await import('@/lib/server/domains/portal/index.server')
+    return await getOrgPortalTabConfig()
+  } catch (error) {
+    log.error({ error }, 'fetch portal tab config failed')
+    throw error
+  }
+})
+
+export const updatePortalTabConfigFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => {
+    const schema = z.object({
+      config: z.record(z.string(), z.boolean().optional()),
+    })
+    return schema.parse(data)
+  })
+  .handler(async ({ data }) => {
+    log.info('update portal tab config')
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
+      if (!isAdmin(auth.principal.role)) {
+        throw new ForbiddenError('FORBIDDEN', 'Admin only')
+      }
+      const { setOrgPortalTabConfig } = await import('@/lib/server/domains/portal/index.server')
+      await setOrgPortalTabConfig(data.config)
+      await recordAuditEvent({
+        event: 'portal_tabs.config_changed',
+        actor: actorFromAuth(auth),
+        target: { type: 'settings', id: 'portal-tab-config' },
+        metadata: { portalTabConfig: data.config },
+      })
+      return data.config
+    } catch (error) {
+      log.error({ error }, 'update portal tab config failed')
+      throw error
+    }
+  })
+
+export const updateSegmentTabOverridesFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => {
+    const schema = z.object({
+      segmentId: z.string(),
+      overrides: z.record(z.string(), z.boolean().optional()),
+    })
+    return schema.parse(data)
+  })
+  .handler(async ({ data }) => {
+    log.info({ segmentId: data.segmentId }, 'update segment tab overrides')
+    try {
+      const auth = await requireAuth({ roles: ['admin'] })
+      if (!isAdmin(auth.principal.role)) {
+        throw new ForbiddenError('FORBIDDEN', 'Admin only')
+      }
+      const { setSegmentTabOverrides } = await import('@/lib/server/domains/portal/index.server')
+      await setSegmentTabOverrides(data.segmentId as SegmentId, data.overrides)
+      await recordAuditEvent({
+        event: 'portal_tabs.segment_override_changed',
+        actor: actorFromAuth(auth),
+        target: { type: 'segment', id: data.segmentId },
+        metadata: { tabOverrides: data.overrides },
+      })
+      return data.overrides
+    } catch (error) {
+      log.error({ error }, 'update segment tab overrides failed')
+      throw error
+    }
   })

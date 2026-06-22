@@ -5,7 +5,6 @@ import {
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
   MapIcon,
-  UsersIcon,
   Cog6ToothIcon,
   Bars3Icon,
   GlobeAltIcon,
@@ -13,6 +12,8 @@ import {
   BookOpenIcon,
   ChartBarIcon,
   QuestionMarkCircleIcon,
+  TicketIcon,
+  BuildingOffice2Icon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -31,6 +32,8 @@ import { NotificationBell } from '@/components/notifications'
 import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
+import { useMyPermissions } from '@/lib/client/hooks/use-authz-queries'
+import { PERMISSIONS, type PermissionKey } from '@/lib/server/domains/authz'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/chat'
 
@@ -61,17 +64,40 @@ interface AdminSidebarProps {
   latestVersion?: LatestVersionResult | null
 }
 
-const navItems = [
+interface NavItemDef {
+  label: string
+  href: string
+  icon: typeof ChatBubbleLeftIcon
+  /** Optional permission gate; nav entry is hidden when actor lacks the permission. */
+  requiresPermission?: PermissionKey
+}
+
+const navItems: NavItemDef[] = [
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
+  {
+    label: 'Tickets',
+    href: '/admin/tickets',
+    icon: TicketIcon,
+    requiresPermission: PERMISSIONS.TICKET_VIEW_ALL,
+  },
+  { label: 'Customers', href: '/admin/customers', icon: BuildingOffice2Icon },
   { label: 'Conversations', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
-  { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
 function isNavActive(pathname: string, href: string) {
+  if (href === '/admin/customers') {
+    return (
+      pathname === href ||
+      pathname.startsWith('/admin/customers/') ||
+      pathname.startsWith('/admin/contacts/') ||
+      pathname === '/admin/contacts' ||
+      pathname === '/admin/users'
+    )
+  }
   return pathname === href || pathname.startsWith(href + '/')
 }
 
@@ -118,6 +144,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const flags = settings?.featureFlags as
     | { helpCenter?: boolean; supportInbox?: boolean }
     | undefined
+  const { data: myPerms } = useMyPermissions()
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
   const branding = (settings as { brandingData?: SettingsBrandingData } | undefined)?.brandingData
@@ -127,6 +154,14 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const filteredNavItems = navItems.filter((item) => {
     if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
     if (item.href === '/admin/inbox') return flags?.supportInbox ?? false
+    if (item.requiresPermission) {
+      if (!myPerms) return false
+      const ws = myPerms.workspacePermissions.includes(item.requiresPermission)
+      const team = myPerms.teamPermissions.some((t) =>
+        t.permissions.includes(item.requiresPermission!)
+      )
+      return ws || team
+    }
     return true
   })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)

@@ -33,6 +33,7 @@ import {
 import { sql, isNull } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { createId } from '@quackback/ids'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import {
@@ -53,7 +54,6 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'posts' })
@@ -555,7 +555,7 @@ export async function updatePost(
     await syncPostMentions({
       postId: updatedPost.id,
       postTitle: updatedPost.title,
-      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+      postUrl: buildPostUrl(resolvePublicBaseUrl(), board.slug, updatedPost.id),
       mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
       excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
       actor: buildEventActor(actor),
