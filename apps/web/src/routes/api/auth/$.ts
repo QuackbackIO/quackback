@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { SSO_OAUTH_CALLBACK_PATH } from '@/lib/shared/sso-test-keys'
+import { rewriteUrlToPublicBaseUrl } from '@/lib/server/public-url'
 
 /**
  * Simple rate limiter for OAuth client registration.
@@ -25,6 +26,36 @@ function isRegistrationRateLimited(request: Request): boolean {
 
   entry.count++
   return entry.count > REG_MAX
+}
+
+/**
+ * Rewrite localhost redirects to use the public origin from forwarded
+ * headers. When accessed via a tunnel (Cloudflare, ngrok, etc), Better Auth
+ * may redirect to the configured localhost baseUrl instead of the actual
+ * public origin where the request came from.
+ */
+async function rewriteAuthRedirect(response: Response, request: Request): Promise<Response> {
+  // Only handle redirect responses
+  const status = response.status
+  if (status < 300 || status >= 400) {
+    return response
+  }
+
+  const location = response.headers.get('location')
+  if (!location) {
+    return response
+  }
+
+  // Rewrite localhost URLs to use public origin
+  const rewritten = rewriteUrlToPublicBaseUrl(location, request.headers)
+  if (rewritten !== location) {
+    // Clone the response and update the Location header
+    const newResponse = new Response(response.body, response)
+    newResponse.headers.set('location', rewritten)
+    return newResponse
+  }
+
+  return response
 }
 
 export const Route = createFileRoute('/api/auth/$')({
@@ -57,7 +88,9 @@ export const Route = createFileRoute('/api/auth/$')({
         }
 
         const { auth } = await import('@/lib/server/auth/index')
-        return await auth.handler(request)
+        let response = await auth.handler(request)
+        response = await rewriteAuthRedirect(response, request)
+        return response
       },
 
       /**
@@ -100,7 +133,9 @@ export const Route = createFileRoute('/api/auth/$')({
         }
 
         const { auth } = await import('@/lib/server/auth/index')
-        return await auth.handler(request)
+        let response = await auth.handler(request)
+        response = await rewriteAuthRedirect(response, request)
+        return response
       },
     },
   },

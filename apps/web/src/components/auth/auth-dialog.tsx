@@ -66,6 +66,7 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
           authConfig={authConfig}
           workspaceName={workspaceName}
           onModeSwitch={setMode}
+          onSuccess={onAuthSuccess}
           onContextChange={setFormContext}
         />
       </DialogContent>

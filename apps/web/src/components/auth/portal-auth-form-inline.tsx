@@ -53,6 +53,15 @@ interface PortalAuthFormInlineProps {
   /** Workspace display name shown in Stage 1 / Stage 2 copy. */
   workspaceName?: string
   onModeSwitch?: (mode: 'login' | 'signup') => void
+  /**
+   * Called immediately when authentication completes in this window.
+   *
+   * Same-window auth still posts to the BroadcastChannel for any other tabs,
+   * but BroadcastChannel delivery within a single window is racy (especially
+   * with browser extensions like password managers in the mix), so we also
+   * notify our hosting dialog directly to guarantee it closes.
+   */
+  onSuccess?: () => void
   /** Lets the surrounding dialog adapt its header to the form's step. */
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
 }
@@ -135,6 +144,7 @@ export function PortalAuthFormInline({
   invitationId,
   workspaceName,
   onModeSwitch,
+  onSuccess,
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const intl = useIntl()
@@ -367,6 +377,7 @@ export function PortalAuthFormInline({
       }
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
+      onSuccess?.()
     } catch (err) {
       setError(
         err instanceof Error

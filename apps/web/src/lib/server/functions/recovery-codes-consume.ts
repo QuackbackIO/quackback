@@ -25,7 +25,7 @@ import { hashRecoveryCode, verifyRecoveryCode } from '@/lib/server/auth/recovery
 import { mintMagicLinkUrl } from '@/lib/server/auth/magic-link-mint'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { bucketRetryAfter, incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
-import { config } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'recovery' })
@@ -163,7 +163,7 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
       email: data.email,
       callbackPath: '/admin',
       errorCallbackPath: '/admin/login',
-      portalUrl: config.baseUrl,
+      portalUrl: resolvePublicBaseUrl(headers),
     })
 
     await recordAuditEvent({

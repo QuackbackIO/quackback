@@ -13,8 +13,10 @@ import {
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
+import { MCP_SCOPES } from '@/lib/server/mcp/types'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { rewriteUrlToPublicBaseUrl } from '@/lib/server/public-url'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -382,7 +384,11 @@ async function createAuth() {
         const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
         const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
         const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await sendPasswordResetEmail({ to: user.email, resetLink: url, logoUrl })
+        await sendPasswordResetEmail({
+          to: user.email,
+          resetLink: rewriteUrlToPublicBaseUrl(url),
+          logoUrl,
+        })
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
     },
@@ -431,6 +437,7 @@ async function createAuth() {
           after: async (user) => {
             // Cast user.id to the branded TypeID type for database operations
             const userId = user.id as ReturnType<typeof generateId<'user'>>
+            const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
 
             // Check if member already exists (in case of race conditions)
             const existingPrincipal = await db.query.principal.findFirst({
@@ -438,7 +445,6 @@ async function createAuth() {
             })
 
             if (!existingPrincipal) {
-              const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
               await db.insert(principalTable).values({
                 id: generateId('principal'),
                 userId,
@@ -461,6 +467,32 @@ async function createAuth() {
                 'created principal record'
               )
             }
+
+            // Link the new user to a CRM contact when their email is verified.
+            // Best-effort: failures are swallowed inside `linkContactForUser`.
+            const { linkContactForUser } = await import('./link-contact')
+            await linkContactForUser({
+              userId,
+              email: user.email ?? null,
+              emailVerified: user.emailVerified === true,
+              anonymous: isAnonymous,
+            })
+          },
+        },
+        update: {
+          after: async (user) => {
+            // Mirror the create hook: re-evaluate the contact link whenever
+            // a user row changes (most importantly when `emailVerified` flips
+            // from false → true after the OTP / magic-link round-trip).
+            const userId = user.id as ReturnType<typeof generateId<'user'>>
+            const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
+            const { linkContactForUser } = await import('./link-contact')
+            await linkContactForUser({
+              userId,
+              email: user.email ?? null,
+              emailVerified: user.emailVerified === true,
+              anonymous: isAnonymous,
+            })
           },
         },
       },
@@ -516,34 +548,18 @@ async function createAuth() {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
 
-        // Quackback-specific scopes
-        scopes: [
-          'openid',
-          'profile',
-          'email',
-          'offline_access',
-          'read:feedback',
-          'write:feedback',
-          'write:changelog',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
-        ],
+        // Quackback-specific scopes (OIDC + the full MCP scope catalogue).
+        scopes: ['openid', 'profile', 'email', 'offline_access', ...MCP_SCOPES],
 
-        // Default scopes for dynamically registered clients
+        // Default scopes for dynamically registered clients. Mirrors the full
+        // catalogue minus `manage:admin`, which is sensitive (role/API-key/
+        // webhook management) and must be granted explicitly via consent.
         clientRegistrationDefaultScopes: [
           'openid',
           'profile',
           'email',
-          'read:feedback',
           'offline_access',
-          'write:feedback',
-          'write:changelog',
-          'read:article',
-          'write:article',
-          'read:chat',
-          'write:chat',
+          ...MCP_SCOPES.filter((s) => s !== 'manage:admin'),
         ],
 
         // MCP endpoint is a valid token audience
