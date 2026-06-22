@@ -796,8 +796,92 @@
     {
       "idx": 113,
       "version": "7",
-      "when": 1782432000000,
-      "tag": "0113_integration_channelid_backfill",
+      "when": 1782432000001,
+      "tag": "0113_ticketing_and_authz",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1782518400000,
+      "tag": "0114_ticket_thread_external_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1782604800000,
+      "tag": "0115_widget_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1782691200000,
+      "tag": "0116_integration_channelid_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1782777600000,
+      "tag": "0117_changelog_taxonomy",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1782864000000,
+      "tag": "0118_ticket_email_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0119_github_sync_mapping_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1783036800000,
+      "tag": "0120_widget_ticket_requester_owned_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0121_portal_tab_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0122_help_center_category_audience",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0123_changelog_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1783382400000,
+      "tag": "0124_visibility_metadata_normalization",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0125_external_surface_permissions",
       "breakpoints": true
     }
   ]

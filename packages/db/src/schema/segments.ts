@@ -47,6 +47,11 @@ export type SegmentRuleAttribute =
   | 'last_active_days_ago'
   | 'signup_source'
   | 'principal_type'
+  | 'contact_title'
+  | 'contact_metadata_key'
+  | 'organization_domain'
+  | 'organization_external_id'
+  | 'organization_metadata_key'
 
 export interface SegmentCondition {
   attribute: SegmentRuleAttribute
@@ -191,8 +196,12 @@ export const userSegments = pgTable(
 // Relations
 // ============================================
 
-export const segmentsRelations = relations(segments, ({ many }) => ({
+export const segmentsRelations = relations(segments, ({ many, one }) => ({
   members: many(userSegments),
+  portalTabOverride: one(portalTabSegmentOverrides, {
+    fields: [segments.id],
+    references: [portalTabSegmentOverrides.segmentId],
+  }),
 }))
 
 export const userSegmentsRelations = relations(userSegments, ({ one }) => ({
@@ -205,3 +214,62 @@ export const userSegmentsRelations = relations(userSegments, ({ one }) => ({
     references: [principal.id],
   }),
 }))
+
+// ============================================
+// Portal Tab Configuration
+// ============================================
+
+/**
+ * Portal tab visibility structure.
+ * Each field represents whether that tab is visible to the user.
+ * Used for org-level defaults and segment-level overrides.
+ */
+export interface PortalTabConfig {
+  feedback?: boolean
+  roadmap?: boolean
+  changelog?: boolean
+  myTickets?: boolean
+  helpCenter?: boolean
+  support?: boolean
+}
+
+/**
+ * Segment-level portal tab visibility overrides.
+ *
+ * When set, these overrides take precedence over org-level defaults
+ * for users in this segment. If a user is in multiple segments with
+ * overrides, the union of enabled tabs is shown (any segment enabling
+ * a tab makes it visible).
+ */
+export const portalTabSegmentOverrides = pgTable(
+  'portal_tab_segment_overrides',
+  {
+    id: typeIdWithDefault('portal_tab_override')('id').primaryKey(),
+    segmentId: typeIdColumn('segment')('segment_id')
+      .notNull()
+      .references(() => segments.id, { onDelete: 'cascade' })
+      .unique(),
+    /**
+     * Override configuration (JSON)
+     * Structure: { feedback?, roadmap?, changelog?, myTickets?, helpCenter?, support? }
+     * Null/absent fields inherit from org-level defaults.
+     */
+    overrides: jsonb('overrides').$type<PortalTabConfig>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index('portal_tab_segment_overrides_segment_id_idx').on(table.segmentId)]
+)
+
+export const portalTabSegmentOverridesRelations = relations(
+  portalTabSegmentOverrides,
+  ({ one }) => ({
+    segment: one(segments, {
+      fields: [portalTabSegmentOverrides.segmentId],
+      references: [segments.id],
+    }),
+  })
+)

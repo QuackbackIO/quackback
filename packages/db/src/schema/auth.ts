@@ -325,6 +325,22 @@ export const settings = pgTable('settings', {
    * lost-update on concurrent writes.
    */
   authConfigVersion: integer('auth_config_version').notNull().default(0),
+  /**
+   * Portal tab visibility configuration (JSON)
+   * Structure: { feedback, roadmap, changelog, myTickets, helpCenter, support }
+   * Each field is a boolean indicating if the tab is visible.
+   * Null means all tabs are enabled (default).
+   */
+  portalTabConfig: text('portal_tab_config'),
+  /**
+   * Changelog category/product visibility configuration (JSON)
+   * Structure: { restrictCategories?, allowedCategoryIds?, restrictProducts?, allowedProductIds? }
+   * When restrictCategories is false (default), all categories are visible.
+   * When true, only entries whose category is in allowedCategoryIds are shown
+   * (entries with no category are always visible).
+   * Null/absent means no restrictions (all visible).
+   */
+  changelogVisibilityConfig: text('changelog_visibility_config'),
 })
 
 /**

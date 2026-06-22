@@ -11,6 +11,7 @@ import {
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { posts, comments } from './posts'
+import { tickets } from './tickets'
 import { principal } from './auth'
 
 /**
@@ -72,6 +73,13 @@ export const notificationPreferences = pgTable(
     emailStatusChange: boolean('email_status_change').default(true).notNull(),
     emailNewComment: boolean('email_new_comment').default(true).notNull(),
     emailMuted: boolean('email_muted').default(false).notNull(),
+    emailTicketThreads: boolean('email_ticket_threads').default(true).notNull(),
+    emailTicketProperties: boolean('email_ticket_properties').default(true).notNull(),
+    emailTicketStatus: boolean('email_ticket_status').default(true).notNull(),
+    emailTicketAssignment: boolean('email_ticket_assignment').default(true).notNull(),
+    emailTicketParticipants: boolean('email_ticket_participants').default(false).notNull(),
+    emailTicketShares: boolean('email_ticket_shares').default(false).notNull(),
+    emailTicketSla: boolean('email_ticket_sla').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -155,6 +163,9 @@ export const inAppNotifications = pgTable(
     commentId: typeIdColumnNullable('comment')('comment_id').references(() => comments.id, {
       onDelete: 'cascade',
     }),
+    ticketId: typeIdColumnNullable('ticket')('ticket_id').references(() => tickets.id, {
+      onDelete: 'set null',
+    }),
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     readAt: timestamp('read_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -169,6 +180,8 @@ export const inAppNotifications = pgTable(
       .where(sql`read_at IS NULL AND archived_at IS NULL`),
     // Find notifications by related post
     index('in_app_notifications_post_idx').on(table.postId),
+    // Find notifications by related ticket
+    index('in_app_notifications_ticket_idx').on(table.ticketId, table.createdAt),
   ]
 )
 
@@ -184,5 +197,9 @@ export const inAppNotificationsRelations = relations(inAppNotifications, ({ one 
   comment: one(comments, {
     fields: [inAppNotifications.commentId],
     references: [comments.id],
+  }),
+  ticket: one(tickets, {
+    fields: [inAppNotifications.ticketId],
+    references: [tickets.id],
   }),
 }))

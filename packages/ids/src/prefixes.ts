@@ -27,6 +27,13 @@ export const ID_PREFIXES = {
   // Planning domain
   roadmap: 'roadmap',
   changelog: 'changelog',
+  changelog_category: 'changelog_cat',
+  changelog_product: 'changelog_prod',
+  changelog_segment_visibility: 'clseg_vis',
+
+  // Widget embedding
+  widget_application: 'widget_app',
+  widget_profile: 'widget_profile',
 
   // Live chat
   conversation: 'conversation',
@@ -43,6 +50,8 @@ export const ID_PREFIXES = {
   integration: 'integration',
   platform_cred: 'platform_cred',
   event_mapping: 'event_mapping',
+  // Shared prefix for both post_external_links and ticket_external_links.
+  // Same semantic concept (external tracker link); separate FK columns disambiguate.
   linked_entity: 'linked_entity',
   sync_log: 'sync_log',
   slack_monitor: 'slack_monitor',
@@ -58,6 +67,7 @@ export const ID_PREFIXES = {
 
   // Users
   segment: 'segment',
+  portal_tab_override: 'portal_tab_override',
   user_attr: 'user_attr',
 
   // AI
@@ -75,6 +85,50 @@ export const ID_PREFIXES = {
   merge_suggestion: 'merge_sug',
   activity: 'activity',
 
+  // Ticketing — access & visibility (Phase 1: RBAC + teams + audit)
+  team: 'team',
+  team_membership: 'team_member',
+  role: 'role',
+  permission: 'perm',
+  role_permission: 'role_perm',
+  role_assignment: 'role_asgn',
+  // Shares 'audit' prefix with audit_log (better-auth security events).
+  // Both store UUIDs internally; prefix is display-layer only. Safe because no
+  // code resolves entity type from a TypeID prefix string across tables.
+  audit_event: 'audit',
+
+  // Ticketing — Phase 2: organizations & contacts
+  organization: 'org',
+  contact: 'contact',
+  contact_user_link: 'cu_link',
+
+  // Ticketing — Phase 3: ticket core
+  ticket: 'ticket',
+  ticket_status: 'ticket_status',
+  ticket_thread: 'ticket_thread',
+  ticket_attachment: 'ticket_att',
+  ticket_participant: 'ticket_part',
+  ticket_share: 'ticket_share',
+  ticket_activity: 'ticket_act',
+
+  // Ticketing — Phase 4: inboxes, channels, routing
+  inbox: 'inbox',
+  inbox_channel: 'inbox_ch',
+  inbox_membership: 'inbox_mem',
+  routing_rule: 'route_rule',
+
+  // Ticketing — Phase 5: SLA + escalations
+  business_hours: 'bizhrs',
+  sla_policy: 'sla_pol',
+  sla_target: 'sla_tgt',
+  ticket_sla_clock: 'sla_clk',
+  escalation_rule: 'esc_rule',
+  sla_escalation_log: 'esc_log',
+
+  // Ticketing — Phase 7: subscriptions + webhook delivery log
+  ticket_subscription: 'tkt_sub',
+  webhook_delivery: 'wh_deliv',
+
   // ============================================
   // Auth Entities (Better-auth, text primary keys)
   // ============================================
@@ -89,6 +143,8 @@ export const ID_PREFIXES = {
   domain: 'domain',
   transfer_token: 'transfer_token',
   two_factor: 'two_factor',
+  // Shares 'audit' prefix with audit_event (ticketing operational audit).
+  // See audit_event comment for rationale.
   audit_log: 'audit',
   sso_recovery_code: 'rcode',
 
