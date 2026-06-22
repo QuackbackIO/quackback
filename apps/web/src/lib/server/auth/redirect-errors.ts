@@ -62,10 +62,6 @@ export const AUTH_BLOCK_MESSAGES: Record<AuthBlockCode, string> = {
     "This account doesn't have team access. Team membership is by invitation only. Please contact your administrator.",
 }
 
-const LOGIN_PATHS = new Set(['/admin/login', '/auth/login'])
-
-const GENERIC_BLOCK_MESSAGE = "Sign-in isn't allowed right now. Please try again."
-
 /**
  * 403 domain error for pre-check denials. Extending `ForbiddenError`
  * keeps the auth-client throw path on the same hierarchy the rest of
@@ -79,11 +75,20 @@ export class AuthBlockedError extends ForbiddenError {
 }
 
 /**
- * Inspect a Response to see if it was redirected to a login error
- * page. Returns the corresponding error to throw, or null if this
- * was a normal response. Exported so the onResponse hook stays a
- * one-liner and the detection logic is unit-testable without a real
- * Response.
+ * Inspect a Response to see if it was redirected to a sign-in error
+ * URL. Detection is code-based (not path-based): the `error` query
+ * param must be a known code in `AUTH_BLOCK_MESSAGES`. This catches
+ * both the canonical `/?signin=1&error=<code>` destination and any
+ * legacy `/auth/login?error=<code>` shape without relying on a
+ * hard-coded path allowlist.
+ *
+ * Returns null when:
+ *  - the response was not redirected
+ *  - there is no `error` param in the final URL
+ *  - the `error` value is not a known AUTH_BLOCK_MESSAGES code
+ *
+ * Exported so the onResponse hook stays a one-liner and the detection
+ * logic is unit-testable without a real Response.
  */
 export function detectAuthBlockRedirect(response: {
   redirected: boolean
@@ -96,9 +101,9 @@ export function detectAuthBlockRedirect(response: {
   } catch {
     return null
   }
-  if (!LOGIN_PATHS.has(parsed.pathname)) return null
   const code = parsed.searchParams.get('error')
   if (!code) return null
-  const message = AUTH_BLOCK_MESSAGES[code as AuthBlockCode] ?? GENERIC_BLOCK_MESSAGE
+  const message = AUTH_BLOCK_MESSAGES[code as AuthBlockCode]
+  if (!message) return null
   return new AuthBlockedError(code, message)
 }

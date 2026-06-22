@@ -967,7 +967,7 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             '@/lib/server/auth/recovery-codes-status'
           )
           if (!(await hasActiveRecoveryCodes())) {
-            throw new Error('recovery_codes_required')
+            throw new ForbiddenError('RECOVERY_CODES_REQUIRED', 'recovery_codes_required')
           }
         }
 

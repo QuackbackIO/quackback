@@ -74,14 +74,15 @@ export const Route = createFileRoute('/_portal')({
       const hasThemeConfig = brandingConfig.light || brandingConfig.dark
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
-      // Parse the auth-prompt search params once; Task 4 will reuse this binding
-      // to add an instant-SSO redirect above the gate build.
+      // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl).
       const prompt = parseAuthPromptSearch((deps ?? {}) as Record<string, unknown>)
       // Instant-SSO: when the workspace has exactly one public OIDC provider
       // and no public password/magic-link, redirect anonymous visitors straight
-      // to the IdP. Skip when `?prompt=login` is set — that always escapes to
-      // the sign-in dialog so the user can pick an alternative if needed.
-      if (prompt.prompt !== 'login') {
+      // to the IdP. Skip for 'unauthorized' (signed-in non-member) — that
+      // visitor already has a session and a force-redirect would be wrong.
+      // Skip when `?prompt=login` is set — that always escapes to the sign-in
+      // dialog so the user can pick an alternative if needed.
+      if (prompt.prompt !== 'login' && accessResult.reason === 'unauthenticated') {
         const instant = await resolveInstantSsoRedirectFn({ data: { callbackUrl: prompt.callbackUrl } })
         if (instant) throw redirect({ href: instant.url })
       }

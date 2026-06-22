@@ -275,7 +275,7 @@ export async function handleSignInPreCheck(ctx: {
   // inbox control at the verified domain shouldn't bypass the IdP's
   // attestations even for brand-new sign-ups.
   if (isHardBound(provider, email, providers, registeredOidcIds)) {
-    throw ctx.redirect('/auth/login?callbackUrl=/admin&error=verified_domain_requires_sso')
+    throw ctx.redirect('/?signin=1&callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
   if (!principalRow) return
@@ -287,11 +287,13 @@ export async function handleSignInPreCheck(ctx: {
     // Team roles land on the unified login with a `/admin` callback (the
     // break-glass form); the error rides as a second param via `&` — a
     // second `?` would silently drop it. Portal roles keep the plain
-    // `/auth/login?error=` shape.
+    // `/?signin=1&error=` shape. All paths go directly to `/?signin=1`
+    // so the auth client's detectAuthBlockRedirect can match on the
+    // error code regardless of the redirect chain.
     throw ctx.redirect(
       isTeamRole
-        ? `/auth/login?callbackUrl=/admin&error=${errorCode}`
-        : `/auth/login?error=${errorCode}`
+        ? `/?signin=1&callbackUrl=/admin&error=${errorCode}`
+        : `/?signin=1&error=${errorCode}`
     )
   }
 
@@ -677,11 +679,13 @@ export async function handleCallbackPolicyCleanup(
   // Team roles route to the unified login carrying a `/admin` callback
   // (the break-glass form); the error joins with `&` so it isn't lost
   // behind a second `?`. Portal roles keep the plain `?error=` shape.
+  // All targets go directly to `/?signin=1` so detectAuthBlockRedirect
+  // matches on the error code without following a redirect stub.
   const blockedRedirect = (errorCode: string) =>
     ctx.redirect(
       isTeamRole
-        ? `/auth/login?callbackUrl=/admin&error=${errorCode}`
-        : `/auth/login?error=${errorCode}`
+        ? `/?signin=1&callbackUrl=/admin&error=${errorCode}`
+        : `/?signin=1&error=${errorCode}`
     )
 
   // Drop the user/account/principal rows iff the user record is brand-
@@ -918,7 +922,7 @@ export async function handleMagicLinkPostSignInGate(
   throw ctx.redirect(
     outcome === 'setup-required'
       ? '/auth/two-factor-setup-required'
-      : '/auth/login?callbackUrl=/admin&error=use_password_for_2fa'
+      : '/?signin=1&callbackUrl=/admin&error=use_password_for_2fa'
   )
 }
 

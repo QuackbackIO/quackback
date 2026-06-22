@@ -99,10 +99,8 @@ const oauthProvidersSchema = z
     github: z.boolean().optional(),
     password: z.boolean().optional(),
     // `magicLink` is the email-link sign-in option surfaced alongside
-    // (or instead of) password. Defaults to false, so a managed-cloud
-    // control plane has to declare it explicitly to push magic-link as
-    // the primary admin auth surface. Self-host tenants keep the legacy
-    // default unless their declarative config opts in.
+    // (or instead of) password. Defaults to false so a deployment must
+    // explicitly declare it to enable magic-link as a sign-in surface.
     magicLink: z.boolean().optional(),
   })
   .strict()

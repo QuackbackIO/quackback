@@ -47,13 +47,29 @@ describe('detectAuthBlockRedirect', () => {
     expect(err?.message).toMatch(/too many sign-in attempts/i)
   })
 
-  it('falls back to a generic message for an unknown error code', () => {
+  it('detects a block on the canonical /?signin=1&error=<code> destination', () => {
     const err = detectAuthBlockRedirect({
       redirected: true,
-      url: 'https://t.example/admin/login?error=brand_new_invented_code',
+      url: 'https://t.example/?signin=1&error=verified_domain_requires_sso',
     })
-    expect(err?.code).toBe('brand_new_invented_code')
-    expect(err?.message).toMatch(/sign-in isn't allowed right now/i)
+    expect(err).toBeInstanceOf(AuthBlockedError)
+    expect(err?.code).toBe('verified_domain_requires_sso')
+    expect(err?.message).toMatch(/single sign-on/i)
+  })
+
+  it('returns null for a plain / with no error param', () => {
+    expect(
+      detectAuthBlockRedirect({ redirected: true, url: 'https://t.example/' })
+    ).toBeNull()
+  })
+
+  it('returns null for an unknown error code (no generic fallback)', () => {
+    expect(
+      detectAuthBlockRedirect({
+        redirected: true,
+        url: 'https://t.example/admin/login?error=brand_new_invented_code',
+      })
+    ).toBeNull()
   })
 
   it('tolerates a malformed url instead of throwing', () => {

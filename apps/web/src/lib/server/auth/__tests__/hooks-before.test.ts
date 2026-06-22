@@ -199,7 +199,7 @@ describe('handleSignInPreCheck — per-domain enforced', () => {
     const ctx = ctxFor('/sign-in/email', { email: 'a@acme.com' })
 
     await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
-      'REDIRECT:/auth/login?callbackUrl=/admin&error=verified_domain_requires_sso'
+      'REDIRECT:/?signin=1&callbackUrl=/admin&error=verified_domain_requires_sso'
     )
   })
 
@@ -290,7 +290,7 @@ describe('handleSignInPreCheck — isAuthMethodAllowed gate', () => {
     const ctx = ctxFor('/sign-in/email', { email: 'a@anywhere.com' })
 
     await expect(handleSignInPreCheck(ctx)).rejects.toThrow(
-      /\/auth\/login\?callbackUrl=\/admin&error=password_method_not_allowed/
+      /\/\?signin=1&callbackUrl=\/admin&error=password_method_not_allowed/
     )
   })
 

@@ -4,6 +4,7 @@ import { getPublicOidcProviders, getPublicPortalConfig } from '@/lib/server/doma
 import { resolveInstantSsoProvider } from '@/lib/server/auth/instant-sso'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
 
 /** Server-side: returns { url } to the IdP when instant-SSO applies and the
  *  visitor is anonymous, else null. Caller decides whether to redirect. */
@@ -25,8 +26,9 @@ export const resolveInstantSsoRedirectFn = createServerFn({ method: 'GET' })
     if (!providerId) return null
 
     const headers = getRequestHeaders()
+    const safeCallback = isSafeCallbackUrl(data.callbackUrl) ? data.callbackUrl : '/'
     const result = await auth.api.signInWithOAuth2({
-      body: { providerId, callbackURL: data.callbackUrl ?? '/', disableRedirect: true },
+      body: { providerId, callbackURL: safeCallback, disableRedirect: true },
       headers,
     })
     return result?.url ? { url: result.url } : null

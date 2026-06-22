@@ -10,5 +10,6 @@ export async function hasActiveRecoveryCodes(): Promise<boolean> {
     .select({ id: ssoRecoveryCode.id })
     .from(ssoRecoveryCode)
     .where(isNull(ssoRecoveryCode.usedAt))
+    .limit(1)
   return rows.length > 0
 }
