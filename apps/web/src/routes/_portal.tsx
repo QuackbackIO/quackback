@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, Outlet, useSearch } from '@tanstack/react-router'
+import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
@@ -16,8 +16,10 @@ import {
 } from '@/lib/server/functions/portal-access'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
+import { resolveInstantSsoProvider } from '@/lib/server/auth/instant-sso'
 
 export const Route = createFileRoute('/_portal')({
   // Only type the auth-prompt keys; child routes receive their own params from
@@ -35,13 +37,14 @@ export const Route = createFileRoute('/_portal')({
   } => ({
     signin: search.signin === '1' || search.signin === 'signup' ? (search.signin as string) : undefined,
     prompt: search.prompt === 'login' ? 'login' : undefined,
-    callbackUrl: typeof search.callbackUrl === 'string' ? search.callbackUrl : undefined,
+    callbackUrl: isSafeCallbackUrl(search.callbackUrl) ? (search.callbackUrl as string) : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
   loaderDeps: ({ search }) => ({
-    signin: (search as Record<string, unknown>).signin,
-    prompt: (search as Record<string, unknown>).prompt,
-    callbackUrl: (search as Record<string, unknown>).callbackUrl,
+    signin: search.signin,
+    prompt: search.prompt,
+    callbackUrl: search.callbackUrl,
+    error: search.error,
   }),
   loader: async ({ context, deps }) => {
     const { session, settings, userRole, baseUrl } = context
@@ -75,16 +78,22 @@ export const Route = createFileRoute('/_portal')({
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
       // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl).
-      const prompt = parseAuthPromptSearch((deps ?? {}) as Record<string, unknown>)
+      const prompt = parseAuthPromptSearch(deps ?? {})
       // Instant-SSO: when the workspace has exactly one public OIDC provider
       // and no public password/magic-link, redirect anonymous visitors straight
       // to the IdP. Skip for 'unauthorized' (signed-in non-member) — that
       // visitor already has a session and a force-redirect would be wrong.
       // Skip when `?prompt=login` is set — that always escapes to the sign-in
       // dialog so the user can pick an alternative if needed.
-      if (prompt.prompt !== 'login' && accessResult.reason === 'unauthenticated') {
-        const instant = await resolveInstantSsoRedirectFn({ data: { callbackUrl: prompt.callbackUrl } })
-        if (instant) throw redirect({ href: instant.url })
+      if (!prompt.suppressInstantSso && accessResult.reason === 'unauthenticated') {
+        const instantProviderId = resolveInstantSsoProvider({
+          publicProviders: settings?.publicPortalConfig?.oidcProviders ?? [],
+          portalOauth: settings?.publicPortalConfig?.oauth ?? {},
+        })
+        if (instantProviderId) {
+          const instant = await resolveInstantSsoRedirectFn({ data: { callbackUrl: prompt.callbackUrl } })
+          if (instant) throw redirect({ href: instant.url })
+        }
       }
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
@@ -98,14 +107,14 @@ export const Route = createFileRoute('/_portal')({
         // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
         callbackUrl: prompt.callbackUrl,
-        autoOpenSignin: prompt.signin ?? (prompt.prompt === 'login' ? 'login' : undefined),
+        autoOpenSignin: prompt.signin,
         authConfig: {
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
           oidcProviders: settings?.publicPortalConfig?.oidcProviders,
         },
       }
-      return { gate }
+      return { gate, prompt }
     }
 
     const org = settings?.settings
@@ -153,6 +162,7 @@ export const Route = createFileRoute('/_portal')({
     }
 
     const { locale, messages } = await loadPortalIntl()
+    const prompt = parseAuthPromptSearch(deps ?? {})
 
     return {
       org: redactSettingsForClient(org),
@@ -169,6 +179,7 @@ export const Route = createFileRoute('/_portal')({
       authConfig,
       locale,
       messages,
+      prompt,
       gate: null,
     }
   },
@@ -246,16 +257,15 @@ function PortalLayout() {
     authConfig,
     locale,
     messages,
+    prompt,
   } = loaderData
 
-  const rawSearch = useSearch({ from: '/_portal' }) as Record<string, unknown>
-  const prompt = parseAuthPromptSearch(rawSearch)
   const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
-        <PortalAuthAutoOpen signin={prompt.signin} prompt={prompt.prompt} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
+        <PortalAuthAutoOpen signin={prompt.signin} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -281,7 +291,6 @@ function PortalLayout() {
 /** Mounts inside AuthPopoverProvider so the hook can access its context. */
 function PortalAuthAutoOpen(props: {
   signin?: 'login' | 'signup'
-  prompt?: 'login'
   callbackUrl?: string
   error?: string
   isAuthenticated: boolean

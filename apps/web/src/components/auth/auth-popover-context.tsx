@@ -38,20 +38,18 @@ export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
     setIsOpen(true)
   }, [])
 
-  const closeAuthPopover = useCallback(() => {
+  const reset = useCallback(() => {
     setIsOpen(false)
     setCallbackUrl(undefined)
     onSuccessCallbackRef.current = null
   }, [])
 
+  const closeAuthPopover = reset
+
   const onAuthSuccess = useCallback(() => {
-    // Call the success callback if provided
     onSuccessCallbackRef.current?.()
-    // Close the popover
-    setIsOpen(false)
-    setCallbackUrl(undefined)
-    onSuccessCallbackRef.current = null
-  }, [])
+    reset()
+  }, [reset])
 
   return (
     <AuthPopoverContext.Provider

@@ -21,7 +21,7 @@ import {
   type OAuthProviderEntry,
   type OidcProviderEntry,
 } from '@/components/auth/oauth-buttons'
-import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
+import { openAuthPopup, usePopupTracker, postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
 import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import { isTeamCallback } from '@/lib/shared/routing'
@@ -144,6 +144,7 @@ export function PortalAuthFormInline({
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const intl = useIntl()
+  const effectiveCallbackUrl = callbackUrl ?? '/'
   const showRecoveryLink = isTeamCallback(callbackUrl)
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
@@ -179,9 +180,8 @@ export function PortalAuthFormInline({
   const lookupAuthMethods = useServerFn(lookupAuthMethodsFn)
 
   const emailSignin = useEmailSignin({
-    callbackUrl: callbackUrl ?? '/',
-    onSuccess: async () => {
-      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
+    callbackUrl: effectiveCallbackUrl,
+    onSuccess: () => {
       postAuthSuccess()
     },
   })
@@ -272,7 +272,7 @@ export function PortalAuthFormInline({
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: callbackUrl ?? '/' })
+        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: effectiveCallbackUrl })
         return
       }
       if (result.kind === 'sso-default') {
@@ -369,7 +369,6 @@ export function PortalAuthFormInline({
           )
         }
       }
-      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
     } catch (err) {
       setError(
@@ -805,7 +804,7 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
-              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: callbackUrl ?? '/' })
+              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: effectiveCallbackUrl })
             } catch (err) {
               setError(
                 (err as Error).message ||
