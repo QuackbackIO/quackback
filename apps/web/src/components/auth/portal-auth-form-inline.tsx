@@ -21,7 +21,11 @@ import {
   type OAuthProviderEntry,
   type OidcProviderEntry,
 } from '@/components/auth/oauth-buttons'
-import { openAuthPopup, usePopupTracker, postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
+import {
+  openAuthPopup,
+  usePopupTracker,
+  postAuthSuccess,
+} from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
 import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import { isTeamCallback } from '@/lib/shared/routing'
@@ -272,7 +276,10 @@ export function PortalAuthFormInline({
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: result.providerId, callbackURL: effectiveCallbackUrl })
+        await authClient.signIn.oauth2({
+          providerId: result.providerId,
+          callbackURL: effectiveCallbackUrl,
+        })
         return
       }
       if (result.kind === 'sso-default') {
@@ -608,15 +615,20 @@ export function PortalAuthFormInline({
     </div>
   )
 
+  // Break-glass for a team member whose only way in is SSO when SSO is down.
+  // Rendered ONLY in the SSO views (not the password/email forms, where a
+  // recovery code is irrelevant) and gated to team-bound sign-in via
+  // showRecoveryLink, so portal users never see it.
   const recoveryLink = showRecoveryLink ? (
-    <div className="text-center">
+    <p className="text-center text-sm text-muted-foreground">
+      <FormattedMessage id="portal.auth.ssoUnavailable" defaultMessage="SSO unavailable?" />{' '}
       <Link
         to="/auth/recovery"
-        className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+        className="font-medium text-foreground hover:underline underline-offset-4"
       >
         <FormattedMessage id="portal.auth.useRecoveryCode" defaultMessage="Use a recovery code" />
       </Link>
-    </div>
+    </p>
   ) : null
 
   // ============================================================
@@ -736,10 +748,10 @@ export function PortalAuthFormInline({
           </>
         )}
 
-        {/* Break-glass link visible in every stable Stage-1 state (including
-            SSO-only, where emailEntryEnabled is false and the block above is
-            skipped). The element is null when showRecoveryLink is false. */}
-        {recoveryLink}
+        {/* Break-glass only in the SSO-only Stage 1 — just the SSO button, no
+            email/password path in front of the admin. Elsewhere the recovery
+            link belongs in the SSO views, not this generic stage. */}
+        {showOAuth && !emailEntryEnabled && recoveryLink}
 
         {/* Misconfiguration safety net — updatePortalConfig blocks saving zero
             methods, but never strand the user on a blank card if it happens. */}
@@ -804,7 +816,10 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
-              await authClient.signIn.oauth2({ providerId: view.providerId, callbackURL: effectiveCallbackUrl })
+              await authClient.signIn.oauth2({
+                providerId: view.providerId,
+                callbackURL: effectiveCallbackUrl,
+              })
             } catch (err) {
               setError(
                 (err as Error).message ||
@@ -839,6 +854,7 @@ export function PortalAuthFormInline({
         >
           <FormattedMessage id="portal.auth.sso.another" defaultMessage="Sign in another way" />
         </button>
+        {recoveryLink}
       </div>
     )
   }
@@ -854,6 +870,7 @@ export function PortalAuthFormInline({
           <InformationCircleIcon className="h-4 w-4" />
           <AlertDescription>{SSO_UNAVAILABLE_MESSAGE}</AlertDescription>
         </Alert>
+        {recoveryLink}
       </div>
     )
   }
@@ -1036,7 +1053,6 @@ export function PortalAuthFormInline({
               </button>
             </div>
           )}
-          {recoveryLink}
         </form>
       )}
 

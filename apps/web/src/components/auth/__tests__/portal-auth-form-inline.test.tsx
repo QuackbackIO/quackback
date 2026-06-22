@@ -8,7 +8,9 @@ import { IntlProvider } from 'react-intl'
 const navigate = vi.fn()
 
 // lookup is only invoked on Continue; the Stage-1 render under test never calls it.
-vi.mock('@tanstack/react-start', () => ({ useServerFn: () => vi.fn() }))
+// Shared spy so tests can control what lookupAuthMethods resolves to.
+const lookupFnSpy = vi.fn()
+vi.mock('@tanstack/react-start', () => ({ useServerFn: () => lookupFnSpy }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -159,12 +161,11 @@ describe('PortalAuthFormInline — recovery-code break-glass link', () => {
   })
   afterEach(() => cleanup())
 
-  it('shows the recovery-code link when callbackUrl is team-bound', () => {
+  // The recovery link belongs in SSO views only — it must NOT appear in the
+  // generic password/email stage even when the callbackUrl is team-bound.
+  it('does not show the recovery-code link in the password/email stage even when team-bound', () => {
     renderForm({ mode: 'login', callbackUrl: '/admin' })
-    expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
-      'href',
-      '/auth/recovery'
-    )
+    expect(screen.queryByRole('link', { name: /use a recovery code/i })).toBeNull()
   })
 
   it('hides the recovery-code link for a non-team callbackUrl', () => {
@@ -191,6 +192,22 @@ describe('PortalAuthFormInline — recovery-code break-glass link', () => {
         oauth: { password: false, magicLink: false },
         oidcProviders: [{ id: 'test-oidc', name: 'Test OIDC' }],
       },
+    })
+    expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
+      'href',
+      '/auth/recovery'
+    )
+  })
+
+  // Positive: the link must also appear in the sso-default view reached after
+  // Continue when lookupAuthMethods resolves to { kind: 'sso-default' }.
+  it('shows the recovery-code link in the sso-default view with a team callbackUrl', async () => {
+    lookupFnSpy.mockResolvedValueOnce({ kind: 'sso-default', providerId: 'sso' })
+    renderForm({ mode: 'login', callbackUrl: '/admin' })
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'user@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /use a recovery code/i })).toBeInTheDocument()
     })
     expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
       'href',

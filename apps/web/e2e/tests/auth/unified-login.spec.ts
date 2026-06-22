@@ -232,9 +232,12 @@ test('(4) /?prompt=login shows the dialog with OIDC button and recovery-code lin
     enabled: true,
     showButton: true,
   })
+  // Disable password + magic-link so Stage 1 is SSO-only: the recovery link
+  // renders only in the SSO views, not in the generic email-entry Stage 1.
+  setPortalAuthMethods('disable')
   try {
     // ?prompt=login opens the dialog; ?callbackUrl=/admin makes isTeamCallback true
-    // so the recovery-code link renders inside the dialog form.
+    // so the recovery-code link renders inside the SSO-only Stage 1.
     await page.goto('/?prompt=login&callbackUrl=%2Fadmin')
     await page.waitForLoadState('networkidle')
 
@@ -246,7 +249,7 @@ test('(4) /?prompt=login shows the dialog with OIDC button and recovery-code lin
       page.getByRole('button', { name: new RegExp(`Sign in with ${BTN_LABEL}`, 'i') })
     ).toBeVisible({ timeout: 10000 })
 
-    // Break-glass recovery-code link is visible (callbackUrl=/admin → isTeamCallback).
+    // Break-glass recovery-code link is visible (SSO-only Stage 1 + callbackUrl=/admin → isTeamCallback).
     await expect(page.getByRole('link', { name: /use a recovery code/i })).toBeVisible({
       timeout: 10000,
     })
@@ -256,6 +259,7 @@ test('(4) /?prompt=login shows the dialog with OIDC button and recovery-code lin
     )
   } finally {
     removeIdentityProvider(BTN_RID)
+    setPortalAuthMethods('restore')
   }
 })
 
