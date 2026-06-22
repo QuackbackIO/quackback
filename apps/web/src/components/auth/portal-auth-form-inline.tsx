@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useRouter } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
@@ -144,7 +144,6 @@ export function PortalAuthFormInline({
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const intl = useIntl()
-  const router = useRouter()
   const showRecoveryLink = isTeamCallback(callbackUrl)
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
@@ -184,7 +183,6 @@ export function PortalAuthFormInline({
     onSuccess: async () => {
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
-      if (callbackUrl) router.navigate({ to: callbackUrl })
     },
   })
 
@@ -354,12 +352,9 @@ export function PortalAuthFormInline({
           )
         }
       } else {
-        // Stash the current page so the twoFactor client can splice it
-        // onto its `/auth/two-factor` redirect — the inline form lives
-        // inside a popover, so on challenge we want to land back here.
-        if (typeof window !== 'undefined') {
-          stashTwoFactorCallbackUrl(window.location.pathname + window.location.search)
-        }
+        // Stash the post-login destination before the sign-in call so the
+        // twoFactor client can forward to it from its /auth/two-factor page.
+        stashTwoFactorCallbackUrl(callbackUrl)
         const result = await authClient.signIn.email({
           email,
           password,
@@ -376,7 +371,6 @@ export function PortalAuthFormInline({
       }
       const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
       postAuthSuccess()
-      if (callbackUrl) router.navigate({ to: callbackUrl })
     } catch (err) {
       setError(
         err instanceof Error

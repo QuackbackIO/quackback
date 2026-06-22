@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render as rtlRender, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render as rtlRender, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
+
+// Shared spy so tests can assert navigate was (or was not) called.
+const navigate = vi.fn()
 
 // lookup is only invoked on Continue; the Stage-1 render under test never calls it.
 vi.mock('@tanstack/react-start', () => ({ useServerFn: () => vi.fn() }))
@@ -21,7 +24,7 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
-  useRouter: () => ({ navigate: vi.fn() }),
+  useRouter: () => ({ navigate }),
 }))
 
 vi.mock('@/lib/server/functions/auth', () => ({
@@ -67,6 +70,9 @@ vi.mock('@/components/ui/input-otp', () => ({
 }))
 
 import { PortalAuthFormInline } from '../portal-auth-form-inline'
+import { postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
+import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
+import { authClient } from '@/lib/client/auth-client'
 
 function render(ui: React.ReactElement) {
   return rtlRender(
@@ -189,6 +195,67 @@ describe('PortalAuthFormInline — recovery-code break-glass link', () => {
     expect(screen.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
       'href',
       '/auth/recovery'
+    )
+  })
+})
+
+describe('PortalAuthFormInline — post-sign-in navigation', () => {
+  // Stub fetch so the invitation flow resolves immediately to Stage 2.
+  const mockInvitation = {
+    id: 'inv_test',
+    email: 'user@example.com',
+    role: null,
+    workspaceName: 'Acme',
+    inviterName: null,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    navigate.mockClear()
+    getEnabledOAuthProvidersMock.mockReturnValue([])
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => mockInvitation,
+    } as Response)
+  })
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('calls postAuthSuccess but does NOT call router.navigate on successful password sign-in', async () => {
+    vi.mocked(authClient.signIn.email).mockResolvedValueOnce({ data: {}, error: null } as never)
+
+    renderForm({ mode: 'login', invitationId: 'inv_test', callbackUrl: '/admin' })
+
+    // Wait for invitation loader to resolve and render the credentials form.
+    const passwordInput = await screen.findByLabelText(/password/i)
+    fireEvent.change(passwordInput, { target: { value: 'correct-password' } })
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    await waitFor(() => {
+      expect(vi.mocked(postAuthSuccess)).toHaveBeenCalled()
+    })
+    // Navigation is solely the dialog opener's responsibility via the broadcast.
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('stashes the callbackUrl prop (not window.location) for the 2FA redirect', async () => {
+    // sign-in result does not matter — stash is called before the network request.
+    vi.mocked(authClient.signIn.email).mockResolvedValueOnce({ data: {}, error: null } as never)
+
+    renderForm({ mode: 'login', invitationId: 'inv_test', callbackUrl: '/admin' })
+
+    const passwordInput = await screen.findByLabelText(/password/i)
+    fireEvent.change(passwordInput, { target: { value: 'correct-password' } })
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+
+    await waitFor(() => {
+      expect(vi.mocked(stashTwoFactorCallbackUrl)).toHaveBeenCalledWith('/admin')
+    })
+    // Must NOT have been called with the dialog's own URL (the old bug).
+    expect(vi.mocked(stashTwoFactorCallbackUrl)).not.toHaveBeenCalledWith(
+      expect.stringContaining('signin=1')
     )
   })
 })

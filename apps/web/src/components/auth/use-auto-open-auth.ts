@@ -26,7 +26,10 @@ export function useAutoOpenAuthDialog(args: {
     // Toast at most once per mount regardless of dep changes.
     if (!errorToasted.current && args.error) {
       errorToasted.current = true
-      toast.error(AUTH_BLOCK_MESSAGES[args.error as keyof typeof AUTH_BLOCK_MESSAGES] ?? args.error)
+      toast.error(
+        AUTH_BLOCK_MESSAGES[args.error as keyof typeof AUTH_BLOCK_MESSAGES] ??
+          'Sign-in failed. Try again or contact your administrator if the problem persists.'
+      )
     }
 
     // Open the dialog when explicitly requested via ?signin or ?prompt=login.
