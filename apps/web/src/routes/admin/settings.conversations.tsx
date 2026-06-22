@@ -3,8 +3,12 @@ import { createFileRoute, useRouter, Navigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { CannedReply } from '@/lib/server/domains/settings/settings.types'
-import { DEFAULT_OFFICE_HOURS } from '@/lib/server/domains/settings/settings.types'
+import type { CannedReply, SupportAccessConfig } from '@/lib/server/domains/settings/settings.types'
+import {
+  DEFAULT_OFFICE_HOURS,
+  DEFAULT_PORTAL_SUPPORT_ACCESS,
+  DEFAULT_WIDGET_SUPPORT_ACCESS,
+} from '@/lib/server/domains/settings/settings.types'
 import type { OfficeHoursConfig } from '@/lib/shared/chat/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useQuery } from '@tanstack/react-query'
@@ -19,9 +23,107 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
+import { PrincipalPicker } from '@/components/admin/shared/principal-picker'
+import { useSegments } from '@/lib/client/hooks/use-segments-queries'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 // Index 0 = Sunday … 6 = Saturday, matching OfficeHoursConfig.days.
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function SupportAccessEditor({
+  value,
+  onChange,
+  segments,
+  includeAnonymous,
+  disabled,
+  busy,
+}: {
+  value: SupportAccessConfig
+  onChange: (next: SupportAccessConfig) => void
+  segments: Array<{ id: string; name: string; memberCount?: number }>
+  includeAnonymous: boolean
+  disabled?: boolean
+  busy?: boolean
+}) {
+  const selectedIsEmpty =
+    value.mode === 'selected' && value.segmentIds.length + value.principalIds.length === 0
+  const modeOptions: Array<{ value: SupportAccessConfig['mode']; label: string }> = [
+    ...(includeAnonymous ? [{ value: 'anonymous' as const, label: 'Anyone' }] : []),
+    { value: 'authenticated', label: 'Signed-in users' },
+    { value: 'selected', label: 'Selected users and segments' },
+    { value: 'team', label: 'Team only' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Label htmlFor={includeAnonymous ? 'widget-chat-access' : 'portal-support-access'}>
+            Access
+          </Label>
+          {busy && <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        </div>
+        <select
+          id={includeAnonymous ? 'widget-chat-access' : 'portal-support-access'}
+          value={value.mode}
+          onChange={(event) =>
+            onChange({ ...value, mode: event.target.value as SupportAccessConfig['mode'] })
+          }
+          disabled={disabled}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          {modeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {value.mode === 'selected' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Allowed segments</Label>
+            {segments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No segments defined yet. Create segments in Customers.
+              </p>
+            ) : (
+              <SegmentMultiSelect
+                segments={segments}
+                value={value.segmentIds}
+                onChange={(next) => onChange({ ...value, segmentIds: next as SegmentId[] })}
+                disabled={disabled}
+                ariaLabel="Support segment allowlist"
+              />
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Allowed users</Label>
+            <PrincipalPicker
+              multiple
+              value={value.principalIds}
+              onValueChange={(next) => onChange({ ...value, principalIds: next as PrincipalId[] })}
+              roleFilter={['user']}
+              placeholder="Select portal users..."
+              disabled={disabled}
+            />
+            <p className="text-xs text-muted-foreground">
+              Explicitly selected users are allowed even if they are not in a selected segment.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selectedIsEmpty && (
+        <p className="text-xs text-destructive">
+          Select at least one segment or user before this access mode can be saved.
+        </p>
+      )}
+    </div>
+  )
+}
 
 export const Route = createFileRoute('/admin/settings/conversations')({
   loader: async ({ context }) => {
@@ -56,11 +158,18 @@ function ConversationsSettingsPage() {
   const updatePortalConfig = useUpdatePortalConfig()
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
+  const segmentsQuery = useSegments()
   const config = widgetConfigQuery.data
   const [isPending, startTransition] = useTransition()
   const [savingField, setSavingField] = useState<string | null>(null)
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
     portalConfigQuery.data?.support?.enabled ?? false
+  )
+  const [widgetAccess, setWidgetAccess] = useState<SupportAccessConfig>(
+    config.chat?.access ?? DEFAULT_WIDGET_SUPPORT_ACCESS
+  )
+  const [portalAccess, setPortalAccess] = useState<SupportAccessConfig>(
+    portalConfigQuery.data?.support?.access ?? DEFAULT_PORTAL_SUPPORT_ACCESS
   )
 
   const [enabled, setEnabled] = useState(config.chat?.enabled ?? false)
@@ -87,6 +196,16 @@ function ConversationsSettingsPage() {
       return [officeHours.timezone || 'UTC']
     }
   }, [officeHours.timezone])
+
+  const segmentOptions = useMemo(
+    () =>
+      (segmentsQuery.data ?? []).map((segment) => ({
+        id: segment.id as string,
+        name: segment.name,
+        memberCount: segment.memberCount,
+      })),
+    [segmentsQuery.data]
+  )
 
   // Persist the whole schedule on every change (deepMerge replaces arrays).
   function saveOfficeHours(next: OfficeHoursConfig) {
@@ -135,6 +254,31 @@ function ConversationsSettingsPage() {
       startTransition(() => router.invalidate())
     } catch {
       setPortalSupportEnabled(!checked)
+    } finally {
+      setSavingField(null)
+    }
+  }
+
+  const canPersistAccess = (access: SupportAccessConfig) =>
+    access.mode !== 'selected' || access.segmentIds.length + access.principalIds.length > 0
+
+  const updateWidgetAccess = (next: SupportAccessConfig) => {
+    const prev = widgetAccess
+    setWidgetAccess(next)
+    if (!canPersistAccess(next)) return
+    persist('widgetAccess', { chat: { access: next } }, () => setWidgetAccess(prev))
+  }
+
+  const updatePortalAccess = async (next: SupportAccessConfig) => {
+    const prev = portalAccess
+    setPortalAccess(next)
+    if (!canPersistAccess(next)) return
+    setSavingField('portalAccess')
+    try {
+      await updatePortalConfig.mutateAsync({ support: { access: next } })
+      startTransition(() => router.invalidate())
+    } catch {
+      setPortalAccess(prev)
     } finally {
       setSavingField(null)
     }
@@ -199,6 +343,20 @@ function ConversationsSettingsPage() {
       </SettingsCard>
 
       <SettingsCard
+        title="Live Chat Access"
+        description="Choose who can use live chat in the embedded widget."
+      >
+        <SupportAccessEditor
+          value={widgetAccess}
+          onChange={updateWidgetAccess}
+          segments={segmentOptions}
+          includeAnonymous
+          disabled={isBusy || !enabled}
+          busy={savingField === 'widgetAccess'}
+        />
+      </SettingsCard>
+
+      <SettingsCard
         title="Portal Support"
         description="Show a Support tab on your public portal where signed-in users can view their conversations and start new ones."
       >
@@ -224,6 +382,20 @@ function ConversationsSettingsPage() {
             />
           </div>
         </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Portal Support Access"
+        description="Choose which signed-in portal users can use the portal Support tab."
+      >
+        <SupportAccessEditor
+          value={portalAccess}
+          onChange={(next) => void updatePortalAccess(next)}
+          segments={segmentOptions}
+          includeAnonymous={false}
+          disabled={isBusy || !portalSupportEnabled}
+          busy={savingField === 'portalAccess'}
+        />
       </SettingsCard>
 
       <SettingsCard

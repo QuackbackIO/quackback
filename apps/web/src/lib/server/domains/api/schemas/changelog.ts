@@ -18,6 +18,21 @@ const ChangelogEntrySchema = z.object({
   id: TypeIdSchema.meta({ example: 'changelog_01h455vb4pex5vsknk084sn02q' }),
   title: z.string().meta({ example: 'New Dark Mode Feature' }),
   content: z.string().meta({ example: "We've added a dark mode option..." }),
+  category: z
+    .object({
+      id: TypeIdSchema,
+      name: z.string(),
+      slug: z.string(),
+      color: z.string().nullable(),
+    })
+    .nullable(),
+  product: z
+    .object({
+      id: TypeIdSchema,
+      name: z.string(),
+      slug: z.string(),
+    })
+    .nullable(),
   publishedAt: NullableTimestampSchema.meta({
     description: 'When the entry was published (null if draft)',
   }),
@@ -39,6 +54,8 @@ const CreateChangelogEntrySchema = z
       .datetime()
       .optional()
       .meta({ description: 'Publish date (omit to save as draft)' }),
+    categoryName: z.string().max(200).nullable().optional(),
+    productName: z.string().max(200).nullable().optional(),
   })
   .meta({ description: 'Create changelog entry request body' })
 
@@ -52,6 +69,8 @@ const UpdateChangelogEntrySchema = z
       .nullable()
       .optional()
       .meta({ description: 'Set to null to unpublish' }),
+    categoryName: z.string().max(200).nullable().optional(),
+    productName: z.string().max(200).nullable().optional(),
   })
   .meta({ description: 'Update changelog entry request body' })
 
