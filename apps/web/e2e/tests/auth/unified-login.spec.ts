@@ -3,7 +3,7 @@
  *
  * Covers the new unified auth surface that replaced the old /auth/login page:
  *
- *  1. Public portal, unauth /admin → /?signin=1&callbackUrl=%2Fadmin; dialog
+ *  1. Public portal, unauth /admin → /?auth=signin&callbackUrl=%2Fadmin; dialog
  *     auto-opens ("Welcome back"); admin magic-link sign-in lands on /admin.
  *  2. Public portal, portal user reaching /admin → error toast (not_team_member);
  *     dialog remains open; user stays out of /admin.
@@ -68,27 +68,23 @@ test.beforeEach(async ({ page }) => {
 // Public portal, unauth /admin → unified dialog auto-opens; admin sign-in
 // completes and lands on /admin.
 
-test('(1a) unauth /admin → /?signin=1 with callbackUrl=/admin and dialog visible', async ({
+test('(1a) unauth /admin → /?auth=signin with callbackUrl=/admin and dialog visible', async ({
   page,
 }) => {
   await page.goto('/admin')
   await page.waitForLoadState('networkidle')
 
   // requireWorkspaceRole redirects to buildSigninRedirect('/admin'), which is
-  // { to: '/', search: { signin: '1', callbackUrl: '/admin' } }.
-  // TanStack Router JSON-encodes the string '1' as "1" in the URL
-  // (%221%22), so match the signin param by key only and verify callbackUrl
-  // via the parsed searchParams.
-  await expect(page).toHaveURL(/[?&]signin=/, { timeout: 15000 })
+  // { to: '/', search: { auth: 'signin', callbackUrl: '/admin' } }.
+  // auth=signin serializes cleanly (no JSON-quoting), so match directly.
+  await expect(page).toHaveURL(/[?&]auth=signin/, { timeout: 15000 })
   const url = new URL(page.url())
   expect(url.searchParams.get('callbackUrl')).toMatch(/^\/admin/)
 
-  // useAutoOpenAuthDialog fires on mount when signin=1; the dialog heading is
+  // useAutoOpenAuthDialog fires on mount when auth=signin; the dialog heading is
   // "Welcome back" for mode='login'.
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
-  await expect(
-    page.getByRole('heading', { name: /welcome back/i })
-  ).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({ timeout: 10000 })
 })
 
 test('(1b) signed-in admin navigating to /admin lands there (not on the dialog)', async ({
@@ -131,21 +127,17 @@ test('(2) portal user reaching /admin gets not_team_member error toast', async (
   await page.waitForLoadState('networkidle')
 
   // requireWorkspaceRole bounces via buildSigninRedirect('/admin', { error: 'not_team_member' }).
-  // Check signin presence (TanStack Router JSON-encodes '1' as "1" in URL).
-  await expect(page).toHaveURL(/[?&]signin=/, { timeout: 15000 })
+  // auth=signin serializes cleanly; match directly.
+  await expect(page).toHaveURL(/[?&]auth=signin/, { timeout: 15000 })
 
-  // Assert the specific error code is not_team_member. TanStack Router
-  // JSON-encodes string params, so the raw searchParam value may carry outer
-  // quotes (e.g. '"not_team_member"'); unwrap before comparing.
+  // Assert the specific error code is not_team_member.
   const errorUrl = new URL(page.url())
   const rawError = errorUrl.searchParams.get('error')
   const errorCode = rawError?.startsWith('"') ? JSON.parse(rawError) : rawError
   expect(errorCode).toBe('not_team_member')
 
   // useAutoOpenAuthDialog fires the error toast before opening the dialog.
-  await expect(
-    page.getByText(/team access|team membership/i)
-  ).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText(/team access|team membership/i)).toBeVisible({ timeout: 10000 })
 
   // The user is NOT on /admin.
   expect(page.url()).not.toMatch(/\/admin/)
@@ -177,19 +169,17 @@ test('(2) portal user reaching /admin gets not_team_member error toast', async (
 //      router.invalidate() → loader re-runs → access granted →
 //      router.navigate({ to: '/admin' }).
 
-test('(3) private portal gate: sign-in in gate dialog lands on /admin', async ({
-  page,
-}) => {
+test('(3) private portal gate: sign-in in gate dialog lands on /admin', async ({ page }) => {
   setPortalVisibility('private')
   try {
-    // /admin redirects to /?signin=1&callbackUrl=/admin; the _portal loader
+    // /admin redirects to /?auth=signin&callbackUrl=/admin; the _portal loader
     // evaluates the anonymous visitor against the private portal → denied →
     // gate rendered with autoOpenSignin='login'.
     await page.goto('/admin')
     await page.waitForLoadState('networkidle')
 
-    // Must land on portal root with signin param.
-    await expect(page).toHaveURL(/[?&]signin=/, { timeout: 15000 })
+    // Must land on portal root with auth=signin param.
+    await expect(page).toHaveURL(/[?&]auth=signin/, { timeout: 15000 })
 
     // Gate's autoOpenSignin fires immediately — dialog is visible.
     // This proves the gate rendered and the auto-open callback fired.
@@ -257,12 +247,13 @@ test('(4) /?prompt=login shows the dialog with OIDC button and recovery-code lin
     ).toBeVisible({ timeout: 10000 })
 
     // Break-glass recovery-code link is visible (callbackUrl=/admin → isTeamCallback).
-    await expect(
-      page.getByRole('link', { name: /use a recovery code/i })
-    ).toBeVisible({ timeout: 10000 })
-    await expect(
-      page.getByRole('link', { name: /use a recovery code/i })
-    ).toHaveAttribute('href', /\/auth\/recovery/)
+    await expect(page.getByRole('link', { name: /use a recovery code/i })).toBeVisible({
+      timeout: 10000,
+    })
+    await expect(page.getByRole('link', { name: /use a recovery code/i })).toHaveAttribute(
+      'href',
+      /\/auth\/recovery/
+    )
   } finally {
     removeIdentityProvider(BTN_RID)
   }
@@ -277,9 +268,9 @@ test('(5) /auth/recovery renders the standalone recovery form', async ({ page })
   await page.waitForLoadState('networkidle')
 
   // Heading confirms we're on the recovery page, not a redirect.
-  await expect(
-    page.getByRole('heading', { name: /use a recovery code/i })
-  ).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('heading', { name: /use a recovery code/i })).toBeVisible({
+    timeout: 15000,
+  })
 
   // Email + code fields and submit button are present.
   await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 10000 })
@@ -315,9 +306,8 @@ test('(6) corporate button hidden; verified-domain email routes to corporate IdP
     domain: { name: CORP_DOMAIN, verified: true, enforced: true },
   })
   try {
-    // Open dialog via ?signin=%221%22 (TanStack Router JSON-encodes the string
-    // '1' as "1", so the URL param must carry the JSON-encoded form).
-    await page.goto('/?signin=%221%22')
+    // Open dialog via ?auth=signin (serializes cleanly, no JSON-quoting needed).
+    await page.goto('/?auth=signin')
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 })
 

@@ -79,9 +79,9 @@ const cleanup = (
   opts: { ssoRegistered?: boolean } = {}
 ) => {
   const domains = tenant?.verifiedDomains ?? []
-  const providers = [
-    { id: 'idp_sso', registrationId: 'sso', domains },
-  ] as unknown as Parameters<typeof handleCallbackPolicyCleanup>[2]
+  const providers = [{ id: 'idp_sso', registrationId: 'sso', domains }] as unknown as Parameters<
+    typeof handleCallbackPolicyCleanup
+  >[2]
   const registeredOidcIds = opts.ssoRegistered === false ? new Set<string>() : new Set(['sso'])
   return handleCallbackPolicyCleanup(ctx, tenant, providers, registeredOidcIds)
 }
@@ -234,10 +234,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'staff@acme.com',
       token: 'tok',
     })
-    await cleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -253,10 +250,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'staff@acme.com',
       token: 'tok',
     })
-    await cleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -271,11 +265,8 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       token: 'tok',
     })
     await expect(
-      cleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-      )
-    ).rejects.toThrow(/\/\?signin=1&error=oauth_method_not_allowed/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
+    ).rejects.toThrow(/\/\?auth=signin&error=oauth_method_not_allowed/)
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
   })
 
@@ -292,11 +283,8 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       token: 'tok',
     })
     await expect(
-      cleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-      )
-    ).rejects.toThrow(/\/\?signin=1&error=oauth_method_not_allowed/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
+    ).rejects.toThrow(/\/\?auth=signin&error=oauth_method_not_allowed/)
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
   })
 })
@@ -334,9 +322,9 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(
-      cleanup(ctx, tenantSettings({ googleEnabled: false }))
-    ).rejects.toThrow(/\/\?signin=1&callbackUrl=\/admin&error=oauth_method_not_allowed/)
+    await expect(cleanup(ctx, tenantSettings({ googleEnabled: false }))).rejects.toThrow(
+      /\/\?auth=signin&callbackUrl=\/admin&error=oauth_method_not_allowed/
+    )
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -353,9 +341,9 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(
-      cleanup(ctx, tenantSettings({ googleEnabled: true }))
-    ).rejects.toThrow(/oauth_method_not_allowed/)
+    await expect(cleanup(ctx, tenantSettings({ googleEnabled: true }))).rejects.toThrow(
+      /oauth_method_not_allowed/
+    )
   })
 
   it('passes for portal user + google when portalConfig.oauth.google=true', async () => {
@@ -388,7 +376,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
     })
 
     await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /\/\?signin=1&error=oauth_method_not_allowed/
+      /\/\?auth=signin&error=oauth_method_not_allowed/
     )
   })
 
@@ -406,9 +394,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /oauth_method_not_allowed/
-    )
+    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(/oauth_method_not_allowed/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     // Brand-new sign-up via google was blocked — its shell rows
@@ -434,9 +420,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /oauth_method_not_allowed/
-    )
+    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(/oauth_method_not_allowed/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockUserDeleteWhere).not.toHaveBeenCalled()
@@ -474,7 +458,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
           verifiedDomains: [makeVerifiedDomain('acme.com', true)],
         })
       )
-    ).rejects.toThrow(/\/\?signin=1&callbackUrl=\/admin&error=verified_domain_requires_sso/)
+    ).rejects.toThrow(/\/\?auth=signin&callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -541,10 +525,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
       email: 'a@acme.com',
       token: 'tok',
     })
-    await cleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -586,11 +567,8 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      cleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-      )
-    ).rejects.toThrow(/\/\?signin=1&callbackUrl=\/admin&error=verified_domain_requires_sso/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
+    ).rejects.toThrow(/\/\?auth=signin&callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockUserDeleteWhere).toHaveBeenCalled()
@@ -612,10 +590,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      cleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-      )
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     ).rejects.toThrow(/verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()

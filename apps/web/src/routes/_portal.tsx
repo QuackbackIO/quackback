@@ -29,19 +29,22 @@ export const Route = createFileRoute('/_portal')({
   // Return type uses optional keys (?: not T|undefined) so that `{}` satisfies
   // the schema — TanStack Router's IsRequiredParams checks `{} extends TParams`
   // and only makes `search` required when the schema has required keys.
-  validateSearch: (search: Record<string, unknown>): {
-    signin?: string
+  validateSearch: (
+    search: Record<string, unknown>
+  ): {
+    auth?: string
     prompt?: 'login'
     callbackUrl?: string
     error?: string
   } => ({
-    signin: search.signin === '1' || search.signin === 'signup' ? (search.signin as string) : undefined,
+    auth:
+      search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
     prompt: search.prompt === 'login' ? 'login' : undefined,
     callbackUrl: isSafeCallbackUrl(search.callbackUrl) ? (search.callbackUrl as string) : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
   loaderDeps: ({ search }) => ({
-    signin: search.signin,
+    auth: search.auth,
     prompt: search.prompt,
     callbackUrl: search.callbackUrl,
     error: search.error,
@@ -91,7 +94,9 @@ export const Route = createFileRoute('/_portal')({
           portalOauth: settings?.publicPortalConfig?.oauth ?? {},
         })
         if (instantProviderId) {
-          const instant = await resolveInstantSsoRedirectFn({ data: { callbackUrl: prompt.callbackUrl } })
+          const instant = await resolveInstantSsoRedirectFn({
+            data: { callbackUrl: prompt.callbackUrl },
+          })
           if (instant) throw redirect({ href: instant.url })
         }
       }
@@ -107,7 +112,7 @@ export const Route = createFileRoute('/_portal')({
         // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
         callbackUrl: prompt.callbackUrl,
-        autoOpenSignin: prompt.signin,
+        autoOpenSignin: prompt.mode,
         authConfig: {
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
@@ -265,7 +270,12 @@ function PortalLayout() {
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
-        <PortalAuthAutoOpen signin={prompt.signin} callbackUrl={prompt.callbackUrl} error={prompt.error} isAuthenticated={isAuthenticated} />
+        <PortalAuthAutoOpen
+          mode={prompt.mode}
+          callbackUrl={prompt.callbackUrl}
+          error={prompt.error}
+          isAuthenticated={isAuthenticated}
+        />
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -290,7 +300,7 @@ function PortalLayout() {
 
 /** Mounts inside AuthPopoverProvider so the hook can access its context. */
 function PortalAuthAutoOpen(props: {
-  signin?: 'login' | 'signup'
+  mode?: 'login' | 'signup'
   callbackUrl?: string
   error?: string
   isAuthenticated: boolean

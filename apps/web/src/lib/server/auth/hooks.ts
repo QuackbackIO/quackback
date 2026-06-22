@@ -262,9 +262,8 @@ export async function handleSignInPreCheck(ctx: {
   // for hard-binding and the per-method gate consult it. `registeredOidcIds`
   // lets `isHardBound` fail open (scoped to the owning provider) on
   // tier-downgrade / missing-secret states so admins aren't self-locked-out.
-  const { listIdentityProviders } = await import(
-    '@/lib/server/domains/settings/identity-providers.service'
-  )
+  const { listIdentityProviders } =
+    await import('@/lib/server/domains/settings/identity-providers.service')
   const { getRegisteredOidcProviderIds } = await import('./registered-providers')
   const providers = await listIdentityProviders()
   const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
@@ -275,7 +274,7 @@ export async function handleSignInPreCheck(ctx: {
   // inbox control at the verified domain shouldn't bypass the IdP's
   // attestations even for brand-new sign-ups.
   if (isHardBound(provider, email, providers, registeredOidcIds)) {
-    throw ctx.redirect('/?signin=1&callbackUrl=/admin&error=verified_domain_requires_sso')
+    throw ctx.redirect('/?auth=signin&callbackUrl=/admin&error=verified_domain_requires_sso')
   }
 
   if (!principalRow) return
@@ -287,13 +286,13 @@ export async function handleSignInPreCheck(ctx: {
     // Team roles land on the unified login with a `/admin` callback (the
     // break-glass form); the error rides as a second param via `&` — a
     // second `?` would silently drop it. Portal roles keep the plain
-    // `/?signin=1&error=` shape. All paths go directly to `/?signin=1`
+    // `/?auth=signin&error=` shape. All paths go directly to `/?auth=signin`
     // so the auth client's detectAuthBlockRedirect can match on the
     // error code regardless of the redirect chain.
     throw ctx.redirect(
       isTeamRole
-        ? `/?signin=1&callbackUrl=/admin&error=${errorCode}`
-        : `/?signin=1&error=${errorCode}`
+        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
+        : `/?auth=signin&error=${errorCode}`
     )
   }
 
@@ -679,13 +678,13 @@ export async function handleCallbackPolicyCleanup(
   // Team roles route to the unified login carrying a `/admin` callback
   // (the break-glass form); the error joins with `&` so it isn't lost
   // behind a second `?`. Portal roles keep the plain `?error=` shape.
-  // All targets go directly to `/?signin=1` so detectAuthBlockRedirect
+  // All targets go directly to `/?auth=signin` so detectAuthBlockRedirect
   // matches on the error code without following a redirect stub.
   const blockedRedirect = (errorCode: string) =>
     ctx.redirect(
       isTeamRole
-        ? `/?signin=1&callbackUrl=/admin&error=${errorCode}`
-        : `/?signin=1&error=${errorCode}`
+        ? `/?auth=signin&callbackUrl=/admin&error=${errorCode}`
+        : `/?auth=signin&error=${errorCode}`
     )
 
   // Drop the user/account/principal rows iff the user record is brand-
@@ -922,7 +921,7 @@ export async function handleMagicLinkPostSignInGate(
   throw ctx.redirect(
     outcome === 'setup-required'
       ? '/auth/two-factor-setup-required'
-      : '/?signin=1&callbackUrl=/admin&error=use_password_for_2fa'
+      : '/?auth=signin&callbackUrl=/admin&error=use_password_for_2fa'
   )
 }
 
@@ -1277,9 +1276,8 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
   > = []
   let registeredOidcIds = new Set<string>()
   if (SESSION_CREATING_CALLBACK_PATHS.has(ctx.path ?? '')) {
-    const { listIdentityProviders } = await import(
-      '@/lib/server/domains/settings/identity-providers.service'
-    )
+    const { listIdentityProviders } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
     const { getRegisteredOidcProviderIds } = await import('./registered-providers')
     providers = await listIdentityProviders()
     registeredOidcIds = await getRegisteredOidcProviderIds(providers)

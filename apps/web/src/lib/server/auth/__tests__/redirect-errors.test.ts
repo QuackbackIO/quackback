@@ -47,10 +47,10 @@ describe('detectAuthBlockRedirect', () => {
     expect(err?.message).toMatch(/too many sign-in attempts/i)
   })
 
-  it('detects a block on the canonical /?signin=1&error=<code> destination', () => {
+  it('detects a block on the canonical /?auth=signin&error=<code> destination', () => {
     const err = detectAuthBlockRedirect({
       redirected: true,
-      url: 'https://t.example/?signin=1&error=verified_domain_requires_sso',
+      url: 'https://t.example/?auth=signin&error=verified_domain_requires_sso',
     })
     expect(err).toBeInstanceOf(AuthBlockedError)
     expect(err?.code).toBe('verified_domain_requires_sso')
@@ -58,9 +58,7 @@ describe('detectAuthBlockRedirect', () => {
   })
 
   it('returns null for a plain / with no error param', () => {
-    expect(
-      detectAuthBlockRedirect({ redirected: true, url: 'https://t.example/' })
-    ).toBeNull()
+    expect(detectAuthBlockRedirect({ redirected: true, url: 'https://t.example/' })).toBeNull()
   })
 
   it('returns null for an unknown error code (no generic fallback)', () => {
@@ -79,7 +77,12 @@ describe('detectAuthBlockRedirect', () => {
 
 describe('AUTH_BLOCK_MESSAGES', () => {
   it('covers the migrated admin-only codes', () => {
-    for (const code of ['token_expired', 'signup_disabled', 'OAUTH_CALLBACK_ERROR', 'not_team_member'] as AuthBlockCode[]) {
+    for (const code of [
+      'token_expired',
+      'signup_disabled',
+      'OAUTH_CALLBACK_ERROR',
+      'not_team_member',
+    ] as AuthBlockCode[]) {
       expect(AUTH_BLOCK_MESSAGES[code]).toBeTruthy()
     }
   })

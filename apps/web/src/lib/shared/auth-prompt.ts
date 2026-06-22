@@ -1,22 +1,22 @@
 import { isSafeCallbackUrl } from './routing'
 
 export interface AuthPromptParams {
-  signin?: 'login' | 'signup'
+  mode?: 'login' | 'signup'
   callbackUrl?: string
   error?: string
   suppressInstantSso?: boolean
 }
 
 /** Reads the auth-prompt query params off a portal-root search object.
- *  `signin=1` → login, `signin=signup` → signup. Unsafe callbackUrls are dropped.
- *  `prompt=login` suppresses instant-SSO and defaults signin to 'login'. */
+ *  `auth=signin` → login, `auth=signup` → signup. Unsafe callbackUrls are dropped.
+ *  `prompt=login` suppresses instant-SSO and defaults mode to 'login'. */
 export function parseAuthPromptSearch(search: Record<string, unknown>): AuthPromptParams {
   const out: AuthPromptParams = {}
-  if (search.signin === '1') out.signin = 'login'
-  else if (search.signin === 'signup') out.signin = 'signup'
+  if (search.auth === 'signin') out.mode = 'login'
+  else if (search.auth === 'signup') out.mode = 'signup'
   if (search.prompt === 'login') {
     out.suppressInstantSso = true
-    out.signin = out.signin ?? 'login'
+    out.mode = out.mode ?? 'login'
   }
   if (typeof search.callbackUrl === 'string' && isSafeCallbackUrl(search.callbackUrl)) {
     out.callbackUrl = search.callbackUrl
@@ -43,7 +43,7 @@ export function buildSigninRedirect(
   opts: { mode?: 'login' | 'signup'; error?: string } = {}
 ): { to: '/'; search: Record<string, string> } {
   const search: Record<string, string> = {
-    signin: opts.mode === 'signup' ? 'signup' : '1',
+    auth: opts.mode === 'signup' ? 'signup' : 'signin',
     callbackUrl,
   }
   if (opts.error) search.error = opts.error

@@ -78,7 +78,7 @@ export class AuthBlockedError extends ForbiddenError {
  * Inspect a Response to see if it was redirected to a sign-in error
  * URL. Detection is code-based (not path-based): the `error` query
  * param must be a known code in `AUTH_BLOCK_MESSAGES`. This catches
- * both the canonical `/?signin=1&error=<code>` destination and any
+ * both the canonical `/?auth=signin&error=<code>` destination and any
  * legacy `/auth/login?error=<code>` shape without relying on a
  * hard-coded path allowlist.
  *

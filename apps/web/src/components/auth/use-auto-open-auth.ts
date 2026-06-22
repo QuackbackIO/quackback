@@ -4,12 +4,12 @@ import { toast } from 'sonner'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
 
-/** Opens the auth dialog once when the portal root is reached with a `?signin`
+/** Opens the auth dialog once when the portal root is reached with a `?auth`
  *  request, navigating to `callbackUrl` on success. No-op when already
  *  authenticated. The dialog opens at most once per mount (latched). Error
  *  toasts fire at most once per mount (separate latch). */
 export function useAutoOpenAuthDialog(args: {
-  signin?: 'login' | 'signup'
+  mode?: 'login' | 'signup'
   callbackUrl?: string
   error?: string
   isAuthenticated: boolean
@@ -31,16 +31,16 @@ export function useAutoOpenAuthDialog(args: {
       )
     }
 
-    // Open the dialog when explicitly requested via ?signin.
+    // Open the dialog when explicitly requested via ?auth.
     // Delay the latch check until after the error path so they don't block each other.
     if (opened.current) return
-    const shouldOpen = !!args.signin
+    const shouldOpen = !!args.mode
     if (!shouldOpen || args.isAuthenticated || !popover) return
     opened.current = true
     popover.openAuthPopover({
-      mode: args.signin!,
+      mode: args.mode!,
       callbackUrl: args.callbackUrl,
       onSuccess: args.callbackUrl ? () => router.navigate({ to: args.callbackUrl! }) : undefined,
     })
-  }, [args.signin, args.callbackUrl, args.error, args.isAuthenticated, popover, router])
+  }, [args.mode, args.callbackUrl, args.error, args.isAuthenticated, popover, router])
 }

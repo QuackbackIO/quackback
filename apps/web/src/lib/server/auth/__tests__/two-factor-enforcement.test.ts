@@ -335,7 +335,7 @@ describe('handleMagicLinkPostSignInGate', () => {
     const ctx = buildCtx({ path: '/magic-link/verify' })
 
     await expect(callMagicLinkGate(ctx, true)).rejects.toThrow(
-      'REDIRECT:/?signin=1&callbackUrl=/admin&error=use_password_for_2fa'
+      'REDIRECT:/?auth=signin&callbackUrl=/admin&error=use_password_for_2fa'
     )
 
     expect(mockDelete).toHaveBeenCalledTimes(1)

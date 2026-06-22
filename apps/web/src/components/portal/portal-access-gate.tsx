@@ -108,7 +108,15 @@ interface GateCardProps {
   autoOpenSignin?: 'login' | 'signup'
 }
 
-function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callbackUrl, autoOpenSignin }: GateCardProps) {
+function GateCard({
+  reason,
+  workspaceName,
+  logoUrl,
+  authConfig,
+  userEmail,
+  callbackUrl,
+  autoOpenSignin,
+}: GateCardProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { openAuthPopover } = useAuthPopover()
@@ -139,7 +147,7 @@ function GateCard({ reason, workspaceName, logoUrl, authConfig, userEmail, callb
   })
 
   // Auto-open the sign-in dialog on mount when requested (e.g. redirected here
-  // from a private URL that carries ?signin=1). One-shot: the ref prevents
+  // from a private URL that carries ?auth=signin). One-shot: the ref prevents
   // re-opening if the component re-renders while the dialog is open.
   const autoOpened = useRef(false)
   useEffect(() => {

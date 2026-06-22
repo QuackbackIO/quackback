@@ -83,7 +83,7 @@ describe('portal-invite route loader — unauthenticated', () => {
     const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
     expect(r.to).toBe('/')
-    expect(r.search?.signin).toBe('1')
+    expect(r.search?.auth).toBe('signin')
   })
 
   it('redirects to the sign-in dialog when session has no user', async () => {
@@ -91,7 +91,7 @@ describe('portal-invite route loader — unauthenticated', () => {
     const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
     expect(r.to).toBe('/')
-    expect(r.search?.signin).toBe('1')
+    expect(r.search?.auth).toBe('signin')
   })
 
   it('includes callbackUrl pointing back to the invite route', async () => {
@@ -108,7 +108,7 @@ describe('portal-invite route loader — Authentication required error', () => {
     const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
     expect(r.to).toBe('/')
-    expect(r.search?.signin).toBe('1')
+    expect(r.search?.auth).toBe('signin')
   })
 })
 

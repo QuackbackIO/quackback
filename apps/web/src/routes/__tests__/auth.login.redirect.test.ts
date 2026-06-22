@@ -5,10 +5,13 @@ describe('authLoginRedirectTarget', () => {
   it('redirects to the portal dialog carrying a safe callbackUrl + error', () => {
     expect(authLoginRedirectTarget({ callbackUrl: '/admin', error: 'token_expired' })).toEqual({
       to: '/',
-      search: { signin: '1', callbackUrl: '/admin', error: 'token_expired' },
+      search: { auth: 'signin', callbackUrl: '/admin', error: 'token_expired' },
     })
   })
   it('defaults an unsafe/missing callbackUrl to /', () => {
-    expect(authLoginRedirectTarget({})).toEqual({ to: '/', search: { signin: '1', callbackUrl: '/' } })
+    expect(authLoginRedirectTarget({})).toEqual({
+      to: '/',
+      search: { auth: 'signin', callbackUrl: '/' },
+    })
   })
 })

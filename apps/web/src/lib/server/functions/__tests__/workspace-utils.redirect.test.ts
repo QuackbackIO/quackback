@@ -4,7 +4,7 @@ import { db } from '@/lib/server/db'
 /**
  * `requireWorkspaceRole` guards team routes in `beforeLoad`. When an
  * unauthenticated caller hits a team-only route it must land on the
- * portal sign-in dialog (portal root with `signin=1`) carrying
+ * portal sign-in dialog (portal root with `auth=signin`) carrying
  * `callbackUrl=/admin`. Portal-allowed routes still fall back to `/`.
  *
  * The handler is a `createServerFn`, so we stub `createServerFn` to
@@ -48,8 +48,8 @@ vi.mock('@tanstack/react-start', () => ({
 
 type RedirectErr = {
   to?: string
-  search?: { callbackUrl?: string; signin?: string; error?: string }
-  options?: { to?: string; search?: { callbackUrl?: string; signin?: string; error?: string } }
+  search?: { callbackUrl?: string; auth?: string; error?: string }
+  options?: { to?: string; search?: { callbackUrl?: string; auth?: string; error?: string } }
 }
 
 let requireWorkspaceRole: AnyHandler
@@ -70,7 +70,7 @@ describe('requireWorkspaceRole redirect target', () => {
 
     expect(err?.to ?? err?.options?.to).toBe('/')
     const search = err?.search ?? err?.options?.search
-    expect(search?.signin).toBe('1')
+    expect(search?.auth).toBe('signin')
     expect(search?.callbackUrl).toBe('/admin')
   })
 
@@ -95,7 +95,7 @@ describe('requireWorkspaceRole redirect target', () => {
 
     expect(err?.to ?? err?.options?.to).toBe('/')
     const search = err?.search ?? err?.options?.search
-    expect(search?.signin).toBe('1')
+    expect(search?.auth).toBe('signin')
     expect(search?.callbackUrl).toBe('/admin')
     expect(search?.error).toBe('not_team_member')
   })

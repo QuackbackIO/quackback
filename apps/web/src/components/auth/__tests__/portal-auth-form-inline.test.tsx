@@ -255,7 +255,7 @@ describe('PortalAuthFormInline — post-sign-in navigation', () => {
     })
     // Must NOT have been called with the dialog's own URL (the old bug).
     expect(vi.mocked(stashTwoFactorCallbackUrl)).not.toHaveBeenCalledWith(
-      expect.stringContaining('signin=1')
+      expect.stringContaining('auth=signin')
     )
   })
 })
