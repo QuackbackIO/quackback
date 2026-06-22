@@ -25,6 +25,7 @@ import { useAuthPopover } from '@/components/auth/auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { signOut } from '@/lib/client/auth-client'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { navigateAfterAuth } from '@/lib/client/post-auth-navigation'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
@@ -140,9 +141,17 @@ function GateCard({
   useAuthBroadcast({
     onSuccess: () => {
       setSigningIn(true)
-      void router.invalidate().then(() => {
-        if (safeCallback) router.navigate({ to: safeCallback })
-      })
+      if (safeCallback) {
+        // Team surfaces full-navigate (re-bootstrap the admin shell); a
+        // portal-local destination invalidates so the gate clears, then routes.
+        navigateAfterAuth(safeCallback, () => {
+          void router.invalidate().then(() => router.navigate({ to: safeCallback }))
+        })
+      } else {
+        // No pending destination — invalidate so the loader re-runs and the gate
+        // clears now that the visitor is authorized.
+        void router.invalidate()
+      }
     },
   })
 

@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { AUTH_BLOCK_MESSAGES } from '@/lib/server/auth/redirect-errors'
+import { navigateAfterAuth } from '@/lib/client/post-auth-navigation'
 
 /** Opens the auth dialog once when the portal root is reached with a `?auth`
  *  request, navigating to `callbackUrl` on success. No-op when already
@@ -40,7 +41,10 @@ export function useAutoOpenAuthDialog(args: {
     popover.openAuthPopover({
       mode: args.mode!,
       callbackUrl: args.callbackUrl,
-      onSuccess: args.callbackUrl ? () => router.navigate({ to: args.callbackUrl! }) : undefined,
+      onSuccess: args.callbackUrl
+        ? () =>
+            navigateAfterAuth(args.callbackUrl!, () => router.navigate({ to: args.callbackUrl! }))
+        : undefined,
     })
   }, [args.mode, args.callbackUrl, args.error, args.isAuthenticated, popover, router])
 }

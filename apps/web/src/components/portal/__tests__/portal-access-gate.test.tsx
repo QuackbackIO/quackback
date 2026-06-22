@@ -37,7 +37,10 @@ vi.mock('@/components/auth/auth-popover-context', async (orig) => ({
   useAuthPopover: () => ({ openAuthPopover }),
 }))
 
+vi.mock('@/lib/client/post-auth-navigation', () => ({ navigateAfterAuth: vi.fn() }))
+
 import { PortalAccessGate } from '../portal-access-gate'
+import { navigateAfterAuth } from '@/lib/client/post-auth-navigation'
 
 const baseProps = {
   reason: 'unauthenticated' as const,
@@ -54,6 +57,7 @@ beforeEach(() => {
   navigate.mockClear()
   invalidate.mockClear()
   openAuthPopover.mockClear()
+  vi.mocked(navigateAfterAuth).mockClear()
   broadcastOnSuccess = undefined
 })
 
@@ -80,6 +84,16 @@ describe('PortalAccessGate — callbackUrl', () => {
       broadcastOnSuccess?.()
       await Promise.resolve()
     })
+    // navigateAfterAuth is called — not router.navigate directly.
+    expect(vi.mocked(navigateAfterAuth)).toHaveBeenCalledWith('/admin', expect.any(Function))
+    expect(navigate).not.toHaveBeenCalled()
+
+    // Invoke the clientNavigate callback to cover the portal-local branch.
+    const clientNavigate = vi.mocked(navigateAfterAuth).mock.calls[0][1]
+    await act(async () => {
+      clientNavigate()
+      await Promise.resolve()
+    })
     expect(invalidate).toHaveBeenCalled()
     expect(navigate).toHaveBeenCalledWith({ to: '/admin' })
   })
@@ -90,6 +104,8 @@ describe('PortalAccessGate — callbackUrl', () => {
       broadcastOnSuccess?.()
       await Promise.resolve()
     })
+    expect(invalidate).toHaveBeenCalled()
+    expect(vi.mocked(navigateAfterAuth)).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
   })
 })
