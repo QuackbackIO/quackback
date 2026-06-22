@@ -1,5 +1,8 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import {
+  fetchUserAvatar,
+  getEffectivePortalTabConfigForCurrentUserFn,
+} from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
@@ -14,7 +17,9 @@ import {
   evaluateMyPortalAccessFn,
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
+import { getSupportSurfaceAccessFn } from '@/lib/server/functions/chat'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import type { PortalTabConfig } from '@/lib/server/domains/portal/types'
 
 export const Route = createFileRoute('/_portal')({
   loader: async ({ context }) => {
@@ -113,6 +118,12 @@ export const Route = createFileRoute('/_portal')({
     }
 
     const { locale, messages } = await loadPortalIntl()
+    const supportAccess = await getSupportSurfaceAccessFn({ data: { surface: 'portal' } })
+
+    // Fetch effective portal tab configuration for the current user
+    const enabledTabs: PortalTabConfig = session?.user
+      ? await getEffectivePortalTabConfigForCurrentUserFn()
+      : {}
 
     return {
       org: redactSettingsForClient(org),
@@ -129,7 +140,8 @@ export const Route = createFileRoute('/_portal')({
       authConfig,
       locale,
       messages,
-      gate: null,
+      supportAccessGranted: supportAccess.granted,
+      enabledTabs,
     }
   },
   head: ({ loaderData }) => {
@@ -203,6 +215,8 @@ function PortalLayout() {
     authConfig,
     locale,
     messages,
+    supportAccessGranted,
+    enabledTabs,
   } = loaderData
 
   return (
@@ -219,6 +233,8 @@ function PortalLayout() {
             userRole={userRole}
             initialUserData={initialUserData}
             showThemeToggle={themeMode === 'user'}
+            supportAccessGranted={supportAccessGranted}
+            enabledTabs={enabledTabs}
           />
           <main className="flex-1 w-full flex flex-col">
             <Outlet />

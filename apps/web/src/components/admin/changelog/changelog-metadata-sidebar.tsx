@@ -10,6 +10,10 @@ interface ChangelogMetadataSidebarProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  categoryName: string
+  onCategoryNameChange: (name: string) => void
+  productName: string
+  onProductNameChange: (name: string) => void
   authorName?: string | null
 }
 
@@ -18,6 +22,10 @@ export function ChangelogMetadataSidebar({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  categoryName,
+  onCategoryNameChange,
+  productName,
+  onProductNameChange,
   authorName,
 }: ChangelogMetadataSidebarProps) {
   return (
@@ -27,6 +35,10 @@ export function ChangelogMetadataSidebar({
         onPublishStateChange={onPublishStateChange}
         linkedPostIds={linkedPostIds}
         onLinkedPostsChange={onLinkedPostsChange}
+        categoryName={categoryName}
+        onCategoryNameChange={onCategoryNameChange}
+        productName={productName}
+        onProductNameChange={onProductNameChange}
         authorName={authorName}
       />
     </SidebarContainer>

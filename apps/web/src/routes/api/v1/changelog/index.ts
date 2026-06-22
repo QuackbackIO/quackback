@@ -18,6 +18,8 @@ const createChangelogSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   content: z.string().min(1, 'Content is required'),
   publishedAt: z.string().datetime().optional(),
+  categoryName: z.string().max(200).nullable().optional(),
+  productName: z.string().max(200).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
 })
 
@@ -53,6 +55,8 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               id: entry.id,
               title: entry.title,
               content: entry.content,
+              category: entry.category,
+              product: entry.product,
               publishedAt: entry.publishedAt?.toISOString() || null,
               createdAt: entry.createdAt.toISOString(),
               updatedAt: entry.updatedAt.toISOString(),
@@ -100,6 +104,8 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             {
               title: parsed.data.title,
               content: parsed.data.content,
+              categoryName: parsed.data.categoryName,
+              productName: parsed.data.productName,
               publishState,
               linkedPostIds: parsed.data.linkedPostIds as PostId[] | undefined,
             },
@@ -113,6 +119,8 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             id: entry.id,
             title: entry.title,
             content: entry.content,
+            category: entry.category,
+            product: entry.product,
             publishedAt: entry.publishedAt?.toISOString() || null,
             createdAt: entry.createdAt.toISOString(),
             updatedAt: entry.updatedAt.toISOString(),

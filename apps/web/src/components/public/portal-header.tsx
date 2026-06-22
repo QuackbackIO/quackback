@@ -47,6 +47,17 @@ interface PortalHeaderProps {
   }
   /** Whether to show the theme toggle (hidden when admin forces a specific theme) */
   showThemeToggle?: boolean
+  /** Server-evaluated feature access for the current visitor. */
+  supportAccessGranted?: boolean
+  /** Portal tab visibility configuration */
+  enabledTabs?: {
+    feedback?: boolean
+    roadmap?: boolean
+    changelog?: boolean
+    myTickets?: boolean
+    helpCenter?: boolean
+    support?: boolean
+  }
 }
 
 export function PortalHeader({
@@ -55,6 +66,8 @@ export function PortalHeader({
   userRole,
   initialUserData,
   showThemeToggle = true,
+  supportAccessGranted = false,
+  enabledTabs = {},
 }: PortalHeaderProps) {
   const intl = useIntl()
   const router = useRouter()
@@ -65,9 +78,16 @@ export function PortalHeader({
   const helpCenterEnabled =
     !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
   const supportEnabled =
-    !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+    !!settings?.featureFlags?.supportInbox &&
+    !!settings?.portalConfig?.support?.enabled &&
+    supportAccessGranted
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
-  const navItems = buildNavItems({ helpCenterEnabled, supportEnabled })
+  const navItems = buildNavItems({
+    helpCenterEnabled,
+    isSignedIn: !!session?.user,
+    supportEnabled,
+    enabledTabs,
+  })
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
   // Team members can still reach /admin/login directly.
@@ -112,7 +132,7 @@ export function PortalHeader({
   // Support pages via the query key. Skipped entirely when signed out.
   const myConversationsQuery = useQuery({
     queryKey: PORTAL_MY_CONVERSATIONS_QUERY_KEY,
-    queryFn: () => getMyConversationsFn(),
+    queryFn: () => getMyConversationsFn({ data: { surface: 'portal' } }),
     enabled: supportEnabled && isLoggedIn,
     staleTime: 30_000,
   })

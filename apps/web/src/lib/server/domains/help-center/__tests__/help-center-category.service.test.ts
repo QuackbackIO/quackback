@@ -253,6 +253,7 @@ describe('listPublicCategories', () => {
         name: 'Public',
         description: null,
         isPublic: true,
+        visibility: 'public',
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -263,6 +264,7 @@ describe('listPublicCategories', () => {
         name: 'Private',
         description: null,
         isPublic: false,
+        visibility: 'public',
         position: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -292,6 +294,7 @@ describe('listPublicCategories', () => {
         name: 'Parent',
         description: null,
         isPublic: true,
+        visibility: 'public',
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -303,6 +306,7 @@ describe('listPublicCategories', () => {
         name: 'Child',
         description: null,
         isPublic: true,
+        visibility: 'public',
         position: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -314,6 +318,7 @@ describe('listPublicCategories', () => {
         name: 'Empty Root',
         description: null,
         isPublic: true,
+        visibility: 'public',
         position: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -492,6 +497,14 @@ describe('createCategory with parentId and icon', () => {
 
 describe('updateCategory with parentId and icon', () => {
   it('passes parentId and icon in the update set', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'category_1' as HelpCenterCategoryId,
+      slug: 'category-1',
+      name: 'Category 1',
+      isPublic: true,
+      visibility: 'public',
+      parentId: null,
+    })
     mockCategoryFindMany.mockResolvedValue([
       { id: 'category_parent1', parentId: null },
       { id: 'category_1', parentId: null },
@@ -507,6 +520,14 @@ describe('updateCategory with parentId and icon', () => {
   })
 
   it('allows clearing parentId and icon by passing null', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'category_1' as HelpCenterCategoryId,
+      slug: 'category-1',
+      name: 'Category 1',
+      isPublic: true,
+      visibility: 'public',
+      parentId: null,
+    })
     mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', parentId: null }])
     await updateCategory('category_1' as HelpCenterCategoryId, {
       parentId: null,
@@ -528,6 +549,7 @@ describe('listPublicCategories returns parentId and icon', () => {
         name: 'Public',
         description: null,
         isPublic: true,
+        visibility: 'public',
         position: 0,
         parentId: 'category_parent1',
         icon: 'book',
@@ -583,6 +605,14 @@ describe('createCategory hierarchy validation', () => {
 
 describe('updateCategory hierarchy validation', () => {
   it('rejects moving a category under itself', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'a',
+      slug: 'a',
+      name: 'A',
+      isPublic: true,
+      visibility: 'public',
+      parentId: null,
+    })
     mockCategoryFindMany.mockResolvedValue([
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },
@@ -593,6 +623,14 @@ describe('updateCategory hierarchy validation', () => {
   })
 
   it('rejects moving a category under its own descendant', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'a',
+      slug: 'a',
+      name: 'A',
+      isPublic: true,
+      visibility: 'public',
+      parentId: null,
+    })
     mockCategoryFindMany.mockResolvedValue([
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },
@@ -604,6 +642,14 @@ describe('updateCategory hierarchy validation', () => {
   })
 
   it('rejects moving a subtree such that the deepest leaf would exceed MAX_CATEGORY_DEPTH', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'b',
+      slug: 'b',
+      name: 'B',
+      isPublic: true,
+      visibility: 'public',
+      parentId: 'a',
+    })
     mockCategoryFindMany.mockResolvedValue([
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },
@@ -617,6 +663,14 @@ describe('updateCategory hierarchy validation', () => {
   })
 
   it('allows setting parentId to null (promoting to top-level)', async () => {
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'b',
+      slug: 'b',
+      name: 'B',
+      isPublic: true,
+      visibility: 'public',
+      parentId: 'a',
+    })
     mockCategoryFindMany.mockResolvedValue([
       { id: 'a', parentId: null },
       { id: 'b', parentId: 'a' },

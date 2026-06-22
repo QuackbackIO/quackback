@@ -23,6 +23,10 @@ export const createChangelogSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.string(),
   contentJson: tiptapContentSchema.nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  categoryName: z.string().max(200).nullable().optional(),
+  productId: z.string().nullable().optional(),
+  productName: z.string().max(200).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
 })
@@ -35,6 +39,10 @@ export const updateChangelogSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().optional(),
   contentJson: tiptapContentSchema.nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  categoryName: z.string().max(200).nullable().optional(),
+  productId: z.string().nullable().optional(),
+  productName: z.string().max(200).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
 })
@@ -68,6 +76,14 @@ export const deleteChangelogSchema = z.object({
 export const listPublicChangelogsSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
+  /** Portal user-selected category filter (category ID) */
+  selectedCategoryId: z.string().optional(),
+  /** Portal user-selected product filter (product ID) */
+  selectedProductId: z.string().optional(),
+  /** Visibility restriction: only show entries in these categories (null = unrestricted) */
+  visibilityCategoryIds: z.array(z.string()).nullable().optional(),
+  /** Visibility restriction: only show entries in these products (null = unrestricted) */
+  visibilityProductIds: z.array(z.string()).nullable().optional(),
 })
 
 // Export types inferred from schemas

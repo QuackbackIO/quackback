@@ -28,6 +28,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryName, setCategoryName] = useState('')
+  const [productName, setProductName] = useState('')
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
@@ -56,6 +58,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         title: data.title,
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
+        categoryName: categoryName.trim() || null,
+        productName: productName.trim() || null,
         linkedPostIds,
         publishState,
       },
@@ -65,6 +69,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
           form.reset()
           setContentJson(null)
           setLinkedPostIds([])
+          setCategoryName('')
+          setProductName('')
           setPublishState({ type: 'draft' })
           onChangelogCreated?.()
         },
@@ -78,6 +84,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
       form.reset()
       setContentJson(null)
       setLinkedPostIds([])
+      setCategoryName('')
+      setProductName('')
       setPublishState({ type: 'draft' })
       createChangelogMutation.reset()
     }
@@ -138,6 +146,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 onPublishStateChange={setPublishState}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
+                categoryName={categoryName}
+                onCategoryNameChange={setCategoryName}
+                productName={productName}
+                onProductNameChange={setProductName}
               />
             </div>
 
@@ -165,6 +177,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       onPublishStateChange={setPublishState}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
+                      categoryName={categoryName}
+                      onCategoryNameChange={setCategoryName}
+                      productName={productName}
+                      onProductNameChange={setProductName}
                     />
                   </div>
                 </SheetContent>

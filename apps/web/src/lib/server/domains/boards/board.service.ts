@@ -65,9 +65,30 @@ export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
   }
 }
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import {
+  dispatchBoardCreated,
+  dispatchBoardUpdated,
+  dispatchBoardDeleted,
+} from '@/lib/server/events/dispatch'
+import type { EventActor, EventBoardRef } from '@/lib/server/events/types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'boards' })
+
+/** Service-actor fallback for board lifecycle events. */
+const boardEventActor: EventActor = { type: 'service', displayName: 'boards-system' }
+
+/** Build the fixed-shape webhook ref from a board row. */
+function toBoardRef(board: Board): EventBoardRef {
+  return {
+    id: board.id,
+    slug: board.slug,
+    name: board.name,
+    description: board.description ?? null,
+    createdAt: board.createdAt?.toISOString() ?? null,
+    updatedAt: board.updatedAt?.toISOString() ?? null,
+  }
+}
 
 /**
  * Create a new board
@@ -145,6 +166,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 
   const [board] = await db.insert(boards).values(insertValues).returning()
 
+  void dispatchBoardCreated(boardEventActor, toBoardRef(board)).catch(() => {})
   return board
 }
 
@@ -224,6 +246,12 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
 
+  // `slug` is a derived side-effect of renaming; report caller-facing input
+  // fields so receivers see the intent, not the implementation.
+  const changedFields = Object.keys(updateData).filter((k) => k !== 'slug')
+  void dispatchBoardUpdated(boardEventActor, toBoardRef(updatedBoard), changedFields).catch(
+    () => {}
+  )
   return updatedBoard
 }
 
@@ -234,6 +262,11 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
  * Also removes the board ID from webhook board_ids filters to maintain referential integrity.
  */
 export async function deleteBoard(id: BoardId): Promise<void> {
+  // Snapshot before the mutation so the delete event carries a populated ref.
+  const snapshot = await db.query.boards.findFirst({
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
+  })
+
   // Soft delete the board by setting deletedAt
   const result = await db
     .update(boards)
@@ -243,6 +276,10 @@ export async function deleteBoard(id: BoardId): Promise<void> {
 
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  if (snapshot) {
+    void dispatchBoardDeleted(boardEventActor, toBoardRef(snapshot)).catch(() => {})
   }
 
   // Clean up webhook board_ids references (fire-and-forget)

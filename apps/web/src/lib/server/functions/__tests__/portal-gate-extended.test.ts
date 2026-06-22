@@ -20,11 +20,12 @@
  *   6  fetchPublicStatuses
  *   7  fetchPublicTags
  *   8  fetchUserAvatar
- *   9  fetchAvatars
- *  10  fetchSubscriptionStatus
- *  11  fetchPublicRoadmaps
- *  12  fetchPublicRoadmapPosts
- *  13  getCommentsSectionDataFn
+ *   9  getEffectivePortalTabConfigForCurrentUserFn
+ *  10  fetchAvatars
+ *  11  fetchSubscriptionStatus
+ *  12  fetchPublicRoadmaps
+ *  13  fetchPublicRoadmapPosts
+ *  14  getCommentsSectionDataFn
  *
  * Handler registration order (changelog.ts):
  *   0  createChangelogFn
@@ -260,10 +261,10 @@ const FETCH_PUBLIC_POST_DETAIL = 4
 const FETCH_PUBLIC_POSTS = 5
 const FETCH_PUBLIC_STATUSES = 6
 const FETCH_PUBLIC_TAGS = 7
-const FETCH_PUBLIC_ROADMAPS = 11
-const FETCH_PUBLIC_ROADMAP_POSTS = 12
+const FETCH_PUBLIC_ROADMAPS = 12
+const FETCH_PUBLIC_ROADMAP_POSTS = 13
 // Declared last in portal.ts (appended to preserve the indices above).
-const FETCH_BOARD_CAPABILITIES = 14
+const FETCH_BOARD_CAPABILITIES = 15
 
 // Changelog handler indices
 const CHANGELOG = '@/lib/server/functions/changelog' as const
@@ -301,6 +302,39 @@ describe('portal.ts fetchPortalData — portal-visibility gate', () => {
     >
     expect(result).toMatchObject({ boards: [], statuses: [], tags: [] })
     expect(mockListPublicBoardsWithStats).toHaveBeenCalledTimes(1)
+  })
+
+  it('serializes post timestamps that are already strings', async () => {
+    const createdAt = '2026-06-12T08:30:00.000Z'
+    mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
+    mockListPublicBoardsWithStats.mockResolvedValue([])
+    mockListPublicPostsWithVotesAndAvatars.mockResolvedValue({
+      items: [
+        {
+          id: 'post_1',
+          title: 'String timestamp post',
+          content: null,
+          statusId: null,
+          voteCount: 3,
+          authorName: 'Taylor',
+          principalId: 'principal_1',
+          createdAt,
+          commentCount: 0,
+          tags: [],
+          board: { id: 'board_1', name: 'Feedback', slug: 'feedback' },
+        },
+      ],
+      hasMore: false,
+    })
+    mockListPublicStatuses.mockResolvedValue([])
+    mockListPublicTags.mockResolvedValue([])
+    mockGetVotedPostIdsByUserId.mockResolvedValue(new Set())
+
+    const h = await loadModule(PORTAL)
+    const result = (await h[FETCH_PORTAL_DATA]({ data: { sort: 'top' } })) as {
+      posts: { items: Array<{ createdAt: string }> }
+    }
+    expect(result.posts.items[0].createdAt).toBe(createdAt)
   })
 
   it('serves data when an authorized caller accesses a private portal', async () => {
