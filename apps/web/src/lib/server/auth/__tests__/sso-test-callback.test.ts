@@ -1,10 +1,10 @@
 /**
  * Tests for the SSO test-callback helper that the auth catch-all route
- * (`/api/auth/oauth2/callback/sso`) calls before handing off to
- * Better-Auth. State-keyed Redis lookup is the discriminator: a hit
+ * calls (for any `/api/auth/oauth2/callback/*` path) before handing off
+ * to Better-Auth. State-keyed Redis lookup is the discriminator: a hit
  * means "this is an admin Test sign-in, run the diagnostic handshake
  * and render the popup HTML"; a miss means "let Better-Auth handle it
- * as a normal SSO callback."
+ * as a normal OAuth callback."
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -41,8 +41,9 @@ vi.mock('@/lib/server/db', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
 }))
 
-// A successful test stamps the legacy blob via the settings service AND the
-// migrated `sso` identity_provider row via the identity-providers service.
+// A successful test stamps the identity_provider row via the
+// identity-providers service. For the legacy 'sso' provider it ALSO
+// stamps the settings blob via the settings service.
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   markSsoTestSucceeded: hoisted.markSsoTestSucceeded,
 }))
@@ -55,10 +56,12 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
 import { handleSsoTestCallback, renderSsoTestCallbackHtml } from '../sso-test-callback'
 import { SSO_TEST_POSTMESSAGE_SOURCE } from '@/lib/shared/sso-test-keys'
 
+/** A valid `sso`-provider test session (the legacy path). */
 const validSession = {
   testId: 'ssotest_abc',
   state: 'state-xyz',
   nonce: 'nonce-xyz',
+  registrationId: 'sso',
   discoveryUrl: 'https://idp/.well-known',
   tokenEndpoint: 'https://idp/token',
   jwksUri: 'https://idp/jwks',
@@ -69,6 +72,14 @@ const validSession = {
   redirectUri: 'https://qb.test/api/auth/oauth2/callback/sso',
   adminUserId: 'user_admin',
   startedAt: 1700000000,
+}
+
+/** A session for a non-sso provider (per-provider path). */
+const customProviderSession = {
+  ...validSession,
+  testId: 'ssotest_custom',
+  registrationId: 'oidc_custom',
+  redirectUri: 'https://qb.test/api/auth/oauth2/callback/oidc_custom',
 }
 
 beforeEach(() => {
@@ -198,6 +209,9 @@ describe('handleSsoTestCallback', () => {
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid', email: '  Admin@ACME.com  ' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
     }
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
     hoisted.runHandshake.mockResolvedValueOnce(okResult)
     hoisted.userFindFirst.mockResolvedValueOnce({ email: 'admin@acme.com' })
 
@@ -209,6 +223,7 @@ describe('handleSsoTestCallback', () => {
     })
 
     expect(handled?.identityMatched).toBe(true)
+    // Legacy blob stamp fires for 'sso' registrationId.
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
     expect(hoisted.cacheSet).toHaveBeenCalledWith(
       'sso-test:result:ssotest_abc',
@@ -228,6 +243,9 @@ describe('handleSsoTestCallback', () => {
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid', email: 'someone-else@acme.com' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
     }
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
     hoisted.runHandshake.mockResolvedValueOnce(okResult)
     hoisted.userFindFirst.mockResolvedValueOnce({ email: 'admin@acme.com' })
 
@@ -255,6 +273,9 @@ describe('handleSsoTestCallback', () => {
       claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
     }
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+    ])
     hoisted.runHandshake.mockResolvedValueOnce(okResult)
 
     const handled = await handleSsoTestCallback({
@@ -269,9 +290,9 @@ describe('handleSsoTestCallback', () => {
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
   })
 
-  it('stamps the migrated `sso` identity_provider row (per-provider enforcement gate)', async () => {
-    // The enforcement gate reads the provider ROW's lastSuccessfulTestAt, not
-    // the legacy JSON — so a successful test must stamp the row too.
+  it('stamps the session provider row and the legacy blob for registrationId===sso', async () => {
+    // For the legacy 'sso' provider, BOTH the row stamp (per-provider gate)
+    // and the blob stamp (legacy gate) must fire on success.
     hoisted.cacheGet.mockResolvedValueOnce(validSession)
     hoisted.listIdentityProviders.mockResolvedValueOnce([
       { id: 'idp_sso', registrationId: 'sso', domains: [] },
@@ -284,10 +305,46 @@ describe('handleSsoTestCallback', () => {
       tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
     })
 
-    await handleSsoTestCallback({ state: 'state-xyz', code: 'authcode', error: null, errorDescription: null })
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
 
     expect(hoisted.markTestSucceeded).toHaveBeenCalledWith('idp_sso')
     expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
+    // Legacy blob stamp MUST fire for 'sso'.
+    expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it('stamps only the provider row (not the legacy blob) for a non-sso registrationId', async () => {
+    // Per-provider test: only the row stamp fires; the legacy blob stamp
+    // must NOT fire (it belongs to the 'sso' registrationId only).
+    hoisted.cacheGet.mockResolvedValueOnce(customProviderSession)
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      { id: 'idp_sso', registrationId: 'sso', domains: [] },
+      { id: 'idp_custom', registrationId: 'oidc_custom', domains: [] },
+    ])
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: true,
+      steps: [],
+      claims: { iss: 'https://idp', sub: 'u2', aud: 'cid' },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+    })
+
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
+
+    // Only the custom provider's row is stamped.
+    expect(hoisted.markTestSucceeded).toHaveBeenCalledWith('idp_custom')
+    expect(hoisted.markTestSucceeded).toHaveBeenCalledTimes(1)
+    // Legacy blob stamp must NOT fire for a non-sso provider.
+    expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
   })
 
   it('failed handshake does not stamp lastSuccessfulTestAt', async () => {

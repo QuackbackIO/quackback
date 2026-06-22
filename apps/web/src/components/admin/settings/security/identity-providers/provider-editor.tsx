@@ -19,6 +19,7 @@
  */
 import { useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
+import { useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -100,9 +101,12 @@ const VERIFY_REASON_MESSAGES: Record<
 
 /** All OIDC providers register under the genericOAuth callback path. The
  *  admin copies this into their IdP's allowed-redirect list. */
-function redirectUriFor(registrationId: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  return `${origin}/api/auth/oauth2/callback/${registrationId}`
+function redirectUriFor(baseUrl: string | undefined, registrationId: string): string {
+  // Build from the SERVER's configured base URL (what Better-Auth actually uses
+  // for the OAuth redirect_uri), not window.location.origin — those diverge
+  // behind a proxy/tunnel (e.g. ngrok) and a mismatch breaks the OAuth flow.
+  const origin = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '')
+  return `${origin.replace(/\/+$/, '')}/api/auth/oauth2/callback/${registrationId}`
 }
 
 /** New providers get an `oidc_<id>` registrationId (stable across the
@@ -129,6 +133,12 @@ export function ProviderEditor({
   const upsert = useServerFn(upsertIdentityProviderFn)
   const setCreds = useServerFn(setProviderCredentialsFn)
   const remove = useServerFn(deleteIdentityProviderFn)
+  const { baseUrl } = useRouteContext({ from: '__root__' })
+
+  // Stable for this editor session: existing providers keep their id; a new
+  // provider gets one generated once so the redirect URI shown below is the
+  // exact value that gets saved (and registered at the IdP), not a placeholder.
+  const [registrationId] = useState(() => provider?.registrationId ?? newRegistrationId())
 
   const [label, setLabel] = useState(provider?.label ?? '')
   const [kind, setKind] = useState<IdpKind>(() => inferIdpKind(provider?.discoveryUrl))
@@ -162,7 +172,7 @@ export function ProviderEditor({
       const saved = await upsert({
         data: {
           id: provider?.id,
-          registrationId: provider?.registrationId ?? newRegistrationId(),
+          registrationId,
           label: label.trim(),
           clientId: clientId.trim(),
           discoveryUrl: discoveryUrl.trim() || null,
@@ -215,9 +225,7 @@ export function ProviderEditor({
     <Dialog open={open} onOpenChange={(o) => (saving ? undefined : onOpenChange(o))}>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 p-0">
         <DialogHeader className="shrink-0 border-b border-border/50 px-6 py-4">
-          <DialogTitle>
-            {provider ? 'Edit identity provider' : 'Add identity provider'}
-          </DialogTitle>
+          <DialogTitle>{provider ? 'Edit identity provider' : 'Add identity provider'}</DialogTitle>
           <DialogDescription>
             Connect an OpenID Connect IdP for portal and admin sign-in.
           </DialogDescription>
@@ -309,28 +317,11 @@ export function ProviderEditor({
                 placeholder={provider ? 'Leave blank to keep the current secret' : ''}
                 disabled={saving}
               />
-              {/* TODO(per-provider-test): The test flow (startSsoTestFn) reads
-                  authConfig.ssoOidc, not the per-provider row. A successful test
-                  would stamp ssoOidc.lastSuccessfulTestAt instead of this
-                  provider's lastSuccessfulTestAt, leaving enforcement gates
-                  unsatisfied. Only the legacy 'sso' registrationId is safe to
-                  test here. */}
-              <TestSignInButton
-                disabled={saving || !provider || provider.registrationId !== 'sso'}
-              />
+              <TestSignInButton registrationId={registrationId} disabled={saving || !provider} />
             </div>
-            {provider && provider.registrationId !== 'sso' && (
-              <p className="text-xs text-muted-foreground">
-                Per-provider test sign-in is coming soon — this connection cannot be
-                verified here yet.
-              </p>
-            )}
           </div>
 
-          <RedirectUriCallout
-            uri={redirectUriFor(provider?.registrationId ?? 'oidc_…')}
-            pending={!provider}
-          />
+          <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
 
           {/* Domains */}
           <DomainsSection provider={provider} disabled={saving} />
@@ -414,7 +405,12 @@ export function ProviderEditor({
             <span />
           )}
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button type="button" onClick={handleSave} disabled={saving}>
@@ -509,7 +505,7 @@ function IdpDiscoveryFields({
 
 /** Redirect URI the admin must register at their IdP. Per-provider: built
  *  from the provider's `registrationId`. */
-function RedirectUriCallout({ uri, pending }: { uri: string; pending: boolean }) {
+function RedirectUriCallout({ uri }: { uri: string }) {
   return (
     <div className="space-y-1">
       <Label>Redirect URI to register in your IdP</Label>
@@ -519,11 +515,9 @@ function RedirectUriCallout({ uri, pending }: { uri: string; pending: boolean })
         </code>
         <CopyButton value={uri} aria-label="Copy redirect URI" />
       </div>
-      {pending && (
-        <p className="text-xs text-muted-foreground">
-          The exact URI is assigned when you save the provider.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Add this exact URI to your IdP&apos;s allowed redirect / callback URIs.
+      </p>
     </div>
   )
 }
@@ -550,10 +544,21 @@ function DomainsSection({
 
   const domains = provider?.domains ?? []
   const hasVerified = domains.some((d) => d.verifiedAt)
-  // Only the migrated `sso` provider can be test-verified today, and the
-  // enforcement gate requires a successful per-provider test — so enforcement
-  // is offered only for `sso` until per-provider test sign-in ships.
-  const enforceable = provider?.registrationId === 'sso'
+  // Enforcement is available once the provider has a valid test sign-in that
+  // postdates the last connection-affecting change. Mirrors the server-side
+  // `isSsoEnforcementUnlocked(provider, null)` predicate (pure, no DB).
+  const enforceable = (() => {
+    if (!provider) return false
+    const testedMs = provider.lastSuccessfulTestAt
+      ? new Date(provider.lastSuccessfulTestAt).getTime()
+      : null
+    if (testedMs === null || Number.isNaN(testedMs)) return false
+    const changedMs = provider.detailsChangedAt
+      ? new Date(provider.detailsChangedAt).getTime()
+      : null
+    if (changedMs === null || Number.isNaN(changedMs)) return true
+    return testedMs > changedMs
+  })()
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
 
@@ -613,13 +618,6 @@ function DomainsSection({
               description="Enforcing requires email delivery (break-glass) + one successful sign-in through this provider first."
             />
           )}
-          {hasVerified && !enforceable && (
-            <WarningBox
-              variant="warning"
-              title="Enforcement not available yet"
-              description="Per-provider test sign-in is coming soon. Until then, enforcement can only be enabled for the primary SSO connection."
-            />
-          )}
 
           <form onSubmit={handleAdd} className="space-y-2">
             <div className="flex items-center gap-2">
@@ -662,11 +660,9 @@ function DomainRow({
 }: {
   domain: VerifiedDomain
   disabled: boolean
-  /** Whether enforcement can actually be enabled for this provider. Only the
-   *  migrated `sso` provider can be test-verified today, and the enforcement
-   *  gate requires a successful per-provider test — so the toggle is disabled
-   *  for other providers until per-provider test sign-in ships (see the
-   *  TODO(per-provider-test) on the Test button). */
+  /** True when the provider has a fresh test sign-in — the enforcement
+   *  checkbox is enabled. False disables the checkbox to prevent setting
+   *  enforcement on an unverified connection. */
   enforceable: boolean
   onChanged: () => Promise<unknown> | void
 }) {
@@ -963,7 +959,9 @@ function AttributeMappingEditor({
               variant="outline"
               size="sm"
               className="h-9"
-              onClick={() => update({ rules: [...current.rules, { whenContains: '', role: 'member' }] })}
+              onClick={() =>
+                update({ rules: [...current.rules, { whenContains: '', role: 'member' }] })
+              }
               disabled={disabled}
             >
               <PlusIcon className="size-3.5" />
@@ -999,8 +997,8 @@ function AttributeMappingEditor({
               disabled={disabled}
             />
             <span>
-              <span className="font-medium">Sync on every sign-in.</span> Re-resolve the role on each
-              sign-in. Demotes members when their IdP group changes.
+              <span className="font-medium">Sync on every sign-in.</span> Re-resolve the role on
+              each sign-in. Demotes members when their IdP group changes.
             </span>
           </label>
         </div>

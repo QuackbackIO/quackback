@@ -42,9 +42,8 @@ vi.mock('@/lib/server/functions/sso', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-// The connection "Test sign-in" affordance rides on the legacy single-SSO
-// modal; stub it so the editor doesn't drag the test-flow server fns in.
-// Pass `disabled` through so tests can assert button state.
+// Stub the Test sign-in button so the editor doesn't pull in the full
+// test-flow server fns. Pass `disabled` through so tests can assert state.
 vi.mock('../../sso/test-sign-in-button', () => ({
   TestSignInButton: ({ disabled }: { disabled?: boolean }) => (
     <button type="button" disabled={disabled}>
@@ -154,18 +153,16 @@ describe('<IdentityProvidersSection>', () => {
 })
 
 describe('Test sign-in button in ProviderEditor', () => {
-  // The legacy startSsoTestFn reads authConfig.ssoOidc, not the
-  // per-provider row. Showing an enabled Test button for providers
-  // with registrationId !== 'sso' gives false confidence: a success
-  // stamps ssoOidc.lastSuccessfulTestAt, not the provider's own
-  // lastSuccessfulTestAt, so enforcement gates are never satisfied.
+  // startSsoTestFn now resolves the provider by registrationId and stamps
+  // that provider's own lastSuccessfulTestAt, so the button is enabled for
+  // any saved provider regardless of its registrationId.
 
-  it('is disabled for a provider with a non-"sso" registrationId', async () => {
+  it('is enabled for a saved non-sso provider', async () => {
     renderSection()
     fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
     await screen.findByText(/edit identity provider/i)
     const testBtn = screen.getByRole('button', { name: /test sign-in/i })
-    expect(testBtn).toBeDisabled()
+    expect(testBtn).not.toBeDisabled()
   })
 
   it('is enabled for the legacy "sso" registrationId provider', async () => {

@@ -1,14 +1,13 @@
 /**
  * Tests for the admin-only SSO test sign-in server functions:
  *
- *  - startSsoTestFn returns a typed error union when SSO is not yet
- *    configured or the client secret is missing, and otherwise builds
- *    an OIDC authorize URL (S256 PKCE — mirrors prod genericOAuth's
- *    pkce: true) using
- *    the SAME redirect_uri as production SSO sign-in, and persists a
- *    TestSession to Redis. The auth catch-all discriminates test from
- *    production by looking up the state in Redis — see
- *    `sso-test-callback.test.ts` for the handler tests.
+ *  - startSsoTestFn accepts a `registrationId`, resolves the provider via
+ *    `listIdentityProviders`, fetches the credential secret via
+ *    `getIdentityProviderCredentials`, builds a per-provider OIDC authorize
+ *    URL (S256 PKCE — mirrors prod genericOAuth's pkce: true), persists a
+ *    TestSession (carrying registrationId) to Redis, and returns the
+ *    authorize URL with a redirect_uri matching the provider's own
+ *    production callback.
  *  - getSsoTestResultFn gates on admin auth, polls the result key, and
  *    returns null until the callback writes its diagnostic payload.
  *
@@ -44,8 +43,8 @@ const hoisted = vi.hoisted(() => ({
   cacheSet: vi.fn(),
   cacheDel: vi.fn(),
   requireAuth: vi.fn(),
-  getTenantSettings: vi.fn(),
-  getSsoClientSecret: vi.fn(),
+  listIdentityProviders: vi.fn(),
+  getIdentityProviderCredentials: vi.fn(),
   safeFetch: vi.fn(),
 }))
 
@@ -60,12 +59,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getTenantSettings: hoisted.getTenantSettings,
-}))
-
-vi.mock('@/lib/server/auth/sso-secret', () => ({
-  getSsoClientSecret: hoisted.getSsoClientSecret,
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: hoisted.listIdentityProviders,
+  getIdentityProviderCredentials: hoisted.getIdentityProviderCredentials,
 }))
 
 vi.mock('@/lib/server/content/ssrf-guard', () => ({
@@ -88,43 +84,41 @@ await import('../sso-test')
 const startSsoTest = handlers[0]
 const getSsoTestResult = handlers[1]
 
-describe('startSsoTestFn', () => {
-  it('returns no-config error when ssoOidc is missing', async () => {
-    hoisted.getTenantSettings.mockResolvedValue({ authConfig: {} })
+/** A minimal provider row returned by listIdentityProviders. */
+const ssoProvider = {
+  id: 'idp_sso',
+  registrationId: 'sso',
+  discoveryUrl: 'https://idp/.well-known',
+  clientId: 'c',
+  domains: [],
+}
 
-    const result = await startSsoTest({ data: {} })
+describe('startSsoTestFn', () => {
+  it('returns no-config error when provider is not found', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([])
+
+    const result = await startSsoTest({ data: { registrationId: 'sso' } })
     expect(result).toMatchObject({ error: 'sso-not-configured' })
   })
 
-  it('returns no-secret error when secret is missing', async () => {
-    hoisted.getTenantSettings.mockResolvedValue({
-      authConfig: {
-        ssoOidc: {
-          enabled: true,
-          discoveryUrl: 'https://idp',
-          clientId: 'c',
-          autoCreateUsers: false,
-        },
-      },
-    })
-    hoisted.getSsoClientSecret.mockResolvedValue(null)
+  it('returns no-config error when provider lacks discoveryUrl', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, discoveryUrl: null }])
 
-    const result = await startSsoTest({ data: {} })
+    const result = await startSsoTest({ data: { registrationId: 'sso' } })
+    expect(result).toMatchObject({ error: 'sso-not-configured' })
+  })
+
+  it('returns no-secret error when credential blob has no clientSecret', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue(null)
+
+    const result = await startSsoTest({ data: { registrationId: 'sso' } })
     expect(result).toMatchObject({ error: 'no-secret' })
   })
 
-  it('returns testId + authorizeUrl when preconditions met', async () => {
-    hoisted.getTenantSettings.mockResolvedValue({
-      authConfig: {
-        ssoOidc: {
-          enabled: true,
-          discoveryUrl: 'https://idp/.well-known',
-          clientId: 'c',
-          autoCreateUsers: false,
-        },
-      },
-    })
-    hoisted.getSsoClientSecret.mockResolvedValue('secret')
+  it('returns testId + authorizeUrl when preconditions met (legacy sso provider)', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([ssoProvider])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
     hoisted.safeFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -138,24 +132,64 @@ describe('startSsoTestFn', () => {
     )
     hoisted.cacheSet.mockResolvedValue(undefined)
 
-    const result = (await startSsoTest({ data: {} })) as {
+    const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
       testId: string
       authorizeUrl: string
     }
 
     expect(result.testId).toMatch(/^ssotest_/)
     expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
-    // Reuses the production SSO callback so admins only register one
-    // URL with their IdP. The auth catch-all discriminates by state.
+    // Redirect URI is the provider's own production callback.
     expect(result.authorizeUrl).toMatch(
       /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Fsso/
     )
-    // PKCE is mandatory for OAuth 2.1 IdPs (e.g. Supabase Auth) and
-    // ignored by IdPs that don't support it — the authorize URL must
-    // carry an S256 challenge pair, mirroring production (pkce: true).
+    // PKCE is mandatory for OAuth 2.1 IdPs and ignored by IdPs that don't
+    // support it — the authorize URL must carry an S256 challenge pair.
     expect(result.authorizeUrl).toMatch(/code_challenge=[A-Za-z0-9_-]{43}/)
     expect(result.authorizeUrl).toMatch(/code_challenge_method=S256/)
     expect(hoisted.cacheSet).toHaveBeenCalledTimes(1)
+
+    // Session persisted to Redis must carry the registrationId.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    expect(session.registrationId).toBe('sso')
+  })
+
+  it('uses the provider-specific callback path for a non-sso registrationId', async () => {
+    const customProvider = {
+      id: 'idp_abc',
+      registrationId: 'oidc_abc123',
+      discoveryUrl: 'https://custom-idp/.well-known',
+      clientId: 'custom-client',
+      domains: [],
+    }
+    hoisted.listIdentityProviders.mockResolvedValue([customProvider])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret2' })
+    hoisted.safeFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://custom-idp',
+          authorization_endpoint: 'https://custom-idp/auth',
+          token_endpoint: 'https://custom-idp/token',
+          jwks_uri: 'https://custom-idp/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    const result = (await startSsoTest({ data: { registrationId: 'oidc_abc123' } })) as {
+      testId: string
+      authorizeUrl: string
+    }
+
+    // Redirect URI must be the provider's OWN callback, not the legacy sso path.
+    expect(result.authorizeUrl).toMatch(
+      /redirect_uri=https%3A%2F%2Fqb\.test%2Fapi%2Fauth%2Foauth2%2Fcallback%2Foidc_abc123/
+    )
+
+    // Session must carry the correct registrationId.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [string, { registrationId: string }]
+    expect(session.registrationId).toBe('oidc_abc123')
   })
 })
 

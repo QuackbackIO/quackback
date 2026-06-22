@@ -28,9 +28,17 @@ export function ssoTestResultKey(testId: string): string {
 export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
 
 /**
- * Better-Auth genericOAuth callback path for the production SSO
- * provider. The test flow piggy-backs on this exact URL so admins
- * only register one redirect URI with their IdP; the auth catch-all
- * dispatches test vs prod by inspecting the OAuth `state`.
+ * Better-Auth genericOAuth callback path for the legacy `sso` provider.
+ * Kept for reference; new code should build per-provider paths from
+ * `SSO_OAUTH_CALLBACK_PREFIX`.
  */
 export const SSO_OAUTH_CALLBACK_PATH = '/api/auth/oauth2/callback/sso' as const
+
+/**
+ * Path prefix shared by every genericOAuth callback. The test flow uses
+ * the provider's own production callback (`<prefix><registrationId>`) so
+ * admins register exactly one redirect URI per provider. The auth catch-all
+ * intercepts all paths under this prefix before handing off to Better-Auth
+ * — a Redis miss for the OAuth `state` still falls through cleanly.
+ */
+export const SSO_OAUTH_CALLBACK_PREFIX = '/api/auth/oauth2/callback/' as const

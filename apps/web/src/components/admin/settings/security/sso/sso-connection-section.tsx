@@ -633,7 +633,7 @@ function SsoConfiguredForm({
           <Button onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
-          <TestSignInButton disabled={saving || !ssoStatus.secretConfigured} />
+          <TestSignInButton registrationId="sso" disabled={saving || !ssoStatus.secretConfigured} />
         </div>
       </div>
     </div>
