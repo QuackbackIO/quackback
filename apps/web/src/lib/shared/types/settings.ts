@@ -10,7 +10,6 @@
  */
 
 export type {
-  PortalAuthMethods,
   PortalConfig,
   PortalWelcomeCard,
   TenantSettings,

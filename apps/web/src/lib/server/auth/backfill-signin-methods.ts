@@ -60,8 +60,6 @@ export async function backfillUnifiedSignInMethods(database: DbOrTx): Promise<{ 
     .update(settings)
     .set({ authConfig: JSON.stringify(parsedAuth) })
     .where(eq(settings.id, rows[0].id))
-  if (added.length > 0) {
-    log.info({ keys: added }, 'merged portal-only sign-in methods into authConfig.oauth')
-  }
+  log.info({ keys: added }, 'merged portal-only sign-in methods into authConfig.oauth')
   return { merged: true }
 }

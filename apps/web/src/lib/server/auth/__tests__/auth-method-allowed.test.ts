@@ -3,26 +3,21 @@
  *
  * Independent of the hard-binding branch (which gates by enforced
  * verified domain). This predicate answers a single question: given
- * the workspace toggles, is provider X turned on for role Y?
+ * the workspace toggles, is provider X turned on for sign-in flow Y?
  *
- * Team-role (admin / member) and portal-role (user) take different
- * paths — team reads `tenant.authConfig.oauth`, portal reads
- * `getPublicPortalConfig().oauth`. Different defaults too: team
- * defaults password ON when the key is missing; portal defaults
- * password ON for backwards compat, magic-link OFF (admin must opt
- * portal users in to passwordless).
+ * All roles (admin / member / user) read the same unified config:
+ * `tenant.authConfig.oauth`. Defaults: password ON when the key is
+ * missing; magic-link OFF (admin must opt in to passwordless).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { OAuthProviders } from '@/lib/server/domains/settings/settings.types'
 import { makeAuthConfig, makeTenant } from './_helpers'
 
 const mockGetTenantSettings = vi.fn()
-const mockGetPublicPortalConfig = vi.fn()
 const mockHasPlatformCredentials = vi.fn()
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   getTenantSettings: (...a: unknown[]) => mockGetTenantSettings(...a),
-  getPublicPortalConfig: (...a: unknown[]) => mockGetPublicPortalConfig(...a),
 }))
 
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
@@ -49,9 +44,6 @@ const tenant = (oauth: OAuthProviders) =>
 beforeEach(() => {
   vi.clearAllMocks()
   mockHasPlatformCredentials.mockResolvedValue(true)
-  mockGetPublicPortalConfig.mockResolvedValue({
-    oauth: { password: true, magicLink: false },
-  })
   mockGetTenantSettings.mockResolvedValue(tenant({}))
 })
 

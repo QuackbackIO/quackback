@@ -287,7 +287,6 @@ const updateThemeSchema = z.object({
 })
 
 const updatePortalConfigSchema = z.object({
-  oauth: z.record(z.string(), z.boolean().optional()).optional(),
   features: z
     .object({
       allowAnonymous: z.boolean().optional(),

@@ -10,9 +10,9 @@
  *     `buildGenericOAuthConfigs`' gate (enabled + secret present + tier),
  *     using the cached configured-types Set so this UI path never decrypts.
  *   - OAuth (Google/GitHub/etc.): credentials in platform_credentials AND
- *     at least one surface (team or portal) has it enabled (the Layer A
- *     registration filter). Generic-oauth entries in AUTH_PROVIDERS are
- *     skipped here — they're now owned by the identity_provider loop above.
+ *     `authConfig.oauth` has it enabled (the Layer A registration filter).
+ *     Generic-oauth entries in AUTH_PROVIDERS are skipped here — they're
+ *     now owned by the identity_provider loop above.
  *
  * The gates must mirror auth/index.ts exactly, otherwise BootstrapData would
  * report a provider as registered that the runtime declined to register, and
@@ -27,6 +27,7 @@ import {
   type IdentityProvider,
 } from '@/lib/server/domains/settings/identity-providers.service'
 import { AUTH_CREDENTIAL_PREFIX, getAllAuthProviders } from './auth-providers'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 /**
  * The set of OIDC provider `registrationId`s the auth runtime registers
@@ -76,22 +77,20 @@ export async function getRegisteredAuthProviders(): Promise<string[]> {
   const ids: string[] = [...(await getRegisteredOidcProviderIds(identityProviders))]
 
   // Layer A registration filter: a social provider is registered globally
-  // on the Better-Auth instance only when at least one surface enables it.
-  // Default-false on both: if neither surface opted in, the runtime skips
+  // on the Better-Auth instance only when `authConfig.oauth` has it enabled.
+  // Default-false: if the admin hasn't opted in, the runtime skips
   // registration even if creds exist, and we mirror that here.
-  const teamOAuth = (tenantSettings?.authConfig?.oauth ?? {}) as Record<string, boolean | undefined>
-  const portalOAuth = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
+  const unifiedOAuth = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
     string,
     boolean | undefined
   >
 
   for (const provider of getAllAuthProviders()) {
     // OIDC providers are reported via the identity_provider loop above;
-    // skip them here so custom-oidc isn't double-reported (and isn't
-    // gated on the now-unused surface oauth flag).
+    // skip them here so custom-oidc isn't double-reported.
     if (provider.type === 'generic-oauth') continue
     if (!configuredTypes.has(provider.credentialType)) continue
-    if (teamOAuth[provider.id] !== true && portalOAuth[provider.id] !== true) continue
+    if (!isSignInMethodEnabled(unifiedOAuth, provider.id)) continue
     ids.push(provider.id)
   }
 

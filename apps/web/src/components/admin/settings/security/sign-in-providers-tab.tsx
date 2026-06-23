@@ -239,17 +239,8 @@ export function SignInProvidersTab({
           description="Sign in with email and password."
           checked={passwordEnabled}
           onCheckedChange={(v) => void saveBuiltin('password', v)}
-          disabled={
-            busy ||
-            isManaged('auth.oauth.password') ||
-            isManaged('portalConfig.oauth.password') ||
-            isLastMethod('password')
-          }
-          badge={
-            isManaged('auth.oauth.password') || isManaged('portalConfig.oauth.password')
-              ? 'Managed'
-              : undefined
-          }
+          disabled={busy || isManaged('auth.oauth.password') || isLastMethod('password')}
+          badge={isManaged('auth.oauth.password') ? 'Managed' : undefined}
         />
         {/* Nested under Password: 2FA enforcement builds on top of the password
             (TOTP enrols over it). The left rule + indent mark it as a child
@@ -285,14 +276,9 @@ export function SignInProvidersTab({
             busy ||
             !emailConfigured ||
             isManaged('auth.oauth.magicLink') ||
-            isManaged('portalConfig.oauth.magicLink') ||
             isLastMethod('magicLink')
           }
-          badge={
-            isManaged('auth.oauth.magicLink') || isManaged('portalConfig.oauth.magicLink')
-              ? 'Managed'
-              : undefined
-          }
+          badge={isManaged('auth.oauth.magicLink') ? 'Managed' : undefined}
         />
       </SettingsCard>
 
@@ -306,7 +292,7 @@ export function SignInProvidersTab({
           enabled={oauthState}
           credentialStatus={credentialStatus}
           isLastMethod={isLastMethod}
-          isManaged={(id) => isManaged(`portalConfig.oauth.${id}`)}
+          isManaged={(id) => isManaged(`auth.oauth.${id}`)}
           saving={busy}
           onToggle={(id, checked) => void saveOauthProvider(id, checked)}
           onConfigure={openConfigDialog}

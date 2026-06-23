@@ -16,6 +16,7 @@ import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 import type { GenericOAuthConfig } from './build-oauth-configs'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -150,25 +151,18 @@ async function createAuth() {
   for (const c of oidcConfigs) trustedProviders.push(c.providerId)
 
   // Layer A registration filter: an OAuth provider is registered on
-  // the Better-Auth instance only if creds exist AND at least one
-  // surface (admin or portal) has it enabled. If both surfaces have
-  // turned it off, skip registration so the button stops rendering on
-  // every login page. Per-surface gating (admin vs portal) happens in
-  // hooks.before/after — Better-Auth's provider list is a global
-  // concept and can't be partitioned per-role at the auth-instance
-  // level. Password and magic-link aren't covered here (they're
-  // global Better-Auth features, not entries in AUTH_PROVIDERS).
-  const teamOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+  // the Better-Auth instance only if creds exist AND `authConfig.oauth`
+  // has it enabled. If the admin hasn't opted in, skip registration so
+  // the button stops rendering on every login page. Per-flow gating
+  // (admin vs portal sign-in) happens in hooks.before/after —
+  // Better-Auth's provider list is a global concept and can't be
+  // partitioned per-role at the auth-instance level. Password and
+  // magic-link aren't covered here (they're global Better-Auth features,
+  // not entries in AUTH_PROVIDERS).
+  const unifiedOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
     string,
     boolean | undefined
   >
-  const portalOAuthConfig = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
-    string,
-    boolean | undefined
-  >
-  const isOAuthProviderEnabledForAnySurface = (id: string): boolean => {
-    return teamOAuthConfig[id] === true || portalOAuthConfig[id] === true
-  }
 
   for (const provider of getAllAuthProviders()) {
     // OIDC providers are owned by the identity_provider list above. Skip
@@ -178,7 +172,7 @@ async function createAuth() {
 
     const creds = await getPlatformCredentials(provider.credentialType)
     if (!creds?.clientId || !creds?.clientSecret) continue
-    if (!isOAuthProviderEnabledForAnySurface(provider.id)) continue
+    if (!isSignInMethodEnabled(unifiedOAuthConfig, provider.id)) continue
 
     // Built-in social providers
     const providerConfig: Record<string, unknown> = {

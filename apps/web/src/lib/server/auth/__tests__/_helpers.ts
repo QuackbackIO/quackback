@@ -72,7 +72,6 @@ export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSetti
     slug: 'test',
     authConfig: makeAuthConfig(),
     portalConfig: {
-      oauth: {},
       features: PORTAL_FEATURES_DEFAULTS,
       moderationDefault: { requireApproval: 'none' },
     },

@@ -8,10 +8,9 @@
  * `upsertIdentityProviderFn` call {@link checkIsOnlyWorkingSignInMethod} and
  * refuse the mutation when it returns true.
  *
- * Auth on this branch is UNIFIED — one set of sign-in methods for everyone, with
- * `authConfig.oauth` and `portalConfig.oauth` kept in sync by the sign-in
- * providers tab, and any registered OIDC provider usable by every role. So
- * "working" reads a single unified config:
+ * Auth on this branch is UNIFIED — one set of sign-in methods for everyone,
+ * stored in `authConfig.oauth`, and any registered OIDC provider usable by
+ * every role. "Working" reads the single unified config:
  *   - password   — `oauth.password !== false` (absent ⇒ on).
  *   - magic link — enabled AND email delivery is wired.
  *   - social     — enabled AND its credentials are saved.
@@ -34,8 +33,7 @@ export interface WorkingMethodInputs {
   tierEnabled: boolean
   /** Every identity provider with its enabled + configured (secret saved) state. */
   providers: ReadonlyArray<{ id: string; enabled: boolean; configured: boolean }>
-  /** The unified workspace sign-in config — `authConfig.oauth`, which the
-   *  sign-in providers tab keeps in lockstep with `portalConfig.oauth`. */
+  /** The unified workspace sign-in config — `authConfig.oauth`. */
   oauth: Record<string, boolean | undefined>
   /** Whether SMTP/Resend delivery is wired (gates magic-link usability). */
   emailConfigured: boolean

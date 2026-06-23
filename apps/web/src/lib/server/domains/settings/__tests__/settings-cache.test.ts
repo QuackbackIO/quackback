@@ -225,7 +225,7 @@ describe('settings write functions invalidate cache', () => {
   })
 
   it('updatePortalConfig invalidates cache', async () => {
-    await updatePortalConfig({ oauth: { password: true }, features: {} })
+    await updatePortalConfig({ features: {} })
     expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
   })
 

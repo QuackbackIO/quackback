@@ -124,6 +124,45 @@ describe('backfillUnifiedSignInMethods', () => {
       })
   })
 
+  it('falls back to DEFAULT_AUTH_CONFIG.oauth when authConfig is null, preserving defaults + adding portal-only method', async () => {
+    await db
+      .transaction(async (tx) => {
+        await tx.delete(settings)
+        const [row] = await tx
+          .insert(settings)
+          .values({
+            name: 'T',
+            slug: 'backfill-test-null-auth',
+            createdAt: new Date(),
+            authConfig: null,
+            // discord is not in DEFAULT_AUTH_CONFIG.oauth, so this is a real
+            // portal-only enable that the backfill must carry over.
+            portalConfig: JSON.stringify({ oauth: { discord: true } }),
+          })
+          .returning({ id: settings.id })
+
+        await backfillUnifiedSignInMethods(tx)
+
+        const [after] = await tx
+          .select({ authConfig: settings.authConfig })
+          .from(settings)
+          .where(eq(settings.id, row.id))
+          .limit(1)
+        const merged = readAuthOauth(after.authConfig)
+        // Defaults (google/github/password) must survive the null-authConfig path.
+        expect(merged.google).toBe(true)
+        expect(merged.github).toBe(true)
+        expect(merged.password).toBe(true)
+        // The portal-only discord must be OR-ed in.
+        expect(merged.discord).toBe(true)
+
+        throw new Error('__ROLLBACK__')
+      })
+      .catch((e) => {
+        if ((e as Error).message !== '__ROLLBACK__') throw e
+      })
+  })
+
   it('is idempotent', async () => {
     await db
       .transaction(async (tx) => {

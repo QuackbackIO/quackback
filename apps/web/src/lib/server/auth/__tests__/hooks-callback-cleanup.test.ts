@@ -29,7 +29,6 @@ const mockUserDeleteWhere = vi.fn(async () => undefined)
 const mockAccountDeleteWhere = vi.fn(async () => undefined)
 const mockPrincipalDeleteWhere = vi.fn(async () => undefined)
 const mockDeleteSessionCookie = vi.fn()
-const mockGetPublicPortalConfig = vi.fn()
 const mockHasPlatformCredentials = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
@@ -57,9 +56,7 @@ vi.mock('better-auth/cookies', () => ({
   deleteSessionCookie: (...a: unknown[]) => mockDeleteSessionCookie(...a),
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPublicPortalConfig: (...a: unknown[]) => mockGetPublicPortalConfig(...a),
-}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({}))
 
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   hasPlatformCredentials: (...a: unknown[]) => mockHasPlatformCredentials(...a),
@@ -127,9 +124,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockPrincipalFindFirst.mockResolvedValue(null)
   mockUserFindFirst.mockResolvedValue(null)
-  mockGetPublicPortalConfig.mockResolvedValue({
-    oauth: { password: true, magicLink: false },
-  })
   mockHasPlatformCredentials.mockResolvedValue(true)
 })
 
@@ -359,11 +353,8 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('revokes for portal user + google when not enabled in portal config', async () => {
+  it('revokes for portal user + google when not enabled', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -380,9 +371,6 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
   it('wipes brand-new shells when a method-blocked OAuth callback revokes a freshly-created user', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
     mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 5_000) })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false /* google not enabled */ },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -406,9 +394,6 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
   it('does NOT wipe shells for an existing user (>60s) whose OAuth method just got disabled', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
     mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 60 * 60_000) })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
