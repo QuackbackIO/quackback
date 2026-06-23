@@ -8,14 +8,18 @@
  * - When password is OFF → 2FA switch is disabled (TOTP enrolls on top
  *   of a password; no password means no viable 2FA flow).
  *
+ * Also verifies the single write-path contract: toggling a built-in method
+ * calls updateAuthConfigFn exactly once and never calls updatePortalConfigFn.
+ *
  * Recovery codes now live inside <IdentityProvidersSection> (the SSO card),
  * which is stubbed here, so this file no longer asserts their placement.
  */
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SignInProvidersTab } from '../sign-in-providers-tab'
-import type { AuthConfig, PortalAuthMethods } from '@/lib/shared/types/settings'
+import { updateAuthConfigFn, updatePortalConfigFn } from '@/lib/server/functions/settings'
+import type { AuthConfig } from '@/lib/shared/types/settings'
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
@@ -42,9 +46,13 @@ const baseTeamAuth: AuthConfig = {
   openSignup: false,
 }
 
-const basePortalOauth: PortalAuthMethods = { password: true }
+// Two methods enabled so neither is the "last method" and both can be toggled.
+const twoMethodTeamAuth: AuthConfig = {
+  oauth: { password: true, magicLink: true, google: false, github: false },
+  openSignup: false,
+}
 
-function renderTab(teamAuth: AuthConfig, portalOauth: PortalAuthMethods = basePortalOauth) {
+function renderTab(teamAuth: AuthConfig) {
   const qc = new QueryClient()
   // The tab reads the identity-providers suspense query for its method count.
   qc.setQueryData(['settings', 'identityProviders'], [])
@@ -52,13 +60,16 @@ function renderTab(teamAuth: AuthConfig, portalOauth: PortalAuthMethods = basePo
     <QueryClientProvider client={qc}>
       <SignInProvidersTab
         initialTeamAuthConfig={teamAuth}
-        initialPortalOauth={portalOauth}
         credentialStatus={{ _emailConfigured: true }}
         customOidcProviderTier={false}
       />
     </QueryClientProvider>
   )
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 describe('2FA nested under Password in <SignInProvidersTab>', () => {
   it('renders the "Require two-factor authentication" row when password is enabled', () => {
@@ -77,11 +88,8 @@ describe('2FA nested under Password in <SignInProvidersTab>', () => {
     expect(twoFaSwitch).not.toBeDisabled()
   })
 
-  it('2FA switch is disabled when password is off on both surfaces', () => {
-    renderTab(
-      { ...baseTeamAuth, oauth: { password: false } },
-      { ...basePortalOauth, password: false }
-    )
+  it('2FA switch is disabled when password is off', () => {
+    renderTab({ ...baseTeamAuth, oauth: { password: false } })
     const switches = screen.getAllByRole('switch')
     // Password off → oauthState.password false → 2FA switch disabled.
     // Password switch: enabled (it's off but can be toggled on).
@@ -95,5 +103,23 @@ describe('2FA nested under Password in <SignInProvidersTab>', () => {
     const switches = screen.getAllByRole('switch')
     const twoFaSwitch = switches[1]
     expect(twoFaSwitch).toHaveAttribute('aria-checked', 'true')
+  })
+})
+
+describe('single write-path contract', () => {
+  it('toggling password calls updateAuthConfigFn once and never calls updatePortalConfigFn', async () => {
+    vi.mocked(updateAuthConfigFn).mockResolvedValueOnce({
+      oauth: { password: false, magicLink: true, google: false, github: false },
+      openSignup: false,
+    })
+
+    renderTab(twoMethodTeamAuth)
+    const passwordSwitch = screen.getAllByRole('switch')[0]
+    fireEvent.click(passwordSwitch)
+
+    await waitFor(() => {
+      expect(vi.mocked(updateAuthConfigFn)).toHaveBeenCalledOnce()
+    })
+    expect(vi.mocked(updatePortalConfigFn)).not.toHaveBeenCalled()
   })
 })

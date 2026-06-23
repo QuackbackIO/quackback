@@ -3,7 +3,7 @@ import { ArrowRightOnRectangleIcon, GlobeAltIcon } from '@heroicons/react/24/sol
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortalAuthTab } from './portal-auth-tab'
 import { SignInProvidersTab } from './sign-in-providers-tab'
-import type { AuthConfig, PortalAuthMethods, PortalConfig } from '@/lib/shared/types/settings'
+import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
 
 /**
  * The Security/authentication page tabs split by concern, not by surface:
@@ -20,8 +20,6 @@ interface AuthSettingsProps {
   tab: AuthTab
   /** Team-side auth config from settings.authConfig. */
   teamAuthConfig: AuthConfig
-  /** Portal-side oauth/methods from settings.portalConfig.oauth. */
-  portalOauth: PortalAuthMethods
   /** Full portal config — needed for the visibility card inside PortalAuthTab. */
   portalConfig: PortalConfig
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
@@ -40,7 +38,6 @@ interface AuthSettingsProps {
 export function AuthSettings({
   tab,
   teamAuthConfig,
-  portalOauth,
   portalConfig,
   credentialStatus,
   customOidcProviderTier,
@@ -86,7 +83,6 @@ export function AuthSettings({
       <TabsContent value="sign-in">
         <SignInProvidersTab
           initialTeamAuthConfig={teamAuthConfig}
-          initialPortalOauth={portalOauth}
           credentialStatus={credentialStatus}
           customOidcProviderTier={customOidcProviderTier}
         />

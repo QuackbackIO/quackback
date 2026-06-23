@@ -7,7 +7,6 @@ import { ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { AuthSettings, type AuthTab } from '@/components/admin/settings/security/auth-settings'
-import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
 
 const searchSchema = z.object({
   // The Security/authentication page splits by CONCERN, not by surface:
@@ -65,8 +64,6 @@ function AuthenticationPage() {
     (ctx as { tierLimits?: { features?: { customOidcProvider?: boolean } } }).tierLimits?.features
       ?.customOidcProvider !== false
 
-  const portalOauth = portalConfigQuery.data?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth
-
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="lg:hidden">
@@ -76,7 +73,6 @@ function AuthenticationPage() {
       <AuthSettings
         tab={tab}
         teamAuthConfig={authConfigQuery.data}
-        portalOauth={portalOauth}
         portalConfig={portalConfigQuery.data}
         credentialStatus={credentialStatusQuery.data}
         customOidcProviderTier={customOidcProviderTier}

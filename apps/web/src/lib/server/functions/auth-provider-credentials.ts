@@ -109,13 +109,13 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
 
       await deletePlatformCredentials(data.credentialType)
 
-      // Disable this provider in portal config if it was enabled
-      const { getPortalConfig, updatePortalConfig } =
+      // Disable this provider in the unified auth config if it was enabled
+      const { getAuthConfig, updateAuthConfig } =
         await import('@/lib/server/domains/settings/settings.service')
-      const portalConfig = await getPortalConfig()
-      const oauthConfig = portalConfig.oauth as Record<string, boolean | undefined>
+      const authConfig = await getAuthConfig()
+      const oauthConfig = (authConfig.oauth ?? {}) as Record<string, boolean | undefined>
       if (oauthConfig[provider.id]) {
-        await updatePortalConfig({ oauth: { [provider.id]: false } })
+        await updateAuthConfig({ oauth: { [provider.id]: false } })
       }
 
       // Reset auth instance
