@@ -483,7 +483,7 @@ describe('lookupAuthMethodsFn — team magic-link toggle', () => {
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'a@external.com', surface: 'team' },
+      data: { email: 'a@external.com' },
     })
     expect(result).toEqual({
       kind: 'methods',
@@ -500,14 +500,14 @@ describe('lookupAuthMethodsFn — team magic-link toggle', () => {
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'a@external.com', surface: 'team' },
+      data: { email: 'a@external.com' },
     })
     expect(result).toMatchObject({ authConfig: { magicLink: true } })
   })
 })
 
 describe('lookupAuthMethodsFn — ssoOidc.required is inert (workspace-wide mode removed)', () => {
-  it('ignores ssoOidc.required for team surface (workspace-wide mode removed)', async () => {
+  it('ignores ssoOidc.required in the unified sign-in config (workspace-wide mode removed)', async () => {
     // The `required` flag is inert; team users at non-verified-domain
     // emails should fall through to the methods form, not `sso-redirect`.
     hoisted.mockGetTenantSettings.mockResolvedValue({
@@ -527,7 +527,7 @@ describe('lookupAuthMethodsFn — ssoOidc.required is inert (workspace-wide mode
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'newhire@example.com', surface: 'team' },
+      data: { email: 'newhire@example.com' },
     })
     expect((result as { kind: string }).kind).toBe('methods')
   })

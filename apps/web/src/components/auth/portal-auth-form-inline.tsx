@@ -270,7 +270,7 @@ export function PortalAuthFormInline({
     setLoadingAction('continue')
     try {
       const result: LookupAuthMethodsResult = await lookupAuthMethods({
-        data: { email: trimmed, surface: 'portal' },
+        data: { email: trimmed },
       })
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })

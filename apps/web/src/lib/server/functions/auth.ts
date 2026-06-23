@@ -2,10 +2,10 @@
  * Public-surface server function for the email-first login dispatcher.
  *
  * `lookupAuthMethodsFn` is shared by both `/admin/login` (team) and
- * `/auth/login` (portal). Given an email and a surface, it tells the
- * client whether to redirect to the configured SSO IdP (verified-
- * domain match — same hard-binding rule on both surfaces) or render
- * the methods form for that surface.
+ * `/auth/login` (portal). Given an email, it tells the client whether
+ * to redirect to the configured SSO IdP (verified-domain match) or
+ * render the methods form. Reads the single `publicAuthConfig.oauth`
+ * for both surfaces.
  *
  * Deliberately does NOT look up whether an account exists at the
  * supplied email — that would leak account presence to anyone who can
@@ -18,7 +18,6 @@ import { z } from 'zod'
 
 const lookupAuthMethodsInput = z.object({
   email: z.string().email().max(320),
-  surface: z.enum(['team', 'portal']).default('team'),
 })
 
 export type LookupAuthMethodsResult =
@@ -54,10 +53,7 @@ export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
     const { resolveLoginRouting } = await import('./auth-routing')
 
     const tenant = await getTenantSettings()
-    const methodsConfig =
-      data.surface === 'portal'
-        ? (tenant?.publicPortalConfig?.oauth ?? {})
-        : (tenant?.publicAuthConfig?.oauth ?? {})
+    const methodsConfig = tenant?.publicAuthConfig?.oauth ?? {}
 
     // Build the liveness snapshot routing needs. `registered` is the
     // canonical registration gate (enabled + creds + tier) from
