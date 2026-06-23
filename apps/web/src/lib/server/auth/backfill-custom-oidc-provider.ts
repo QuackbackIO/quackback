@@ -132,11 +132,13 @@ function readOauthToggles(json: string | null): Record<string, boolean | undefin
  */
 export async function runStartupBackfills(): Promise<void> {
   let signInMethodsMerged = false
+  let customOidcCreated = 0
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext('quackback:identity_provider_backfill'))`
     )
     const { created } = await backfillCustomOidcProvider(tx)
+    customOidcCreated = created
     if (created > 0) {
       log.info({ registration_id: 'custom-oidc' }, 'backfilled identity provider from credential')
     }
@@ -146,7 +148,7 @@ export async function runStartupBackfills(): Promise<void> {
       signInMethodsMerged = true
     }
   })
-  if (signInMethodsMerged) {
+  if (signInMethodsMerged || customOidcCreated > 0) {
     resetAuth()
     await invalidateSettingsCache()
   }
