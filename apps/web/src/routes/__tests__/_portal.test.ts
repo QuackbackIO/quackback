@@ -34,9 +34,6 @@ vi.mock('@/lib/shared/theme', () => ({
 }))
 vi.mock('@/lib/shared/i18n', () => ({ resolveLocale: vi.fn(async () => 'en') }))
 vi.mock('@/lib/shared/types/settings', () => ({ DEFAULT_PORTAL_CONFIG: { oauth: {}, access: {} } }))
-vi.mock('@/lib/shared/types/portal-gate-error', () => ({
-  parseGateError: vi.fn(() => null),
-}))
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {

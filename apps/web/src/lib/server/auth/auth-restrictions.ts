@@ -27,7 +27,6 @@ import {
   getPublicPortalConfig,
   getTenantSettings,
 } from '@/lib/server/domains/settings/settings.service'
-import { emailDomain } from '@/lib/server/auth/normalize-domain'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -35,7 +34,6 @@ import {
   type ProviderWithDomains,
 } from '@/lib/server/auth/provider-ids'
 import { isTeamMember } from '@/lib/shared/roles'
-import type { AuthConfig, VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 
 export type AuthProvider = 'email' | 'credential' | 'magic-link' | 'sso' | string
 export type Role = 'admin' | 'member' | 'user'
@@ -153,36 +151,6 @@ async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethod
 }
 
 /**
- * Find the verified-domain row whose `name` matches the candidate
- * email's domain (case- and trailing-dot-insensitive via `emailDomain`).
- * A row only matches when it's actually verified (`verifiedAt !== null`).
- * Returns `null` when no row matches.
- */
-export function findVerifiedDomainForEmail(
-  email: string | null | undefined,
-  verifiedDomains: readonly VerifiedDomain[] | undefined
-): VerifiedDomain | null {
-  if (!email || !verifiedDomains?.length) return null
-  const candidate = emailDomain(email)
-  if (candidate === null) return null
-  return verifiedDomains.find((d) => d.verifiedAt !== null && d.name === candidate) ?? null
-}
-
-/**
- * Routing predicate: the email belongs to one of the workspace's
- * verified SSO domains. Used to default the login form to "Continue
- * with SSO" and to auto-redirect when that row also has `enforced=true`.
- * Does NOT imply other methods are blocked — see
- * {@link isHardBoundByVerifiedDomain} for the policy gate.
- */
-export function isEmailAtVerifiedDomain(
-  email: string | null | undefined,
-  verifiedDomains: readonly VerifiedDomain[] | undefined
-): boolean {
-  return findVerifiedDomainForEmail(email, verifiedDomains) !== null
-}
-
-/**
  * Portal-side OIDC eligibility gate. A non-team role (portal user) may
  * complete an OIDC sign-in only from a verified domain owned by *the
  * callback provider*; team roles (admin/member) are granted deliberately
@@ -219,25 +187,6 @@ export function isSsoBlockedForRole(
   // Routed-only provider: eligible iff the email is at one of its verified
   // domains.
   return findProviderForDomainEmail(email, [callbackProvider]) === null
-}
-
-/**
- * Layer-1 predicate: did the admin configure SSO to be on?
- *
- * Pure check of admin intent. Use when you need to know whether
- * downstream SSO state (`required`, verified-domain `enforced`) is in
- * play at all. Does NOT verify that SSO is actually viable right now —
- * use {@link isHardBound} for enforcement (which fails open on runtime
- * unavailability) or `isSsoActuallyRegistered` for the full viability
- * check (admin intent + tier + secret).
- *
- * Type predicate: narrows `sso` to non-undefined inside the guarded
- * branch so callers don't need to re-check.
- */
-export function isSsoConfigured(
-  sso: AuthConfig['ssoOidc']
-): sso is NonNullable<AuthConfig['ssoOidc']> {
-  return sso?.enabled === true
 }
 
 /**

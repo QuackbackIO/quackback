@@ -50,7 +50,6 @@ const otpStash = makeStash<string>()
 
 export const storeMagicLinkToken = (email: string, token: string) =>
   magicLinkStash.set(email, token)
-export const getMagicLinkToken = (email: string) => magicLinkStash.take(email)
 export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
 export const getOTP = (email: string) => otpStash.take(email)
 
@@ -90,9 +89,8 @@ async function createAuth() {
   const { getAllAuthProviders } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const { listIdentityProviders, getIdentityProviderCredentials } = await import(
-    '@/lib/server/domains/settings/identity-providers.service'
-  )
+  const { listIdentityProviders, getIdentityProviderCredentials } =
+    await import('@/lib/server/domains/settings/identity-providers.service')
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
 
   // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
@@ -673,17 +671,6 @@ export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 
 import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
-
-const levels: Record<Role, number> = {
-  admin: 3,
-  member: 2,
-  user: 1,
-}
-
-/** Check if role meets minimum level: hasRole('admin', 'member') → true */
-export function hasRole(role: Role, minimum: Role): boolean {
-  return levels[role] >= levels[minimum]
-}
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {

@@ -31,7 +31,6 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/lib/server/functions/auth', () => ({
   lookupAuthMethodsFn: vi.fn(),
-  SSO_UNAVAILABLE_MESSAGE: 'SSO unavailable',
 }))
 
 vi.mock('@/lib/server/auth/client', () => ({ stashTwoFactorCallbackUrl: vi.fn() }))

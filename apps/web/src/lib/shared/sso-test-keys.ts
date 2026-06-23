@@ -28,13 +28,6 @@ export function ssoTestResultKey(testId: string): string {
 export const SSO_TEST_POSTMESSAGE_SOURCE = 'quackback-sso-test' as const
 
 /**
- * Better-Auth genericOAuth callback path for the legacy `sso` provider.
- * Kept for reference; new code should build per-provider paths from
- * `SSO_OAUTH_CALLBACK_PREFIX`.
- */
-export const SSO_OAUTH_CALLBACK_PATH = '/api/auth/oauth2/callback/sso' as const
-
-/**
  * Path prefix shared by every genericOAuth callback. The test flow uses
  * the provider's own production callback (`<prefix><registrationId>`) so
  * admins register exactly one redirect URI per provider. The auth catch-all

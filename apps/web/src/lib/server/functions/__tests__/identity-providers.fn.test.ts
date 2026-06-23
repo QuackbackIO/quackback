@@ -76,10 +76,11 @@ beforeEach(() => {
 
 await import('../sso')
 // Handler order mirrors the createServerFn export sequence in sso.ts. The
-// identity-provider fns are appended after the 10 existing SSO/domain fns,
-// so upsertIdentityProviderFn is the 12th createServerFn (index 11). If the
-// file is reordered, fix this index along with the comment.
-const UPSERT_INDEX = 11
+// identity-provider fns are appended after the 3 kept SSO/domain fns
+// (clearSsoClientSecretFn, removeVerifiedDomainFn, getVerifiedDomainsFn),
+// so listIdentityProvidersFn is index 3 and upsertIdentityProviderFn is
+// index 4. If the file is reordered, fix this index along with the comment.
+const UPSERT_INDEX = 4
 const upsertIdentityProvider = handlers[UPSERT_INDEX]
 if (typeof upsertIdentityProvider !== 'function') {
   throw new Error(

@@ -87,7 +87,6 @@ export function AuthSettings({
         <SignInProvidersTab
           initialTeamAuthConfig={teamAuthConfig}
           initialPortalOauth={portalOauth}
-          portalConfig={portalConfig}
           credentialStatus={credentialStatus}
           customOidcProviderTier={customOidcProviderTier}
         />

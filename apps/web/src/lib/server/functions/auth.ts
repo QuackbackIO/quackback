@@ -35,32 +35,21 @@ export type LookupAuthMethodsResult =
       providerId: string
       authConfig: Record<string, boolean | undefined>
     }
-  | { kind: 'sso-unavailable'; reason: 'not-registered' }
   | {
       kind: 'methods'
       authConfig: Record<string, boolean | undefined>
       ssoEnabled: boolean
     }
 
-/** User-facing copy for the `sso-unavailable` branch. Centralised so
- *  every login surface renders the same wording when SSO is configured
- *  for a verified domain but isn't actually live at runtime. */
-export const SSO_UNAVAILABLE_MESSAGE =
-  'Single sign-on is configured for your domain but is not currently available. Contact your administrator.'
-
 export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
   .validator(lookupAuthMethodsInput)
   .handler(async ({ data }): Promise<LookupAuthMethodsResult> => {
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const { listIdentityProviders } = await import(
-      '@/lib/server/domains/settings/identity-providers.service'
-    )
-    const { getRegisteredOidcProviderIds } = await import(
-      '@/lib/server/auth/registered-providers'
-    )
-    const { getConfiguredIntegrationTypes } = await import(
-      '@/lib/server/domains/platform-credentials/platform-credential.service'
-    )
+    const { listIdentityProviders } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+    const { getConfiguredIntegrationTypes } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
     const { AUTH_CREDENTIAL_PREFIX } = await import('@/lib/server/auth/auth-providers')
     const { resolveLoginRouting } = await import('./auth-routing')
 

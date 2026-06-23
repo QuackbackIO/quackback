@@ -15,14 +15,13 @@ import { RecoveryCodesSection } from '@/components/admin/settings/security/sso/r
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 import { updateAuthConfigFn, updatePortalConfigFn } from '@/lib/server/functions/settings'
-import type { AuthConfig, PortalAuthMethods, PortalConfig } from '@/lib/shared/types/settings'
+import type { AuthConfig, PortalAuthMethods } from '@/lib/shared/types/settings'
 
 interface SignInProvidersTabProps {
   /** Team-side auth config from settings.authConfig. */
   initialTeamAuthConfig: AuthConfig
   /** Portal-side oauth/methods from settings.portalConfig.oauth. */
   initialPortalOauth: PortalAuthMethods
-  portalConfig: PortalConfig
   credentialStatus: Record<string, boolean> & { _emailConfigured?: boolean }
   customOidcProviderTier: boolean
 }
@@ -50,7 +49,6 @@ interface SignInProvidersTabProps {
 export function SignInProvidersTab({
   initialTeamAuthConfig,
   initialPortalOauth,
-  portalConfig: _portalConfig,
   credentialStatus,
   customOidcProviderTier,
 }: SignInProvidersTabProps) {

@@ -92,6 +92,12 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   fetchCustomCss: vi.fn(),
 }))
 
+// updateAuthConfigFn's last-method backstop calls the DB-backed sign-in-method
+// check; stub it so these audit-wiring tests stay unit-level.
+vi.mock('@/lib/server/auth/sign-in-method-availability', () => ({
+  wouldLeaveNoWorkingSignInMethod: vi.fn(async () => false),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.mockRequireAuth.mockResolvedValue({

@@ -255,30 +255,21 @@ const enforcedDomainRow = { ...verifiedDomainRow, enforced: true }
 
 // Load the SSO module ONCE and resolve handlers by their position in
 // the file. Order matches the export sequence in sso.ts:
-//   0: testSsoConnectionFn
-//   1: setVerifiedDomainEnforcedFn
-//   2: getSsoStatusFn
-//   3: setSsoClientSecretFn
-//   4: switchSsoProviderFn
-//   5: clearSsoClientSecretFn
-//   6: addVerifiedDomainFn
-//   7: removeVerifiedDomainFn
-//   8: verifyDomainFn
-//   9: getVerifiedDomainsFn
-//  10: listIdentityProvidersFn
-//  11: upsertIdentityProviderFn
-//  12: deleteIdentityProviderFn
-//  13: setProviderCredentialsFn
-//  14: addProviderDomainFn
-//  15: verifyProviderDomainFn
-//  16: setDomainEnforcedFn
+//   0: clearSsoClientSecretFn
+//   1: removeVerifiedDomainFn
+//   2: getVerifiedDomainsFn
+//   3: listIdentityProvidersFn
+//   4: upsertIdentityProviderFn
+//   5: deleteIdentityProviderFn
+//   6: setProviderCredentialsFn
+//   7: addProviderDomainFn
+//   8: verifyProviderDomainFn
+//   9: setDomainEnforcedFn
 currentModule = 'sso'
 await import('../sso')
 const ssoHandlers = handlersByModule.get('sso')!
-const testSsoConnection = ssoHandlers[0]
-const switchSsoProvider = ssoHandlers[4]
-const clearSsoClientSecret = ssoHandlers[5]
-const setDomainEnforced = ssoHandlers[16]
+const clearSsoClientSecret = ssoHandlers[0]
+const setDomainEnforced = ssoHandlers[9]
 
 currentModule = 'auth'
 await import('../auth')
@@ -324,82 +315,6 @@ describe('clearSsoClientSecretFn refusals', () => {
 
     await expect(clearSsoClientSecret({ data: {} })).resolves.toEqual({ success: true })
     expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('switchSsoProviderFn', () => {
-  // The "Change provider" flow wipes the encrypted secret, the
-  // authConfig.ssoOidc block, AND any per-domain `enforced` flags in
-  // one transaction. The enforced flags get auto-disabled (not refused)
-  // so admins can switch providers without manually defanging each
-  // domain first — those users still have password/magic-link until
-  // the new IdP is set up.
-  beforeEach(() => {
-    hoisted.mockRequireSettings.mockResolvedValue({
-      id: 'settings_id',
-      authConfig: JSON.stringify({ ssoOidc: ssoConfig, oauth: { password: true } }),
-    })
-    mockSetVerifiedDomainEnforced.mockResolvedValue(undefined)
-  })
-
-  it('auto-disables enforcement on rows that have it on, then clears SSO', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [enforcedDomainRow],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: ['acme.com'] })
-    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith('domain_acme', false)
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockBumpAuthConfigVersionInTx).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockResetAuth).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockInvalidateSettingsCache).toHaveBeenCalledTimes(1)
-  })
-
-  it('skips the defang step when no domain is enforced', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [verifiedDomainRow],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: [] })
-    expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-  })
-
-  it('allows switching when no domains exist', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: [] })
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-  })
-
-  it('defangs multiple enforced domains in one call', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [
-        enforcedDomainRow,
-        { ...enforcedDomainRow, id: 'domain_beta', name: 'beta.com' },
-      ],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({
-      success: true,
-      defangedDomains: ['acme.com', 'beta.com'],
-    })
-    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -453,88 +368,6 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
     const a = await lookupAuthMethods({ data: { email: 'known@example.com' } })
     const b = await lookupAuthMethods({ data: { email: 'unknown@example.com' } })
     expect(a).toEqual(b)
-  })
-})
-
-describe('testSsoConnectionFn — SSRF-checks discovery endpoints', () => {
-  // A malicious or misconfigured discovery doc could return private-IP
-  // endpoints. authorization_endpoint is a browser redirect (no SSRF),
-  // but token_endpoint and jwks_uri are server-side fetches by Better-
-  // Auth at runtime — we must reject before save.
-  const validDiscovery = {
-    issuer: 'https://acme.idp',
-    authorization_endpoint: 'https://acme.idp/authorize',
-    token_endpoint: 'https://acme.idp/token',
-    jwks_uri: 'https://acme.idp/jwks',
-  }
-
-  const okFetchResponse = (body: object) =>
-    new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
-
-  it('rejects when token_endpoint resolves to a private address', async () => {
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.token_endpoint) return { safe: false, reason: 'ssrf-rejected' }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; error?: string }
-    expect(result).toEqual({ ok: false, error: 'unsafe_endpoint:token_endpoint' })
-  })
-
-  it('rejects when jwks_uri resolves to a private address', async () => {
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.jwks_uri) return { safe: false, reason: 'ssrf-rejected' }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; error?: string }
-    expect(result).toEqual({ ok: false, error: 'unsafe_endpoint:jwks_uri' })
-  })
-
-  it('passes when all SSRF-checked endpoints are safe', async () => {
-    hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: true })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; issuer?: string }
-    expect(result).toEqual({ ok: true, issuer: validDiscovery.issuer })
-  })
-
-  it('does NOT SSRF-check authorization_endpoint (browser redirect only)', async () => {
-    // Even if the doc's authorization_endpoint resolves to a private
-    // address, that's a browser redirect — the user's browser fetches
-    // it from their network, not ours. Still validated for URL shape
-    // upstream, but not subject to checkUrlSafety.
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.authorization_endpoint) {
-        return { safe: false, reason: 'ssrf-rejected' }
-      }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; issuer?: string }
-    expect(result.ok).toBe(true)
   })
 })
 
@@ -720,9 +553,9 @@ describe('setDomainEnforcedFn — recovery-code guard', () => {
   it('throws recovery_codes_required when no active recovery codes exist', async () => {
     hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(false)
 
-    await expect(
-      setDomainEnforced({ data: { id: domainId, enforced: true } })
-    ).rejects.toThrow('recovery_codes_required')
+    await expect(setDomainEnforced({ data: { id: domainId, enforced: true } })).rejects.toThrow(
+      'recovery_codes_required'
+    )
     expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
   })
 

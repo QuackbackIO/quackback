@@ -14,7 +14,7 @@
  *    prevent self-lockout.
  */
 import { describe, it, expect } from 'vitest'
-import { isHardBound, isSsoConfigured, type AuthProvider } from '../auth-restrictions'
+import { isHardBound, type AuthProvider } from '../auth-restrictions'
 import type { AuthConfig, VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 
 const baseConfig: AuthConfig = {
@@ -73,20 +73,6 @@ const callIsHardBound = (
     [{ id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains ?? [], showButton: false }],
     ssoRegistered ? new Set(['sso']) : new Set<string>()
   )
-
-describe('isSsoConfigured — master-switch helper', () => {
-  it('returns true when ssoOidc.enabled === true', () => {
-    expect(isSsoConfigured(baseSso)).toBe(true)
-  })
-
-  it('returns false when ssoOidc.enabled === false', () => {
-    expect(isSsoConfigured({ ...baseSso, enabled: false })).toBe(false)
-  })
-
-  it('returns false when ssoOidc is undefined (never configured)', () => {
-    expect(isSsoConfigured(undefined)).toBe(false)
-  })
-})
 
 describe('isHardBound — per-verified-domain branch', () => {
   it('blocks credential at an enforced verified domain', () => {

@@ -30,11 +30,7 @@ import {
 import { authClient } from '@/lib/client/auth-client'
 import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import { isTeamCallback } from '@/lib/shared/routing'
-import {
-  lookupAuthMethodsFn,
-  SSO_UNAVAILABLE_MESSAGE,
-  type LookupAuthMethodsResult,
-} from '@/lib/server/functions/auth'
+import { lookupAuthMethodsFn, type LookupAuthMethodsResult } from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
 import type { AuthFormStep } from './email-signin-types'
@@ -136,7 +132,6 @@ function OAuthButton({
  *      (the dialog is closing anyway since the page navigates).
  *    - `sso-default`      → "Workspace uses SSO" card + escape hatch.
  *    - `methods`          → password + magic-link form, email locked.
- *    - `sso-unavailable`  → `SSO_UNAVAILABLE_MESSAGE`.
  *    - Special: signup-mode + unknown email + openSignup=false →
  *      "no account / signups closed" block.
  *
@@ -168,7 +163,6 @@ export function PortalAuthFormInline({
     | { stage: 'email' }
     | { stage: 'methods-step'; step: AuthFormStep }
     | { stage: 'sso-default'; providerId: string }
-    | { stage: 'sso-unavailable' }
     | { stage: 'closed-signup' }
     | { stage: 'sso-redirecting' }
 
@@ -289,10 +283,6 @@ export function PortalAuthFormInline({
       }
       if (result.kind === 'sso-default') {
         setView({ stage: 'sso-default', providerId: result.providerId })
-        return
-      }
-      if (result.kind === 'sso-unavailable') {
-        setView({ stage: 'sso-unavailable' })
         return
       }
       if (mode === 'signup' && openSignup === false) {
@@ -862,22 +852,6 @@ export function PortalAuthFormInline({
         >
           <FormattedMessage id="portal.auth.sso.another" defaultMessage="Sign in another way" />
         </button>
-        {recoveryLink}
-      </div>
-    )
-  }
-
-  // ============================================================
-  // Stage 2 — sso-unavailable branch
-  // ============================================================
-  if (view.stage === 'sso-unavailable') {
-    return (
-      <div className="space-y-4">
-        <BackToEmailLink onClick={backToEmail} />
-        <Alert variant="destructive">
-          <InformationCircleIcon className="h-4 w-4" />
-          <AlertDescription>{SSO_UNAVAILABLE_MESSAGE}</AlertDescription>
-        </Alert>
         {recoveryLink}
       </div>
     )
