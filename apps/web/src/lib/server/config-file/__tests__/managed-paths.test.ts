@@ -51,26 +51,6 @@ describe('computeManagedPaths', () => {
       'auth.oauth.google',
     ])
   })
-
-  it('emits per-key paths under auth.ssoOidc', () => {
-    expect(
-      computeManagedPaths({
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
-            clientId: 'workspace-x',
-            autoCreateUsers: true,
-          },
-        },
-      })
-    ).toEqual([
-      'auth.ssoOidc.enabled',
-      'auth.ssoOidc.discoveryUrl',
-      'auth.ssoOidc.clientId',
-      'auth.ssoOidc.autoCreateUsers',
-    ])
-  })
 })
 
 describe('isPathManaged', () => {

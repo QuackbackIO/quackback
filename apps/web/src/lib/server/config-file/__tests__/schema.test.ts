@@ -89,66 +89,6 @@ describe('parseQuackbackConfig', () => {
     })
     expect(result.success).toBe(false)
   })
-
-  it('accepts an auth.ssoOidc block', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: {
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
-            clientId: 'workspace-x',
-            autoCreateUsers: true,
-          },
-        },
-      },
-    })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.spec.auth?.ssoOidc?.enabled).toBe(true)
-      expect(result.data.spec.auth?.ssoOidc?.clientId).toBe('workspace-x')
-      expect(result.data.spec.auth?.ssoOidc?.autoCreateUsers).toBe(true)
-    }
-  })
-
-  it('rejects unknown keys inside auth.ssoOidc', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: {
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-            clientId: 'x',
-            // Secrets must never be declared in the file — strict mode
-            // rejects an attempted clientSecret leak.
-            clientSecret: 'leak',
-          },
-        },
-      } as unknown as Record<string, unknown>,
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects an invalid discoveryUrl', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: {
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'not-a-url',
-            clientId: 'x',
-          },
-        },
-      },
-    })
-    expect(result.success).toBe(false)
-  })
 })
 
 const baseConfig = {

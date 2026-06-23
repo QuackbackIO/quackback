@@ -26,7 +26,6 @@ import type { IdentityProviderId } from '@quackback/ids'
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
-import { providerPathKey } from '@/lib/server/config-file/managed-paths'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -220,22 +219,6 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
           'Cannot disable the only enabled sign-in method. Enable another method first.'
         )
       }
-    }
-
-    // Managed-path guard: refuse in-app edits of config-file-declared providers.
-    // NOTE: The guard keys on the prior (existing) label. A rename changes the
-    // providerPathKey, so renaming a managed provider can escape this lock. That
-    // is a known design limitation; the fix requires a stable config-file
-    // provider id rather than a label-derived key.
-    {
-      const { assertNotManaged } = await import('@/lib/server/config-file/managed-guard')
-      const base = `auth.identityProviders.${providerPathKey(prior?.label ?? data.label)}`
-      await assertNotManaged(`${base}.discoveryUrl`)
-      await assertNotManaged(`${base}.clientId`)
-      if (data.enabled !== undefined) await assertNotManaged(`${base}.enabled`)
-      if (data.autoCreateUsers !== undefined) await assertNotManaged(`${base}.autoCreateUsers`)
-      if (data.autoProvisionRole !== undefined) await assertNotManaged(`${base}.autoProvisionRole`)
-      if (data.scopes !== undefined) await assertNotManaged(`${base}.scopes`)
     }
 
     return withAuditEvent(

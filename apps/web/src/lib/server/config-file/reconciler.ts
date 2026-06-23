@@ -38,28 +38,6 @@ export interface SettingsInsert {
   managedFieldPaths: string[]
 }
 
-/**
- * Desired state of one config-declared identity provider, mapped from the
- * config file's `auth.identityProviders[]` entries. This is the
- * row-oriented shape the reconciler hands to its upsert dep — distinct
- * from the settings-JSON merge the rest of the reconciler performs.
- *
- * `domains` are operator-trusted: the production wiring marks them
- * verified WITHOUT a DNS challenge (the operator owning the config file
- * IS the authority for the domains they declare).
- */
-export interface IdentityProviderSpec {
-  /** Stable match key across reconciles (the config carries no id). */
-  label: string
-  discoveryUrl: string
-  clientId: string
-  enabled?: boolean
-  autoCreateUsers?: boolean
-  autoProvisionRole?: 'admin' | 'member' | 'user'
-  scopes?: string
-  domains: { name: string; enforced?: boolean }[]
-}
-
 export interface ReconcileDeps {
   readSettings: () => Promise<SettingsRow | null>
   updateSettings: (update: SettingsUpdate) => Promise<void>
@@ -81,15 +59,6 @@ export interface ReconcileDeps {
     message?: string
     configHash?: string
   }) => Promise<void>
-  /** Upsert the config-declared identity providers (and their verified
-   *  domains) into `identity_provider` / `sso_verified_domain` rows.
-   *  Optional so the many unit tests that stub `ReconcileDeps` don't all
-   *  have to provide it (mirrors `reportStatus`). Production wiring
-   *  (`makeReconcileDeps`) delegates to the identity-providers service:
-   *  each provider is matched by label, net-new ones get a deterministic
-   *  `oidc_<label>` registrationId, and declared domains are stamped
-   *  verified WITHOUT a DNS challenge (operator-trusted bypass). */
-  upsertIdentityProviders?: (specs: IdentityProviderSpec[]) => Promise<void>
 }
 
 /**
@@ -129,9 +98,6 @@ export async function reconcileFileIntoDb(
     await deps.invalidateSettingsCache()
     await deps.invalidateTierLimitsCache()
     if (spec.auth !== undefined || spec.features !== undefined) await deps.resetAuth()
-    // Providers are separate rows, reconciled after the settings row
-    // exists so the in-tx auth_config_version bump has a row to touch.
-    await reconcileIdentityProviders(spec, deps)
     return
   }
 
@@ -177,12 +143,6 @@ export async function reconcileFileIntoDb(
     }
   }
 
-  // Identity providers live in their own rows, independent of the
-  // settings-JSON diff above — reconcile them even when the settings
-  // update is a no-op (a provider's clientId could change while no
-  // managed settings field did).
-  await reconcileIdentityProviders(spec, deps)
-
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
 
@@ -196,31 +156,6 @@ export async function reconcileFileIntoDb(
   // Better-Auth's plugin set + provider list is built from settings at
   // boot, so any auth/feature change has to drop the cached instance.
   if (touchedFeatures || touchedAuth) await deps.resetAuth()
-}
-
-/**
- * Map the config's `auth.identityProviders[]` into row-upsert specs and
- * hand them to the (optional) upsert dep. No-op when the file declares no
- * providers or the dep isn't wired (e.g. in the reconciler's unit tests
- * that don't exercise the row path).
- */
-async function reconcileIdentityProviders(
-  spec: QuackbackConfigSpec,
-  deps: ReconcileDeps
-): Promise<void> {
-  const declared = spec.auth?.identityProviders
-  if (!declared || !deps.upsertIdentityProviders) return
-  const specs: IdentityProviderSpec[] = declared.map((p) => ({
-    label: p.label,
-    discoveryUrl: p.discoveryUrl,
-    clientId: p.clientId,
-    enabled: p.enabled,
-    autoCreateUsers: p.autoCreateUsers,
-    autoProvisionRole: p.autoProvisionRole,
-    scopes: p.scopes,
-    domains: (p.domains ?? []).map((d) => ({ name: d.name, enforced: d.enforced })),
-  }))
-  await deps.upsertIdentityProviders(specs)
 }
 
 interface SetupStateShape {
@@ -269,7 +204,8 @@ function mergeSetupState(
  * Per-key merge of `auth` over the existing auth config. The file
  * declares only what it wants to lock; absent fields keep their stored
  * value. openSignup falls back to existing → false in that order;
- * ssoOidc is merged per-key on top of the existing block.
+ * ssoOidc is passed through from the existing DB blob unchanged (the file
+ * no longer declares it — providers are configured in-app only).
  *
  * `existing` accepts the raw JSON string (or null) to keep callers
  * from having to pre-parse — this also runs at insert time, where
@@ -287,12 +223,6 @@ function mergeAuthConfig(
   }
   if (safe.ssoOidc) {
     merged.ssoOidc = safe.ssoOidc
-  }
-  if (next.ssoOidc !== undefined) {
-    merged.ssoOidc = {
-      ...(safe.ssoOidc ?? {}),
-      ...next.ssoOidc,
-    }
   }
   return merged
 }

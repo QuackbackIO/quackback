@@ -150,11 +150,6 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     if (input.openSignup !== undefined) {
       await assertNotManaged('auth.openSignup')
     }
-    if (input.ssoOidc) {
-      for (const key of Object.keys(input.ssoOidc)) {
-        await assertNotManaged(`auth.ssoOidc.${key}`)
-      }
-    }
     if (input.twoFactor) {
       for (const key of Object.keys(input.twoFactor)) {
         await assertNotManaged(`auth.twoFactor.${key}`)

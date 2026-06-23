@@ -89,10 +89,9 @@ const tierLimitsSchema = z
 // validates against; here the shape just needs to be string→boolean.
 const featuresSchema = z.record(z.string(), z.boolean())
 
-// Auth surface: OAuth provider toggles + openSignup + optional OIDC SSO.
-// Provider secrets are never declared here — both OAuth client secrets
-// (Google/GitHub/etc.) and the SSO OIDC client secret live encrypted
-// in the platform_credentials table.
+// Auth surface: OAuth provider toggles + openSignup. Provider secrets
+// are never declared here — OAuth client secrets (Google/GitHub/etc.)
+// live encrypted in the platform_credentials table.
 const oauthProvidersSchema = z
   .object({
     google: z.boolean().optional(),
@@ -105,72 +104,10 @@ const oauthProvidersSchema = z
   })
   .strict()
 
-// OIDC SSO provider config. The file declares the non-secret config —
-// discoveryUrl + clientId + UX flags — while the client *secret* lives
-// in platform_credentials (auth_sso, encrypted). The admin login page
-// is email-first: typing an email at a verified domain auto-redirects
-// to the IdP, so there's no "default CTA" knob.
-//
-// DEPRECATED: superseded by `identityProviders` (the multi-provider
-// list below). Kept as a tolerated-optional field for one release so
-// already-deployed config files that still declare `ssoOidc` keep
-// parsing under `.strict()` — removing it here would reject those files
-// outright. New config files should declare a single-element
-// `identityProviders` list instead.
-const ssoOidcSchema = z
-  .object({
-    enabled: z.boolean(),
-    discoveryUrl: httpsUrl,
-    clientId: z.string().min(1),
-    /** Auto-create user records on first SSO sign-in. */
-    autoCreateUsers: z.boolean().default(true),
-  })
-  .strict()
-
-// Role auto-provisioned for users created on first sign-in via a
-// config-declared provider. Mirrors the IdP-role enum used by the
-// identity-provider service / server fns.
-const autoProvisionRoleSchema = z.enum(['admin', 'member', 'user'])
-
-// A verified domain attached to a config-declared identity provider.
-// Domains listed here are reconciled into `sso_verified_domain` rows and
-// marked verified WITHOUT the DNS TXT challenge: the operator who owns
-// the config file is, by definition, the authority for the domains they
-// declare (operator-trusted bypass — see reconciler.ts).
-const identityProviderDomainSchema = z
-  .object({
-    name: z.string().min(1),
-    /** Force users at this domain through the provider (no password fallback). */
-    enforced: z.boolean().optional(),
-  })
-  .strict()
-
-// One OIDC identity provider, declared as a list entry. Reconciled into
-// an `identity_provider` row (+ its `sso_verified_domain` rows). The
-// client *secret* is never declared here — it lives encrypted in
-// platform_credentials, exactly like ssoOidc. Providers are matched
-// across reconciles by `label` (the config carries no id), so renaming a
-// provider's label creates a new row rather than renaming the old one.
-const identityProviderSchema = z
-  .object({
-    label: z.string().min(1),
-    discoveryUrl: httpsUrl,
-    clientId: z.string().min(1),
-    enabled: z.boolean().optional(),
-    autoCreateUsers: z.boolean().optional(),
-    autoProvisionRole: autoProvisionRoleSchema.optional(),
-    scopes: z.string().optional(),
-    domains: z.array(identityProviderDomainSchema).optional(),
-  })
-  .strict()
-
 const authSchema = z
   .object({
     oauth: oauthProvidersSchema.optional(),
     openSignup: z.boolean().optional(),
-    // DEPRECATED — see ssoOidcSchema. Prefer `identityProviders`.
-    ssoOidc: ssoOidcSchema.optional(),
-    identityProviders: z.array(identityProviderSchema).optional(),
   })
   .strict()
 

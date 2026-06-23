@@ -16,10 +16,6 @@ export const MANAGED_PATHS = {
   AUTH_OAUTH_GITHUB: 'auth.oauth.github',
   AUTH_OAUTH_PASSWORD: 'auth.oauth.password',
   AUTH_OPEN_SIGNUP: 'auth.openSignup',
-  AUTH_SSO_ENABLED: 'auth.ssoOidc.enabled',
-  AUTH_SSO_DISCOVERY_URL: 'auth.ssoOidc.discoveryUrl',
-  AUTH_SSO_CLIENT_ID: 'auth.ssoOidc.clientId',
-  AUTH_SSO_AUTO_CREATE_USERS: 'auth.ssoOidc.autoCreateUsers',
 } as const
 
 export type ManagedPath = (typeof MANAGED_PATHS)[keyof typeof MANAGED_PATHS] | (string & {})
