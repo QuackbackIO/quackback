@@ -15,7 +15,6 @@ describe('parseQuackbackConfig', () => {
           aiTokensPerMonth: 100000,
           features: { customDomain: true, integrations: false },
         },
-        features: { helpCenter: true, experimentalRichEditor: false },
       },
     })
     expect(result.success).toBe(true)
@@ -23,7 +22,6 @@ describe('parseQuackbackConfig', () => {
       expect(result.data.spec.workspace?.name).toBe('Acme')
       expect(result.data.spec.tierLimits?.maxBoards).toBe(10)
       expect(result.data.spec.tierLimits?.features?.customDomain).toBe(true)
-      expect(result.data.spec.features?.helpCenter).toBe(true)
     }
   })
 
@@ -64,28 +62,6 @@ describe('parseQuackbackConfig', () => {
       apiVersion: 'quackback.io/v1',
       kind: 'QuackbackConfig',
       spec: { boards: [{ name: 'x' }] } as unknown,
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts an auth block', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: { auth: { oauth: { google: true }, openSignup: false } },
-    })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.spec.auth?.oauth?.google).toBe(true)
-      expect(result.data.spec.auth?.openSignup).toBe(false)
-    }
-  })
-
-  it('rejects unknown OAuth provider keys in auth.oauth (v1 is google+github only)', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: { auth: { oauth: { discord: true } } },
     })
     expect(result.success).toBe(false)
   })

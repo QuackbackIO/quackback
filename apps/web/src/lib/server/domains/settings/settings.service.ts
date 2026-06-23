@@ -136,20 +136,6 @@ const STANDARD_OAUTH_PROVIDERS = new Set(['google', 'github', 'microsoft', 'disc
 export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
   log.info('update auth config')
   try {
-    // Managed-fields gate: refuse touching paths the config file at
-    // `/etc/quackback/config.yaml` has declared. Per-key so the file
-    // can lock one knob while leaving siblings UI-editable. Runs
-    // BEFORE the tier gate so a 403 FIELD_MANAGED error shows up
-    // cleanly even when the user is on a tier that would otherwise
-    // also block the change.
-    if (input.oauth) {
-      for (const key of Object.keys(input.oauth)) {
-        await assertNotManaged(`auth.oauth.${key}`)
-      }
-    }
-    if (input.openSignup !== undefined) {
-      await assertNotManaged('auth.openSignup')
-    }
     if (input.twoFactor) {
       for (const key of Object.keys(input.twoFactor)) {
         await assertNotManaged(`auth.twoFactor.${key}`)
@@ -890,12 +876,6 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
  * Update feature flags (partial update, merges with existing)
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
-  // Per-key managed gate: only the keys declared in the config file
-  // are locked; every other flag stays UI-editable. Assert before any
-  // DB write so a partial update with one locked key fails atomically.
-  for (const key of Object.keys(input)) {
-    await assertNotManaged(`features.${key}`)
-  }
   // Tier gate: enabling AI feedback extraction is plan-entitled (Scale on
   // cloud). Checked only on enable so a downgrade can still switch it off.
   if (input.aiFeedbackExtraction === true) {

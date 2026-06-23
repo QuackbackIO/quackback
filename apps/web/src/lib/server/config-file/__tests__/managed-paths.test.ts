@@ -22,34 +22,13 @@ describe('computeManagedPaths', () => {
     expect(computeManagedPaths({ tierLimits: { maxBoards: 5 } })).toEqual(['tierLimits'])
   })
 
-  it('emits per-key feature paths', () => {
-    expect(
-      computeManagedPaths({ features: { helpCenter: true, experimentalRichEditor: false } })
-    ).toEqual(['features.helpCenter', 'features.experimentalRichEditor'])
-  })
-
   it('combines all path types into one stable-ordered list', () => {
     expect(
       computeManagedPaths({
         workspace: { name: 'X' },
         tierLimits: {},
-        features: { a: true },
       })
-    ).toEqual(['workspace.name', 'tierLimits', 'features.a'])
-  })
-
-  it('emits per-key auth.oauth paths and the auth.openSignup leaf', () => {
-    expect(
-      computeManagedPaths({
-        auth: { oauth: { google: true, github: false }, openSignup: false },
-      })
-    ).toEqual(['auth.oauth.google', 'auth.oauth.github', 'auth.openSignup'])
-  })
-
-  it('omits auth.openSignup when only oauth providers are declared', () => {
-    expect(computeManagedPaths({ auth: { oauth: { google: true } } })).toEqual([
-      'auth.oauth.google',
-    ])
+    ).toEqual(['workspace.name', 'tierLimits'])
   })
 })
 

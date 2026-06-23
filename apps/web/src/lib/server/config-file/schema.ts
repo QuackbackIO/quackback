@@ -83,34 +83,6 @@ const tierLimitsSchema = z
   })
   .strict()
 
-// `features` is per-key managed: each entry locks one feature flag
-// while leaving others UI-toggleable. Accepts any boolean key — the
-// FeatureFlags shape has its own zod schema that the reconciler
-// validates against; here the shape just needs to be string→boolean.
-const featuresSchema = z.record(z.string(), z.boolean())
-
-// Auth surface: OAuth provider toggles + openSignup. Provider secrets
-// are never declared here — OAuth client secrets (Google/GitHub/etc.)
-// live encrypted in the platform_credentials table.
-const oauthProvidersSchema = z
-  .object({
-    google: z.boolean().optional(),
-    github: z.boolean().optional(),
-    password: z.boolean().optional(),
-    // `magicLink` is the email-link sign-in option surfaced alongside
-    // (or instead of) password. Defaults to false so a deployment must
-    // explicitly declare it to enable magic-link as a sign-in surface.
-    magicLink: z.boolean().optional(),
-  })
-  .strict()
-
-const authSchema = z
-  .object({
-    oauth: oauthProvidersSchema.optional(),
-    openSignup: z.boolean().optional(),
-  })
-  .strict()
-
 export const quackbackConfigSchema = z
   .object({
     apiVersion: z.literal('quackback.io/v1'),
@@ -120,8 +92,6 @@ export const quackbackConfigSchema = z
       .object({
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
-        features: featuresSchema.optional(),
-        auth: authSchema.optional(),
       })
       .strict(),
   })

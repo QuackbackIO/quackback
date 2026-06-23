@@ -7,8 +7,6 @@ export interface SettingsRow {
   slug: string
   setupState: string | null
   tierLimits: string | null
-  featureFlags: string | null
-  authConfig: string | null
   managedFieldPaths: string[]
 }
 
@@ -17,8 +15,6 @@ export interface SettingsUpdate {
   slug?: string
   setupState?: string
   tierLimits?: string
-  featureFlags?: string
-  authConfig?: string
   managedFieldPaths: string[]
 }
 
@@ -33,8 +29,6 @@ export interface SettingsInsert {
   slug: string
   setupState?: string
   tierLimits?: string
-  featureFlags?: string
-  authConfig?: string
   managedFieldPaths: string[]
 }
 
@@ -49,7 +43,6 @@ export interface ReconcileDeps {
   createSettings: (insert: SettingsInsert) => Promise<void>
   invalidateSettingsCache: () => Promise<void>
   invalidateTierLimitsCache: () => Promise<void>
-  resetAuth: () => Promise<void>
   /** Post-reconcile status reporter. Optional so unit tests don't have
    *  to stub it; production wiring (`makeReconcileDeps`) populates it
    *  with a fetch to the operator's status endpoint. A silent no-op
@@ -67,9 +60,6 @@ export interface ReconcileDeps {
  * Idempotent: when the resulting update would be a no-op (every
  * targeted field already matches), `updateSettings` is skipped. Cache
  * invalidations only fire when something actually changed.
- *
- * resetAuth fires when feature flags change, since Better-Auth's
- * plugin set is built from flags + settings at boot.
  */
 export async function reconcileFileIntoDb(
   spec: QuackbackConfigSpec,
@@ -84,26 +74,20 @@ export async function reconcileFileIntoDb(
     if (!spec.workspace?.name || !spec.workspace?.slug) return
 
     const setupState = JSON.stringify(mergeSetupState(null, spec.workspace))
-    const authConfig =
-      spec.auth !== undefined ? JSON.stringify(mergeAuthConfig(null, spec.auth)) : undefined
     await deps.createSettings({
       name: spec.workspace.name,
       slug: spec.workspace.slug,
       setupState,
       tierLimits: spec.tierLimits !== undefined ? JSON.stringify(spec.tierLimits) : undefined,
-      featureFlags: spec.features !== undefined ? JSON.stringify(spec.features) : undefined,
-      authConfig,
       managedFieldPaths: computeManagedPaths(spec),
     })
     await deps.invalidateSettingsCache()
     await deps.invalidateTierLimitsCache()
-    if (spec.auth !== undefined || spec.features !== undefined) await deps.resetAuth()
     return
   }
 
   const newPaths = computeManagedPaths(spec)
   const update: SettingsUpdate = { managedFieldPaths: newPaths }
-  let touchedFeatures = false
 
   if (spec.workspace?.name !== undefined && spec.workspace.name !== current.name) {
     update.name = spec.workspace.name
@@ -123,26 +107,6 @@ export async function reconcileFileIntoDb(
     if (serialized !== current.tierLimits) update.tierLimits = serialized
   }
 
-  if (spec.features !== undefined) {
-    const existing = current.featureFlags ? (safeJsonParse(current.featureFlags) ?? {}) : {}
-    const merged = { ...existing, ...spec.features }
-    const serialized = JSON.stringify(merged)
-    if (serialized !== current.featureFlags) {
-      update.featureFlags = serialized
-      touchedFeatures = true
-    }
-  }
-
-  let touchedAuth = false
-  if (spec.auth !== undefined) {
-    const merged = mergeAuthConfig(current.authConfig, spec.auth)
-    const serialized = JSON.stringify(merged)
-    if (serialized !== current.authConfig) {
-      update.authConfig = serialized
-      touchedAuth = true
-    }
-  }
-
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
 
@@ -153,9 +117,6 @@ export async function reconcileFileIntoDb(
   await deps.updateSettings(update)
   await deps.invalidateSettingsCache()
   await deps.invalidateTierLimitsCache()
-  // Better-Auth's plugin set + provider list is built from settings at
-  // boot, so any auth/feature change has to drop the cached instance.
-  if (touchedFeatures || touchedAuth) await deps.resetAuth()
 }
 
 interface SetupStateShape {
@@ -198,60 +159,6 @@ function mergeSetupState(
     useCase: workspace.useCase ?? parsed?.useCase,
     completedAt,
   }
-}
-
-/**
- * Per-key merge of `auth` over the existing auth config. The file
- * declares only what it wants to lock; absent fields keep their stored
- * value. openSignup falls back to existing → false in that order;
- * ssoOidc is passed through from the existing DB blob unchanged (the file
- * no longer declares it — providers are configured in-app only).
- *
- * `existing` accepts the raw JSON string (or null) to keep callers
- * from having to pre-parse — this also runs at insert time, where
- * there is no row to read from.
- */
-function mergeAuthConfig(
-  existing: string | null,
-  next: NonNullable<QuackbackConfigSpec['auth']>
-): Record<string, unknown> {
-  const parsed = existing ? safeJsonParse(existing) : null
-  const safe = safeAuthExisting(parsed)
-  const merged: Record<string, unknown> = {
-    oauth: { ...safe.oauth, ...(next.oauth ?? {}) },
-    openSignup: next.openSignup ?? safe.openSignup,
-  }
-  if (safe.ssoOidc) {
-    merged.ssoOidc = safe.ssoOidc
-  }
-  return merged
-}
-
-/**
- * Coerce parsed authConfig JSON to a known shape. Hardens the merge
- * against rows that pre-date the schema or were poked at by hand —
- * a stray `"oauth": "yes"` shouldn't crash the reconciler.
- */
-function safeAuthExisting(parsed: Record<string, unknown> | null): {
-  oauth: Record<string, boolean>
-  openSignup: boolean
-  ssoOidc: Record<string, unknown> | undefined
-} {
-  if (!parsed) return { oauth: {}, openSignup: false, ssoOidc: undefined }
-  const oauthRaw = parsed.oauth
-  const oauth: Record<string, boolean> = {}
-  if (oauthRaw && typeof oauthRaw === 'object' && !Array.isArray(oauthRaw)) {
-    for (const [k, v] of Object.entries(oauthRaw as Record<string, unknown>)) {
-      if (typeof v === 'boolean') oauth[k] = v
-    }
-  }
-  const openSignup = typeof parsed.openSignup === 'boolean' ? parsed.openSignup : false
-  const ssoOidcRaw = parsed.ssoOidc
-  const ssoOidc =
-    ssoOidcRaw && typeof ssoOidcRaw === 'object' && !Array.isArray(ssoOidcRaw)
-      ? (ssoOidcRaw as Record<string, unknown>)
-      : undefined
-  return { oauth, openSignup, ssoOidc }
 }
 
 function safeJsonParse(s: string): Record<string, unknown> | null {
