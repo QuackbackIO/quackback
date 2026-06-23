@@ -23,10 +23,8 @@
  * open.
  */
 
-import {
-  getPublicPortalConfig,
-  getTenantSettings,
-} from '@/lib/server/domains/settings/settings.service'
+import { getTenantSettings } from '@/lib/server/domains/settings/settings.service'
+import { isSignInMethodEnabled, normalizeMethodKey } from '@/lib/shared/signin-methods'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -44,15 +42,20 @@ interface AuthMethodResult {
 }
 
 /**
- * Per-method enablement check. Answers "is method X allowed for role Y?"
- * Team and portal roles take different paths ({@link checkPortalAuthMethod}
- * handles `role: 'user'`), except any registered OIDC provider — which is
- * allowed for every role up front. Hard-binding for verified-domain emails
- * is handled separately by {@link isHardBound} in `hooks.before` /
- * `hooks.after`.
+ * Per-method enablement check. Answers "is method X enabled in authConfig.oauth?"
+ * All roles — team (admin/member) and portal (user) — read the same
+ * `authConfig.oauth` map via {@link isSignInMethodEnabled}. OIDC eligibility
+ * per role is a separate concern handled by {@link isSsoBlockedForRole}.
+ * Any registered OIDC provider id is allowed at this layer for every role;
+ * per-domain eligibility is enforced at the callback.
+ *
+ * Hard-binding for verified-domain emails is handled separately by
+ * {@link isHardBound} in `hooks.before` / `hooks.after`.
  *
  * @param provider - Path-derived provider id ('credential' | 'magic-link' | OIDC registrationId | social id)
- * @param role - The principal's role
+ * @param _role - The principal's role. No longer gates method enablement here;
+ *   kept positionally for callers in hooks.ts. Role governs OIDC eligibility
+ *   in the sibling {@link isSsoBlockedForRole}.
  * @param registeredOidcProviderIds - Currently-registered OIDC provider ids.
  *   Any provider in this set is "allowed" at this layer (its per-domain
  *   eligibility is enforced at the callback via {@link isSsoBlockedForRole} /
@@ -62,7 +65,7 @@ interface AuthMethodResult {
  */
 export async function isAuthMethodAllowed(
   provider: AuthProvider,
-  role: Role,
+  _role: Role,
   registeredOidcProviderIds: Set<string>,
   /** Optional pre-fetched tenant settings to skip the cache hit. Used
    *  by hooks.ts where the same settings already drove a hard-binding
@@ -76,78 +79,28 @@ export async function isAuthMethodAllowed(
   // see `isSsoBlockedForRole` / `handleCallbackPolicyCleanup`.
   if (isRegisteredOidcProvider(provider, registeredOidcProviderIds)) return { allowed: true }
 
-  if (role === 'user') {
-    return checkPortalAuthMethod(provider)
-  }
-
   const tenant = tenantSettings ?? (await getTenantSettings())
-  const authConfig = tenant?.authConfig
+  const oauth = tenant?.authConfig?.oauth
+  const key = normalizeMethodKey(provider)
 
-  // Magic-link is gated by the team-side `authConfig.oauth.magicLink`
-  // toggle, mirroring the password toggle. An absent key defaults to
-  // enabled, so a tenant that never set it keeps team sign-in working.
-  // Verified-domain hard-binding can still block magic-link for a
-  // specific email; that check runs in hooks before this function is
-  // reached.
-  //
-  // Internal token-mint paths (invitations, recovery-code-mint,
-  // password-reset) bypass this gate entirely because they write the
-  // verification row directly via `mintMagicLinkUrl` rather than going
-  // through `auth.api.signInMagicLink`.
-  if (provider === 'magic-link' || provider === 'email') {
-    const enabled = authConfig?.oauth?.magicLink !== false
-    return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
+  if (key === 'password') {
+    return isSignInMethodEnabled(oauth, 'password')
+      ? { allowed: true }
+      : { allowed: false, error: 'password_method_not_allowed' }
   }
-
-  // Password is gated by the team-side `authConfig.oauth.password`
-  // toggle. An absent key defaults to enabled, so a tenant that never
-  // set it keeps team sign-in working; an explicit `false` blocks it.
-  // (`DEFAULT_AUTH_CONFIG` seeds it off, so fresh tenants opt in.)
-  if (provider === 'credential' || provider === 'password') {
-    const enabled = authConfig?.oauth?.password !== false
-    return enabled ? { allowed: true } : { allowed: false, error: 'password_method_not_allowed' }
+  if (key === 'magicLink') {
+    return isSignInMethodEnabled(oauth, 'magicLink')
+      ? { allowed: true }
+      : { allowed: false, error: 'magic_link_method_not_allowed' }
   }
-
-  // Any other OAuth provider is gated by authConfig.oauth.<provider>
-  // and must also have credentials configured.
-  const teamEnabled = authConfig?.oauth?.[provider] === true
-  if (!teamEnabled) return { allowed: false, error: 'oauth_method_not_allowed' }
-
+  // Social provider: enabled flag + credentials present.
+  if (!isSignInMethodEnabled(oauth, key)) {
+    return { allowed: false, error: 'oauth_method_not_allowed' }
+  }
   const { hasPlatformCredentials } =
     await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-  const hasCredentials = await hasPlatformCredentials(`auth_${provider}`)
+  const hasCredentials = await hasPlatformCredentials(`auth_${key}`)
   return hasCredentials ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
-}
-
-async function checkPortalAuthMethod(provider: AuthProvider): Promise<AuthMethodResult> {
-  // getPublicPortalConfig already filters by credential availability
-  const portalConfig = await getPublicPortalConfig()
-
-  // Path-derived provider ids from hooks.ts:
-  //   '/sign-in/email' → 'credential'   (Better-Auth's name for email+password)
-  //   '/sign-in/magic-link' / '/magic-link/verify' / email-OTP → 'magic-link'
-  // Portal config uses different keys ('password' and 'magicLink') for
-  // historical reasons. Normalize here so the policy answers the right
-  // question regardless of caller convention.
-  if (provider === 'credential' || provider === 'password') {
-    const enabled = portalConfig.oauth.password ?? true
-    return enabled ? { allowed: true } : { allowed: false, error: 'password_method_not_allowed' }
-  }
-
-  if (provider === 'magic-link' || provider === 'magicLink' || provider === 'email') {
-    // `magicLink` portal toggle is the authoritative key; legacy
-    // `email` (OTP) was retired in migration 0049 and folded into
-    // magic-link. Default off — admin must opt portal users in.
-    const enabled = portalConfig.oauth.magicLink ?? false
-    return enabled ? { allowed: true } : { allowed: false, error: 'magic_link_method_not_allowed' }
-  }
-
-  // Any other OAuth provider (google, github, …) — enabled iff its portal
-  // toggle is on (already filtered by credential availability). Registered
-  // OIDC providers are short-circuited in isAuthMethodAllowed and never
-  // reach here.
-  const enabled = portalConfig.oauth[provider]
-  return enabled ? { allowed: true } : { allowed: false, error: 'oauth_method_not_allowed' }
 }
 
 /**

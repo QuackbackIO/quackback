@@ -346,11 +346,8 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
     )
   })
 
-  it('passes for portal user + google when portalConfig.oauth.google=true', async () => {
+  it('passes for portal user + google when authConfig.oauth.google=true', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, google: true },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -358,7 +355,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       email: 'a@external.com',
       token: 'tok',
     })
-    await cleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({ googleEnabled: true }))
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 

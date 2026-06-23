@@ -81,9 +81,9 @@ describe('isAuthMethodAllowed — team role', () => {
     expect(r).toEqual({ allowed: true })
   })
 
-  it('allows magic-link for team when oauth.magicLink is undefined (default true)', async () => {
+  it('blocks magic-link for team when oauth.magicLink is undefined (opt-in, default off)', async () => {
     const r = await isAuthMethodAllowed('magic-link', 'admin', tenant({}))
-    expect(r).toEqual({ allowed: true })
+    expect(r).toEqual({ allowed: false, error: 'magic_link_method_not_allowed' })
   })
 
   it('blocks magic-link for team when oauth.magicLink is explicitly false', async () => {
@@ -142,66 +142,48 @@ describe('isAuthMethodAllowed — team role', () => {
 })
 
 describe('isAuthMethodAllowed — portal role (user)', () => {
-  it('allows credential when portalConfig.oauth.password=true', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
-    const r = await isAuthMethodAllowed('credential', 'user')
+  // After the unified gate, portal reads authConfig.oauth via getTenantSettings,
+  // same as team roles. The same defaults apply: password on unless false,
+  // magic-link and social opt-in.
+
+  it('allows credential for portal when oauth.password=true', async () => {
+    const r = await isAuthMethodAllowed('credential', 'user', tenant({ password: true }))
     expect(r).toEqual({ allowed: true })
   })
 
-  it('allows credential when portalConfig.oauth.password is undefined (default ON for portal too)', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { magicLink: false },
-    })
-    const r = await isAuthMethodAllowed('credential', 'user')
+  it('allows credential for portal when oauth.password is undefined (default ON)', async () => {
+    const r = await isAuthMethodAllowed('credential', 'user', tenant({}))
     expect(r).toEqual({ allowed: true })
   })
 
-  it('blocks credential when portalConfig.oauth.password=false', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: false, magicLink: false },
-    })
-    const r = await isAuthMethodAllowed('credential', 'user')
+  it('blocks credential for portal when oauth.password=false', async () => {
+    const r = await isAuthMethodAllowed('credential', 'user', tenant({ password: false }))
     expect(r).toEqual({ allowed: false, error: 'password_method_not_allowed' })
   })
 
-  it('blocks magic-link by default for portal (admin must opt in)', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true },
-    })
-    const r = await isAuthMethodAllowed('magic-link', 'user')
+  it('blocks magic-link for portal when oauth.magicLink is absent (opt-in)', async () => {
+    const r = await isAuthMethodAllowed('magic-link', 'user', tenant({}))
     expect(r).toEqual({ allowed: false, error: 'magic_link_method_not_allowed' })
   })
 
-  it('allows magic-link for portal when opted in', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: true },
-    })
-    const r = await isAuthMethodAllowed('magic-link', 'user')
+  it('allows magic-link for portal when oauth.magicLink=true', async () => {
+    const r = await isAuthMethodAllowed('magic-link', 'user', tenant({ magicLink: true }))
     expect(r).toEqual({ allowed: true })
   })
 
-  it('allows sso for portal users regardless of the portal oauth map (SSO is role-agnostic)', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({ oauth: {} })
+  it('allows sso for portal users (SSO short-circuits before method gate)', async () => {
     expect(await isAuthMethodAllowed('sso', 'user')).toEqual({ allowed: true })
   })
 
-  it('allows OAuth provider for portal when explicitly enabled', async () => {
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, google: true },
-    })
-    const r = await isAuthMethodAllowed('google', 'user')
+  it('allows OAuth provider for portal when oauth toggle=true and credentials present', async () => {
+    mockHasPlatformCredentials.mockResolvedValue(true)
+    const r = await isAuthMethodAllowed('google', 'user', tenant({ google: true }))
     expect(r).toEqual({ allowed: true })
   })
 
-  it('does not consult the workspace-side hasPlatformCredentials for portal OAuth', async () => {
+  it('blocks OAuth provider for portal when credentials missing', async () => {
     mockHasPlatformCredentials.mockResolvedValue(false)
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, google: true },
-    })
-    const r = await isAuthMethodAllowed('google', 'user')
-    expect(r).toEqual({ allowed: true })
-    expect(mockHasPlatformCredentials).not.toHaveBeenCalled()
+    const r = await isAuthMethodAllowed('google', 'user', tenant({ google: true }))
+    expect(r).toEqual({ allowed: false, error: 'oauth_method_not_allowed' })
   })
 })

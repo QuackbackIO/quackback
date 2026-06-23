@@ -342,6 +342,7 @@ describe('handleSignInPreCheck — ssoOidc.enabled=false (workspace SSO disabled
     mockGetTenantSettings.mockResolvedValue(
       tenant({
         ssoEnabled: false,
+        magicLinkEnabled: true,
         verifiedDomains: [makeVerifiedDomain('acme.com', true)],
       })
     )
@@ -405,6 +406,7 @@ describe('handleSignInPreCheck — tier-downgrade / missing-secret fail-open', (
     mockGetTenantSettings.mockResolvedValue(
       tenant({
         ssoEnabled: true,
+        magicLinkEnabled: true,
         verifiedDomains: [makeVerifiedDomain('acme.com', true)],
       })
     )
