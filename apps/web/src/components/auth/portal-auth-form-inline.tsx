@@ -356,7 +356,7 @@ export function PortalAuthFormInline({
       } else {
         // Stash the post-login destination before the sign-in call so the
         // twoFactor client can forward to it from its /auth/two-factor page.
-        stashTwoFactorCallbackUrl(callbackUrl)
+        stashTwoFactorCallbackUrl(callbackUrl ?? window.location.pathname + window.location.search)
         const result = await authClient.signIn.email({
           email,
           password,
