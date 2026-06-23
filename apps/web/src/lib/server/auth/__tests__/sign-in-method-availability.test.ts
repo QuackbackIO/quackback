@@ -143,4 +143,19 @@ describe('hasAnyWorkingSignInMethod', () => {
       })
     ).toBe(true)
   })
+
+  it('false when magicLink key is absent (opt-in default), email configured, no other method', () => {
+    // Regression: old code treated absent magicLink as enabled (!== false).
+    // The unified opt-in default means absent ⇒ off, so this must return false.
+    expect(
+      hasAnyWorkingSignInMethod({
+        tierEnabled: false,
+        providers: [],
+        oauth: { password: false }, // magicLink key intentionally absent
+        emailConfigured: true,
+        socialIds: ['google', 'github'],
+        configuredSocialIds: new Set<string>(),
+      })
+    ).toBe(false)
+  })
 })

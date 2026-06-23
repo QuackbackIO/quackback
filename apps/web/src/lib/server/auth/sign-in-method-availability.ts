@@ -12,8 +12,8 @@
  * stored in `authConfig.oauth`, and any registered OIDC provider usable by
  * every role. "Working" reads the single unified config:
  *   - password   — `oauth.password !== false` (absent ⇒ on).
- *   - magic link — enabled AND email delivery is wired.
- *   - social     — enabled AND its credentials are saved.
+ *   - magic link — `oauth.magicLink === true` (absent ⇒ off, opt-in) AND email delivery is wired.
+ *   - social     — `oauth[id] === true` (absent ⇒ off, opt-in) AND its credentials are saved.
  *   - identity provider — registered (tier on + enabled + secret saved).
  *
  * Each check is read-then-write (no lock across the check and the mutation), so
@@ -25,6 +25,7 @@
 
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 export interface WorkingMethodInputs {
   /** Whether the `customOidcProvider` tier feature is on. The runtime only
@@ -58,12 +59,12 @@ export function hasAnyWorkingSignInMethod(snap: WorkingMethodInputs): boolean {
   // Registered IdP — enabled + configured + tier on.
   if (snap.tierEnabled && snap.providers.some((p) => p.enabled && p.configured)) return true
   // Password — enabled (absent ⇒ on), matching the runtime gate.
-  if (snap.oauth.password !== false) return true
-  // Magic link — enabled (absent ⇒ on) AND email delivery wired (else rejected).
-  if (snap.oauth.magicLink !== false && snap.emailConfigured) return true
-  // Social — enabled AND its credentials are saved.
+  if (isSignInMethodEnabled(snap.oauth, 'password')) return true
+  // Magic link — opt-in (absent ⇒ off) AND email delivery wired (else rejected).
+  if (isSignInMethodEnabled(snap.oauth, 'magicLink') && snap.emailConfigured) return true
+  // Social — opt-in (absent ⇒ off) AND its credentials are saved.
   for (const id of snap.socialIds) {
-    if (snap.oauth[id] === true && snap.configuredSocialIds.has(id)) return true
+    if (isSignInMethodEnabled(snap.oauth, id) && snap.configuredSocialIds.has(id)) return true
   }
   return false
 }
