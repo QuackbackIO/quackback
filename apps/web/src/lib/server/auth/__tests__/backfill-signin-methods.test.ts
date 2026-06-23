@@ -163,6 +163,40 @@ describe('backfillUnifiedSignInMethods', () => {
       })
   })
 
+  it('bumps auth_config_version when a merge writes', async () => {
+    await db
+      .transaction(async (tx) => {
+        await tx.delete(settings)
+        const [row] = await tx
+          .insert(settings)
+          .values({
+            name: 'T',
+            slug: 'backfill-test-version-bump',
+            createdAt: new Date(),
+            authConfig: JSON.stringify({ oauth: { google: true }, openSignup: false }),
+            portalConfig: JSON.stringify({ oauth: { github: true } }),
+          })
+          .returning({ id: settings.id, authConfigVersion: settings.authConfigVersion })
+
+        const versionBefore = row.authConfigVersion
+
+        const result = await backfillUnifiedSignInMethods(tx)
+        expect(result.merged).toBe(true)
+
+        const [after] = await tx
+          .select({ authConfigVersion: settings.authConfigVersion })
+          .from(settings)
+          .where(eq(settings.id, row.id))
+          .limit(1)
+        expect(after.authConfigVersion).toBeGreaterThan(versionBefore)
+
+        throw new Error('__ROLLBACK__')
+      })
+      .catch((e) => {
+        if ((e as Error).message !== '__ROLLBACK__') throw e
+      })
+  })
+
   it('is idempotent', async () => {
     await db
       .transaction(async (tx) => {

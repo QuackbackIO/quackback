@@ -26,7 +26,9 @@ import {
   type Transaction,
 } from '@/lib/server/db'
 import { backfillUnifiedSignInMethods } from './backfill-signin-methods'
+import { resetAuth } from './index'
 import { decryptPlatformCredentials } from '@/lib/server/integrations/encryption'
+import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'idp-backfill' })
@@ -129,6 +131,7 @@ function readOauthToggles(json: string | null): Record<string, boolean | undefin
  * it is auto-released on commit/rollback, so there is no unlock to leak.
  */
 export async function runStartupBackfills(): Promise<void> {
+  let signInMethodsMerged = false
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext('quackback:identity_provider_backfill'))`
@@ -138,6 +141,13 @@ export async function runStartupBackfills(): Promise<void> {
       log.info({ registration_id: 'custom-oidc' }, 'backfilled identity provider from credential')
     }
     const { merged } = await backfillUnifiedSignInMethods(tx)
-    if (merged) log.info('merged portal sign-in methods into authConfig.oauth')
+    if (merged) {
+      log.info('merged portal sign-in methods into authConfig.oauth')
+      signInMethodsMerged = true
+    }
   })
+  if (signInMethodsMerged) {
+    resetAuth()
+    await invalidateSettingsCache()
+  }
 }

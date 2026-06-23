@@ -7,6 +7,7 @@
  */
 import { settings, eq, type Database, type Transaction } from '@/lib/server/db'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/server/domains/settings/settings.types'
+import { bumpAuthConfigVersionInTx } from './config-version'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'signin-methods-backfill' })
@@ -60,6 +61,7 @@ export async function backfillUnifiedSignInMethods(database: DbOrTx): Promise<{ 
     .update(settings)
     .set({ authConfig: JSON.stringify(parsedAuth) })
     .where(eq(settings.id, rows[0].id))
+  await bumpAuthConfigVersionInTx(database as Transaction)
   log.info({ keys: added }, 'merged portal-only sign-in methods into authConfig.oauth')
   return { merged: true }
 }
