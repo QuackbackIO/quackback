@@ -316,6 +316,18 @@ export async function upsertIdentityProvider(
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
         if (input.attributeMapping !== undefined) patch.attributeMapping = input.attributeMapping
         if (input.showButton !== undefined) patch.showButton = input.showButton
+
+        // Restamp the freshness baseline when a connection-affecting field
+        // changes. The gate `isSsoTestValid` compares `lastSuccessfulTestAt`
+        // vs `detailsChangedAt`; without this stamp a pre-edit test could
+        // vouch for a changed connection.
+        const connectionChanged =
+          input.clientId !== existing.clientId ||
+          (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl)
+        if (connectionChanged) {
+          patch.detailsChangedAt = new Date()
+        }
+
         ;[row] = await tx
           .update(identityProvider)
           .set(patch)
