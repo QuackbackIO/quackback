@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 // vi.hoisted ensures these mocks are available when the vi.mock factory runs
 // (vi.mock calls are hoisted above imports by the Vitest transformer).
-const { mockGetRouteContext } = vi.hoisted(() => ({
-  mockGetRouteContext: vi.fn(),
-}))
+const { mockGetRouteContext, mockOpenAuthPopover, mockOauth2, mockResolveSole, mockHasAny } =
+  vi.hoisted(() => ({
+    mockGetRouteContext: vi.fn(),
+    mockOpenAuthPopover: vi.fn(),
+    mockOauth2: vi.fn(),
+    mockResolveSole: vi.fn((): string | null => null),
+    mockHasAny: vi.fn((): boolean => false),
+  }))
 
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn(), navigate: vi.fn() }),
@@ -36,11 +41,12 @@ vi.mock('next-themes', () => ({
 }))
 
 vi.mock('@/components/auth/auth-popover-context', () => ({
-  useAuthPopoverSafe: () => null,
+  useAuthPopoverSafe: () => ({ openAuthPopover: mockOpenAuthPopover }),
 }))
 
 vi.mock('@/components/auth/oauth-buttons', () => ({
-  hasAnyPortalAuthMethod: () => false,
+  hasAnyPortalAuthMethod: () => mockHasAny(),
+  resolveSoleOidcProvider: () => mockResolveSole(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -58,6 +64,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: vi.fn(),
+  authClient: { signIn: { oauth2: mockOauth2 } },
 }))
 
 vi.mock('@/components/notifications', () => ({
@@ -123,5 +130,31 @@ describe('PortalHeader — Admin dropdown item', () => {
     // no Admin menuitem is present.
     await screen.findByRole('menuitem', { name: /settings/i })
     expect(screen.queryByRole('menuitem', { name: /admin/i })).toBeNull()
+  })
+})
+
+describe('PortalHeader — single-IdP redirect', () => {
+  beforeEach(() => {
+    mockOpenAuthPopover.mockClear()
+    mockOauth2.mockClear()
+    mockHasAny.mockReturnValue(true) // the portal has a usable sign-in method
+    mockResolveSole.mockReturnValue(null)
+  })
+  afterEach(() => cleanup())
+
+  it('redirects straight to the sole OIDC provider on Log in, skipping the dialog', () => {
+    mockResolveSole.mockReturnValue('oidc_entra')
+    renderHeader({ userRole: null, isLoggedIn: false })
+    fireEvent.click(screen.getByRole('button', { name: /log in/i }))
+    expect(mockOauth2).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'oidc_entra' }))
+    expect(mockOpenAuthPopover).not.toHaveBeenCalled()
+  })
+
+  it('opens the dialog on Log in when more than one method exists', () => {
+    mockResolveSole.mockReturnValue(null)
+    renderHeader({ userRole: null, isLoggedIn: false })
+    fireEvent.click(screen.getByRole('button', { name: /log in/i }))
+    expect(mockOpenAuthPopover).toHaveBeenCalledWith(expect.objectContaining({ mode: 'login' }))
+    expect(mockOauth2).not.toHaveBeenCalled()
   })
 })

@@ -4,20 +4,14 @@ export interface AuthPromptParams {
   mode?: 'login' | 'signup'
   callbackUrl?: string
   error?: string
-  suppressInstantSso?: boolean
 }
 
 /** Reads the auth-prompt query params off a portal-root search object.
- *  `auth=signin` → login, `auth=signup` → signup. Unsafe callbackUrls are dropped.
- *  `prompt=login` suppresses instant-SSO and defaults mode to 'login'. */
+ *  `auth=signin` → login, `auth=signup` → signup. Unsafe callbackUrls are dropped. */
 export function parseAuthPromptSearch(search: Record<string, unknown>): AuthPromptParams {
   const out: AuthPromptParams = {}
   if (search.auth === 'signin') out.mode = 'login'
   else if (search.auth === 'signup') out.mode = 'signup'
-  if (search.prompt === 'login') {
-    out.suppressInstantSso = true
-    out.mode = out.mode ?? 'login'
-  }
   if (typeof search.callbackUrl === 'string' && isSafeCallbackUrl(search.callbackUrl)) {
     out.callbackUrl = search.callbackUrl
   }

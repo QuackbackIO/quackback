@@ -37,6 +37,9 @@ export interface PortalAccessGateError {
     found: boolean
     oauth: Record<string, boolean | undefined>
     oidcProviders?: { id: string; name: string }[]
+    /** All registered auth provider ids — lets the gate's sign-in form show
+     *  the email input for a routed-only IdP that renders no public button. */
+    registeredAuthProviders?: string[]
   }
 }
 

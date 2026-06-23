@@ -32,9 +32,9 @@ vi.mock('@tanstack/react-start/server', () => ({
 
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
-  getPublicOidcProviders: vi.fn(),
   getPublicPortalConfig: vi.fn(),
-  resolveInstantSsoProvider: vi.fn(),
+  getRegisteredOidcProviderIds: vi.fn(),
+  getRegisteredAuthProviders: vi.fn(),
   signInWithOAuth2: vi.fn(),
 }))
 
@@ -43,12 +43,12 @@ vi.mock('@/lib/server/auth/session', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPublicOidcProviders: hoisted.getPublicOidcProviders,
   getPublicPortalConfig: hoisted.getPublicPortalConfig,
 }))
 
-vi.mock('@/lib/server/auth/instant-sso', () => ({
-  resolveInstantSsoProvider: hoisted.resolveInstantSsoProvider,
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: hoisted.getRegisteredOidcProviderIds,
+  getRegisteredAuthProviders: hoisted.getRegisteredAuthProviders,
 }))
 
 vi.mock('@/lib/server/auth', () => ({
@@ -72,6 +72,23 @@ if (typeof resolveHandler !== 'function') {
   )
 }
 
+/** Configure the mocks for a sole-OIDC workspace (one registered provider, no
+ *  other method) seen by an anonymous visitor. */
+function soleOidcWorkspace(over?: {
+  oidcIds?: string[]
+  allIds?: string[]
+  oauth?: Record<string, boolean>
+}) {
+  hoisted.getSession.mockResolvedValueOnce(null)
+  hoisted.getRegisteredOidcProviderIds.mockResolvedValueOnce(
+    new Set(over?.oidcIds ?? ['oidc_acme'])
+  )
+  hoisted.getRegisteredAuthProviders.mockResolvedValueOnce(over?.allIds ?? ['oidc_acme'])
+  hoisted.getPublicPortalConfig.mockResolvedValueOnce({
+    oauth: over?.oauth ?? { password: false, magicLink: false },
+  })
+}
+
 describe('resolveInstantSsoRedirectFn', () => {
   it('(a) returns null without calling signInWithOAuth2 when a non-anonymous user is signed in', async () => {
     hoisted.getSession.mockResolvedValueOnce({
@@ -84,11 +101,8 @@ describe('resolveInstantSsoRedirectFn', () => {
     expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
   })
 
-  it('(b) returns { url } when anonymous and instant-SSO provider resolves', async () => {
-    hoisted.getSession.mockResolvedValueOnce(null)
-    hoisted.getPublicOidcProviders.mockResolvedValueOnce([])
-    hoisted.getPublicPortalConfig.mockResolvedValueOnce({ oauth: {} })
-    hoisted.resolveInstantSsoProvider.mockReturnValueOnce('oidc_acme')
+  it('(b) redirects to the sole registered OIDC provider for an anonymous visitor', async () => {
+    soleOidcWorkspace()
     hoisted.signInWithOAuth2.mockResolvedValueOnce({ url: 'https://idp.example.com/auth' })
 
     const result = await resolveHandler({ data: { callbackUrl: '/portal' } })
@@ -99,5 +113,32 @@ describe('resolveInstantSsoRedirectFn', () => {
         body: expect.objectContaining({ providerId: 'oidc_acme', disableRedirect: true }),
       })
     )
+  })
+
+  it('(c) returns null when a built-in email method is still enabled', async () => {
+    soleOidcWorkspace({ oauth: { password: true, magicLink: false } })
+
+    const result = await resolveHandler({ data: {} })
+
+    expect(result).toBeNull()
+    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+  })
+
+  it('(d) returns null when a social provider is also registered', async () => {
+    soleOidcWorkspace({ oidcIds: ['oidc_acme'], allIds: ['oidc_acme', 'google'] })
+
+    const result = await resolveHandler({ data: {} })
+
+    expect(result).toBeNull()
+    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+  })
+
+  it('(e) returns null when more than one IdP is registered (the user has a choice)', async () => {
+    soleOidcWorkspace({ oidcIds: ['oidc_a', 'oidc_b'], allIds: ['oidc_a', 'oidc_b'] })
+
+    const result = await resolveHandler({ data: {} })
+
+    expect(result).toBeNull()
+    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
   })
 })

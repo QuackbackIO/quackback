@@ -363,6 +363,16 @@ export const identityProvider = pgTable(
     /** Better-Auth providerId; drives redirect URI + account.provider_id. */
     registrationId: text('registration_id').notNull(),
     label: text('label').notNull(),
+    /**
+     * IdP family the admin selected in the setup shortcut. Persisted so the
+     * settings editor and provider list always render the chosen provider
+     * faithfully, instead of re-deriving it from `discoveryUrl` — a vanity
+     * IdP domain (e.g. Okta at `login.acme.com`) matches none of the
+     * inference patterns and would otherwise display as "Custom OIDC". Null
+     * on rows created before this column; the UI falls back to URL inference
+     * for those until they are next saved.
+     */
+    kind: text('kind').$type<'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other'>(),
     /** Null for manual-endpoint installs (no discovery document). */
     discoveryUrl: text('discovery_url'),
     /** Manual-endpoint fallback when there is no discovery document. */
@@ -420,10 +430,9 @@ export const ssoVerifiedDomain = pgTable(
      * domains stay unlinked until the backfill (Task 9) attaches them.
      * Cascades so removing a provider clears its domain bindings.
      */
-    providerId: typeIdColumnNullable('idp')('provider_id').references(
-      () => identityProvider.id,
-      { onDelete: 'cascade' }
-    ),
+    providerId: typeIdColumnNullable('idp')('provider_id').references(() => identityProvider.id, {
+      onDelete: 'cascade',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

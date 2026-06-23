@@ -16,6 +16,9 @@ interface OrgAuthConfig {
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
   oidcProviders?: { id: string; name: string }[]
+  /** All registered auth provider ids — lets the form show the email input for
+   *  a routed-only IdP that renders no public button. */
+  registeredAuthProviders?: string[]
 }
 
 interface AuthDialogProps {

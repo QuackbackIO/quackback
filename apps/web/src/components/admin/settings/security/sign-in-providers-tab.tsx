@@ -1,6 +1,6 @@
 import { useState, useTransition } from 'react'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowPathIcon, EnvelopeIcon, KeyIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
 import { MethodRow } from '@/components/admin/settings/auth-shared/method-row'
@@ -9,6 +9,8 @@ import { AuthProviderCredentialsDialog } from '@/components/admin/settings/porta
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WarningBox } from '@/components/shared/warning-box'
 import { IdentityProvidersSection } from '@/components/admin/settings/security/identity-providers/provider-list'
+import { countEnabledAuthMethods } from '@/components/admin/settings/security/auth-method-count'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { RecoveryCodesSection } from '@/components/admin/settings/security/sso/recovery-codes-section'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
@@ -85,27 +87,27 @@ export function SignInProvidersTab({
     magicLink: teamOauth.magicLink !== false || (initialPortalOauth.magicLink ?? false),
   }))
 
+  // Identity providers share the cache IdentityProvidersSection reads
+  // (preloaded by the route loader). Counting enabled+configured ones here lets
+  // the built-in / social toggles treat a working IdP as a valid fallback.
+  const identityProviders = useSuspenseQuery(settingsQueries.identityProviders()).data ?? []
+
   const emailConfigured = credentialStatus._emailConfigured !== false
   const passwordEnabled = !!oauthState.password
   const magicLinkEnabled = !!oauthState.magicLink
   const twoFactorRequired = teamAuthConfig.twoFactor?.required === true
 
-  /** "Last method standing" guard — refuses to disable the only enabled
-   *  provider so visitors and team admins aren't locked out. Counts only
-   *  what would *actually accept a sign-in today*:
-   *   - password — always counts when enabled
-   *   - magicLink — only when email delivery is configured (otherwise
-   *     the toggle is on but the runtime path rejects)
-   *   - social/OIDC — only when credentials are configured (the row
-   *     renders as "Not configured" otherwise and isn't usable)
-   *  Legacy `email` flag excluded (migration 0049 retired it). */
-  const enabledMethodCount = Object.entries(oauthState).reduce((acc, [id, enabled]) => {
-    if (!enabled) return acc
-    if (id === 'email') return acc
-    if (id === 'password') return acc + 1
-    if (id === 'magicLink') return emailConfigured ? acc + 1 : acc
-    return credentialStatus[id] ? acc + 1 : acc
-  }, 0)
+  /** "Last method standing" guard — refuses to disable the only working
+   *  sign-in method so visitors and team admins aren't locked out. The count
+   *  spans all three surfaces (built-in, social, and the identity_provider
+   *  table); `countEnabledAuthMethods` defines exactly what counts as usable. */
+  const enabledMethodCount = countEnabledAuthMethods({
+    oauthState,
+    emailConfigured,
+    credentialStatus,
+    // IdPs only register (and so only count as a method) when the tier is on.
+    identityProviders: customOidcProviderTier ? identityProviders : [],
+  })
   const isLastMethod = (id: string) => {
     if (!oauthState[id]) return false
     // Mirror the same usability filter the count uses — an enabled-but-
@@ -142,10 +144,23 @@ export function SignInProvidersTab({
     const prevTeam = teamAuthConfig
     const prevOauth = oauthState
     const prevValue = prevOauth[key]
+    // Disabling password while 2FA enforcement is on would lock team members
+    // out (TOTP enrols on top of a password), so cascade 2FA off in the same
+    // atomic save instead of blocking the toggle.
+    const cascadeDisable2FA = key === 'password' && !value && twoFactorRequired
     setOauthState((p) => ({ ...p, [key]: value }))
-    setTeamAuthConfig((p) => ({ ...p, oauth: { ...(p.oauth ?? {}), [key]: value } }))
+    setTeamAuthConfig((p) => ({
+      ...p,
+      oauth: { ...(p.oauth ?? {}), [key]: value },
+      ...(cascadeDisable2FA && { twoFactor: { ...(p.twoFactor ?? {}), required: false } }),
+    }))
     try {
-      const updated = await updateAuthConfigFn({ data: { oauth: { [key]: value } } })
+      const updated = await updateAuthConfigFn({
+        data: {
+          oauth: { [key]: value },
+          ...(cascadeDisable2FA && { twoFactor: { required: false } }),
+        },
+      })
       try {
         await updatePortalConfigFn({ data: { oauth: { [key]: value } } })
       } catch (portalErr) {
@@ -158,7 +173,12 @@ export function SignInProvidersTab({
           // "rely on the runtime default"; writing false is slightly
           // more restrictive but is the safer rollback choice on a
           // path that exists only after a save failure.
-          await updateAuthConfigFn({ data: { oauth: { [key]: !!prevValue } } })
+          await updateAuthConfigFn({
+            data: {
+              oauth: { [key]: !!prevValue },
+              ...(cascadeDisable2FA && { twoFactor: { required: true } }),
+            },
+          })
         } catch {
           toast.error(
             'Saved on the team side but the portal save failed; rollback also failed — please reload and verify.'
@@ -290,23 +310,14 @@ export function SignInProvidersTab({
         <MethodRow
           icon={KeyIcon}
           label="Password"
-          description={
-            passwordEnabled && twoFactorRequired
-              ? 'Sign in with email and password. Required while 2FA enforcement is on — TOTP enrollment requires a password.'
-              : 'Sign in with email and password.'
-          }
+          description="Sign in with email and password."
           checked={passwordEnabled}
           onCheckedChange={(v) => void saveBuiltin('password', v)}
           disabled={
             busy ||
             isManaged('auth.oauth.password') ||
             isManaged('portalConfig.oauth.password') ||
-            isLastMethod('password') ||
-            // 2FA enforcement (Team access tab) requires password as the
-            // factor that 2FA enrolls *on top of*. Disabling password
-            // while 2FA is required would lock all team members out;
-            // mirror the guard the old Team-tab Sign-in card carried.
-            (passwordEnabled && twoFactorRequired)
+            isLastMethod('password')
           }
           badge={
             isManaged('auth.oauth.password') || isManaged('portalConfig.oauth.password')
@@ -314,18 +325,16 @@ export function SignInProvidersTab({
               : undefined
           }
         />
-        {/* Nested: 2FA enforcement lives here because TOTP enrols on
-            top of a password. Indented to signal it is a child setting
-            of the Password row above, not a peer method. */}
-        <div className="ml-[52px] space-y-4 border-l border-border pl-4">
+        {/* Nested: 2FA enforcement lives here because TOTP enrols on top of a
+            password. Indented (the compact row's light treatment already
+            signals it is a child setting of the Password row, not a peer). */}
+        <div className="ml-[52px] space-y-4 pl-4">
           <MethodRow
+            compact
+            muted={!passwordEnabled}
             icon={ShieldCheckIcon}
             label="Require 2FA for team members"
-            description={
-              passwordEnabled
-                ? 'Members must pass a TOTP challenge to sign in. Recovery codes are the break-glass.'
-                : 'Enable Password sign-in first — enrolling 2FA requires a password.'
-            }
+            description="Members must pass a TOTP challenge to sign in. Recovery codes are the break-glass."
             checked={twoFactorRequired}
             onCheckedChange={(v) => void saveTwoFactor(v)}
             disabled={busy || isManaged('auth.twoFactor.required') || !passwordEnabled}
@@ -380,7 +389,10 @@ export function SignInProvidersTab({
           identity_provider table; editing a row opens the per-provider
           editor (connection + verified domains + visibility + role
           provisioning). Supersedes the former single Custom OIDC card. */}
-      <IdentityProvidersSection tierEnabled={customOidcProviderTier} />
+      <IdentityProvidersSection
+        tierEnabled={customOidcProviderTier}
+        enabledMethodCount={enabledMethodCount}
+      />
 
       {/* Card 4: Recovery & break-glass. One-time codes for sign-in when
           SSO is unavailable. Formerly on the retired /sso page. */}

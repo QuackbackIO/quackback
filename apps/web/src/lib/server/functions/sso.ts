@@ -343,7 +343,9 @@ export const getSsoStatusFn = createServerFn({ method: 'GET' }).handler(
 )
 
 const setSsoClientSecretInput = z.object({
-  clientSecret: z.string().min(1).max(2048),
+  // Trim BEFORE min(1) so a whitespace-only secret is rejected, not saved as an
+  // empty credential that still reads as `configured`.
+  clientSecret: z.string().trim().min(1).max(2048),
 })
 
 /**
@@ -418,6 +420,23 @@ export const switchSsoProviderFn = createServerFn({ method: 'POST' }).handler(as
       headers: getRequestHeaders(),
     },
     async () => {
+      // Clearing the 'sso' secret unconfigures that provider. Refuse if it's
+      // the workspace's only working sign-in method — otherwise the admin is
+      // locked out before they can set the replacement up.
+      const { listIdentityProviders } =
+        await import('@/lib/server/domains/settings/identity-providers.service')
+      const ssoProvider = (await listIdentityProviders()).find((p) => p.registrationId === 'sso')
+      if (ssoProvider) {
+        const { checkIsOnlyWorkingSignInMethod } =
+          await import('@/lib/server/auth/sign-in-method-availability')
+        if (await checkIsOnlyWorkingSignInMethod(ssoProvider.id)) {
+          throw new ConflictError(
+            'LAST_SIGN_IN_METHOD',
+            'Cannot remove the only enabled sign-in method. Enable another method first.'
+          )
+        }
+      }
+
       const { getTenantSettings, setVerifiedDomainEnforced } =
         await import('@/lib/server/domains/settings/settings.service')
       const tenant = await getTenantSettings()
@@ -503,6 +522,22 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
           'SSO_DOMAIN_VERIFIED',
           `Remove the verified domain ${verifiedRow.name} before removing the client secret.`
         )
+      }
+      // Clearing the secret unconfigures the 'sso' provider; refuse if it's the
+      // workspace's only working sign-in method (a no-public-button 'sso' isn't
+      // caught by the verified-domain checks above).
+      const { listIdentityProviders } =
+        await import('@/lib/server/domains/settings/identity-providers.service')
+      const ssoProvider = (await listIdentityProviders()).find((p) => p.registrationId === 'sso')
+      if (ssoProvider) {
+        const { checkIsOnlyWorkingSignInMethod } =
+          await import('@/lib/server/auth/sign-in-method-availability')
+        if (await checkIsOnlyWorkingSignInMethod(ssoProvider.id)) {
+          throw new ConflictError(
+            'LAST_SIGN_IN_METHOD',
+            'Cannot remove the only enabled sign-in method. Enable another method first.'
+          )
+        }
       }
       const { deletePlatformCredentials } =
         await import('@/lib/server/domains/platform-credentials/platform-credential.service')
@@ -666,6 +701,9 @@ const upsertIdentityProviderInput = z.object({
   id: identityProviderId.optional(),
   registrationId: z.string().min(1).max(64),
   label: z.string().min(1).max(120),
+  // IdP family from the setup shortcut — purely drives which editor controls
+  // and label render; does not affect Better-Auth registration.
+  kind: z.enum(['okta', 'auth0', 'keycloak', 'entra', 'google', 'other']).nullable().optional(),
   clientId: z.string().min(1).max(512),
   discoveryUrl: httpsUrl.nullable().optional(),
   authorizationUrl: httpsUrl.nullable().optional(),
@@ -705,6 +743,19 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
       ? existing.find((p) => p.id === data.id)
       : existing.find((p) => p.registrationId === data.registrationId)
 
+    // Refuse to disable the workspace's only working sign-in method (lockout).
+    // Only a true→false transition on a currently-usable provider can do it.
+    if (data.enabled === false && prior?.enabled && prior.configured) {
+      const { checkIsOnlyWorkingSignInMethod } =
+        await import('@/lib/server/auth/sign-in-method-availability')
+      if (await checkIsOnlyWorkingSignInMethod(prior.id, existing)) {
+        throw new ConflictError(
+          'LAST_SIGN_IN_METHOD',
+          'Cannot disable the only enabled sign-in method. Enable another method first.'
+        )
+      }
+    }
+
     return withAuditEvent(
       {
         event: prior ? 'idp.updated' : 'idp.created',
@@ -734,6 +785,17 @@ export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ roles: ['admin'] })
 
+    // Refuse to remove the workspace's only working sign-in method — doing so
+    // would lock everyone out. Mirrors the UI's disabled Remove button.
+    const { checkIsOnlyWorkingSignInMethod } =
+      await import('@/lib/server/auth/sign-in-method-availability')
+    if (await checkIsOnlyWorkingSignInMethod(data.id)) {
+      throw new ConflictError(
+        'LAST_SIGN_IN_METHOD',
+        'Cannot remove the only enabled sign-in method. Enable another method first.'
+      )
+    }
+
     return withAuditEvent(
       {
         event: 'idp.deleted',
@@ -752,7 +814,9 @@ export const deleteIdentityProviderFn = createServerFn({ method: 'POST' })
 
 const setProviderCredentialsInput = z.object({
   id: identityProviderId,
-  clientSecret: z.string().min(1).max(2048),
+  // Trim BEFORE min(1) so a whitespace-only secret is rejected, not saved as an
+  // empty credential that still reads as `configured`.
+  clientSecret: z.string().trim().min(1).max(2048),
 })
 
 /**
@@ -963,9 +1027,7 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             )
           }
 
-          const { hasActiveRecoveryCodes } = await import(
-            '@/lib/server/auth/recovery-codes-status'
-          )
+          const { hasActiveRecoveryCodes } = await import('@/lib/server/auth/recovery-codes-status')
           if (!(await hasActiveRecoveryCodes())) {
             throw new ForbiddenError('RECOVERY_CODES_REQUIRED', 'recovery_codes_required')
           }

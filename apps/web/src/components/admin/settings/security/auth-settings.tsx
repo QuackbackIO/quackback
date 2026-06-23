@@ -75,7 +75,7 @@ export function AuthSettings({
         </TabsTrigger>
         <TabsTrigger value="sign-in">
           <ArrowRightOnRectangleIcon />
-          Sign-in providers
+          Sign-in
         </TabsTrigger>
       </TabsList>
 

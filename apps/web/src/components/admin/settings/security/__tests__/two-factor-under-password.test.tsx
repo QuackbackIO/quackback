@@ -65,6 +65,8 @@ const basePortalConfig: PortalConfig = {
 
 function renderTab(teamAuth: AuthConfig, portalOauth: PortalAuthMethods = basePortalOauth) {
   const qc = new QueryClient()
+  // The tab reads the identity-providers suspense query for its method count.
+  qc.setQueryData(['settings', 'identityProviders'], [])
   return render(
     <QueryClientProvider client={qc}>
       <SignInProvidersTab

@@ -18,6 +18,7 @@ import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons
 import {
   getEnabledOAuthProviders,
   getOAuthRedirectUrl,
+  hasRoutableOidcProvider,
   type OAuthProviderEntry,
   type OidcProviderEntry,
 } from '@/components/auth/oauth-buttons'
@@ -44,6 +45,10 @@ interface OrgAuthConfig {
   openSignup?: boolean
   /** Public OIDC sign-in buttons from the identity_provider list. */
   oidcProviders?: OidcProviderEntry[]
+  /** All registered auth provider ids (OIDC registrationIds + social ids).
+   *  Lets the form show the email input for a routed-only IdP that has no
+   *  public button — a domain email is the only way to reach it. */
+  registeredAuthProviders?: string[]
 }
 
 interface InvitationInfo {
@@ -539,11 +544,14 @@ export function PortalAuthFormInline({
     authConfig?.oidcProviders
   )
   const showOAuth = enabledProviders.length > 0
-  // Email entry (and the "or" divider + create-account link) only makes sense
-  // when a portal email method is enabled (password or magic-link); with both
-  // off it dead-ends at an empty Stage 2, so show only the OAuth tiles. Team
-  // members (incl. SSO) sign in at /admin/login, not here. (#231)
-  const emailEntryEnabled = passwordEnabled || magicLinkEnabled
+  // Email entry makes sense when a portal email method is enabled (password or
+  // magic-link), OR when a routed-only IdP exists — entering a domain email is
+  // the only way to reach a provider that renders no public button. Without
+  // either, Stage 2 would dead-end, so we show only the OAuth tiles. (#231)
+  const emailEntryEnabled =
+    passwordEnabled ||
+    magicLinkEnabled ||
+    hasRoutableOidcProvider(authConfig?.registeredAuthProviders, authConfig?.oidcProviders)
 
   // Loading invitation
   if (loadingInvitation) {
@@ -927,22 +935,23 @@ export function PortalAuthFormInline({
       {invitationBanner}
 
       {(step === 'credentials' || step === 'email') && (
-        <>
-          {showBack && <BackToEmailLink onClick={backToEmail} />}
-          <div className="space-y-1 text-center">
-            <h2 className="text-lg font-semibold">
-              {mode === 'login' ? (
-                <FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />
-              ) : (
-                <FormattedMessage
-                  id="portal.auth.createYourAccount"
-                  defaultMessage="Create your account"
-                />
-              )}
-            </h2>
-            {email && <p className="text-sm text-muted-foreground break-all">{email}</p>}
+        // Show the entered email as a filled, locked field (the dialog header
+        // already greets the user) — change it via "use a different email".
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="inline-email-locked">
+              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
+            </Label>
+            {showBack && <BackToEmailLink onClick={backToEmail} />}
           </div>
-        </>
+          <Input
+            id="inline-email-locked"
+            type="email"
+            value={email}
+            readOnly
+            className="bg-muted/40"
+          />
+        </div>
       )}
 
       {/* Password credentials form */}

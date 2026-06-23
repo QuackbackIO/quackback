@@ -239,10 +239,10 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
       ])
 
       const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
-      const { listIdentityProviders } = await import(
-        '@/lib/server/domains/settings/identity-providers.service'
-      )
-      const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+      const { listIdentityProviders } =
+        await import('@/lib/server/domains/settings/identity-providers.service')
+      const { getRegisteredOidcProviderIds } =
+        await import('@/lib/server/auth/registered-providers')
       const providers = await listIdentityProviders()
       const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
       // Use the full predicate so the profile page hides the password
@@ -446,6 +446,27 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
       const before = tracksAnyToggle || tracksSso ? await getAuthConfig() : null
 
       try {
+        // Backstop the unified "keep ≥1 working sign-in method" invariant — a
+        // direct API call must not be able to disable the workspace's last way
+        // in (the client `isLastMethod` guard covers only the UI). A blocked
+        // attempt falls through to the failure audit + re-throw below.
+        if (data.oauth) {
+          const current = before ?? (await getAuthConfig())
+          const proposedOauth = {
+            ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
+            ...data.oauth,
+          }
+          const { wouldLeaveNoWorkingSignInMethod } =
+            await import('@/lib/server/auth/sign-in-method-availability')
+          if (await wouldLeaveNoWorkingSignInMethod(proposedOauth)) {
+            const { ConflictError } = await import('@/lib/shared/errors')
+            throw new ConflictError(
+              'LAST_SIGN_IN_METHOD',
+              'Cannot disable the last enabled sign-in method. Enable another method first.'
+            )
+          }
+        }
+
         const result = await updateAuthConfig(data as Parameters<typeof updateAuthConfig>[0])
 
         if (tracksAnyToggle && before && data.oauth) {

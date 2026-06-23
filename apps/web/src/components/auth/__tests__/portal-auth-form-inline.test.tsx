@@ -49,6 +49,7 @@ const getEnabledOAuthProvidersMock = vi.fn(() => [] as Array<Record<string, unkn
 vi.mock('@/components/auth/oauth-buttons', () => ({
   getEnabledOAuthProviders: () => getEnabledOAuthProvidersMock(),
   getOAuthRedirectUrl: vi.fn(),
+  hasRoutableOidcProvider: () => false,
 }))
 
 // usePopupTracker opens a BroadcastChannel on mount — stub the whole module.

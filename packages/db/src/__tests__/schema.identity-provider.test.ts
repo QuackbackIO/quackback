@@ -13,6 +13,7 @@ describe('identity_provider schema', () => {
       'id',
       'registrationId',
       'label',
+      'kind',
       'discoveryUrl',
       'authorizationUrl',
       'tokenUrl',
@@ -48,6 +49,8 @@ describe('identity_provider schema', () => {
     expect(cols.createdAt.notNull).toBe(true)
     // Manual-endpoint installs have no discovery doc; these stay nullable.
     expect(cols.discoveryUrl.notNull).toBe(false)
+    // Null on rows predating the column; UI falls back to URL inference.
+    expect(cols.kind.notNull).toBe(false)
     expect(cols.scopes.notNull).toBe(false)
     expect(cols.attributeMapping.notNull).toBe(false)
   })

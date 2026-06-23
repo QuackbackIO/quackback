@@ -124,8 +124,12 @@ export function RecoveryCodesSection() {
       <Dialog
         open={revealedCodes !== null}
         onOpenChange={(open) => {
-          if (!open && acknowledged) {
+          // The X / Escape / backdrop always dismiss — codes can be regenerated,
+          // so never trap the admin behind the acknowledgement checkbox (which
+          // only gates the primary "Done" button).
+          if (!open) {
             setRevealedCodes(null)
+            setAcknowledged(false)
           }
         }}
       >

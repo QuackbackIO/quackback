@@ -10,8 +10,8 @@
  *  - A provider WITH a verified domain is `routed`; its editor shows the
  *    visibility toggle AND the per-domain enforcement control.
  */
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -23,15 +23,18 @@ vi.mock('@tanstack/react-router', () => ({
   useRouteContext: () => ({ managedFieldPaths: [] }),
 }))
 
-// The per-provider server fns are referenced (via useServerFn) but never
-// invoked in these render-only assertions — stub them so importing the
-// components never pulls server code into the happy-dom run.
+const { upsertSpy } = vi.hoisted(() => ({
+  upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
+}))
+
+// useServerFn just unwraps the server fn in the browser — return it as-is so
+// the enable toggle calls our spy directly.
 vi.mock('@tanstack/react-start', () => ({
-  useServerFn: () => vi.fn().mockResolvedValue(undefined),
+  useServerFn: (fn: unknown) => fn,
 }))
 
 vi.mock('@/lib/server/functions/sso', () => ({
-  upsertIdentityProviderFn: vi.fn(),
+  upsertIdentityProviderFn: upsertSpy,
   deleteIdentityProviderFn: vi.fn(),
   setProviderCredentialsFn: vi.fn(),
   addProviderDomainFn: vi.fn(),
@@ -39,6 +42,10 @@ vi.mock('@/lib/server/functions/sso', () => ({
   setDomainEnforcedFn: vi.fn(),
   removeVerifiedDomainFn: vi.fn(),
 }))
+
+beforeEach(() => {
+  upsertSpy.mockClear()
+})
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -66,11 +73,23 @@ const verifiedDomain: VerifiedDomain = {
   createdAt: '2026-05-01T00:00:00.000Z',
 }
 
+const verifiedDomain2: VerifiedDomain = {
+  id: 'domain_2' as `domain_${string}`,
+  name: 'beta.com',
+  verificationToken: 'tok2',
+  verifiedAt: '2026-06-01T00:00:00.000Z',
+  enforced: true,
+  providerId: 'idp_routed' as `idp_${string}`,
+  createdAt: '2026-05-02T00:00:00.000Z',
+}
+
 function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
   return {
     id: 'idp_x' as IdentityProviderId,
     registrationId: 'oidc_x',
     label: 'Provider',
+    kind: null,
+    configured: true,
     discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
     authorizationUrl: null,
     tokenUrl: null,
@@ -95,6 +114,7 @@ const buttonProvider = makeProvider({
   id: 'idp_button' as IdentityProviderId,
   registrationId: 'oidc_button',
   label: 'Customer Login',
+  enabled: false,
   domains: [],
   visibility: 'button',
 })
@@ -104,7 +124,7 @@ const routedProvider = makeProvider({
   registrationId: 'sso',
   label: 'Acme SSO',
   autoProvisionRole: 'member',
-  domains: [verifiedDomain],
+  domains: [verifiedDomain, verifiedDomain2],
   visibility: 'routed',
 })
 
@@ -118,21 +138,37 @@ vi.mock('@/lib/client/queries/settings', () => ({
   },
 }))
 
-function renderSection() {
+function renderSection(enabledMethodCount = 5) {
   const qc = new QueryClient()
   qc.setQueryData(['settings', 'identityProviders'], [buttonProvider, routedProvider])
   return render(
     <QueryClientProvider client={qc}>
-      <IdentityProvidersSection tierEnabled />
+      <IdentityProvidersSection tierEnabled enabledMethodCount={enabledMethodCount} />
     </QueryClientProvider>
   )
 }
 
 describe('<IdentityProvidersSection>', () => {
-  it('renders a [button] badge for a no-domain provider and [routed] for a verified-domain one', () => {
+  it('lists each provider by name without the button/routed jargon badge', () => {
     renderSection()
-    expect(screen.getByText('button')).toBeInTheDocument()
-    expect(screen.getByText('routed')).toBeInTheDocument()
+    expect(screen.getByText('Customer Login')).toBeInTheDocument()
+    expect(screen.getByText('Acme SSO')).toBeInTheDocument()
+    expect(screen.queryByText('button')).toBeNull()
+    expect(screen.queryByText('routed')).toBeNull()
+  })
+
+  it('lists every verified domain underneath, marking enforced ones', () => {
+    renderSection()
+    // Each verified domain is its own chip — no "+N" truncation.
+    expect(screen.getByText('acme.com')).toBeInTheDocument()
+    // The enforced domain carries a green "SSO enforced" affordance.
+    expect(screen.getByTitle('SSO enforced for beta.com')).toBeInTheDocument()
+  })
+
+  it('shows no domain chips for a provider with no verified domains', () => {
+    renderSection()
+    // The old "no domains" filler is gone; button providers show no domain text.
+    expect(screen.queryByText(/no domains/i)).toBeNull()
   })
 
   it('hides the visibility toggle and enforcement control for a no-domain provider', async () => {
@@ -149,6 +185,46 @@ describe('<IdentityProvidersSection>', () => {
     fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
     expect(await screen.findByText(/also show a/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
+  })
+})
+
+describe('enable toggle on the list row', () => {
+  it('flips the provider enabled flag via upsert without opening the editor', async () => {
+    renderSection()
+    fireEvent.click(screen.getByRole('switch', { name: /enable customer login/i }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalledTimes(1))
+    expect(upsertSpy.mock.calls[0][0].data).toMatchObject({
+      id: buttonProvider.id,
+      enabled: true,
+    })
+    // The editor dialog must not have opened.
+    expect(screen.queryByText(/edit identity provider/i)).toBeNull()
+  })
+
+  it('blocks disabling a provider that is the only working method', () => {
+    // Acme SSO is enabled + configured; with a total of 1 method it is the
+    // last thing standing, so its toggle is locked.
+    renderSection(1)
+    expect(screen.getByRole('switch', { name: /enable acme sso/i })).toBeDisabled()
+  })
+
+  it('allows disabling a provider when other methods remain', () => {
+    renderSection(3)
+    expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeDisabled()
+  })
+
+  it('blocks removing a provider that is the only working method', async () => {
+    renderSection(1)
+    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
+    await screen.findByText(/edit identity provider/i)
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled()
+  })
+
+  it('allows removing a provider when other methods remain', async () => {
+    renderSection(3)
+    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
+    await screen.findByText(/edit identity provider/i)
+    expect(screen.getByRole('button', { name: 'Remove' })).not.toBeDisabled()
   })
 })
 

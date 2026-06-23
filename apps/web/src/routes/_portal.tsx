@@ -19,7 +19,6 @@ import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
-import { resolveInstantSsoProvider } from '@/lib/server/auth/instant-sso'
 
 export const Route = createFileRoute('/_portal')({
   // Only type the auth-prompt keys; child routes receive their own params from
@@ -33,24 +32,21 @@ export const Route = createFileRoute('/_portal')({
     search: Record<string, unknown>
   ): {
     auth?: string
-    prompt?: 'login'
     callbackUrl?: string
     error?: string
   } => ({
     auth:
       search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
-    prompt: search.prompt === 'login' ? 'login' : undefined,
     callbackUrl: isSafeCallbackUrl(search.callbackUrl) ? (search.callbackUrl as string) : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
   }),
   loaderDeps: ({ search }) => ({
     auth: search.auth,
-    prompt: search.prompt,
     callbackUrl: search.callbackUrl,
     error: search.error,
   }),
   loader: async ({ context, deps }) => {
-    const { session, settings, userRole, baseUrl } = context
+    const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Portal-level visibility gate — evaluated here in the loader (NOT
     // beforeLoad) so the post-sign-in router.invalidate() re-runs it and the
@@ -82,23 +78,18 @@ export const Route = createFileRoute('/_portal')({
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
       // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl).
       const prompt = parseAuthPromptSearch(deps ?? {})
-      // Instant-SSO: when the workspace has exactly one public OIDC provider
-      // and no public password/magic-link, redirect anonymous visitors straight
-      // to the IdP. Skip for 'unauthorized' (signed-in non-member) — that
-      // visitor already has a session and a force-redirect would be wrong.
-      // Skip when `?prompt=login` is set — that always escapes to the sign-in
-      // dialog so the user can pick an alternative if needed.
-      if (!prompt.suppressInstantSso && accessResult.reason === 'unauthenticated') {
-        const instantProviderId = resolveInstantSsoProvider({
-          publicProviders: settings?.publicPortalConfig?.oidcProviders ?? [],
-          portalOauth: settings?.publicPortalConfig?.oauth ?? {},
+      // Instant-SSO: when the workspace's only sign-in method is a single OIDC
+      // provider, redirect anonymous visitors straight to the IdP. Skipped for
+      // 'unauthorized' (signed-in non-member) — they already have a session and
+      // a force-redirect would be wrong. Skipped when an `error` is present: an
+      // IdP-rejected sign-in bounces back to `?error=…`, and re-redirecting to
+      // the IdP would loop instead of surfacing the error. /auth/recovery is
+      // the standalone break-glass for an admin who can't use the IdP.
+      if (accessResult.reason === 'unauthenticated' && !prompt.error) {
+        const instant = await resolveInstantSsoRedirectFn({
+          data: { callbackUrl: prompt.callbackUrl },
         })
-        if (instantProviderId) {
-          const instant = await resolveInstantSsoRedirectFn({
-            data: { callbackUrl: prompt.callbackUrl },
-          })
-          if (instant) throw redirect({ href: instant.url })
-        }
+        if (instant) throw redirect({ href: instant.url })
       }
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
@@ -117,6 +108,7 @@ export const Route = createFileRoute('/_portal')({
           found: !!settings?.publicPortalConfig,
           oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
           oidcProviders: settings?.publicPortalConfig?.oidcProviders,
+          registeredAuthProviders,
         },
       }
       return { gate, prompt }
@@ -125,6 +117,19 @@ export const Route = createFileRoute('/_portal')({
     const org = settings?.settings
     if (!org) {
       throw redirect({ to: '/onboarding' })
+    }
+
+    const prompt = parseAuthPromptSearch(deps ?? {})
+    // Sole-IdP shortcut: a sign-in request (?auth=signin/signup) on an
+    // accessible portal redirects straight to the only provider, server-side —
+    // no dialog. Skipped when an `error` is present so an IdP-rejected sign-in
+    // surfaces the error instead of looping back to the IdP. The fn no-ops for
+    // signed-in users and multi-method setups; /auth/recovery is the break-glass.
+    if (prompt.mode && !prompt.error) {
+      const instant = await resolveInstantSsoRedirectFn({
+        data: { callbackUrl: prompt.callbackUrl },
+      })
+      if (instant) throw redirect({ href: instant.url })
     }
 
     // userRole comes from bootstrap data, avatar needs to be fetched
@@ -164,10 +169,10 @@ export const Route = createFileRoute('/_portal')({
       found: true,
       oauth: publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
       oidcProviders: publicPortalConfig?.oidcProviders,
+      registeredAuthProviders,
     }
 
     const { locale, messages } = await loadPortalIntl()
-    const prompt = parseAuthPromptSearch(deps ?? {})
 
     return {
       org: redactSettingsForClient(org),

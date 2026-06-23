@@ -26,6 +26,8 @@ import { logger } from '@/lib/server/logger'
 import {
   getPlatformCredentials,
   deletePlatformCredentials,
+  getConfiguredIntegrationTypes,
+  hasPlatformCredentials,
 } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
@@ -49,6 +51,12 @@ export interface IdentityProvider {
   /** Better-Auth providerId — drives the redirect URI + account.provider_id. */
   registrationId: string
   label: string
+  /**
+   * IdP family from the setup shortcut, used to render the right editor
+   * controls and provider label. Null on rows predating the column — the UI
+   * falls back to inferring it from `discoveryUrl`.
+   */
+  kind: 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other' | null
   discoveryUrl: string | null
   authorizationUrl: string | null
   tokenUrl: string | null
@@ -56,6 +64,10 @@ export interface IdentityProvider {
   clientId: string
   scopes: string | null
   enabled: boolean
+  /** True when a client secret is saved at `auth_<registrationId>`. An enabled
+   *  provider without one registers nothing, so it is not a usable sign-in
+   *  method — the "keep one method enabled" guard treats it as not counting. */
+  configured: boolean
   autoCreateUsers: boolean
   autoProvisionRole: 'admin' | 'member' | 'user' | null
   attributeMapping: IdentityProviderAttributeMapping | null
@@ -82,6 +94,7 @@ export interface UpsertIdentityProviderInput {
   id?: IdentityProviderId
   registrationId: string
   label: string
+  kind?: 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other' | null
   clientId: string
   discoveryUrl?: string | null
   authorizationUrl?: string | null
@@ -135,12 +148,14 @@ function rowToVerifiedDomain(row: typeof ssoVerifiedDomain.$inferSelect): Verifi
 
 function rowToIdentityProvider(
   row: typeof identityProvider.$inferSelect,
-  domains: VerifiedDomain[]
+  domains: VerifiedDomain[],
+  configured: boolean
 ): IdentityProvider {
   return {
     id: row.id,
     registrationId: row.registrationId,
     label: row.label,
+    kind: row.kind,
     discoveryUrl: row.discoveryUrl,
     authorizationUrl: row.authorizationUrl,
     tokenUrl: row.tokenUrl,
@@ -148,6 +163,7 @@ function rowToIdentityProvider(
     clientId: row.clientId,
     scopes: row.scopes,
     enabled: row.enabled,
+    configured,
     autoCreateUsers: row.autoCreateUsers,
     autoProvisionRole: row.autoProvisionRole,
     attributeMapping: row.attributeMapping ?? null,
@@ -171,9 +187,10 @@ function rowToIdentityProvider(
  */
 export async function listIdentityProviders(): Promise<IdentityProvider[]> {
   try {
-    const [providers, domains] = await Promise.all([
+    const [providers, domains, configuredTypes] = await Promise.all([
       db.select().from(identityProvider).orderBy(identityProvider.createdAt),
       db.select().from(ssoVerifiedDomain).orderBy(ssoVerifiedDomain.createdAt),
+      getConfiguredIntegrationTypes(),
     ])
 
     const byProvider = new Map<string, VerifiedDomain[]>()
@@ -187,7 +204,13 @@ export async function listIdentityProviders(): Promise<IdentityProvider[]> {
       }
     }
 
-    return providers.map((p) => rowToIdentityProvider(p, byProvider.get(p.id) ?? []))
+    return providers.map((p) =>
+      rowToIdentityProvider(
+        p,
+        byProvider.get(p.id) ?? [],
+        configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${p.registrationId}`)
+      )
+    )
   } catch (error) {
     log.error({ err: error }, 'list identity providers failed')
     wrapDbError('list identity providers', error)
@@ -266,6 +289,7 @@ export async function upsertIdentityProvider(
           label: input.label,
           clientId: input.clientId,
         }
+        if (input.kind !== undefined) patch.kind = input.kind
         if (input.discoveryUrl !== undefined) patch.discoveryUrl = input.discoveryUrl
         if (input.authorizationUrl !== undefined) patch.authorizationUrl = input.authorizationUrl
         if (input.tokenUrl !== undefined) patch.tokenUrl = input.tokenUrl
@@ -273,8 +297,7 @@ export async function upsertIdentityProvider(
         if (input.scopes !== undefined) patch.scopes = input.scopes
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
-        if (input.autoProvisionRole !== undefined)
-          patch.autoProvisionRole = input.autoProvisionRole
+        if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
         if (input.attributeMapping !== undefined) patch.attributeMapping = input.attributeMapping
         if (input.showButton !== undefined) patch.showButton = input.showButton
         ;[row] = await tx
@@ -289,6 +312,7 @@ export async function upsertIdentityProvider(
           .values({
             registrationId: input.registrationId,
             label: input.label,
+            kind: input.kind ?? null,
             clientId: input.clientId,
             discoveryUrl: input.discoveryUrl ?? null,
             authorizationUrl: input.authorizationUrl ?? null,
@@ -310,8 +334,11 @@ export async function upsertIdentityProvider(
     resetAuth()
     await invalidateSettingsCache()
 
-    const domains = await listDomainsForProvider(saved.id)
-    return rowToIdentityProvider(saved, domains)
+    const [domains, configured] = await Promise.all([
+      listDomainsForProvider(saved.id),
+      hasPlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${saved.registrationId}`),
+    ])
+    return rowToIdentityProvider(saved, domains, configured)
   } catch (error) {
     log.error({ err: error }, 'upsert identity provider failed')
     wrapDbError('upsert identity provider', error)

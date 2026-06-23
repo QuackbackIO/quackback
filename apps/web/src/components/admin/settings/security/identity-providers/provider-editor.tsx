@@ -51,7 +51,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
+import { RadioGroup } from '@/components/ui/radio-group'
+import { IdpLogo } from '@/components/icons/idp-provider-icons'
+import { cn } from '@/lib/shared/utils'
 import { CopyButton } from '@/components/shared/copy-button'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -67,7 +70,7 @@ import {
 } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
-import { getIdpShortcut, inferIdpKind, type IdpKind } from '../idp-shortcuts'
+import { getIdpShortcut, inferIdpKind, IDP_KIND_NAMES, type IdpKind } from '../idp-shortcuts'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 
 type Role = 'admin' | 'member' | 'user'
@@ -76,15 +79,6 @@ type Mapping = NonNullable<IdentityProvider['attributeMapping']>
 const ROLES: Role[] = ['admin', 'member', 'user']
 const IDENTITY_PROVIDERS_KEY = ['settings', 'identityProviders'] as const
 
-/** Friendly display name per IdP kind — drives the shortcut radio labels. */
-const IDP_KIND_NAMES: Record<IdpKind, string> = {
-  okta: 'Okta',
-  auth0: 'Auth0',
-  entra: 'Entra',
-  keycloak: 'Keycloak',
-  google: 'Google',
-  other: 'Other',
-}
 const IDP_KIND_OPTIONS: IdpKind[] = ['okta', 'auth0', 'entra', 'keycloak', 'google', 'other']
 
 const VERIFY_REASON_MESSAGES: Record<
@@ -120,6 +114,7 @@ export function ProviderEditor({
   open,
   onOpenChange,
   onSaved,
+  isOnlyMethod = false,
 }: {
   /** Existing provider to edit, or null to create a new one. */
   provider: IdentityProvider | null
@@ -128,6 +123,10 @@ export function ProviderEditor({
   /** Fired after a successful create/update with the saved provider so the
    *  parent can keep the dialog open on the now-persisted row. */
   onSaved?: (saved: IdentityProvider) => void
+  /** True when this provider is the workspace's only working sign-in method —
+   *  removing it would lock everyone out, so the Remove action is blocked
+   *  (the server enforces the same invariant as a backstop). */
+  isOnlyMethod?: boolean
 }) {
   const queryClient = useQueryClient()
   const upsert = useServerFn(upsertIdentityProviderFn)
@@ -141,11 +140,18 @@ export function ProviderEditor({
   const [registrationId] = useState(() => provider?.registrationId ?? newRegistrationId())
 
   const [label, setLabel] = useState(provider?.label ?? '')
-  const [kind, setKind] = useState<IdpKind>(() => inferIdpKind(provider?.discoveryUrl))
+  // Prefer the persisted shortcut choice; fall back to inferring it from the
+  // discovery URL only for legacy rows saved before `kind` was stored (a
+  // vanity domain infers as "Custom OIDC" even when it is really Okta/Entra).
+  const [kind, setKind] = useState<IdpKind>(
+    () => provider?.kind ?? inferIdpKind(provider?.discoveryUrl)
+  )
   const [discoveryUrl, setDiscoveryUrl] = useState(provider?.discoveryUrl ?? '')
   const [clientId, setClientId] = useState(provider?.clientId ?? '')
   const [secretDraft, setSecretDraft] = useState('')
-  const [enabled, setEnabled] = useState(provider?.enabled ?? false)
+  // Enabling/disabling lives on the provider list row now; the editor only
+  // preserves the existing value so saving other fields never flips it.
+  const [enabled] = useState(provider?.enabled ?? false)
   const [autoCreateUsers, setAutoCreateUsers] = useState(provider?.autoCreateUsers ?? true)
   const [autoProvisionRole, setAutoProvisionRole] = useState<Role>(
     provider?.autoProvisionRole ?? 'user'
@@ -174,6 +180,9 @@ export function ProviderEditor({
           id: provider?.id,
           registrationId,
           label: label.trim(),
+          // Persist the selected family so the editor reopens on the right
+          // tile regardless of what the discovery URL would infer.
+          kind,
           clientId: clientId.trim(),
           discoveryUrl: discoveryUrl.trim() || null,
           enabled,
@@ -232,20 +241,9 @@ export function ProviderEditor({
         </DialogHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-          {/* Display name + enabled */}
+          {/* Display name */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="idp-label">Display name</Label>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Enabled
-                <Switch
-                  checked={enabled}
-                  onCheckedChange={setEnabled}
-                  disabled={saving}
-                  aria-label="Provider enabled"
-                />
-              </label>
-            </div>
+            <Label htmlFor="idp-label">Display name</Label>
             <Input
               id="idp-label"
               value={label}
@@ -260,9 +258,9 @@ export function ProviderEditor({
             )}
           </div>
 
-          {/* IdP shortcut + discovery */}
+          {/* Identity provider picker + discovery */}
           <div className="space-y-3">
-            <Label>IdP shortcut</Label>
+            <Label>Identity provider</Label>
             <RadioGroup
               value={kind}
               onValueChange={(v) => {
@@ -277,13 +275,29 @@ export function ProviderEditor({
                   if (url) setDiscoveryUrl(url)
                 }
               }}
-              className="grid grid-flow-col auto-cols-max gap-4"
+              className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
             >
               {IDP_KIND_OPTIONS.map((k) => (
-                <label key={k} className="flex items-center gap-1.5 text-sm">
-                  <RadioGroupItem value={k} id={`idp-kind-${k}`} disabled={saving} />
-                  {IDP_KIND_NAMES[k]}
-                </label>
+                <RadioGroupPrimitive.Item
+                  key={k}
+                  value={k}
+                  id={`idp-kind-${k}`}
+                  disabled={saving}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
+                    'hover:border-border hover:bg-accent/40',
+                    'focus-visible:ring-2 focus-visible:ring-ring/50',
+                    'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
+                    'disabled:cursor-not-allowed disabled:opacity-60'
+                  )}
+                >
+                  <IdpLogo
+                    kind={k}
+                    className="h-8 w-8 shrink-0"
+                    iconClassName="h-[18px] w-[18px]"
+                  />
+                  <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
+                </RadioGroupPrimitive.Item>
               ))}
             </RadioGroup>
             <IdpDiscoveryFields
@@ -390,17 +404,25 @@ export function ProviderEditor({
 
         <DialogFooter className="shrink-0 items-center border-t border-border/50 px-6 py-4 sm:justify-between">
           {provider ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => setDeleteOpen(true)}
-              disabled={saving}
+            <span
+              title={
+                isOnlyMethod
+                  ? 'This is the only enabled sign-in method — enable another before removing it.'
+                  : undefined
+              }
             >
-              <TrashIcon className="mr-1.5 h-4 w-4" />
-              Remove
-            </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+                disabled={saving || isOnlyMethod}
+              >
+                <TrashIcon className="mr-1.5 h-4 w-4" />
+                Remove
+              </Button>
+            </span>
           ) : (
             <span />
           )}

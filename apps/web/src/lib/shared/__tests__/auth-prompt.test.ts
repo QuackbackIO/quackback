@@ -11,22 +11,8 @@ describe('parseAuthPromptSearch', () => {
   it('maps auth=signup to signup mode', () => {
     expect(parseAuthPromptSearch({ auth: 'signup' })).toEqual({ mode: 'signup' })
   })
-  it('maps prompt=login to suppressInstantSso + mode:login', () => {
-    expect(parseAuthPromptSearch({ prompt: 'login', error: 'not_team_member' })).toEqual({
-      mode: 'login',
-      suppressInstantSso: true,
-      error: 'not_team_member',
-    })
-  })
-  it('keeps explicit auth=signup over prompt=login default', () => {
-    expect(parseAuthPromptSearch({ prompt: 'login', auth: 'signup' })).toEqual({
-      mode: 'signup',
-      suppressInstantSso: true,
-    })
-  })
-  it('does not set suppressInstantSso when prompt is absent', () => {
-    const result = parseAuthPromptSearch({ auth: 'signin' })
-    expect(result.suppressInstantSso).toBeUndefined()
+  it('ignores an unrecognised auth value', () => {
+    expect(parseAuthPromptSearch({ auth: 'nope' })).toEqual({})
   })
   it('drops an unsafe (absolute/cross-origin) callbackUrl', () => {
     expect(parseAuthPromptSearch({ auth: 'signin', callbackUrl: 'https://evil.test' })).toEqual({

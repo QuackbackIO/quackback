@@ -12,6 +12,17 @@
 
 export type IdpKind = 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other'
 
+/** Friendly display name per IdP kind — the picker tiles and the provider list
+ *  both render these, so they live here to stay in sync. */
+export const IDP_KIND_NAMES: Record<IdpKind, string> = {
+  okta: 'Okta',
+  auth0: 'Auth0',
+  entra: 'Microsoft Entra',
+  keycloak: 'Keycloak',
+  google: 'Google Workspace',
+  other: 'Custom OIDC',
+}
+
 export interface IdpShortcutField {
   /** Field key — used in the shortcut state shape and form input. */
   key: string
