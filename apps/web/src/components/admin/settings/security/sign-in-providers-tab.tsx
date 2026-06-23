@@ -11,7 +11,6 @@ import { WarningBox } from '@/components/shared/warning-box'
 import { IdentityProvidersSection } from '@/components/admin/settings/security/identity-providers/provider-list'
 import { countEnabledAuthMethods } from '@/components/admin/settings/security/auth-method-count'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { RecoveryCodesSection } from '@/components/admin/settings/security/sso/recovery-codes-section'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
 import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 import { updateAuthConfigFn, updatePortalConfigFn } from '@/lib/server/functions/settings'
@@ -302,7 +301,7 @@ export function SignInProvidersTab({
           auth.oauth.X and portalConfig.oauth.X. */}
       <SettingsCard
         title="Email"
-        description="Built-in sign-in for the portal and the admin team."
+        description="Built-in sign-in for users."
         contentClassName="space-y-4"
       >
         <MethodRow
@@ -323,16 +322,20 @@ export function SignInProvidersTab({
               : undefined
           }
         />
-        {/* Nested: 2FA enforcement lives here because TOTP enrols on top of a
-            password. Indented (the compact row's light treatment already
-            signals it is a child setting of the Password row, not a peer). */}
-        <div className="ml-[52px] space-y-4 pl-4">
+        {/* Nested under Password: 2FA enforcement builds on top of the password
+            (TOTP enrols over it). The left rule + indent mark it as a child
+            setting of the Password row, not a peer. */}
+        <div className="ml-5 space-y-4 border-l-2 border-border/60 pl-5">
           <MethodRow
             compact
             muted={!passwordEnabled}
             icon={ShieldCheckIcon}
-            label="Require 2FA for team members"
-            description="Members must pass a TOTP challenge to sign in. Recovery codes are the break-glass."
+            label="Require two-factor authentication"
+            description={
+              passwordEnabled
+                ? 'Users must enter a code from their authenticator app after their password.'
+                : 'Turn on Password sign-in to require a second factor.'
+            }
             checked={twoFactorRequired}
             onCheckedChange={(v) => void saveTwoFactor(v)}
             disabled={busy || isManaged('auth.twoFactor.required') || !passwordEnabled}
@@ -369,7 +372,7 @@ export function SignInProvidersTab({
           whether it shows up on portal AND admin sign-in screens. */}
       <SettingsCard
         title="Social sign-in"
-        description="Let visitors and team admins sign in with Google, GitHub, and more."
+        description="Let users sign in with Google, GitHub, and more."
       >
         <OAuthProviderGrid
           enabled={oauthState}
@@ -383,18 +386,15 @@ export function SignInProvidersTab({
         />
       </SettingsCard>
 
-      {/* Card 3: Identity providers (OIDC). One row per provider in the
+      {/* Card 3: Single sign-on (OIDC). One row per provider in the
           identity_provider table; editing a row opens the per-provider
           editor (connection + verified domains + visibility + role
-          provisioning). Supersedes the former single Custom OIDC card. */}
+          provisioning). Recovery codes — the break-glass for SSO — are
+          nested inside this card. */}
       <IdentityProvidersSection
         tierEnabled={customOidcProviderTier}
         enabledMethodCount={enabledMethodCount}
       />
-
-      {/* Card 4: Recovery & break-glass. One-time codes for sign-in when
-          SSO is unavailable. Formerly on the retired /sso page. */}
-      <RecoveryCodesSection />
 
       {busy && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

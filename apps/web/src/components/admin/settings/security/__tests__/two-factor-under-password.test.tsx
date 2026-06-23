@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 /**
- * Verifies that the "Require 2FA for team members" toggle is rendered
+ * Verifies that the "Require two-factor authentication" toggle is rendered
  * inside <SignInProvidersTab> (nested under the Password row) — not in
  * the deleted <TeamAuthMethodsSection>.
  *
  * - When password is ON  → 2FA switch is enabled.
  * - When password is OFF → 2FA switch is disabled (TOTP enrolls on top
  *   of a password; no password means no viable 2FA flow).
+ *
+ * Recovery codes now live inside <IdentityProvidersSection> (the SSO card),
+ * which is stubbed here, so this file no longer asserts their placement.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -28,10 +31,6 @@ vi.mock('@/lib/server/functions/settings', () => ({
 // Password / 2FA area.
 vi.mock('@/components/admin/settings/security/identity-providers/provider-list', () => ({
   IdentityProvidersSection: () => <div data-testid="identity-providers-section" />,
-}))
-
-vi.mock('@/components/admin/settings/security/sso/recovery-codes-section', () => ({
-  RecoveryCodesSection: () => <div data-testid="recovery-codes-section" />,
 }))
 
 vi.mock('@/components/admin/settings/auth-shared/oauth-provider-grid', () => ({
@@ -62,14 +61,9 @@ function renderTab(teamAuth: AuthConfig, portalOauth: PortalAuthMethods = basePo
 }
 
 describe('2FA nested under Password in <SignInProvidersTab>', () => {
-  it('renders the RecoveryCodesSection at the bottom of the tab', () => {
+  it('renders the "Require two-factor authentication" row when password is enabled', () => {
     renderTab(baseTeamAuth)
-    expect(screen.getByTestId('recovery-codes-section')).toBeInTheDocument()
-  })
-
-  it('renders the "Require 2FA" row when password is enabled', () => {
-    renderTab(baseTeamAuth)
-    expect(screen.getByText(/require 2fa for team members/i)).toBeInTheDocument()
+    expect(screen.getByText(/require two-factor authentication/i)).toBeInTheDocument()
   })
 
   it('2FA switch is enabled when password is on', () => {

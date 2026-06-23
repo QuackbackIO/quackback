@@ -72,11 +72,7 @@ function AuthenticationPage() {
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
-      <PageHeader
-        icon={ShieldCheckIcon}
-        title="Security"
-        description="Choose how your team and end users sign in."
-      />
+      <PageHeader icon={ShieldCheckIcon} title="Security" description="Choose how users sign in." />
       <AuthSettings
         tab={tab}
         teamAuthConfig={authConfigQuery.data}

@@ -1,12 +1,13 @@
 /**
- * Identity-providers list — the "IDENTITY PROVIDERS (OIDC)" section of the
- * Sign-in providers tab (spec §11.2). Replaces the single `CustomOidcCard`
- * with a multi-provider list backed by the `identity_provider` table.
+ * Single sign-on (OIDC) — the SSO card on the Sign-in tab. A multi-provider
+ * list backed by the `identity_provider` table, with the account's recovery
+ * codes (the SSO break-glass) nested at the bottom of the same card.
  *
- * Each row surfaces the domain→visibility rule (D5) as a `[button]` /
- * `[routed]` badge — the same label the end user meets at login. Editing a
- * row (or adding one) opens `<ProviderEditor>`, which absorbs the former
- * single-SSO connection / domains / mapping / test sections.
+ * Each row surfaces the domain→visibility rule as an enforced-domain badge —
+ * the same label the end user meets at login. Editing a row (or adding one)
+ * opens `<ProviderEditor>`, which holds the connection / domains / mapping /
+ * test sections. When the custom-OIDC tier is off, the provider list is
+ * replaced by an upgrade prompt but the recovery codes stay.
  */
 import { useEffect, useState } from 'react'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -29,6 +30,7 @@ import { upsertIdentityProviderFn } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { inferIdpKind, IDP_KIND_NAMES } from '../idp-shortcuts'
 import { SsoTestSignInProvider } from '../sso/use-sso-test-sign-in'
+import { RecoveryCodesSection } from '../sso/recovery-codes-section'
 import { ProviderEditor } from './provider-editor'
 
 export function IdentityProvidersSection({
@@ -49,12 +51,23 @@ export function IdentityProvidersSection({
   const editingProvider =
     editing?.mode === 'edit' ? (providers.find((p) => p.id === editing.id) ?? null) : null
 
-  if (!tierEnabled) {
-    return (
-      <SettingsCard
-        title="Identity providers (OIDC)"
-        description="Bring your own OpenID Connect IdP for portal and admin sign-in."
-      >
+  // The SSO card renders the same whether or not the tier is on — only the
+  // action button and body differ (handled inline). Defined once so both
+  // paths render an identical card + nested recovery codes.
+  const ssoCard = (
+    <SettingsCard
+      title="Single sign-on (OIDC)"
+      description="Okta, Auth0, Microsoft Entra, Keycloak, or any OpenID Connect IdP."
+      action={
+        tierEnabled ? (
+          <Button type="button" size="sm" onClick={() => setEditing({ mode: 'new' })}>
+            <PlusIcon className="mr-1 h-3.5 w-3.5" />
+            Add provider
+          </Button>
+        ) : undefined
+      }
+    >
+      {!tierEnabled ? (
         <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             Available on plans with the custom OIDC feature.
@@ -66,46 +79,45 @@ export function IdentityProvidersSection({
             </a>
           </Button>
         </div>
-      </SettingsCard>
-    )
-  }
+      ) : providers.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+            <ShieldCheckIcon className="h-5 w-5 text-muted-foreground/60" />
+          </div>
+          <p className="text-sm font-medium">No identity providers yet</p>
+          <p className="max-w-sm text-xs text-muted-foreground">
+            Add an OIDC provider to let your team and end users sign in through it.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2.5">
+          {providers.map((provider) => (
+            <ProviderRow
+              key={provider.id}
+              provider={provider}
+              enabledMethodCount={enabledMethodCount}
+              onEdit={() => setEditing({ mode: 'edit', id: provider.id })}
+            />
+          ))}
+        </ul>
+      )}
+
+      {/* Recovery codes nest here as a layout grouping for the Sign-in page,
+          not a technical dependency: they're the account break-glass for when
+          SSO is unavailable and also back up TOTP/2FA, so they stay shown
+          regardless of the custom-OIDC tier. */}
+      <RecoveryCodesSection />
+    </SettingsCard>
+  )
+
+  // The SSO test flow (popup + a global postMessage listener) is only
+  // reachable with the tier on (Add provider / Edit), so skip mounting its
+  // provider — and its idle listener — for tier-off accounts.
+  if (!tierEnabled) return ssoCard
 
   return (
     <SsoTestSignInProvider>
-      <SettingsCard
-        title="Identity providers (OIDC)"
-        description="Okta, Auth0, Microsoft Entra, Keycloak, or any OpenID Connect IdP."
-        action={
-          <Button type="button" size="sm" onClick={() => setEditing({ mode: 'new' })}>
-            <PlusIcon className="mr-1 h-3.5 w-3.5" />
-            Add provider
-          </Button>
-        }
-      >
-        {providers.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-              <ShieldCheckIcon className="h-5 w-5 text-muted-foreground/60" />
-            </div>
-            <p className="text-sm font-medium">No identity providers yet</p>
-            <p className="max-w-sm text-xs text-muted-foreground">
-              Add an OIDC provider to let your team and end users sign in through it.
-            </p>
-          </div>
-        ) : (
-          <ul className="space-y-2.5">
-            {providers.map((provider) => (
-              <ProviderRow
-                key={provider.id}
-                provider={provider}
-                enabledMethodCount={enabledMethodCount}
-                onEdit={() => setEditing({ mode: 'edit', id: provider.id })}
-              />
-            ))}
-          </ul>
-        )}
-      </SettingsCard>
-
+      {ssoCard}
       {editing && (
         <ProviderEditor
           key={editing.mode === 'edit' ? editing.id : 'new'}

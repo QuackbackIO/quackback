@@ -62,6 +62,11 @@ vi.mock('../../sso/use-sso-test-sign-in', () => ({
   useSsoTestSignIn: () => ({ open: vi.fn() }),
   SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
+// Recovery codes nest inside this section now; stub it so the test doesn't
+// pull in the recovery-codes server fn and its server-only import chain.
+vi.mock('../../sso/recovery-codes-section', () => ({
+  RecoveryCodesSection: () => <div data-testid="recovery-codes-section" />,
+}))
 
 const verifiedDomain: VerifiedDomain = {
   id: 'domain_1' as `domain_${string}`,
