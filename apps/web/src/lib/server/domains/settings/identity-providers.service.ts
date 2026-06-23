@@ -270,6 +270,22 @@ export async function upsertIdentityProvider(
 ): Promise<IdentityProvider> {
   log.info({ registrationId: input.registrationId }, 'upsert identity provider')
   try {
+    // SSRF guard: validate the discoveryUrl before any DB write — the auth
+    // runtime and SSO test callback fetch this URL server-side.
+    if (input.discoveryUrl) {
+      const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
+      const safety = await checkUrlSafety(input.discoveryUrl)
+      if (!safety.safe) {
+        const { ValidationError } = await import('@/lib/shared/errors')
+        throw new ValidationError(
+          'INVALID_IDP_CONFIG',
+          safety.reason === 'ssrf-rejected'
+            ? 'Discovery URL must point to a public IdP, not a private or loopback address.'
+            : 'Discovery URL is not a valid https:// URL.'
+        )
+      }
+    }
+
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
 

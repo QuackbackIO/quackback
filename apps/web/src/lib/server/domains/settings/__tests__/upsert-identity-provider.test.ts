@@ -1,0 +1,309 @@
+/**
+ * Focused unit tests for the `upsertIdentityProvider` write path.
+ *
+ * Covers Fix 5 (SSRF guard) and Fix 6 (detailsChangedAt restamp) from
+ * the Codex IdP-cluster review.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ValidationError } from '@/lib/shared/errors'
+
+// ---------------------------------------------------------------------------
+// Hoisted state
+// ---------------------------------------------------------------------------
+
+const hoisted = vi.hoisted(() => ({
+  mockCheckUrlSafety: vi.fn(),
+  mockDbTransaction: vi.fn(),
+  mockHasPlatformCredentials: vi.fn(),
+  mockResetAuth: vi.fn(),
+  mockInvalidateSettingsCache: vi.fn(),
+  mockBumpAuthConfigVersionInTx: vi.fn(),
+  // Mutable ref: what the tx select() returns. Empty = INSERT path;
+  // populate with [EXISTING_ROW] to exercise the UPDATE/edit path.
+  txSelectResult: [] as object[],
+  // Mutable ref: the patch passed to tx.update().set() on the last call.
+  // Inspected by Fix 6 tests.
+  capturedSetPatch: null as Record<string, unknown> | null,
+}))
+
+// ---------------------------------------------------------------------------
+// Module mocks
+// ---------------------------------------------------------------------------
+
+vi.mock('@/lib/server/content/ssrf-guard', () => ({
+  checkUrlSafety: hoisted.mockCheckUrlSafety,
+}))
+
+vi.mock('@/lib/server/auth/config-version', () => ({
+  bumpAuthConfigVersionInTx: hoisted.mockBumpAuthConfigVersionInTx,
+}))
+
+vi.mock('@/lib/server/auth', () => ({
+  resetAuth: hoisted.mockResetAuth,
+}))
+
+vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
+  invalidateSettingsCache: hoisted.mockInvalidateSettingsCache,
+  wrapDbError: (_msg: string, err: unknown) => {
+    throw err
+  },
+}))
+
+vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
+  hasPlatformCredentials: hoisted.mockHasPlatformCredentials,
+  getConfiguredIntegrationTypes: vi.fn().mockResolvedValue(new Set<string>()),
+}))
+
+vi.mock('@/lib/server/auth/auth-providers', () => ({
+  AUTH_CREDENTIAL_PREFIX: 'auth_',
+}))
+
+vi.mock('@/lib/server/auth/provider-ids', () => ({
+  verifiedDomainCount: () => 0,
+  shouldRenderPublicButton: () => false,
+}))
+
+vi.mock('@/lib/server/logger', () => ({
+  logger: { child: () => ({ info: vi.fn(), error: vi.fn() }) },
+}))
+
+// DB mock: transaction calls fn with a tx that supports select/update/insert.
+// Domain table objects are stubs — the eq() filter arguments are ignored so
+// the mock can return controlled results regardless of which column was filtered.
+vi.mock('@/lib/server/db', () => ({
+  db: {
+    // Used by listDomainsForProvider (outside the tx, after commit).
+    select: vi.fn(() => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => Promise.resolve([]),
+        }),
+      }),
+    })),
+    transaction: async (fn: (tx: object) => Promise<unknown>) => {
+      hoisted.mockDbTransaction()
+      const tx = {
+        select: () => ({
+          from: () => ({
+            // Returns whatever txSelectResult holds at call time.
+            where: () => Promise.resolve(hoisted.txSelectResult),
+          }),
+        }),
+        update: () => ({
+          set: (patch: Record<string, unknown>) => {
+            hoisted.capturedSetPatch = patch
+            const base = hoisted.txSelectResult[0] ?? {}
+            return {
+              where: () => ({
+                returning: () => Promise.resolve([{ ...base, ...patch }]),
+              }),
+            }
+          },
+        }),
+        insert: () => ({
+          values: (vals: Record<string, unknown>) => ({
+            returning: () =>
+              Promise.resolve([
+                {
+                  ...vals,
+                  id: 'idp_new',
+                  detailsChangedAt: null,
+                  lastSuccessfulTestAt: null,
+                  createdAt: new Date('2026-01-01'),
+                  kind: null,
+                  authorizationUrl: null,
+                  tokenUrl: null,
+                  userInfoUrl: null,
+                  attributeMapping: null,
+                },
+              ]),
+          }),
+        }),
+      }
+      return fn(tx)
+    },
+  },
+  identityProvider: {},
+  ssoVerifiedDomain: {},
+  eq: vi.fn(),
+}))
+
+// ---------------------------------------------------------------------------
+// Import subject AFTER mocks are wired
+// ---------------------------------------------------------------------------
+
+import { upsertIdentityProvider } from '../identity-providers.service'
+
+// ---------------------------------------------------------------------------
+// Shared fixtures
+// ---------------------------------------------------------------------------
+
+const BASE_INPUT = {
+  registrationId: 'oidc_x',
+  label: 'Acme IdP',
+  clientId: 'client-abc',
+  discoveryUrl: 'https://idp.example/.well-known/openid-configuration',
+} as const
+
+const EXISTING_ROW = {
+  id: 'idp_existing' as `idp_${string}`,
+  registrationId: 'oidc_x',
+  label: 'Acme IdP',
+  kind: null,
+  discoveryUrl: 'https://idp.example/.well-known/openid-configuration',
+  authorizationUrl: null,
+  tokenUrl: null,
+  userInfoUrl: null,
+  clientId: 'client-abc',
+  scopes: null,
+  enabled: false,
+  autoCreateUsers: true,
+  autoProvisionRole: null,
+  attributeMapping: null,
+  showButton: false,
+  detailsChangedAt: null,
+  lastSuccessfulTestAt: null,
+  createdAt: new Date('2026-01-01'),
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  hoisted.txSelectResult = []
+  hoisted.capturedSetPatch = null
+  hoisted.mockHasPlatformCredentials.mockResolvedValue(false)
+  hoisted.mockInvalidateSettingsCache.mockResolvedValue(undefined)
+  hoisted.mockBumpAuthConfigVersionInTx.mockResolvedValue(undefined)
+  // Default: safe URL. Override in SSRF-rejection tests.
+  hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: true, address: '93.184.216.34', family: 4 })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 5: SSRF guard on discoveryUrl
+// ---------------------------------------------------------------------------
+
+describe('upsertIdentityProvider — SSRF guard (Fix 5)', () => {
+  it('throws ValidationError INVALID_IDP_CONFIG with private-address message when ssrf-rejected', async () => {
+    hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: false, reason: 'ssrf-rejected' })
+
+    await expect(upsertIdentityProvider(BASE_INPUT)).rejects.toBeInstanceOf(ValidationError)
+    await expect(upsertIdentityProvider(BASE_INPUT)).rejects.toMatchObject({
+      code: 'INVALID_IDP_CONFIG',
+      message: expect.stringMatching(/private or loopback/i),
+    })
+  })
+
+  it('throws ValidationError INVALID_IDP_CONFIG with https message when scheme-rejected', async () => {
+    hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: false, reason: 'scheme-rejected' })
+
+    await expect(upsertIdentityProvider(BASE_INPUT)).rejects.toMatchObject({
+      code: 'INVALID_IDP_CONFIG',
+      message: expect.stringMatching(/https/i),
+    })
+  })
+
+  it('aborts before db.transaction when discoveryUrl is unsafe', async () => {
+    hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: false, reason: 'ssrf-rejected' })
+
+    await upsertIdentityProvider(BASE_INPUT).catch(() => {})
+
+    expect(hoisted.mockDbTransaction).not.toHaveBeenCalled()
+  })
+
+  it('calls checkUrlSafety and proceeds when the URL is safe', async () => {
+    hoisted.mockCheckUrlSafety.mockResolvedValue({
+      safe: true,
+      address: '93.184.216.34',
+      family: 4,
+    })
+
+    await upsertIdentityProvider(BASE_INPUT)
+
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(BASE_INPUT.discoveryUrl)
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips checkUrlSafety entirely when discoveryUrl is absent', async () => {
+    const { discoveryUrl: _omit, ...inputWithoutUrl } = BASE_INPUT
+
+    await upsertIdentityProvider(inputWithoutUrl)
+
+    expect(hoisted.mockCheckUrlSafety).not.toHaveBeenCalled()
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips checkUrlSafety when discoveryUrl is explicitly null', async () => {
+    await upsertIdentityProvider({ ...BASE_INPUT, discoveryUrl: null })
+
+    expect(hoisted.mockCheckUrlSafety).not.toHaveBeenCalled()
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fix 6: restamp detailsChangedAt on connection-field edits
+// ---------------------------------------------------------------------------
+
+describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
+  beforeEach(() => {
+    // Use the UPDATE (edit) path: tx.select returns the existing row.
+    hoisted.txSelectResult = [EXISTING_ROW]
+  })
+
+  it('restamps detailsChangedAt when clientId changes', async () => {
+    const before = Date.now()
+
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      clientId: 'new-client-id', // changed from EXISTING_ROW.clientId
+    })
+
+    expect(hoisted.capturedSetPatch).not.toBeNull()
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('restamps detailsChangedAt when discoveryUrl changes', async () => {
+    const before = Date.now()
+
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      discoveryUrl: 'https://new-idp.example/.well-known/openid-configuration', // changed
+    })
+
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('does NOT restamp detailsChangedAt when only label changes (non-connection field)', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      label: 'New Label Only', // non-connection field; clientId + discoveryUrl same as existing
+    })
+
+    expect(hoisted.capturedSetPatch).not.toBeNull()
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+
+  it('does NOT restamp when discoveryUrl is omitted (patch semantics, no change signal)', async () => {
+    const { discoveryUrl: _omit, ...inputWithoutUrl } = BASE_INPUT
+
+    await upsertIdentityProvider({
+      ...inputWithoutUrl,
+      id: 'idp_existing' as `idp_${string}`,
+      // clientId same as EXISTING_ROW; discoveryUrl not supplied
+    })
+
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
+  })
+})
