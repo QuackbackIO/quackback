@@ -651,7 +651,6 @@ export interface PublicAuthConfig {
  * Public portal config for portal login forms
  */
 export interface PublicPortalConfig {
-  oauth: PortalAuthMethods
   features: PortalFeatures
   /**
    * Public OIDC sign-in buttons from the identity_provider table. Each

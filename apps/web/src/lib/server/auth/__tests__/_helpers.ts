@@ -81,7 +81,7 @@ export function makeTenant(overrides: Partial<TenantSettings> = {}): TenantSetti
     helpCenterConfig: {} as TenantSettings['helpCenterConfig'],
     customCss: '',
     publicAuthConfig: { oauth: {}, openSignup: false },
-    publicPortalConfig: { oauth: {}, features: PORTAL_FEATURES_DEFAULTS },
+    publicPortalConfig: { features: PORTAL_FEATURES_DEFAULTS },
     publicWidgetConfig: {} as TenantSettings['publicWidgetConfig'],
     featureFlags: {} as TenantSettings['featureFlags'],
     brandingData: {} as TenantSettings['brandingData'],

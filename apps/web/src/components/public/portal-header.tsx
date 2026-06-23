@@ -73,7 +73,7 @@ export function PortalHeader({
   // Team members can still reach /admin/login directly. Counts any registered
   // OIDC provider — including a routed-only one with no public button, which a
   // domain user reaches by entering their email — not just the legacy `sso` id.
-  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
+  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicAuthConfig?.oauth ?? {}, {
     registeredAuthProviders,
     oidcProviders: settings?.publicPortalConfig?.oidcProviders,
   })
@@ -83,7 +83,7 @@ export function PortalHeader({
   // the email-entry dialog entirely.
   const soleOidcProviderId = resolveSoleOidcProvider(
     registeredAuthProviders,
-    settings?.publicPortalConfig?.oauth ?? {}
+    settings?.publicAuthConfig?.oauth ?? {}
   )
 
   const authPopover = useAuthPopoverSafe()

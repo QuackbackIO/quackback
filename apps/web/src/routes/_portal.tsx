@@ -5,7 +5,7 @@ import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
+import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
@@ -106,7 +106,7 @@ export const Route = createFileRoute('/_portal')({
         autoOpenSignin: prompt.mode,
         authConfig: {
           found: !!settings?.publicPortalConfig,
-          oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
+          oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
           oidcProviders: settings?.publicPortalConfig?.oidcProviders,
           registeredAuthProviders,
         },
@@ -167,7 +167,7 @@ export const Route = createFileRoute('/_portal')({
 
     const authConfig = {
       found: true,
-      oauth: publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
+      oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
       oidcProviders: publicPortalConfig?.oidcProviders,
       registeredAuthProviders,
     }

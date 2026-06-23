@@ -775,19 +775,9 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
 
-    const [configuredTypes, passthroughKeys] = await Promise.all([
-      getConfiguredAuthTypes(),
-      getEmailDependentPassthroughKeys(),
-    ])
-    const filteredOAuth = filterOAuthByCredentials(
-      portalConfig.oauth,
-      configuredTypes,
-      passthroughKeys
-    )
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
-      oauth: filteredOAuth,
       features: portalConfig.features,
       ...(oidcProviders.length > 0 && { oidcProviders }),
       ...(welcome && { welcomeCard: welcome }),
@@ -839,11 +829,6 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       configuredTypes,
       passthroughKeys
     )
-    const filteredPortalOAuth = filterOAuthByCredentials(
-      portalConfig.oauth,
-      configuredTypes,
-      passthroughKeys
-    )
     // Public OIDC buttons come from the identity_provider table (portal
     // surface only); the static map supplies social providers only.
     const portalOidcProviders = await getPublicOidcProviders()
@@ -874,7 +859,6 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)
         return {
-          oauth: filteredPortalOAuth,
           features: portalConfig.features,
           ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
           ...(welcome && { welcomeCard: welcome }),

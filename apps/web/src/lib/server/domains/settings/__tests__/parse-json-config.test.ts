@@ -21,7 +21,6 @@ describe('PublicPortalConfig.portalAccess', () => {
   it('portalAccess shape includes widgetSignIn', () => {
     // Verify the type carries widgetSignIn (build-time type assertion via satisfies)
     const cfg = {
-      oauth: {},
       features: DEFAULT_PORTAL_CONFIG.features,
       portalAccess: { isPrivate: true, widgetSignIn: false },
     } satisfies PublicPortalConfig
@@ -31,7 +30,6 @@ describe('PublicPortalConfig.portalAccess', () => {
 
   it('portalAccess.widgetSignIn is boolean', () => {
     const cfg: PublicPortalConfig = {
-      oauth: {},
       features: DEFAULT_PORTAL_CONFIG.features,
       portalAccess: { isPrivate: false, widgetSignIn: true },
     }
