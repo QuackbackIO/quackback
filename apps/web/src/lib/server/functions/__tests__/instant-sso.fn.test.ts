@@ -32,7 +32,8 @@ vi.mock('@tanstack/react-start/server', () => ({
 
 const hoisted = vi.hoisted(() => ({
   getSession: vi.fn(),
-  getPublicPortalConfig: vi.fn(),
+  getPublicAuthConfig: vi.fn(),
+  isSignInMethodEnabled: vi.fn(),
   getRegisteredOidcProviderIds: vi.fn(),
   getRegisteredAuthProviders: vi.fn(),
   signInWithOAuth2: vi.fn(),
@@ -43,7 +44,11 @@ vi.mock('@/lib/server/auth/session', () => ({
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPublicPortalConfig: hoisted.getPublicPortalConfig,
+  getPublicAuthConfig: hoisted.getPublicAuthConfig,
+}))
+
+vi.mock('@/lib/shared/signin-methods', () => ({
+  isSignInMethodEnabled: hoisted.isSignInMethodEnabled,
 }))
 
 vi.mock('@/lib/server/auth/registered-providers', () => ({
@@ -79,14 +84,20 @@ function soleOidcWorkspace(over?: {
   allIds?: string[]
   oauth?: Record<string, boolean>
 }) {
+  const oauth = over?.oauth ?? { password: false, magicLink: false }
   hoisted.getSession.mockResolvedValueOnce(null)
   hoisted.getRegisteredOidcProviderIds.mockResolvedValueOnce(
     new Set(over?.oidcIds ?? ['oidc_acme'])
   )
   hoisted.getRegisteredAuthProviders.mockResolvedValueOnce(over?.allIds ?? ['oidc_acme'])
-  hoisted.getPublicPortalConfig.mockResolvedValueOnce({
-    oauth: over?.oauth ?? { password: false, magicLink: false },
-  })
+  hoisted.getPublicAuthConfig.mockResolvedValueOnce({ oauth, openSignup: false })
+  // isSignInMethodEnabled is real logic — default to matching the oauth shape
+  hoisted.isSignInMethodEnabled.mockImplementation(
+    (_oauth: Record<string, boolean | undefined> | undefined, key: string) => {
+      if (key === 'password') return (oauth.password ?? true) !== false
+      return oauth[key] === true
+    }
+  )
 }
 
 describe('resolveInstantSsoRedirectFn', () => {
@@ -135,6 +146,25 @@ describe('resolveInstantSsoRedirectFn', () => {
 
   it('(e) returns null when more than one IdP is registered (the user has a choice)', async () => {
     soleOidcWorkspace({ oidcIds: ['oidc_a', 'oidc_b'], allIds: ['oidc_a', 'oidc_b'] })
+
+    const result = await resolveHandler({ data: {} })
+
+    expect(result).toBeNull()
+    expect(hoisted.signInWithOAuth2).not.toHaveBeenCalled()
+  })
+
+  it('(f) reads unified authConfig: sole OIDC + password/magicLink OFF => redirects', async () => {
+    soleOidcWorkspace({ oauth: { password: false, magicLink: false } })
+    hoisted.signInWithOAuth2.mockResolvedValueOnce({ url: 'https://idp.example.com/sso' })
+
+    const result = await resolveHandler({ data: {} })
+
+    expect(result).toEqual({ url: 'https://idp.example.com/sso' })
+    expect(hoisted.getPublicAuthConfig).toHaveBeenCalled()
+  })
+
+  it('(g) reads unified authConfig: sole OIDC + password ON => null', async () => {
+    soleOidcWorkspace({ oauth: { password: true, magicLink: false } })
 
     const result = await resolveHandler({ data: {} })
 

@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSession } from '@/lib/server/auth/session'
-import { getPublicPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import { getPublicAuthConfig } from '@/lib/server/domains/settings/settings.service'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import {
   getRegisteredAuthProviders,
   getRegisteredOidcProviderIds,
@@ -28,14 +29,14 @@ export const resolveInstantSsoRedirectFn = createServerFn({ method: 'GET' })
     const session = await getSession()
     if (session?.user && session.user.principalType !== 'anonymous') return null
 
-    const [registeredOidc, registeredAll, portalConfig] = await Promise.all([
+    const [registeredOidc, registeredAll, authConfig] = await Promise.all([
       getRegisteredOidcProviderIds(),
       getRegisteredAuthProviders(),
-      getPublicPortalConfig(),
+      getPublicAuthConfig(),
     ])
     const oidcIds = [...registeredOidc]
-    const passwordEnabled = portalConfig?.oauth?.password ?? true
-    const magicLinkEnabled = portalConfig?.oauth?.magicLink ?? false
+    const passwordEnabled = isSignInMethodEnabled(authConfig?.oauth, 'password')
+    const magicLinkEnabled = isSignInMethodEnabled(authConfig?.oauth, 'magicLink')
     // Sole sign-in method: exactly one registered OIDC provider, no registered
     // social provider (`registeredAll` is just that one id), and no built-in
     // email method.
