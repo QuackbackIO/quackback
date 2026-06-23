@@ -37,6 +37,7 @@ const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   listIdentityProviders: vi.fn(),
   upsertIdentityProvider: vi.fn(),
+  mockAssertNotManaged: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -61,6 +62,15 @@ vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
   stampDetailsChanged: vi.fn(),
 }))
 
+vi.mock('@/lib/server/config-file/managed-guard', () => ({
+  assertNotManaged: hoisted.mockAssertNotManaged,
+}))
+
+// Use the real encoding logic so path assertions stay honest.
+vi.mock('@/lib/server/config-file/managed-paths', () => ({
+  providerPathKey: (label: string) => encodeURIComponent(label).replace(/\./g, '%2E'),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({
@@ -72,6 +82,8 @@ beforeEach(() => {
     id: 'idp_123',
     registrationId: input.registrationId,
   }))
+  // Default: no managed paths — Fix 7 tests that need a lock override this.
+  hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
 })
 
 await import('../sso')
@@ -112,5 +124,93 @@ describe('upsertIdentityProviderFn', () => {
         clientId: 'client-123',
       })
     )
+  })
+})
+
+describe('upsertIdentityProviderFn — managed-path guard (Fix 7)', () => {
+  // providerPathKey('Acme IdP') = 'Acme%20IdP' (space → %20, no dots)
+  const base = `auth.identityProviders.${encodeURIComponent('Acme IdP').replace(/\./g, '%2E')}`
+
+  it('throws FIELD_MANAGED before upsert when discoveryUrl is locked for the provider', async () => {
+    const { ForbiddenError } = await import('@/lib/shared/errors')
+    hoisted.mockAssertNotManaged.mockImplementation(async (path: string) => {
+      if (path === `${base}.discoveryUrl`) {
+        throw new ForbiddenError('FIELD_MANAGED', `Field "${path}" is managed`)
+      }
+    })
+
+    await expect(
+      upsertIdentityProvider({
+        data: {
+          registrationId: 'oidc_x',
+          label: 'Acme IdP',
+          clientId: 'c',
+          discoveryUrl: 'https://idp.example/.well-known/oidc',
+        },
+      })
+    ).rejects.toMatchObject({ code: 'FIELD_MANAGED' })
+
+    expect(hoisted.upsertIdentityProvider).not.toHaveBeenCalled()
+  })
+
+  it('throws FIELD_MANAGED before upsert when clientId is locked for the provider', async () => {
+    const { ForbiddenError } = await import('@/lib/shared/errors')
+    hoisted.mockAssertNotManaged.mockImplementation(async (path: string) => {
+      if (path === `${base}.clientId`) {
+        throw new ForbiddenError('FIELD_MANAGED', `Field "${path}" is managed`)
+      }
+    })
+
+    await expect(
+      upsertIdentityProvider({
+        data: { registrationId: 'oidc_x', label: 'Acme IdP', clientId: 'new-c' },
+      })
+    ).rejects.toMatchObject({ code: 'FIELD_MANAGED' })
+
+    expect(hoisted.upsertIdentityProvider).not.toHaveBeenCalled()
+  })
+
+  it('upserts fine when no paths are managed (unmanaged provider)', async () => {
+    hoisted.mockAssertNotManaged.mockResolvedValue(undefined)
+
+    await upsertIdentityProvider({
+      data: { registrationId: 'oidc_x', label: 'Acme IdP', clientId: 'c' },
+    })
+
+    expect(hoisted.upsertIdentityProvider).toHaveBeenCalledTimes(1)
+  })
+
+  it('asserts discoveryUrl and clientId paths on every call', async () => {
+    const assertedPaths: string[] = []
+    hoisted.mockAssertNotManaged.mockImplementation(async (path: string) => {
+      assertedPaths.push(path)
+    })
+
+    await upsertIdentityProvider({
+      data: { registrationId: 'oidc_x', label: 'Acme IdP', clientId: 'c' },
+    })
+
+    expect(assertedPaths).toContain(`${base}.discoveryUrl`)
+    expect(assertedPaths).toContain(`${base}.clientId`)
+  })
+
+  it('asserts enabled path only when data.enabled is present', async () => {
+    const assertedPaths: string[] = []
+    hoisted.mockAssertNotManaged.mockImplementation(async (path: string) => {
+      assertedPaths.push(path)
+    })
+
+    // Without enabled in data — should NOT assert the enabled path.
+    await upsertIdentityProvider({
+      data: { registrationId: 'oidc_x', label: 'Acme IdP', clientId: 'c' },
+    })
+    expect(assertedPaths).not.toContain(`${base}.enabled`)
+
+    // With enabled in data — SHOULD assert the enabled path.
+    assertedPaths.length = 0
+    await upsertIdentityProvider({
+      data: { registrationId: 'oidc_x', label: 'Acme IdP', clientId: 'c', enabled: true },
+    })
+    expect(assertedPaths).toContain(`${base}.enabled`)
   })
 })
