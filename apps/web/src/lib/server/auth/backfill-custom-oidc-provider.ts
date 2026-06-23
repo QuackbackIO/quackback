@@ -25,6 +25,7 @@ import {
   type Database,
   type Transaction,
 } from '@/lib/server/db'
+import { backfillUnifiedSignInMethods } from './backfill-signin-methods'
 import { decryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { logger } from '@/lib/server/logger'
 
@@ -129,10 +130,14 @@ function readOauthToggles(json: string | null): Record<string, boolean | undefin
  */
 export async function runStartupBackfills(): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('quackback:identity_provider_backfill'))`)
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('quackback:identity_provider_backfill'))`
+    )
     const { created } = await backfillCustomOidcProvider(tx)
     if (created > 0) {
       log.info({ registration_id: 'custom-oidc' }, 'backfilled identity provider from credential')
     }
+    const { merged } = await backfillUnifiedSignInMethods(tx)
+    if (merged) log.info('merged portal sign-in methods into authConfig.oauth')
   })
 }
