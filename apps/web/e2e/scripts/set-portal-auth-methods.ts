@@ -68,7 +68,11 @@ try {
   }
 
   await sql`UPDATE settings SET portal_config = ${JSON.stringify(config)} WHERE id = ${id}`
-  console.log(JSON.stringify({ action: arg, oauth: config.oauth }))
+  // Echo only the action. The resulting oauth flags are deterministic per
+  // action, callers ignore this output, and logging the oauth object trips
+  // clear-text-logging analysis on the `oauth` property name even though
+  // these are just boolean enable flags, not secrets.
+  console.log(JSON.stringify({ action: arg }))
   await sql.end()
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err))
