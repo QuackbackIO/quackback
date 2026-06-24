@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseQuackbackConfig, quackbackConfigSchema } from '../schema'
+import { getDeprecatedConfigKeys, parseQuackbackConfig, quackbackConfigSchema } from '../schema'
 
 describe('parseQuackbackConfig', () => {
   it('accepts a fully-populated valid config', () => {
@@ -64,6 +64,45 @@ describe('parseQuackbackConfig', () => {
       spec: { boards: [{ name: 'x' }] } as unknown,
     })
     expect(result.success).toBe(false)
+  })
+
+  it('accepts deprecated auth and features keys without treating them as schema errors', () => {
+    const result = parseQuackbackConfig({
+      apiVersion: 'quackback.io/v1',
+      kind: 'QuackbackConfig',
+      spec: {
+        workspace: { name: 'Acme', slug: 'acme' },
+        features: { helpCenter: true },
+        auth: {
+          oauth: { google: true },
+          openSignup: false,
+          ssoOidc: {
+            enabled: true,
+            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
+            clientId: 'client-id',
+          },
+        },
+      },
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.spec.workspace?.name).toBe('Acme')
+      expect(getDeprecatedConfigKeys(result.data.spec)).toEqual(['auth', 'features'])
+    }
+  })
+
+  it('reports no deprecated keys for a modern config', () => {
+    const result = parseQuackbackConfig({
+      apiVersion: 'quackback.io/v1',
+      kind: 'QuackbackConfig',
+      spec: { workspace: { name: 'Acme' } },
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(getDeprecatedConfigKeys(result.data.spec)).toEqual([])
+    }
   })
 })
 

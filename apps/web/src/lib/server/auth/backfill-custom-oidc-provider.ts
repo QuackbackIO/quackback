@@ -91,6 +91,7 @@ export async function backfillCustomOidcProvider(db: DbOrTx): Promise<{ created:
     // custom-oidc is the portal-facing sign-in button (the SSO provider is not).
     showButton: true,
   })
+  await db.update(settings).set({ authConfigVersion: sql`${settings.authConfigVersion} + 1` })
 
   return { created: 1 }
 }

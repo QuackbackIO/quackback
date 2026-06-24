@@ -99,6 +99,26 @@ describe('reconcileFileIntoDb', () => {
     expect(arg.managedFieldPaths).toEqual(['tierLimits'])
   })
 
+  it('ignores deprecated auth and features keys while reconciling supported fields', async () => {
+    const deps = baseDeps()
+    await reconcileFileIntoDb(
+      {
+        workspace: { name: 'Acme' },
+        tierLimits: { maxBoards: 3 },
+        auth: { oauth: { google: true } },
+        features: { helpCenter: true },
+      },
+      deps
+    )
+
+    const arg = (deps.updateSettings as ReturnType<typeof vi.fn>).mock.calls[0]![0]
+    expect(arg.name).toBe('Acme')
+    expect(JSON.parse(arg.tierLimits as string)).toEqual({ maxBoards: 3 })
+    expect(arg.managedFieldPaths).toEqual(['workspace.name', 'tierLimits'])
+    expect(arg).not.toHaveProperty('authConfig')
+    expect(arg).not.toHaveProperty('featureFlags')
+  })
+
   it('clears managedFieldPaths when called with an empty spec', async () => {
     const deps = baseDeps()
     deps.readSettings = vi.fn(async () => ({

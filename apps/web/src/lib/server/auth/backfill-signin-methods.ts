@@ -1,9 +1,13 @@
 /**
  * One-time merge of `portalConfig.oauth` into `authConfig.oauth` so the
  * workspace has a single source of truth for sign-in method flags. Union of
- * effective values: a method usable on either surface stays usable; magic-link
- * and social only carry over explicit enables. Idempotent and advisory-locked
- * via runStartupBackfills. Residual portalConfig.oauth is left untouched.
+ * effective values: a method usable on either surface stays usable. The one
+ * legacy-default exception is team magic-link: before the unified config, an
+ * absent `authConfig.oauth.magicLink` meant "allowed" for team sign-in. When
+ * password is explicitly off, materialize that old fallback as `true` so a
+ * passwordless legacy workspace is not migrated to zero working methods.
+ * Idempotent and advisory-locked via runStartupBackfills. Residual
+ * portalConfig.oauth is left untouched.
  */
 import { settings, eq, type Database, type Transaction } from '@/lib/server/db'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/server/domains/settings/settings.types'
@@ -43,9 +47,15 @@ export async function backfillUnifiedSignInMethods(database: DbOrTx): Promise<{ 
   const portal = parseOauth(rows[0].portalConfig)
 
   // Monotonic merge: copy the team config, then OR-in portal's explicit
-  // enables. Never removes a method; never propagates an implicit default.
+  // enables. Never removes a method; only materializes the legacy team
+  // magic-link default when password was explicitly disabled.
   const merged: Oauth = { ...team }
   const added: string[] = []
+  const teamHasMagicLinkKey = Object.prototype.hasOwnProperty.call(team, 'magicLink')
+  if (!teamHasMagicLinkKey && team.password === false) {
+    merged.magicLink = true
+    added.push('magicLink')
+  }
   for (const key of Object.keys(portal)) {
     if (portal[key] === true && merged[key] !== true) {
       merged[key] = true

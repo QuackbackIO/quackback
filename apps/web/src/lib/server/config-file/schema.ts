@@ -83,6 +83,14 @@ const tierLimitsSchema = z
   })
   .strict()
 
+// Deprecated compatibility keys. `auth` and top-level `features` were managed
+// by older config files, but are now in-app only. Keep accepting them for one
+// release so old files do not make the whole watcher fail before supported
+// workspace/tier fields can reconcile. The reconciler deliberately ignores
+// both keys.
+const deprecatedFeaturesSchema = z.record(z.string(), z.boolean())
+const deprecatedAuthSchema = z.unknown()
+
 export const quackbackConfigSchema = z
   .object({
     apiVersion: z.literal('quackback.io/v1'),
@@ -92,6 +100,8 @@ export const quackbackConfigSchema = z
       .object({
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
+        features: deprecatedFeaturesSchema.optional(),
+        auth: deprecatedAuthSchema.optional(),
       })
       .strict(),
   })
@@ -99,6 +109,13 @@ export const quackbackConfigSchema = z
 
 export type QuackbackConfig = z.infer<typeof quackbackConfigSchema>
 export type QuackbackConfigSpec = QuackbackConfig['spec']
+
+export function getDeprecatedConfigKeys(spec: QuackbackConfigSpec): Array<'auth' | 'features'> {
+  const keys: Array<'auth' | 'features'> = []
+  if (Object.prototype.hasOwnProperty.call(spec, 'auth')) keys.push('auth')
+  if (Object.prototype.hasOwnProperty.call(spec, 'features')) keys.push('features')
+  return keys
+}
 
 export function parseQuackbackConfig(input: unknown): z.ZodSafeParseResult<QuackbackConfig> {
   return quackbackConfigSchema.safeParse(input)

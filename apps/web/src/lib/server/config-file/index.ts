@@ -1,6 +1,7 @@
 export {
   quackbackConfigSchema,
   parseQuackbackConfig,
+  getDeprecatedConfigKeys,
   type QuackbackConfig,
   type QuackbackConfigSpec,
 } from './schema'
@@ -19,7 +20,7 @@ import { createHash } from 'node:crypto'
 import { watchConfigFile } from './watcher'
 import { reconcileFileIntoDb } from './reconciler'
 import { makeReconcileDeps } from './deps'
-import type { QuackbackConfigSpec } from './schema'
+import { getDeprecatedConfigKeys, type QuackbackConfigSpec } from './schema'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'config-file' })
@@ -49,10 +50,21 @@ export function startQuackbackConfigWatcher(): () => void {
       await deps.reportStatus?.({ kind: 'error', message: result.error })
       return
     }
+    const deprecatedKeys = getDeprecatedConfigKeys(result.config.spec)
+    const deprecatedMessage =
+      deprecatedKeys.length > 0
+        ? `Deprecated config key(s) ignored: ${deprecatedKeys
+            .map((key) => `spec.${key}`)
+            .join(', ')}. Manage these settings in-app.`
+        : undefined
+    if (deprecatedKeys.length > 0) {
+      log.warn({ keys: deprecatedKeys }, 'config file contains deprecated ignored keys')
+    }
     await reconcileFileIntoDb(result.config.spec, deps)
     await deps.reportStatus?.({
       kind: 'ok',
       configHash: hashSpec(result.config.spec),
+      ...(deprecatedMessage && { message: deprecatedMessage }),
     })
     log.info({ path }, 'reconciled config spec')
   })

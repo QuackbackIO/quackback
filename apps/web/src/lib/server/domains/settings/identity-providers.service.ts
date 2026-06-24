@@ -270,19 +270,31 @@ export async function upsertIdentityProvider(
 ): Promise<IdentityProvider> {
   log.info({ registrationId: input.registrationId }, 'upsert identity provider')
   try {
-    // SSRF guard: validate the discoveryUrl before any DB write — the auth
-    // runtime and SSO test callback fetch this URL server-side.
-    if (input.discoveryUrl) {
+    // SSRF guard: validate every connection URL before any DB write. The auth
+    // runtime and SSO test callback fetch discoveryUrl / tokenUrl / userInfoUrl
+    // server-side, and authorizationUrl is the redirect target — none may
+    // resolve to a private or loopback address. Manual endpoints get the same
+    // guard as discoveryUrl so a discovery-less config can't smuggle one in.
+    const guardedUrls: ReadonlyArray<readonly [string, string | null | undefined]> = [
+      ['Discovery URL', input.discoveryUrl],
+      ['Authorization URL', input.authorizationUrl],
+      ['Token URL', input.tokenUrl],
+      ['User info URL', input.userInfoUrl],
+    ]
+    if (guardedUrls.some(([, value]) => value)) {
       const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
-      const safety = await checkUrlSafety(input.discoveryUrl)
-      if (!safety.safe) {
-        const { ValidationError } = await import('@/lib/shared/errors')
-        throw new ValidationError(
-          'INVALID_IDP_CONFIG',
-          safety.reason === 'ssrf-rejected'
-            ? 'Discovery URL must point to a public IdP, not a private or loopback address.'
-            : 'Discovery URL is not a valid https:// URL.'
-        )
+      const { ValidationError } = await import('@/lib/shared/errors')
+      for (const [label, value] of guardedUrls) {
+        if (!value) continue
+        const safety = await checkUrlSafety(value)
+        if (!safety.safe) {
+          throw new ValidationError(
+            'INVALID_IDP_CONFIG',
+            safety.reason === 'ssrf-rejected'
+              ? `${label} must point to a public IdP, not a private or loopback address.`
+              : `${label} is not a valid https:// URL.`
+          )
+        }
       }
     }
 
@@ -318,12 +330,17 @@ export async function upsertIdentityProvider(
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
         // Restamp the freshness baseline when a connection-affecting field
-        // changes. The gate `isSsoTestValid` compares `lastSuccessfulTestAt`
-        // vs `detailsChangedAt`; without this stamp a pre-edit test could
-        // vouch for a changed connection.
+        // changes — clientId or ANY fetched endpoint (discovery + the manual
+        // authorization/token/userinfo URLs). The gate `isSsoTestValid`
+        // compares `lastSuccessfulTestAt` vs `detailsChangedAt`; without this
+        // stamp a pre-edit test could vouch for a swapped token endpoint.
         const connectionChanged =
           input.clientId !== existing.clientId ||
-          (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl)
+          (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl) ||
+          (input.authorizationUrl !== undefined &&
+            input.authorizationUrl !== existing.authorizationUrl) ||
+          (input.tokenUrl !== undefined && input.tokenUrl !== existing.tokenUrl) ||
+          (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl)
         if (connectionChanged) {
           patch.detailsChangedAt = new Date()
         }

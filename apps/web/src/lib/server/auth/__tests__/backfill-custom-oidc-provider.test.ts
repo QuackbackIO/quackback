@@ -19,7 +19,14 @@ process.env.BASE_URL = 'http://localhost:3000'
 process.env.REDIS_URL = 'redis://localhost:6379'
 
 import { describe, it, expect } from 'vitest'
-import { db, eq, identityProvider, integrationPlatformCredentials, account } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  identityProvider,
+  integrationPlatformCredentials,
+  account,
+  settings,
+} from '@/lib/server/db'
 import { encryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { backfillCustomOidcProvider } from '../backfill-custom-oidc-provider'
 
@@ -27,6 +34,21 @@ describe('custom-oidc backfill', () => {
   it('migrates the custom-oidc credential into a provider and is idempotent', async () => {
     await db
       .transaction(async (tx) => {
+        await tx.delete(settings)
+        const [settingsRow] = await tx
+          .insert(settings)
+          .values({
+            name: 'T',
+            slug: 'custom-oidc-backfill-test',
+            createdAt: new Date(),
+            authConfig: JSON.stringify({
+              oauth: { password: false, 'custom-oidc': true },
+              openSignup: false,
+            }),
+            portalConfig: JSON.stringify({ oauth: { 'custom-oidc': true } }),
+          })
+          .returning({ id: settings.id, authConfigVersion: settings.authConfigVersion })
+
         // Seed the encrypted custom-oidc credential blob the connect flow stores.
         await tx.insert(integrationPlatformCredentials).values({
           integrationType: 'auth_custom-oidc',
@@ -55,6 +77,13 @@ describe('custom-oidc backfill', () => {
         expect(providers[0].discoveryUrl).toBe(
           'https://okta.example.com/.well-known/openid-configuration'
         )
+        expect(providers[0].enabled).toBe(true)
+
+        const [settingsAfterFirst] = await tx
+          .select({ authConfigVersion: settings.authConfigVersion })
+          .from(settings)
+          .where(eq(settings.id, settingsRow.id))
+        expect(settingsAfterFirst.authConfigVersion).toBeGreaterThan(settingsRow.authConfigVersion)
 
         // Credential key is unchanged — registration_id stays 'custom-oidc', so
         // account.provider_id rows still resolve. No re-key, no delete.
@@ -71,6 +100,11 @@ describe('custom-oidc backfill', () => {
         // Idempotent: a second run is a no-op now the provider exists.
         const second = await backfillCustomOidcProvider(tx)
         expect(second.created).toBe(0)
+        const [settingsAfterSecond] = await tx
+          .select({ authConfigVersion: settings.authConfigVersion })
+          .from(settings)
+          .where(eq(settings.id, settingsRow.id))
+        expect(settingsAfterSecond.authConfigVersion).toBe(settingsAfterFirst.authConfigVersion)
 
         throw new Error('__ROLLBACK__')
       })

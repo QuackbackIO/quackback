@@ -307,3 +307,117 @@ describe('upsertIdentityProvider — detailsChangedAt restamp (Fix 6)', () => {
     expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Fix 7: the manual OIDC endpoints (authorizationUrl / tokenUrl / userInfoUrl)
+// are server-fetched too, so they get the SAME SSRF guard + restamp treatment
+// as discoveryUrl — a stale test must not vouch for a swapped token endpoint.
+// ---------------------------------------------------------------------------
+
+describe('upsertIdentityProvider — manual endpoint SSRF guard (Fix 7)', () => {
+  it('throws when tokenUrl resolves to a private/loopback address', async () => {
+    const TOKEN = 'https://token.internal/oauth/token'
+    hoisted.mockCheckUrlSafety.mockImplementation(async (u: string) =>
+      u === TOKEN
+        ? { safe: false, reason: 'ssrf-rejected' }
+        : { safe: true, address: '93.184.216.34', family: 4 }
+    )
+
+    await expect(upsertIdentityProvider({ ...BASE_INPUT, tokenUrl: TOKEN })).rejects.toMatchObject({
+      code: 'INVALID_IDP_CONFIG',
+      message: expect.stringMatching(/private or loopback/i),
+    })
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(TOKEN)
+  })
+
+  it('throws when userInfoUrl resolves to a private/loopback address', async () => {
+    const USERINFO = 'https://userinfo.internal/me'
+    hoisted.mockCheckUrlSafety.mockImplementation(async (u: string) =>
+      u === USERINFO
+        ? { safe: false, reason: 'ssrf-rejected' }
+        : { safe: true, address: '93.184.216.34', family: 4 }
+    )
+
+    await expect(
+      upsertIdentityProvider({ ...BASE_INPUT, userInfoUrl: USERINFO })
+    ).rejects.toMatchObject({ code: 'INVALID_IDP_CONFIG' })
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(USERINFO)
+  })
+
+  it('throws when authorizationUrl resolves to a private/loopback address', async () => {
+    const AUTHZ = 'https://authorize.internal/authorize'
+    hoisted.mockCheckUrlSafety.mockImplementation(async (u: string) =>
+      u === AUTHZ
+        ? { safe: false, reason: 'ssrf-rejected' }
+        : { safe: true, address: '93.184.216.34', family: 4 }
+    )
+
+    await expect(
+      upsertIdentityProvider({ ...BASE_INPUT, authorizationUrl: AUTHZ })
+    ).rejects.toMatchObject({ code: 'INVALID_IDP_CONFIG' })
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith(AUTHZ)
+  })
+
+  it('still proceeds when all provided endpoints are safe', async () => {
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      authorizationUrl: 'https://idp.example/authorize',
+      tokenUrl: 'https://idp.example/token',
+      userInfoUrl: 'https://idp.example/userinfo',
+    })
+
+    expect(hoisted.mockCheckUrlSafety).toHaveBeenCalledWith('https://idp.example/token')
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('upsertIdentityProvider — manual endpoint restamp (Fix 7)', () => {
+  beforeEach(() => {
+    hoisted.txSelectResult = [EXISTING_ROW]
+  })
+
+  it('restamps detailsChangedAt when tokenUrl changes', async () => {
+    const before = Date.now()
+
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      tokenUrl: 'https://idp.example/oauth/token', // EXISTING_ROW.tokenUrl is null
+    })
+
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('restamps detailsChangedAt when authorizationUrl changes', async () => {
+    const before = Date.now()
+
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      authorizationUrl: 'https://idp.example/authorize', // EXISTING_ROW.authorizationUrl is null
+    })
+
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+
+  it('restamps detailsChangedAt when userInfoUrl changes', async () => {
+    const before = Date.now()
+
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      userInfoUrl: 'https://idp.example/userinfo', // EXISTING_ROW.userInfoUrl is null
+    })
+
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+    expect((hoisted.capturedSetPatch!.detailsChangedAt as Date).getTime()).toBeGreaterThanOrEqual(
+      before
+    )
+  })
+})

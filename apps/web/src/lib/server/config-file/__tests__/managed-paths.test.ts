@@ -22,6 +22,15 @@ describe('computeManagedPaths', () => {
     expect(computeManagedPaths({ tierLimits: { maxBoards: 5 } })).toEqual(['tierLimits'])
   })
 
+  it('does not emit managed paths for deprecated auth and features keys', () => {
+    expect(
+      computeManagedPaths({
+        auth: { oauth: { google: true } },
+        features: { helpCenter: true },
+      })
+    ).toEqual([])
+  })
+
   it('combines all path types into one stable-ordered list', () => {
     expect(
       computeManagedPaths({

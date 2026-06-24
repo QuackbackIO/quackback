@@ -4,7 +4,8 @@
  * Proves the merge is:
  *   - additive: portal-only social enables are OR-ed into authConfig.oauth;
  *   - monotonic: team methods are never removed;
- *   - magic-link-safe: magic-link is only enabled from an explicit portal true;
+ *   - magic-link-safe: explicit false is preserved, while passwordless legacy
+ *     tenants keep the old absent-key team fallback;
  *   - idempotent: a second run changes nothing.
  *
  * Each test runs inside a transaction that is rolled back so the shared test
@@ -116,6 +117,75 @@ describe('backfillUnifiedSignInMethods', () => {
           .where(eq(settings.id, row.id))
           .limit(1)
         expect(readAuthOauth(after.authConfig).magicLink).not.toBe(true)
+
+        throw new Error('__ROLLBACK__')
+      })
+      .catch((e) => {
+        if ((e as Error).message !== '__ROLLBACK__') throw e
+      })
+  })
+
+  it('materializes legacy team magic-link when password was explicitly disabled and magicLink was absent', async () => {
+    await db
+      .transaction(async (tx) => {
+        await tx.delete(settings)
+        const [row] = await tx
+          .insert(settings)
+          .values({
+            name: 'T',
+            slug: 'backfill-test-passwordless-magic-link',
+            createdAt: new Date(),
+            authConfig: JSON.stringify({ oauth: { password: false }, openSignup: false }),
+            portalConfig: JSON.stringify({ oauth: {} }),
+          })
+          .returning({ id: settings.id })
+
+        await backfillUnifiedSignInMethods(tx)
+
+        const [after] = await tx
+          .select({ authConfig: settings.authConfig })
+          .from(settings)
+          .where(eq(settings.id, row.id))
+          .limit(1)
+        const merged = readAuthOauth(after.authConfig)
+        expect(merged.password).toBe(false)
+        expect(merged.magicLink).toBe(true)
+
+        throw new Error('__ROLLBACK__')
+      })
+      .catch((e) => {
+        if ((e as Error).message !== '__ROLLBACK__') throw e
+      })
+  })
+
+  it('preserves an explicit team magic-link false when portal did not enable it', async () => {
+    await db
+      .transaction(async (tx) => {
+        await tx.delete(settings)
+        const [row] = await tx
+          .insert(settings)
+          .values({
+            name: 'T',
+            slug: 'backfill-test-explicit-magic-link-false',
+            createdAt: new Date(),
+            authConfig: JSON.stringify({
+              oauth: { password: false, magicLink: false },
+              openSignup: false,
+            }),
+            portalConfig: JSON.stringify({ oauth: {} }),
+          })
+          .returning({ id: settings.id })
+
+        await backfillUnifiedSignInMethods(tx)
+
+        const [after] = await tx
+          .select({ authConfig: settings.authConfig })
+          .from(settings)
+          .where(eq(settings.id, row.id))
+          .limit(1)
+        const merged = readAuthOauth(after.authConfig)
+        expect(merged.password).toBe(false)
+        expect(merged.magicLink).toBe(false)
 
         throw new Error('__ROLLBACK__')
       })
