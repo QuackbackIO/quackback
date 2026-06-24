@@ -295,12 +295,6 @@ export async function handleSignInPreCheck(ctx: {
         : `/?auth=signin&error=${errorCode}`
     )
   }
-
-  // NB: the workspace-wide Require-2FA gate used to live here, but
-  // gating before password verification leaks account state — an
-  // attacker can probe the redirect to enumerate team-role users
-  // without 2FA. The check now runs in `handleCredentialPostSignInGate`
-  // below (Layer C), after Better-Auth has verified the password.
 }
 
 export const hooksBefore = createAuthMiddleware(async (ctx) => {
@@ -749,183 +743,6 @@ export async function handleCallbackPolicyCleanup(
 }
 
 /**
- * Workspace `Require 2FA` gate for password sign-in.
- *
- * Fires after Better-Auth has verified the password and created the
- * session (matches the same path set as Better-Auth's twoFactor plugin:
- * `/sign-in/email`, `/sign-in/username`, `/sign-in/phone-number`). When
- * the workspace has 2FA required and the just-authenticated user is a
- * team-role principal with no enrolled 2FA, we revoke the brand-new
- * session and redirect to the setup-required landing page.
- *
- * Why post-auth: pre-auth gating leaks account state — an attacker can
- * try `email=alice@acme.com` with any password and observe the redirect
- * to `/auth/two-factor-setup-required` to confirm Alice exists, is a
- * team member, and has no 2FA. Post-auth verification closes that
- * oracle: the only path that reaches the gate is a real password
- * success, so the redirect is no more informative than any other
- * post-sign-in landing page.
- *
- * Better-Auth's own twoFactor plugin handles users who DO have 2FA
- * enrolled — its hook matches the same paths, sees `twoFactorEnabled`,
- * deletes the session, and emits `twoFactorRedirect: true` for the
- * client to navigate to the challenge page. Our hook is the
- * complementary case: enrollment missing but required.
- */
-const CREDENTIAL_SIGN_IN_PATHS = new Set<string>([
-  '/sign-in/email',
-  '/sign-in/username',
-  '/sign-in/phone-number',
-])
-
-export async function handleCredentialPostSignInGate(
-  ctx: {
-    path?: string
-    context?: {
-      newSession?: {
-        user?: { id?: string }
-        session?: { token?: string }
-      } | null
-    }
-    redirect: (url: string) => Error
-  },
-  tenant: Awaited<
-    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
-  >
-): Promise<void> {
-  if (!CREDENTIAL_SIGN_IN_PATHS.has(ctx.path ?? '')) return
-
-  const workspaceRequired = tenant?.authConfig?.twoFactor?.required === true
-  if (!workspaceRequired) return
-
-  const userId = ctx.context?.newSession?.user?.id
-  const token = ctx.context?.newSession?.session?.token
-  // No newSession means Better-Auth's twoFactor plugin already
-  // intercepted (user has 2FA enrolled — challenge handoff). Bail.
-  if (typeof userId !== 'string' || typeof token !== 'string') return
-
-  const { db, user: userTable, principal: principalTable, eq } = await import('@/lib/server/db')
-  type UserId = `user_${string}`
-  const userIdTyped = userId as UserId
-
-  const [userRow, principalRow] = await Promise.all([
-    db.query.user.findFirst({
-      where: eq(userTable.id, userIdTyped),
-      columns: { twoFactorEnabled: true },
-    }),
-    db.query.principal.findFirst({
-      where: eq(principalTable.userId, userIdTyped),
-      columns: { role: true },
-    }),
-  ])
-  if (!principalRow) return
-
-  const { shouldRequire2FA } = await import('./two-factor-policy')
-  if (
-    !shouldRequire2FA({
-      role: principalRow.role as 'admin' | 'member' | 'user',
-      userHas2FA: userRow?.twoFactorEnabled === true,
-      workspaceRequired,
-    })
-  ) {
-    return
-  }
-
-  // Revoke the just-created session row BEFORE throwing the redirect —
-  // otherwise the user is signed in despite the redirect. revokeSession
-  // deletes the row and clears the cookie via Better-Auth's helper.
-  await revokeSession(ctx as SessionCtx, token)
-  throw ctx.redirect('/auth/two-factor-setup-required')
-}
-
-/**
- * Workspace `Require 2FA` gate for **magic-link** sign-in.
- *
- * Better-Auth's twoFactor plugin only intercepts password paths
- * (`/sign-in/email`, etc.) — magic-link verification creates a session
- * directly without offering a TOTP challenge. Without this gate, a
- * team-role user with 2FA enrolled could sign in via magic-link and
- * bypass the second factor entirely (anyone with inbox access wins,
- * which defeats the purpose of requiring 2FA).
- *
- * Two outcomes for team-role users when the workspace requires 2FA:
- *   - **No 2FA enrolled** — same as the credential gate: revoke the
- *     just-created session and redirect to `/auth/two-factor-setup-required`.
- *   - **2FA enrolled** — refuse and redirect to `/auth/login?callbackUrl=
- *     /admin&error=use_password_for_2fa`. The user must complete the password+TOTP
- *     flow where Better-Auth's plugin handles the challenge. Recovery
- *     codes remain the documented break-glass for lost authenticators.
- *
- * Portal users (`role='user'`) are never gated — workspace 2FA is
- * team-only policy.
- *
- * Path set: only the verify endpoints (which actually create a
- * session). The send endpoints (`/sign-in/magic-link`,
- * `/email-otp/send-verification-otp`) don't create a session, so
- * `newSession` is empty and the gate naturally short-circuits.
- */
-const MAGIC_LINK_VERIFY_PATHS = new Set<string>(['/magic-link/verify', '/sign-in/email-otp'])
-
-export async function handleMagicLinkPostSignInGate(
-  ctx: {
-    path?: string
-    context?: {
-      newSession?: {
-        user?: { id?: string }
-        session?: { token?: string }
-      } | null
-    }
-    redirect: (url: string) => Error
-  },
-  tenant: Awaited<
-    ReturnType<typeof import('@/lib/server/domains/settings/settings.service').getTenantSettings>
-  >
-): Promise<void> {
-  if (!MAGIC_LINK_VERIFY_PATHS.has(ctx.path ?? '')) return
-
-  const workspaceRequired = tenant?.authConfig?.twoFactor?.required === true
-  if (!workspaceRequired) return
-
-  const userId = ctx.context?.newSession?.user?.id
-  const token = ctx.context?.newSession?.session?.token
-  if (typeof userId !== 'string' || typeof token !== 'string') return
-
-  const { db, user: userTable, principal: principalTable, eq } = await import('@/lib/server/db')
-  type UserId = `user_${string}`
-  const userIdTyped = userId as UserId
-
-  const [userRow, principalRow] = await Promise.all([
-    db.query.user.findFirst({
-      where: eq(userTable.id, userIdTyped),
-      columns: { twoFactorEnabled: true },
-    }),
-    db.query.principal.findFirst({
-      where: eq(principalTable.userId, userIdTyped),
-      columns: { role: true },
-    }),
-  ])
-  if (!principalRow) return
-
-  const { evaluateMagicLinkTwoFactor } = await import('./two-factor-policy')
-  const outcome = evaluateMagicLinkTwoFactor({
-    role: principalRow.role as 'admin' | 'member' | 'user',
-    userHas2FA: userRow?.twoFactorEnabled === true,
-    workspaceRequired,
-  })
-  if (outcome === 'allow') return
-
-  // Both blocking outcomes revoke the just-created session; the
-  // redirect target differs based on whether the user can enroll
-  // (setup) or must use the password flow (use-password).
-  await revokeSession(ctx as SessionCtx, token)
-  throw ctx.redirect(
-    outcome === 'setup-required'
-      ? '/auth/two-factor-setup-required'
-      : '/?auth=signin&callbackUrl=/admin&error=use_password_for_2fa'
-  )
-}
-
-/**
  * Audit emitter for user-initiated 2FA enrollment / removal.
  *
  * The `AuditEventType` union has carried `two_factor.enabled` and
@@ -1246,16 +1063,11 @@ export async function handleCountryCapture(ctx: {
  *     per-domain SSO enforcement or a disabled per-method toggle. SSO is
  *     allowed for every role, so verified-domain users pass this step; it
  *     gates the non-SSO providers.
- *  4. `handleCredentialPostSignInGate` — Require-2FA gate for the
- *     password path.
- *  5. `handleMagicLinkPostSignInGate` — Require-2FA gate for magic-
- *     link / email-OTP verify paths. Better-Auth's twoFactor plugin
- *     only covers password paths, so this is our own enforcement.
- *  6. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
+ *  4. `handleSignInSuccessAudit` — emits `auth.signin.success` if a
  *     session still exists at this point (i.e. wasn't revoked by
  *     prior steps). Runs after the gates so it only records sign-ins
  *     that actually stuck.
- *  7. `handleNewDeviceNotification` — sends a "new device" email +
+ *  5. `handleNewDeviceNotification` — sends a "new device" email +
  *     records an audit row when the user's UA + /24-IP combination
  *     hasn't been seen for them within the last 90 days.
  */
@@ -1304,20 +1116,6 @@ export const hooksAfter = createAuthMiddleware(async (ctx) => {
     tenant,
     providers,
     registeredOidcIds
-  )
-  // Workspace Require-2FA gate for password sign-in success — closes
-  // the pre-auth enumeration oracle that used to live in hooksBefore.
-  await handleCredentialPostSignInGate(
-    ctx as Parameters<typeof handleCredentialPostSignInGate>[0],
-    tenant
-  )
-  // Workspace Require-2FA gate for magic-link / email-OTP verify
-  // success — Better-Auth's twoFactor plugin only covers password
-  // paths, so without this gate a team user with 2FA enrolled could
-  // sign in via magic-link and skip the second factor.
-  await handleMagicLinkPostSignInGate(
-    ctx as Parameters<typeof handleMagicLinkPostSignInGate>[0],
-    tenant
   )
   // SOC2 trail for user-initiated 2FA lifecycle (`two_factor.enabled`
   // and `two_factor.disabled`). Independent of sign-in success audit;
