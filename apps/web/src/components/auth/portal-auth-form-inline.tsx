@@ -926,9 +926,12 @@ export function PortalAuthFormInline({
       <TwoFactorChallengeStep
         onComplete={postAuthSuccess}
         onCancel={async () => {
-          await authClient.signOut()
-          setError('')
-          setView({ stage: 'methods-step', step: methodsDefaultStep })
+          try {
+            await authClient.signOut()
+          } finally {
+            setError('')
+            setView({ stage: 'methods-step', step: methodsDefaultStep })
+          }
         }}
       />
     )
@@ -944,9 +947,12 @@ export function PortalAuthFormInline({
         password={password}
         onComplete={postAuthSuccess}
         onCancel={async () => {
-          await authClient.signOut()
-          setError('')
-          setView({ stage: 'methods-step', step: methodsDefaultStep })
+          try {
+            await authClient.signOut()
+          } finally {
+            setError('')
+            setView({ stage: 'methods-step', step: methodsDefaultStep })
+          }
         }}
       />
     )

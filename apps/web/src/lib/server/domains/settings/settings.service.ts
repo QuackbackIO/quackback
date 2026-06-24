@@ -206,13 +206,13 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     const updated = deepMerge(existing, input as Partial<AuthConfig>)
 
     // Coupling invariant: `twoFactor.required=true` is only meaningful
-    // when `oauth.password=true`. The 2FA gate
-    // (`handleCredentialPostSignInGate`) runs exclusively on password
-    // sign-in paths — magic-link, SSO, and non-SSO OAuth all bypass
-    // it. Persisting `required=true` while password is off stores a
-    // toggle that does nothing at runtime, which misleads admins
-    // reading the settings page ("my team is 2FA-protected") and
-    // pollutes audit dumps. Reject the combination at write time;
+    // when `oauth.password=true`. The inline enrollment and TOTP
+    // challenge in the auth dialog are triggered exclusively on the
+    // password sign-in path — magic-link, SSO, and non-SSO OAuth all
+    // bypass them. Persisting `required=true` while password is off
+    // stores a toggle that does nothing at runtime, which misleads
+    // admins reading the settings page ("my team is 2FA-protected")
+    // and pollutes audit dumps. Reject the combination at write time;
     // migration 0061 normalized any pre-existing inert state.
     //
     // `password` defaults to `true` when the key is absent (matches

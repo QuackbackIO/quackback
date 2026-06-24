@@ -90,13 +90,23 @@ export interface AuthConfig {
     }
   }
   /**
-   * Workspace-wide two-factor policy for team-role users.
+   * Workspace-wide two-factor authentication policy.
    *
-   * When `required` is true, the password sign-in returns an error that
-   * the auth dialog surfaces as an inline enrollment prompt for any
-   * team-role user (`admin` / `member`) without 2FA enrolled. Portal
-   * users (`role='user'`) are never gated. Magic-link remains open as
-   * the break-glass for an admin who lost their authenticator.
+   * When `required` is true, a password sign-in (or signup) by ANY user
+   * whose account has no 2FA enrolled takes them through inline TOTP
+   * enrollment inside the auth dialog. An already-enrolled user is
+   * challenged for their TOTP code inline instead of receiving a session.
+   * There is no role distinction — the policy applies to all roles equally.
+   *
+   * The dialog does not receive an error from the server. It infers
+   * enrollment-needed from this `twoFactor.required` flag combined with
+   * the presence of a full session: better-auth withholds the session for
+   * enrolled users (returning `twoFactorRedirect`), so a full session
+   * under a required-2FA workspace means the user is un-enrolled.
+   *
+   * This flag gates only the password path. Magic-link, OAuth, and
+   * email-OTP sign-ins are not gated — the workspace flag is not a hard
+   * guarantee when those methods are also enabled.
    *
    * Default `undefined` is treated as `required=false` (off) so
    * existing tenants pre-migration aren't suddenly locked out.
