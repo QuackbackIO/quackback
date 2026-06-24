@@ -421,3 +421,74 @@ describe('upsertIdentityProvider — manual endpoint restamp (Fix 7)', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// Fix 8: an enabled provider must have a usable OAuth endpoint source
+// (discovery URL, or both authorization + token URLs). Otherwise
+// buildGenericOAuthConfigs publishes a config with nowhere to send users.
+// ---------------------------------------------------------------------------
+
+describe('upsertIdentityProvider — enable requires OAuth endpoints (Fix 8)', () => {
+  it('throws when creating an enabled provider with no discovery and no manual endpoints', async () => {
+    await expect(
+      upsertIdentityProvider({
+        registrationId: 'oidc_x',
+        label: 'Acme IdP',
+        clientId: 'client-abc',
+        enabled: true,
+      })
+    ).rejects.toMatchObject({
+      code: 'INVALID_IDP_CONFIG',
+      message: expect.stringMatching(/Discovery URL.*Authorization URL.*Token URL/i),
+    })
+  })
+
+  it('throws when enabling an existing endpoint-less provider via patch', async () => {
+    hoisted.txSelectResult = [
+      {
+        ...EXISTING_ROW,
+        discoveryUrl: null,
+        authorizationUrl: null,
+        tokenUrl: null,
+        enabled: false,
+      },
+    ]
+    await expect(
+      upsertIdentityProvider({ ...BASE_INPUT, discoveryUrl: null, enabled: true })
+    ).rejects.toMatchObject({ code: 'INVALID_IDP_CONFIG' })
+  })
+
+  it('allows enabling with a discovery URL', async () => {
+    await upsertIdentityProvider({ ...BASE_INPUT, enabled: true })
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows enabling a manual-endpoint provider (authorization + token, no discovery)', async () => {
+    await upsertIdentityProvider({
+      registrationId: 'oidc_x',
+      label: 'Acme IdP',
+      clientId: 'client-abc',
+      discoveryUrl: null,
+      authorizationUrl: 'https://idp.example/authorize',
+      tokenUrl: 'https://idp.example/token',
+      enabled: true,
+    })
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows enabling via patch when the stored row already has a discovery URL', async () => {
+    hoisted.txSelectResult = [{ ...EXISTING_ROW, enabled: false }] // EXISTING_ROW has discoveryUrl
+    await upsertIdentityProvider({ ...BASE_INPUT, discoveryUrl: undefined, enabled: true })
+    expect(hoisted.capturedSetPatch!.enabled).toBe(true)
+  })
+
+  it('does not gate a disabled provider with no endpoints', async () => {
+    await upsertIdentityProvider({
+      registrationId: 'oidc_x',
+      label: 'Acme IdP',
+      clientId: 'client-abc',
+      enabled: false,
+    })
+    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
+  })
+})

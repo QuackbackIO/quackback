@@ -309,6 +309,32 @@ export async function upsertIdentityProvider(
             .from(identityProvider)
             .where(eq(identityProvider.registrationId, input.registrationId))
 
+      // An enabled provider must have a usable OAuth endpoint source, or
+      // buildGenericOAuthConfigs registers a config with nowhere to send users
+      // (a sole-IdP workspace would then route the login button into a broken
+      // flow). Require a discovery URL, or both a manual authorization + token
+      // URL. Patch semantics: fall back to the stored row for fields the caller
+      // didn't supply.
+      const willBeEnabled =
+        input.enabled !== undefined ? input.enabled : (existing?.enabled ?? false)
+      if (willBeEnabled) {
+        const effectiveDiscovery =
+          input.discoveryUrl !== undefined ? input.discoveryUrl : (existing?.discoveryUrl ?? null)
+        const effectiveAuthz =
+          input.authorizationUrl !== undefined
+            ? input.authorizationUrl
+            : (existing?.authorizationUrl ?? null)
+        const effectiveToken =
+          input.tokenUrl !== undefined ? input.tokenUrl : (existing?.tokenUrl ?? null)
+        if (!effectiveDiscovery && !(effectiveAuthz && effectiveToken)) {
+          const { ValidationError } = await import('@/lib/shared/errors')
+          throw new ValidationError(
+            'INVALID_IDP_CONFIG',
+            'An enabled provider needs a Discovery URL, or both an Authorization URL and a Token URL.'
+          )
+        }
+      }
+
       let row: typeof identityProvider.$inferSelect
       if (existing) {
         // Patch semantics: only overwrite columns the caller supplied.

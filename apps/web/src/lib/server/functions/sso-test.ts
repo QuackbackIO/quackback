@@ -133,7 +133,11 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       response_type: 'code',
       client_id: provider.clientId,
       redirect_uri: redirectUri,
-      scope: 'openid email profile',
+      // Mirror production: buildGenericOAuthConfigs requests provider.scopes
+      // (falling back to the default trio). A test that always sent
+      // 'openid email profile' could pass while real sign-in requests a
+      // different set — letting a non-representative test unlock enforcement.
+      scope: provider.scopes ?? 'openid email profile',
       state,
       nonce,
       prompt: 'login',

@@ -45,7 +45,7 @@ export const Route = createFileRoute('/_portal')({
     callbackUrl: search.callbackUrl,
     error: search.error,
   }),
-  loader: async ({ context, deps }) => {
+  loader: async ({ context, deps, location }) => {
     const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Portal-level visibility gate — evaluated here in the loader (NOT
@@ -87,7 +87,9 @@ export const Route = createFileRoute('/_portal')({
       // the standalone break-glass for an admin who can't use the IdP.
       if (accessResult.reason === 'unauthenticated' && !prompt.error) {
         const instant = await resolveInstantSsoRedirectFn({
-          data: { callbackUrl: prompt.callbackUrl },
+          // Fall back to the requested deep link so a sole-IdP redirect returns
+          // the user to the private route they asked for, not the portal root.
+          data: { callbackUrl: prompt.callbackUrl ?? location.pathname },
         })
         if (instant) throw redirect({ href: instant.url })
       }
@@ -128,7 +130,9 @@ export const Route = createFileRoute('/_portal')({
     // signed-in users and multi-method setups; /auth/recovery is the break-glass.
     if (prompt.mode && !prompt.error) {
       const instant = await resolveInstantSsoRedirectFn({
-        data: { callbackUrl: prompt.callbackUrl },
+        // Fall back to the current path so the IdP returns the user where they
+        // were, not the portal root.
+        data: { callbackUrl: prompt.callbackUrl ?? location.pathname },
       })
       if (instant) throw redirect({ href: instant.url })
     }

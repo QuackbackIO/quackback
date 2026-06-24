@@ -154,6 +154,53 @@ describe('startSsoTestFn', () => {
     expect(session.registrationId).toBe('sso')
   })
 
+  it('requests the provider-configured scopes (mirrors production) instead of a hardcoded set', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([
+      { ...ssoProvider, scopes: 'openid email profile groups' },
+    ])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.safeFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp',
+          authorization_endpoint: 'https://idp/auth',
+          token_endpoint: 'https://idp/token',
+          jwks_uri: 'https://idp/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+      authorizeUrl: string
+    }
+    // URLSearchParams encodes spaces as '+'.
+    expect(result.authorizeUrl).toMatch(/scope=openid\+email\+profile\+groups/)
+  })
+
+  it('falls back to the default scope set when the provider has none', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([{ ...ssoProvider, scopes: null }])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.safeFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          issuer: 'https://idp',
+          authorization_endpoint: 'https://idp/auth',
+          token_endpoint: 'https://idp/token',
+          jwks_uri: 'https://idp/jwks',
+        }),
+        { status: 200 }
+      )
+    )
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    const result = (await startSsoTest({ data: { registrationId: 'sso' } })) as {
+      authorizeUrl: string
+    }
+    expect(result.authorizeUrl).toMatch(/scope=openid\+email\+profile(&|$)/)
+  })
+
   it('uses the provider-specific callback path for a non-sso registrationId', async () => {
     const customProvider = {
       id: 'idp_abc',
