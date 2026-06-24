@@ -92,12 +92,11 @@ export interface AuthConfig {
   /**
    * Workspace-wide two-factor policy for team-role users.
    *
-   * When `required` is true, the password sign-in hook redirects any
-   * team-role user (`admin` / `member`) without 2FA enrolled to
-   * `/auth/two-factor-setup-required`. Portal users (`role='user'`)
-   * are never gated. Magic-link remains open as the break-glass for
-   * an admin who lost their authenticator — they can get back in,
-   * re-enroll, then sign in via password again.
+   * When `required` is true, the password sign-in returns an error that
+   * the auth dialog surfaces as an inline enrollment prompt for any
+   * team-role user (`admin` / `member`) without 2FA enrolled. Portal
+   * users (`role='user'`) are never gated. Magic-link remains open as
+   * the break-glass for an admin who lost their authenticator.
    *
    * Default `undefined` is treated as `required=false` (off) so
    * existing tenants pre-migration aren't suddenly locked out.

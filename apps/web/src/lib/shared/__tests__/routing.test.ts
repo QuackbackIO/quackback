@@ -75,9 +75,8 @@ describe('isTeamCallback', () => {
     expect(isTeamCallback('/admin')).toBe(true)
     expect(isTeamCallback('/admin/feedback')).toBe(true)
   })
-  it('is true for team-invitation / 2FA-setup callbacks', () => {
+  it('is true for team-invitation callbacks', () => {
     expect(isTeamCallback('/complete-signup/inv_123')).toBe(true)
-    expect(isTeamCallback('/auth/two-factor-setup-required')).toBe(true)
   })
   it('is false for portal paths and undefined', () => {
     expect(isTeamCallback('/')).toBe(false)
