@@ -29,7 +29,14 @@ export interface HandshakeInput {
   code: string | null
   expectedState: string
   expectedNonce: string
-  discoveryUrl: string
+  /** Present for discovery providers (endpoints fetched from the doc). Absent
+   *  for manual-endpoint providers, which pass the resolved endpoints below. */
+  discoveryUrl?: string
+  /** Pre-resolved endpoints for manual-endpoint providers (no discovery doc). */
+  tokenEndpoint?: string
+  jwksUri?: string
+  issuer?: string
+  userinfoEndpoint?: string
   clientId: string
   clientSecret: string
   redirectUri: string
@@ -107,58 +114,76 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   }
   steps.push({ ok: true, stage: 'state-validation', label: 'State validated' })
 
-  // Fetch the discovery doc through the SSRF-safe pinned fetch:
-  // validate, connect to the validated IP (no DNS-rebind window), and
-  // never follow redirects. Each sub-endpoint we fetch below
-  // (token_endpoint, jwks_uri, userinfo_endpoint) is likewise pinned by
-  // its own safeFetch call, so a hostile discovery doc can't point us
-  // at the internal network.
+  // Every sub-endpoint we fetch below (token_endpoint, jwks_uri,
+  // userinfo_endpoint) is pinned by its own SSRF-safe safeFetch call (validate,
+  // connect to the validated IP, never follow redirects), so a hostile
+  // discovery doc or manual endpoint can't point us at the internal network.
   const { safeFetch, SsrfError } = await import('@/lib/server/content/ssrf-guard')
 
-  let discoveryRes: Response
-  try {
-    discoveryRes = await safeFetch(input.discoveryUrl, { timeoutMs: 5000 })
-  } catch (err) {
-    if (err instanceof SsrfError) {
-      return {
-        ok: false,
-        stage: 'discovery-fetch',
-        hint: `Discovery URL (${input.discoveryUrl}) is not safe to fetch (${err.reason}). Use a public IdP URL.`,
-        steps,
-      }
-    }
-    return {
-      ok: false,
-      stage: 'discovery-fetch',
-      hint: `Discovery URL could not be reached: ${err instanceof Error ? err.message : 'network error'}. Check the URL, your DNS/firewall, and IdP availability.`,
-      steps,
-    }
-  }
-  if (!discoveryRes.ok) {
-    return {
-      ok: false,
-      stage: 'discovery-fetch',
-      hint: `Discovery URL returned ${discoveryRes.status}. Check the URL and IdP availability.`,
-      steps,
-    }
-  }
+  // Resolve the IdP's issuer + endpoints: fetch the discovery doc for discovery
+  // providers, or use the manually-configured endpoints for installs with no
+  // discovery document. The rest of the handshake is identical either way.
   let discovery: {
     issuer: string
     token_endpoint: string
     jwks_uri: string
     userinfo_endpoint?: string
   }
-  try {
-    discovery = (await discoveryRes.json()) as typeof discovery
-  } catch (err) {
+  if (input.discoveryUrl) {
+    let discoveryRes: Response
+    try {
+      discoveryRes = await safeFetch(input.discoveryUrl, { timeoutMs: 5000 })
+    } catch (err) {
+      if (err instanceof SsrfError) {
+        return {
+          ok: false,
+          stage: 'discovery-fetch',
+          hint: `Discovery URL (${input.discoveryUrl}) is not safe to fetch (${err.reason}). Use a public IdP URL.`,
+          steps,
+        }
+      }
+      return {
+        ok: false,
+        stage: 'discovery-fetch',
+        hint: `Discovery URL could not be reached: ${err instanceof Error ? err.message : 'network error'}. Check the URL, your DNS/firewall, and IdP availability.`,
+        steps,
+      }
+    }
+    if (!discoveryRes.ok) {
+      return {
+        ok: false,
+        stage: 'discovery-fetch',
+        hint: `Discovery URL returned ${discoveryRes.status}. Check the URL and IdP availability.`,
+        steps,
+      }
+    }
+    try {
+      discovery = (await discoveryRes.json()) as typeof discovery
+    } catch (err) {
+      return {
+        ok: false,
+        stage: 'discovery-fetch',
+        hint: `Discovery URL returned non-JSON response: ${err instanceof Error ? err.message : 'parse error'}. Check that the URL points at a valid OIDC discovery document.`,
+        steps,
+      }
+    }
+    steps.push({ ok: true, stage: 'discovery-fetch', label: 'Discovery doc fetched' })
+  } else if (input.tokenEndpoint && input.jwksUri && input.issuer) {
+    discovery = {
+      issuer: input.issuer,
+      token_endpoint: input.tokenEndpoint,
+      jwks_uri: input.jwksUri,
+      userinfo_endpoint: input.userinfoEndpoint,
+    }
+    steps.push({ ok: true, stage: 'discovery-fetch', label: 'Using configured endpoints' })
+  } else {
     return {
       ok: false,
       stage: 'discovery-fetch',
-      hint: `Discovery URL returned non-JSON response: ${err instanceof Error ? err.message : 'parse error'}. Check that the URL points at a valid OIDC discovery document.`,
+      hint: 'Provider has no discovery URL and is missing one or more manual endpoints (token, JWKS, issuer).',
       steps,
     }
   }
-  steps.push({ ok: true, stage: 'discovery-fetch', label: 'Discovery doc fetched' })
 
   // Mirror production: Better-Auth's genericOAuth plugin runs with
   // pkce: true in our config, so the test flow sends code_verifier

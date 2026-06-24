@@ -61,6 +61,10 @@ export interface IdentityProvider {
   authorizationUrl: string | null
   tokenUrl: string | null
   userInfoUrl: string | null
+  /** JWKS endpoint + expected issuer for manual-endpoint installs (no discovery
+   *  doc), so the SSO test can verify the ID token. Null for discovery providers. */
+  jwksUri: string | null
+  issuer: string | null
   clientId: string
   scopes: string | null
   enabled: boolean
@@ -100,6 +104,8 @@ export interface UpsertIdentityProviderInput {
   authorizationUrl?: string | null
   tokenUrl?: string | null
   userInfoUrl?: string | null
+  jwksUri?: string | null
+  issuer?: string | null
   scopes?: string | null
   enabled?: boolean
   autoCreateUsers?: boolean
@@ -160,6 +166,8 @@ function rowToIdentityProvider(
     authorizationUrl: row.authorizationUrl,
     tokenUrl: row.tokenUrl,
     userInfoUrl: row.userInfoUrl,
+    jwksUri: row.jwksUri,
+    issuer: row.issuer,
     clientId: row.clientId,
     scopes: row.scopes,
     enabled: row.enabled,
@@ -280,6 +288,7 @@ export async function upsertIdentityProvider(
       ['Authorization URL', input.authorizationUrl],
       ['Token URL', input.tokenUrl],
       ['User info URL', input.userInfoUrl],
+      ['JWKS URI', input.jwksUri],
     ]
     if (guardedUrls.some(([, value]) => value)) {
       const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
@@ -348,6 +357,8 @@ export async function upsertIdentityProvider(
         if (input.authorizationUrl !== undefined) patch.authorizationUrl = input.authorizationUrl
         if (input.tokenUrl !== undefined) patch.tokenUrl = input.tokenUrl
         if (input.userInfoUrl !== undefined) patch.userInfoUrl = input.userInfoUrl
+        if (input.jwksUri !== undefined) patch.jwksUri = input.jwksUri
+        if (input.issuer !== undefined) patch.issuer = input.issuer
         if (input.scopes !== undefined) patch.scopes = input.scopes
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
@@ -366,7 +377,9 @@ export async function upsertIdentityProvider(
           (input.authorizationUrl !== undefined &&
             input.authorizationUrl !== existing.authorizationUrl) ||
           (input.tokenUrl !== undefined && input.tokenUrl !== existing.tokenUrl) ||
-          (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl)
+          (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl) ||
+          (input.jwksUri !== undefined && input.jwksUri !== existing.jwksUri) ||
+          (input.issuer !== undefined && input.issuer !== existing.issuer)
         if (connectionChanged) {
           patch.detailsChangedAt = new Date()
         }
@@ -389,6 +402,8 @@ export async function upsertIdentityProvider(
             authorizationUrl: input.authorizationUrl ?? null,
             tokenUrl: input.tokenUrl ?? null,
             userInfoUrl: input.userInfoUrl ?? null,
+            jwksUri: input.jwksUri ?? null,
+            issuer: input.issuer ?? null,
             scopes: input.scopes ?? null,
             enabled: input.enabled ?? false,
             autoCreateUsers: input.autoCreateUsers ?? true,

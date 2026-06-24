@@ -65,6 +65,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     authorizationUrl: null,
     tokenUrl: null,
     userInfoUrl: null,
+    jwksUri: null,
+    issuer: null,
     clientId: 'client-id',
     scopes: null,
     enabled: true,

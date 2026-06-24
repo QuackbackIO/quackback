@@ -492,3 +492,35 @@ describe('upsertIdentityProvider — enable requires OAuth endpoints (Fix 8)', (
     expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// jwksUri is server-fetched by the SSO test, so it gets the same SSRF guard
+// and detailsChangedAt restamp as the other endpoints.
+// ---------------------------------------------------------------------------
+
+describe('upsertIdentityProvider — jwksUri SSRF + restamp', () => {
+  it('rejects a private/loopback jwksUri before any DB write', async () => {
+    const JWKS = 'https://jwks.internal/keys'
+    hoisted.mockCheckUrlSafety.mockImplementation(async (u: string) =>
+      u === JWKS
+        ? { safe: false, reason: 'ssrf-rejected' }
+        : { safe: true, address: '93.184.216.34', family: 4 }
+    )
+
+    await expect(upsertIdentityProvider({ ...BASE_INPUT, jwksUri: JWKS })).rejects.toMatchObject({
+      code: 'INVALID_IDP_CONFIG',
+      message: expect.stringMatching(/JWKS URI.*private or loopback/i),
+    })
+    expect(hoisted.mockDbTransaction).not.toHaveBeenCalled()
+  })
+
+  it('restamps detailsChangedAt when issuer changes', async () => {
+    hoisted.txSelectResult = [{ ...EXISTING_ROW, jwksUri: null, issuer: null }]
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      issuer: 'https://idp.example',
+    })
+    expect(hoisted.capturedSetPatch!.detailsChangedAt).toBeInstanceOf(Date)
+  })
+})

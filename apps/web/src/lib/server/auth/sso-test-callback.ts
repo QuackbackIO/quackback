@@ -72,7 +72,13 @@ export async function handleSsoTestCallback(
     idpErrorDescription: input.errorDescription,
     expectedState: session.state,
     expectedNonce: session.nonce,
+    // Discovery providers re-resolve from the doc; manual-endpoint providers
+    // pass the endpoints resolved at start time (discoveryUrl is undefined).
     discoveryUrl: session.discoveryUrl,
+    tokenEndpoint: session.tokenEndpoint,
+    jwksUri: session.jwksUri,
+    issuer: session.issuer,
+    userinfoEndpoint: session.userinfoEndpoint,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,

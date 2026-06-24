@@ -147,6 +147,17 @@ export function ProviderEditor({
     () => provider?.kind ?? inferIdpKind(provider?.discoveryUrl)
   )
   const [discoveryUrl, setDiscoveryUrl] = useState(provider?.discoveryUrl ?? '')
+  // Manual endpoints for an IdP with no discovery document. authorization +
+  // token are needed to sign in; jwks + issuer additionally let the SSO test
+  // verify the ID token (and thus unlock enforcement). Only surfaced for the
+  // "Other" kind — the shortcut kinds always build a discovery URL.
+  const [manual, setManual] = useState({
+    authorizationUrl: provider?.authorizationUrl ?? '',
+    tokenUrl: provider?.tokenUrl ?? '',
+    userInfoUrl: provider?.userInfoUrl ?? '',
+    jwksUri: provider?.jwksUri ?? '',
+    issuer: provider?.issuer ?? '',
+  })
   const [clientId, setClientId] = useState(provider?.clientId ?? '')
   const [secretDraft, setSecretDraft] = useState('')
   // Enabling/disabling lives on the provider list row now; the editor only
@@ -185,6 +196,13 @@ export function ProviderEditor({
           kind,
           clientId: clientId.trim(),
           discoveryUrl: discoveryUrl.trim() || null,
+          // Manual endpoints only apply to "Other"; null them out otherwise so
+          // switching back to a shortcut kind clears any stale manual config.
+          authorizationUrl: kind === 'other' ? manual.authorizationUrl.trim() || null : null,
+          tokenUrl: kind === 'other' ? manual.tokenUrl.trim() || null : null,
+          userInfoUrl: kind === 'other' ? manual.userInfoUrl.trim() || null : null,
+          jwksUri: kind === 'other' ? manual.jwksUri.trim() || null : null,
+          issuer: kind === 'other' ? manual.issuer.trim() || null : null,
           enabled,
           autoCreateUsers,
           // Role only applies when auto-create is on; null it out otherwise
@@ -306,6 +324,13 @@ export function ProviderEditor({
               disabled={saving}
               onChange={setDiscoveryUrl}
             />
+            {kind === 'other' && (
+              <ManualEndpointsSection
+                values={manual}
+                disabled={saving}
+                onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
+              />
+            )}
           </div>
 
           <div className="space-y-2">
@@ -521,6 +546,85 @@ function IdpDiscoveryFields({
           {f.help && <p className="text-xs text-muted-foreground">{f.help}</p>}
         </div>
       ))}
+    </div>
+  )
+}
+
+type ManualEndpoints = {
+  authorizationUrl: string
+  tokenUrl: string
+  userInfoUrl: string
+  jwksUri: string
+  issuer: string
+}
+
+/**
+ * Manual OIDC endpoints for an IdP with no discovery document. Authorization +
+ * Token are the minimum to sign in; adding JWKS URI + Issuer lets the SSO test
+ * verify the ID token, which is what unlocks domain enforcement. Collapsed by
+ * default; auto-expanded when the provider already has any manual endpoint set.
+ */
+function ManualEndpointsSection({
+  values,
+  disabled,
+  onChange,
+}: {
+  values: ManualEndpoints
+  disabled: boolean
+  onChange: (patch: Partial<ManualEndpoints>) => void
+}) {
+  const hasAny = Object.values(values).some((v) => v.trim() !== '')
+  const [open, setOpen] = useState(hasAny)
+
+  const fields: { key: keyof ManualEndpoints; label: string; placeholder: string }[] = [
+    {
+      key: 'authorizationUrl',
+      label: 'Authorization URL',
+      placeholder: 'https://your-idp/authorize',
+    },
+    { key: 'tokenUrl', label: 'Token URL', placeholder: 'https://your-idp/token' },
+    { key: 'jwksUri', label: 'JWKS URI', placeholder: 'https://your-idp/.well-known/jwks.json' },
+    { key: 'issuer', label: 'Issuer', placeholder: 'https://your-idp/' },
+    {
+      key: 'userInfoUrl',
+      label: 'User info URL (optional)',
+      placeholder: 'https://your-idp/userinfo',
+    },
+  ]
+
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+        aria-expanded={open}
+      >
+        <span>Manual endpoints (no discovery URL)</span>
+        <span>{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-border/40 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            Use these only if your IdP has no discovery document. Authorization + Token are required
+            to sign in; add JWKS URI + Issuer to enable the SSO test (and domain enforcement).
+          </p>
+          {fields.map((f) => (
+            <div key={f.key} className="space-y-1.5">
+              <Label htmlFor={`idp-manual-${f.key}`} className="text-xs">
+                {f.label}
+              </Label>
+              <Input
+                id={`idp-manual-${f.key}`}
+                value={values[f.key]}
+                onChange={(e) => onChange({ [f.key]: e.target.value })}
+                placeholder={f.placeholder}
+                disabled={disabled}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

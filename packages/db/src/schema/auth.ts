@@ -379,6 +379,11 @@ export const identityProvider = pgTable(
     authorizationUrl: text('authorization_url'),
     tokenUrl: text('token_url'),
     userInfoUrl: text('user_info_url'),
+    /** JWKS endpoint + expected issuer for manual-endpoint installs — lets the
+     *  SSO test verify the ID token signature + iss/aud the way a discovery
+     *  provider does. NULL for discovery providers (resolved from the doc). */
+    jwksUri: text('jwks_uri'),
+    issuer: text('issuer'),
     clientId: text('client_id').notNull(),
     /** Space- or comma-joined custom scopes; `openid email profile` when null. */
     scopes: text('scopes'),

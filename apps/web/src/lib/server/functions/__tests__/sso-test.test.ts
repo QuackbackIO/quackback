@@ -201,6 +201,62 @@ describe('startSsoTestFn', () => {
     expect(result.authorizeUrl).toMatch(/scope=openid\+email\+profile(&|$)/)
   })
 
+  it('tests a manual-endpoint provider (no discovery doc) using its stored endpoints', async () => {
+    const manualProvider = {
+      id: 'idp_manual',
+      registrationId: 'oidc_manual',
+      discoveryUrl: null,
+      authorizationUrl: 'https://idp/auth',
+      tokenUrl: 'https://idp/token',
+      jwksUri: 'https://idp/jwks',
+      issuer: 'https://idp',
+      userInfoUrl: 'https://idp/userinfo',
+      clientId: 'c',
+      domains: [],
+    }
+    hoisted.listIdentityProviders.mockResolvedValue([manualProvider])
+    hoisted.getIdentityProviderCredentials.mockResolvedValue({ clientSecret: 'secret' })
+    hoisted.cacheSet.mockResolvedValue(undefined)
+
+    const result = (await startSsoTest({ data: { registrationId: 'oidc_manual' } })) as {
+      testId: string
+      authorizeUrl: string
+    }
+
+    // No discovery doc is fetched for a manual-endpoint provider.
+    expect(hoisted.safeFetch).not.toHaveBeenCalled()
+    // Authorize URL is built from the stored authorization endpoint.
+    expect(result.authorizeUrl).toMatch(/^https:\/\/idp\/auth\?/)
+    // Session carries the manual endpoints for the callback handshake.
+    const [, session] = hoisted.cacheSet.mock.calls[0] as [
+      string,
+      { tokenEndpoint: string; jwksUri: string; issuer: string; discoveryUrl?: string },
+    ]
+    expect(session.tokenEndpoint).toBe('https://idp/token')
+    expect(session.jwksUri).toBe('https://idp/jwks')
+    expect(session.issuer).toBe('https://idp')
+    expect(session.discoveryUrl).toBeUndefined()
+  })
+
+  it('rejects a manual-endpoint provider missing jwks/issuer as not configured', async () => {
+    hoisted.listIdentityProviders.mockResolvedValue([
+      {
+        id: 'idp_partial',
+        registrationId: 'oidc_partial',
+        discoveryUrl: null,
+        authorizationUrl: 'https://idp/auth',
+        tokenUrl: 'https://idp/token',
+        jwksUri: null, // incomplete — can't verify the ID token
+        issuer: null,
+        clientId: 'c',
+        domains: [],
+      },
+    ])
+
+    const result = await startSsoTest({ data: { registrationId: 'oidc_partial' } })
+    expect(result).toMatchObject({ error: 'sso-not-configured' })
+  })
+
   it('uses the provider-specific callback path for a non-sso registrationId', async () => {
     const customProvider = {
       id: 'idp_abc',
