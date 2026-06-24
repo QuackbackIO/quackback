@@ -28,11 +28,12 @@ import {
   postAuthSuccess,
 } from '@/lib/client/hooks/use-auth-broadcast'
 import { authClient } from '@/lib/client/auth-client'
-import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import { isTeamCallback } from '@/lib/shared/routing'
 import { lookupAuthMethodsFn, type LookupAuthMethodsResult } from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
+import { TwoFactorEnrollSteps } from './two-factor-enroll-steps'
+import { TwoFactorChallengeStep } from './two-factor-challenge-step'
 import type { AuthFormStep } from './email-signin-types'
 
 interface OrgAuthConfig {
@@ -155,7 +156,7 @@ export function PortalAuthFormInline({
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
   const openSignup = authConfig?.openSignup
-  const _twoFactorRequired = authConfig?.twoFactorRequired ?? false
+  const twoFactorRequired = authConfig?.twoFactorRequired ?? false
   const methodsDefaultStep: AuthFormStep =
     !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
 
@@ -168,6 +169,8 @@ export function PortalAuthFormInline({
     | { stage: 'sso-default'; providerId: string }
     | { stage: 'closed-signup' }
     | { stage: 'sso-redirecting' }
+    | { stage: 'two-factor-challenge' }
+    | { stage: 'two-factor-enroll' }
 
   // Invitation flow: the email is server-known, so Stage 1 is moot.
   const [view, setView] = useState<View>(
@@ -357,9 +360,6 @@ export function PortalAuthFormInline({
           )
         }
       } else {
-        // Stash the post-login destination before the sign-in call so the
-        // twoFactor client can forward to it from its /auth/two-factor page.
-        stashTwoFactorCallbackUrl(callbackUrl ?? window.location.pathname + window.location.search)
         const result = await authClient.signIn.email({
           email,
           password,
@@ -373,6 +373,22 @@ export function PortalAuthFormInline({
               })
           )
         }
+        // better-auth's twoFactor plugin injects this field at runtime but
+        // the client type doesn't declare it — cast to surface it safely.
+        if (
+          (result.data as { twoFactorRedirect?: boolean } | null | undefined)?.twoFactorRedirect
+        ) {
+          setView({ stage: 'two-factor-challenge' })
+          setLoadingAction(null)
+          return
+        }
+      }
+      // A full session under a 2FA-required workspace can only mean the user
+      // is not enrolled (enrolled users get twoFactorRedirect, no session).
+      if (twoFactorRequired) {
+        setView({ stage: 'two-factor-enroll' })
+        setLoadingAction(null)
+        return
       }
       postAuthSuccess()
     } catch (err) {
@@ -898,6 +914,41 @@ export function PortalAuthFormInline({
           </p>
         )}
       </div>
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — two-factor challenge (enrolled user, better-auth returned
+  // twoFactorRedirect)
+  // ============================================================
+  if (view.stage === 'two-factor-challenge') {
+    return (
+      <TwoFactorChallengeStep
+        onComplete={postAuthSuccess}
+        onCancel={async () => {
+          await authClient.signOut()
+          setError('')
+          setView({ stage: 'methods-step', step: methodsDefaultStep })
+        }}
+      />
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — two-factor enrollment (unenrolled user under a workspace
+  // that requires 2FA — enrolled users get twoFactorRedirect instead)
+  // ============================================================
+  if (view.stage === 'two-factor-enroll') {
+    return (
+      <TwoFactorEnrollSteps
+        password={password}
+        onComplete={postAuthSuccess}
+        onCancel={async () => {
+          await authClient.signOut()
+          setError('')
+          setView({ stage: 'methods-step', step: methodsDefaultStep })
+        }}
+      />
     )
   }
 

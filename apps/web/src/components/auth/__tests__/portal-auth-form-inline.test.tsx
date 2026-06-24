@@ -33,8 +33,6 @@ vi.mock('@/lib/server/functions/auth', () => ({
   lookupAuthMethodsFn: vi.fn(),
 }))
 
-vi.mock('@/lib/server/auth/client', () => ({ stashTwoFactorCallbackUrl: vi.fn() }))
-
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: {
     signIn: { email: vi.fn(), emailOtp: vi.fn(), oauth2: vi.fn(), social: vi.fn() },
@@ -73,7 +71,6 @@ vi.mock('@/components/ui/input-otp', () => ({
 
 import { PortalAuthFormInline } from '../portal-auth-form-inline'
 import { postAuthSuccess } from '@/lib/client/hooks/use-auth-broadcast'
-import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import { authClient } from '@/lib/client/auth-client'
 
 function render(ui: React.ReactElement) {
@@ -255,44 +252,5 @@ describe('PortalAuthFormInline — post-sign-in navigation', () => {
     })
     // Navigation is solely the dialog opener's responsibility via the broadcast.
     expect(navigate).not.toHaveBeenCalled()
-  })
-
-  it('stashes the callbackUrl prop (not window.location) for the 2FA redirect', async () => {
-    // sign-in result does not matter — stash is called before the network request.
-    vi.mocked(authClient.signIn.email).mockResolvedValueOnce({ data: {}, error: null } as never)
-
-    renderForm({ mode: 'login', invitationId: 'inv_test', callbackUrl: '/admin' })
-
-    const passwordInput = await screen.findByLabelText(/password/i)
-    fireEvent.change(passwordInput, { target: { value: 'correct-password' } })
-    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
-
-    await waitFor(() => {
-      expect(vi.mocked(stashTwoFactorCallbackUrl)).toHaveBeenCalledWith('/admin')
-    })
-    // Must NOT have been called with the dialog's own URL (the old bug).
-    expect(vi.mocked(stashTwoFactorCallbackUrl)).not.toHaveBeenCalledWith(
-      expect.stringContaining('auth=signin')
-    )
-  })
-
-  it('falls back to window.location when callbackUrl is absent (prevents clearing the stash)', async () => {
-    vi.mocked(authClient.signIn.email).mockResolvedValueOnce({ data: {}, error: null } as never)
-
-    // No callbackUrl — the portal-header open-dialog scenario.
-    renderForm({ mode: 'login', invitationId: 'inv_test' })
-
-    const passwordInput = await screen.findByLabelText(/password/i)
-    fireEvent.change(passwordInput, { target: { value: 'correct-password' } })
-    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
-
-    await waitFor(() => {
-      // Must NOT be called with undefined (which actively removes the stash entry).
-      expect(vi.mocked(stashTwoFactorCallbackUrl)).not.toHaveBeenCalledWith(undefined)
-      // Must be called with the current pathname so the stash is populated.
-      expect(vi.mocked(stashTwoFactorCallbackUrl)).toHaveBeenCalledWith(
-        window.location.pathname + window.location.search
-      )
-    })
   })
 })
