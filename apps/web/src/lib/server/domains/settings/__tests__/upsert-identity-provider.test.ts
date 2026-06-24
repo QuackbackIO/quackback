@@ -514,6 +514,17 @@ describe('upsertIdentityProvider — jwksUri SSRF + restamp', () => {
     expect(hoisted.mockDbTransaction).not.toHaveBeenCalled()
   })
 
+  it('keeps registrationId immutable on update (ignores a divergent input id)', async () => {
+    hoisted.txSelectResult = [EXISTING_ROW] // registrationId 'oidc_x'
+    await upsertIdentityProvider({
+      ...BASE_INPUT,
+      id: 'idp_existing' as `idp_${string}`,
+      registrationId: 'oidc_attacker', // attempt to rewrite the id
+    })
+    // The patch keeps the stored id, never the caller's.
+    expect(hoisted.capturedSetPatch!.registrationId).toBe('oidc_x')
+  })
+
   it('restamps detailsChangedAt when issuer changes', async () => {
     hoisted.txSelectResult = [{ ...EXISTING_ROW, jwksUri: null, issuer: null }]
     await upsertIdentityProvider({

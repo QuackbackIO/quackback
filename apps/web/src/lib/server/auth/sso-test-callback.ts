@@ -114,19 +114,34 @@ export async function handleSsoTestCallback(
       await import('@/lib/server/domains/settings/identity-providers.service')
     const providers = await listIdentityProviders()
     const provider = providers.find((p) => p.registrationId === session.registrationId)
-    if (provider) await markTestSucceeded(provider.id)
+    // Only stamp when the provider is UNCHANGED since the test started. If its
+    // connection details (clientId/endpoints/secret) were edited mid-test, the
+    // handshake exercised the OLD config — stamping would let a stale test
+    // unlock enforcement (lastSuccessfulTestAt > detailsChangedAt) for an
+    // untested new configuration. The admin must re-test after editing.
+    const unchanged = !!provider && provider.detailsChangedAt === session.detailsChangedAt
 
-    // For the legacy `sso` provider also stamp the JSON blob that the
-    // old single-provider gate still reads, keeping both paths in sync.
-    if (session.registrationId === 'sso') {
-      const { markSsoTestSucceeded } =
-        await import('@/lib/server/domains/settings/settings.service')
-      await markSsoTestSucceeded()
+    if (provider && unchanged) {
+      await markTestSucceeded(provider.id)
+
+      // For the legacy `sso` provider also stamp the JSON blob that the
+      // old single-provider gate still reads, keeping both paths in sync.
+      if (session.registrationId === 'sso') {
+        const { markSsoTestSucceeded } =
+          await import('@/lib/server/domains/settings/settings.service')
+        await markSsoTestSucceeded()
+      }
     }
 
     log.info(
-      { admin_user_id: session.adminUserId, registrationId: session.registrationId },
-      'sso test succeeded; provider gates unlocked'
+      {
+        admin_user_id: session.adminUserId,
+        registrationId: session.registrationId,
+        stamped: provider ? unchanged : false,
+      },
+      unchanged
+        ? 'sso test succeeded; provider gates unlocked'
+        : 'sso test succeeded but provider changed mid-test; not stamping'
     )
 
     if (result.claims.email) {

@@ -48,6 +48,10 @@ type TestSession = {
   adminUserId: string
   startedAt: number
   codeVerifier: string
+  /** The provider's `detailsChangedAt` at test-start. The callback only stamps
+   *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
+   *  provider can't let a stale test unlock enforcement for the new config. */
+  detailsChangedAt: string | null
 }
 
 export type StartSsoTestResult =
@@ -169,6 +173,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       codeVerifier,
       adminUserId: user.id,
       startedAt: Date.now(),
+      detailsChangedAt: provider.detailsChangedAt,
     }
 
     const { cacheSet } = await import('@/lib/server/redis')

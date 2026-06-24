@@ -321,6 +321,41 @@ describe('handleSsoTestCallback', () => {
     expect(hoisted.markSsoTestSucceeded).toHaveBeenCalledTimes(1)
   })
 
+  it('does NOT stamp when the provider was edited mid-test (stale detailsChangedAt)', async () => {
+    // Test started at one config; the provider's connection details were edited
+    // before the popup callback completed (newer detailsChangedAt). The
+    // handshake exercised the OLD config, so the stamp must be withheld —
+    // otherwise a stale test would unlock enforcement for the new, untested one.
+    hoisted.cacheGet.mockResolvedValueOnce({
+      ...validSession,
+      detailsChangedAt: '2026-06-24T10:00:00.000Z',
+    })
+    hoisted.listIdentityProviders.mockResolvedValueOnce([
+      {
+        id: 'idp_sso',
+        registrationId: 'sso',
+        domains: [],
+        detailsChangedAt: '2026-06-24T10:05:00.000Z', // edited after the test started
+      },
+    ])
+    hoisted.runHandshake.mockResolvedValueOnce({
+      ok: true,
+      steps: [],
+      claims: { iss: 'https://idp', sub: 'u1', aud: 'cid' },
+      tokenInfo: { idTokenAlg: 'RS256', hasAccessToken: true, hasRefreshToken: false },
+    })
+
+    await handleSsoTestCallback({
+      state: 'state-xyz',
+      code: 'authcode',
+      error: null,
+      errorDescription: null,
+    })
+
+    expect(hoisted.markTestSucceeded).not.toHaveBeenCalled()
+    expect(hoisted.markSsoTestSucceeded).not.toHaveBeenCalled()
+  })
+
   it('stamps only the provider row (not the legacy blob) for a non-sso registrationId', async () => {
     // Per-provider test: only the row stamp fires; the legacy blob stamp
     // must NOT fire (it belongs to the 'sso' registrationId only).

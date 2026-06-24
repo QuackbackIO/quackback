@@ -161,10 +161,25 @@ const attributeMappingSchema = z.object({
   syncOnEverySignIn: z.boolean().optional(),
 })
 
+/**
+ * Identity-provider registrationIds are restricted to the generated `oidc_`
+ * namespace plus the two legacy ids (`sso` / `custom-oidc`). This blocks
+ * registering a provider under a built-in method id such as `credential`,
+ * `magic-link`, or a social id like `google`: a registered OIDC provider is
+ * allowed by `isAuthMethodAllowed` BEFORE the built-in toggles are consulted,
+ * so a provider named `credential` would let password sign-ins bypass
+ * `authConfig.oauth.password === false`.
+ */
+export function isAllowedRegistrationId(id: string): boolean {
+  return id === 'sso' || id === 'custom-oidc' || /^oidc_[a-z0-9]+$/i.test(id)
+}
+
 const upsertIdentityProviderInput = z.object({
   // Present when editing; absent on create (matched by registrationId).
   id: identityProviderId.optional(),
-  registrationId: z.string().min(1).max(64),
+  registrationId: z.string().min(1).max(64).refine(isAllowedRegistrationId, {
+    message: 'registrationId must be a generated oidc_ id (or the legacy sso / custom-oidc).',
+  }),
   label: z.string().min(1).max(120),
   // IdP family from the setup shortcut — purely drives which editor controls
   // and label render; does not affect Better-Auth registration.

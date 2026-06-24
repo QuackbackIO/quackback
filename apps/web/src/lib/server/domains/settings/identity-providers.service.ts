@@ -347,8 +347,13 @@ export async function upsertIdentityProvider(
       let row: typeof identityProvider.$inferSelect
       if (existing) {
         // Patch semantics: only overwrite columns the caller supplied.
+        // registrationId is immutable on update — it keys the Better-Auth
+        // provider id, the redirect URI, account.provider_id, and the
+        // `auth_<id>` credential. Rewriting it would orphan all of those (and
+        // slip past the enabled-based last-method guard), so keep the stored id
+        // regardless of what the caller passed.
         const patch: Partial<typeof identityProvider.$inferInsert> = {
-          registrationId: input.registrationId,
+          registrationId: existing.registrationId,
           label: input.label,
           clientId: input.clientId,
         }
