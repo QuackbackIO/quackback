@@ -89,7 +89,7 @@ export const Route = createFileRoute('/_portal')({
         const instant = await resolveInstantSsoRedirectFn({
           // Fall back to the requested deep link so a sole-IdP redirect returns
           // the user to the private route they asked for, not the portal root.
-          data: { callbackUrl: prompt.callbackUrl ?? location.pathname },
+          data: { callbackUrl: prompt.callbackUrl ?? location?.pathname },
         })
         if (instant) throw redirect({ href: instant.url })
       }
