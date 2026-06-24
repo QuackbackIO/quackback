@@ -718,6 +718,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     return {
       oauth: filteredOAuth,
       openSignup: authConfig.openSignup,
+      twoFactor: { required: authConfig.twoFactor?.required ?? false },
     }
   } catch (error) {
     log.error({ err: error }, 'get public auth config failed')
@@ -810,6 +811,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       publicAuthConfig: {
         oauth: filteredAuthOAuth,
         openSignup: authConfig.openSignup,
+        twoFactor: { required: authConfig.twoFactor?.required ?? false },
       },
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)

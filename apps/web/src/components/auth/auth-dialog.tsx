@@ -19,6 +19,8 @@ interface OrgAuthConfig {
   /** All registered auth provider ids — lets the form show the email input for
    *  a routed-only IdP that renders no public button. */
   registeredAuthProviders?: string[]
+  /** Workspace requires 2FA — drives inline enrollment after password sign-in. */
+  twoFactorRequired?: boolean
 }
 
 interface AuthDialogProps {

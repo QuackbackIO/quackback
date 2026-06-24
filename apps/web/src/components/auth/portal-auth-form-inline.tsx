@@ -45,6 +45,8 @@ interface OrgAuthConfig {
    *  Lets the form show the email input for a routed-only IdP that has no
    *  public button — a domain email is the only way to reach it. */
   registeredAuthProviders?: string[]
+  /** Workspace requires 2FA — drives inline enrollment after password sign-in. */
+  twoFactorRequired?: boolean
 }
 
 interface InvitationInfo {
@@ -153,6 +155,7 @@ export function PortalAuthFormInline({
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
   const openSignup = authConfig?.openSignup
+  const _twoFactorRequired = authConfig?.twoFactorRequired ?? false
   const methodsDefaultStep: AuthFormStep =
     !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
 

@@ -615,6 +615,9 @@ export interface UpdatePortalConfigInput {
 export interface PublicAuthConfig {
   oauth: OAuthProviders
   openSignup: boolean
+  /** Workspace 2FA policy, surfaced so the auth dialog can drive inline
+   *  enrollment after a password sign-in. */
+  twoFactor?: { required: boolean }
 }
 
 /**

@@ -109,6 +109,7 @@ export const Route = createFileRoute('/_portal')({
           oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
           oidcProviders: settings?.publicPortalConfig?.oidcProviders,
           registeredAuthProviders,
+          twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
         },
       }
       return { gate, prompt }
@@ -170,6 +171,7 @@ export const Route = createFileRoute('/_portal')({
       oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
       oidcProviders: publicPortalConfig?.oidcProviders,
       registeredAuthProviders,
+      twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
     }
 
     const { locale, messages } = await loadPortalIntl()

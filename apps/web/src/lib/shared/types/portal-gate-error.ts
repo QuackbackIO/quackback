@@ -39,5 +39,7 @@ export interface PortalAccessGateError {
     /** All registered auth provider ids — lets the gate's sign-in form show
      *  the email input for a routed-only IdP that renders no public button. */
     registeredAuthProviders?: string[]
+    /** Workspace requires 2FA — drives inline enrollment after password sign-in. */
+    twoFactorRequired?: boolean
   }
 }
