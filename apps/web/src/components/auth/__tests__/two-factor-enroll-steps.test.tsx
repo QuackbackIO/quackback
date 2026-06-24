@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
@@ -9,6 +10,36 @@ vi.mock('@/lib/client/auth-client', () => ({
 }))
 vi.mock('qrcode', () => ({
   default: { toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,x') },
+}))
+
+// Stub the OTP input to a plain input (matches the sibling dialog test). The
+// real input-otp schedules its own effects/RAF that can fire after the test
+// unmounts, surfacing as an unhandled "window is not defined" once happy-dom
+// has torn the env down. A plain controlled input keeps the test deterministic.
+vi.mock('@/components/ui/input-otp', () => ({
+  // InputOTP calls onChange(value: string) — adapt the native input event so
+  // the component's `setCode` receives the string, not the event.
+  InputOTP: ({
+    children: _children,
+    onComplete,
+    onChange,
+    ...props
+  }: {
+    children?: ReactNode
+    onComplete?: (v: string) => void
+    onChange?: (v: string) => void
+  } & Record<string, unknown>) => (
+    <input
+      {...(props as object)}
+      onChange={(e) => {
+        onChange?.(e.target.value)
+        if (e.target.value.length === 6) onComplete?.(e.target.value)
+      }}
+    />
+  ),
+  InputOTPGroup: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  InputOTPSlot: () => null,
+  InputOTPSeparator: () => null,
 }))
 
 const { TwoFactorEnrollSteps } = await import('../two-factor-enroll-steps')

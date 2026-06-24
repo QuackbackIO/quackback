@@ -38,7 +38,13 @@ export function TwoFactorEnrollSteps({
         setError(betterErr?.message ?? 'Could not start 2FA setup.')
         return
       }
-      setQrDataUrl(await QRCode.toDataURL(data.totpURI))
+      // Re-check after the second await — without this, a QR render that
+      // resolves after unmount sets state on a dead component, and React's
+      // scheduler then touches a torn-down `window` (surfaces as an unhandled
+      // "window is not defined" that fails the test run).
+      const qrDataUrl = await QRCode.toDataURL(data.totpURI)
+      if (cancelled) return
+      setQrDataUrl(qrDataUrl)
       setBackupCodes(data.backupCodes)
       setStep('qr')
       onStepChange?.('qr')
