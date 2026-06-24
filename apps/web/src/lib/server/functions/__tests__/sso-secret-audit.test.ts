@@ -84,8 +84,6 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   listVerifiedDomains: vi.fn(),
   updateAuthConfig: vi.fn(),
   setSsoDomainSubtree: vi.fn(),
-  // setSsoClientSecretFn stamps detailsChangedAt after saving the secret.
-  markSsoDetailsChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/auth/sso-secret', () => ({

@@ -161,8 +161,9 @@ export function ProviderEditor({
   const [clientId, setClientId] = useState(provider?.clientId ?? '')
   const [secretDraft, setSecretDraft] = useState('')
   // Enabling/disabling lives on the provider list row now; the editor only
-  // preserves the existing value so saving other fields never flips it.
-  const [enabled] = useState(provider?.enabled ?? false)
+  // preserves the existing value so saving other fields never flips it. The
+  // editor is keyed per provider, so this is stable for the dialog's lifetime.
+  const enabled = provider?.enabled ?? false
   const [autoCreateUsers, setAutoCreateUsers] = useState(provider?.autoCreateUsers ?? true)
   const [autoProvisionRole, setAutoProvisionRole] = useState<Role>(
     provider?.autoProvisionRole ?? 'user'

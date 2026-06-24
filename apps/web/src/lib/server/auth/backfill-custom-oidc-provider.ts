@@ -25,7 +25,7 @@ import {
   type Database,
   type Transaction,
 } from '@/lib/server/db'
-import { backfillUnifiedSignInMethods } from './backfill-signin-methods'
+import { backfillUnifiedSignInMethods, parseSettingsOauth } from './backfill-signin-methods'
 import { resetAuth } from './index'
 import { decryptPlatformCredentials } from '@/lib/server/integrations/encryption'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
@@ -107,19 +107,9 @@ async function isCustomOidcEnabled(db: DbOrTx): Promise<boolean> {
     .from(settings)
     .limit(1)
   if (rows.length === 0) return false
-  const team = readOauthToggles(rows[0].authConfig)
-  const portal = readOauthToggles(rows[0].portalConfig)
+  const team = parseSettingsOauth(rows[0].authConfig)
+  const portal = parseSettingsOauth(rows[0].portalConfig)
   return team['custom-oidc'] === true || portal['custom-oidc'] === true
-}
-
-/** Parse an `oauth` toggle map out of a settings JSON column; {} on bad input. */
-function readOauthToggles(json: string | null): Record<string, boolean | undefined> {
-  if (!json) return {}
-  try {
-    return (JSON.parse(json)?.oauth ?? {}) as Record<string, boolean | undefined>
-  } catch {
-    return {}
-  }
 }
 
 /**

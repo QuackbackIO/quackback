@@ -40,6 +40,7 @@ vi.mock('@/components/ui/input-otp', () => ({
   InputOTPGroup: ({ children }: { children?: ReactNode }) => <>{children}</>,
   InputOTPSlot: () => null,
   InputOTPSeparator: () => null,
+  InputOTPSixSlots: () => null,
 }))
 
 const { TwoFactorEnrollSteps } = await import('../two-factor-enroll-steps')

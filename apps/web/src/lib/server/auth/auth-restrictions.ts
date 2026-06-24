@@ -31,10 +31,9 @@ import {
   shouldRenderPublicButton,
   type ProviderWithDomains,
 } from '@/lib/server/auth/provider-ids'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, type Role } from '@/lib/shared/roles'
 
 export type AuthProvider = 'email' | 'credential' | 'magic-link' | 'sso' | string
-export type Role = 'admin' | 'member' | 'user'
 
 interface AuthMethodResult {
   allowed: boolean

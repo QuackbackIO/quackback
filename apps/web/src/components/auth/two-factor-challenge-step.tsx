@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
 
 /** Inline TOTP / backup-code challenge for an already-enrolled user, shown
@@ -78,14 +78,7 @@ export function TwoFactorChallengeStep({
               aria-label="Authenticator code"
               aria-invalid={!!error || undefined}
             >
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
-              </InputOTPGroup>
+              <InputOTPSixSlots />
             </InputOTP>
           </div>
         )}

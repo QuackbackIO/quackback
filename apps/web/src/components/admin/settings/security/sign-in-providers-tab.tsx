@@ -1,5 +1,5 @@
 import { useState, useTransition } from 'react'
-import { useRouter, useRouteContext } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowPathIcon, EnvelopeIcon, KeyIcon, ShieldCheckIcon } from '@heroicons/react/24/solid'
@@ -12,7 +12,6 @@ import { IdentityProvidersSection } from '@/components/admin/settings/security/i
 import { countEnabledAuthMethods } from '@/components/admin/settings/security/auth-method-count'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
-import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 import { updateAuthConfigFn } from '@/lib/server/functions/settings'
 import type { AuthConfig } from '@/lib/shared/types/settings'
@@ -47,10 +46,6 @@ export function SignInProvidersTab({
   const queryClient = useQueryClient()
   const [isPending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
-
-  const { managedFieldPaths = [] } =
-    (useRouteContext({ from: '__root__' }) as { managedFieldPaths?: string[] }) ?? {}
-  const isManaged = (path: string) => isPathManagedFromBootstrap(path, managedFieldPaths)
 
   // ---------- Unified state ----------
   // Seed from authConfig.oauth only. isSignInMethodEnabled applies the correct
@@ -239,8 +234,7 @@ export function SignInProvidersTab({
           description="Sign in with email and password."
           checked={passwordEnabled}
           onCheckedChange={(v) => void saveBuiltin('password', v)}
-          disabled={busy || isManaged('auth.oauth.password') || isLastMethod('password')}
-          badge={isManaged('auth.oauth.password') ? 'Managed' : undefined}
+          disabled={busy || isLastMethod('password')}
         />
         {/* Nested under Password: 2FA enforcement builds on top of the password
             (TOTP enrols over it). The left rule + indent mark it as a child
@@ -258,8 +252,7 @@ export function SignInProvidersTab({
             }
             checked={twoFactorRequired}
             onCheckedChange={(v) => void saveTwoFactor(v)}
-            disabled={busy || isManaged('auth.twoFactor.required') || !passwordEnabled}
-            badge={isManaged('auth.twoFactor.required') ? 'Managed' : undefined}
+            disabled={busy || !passwordEnabled}
           />
         </div>
         <MethodRow
@@ -272,13 +265,7 @@ export function SignInProvidersTab({
           }
           checked={magicLinkEnabled}
           onCheckedChange={(v) => void saveBuiltin('magicLink', v)}
-          disabled={
-            busy ||
-            !emailConfigured ||
-            isManaged('auth.oauth.magicLink') ||
-            isLastMethod('magicLink')
-          }
-          badge={isManaged('auth.oauth.magicLink') ? 'Managed' : undefined}
+          disabled={busy || !emailConfigured || isLastMethod('magicLink')}
         />
       </SettingsCard>
 
@@ -292,7 +279,6 @@ export function SignInProvidersTab({
           enabled={oauthState}
           credentialStatus={credentialStatus}
           isLastMethod={isLastMethod}
-          isManaged={(id) => isManaged(`auth.oauth.${id}`)}
           saving={busy}
           onToggle={(id, checked) => void saveOauthProvider(id, checked)}
           onConfigure={openConfigDialog}

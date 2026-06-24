@@ -317,7 +317,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
 
 /**
  * Shallow-merge a patch into the stored `ssoOidc` block + invalidate the
- * settings cache. Shared by the two timestamp-stamping helpers below.
+ * settings cache. Used by the `lastSuccessfulTestAt` stamping helper below.
  * No-op when no ssoOidc block exists.
  *
  * Deliberately skips the `auth_config_version` bump + `resetAuth()` that
@@ -339,24 +339,6 @@ async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>):
     .set({ authConfig: JSON.stringify(updated) })
     .where(eq(settings.id, org.id))
   await invalidateSettingsCache()
-}
-
-/**
- * Stamp `ssoOidc.detailsChangedAt = now`. Called when a connection-
- * affecting field changes *outside* `updateAuthConfig` — specifically
- * the client secret, which `setSsoClientSecretFn` writes to
- * `platform_credentials` rather than the settings JSON. Keeps the
- * "a prior test only counts if it postdates the last details change"
- * invariant honest.
- */
-export async function markSsoDetailsChanged(): Promise<void> {
-  log.info('mark sso details changed')
-  try {
-    await patchSsoOidc({ detailsChangedAt: new Date().toISOString() })
-  } catch (error) {
-    log.error({ err: error }, 'mark sso details changed failed')
-    wrapDbError('mark sso details changed', error)
-  }
 }
 
 /**

@@ -25,6 +25,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
+import { DEFAULT_OIDC_SCOPES } from '@/lib/server/auth/build-oauth-configs'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
 const TTL_SECONDS = 600
@@ -186,10 +187,10 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       client_id: provider.clientId,
       redirect_uri: redirectUri,
       // Mirror production: buildGenericOAuthConfigs requests provider.scopes
-      // (falling back to the default trio). A test that always sent
-      // 'openid email profile' could pass while real sign-in requests a
-      // different set — letting a non-representative test unlock enforcement.
-      scope: provider.scopes ?? 'openid email profile',
+      // (falling back to the default set). A test that always sent a fixed
+      // scope set could pass while real sign-in requests a different one,
+      // letting a non-representative test unlock enforcement.
+      scope: provider.scopes ?? DEFAULT_OIDC_SCOPES.join(' '),
       state,
       nonce,
       prompt: 'login',

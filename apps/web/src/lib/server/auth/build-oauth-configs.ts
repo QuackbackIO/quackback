@@ -21,6 +21,13 @@
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 
+/**
+ * Default OIDC scopes requested when a provider has no explicit `scopes`.
+ * The SSO test flow mirrors this exact set so a passing test exercises the
+ * same scope request production sign-in will make.
+ */
+export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
+
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
   providerId: string
@@ -116,7 +123,9 @@ export async function buildGenericOAuthConfigs({
       ...(discoveryUrl ? { discoveryUrl } : {}),
       ...(authorizationUrl ? { authorizationUrl } : {}),
       ...(tokenUrl ? { tokenUrl } : {}),
-      scopes: provider.scopes ? provider.scopes.split(/\s+/).filter(Boolean) : ['openid', 'email', 'profile'],
+      scopes: provider.scopes
+        ? provider.scopes.split(/\s+/).filter(Boolean)
+        : [...DEFAULT_OIDC_SCOPES],
       // PKCE on every provider. OAuth 2.1 IdPs require code_challenge and
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).

@@ -62,6 +62,9 @@ export const Route = createFileRoute('/_portal')({
     // visitor (defense in depth). The decision is computed server-side
     // (session + allowedDomains never leave the server); only it is returned.
     const accessResult = await evaluateMyPortalAccessFn()
+    // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl)
+    // once; both the blocked-gate and the accessible branch below consume it.
+    const prompt = parseAuthPromptSearch(deps ?? {})
     if (!accessResult.granted) {
       // OWASP authz_fail — emit only for authenticated denials (anonymous
       // denials are too noisy). Best-effort, fire-and-forget.
@@ -76,8 +79,6 @@ export const Route = createFileRoute('/_portal')({
       const hasThemeConfig = brandingConfig.light || brandingConfig.dark
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
-      // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl).
-      const prompt = parseAuthPromptSearch(deps ?? {})
       // Instant-SSO: when the workspace's only sign-in method is a single OIDC
       // provider, redirect anonymous visitors straight to the IdP. Skipped for
       // 'unauthorized' (signed-in non-member) — they already have a session and
@@ -122,7 +123,6 @@ export const Route = createFileRoute('/_portal')({
       throw redirect({ to: '/onboarding' })
     }
 
-    const prompt = parseAuthPromptSearch(deps ?? {})
     // Sole-IdP shortcut: a sign-in request (?auth=signin/signup) on an
     // accessible portal redirects straight to the only provider, server-side —
     // no dialog. Skipped when an `error` is present so an IdP-rejected sign-in

@@ -123,9 +123,7 @@ export function IdentityProvidersSection({
           key={editing.mode === 'edit' ? editing.id : 'new'}
           provider={editingProvider}
           open
-          isOnlyMethod={
-            enabledMethodCount === 1 && !!editingProvider?.enabled && !!editingProvider?.configured
-          }
+          isOnlyMethod={isOnlyWorkingMethod(editingProvider, enabledMethodCount)}
           onOpenChange={(o) => {
             if (!o) setEditing(null)
           }}
@@ -134,6 +132,16 @@ export function IdentityProvidersSection({
       )}
     </SsoTestSignInProvider>
   )
+}
+
+/** This provider is the last thing standing between the workspace and a
+ *  no-auth lockout when it's the sole enabled + configured sign-in method;
+ *  turning it off must be blocked. */
+function isOnlyWorkingMethod(
+  provider: { enabled: boolean; configured: boolean } | null | undefined,
+  enabledMethodCount: number
+): boolean {
+  return enabledMethodCount === 1 && !!provider?.enabled && !!provider?.configured
 }
 
 function ProviderRow({
@@ -155,10 +163,7 @@ function ProviderRow({
   // Persisted choice wins; infer from the discovery URL only for legacy rows.
   const kind = provider.kind ?? inferIdpKind(provider.discoveryUrl)
   const verifiedDomains = provider.domains.filter((d) => d.verifiedAt)
-  // This provider is the last thing standing between the workspace and a
-  // no-auth lockout when it's the sole working method. Block turning it off;
-  // turning it on is always fine.
-  const isOnlyMethod = enabledMethodCount === 1 && provider.enabled && provider.configured
+  const isOnlyMethod = isOnlyWorkingMethod(provider, enabledMethodCount)
 
   // Flip just the `enabled` flag in place. Resends the required identity
   // fields (registrationId/label/clientId) unchanged so the patch validator

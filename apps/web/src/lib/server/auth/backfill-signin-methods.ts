@@ -18,7 +18,8 @@ const log = logger.child({ component: 'signin-methods-backfill' })
 type DbOrTx = Database | Transaction
 type Oauth = Record<string, boolean | undefined>
 
-function parseOauth(json: string | null): Oauth {
+/** Parse an `oauth` toggle map out of a settings JSON column; {} on bad input. */
+export function parseSettingsOauth(json: string | null): Oauth {
   if (!json) return {}
   try {
     return (JSON.parse(json)?.oauth ?? {}) as Oauth
@@ -42,9 +43,9 @@ export async function backfillUnifiedSignInMethods(database: DbOrTx): Promise<{ 
   // authConfig falls back to the defaults (so default-on google/github are
   // never dropped). Portal contributes only its stored explicit values.
   const team = rows[0].authConfig
-    ? parseOauth(rows[0].authConfig)
+    ? parseSettingsOauth(rows[0].authConfig)
     : { ...DEFAULT_AUTH_CONFIG.oauth }
-  const portal = parseOauth(rows[0].portalConfig)
+  const portal = parseSettingsOauth(rows[0].portalConfig)
 
   // Monotonic merge: copy the team config, then OR-in portal's explicit
   // enables. Never removes a method; only materializes the legacy team

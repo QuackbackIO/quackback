@@ -278,6 +278,7 @@ export async function upsertIdentityProvider(
 ): Promise<IdentityProvider> {
   log.info({ registrationId: input.registrationId }, 'upsert identity provider')
   try {
+    const { ValidationError } = await import('@/lib/shared/errors')
     // SSRF guard: validate every connection URL before any DB write. The auth
     // runtime and SSO test callback fetch discoveryUrl / tokenUrl / userInfoUrl
     // server-side, and authorizationUrl is the redirect target — none may
@@ -292,7 +293,6 @@ export async function upsertIdentityProvider(
     ]
     if (guardedUrls.some(([, value]) => value)) {
       const { checkUrlSafety } = await import('@/lib/server/content/ssrf-guard')
-      const { ValidationError } = await import('@/lib/shared/errors')
       for (const [label, value] of guardedUrls) {
         if (!value) continue
         const safety = await checkUrlSafety(value)
@@ -336,7 +336,6 @@ export async function upsertIdentityProvider(
         const effectiveToken =
           input.tokenUrl !== undefined ? input.tokenUrl : (existing?.tokenUrl ?? null)
         if (!effectiveDiscovery && !(effectiveAuthz && effectiveToken)) {
-          const { ValidationError } = await import('@/lib/shared/errors')
           throw new ValidationError(
             'INVALID_IDP_CONFIG',
             'An enabled provider needs a Discovery URL, or both an Authorization URL and a Token URL.'

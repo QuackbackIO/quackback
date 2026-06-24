@@ -67,6 +67,7 @@ vi.mock('@/components/ui/input-otp', () => ({
   InputOTPGroup: ({ children }: { children?: ReactNode }) => <>{children}</>,
   InputOTPSlot: () => null,
   InputOTPSeparator: () => null,
+  InputOTPSixSlots: () => null,
 }))
 
 import { PortalAuthFormInline } from '../portal-auth-form-inline'

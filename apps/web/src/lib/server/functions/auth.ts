@@ -47,31 +47,30 @@ export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
     const { listIdentityProviders } =
       await import('@/lib/server/domains/settings/identity-providers.service')
     const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
-    const { getConfiguredIntegrationTypes } =
-      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
-    const { AUTH_CREDENTIAL_PREFIX } = await import('@/lib/server/auth/auth-providers')
     const { resolveLoginRouting } = await import('./auth-routing')
 
     const tenant = await getTenantSettings()
     const methodsConfig = tenant?.publicAuthConfig?.oauth ?? {}
 
-    // Build the liveness snapshot routing needs. `registered` is the
-    // canonical registration gate (enabled + creds + tier) from
-    // `getRegisteredOidcProviderIds`; `credsPresent` comes from the same
-    // cached configured-types Set `buildGenericOAuthConfigs` consults — we
-    // reuse those gates rather than re-deriving a different one.
+    // Build the liveness snapshot routing needs. `getRegisteredOidcProviderIds`
+    // already applies the full gate (enabled + credential present + tier) and
+    // internally consults the same configured-types Set, so membership in it is
+    // the single source of truth — reuse it rather than fetching configured
+    // types a second time here.
     const providers = await listIdentityProviders()
-    const [registeredIds, configuredTypes] = await Promise.all([
-      getRegisteredOidcProviderIds(providers),
-      getConfiguredIntegrationTypes(),
-    ])
-    const routable = providers.map((p) => ({
-      registrationId: p.registrationId,
-      enabled: p.enabled,
-      registered: registeredIds.has(p.registrationId),
-      credsPresent: configuredTypes.has(`${AUTH_CREDENTIAL_PREFIX}${p.registrationId}`),
-      domains: p.domains,
-    }))
+    const registeredIds = await getRegisteredOidcProviderIds(providers)
+    const routable = providers.map((p) => {
+      const registered = registeredIds.has(p.registrationId)
+      return {
+        registrationId: p.registrationId,
+        enabled: p.enabled,
+        registered,
+        // `registered` already implies a present credential, so mirror it
+        // instead of triggering a second configured-types lookup.
+        credsPresent: registered,
+        domains: p.domains,
+      }
+    })
 
     // Route to the provider owning the email's verified domain. The
     // liveness gate inside `resolveLoginRouting` falls a dead owner
