@@ -16,9 +16,7 @@
  *     cleanup for OAuth callbacks where the email isn't known until
  *     after the upstream token exchange. setSessionCookie has already
  *     run; on policy reject we delete the session row, clear the
- *     cookie, and redirect. Also hosts the workspace Require-2FA gate
- *     for credential sign-in success (post-auth, to avoid leaking
- *     account state to anonymous probes).
+ *     cookie, and redirect.
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
