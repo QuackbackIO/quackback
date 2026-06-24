@@ -10,6 +10,7 @@ import {
 import { PortalAuthFormInline } from './portal-auth-form-inline'
 import { useAuthPopover } from './auth-popover-context'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
+import { signOut } from '@/lib/client/auth-client'
 
 interface OrgAuthConfig {
   found: boolean
@@ -55,6 +56,18 @@ export function AuthDialog({ authConfig, workspaceName }: AuthDialogProps) {
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) {
+          // Abandoning the dialog mid-2FA (X / backdrop / Esc) must revoke the
+          // session signIn.email already created — otherwise a required-2FA user
+          // who never finishes enrollment keeps a valid, un-enrolled session and
+          // bypasses the policy on the next navigation. Success closes via
+          // reset() programmatically, which does NOT fire onOpenChange, so this
+          // only runs on a genuine abandon.
+          if (
+            formContext.step === 'two-factor-enroll' ||
+            formContext.step === 'two-factor-challenge'
+          ) {
+            void signOut().catch(() => {})
+          }
           // Reset context on close so the next open starts fresh
           setFormContext({ step: 'credentials', email: '' })
           closeAuthPopover()

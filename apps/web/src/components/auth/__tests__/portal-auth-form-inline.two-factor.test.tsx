@@ -63,7 +63,10 @@ vi.mock('@/components/ui/input-otp', () => ({
 
 const { PortalAuthFormInline } = await import('../portal-auth-form-inline')
 
-function renderForm(twoFactorRequired: boolean) {
+function renderForm(
+  twoFactorRequired: boolean,
+  onContextChange?: (ctx: { step: string; email: string }) => void
+) {
   return render(
     <IntlProvider locale="en">
       <PortalAuthFormInline
@@ -71,6 +74,7 @@ function renderForm(twoFactorRequired: boolean) {
         invitationId={null}
         authConfig={{ found: true, oauth: { password: true }, twoFactorRequired }}
         callbackUrl="/admin"
+        onContextChange={onContextChange}
       />
     </IntlProvider>
   )
@@ -115,6 +119,20 @@ describe('PortalAuthFormInline — inline 2FA', () => {
     await fillEmailAndContinue()
     await fillPasswordAndSubmit()
     expect(await screen.findByText('ENROLL_STEPS')).toBeInTheDocument()
+  })
+
+  it('reports the two-factor-enroll step so the dialog can revoke on abandon', async () => {
+    mockSignInEmail.mockResolvedValue({ data: { user: {} }, error: null })
+    const onContextChange = vi.fn()
+    renderForm(true, onContextChange)
+    await fillEmailAndContinue()
+    await fillPasswordAndSubmit()
+    await screen.findByText('ENROLL_STEPS')
+    await waitFor(() =>
+      expect(onContextChange).toHaveBeenCalledWith(
+        expect.objectContaining({ step: 'two-factor-enroll' })
+      )
+    )
   })
 
   it('does not show 2FA UI when the workspace does not require it', async () => {

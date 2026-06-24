@@ -1,4 +1,5 @@
 import { AUTH_PROVIDERS } from '@/lib/shared/auth-providers'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 /** Social provider ids (built-in Better-Auth socials). OIDC providers are
  *  `generic-oauth` and counted via `identityProviders`, never as an `oauth`
@@ -44,13 +45,20 @@ export function countEnabledAuthMethods({
   credentialStatus,
   identityProviders,
 }: AuthMethodInputs): number {
-  const builtinAndSocial = Object.entries(oauthState).reduce((acc, [id, enabled]) => {
-    if (!enabled) return acc
-    if (id === 'password') return acc + 1
-    if (id === 'magicLink') return emailConfigured ? acc + 1 : acc
-    // Social only — OIDC providers are counted via `identityProviders`.
-    return SOCIAL_PROVIDER_IDS.has(id) && credentialStatus[id] ? acc + 1 : acc
-  }, 0)
+  // Password is on unless explicitly false (absent ⇒ on), so seed it from the
+  // canonical predicate rather than the explicit-entry loop below — upgraded /
+  // default configs often omit the `password` key entirely, and missing it here
+  // would make the UI report zero (or one-too-few) working methods.
+  const builtinAndSocial = Object.entries(oauthState).reduce(
+    (acc, [id, enabled]) => {
+      if (id === 'password') return acc // counted via the seed above
+      if (!enabled) return acc
+      if (id === 'magicLink') return emailConfigured ? acc + 1 : acc
+      // Social only — OIDC providers are counted via `identityProviders`.
+      return SOCIAL_PROVIDER_IDS.has(id) && credentialStatus[id] ? acc + 1 : acc
+    },
+    isSignInMethodEnabled(oauthState, 'password') ? 1 : 0
+  )
   const idps = identityProviders.filter((p) => p.enabled && p.configured).length
   return builtinAndSocial + idps
 }

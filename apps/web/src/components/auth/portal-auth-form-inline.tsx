@@ -254,7 +254,14 @@ export function PortalAuthFormInline({
   // `credentials` so the dialog renders the default Welcome / Create
   // header until the user lands inside the methods form.
   useEffect(() => {
-    const step: AuthFormStep = view.stage === 'methods-step' ? view.step : 'credentials'
+    const step: AuthFormStep =
+      view.stage === 'methods-step'
+        ? view.step
+        : view.stage === 'two-factor-enroll'
+          ? 'two-factor-enroll'
+          : view.stage === 'two-factor-challenge'
+            ? 'two-factor-challenge'
+            : 'credentials'
     onContextChange?.({ step, email })
   }, [view, email, onContextChange])
 
