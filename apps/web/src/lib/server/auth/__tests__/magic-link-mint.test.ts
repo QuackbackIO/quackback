@@ -21,7 +21,6 @@ vi.mock('../index', async () => {
         },
       },
     }),
-    getMagicLinkToken: () => null, // unused under the new path
   }
 })
 

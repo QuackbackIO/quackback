@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { LockClosedIcon } from '@heroicons/react/24/solid'
+import { cn } from '@/lib/shared/utils'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,14 @@ interface MethodRowProps {
   badge?: string
   /** Tooltip shown on the badge. Used by portal-auth's "Managed" hint. */
   badgeTooltip?: string
+  /** Renders as a nested child setting (small inline icon, no tile, tighter
+   *  spacing) so a sub-option like "Require 2FA" reads as subordinate to its
+   *  parent method row rather than a peer. */
+  compact?: boolean
+  /** Dims the row to signal it is unavailable for a structural reason (e.g. a
+   *  prerequisite is off), keeping the same copy. Distinct from `disabled`,
+   *  which also covers the transient busy state and only affects the switch. */
+  muted?: boolean
 }
 
 /**
@@ -41,13 +50,19 @@ export function MethodRow({
   lockedReason,
   badge,
   badgeTooltip,
+  compact,
+  muted,
 }: MethodRowProps) {
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-start gap-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-          <Icon className="h-5 w-5" />
-        </div>
+      <div className={cn('flex items-start', compact ? 'gap-3' : 'gap-4', muted && 'opacity-50')}>
+        {compact ? (
+          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+            <Icon className="h-5 w-5" />
+          </div>
+        )}
         <div>
           <div className="flex items-center gap-2">
             <Label className="font-medium">{label}</Label>

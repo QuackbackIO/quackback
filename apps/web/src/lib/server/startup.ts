@@ -265,6 +265,13 @@ export function logStartupBanner(): void {
     .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())
     .catch((err) => log.error({ err }, 'failed to ensure quackback feedback source'))
 
+  // One-time in-place data backfills (idempotent, advisory-locked). Runs the
+  // custom-oidc → identity_provider migration that needs SECRET_KEY to decrypt
+  // its credential and so can't live in the SQL migration bundle.
+  import('@/lib/server/auth/backfill-custom-oidc-provider')
+    .then(({ runStartupBackfills }) => runStartupBackfills())
+    .catch((err) => log.error({ err }, 'failed to run startup backfills'))
+
   // Quackback config file watcher — reconciles managed fields from
   // /etc/quackback/config.yaml on every change. No-op when the file
   // is absent (self-host default).

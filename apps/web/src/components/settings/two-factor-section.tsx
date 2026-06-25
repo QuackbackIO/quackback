@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import QRCode from 'qrcode'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,8 +10,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/client/auth-client'
+import { TwoFactorEnrollSteps } from '@/components/auth/two-factor-enroll-steps'
 
 interface Props {
   enrolled: boolean
@@ -139,44 +138,9 @@ function PasswordConfirmForm({
 }
 
 function SetupDialog({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
-  const [step, setStep] = useState<'password' | 'qr' | 'backup'>('password')
-  const [code, setCode] = useState('')
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [backupCodes, setBackupCodes] = useState<string[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  async function handleEnable(password: string) {
-    const { data, error: betterErr } = await authClient.twoFactor.enable({
-      password,
-    })
-    if (betterErr) throw new Error(betterErr.message ?? 'Could not start 2FA setup.')
-    if (!data) throw new Error('Empty response from 2FA enable endpoint.')
-    const dataUrl = await QRCode.toDataURL(data.totpURI)
-    setQrDataUrl(dataUrl)
-    setBackupCodes(data.backupCodes)
-    setStep('qr')
-  }
-
-  async function verifyCode(value: string) {
-    if (pending) return
-    setError(null)
-    setPending(true)
-    try {
-      const { error: betterErr } = await authClient.twoFactor.verifyTotp({ code: value })
-      if (betterErr) throw new Error(betterErr.message ?? 'Code rejected.')
-      setStep('backup')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Code rejected.')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  function handleVerify(e: React.FormEvent) {
-    e.preventDefault()
-    void verifyCode(code)
-  }
+  const [step, setStep] = useState<'password' | 'enroll'>('password')
+  const [enrollStep, setEnrollStep] = useState<'qr' | 'backup'>('qr')
+  const [password, setPassword] = useState('')
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -184,8 +148,8 @@ function SetupDialog({ onClose, onComplete }: { onClose: () => void; onComplete:
         <DialogHeader>
           <DialogTitle>
             {step === 'password' && 'Confirm your password'}
-            {step === 'qr' && 'Scan with your authenticator'}
-            {step === 'backup' && 'Save your backup codes'}
+            {step === 'enroll' && enrollStep === 'qr' && 'Scan with your authenticator'}
+            {step === 'enroll' && enrollStep === 'backup' && 'Save your backup codes'}
           </DialogTitle>
         </DialogHeader>
         {step === 'password' && (
@@ -193,88 +157,22 @@ function SetupDialog({ onClose, onComplete }: { onClose: () => void; onComplete:
             inputId="tf-password"
             description="For your security, re-enter your password to enable two-factor authentication."
             onCancel={onClose}
-            onSubmit={handleEnable}
+            onSubmit={async (pw) => {
+              setPassword(pw)
+              setStep('enroll')
+            }}
             pendingLabel="Working…"
             submitLabel="Continue"
             fallbackError="Could not start 2FA setup."
           />
         )}
-        {step === 'qr' && (
-          <form onSubmit={handleVerify} className="space-y-3">
-            {qrDataUrl && (
-              <img
-                src={qrDataUrl}
-                alt="TOTP QR code"
-                className="mx-auto h-44 w-44 bg-white p-2 rounded"
-              />
-            )}
-            <p className="text-xs text-muted-foreground text-center">
-              Scan with Google Authenticator, 1Password, Authy, or any TOTP app. Then enter the
-              6-digit code below.
-            </p>
-            <Label htmlFor="tf-code" className="sr-only">
-              Code
-            </Label>
-            <div className="flex justify-center">
-              <InputOTP
-                id="tf-code"
-                maxLength={6}
-                value={code}
-                onChange={setCode}
-                onComplete={(value) => void verifyCode(value)}
-                disabled={pending}
-                autoFocus
-                autoComplete="one-time-code"
-                aria-label="Authenticator code"
-                aria-invalid={!!error || undefined}
-              >
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-            </div>
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending || code.length !== 6}>
-                {pending ? 'Verifying…' : 'Verify'}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-        {step === 'backup' && (
-          <div className="space-y-3">
-            <Alert>
-              <AlertDescription className="text-xs">
-                Save these one-time codes somewhere safe. Each can be used once if you lose access
-                to your authenticator.
-              </AlertDescription>
-            </Alert>
-            <pre className="rounded-md border border-border/50 bg-muted/30 p-3 text-xs font-mono columns-2">
-              {backupCodes.join('\n')}
-            </pre>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigator.clipboard.writeText(backupCodes.join('\n'))}
-            >
-              Copy all codes
-            </Button>
-            <DialogFooter>
-              <Button onClick={onComplete}>I have saved the codes</Button>
-            </DialogFooter>
-          </div>
+        {step === 'enroll' && (
+          <TwoFactorEnrollSteps
+            password={password}
+            onComplete={onComplete}
+            onCancel={onClose}
+            onStepChange={setEnrollStep}
+          />
         )}
       </DialogContent>
     </Dialog>

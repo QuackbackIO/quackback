@@ -1,4 +1,5 @@
 import { db, eq, settings, ssoVerifiedDomain } from '@/lib/server/db'
+import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
 import { ValidationError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
@@ -86,36 +87,34 @@ async function getEmailDependentPassthroughKeys(): Promise<string[]> {
 }
 
 /**
- * Display-name overrides for generic OAuth providers (currently only
- * `custom-oidc`, which is exposed on the portal surface only). Returns
- * a map of providerId → displayName when an admin has set one.
+ * Public OIDC sign-in buttons for the portal, sourced from the
+ * `identity_provider` table (NOT the static AUTH_PROVIDERS map). Each
+ * button's `id` is the provider's `registrationId`, so a click drives
+ * `signIn.oauth2({ providerId: registrationId })` → the matching
+ * `/oauth2/callback/<registrationId>`.
+ *
+ * A provider yields a button only when it is BOTH:
+ *   - button-eligible (`shouldRenderPublicButton`): no verified domain,
+ *     or the admin opted a routed provider back in via `showButton`.
+ *   - registered (`getRegisteredOidcProviderIds`): the same gate the auth
+ *     runtime applies (enabled + creds + tier) so a button never 404s.
+ *
+ * Routed-only providers (verified domain + `showButton:false`) are
+ * reached via the email-first SSO routing, so they're excluded here.
  */
-async function getCustomProviderNames(
-  oauth: Record<string, boolean | undefined>,
-  configuredTypes: Set<string>
-): Promise<Record<string, string> | undefined> {
-  const { getAllAuthProviders } = await import('@/lib/server/auth/auth-providers')
-  const { getPlatformCredentials } =
-    await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+export async function getPublicOidcProviders(): Promise<{ id: string; name: string }[]> {
+  const { listIdentityProviders, shouldRenderPublicButton } =
+    await import('./identity-providers.service')
+  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
 
-  const genericProviders = getAllAuthProviders().filter(
-    (p) => p.type === 'generic-oauth' && oauth[p.id] && configuredTypes.has(p.credentialType)
-  )
+  const providers = await listIdentityProviders()
+  // No providers → no buttons; skip the tier + credential round-trips.
+  if (providers.length === 0) return []
+  const registered = await getRegisteredOidcProviderIds(providers)
 
-  if (genericProviders.length === 0) return undefined
-
-  const names: Record<string, string> = {}
-  const credResults = await Promise.all(
-    genericProviders.map((p) => getPlatformCredentials(p.credentialType))
-  )
-  for (let i = 0; i < genericProviders.length; i++) {
-    const displayName = credResults[i]?.displayName
-    if (displayName) {
-      names[genericProviders[i].id] = displayName
-    }
-  }
-
-  return Object.keys(names).length > 0 ? names : undefined
+  return providers
+    .filter((p) => registered.has(p.registrationId) && shouldRenderPublicButton(p))
+    .map((p) => ({ id: p.registrationId, name: p.label }))
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
@@ -137,25 +136,6 @@ const STANDARD_OAUTH_PROVIDERS = new Set(['google', 'github', 'microsoft', 'disc
 export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<AuthConfig> {
   log.info('update auth config')
   try {
-    // Managed-fields gate: refuse touching paths the config file at
-    // `/etc/quackback/config.yaml` has declared. Per-key so the file
-    // can lock one knob while leaving siblings UI-editable. Runs
-    // BEFORE the tier gate so a 403 FIELD_MANAGED error shows up
-    // cleanly even when the user is on a tier that would otherwise
-    // also block the change.
-    if (input.oauth) {
-      for (const key of Object.keys(input.oauth)) {
-        await assertNotManaged(`auth.oauth.${key}`)
-      }
-    }
-    if (input.openSignup !== undefined) {
-      await assertNotManaged('auth.openSignup')
-    }
-    if (input.ssoOidc) {
-      for (const key of Object.keys(input.ssoOidc)) {
-        await assertNotManaged(`auth.ssoOidc.${key}`)
-      }
-    }
     if (input.twoFactor) {
       for (const key of Object.keys(input.twoFactor)) {
         await assertNotManaged(`auth.twoFactor.${key}`)
@@ -226,13 +206,13 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     const updated = deepMerge(existing, input as Partial<AuthConfig>)
 
     // Coupling invariant: `twoFactor.required=true` is only meaningful
-    // when `oauth.password=true`. The 2FA gate
-    // (`handleCredentialPostSignInGate`) runs exclusively on password
-    // sign-in paths — magic-link, SSO, and non-SSO OAuth all bypass
-    // it. Persisting `required=true` while password is off stores a
-    // toggle that does nothing at runtime, which misleads admins
-    // reading the settings page ("my team is 2FA-protected") and
-    // pollutes audit dumps. Reject the combination at write time;
+    // when `oauth.password=true`. The inline enrollment and TOTP
+    // challenge in the auth dialog are triggered exclusively on the
+    // password sign-in path — magic-link, SSO, and non-SSO OAuth all
+    // bypass them. Persisting `required=true` while password is off
+    // stores a toggle that does nothing at runtime, which misleads
+    // admins reading the settings page ("my team is 2FA-protected")
+    // and pollutes audit dumps. Reject the combination at write time;
     // migration 0061 normalized any pre-existing inert state.
     //
     // `password` defaults to `true` when the key is absent (matches
@@ -337,7 +317,7 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
 
 /**
  * Shallow-merge a patch into the stored `ssoOidc` block + invalidate the
- * settings cache. Shared by the two timestamp-stamping helpers below.
+ * settings cache. Used by the `lastSuccessfulTestAt` stamping helper below.
  * No-op when no ssoOidc block exists.
  *
  * Deliberately skips the `auth_config_version` bump + `resetAuth()` that
@@ -359,24 +339,6 @@ async function patchSsoOidc(patch: Partial<NonNullable<AuthConfig['ssoOidc']>>):
     .set({ authConfig: JSON.stringify(updated) })
     .where(eq(settings.id, org.id))
   await invalidateSettingsCache()
-}
-
-/**
- * Stamp `ssoOidc.detailsChangedAt = now`. Called when a connection-
- * affecting field changes *outside* `updateAuthConfig` — specifically
- * the client secret, which `setSsoClientSecretFn` writes to
- * `platform_credentials` rather than the settings JSON. Keeps the
- * "a prior test only counts if it postdates the last details change"
- * invariant honest.
- */
-export async function markSsoDetailsChanged(): Promise<void> {
-  log.info('mark sso details changed')
-  try {
-    await patchSsoOidc({ detailsChangedAt: new Date().toISOString() })
-  } catch (error) {
-    log.error({ err: error }, 'mark sso details changed failed')
-    wrapDbError('mark sso details changed', error)
-  }
 }
 
 /**
@@ -410,6 +372,7 @@ function rowToVerifiedDomain(row: typeof ssoVerifiedDomain.$inferSelect): Verifi
     verificationToken: row.verificationToken,
     verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
     enforced: row.enforced,
+    providerId: row.providerId,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -439,9 +402,19 @@ function generateVerificationToken(): string {
  * Insert a verified-domain row for `name`. Idempotent: if a row with
  * that name already exists, returns the existing row (preserves its
  * pending/verified state and token). Caps at MAX_VERIFIED_DOMAINS.
+ *
+ * `providerId` links the domain to an identity provider. On insert it is
+ * stamped onto the new row; on the idempotent path an already-existing
+ * but *unlinked* row is adopted by the given provider (a previously
+ * global / backfilled domain). A row already owned by another provider is
+ * returned untouched — `name` is globally unique, so a domain belongs to
+ * exactly one provider.
  */
-export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain> {
-  log.info({ name }, 'insert verified domain')
+export async function insertVerifiedDomain(
+  name: string,
+  providerId?: IdentityProviderId
+): Promise<VerifiedDomain> {
+  log.info({ name, providerId }, 'insert verified domain')
   try {
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
     const { resetAuth } = await import('@/lib/server/auth')
@@ -452,7 +425,18 @@ export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain
         .from(ssoVerifiedDomain)
         .where(eq(ssoVerifiedDomain.name, name))
       if (existing.length > 0) {
-        return { row: existing[0], created: false }
+        const current = existing[0]
+        // Adopt a previously-unlinked domain into the requesting provider.
+        if (providerId && current.providerId === null) {
+          const [relinked] = await tx
+            .update(ssoVerifiedDomain)
+            .set({ providerId })
+            .where(eq(ssoVerifiedDomain.id, current.id))
+            .returning()
+          await bumpAuthConfigVersionInTx(tx)
+          return { row: relinked, changed: true }
+        }
+        return { row: current, changed: false }
       }
       const count = await tx.$count(ssoVerifiedDomain)
       if (count >= MAX_VERIFIED_DOMAINS) {
@@ -466,12 +450,13 @@ export async function insertVerifiedDomain(name: string): Promise<VerifiedDomain
         .values({
           name,
           verificationToken: generateVerificationToken(),
+          providerId: providerId ?? null,
         })
         .returning()
       await bumpAuthConfigVersionInTx(tx)
-      return { row, created: true }
+      return { row, changed: true }
     })
-    if (inserted.created) {
+    if (inserted.changed) {
       resetAuth()
       await invalidateSettingsCache()
     }
@@ -619,36 +604,10 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
       updated.welcomeCard = mergeWelcomeCard(existing.welcomeCard, normalizedWelcome)
     }
 
-    const hasAuthMethod = Object.values(updated.oauth).some(Boolean)
-    if (!hasAuthMethod) {
-      throw new ValidationError(
-        'AUTH_METHOD_REQUIRED',
-        'At least one authentication method must be enabled'
-      )
-    }
-
-    // Provider registration in `auth/index.ts` reads portalConfig.oauth at
-    // build time — toggling a portal OAuth provider must invalidate other
-    // pods' Better-Auth instances or they'll keep serving the stale provider
-    // list until cache TTL. Skip the bump for non-oauth edits (e.g. the
-    // welcome card debounce-saves) to avoid an auth rebuild per keystroke.
-    if (input.oauth !== undefined) {
-      const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
-      const { resetAuth } = await import('@/lib/server/auth')
-      await db.transaction(async (tx) => {
-        await tx
-          .update(settings)
-          .set({ portalConfig: JSON.stringify(updated) })
-          .where(eq(settings.id, org.id))
-        await bumpAuthConfigVersionInTx(tx)
-      })
-      resetAuth()
-    } else {
-      await db
-        .update(settings)
-        .set({ portalConfig: JSON.stringify(updated) })
-        .where(eq(settings.id, org.id))
-    }
+    await db
+      .update(settings)
+      .set({ portalConfig: JSON.stringify(updated) })
+      .where(eq(settings.id, org.id))
     await invalidateSettingsCache()
     return updated
   } catch (error) {
@@ -741,6 +700,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     return {
       oauth: filteredOAuth,
       openSignup: authConfig.openSignup,
+      twoFactor: { required: authConfig.twoFactor?.required ?? false },
     }
   } catch (error) {
     log.error({ err: error }, 'get public auth config failed')
@@ -753,21 +713,11 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const org = await requireSettings()
     const portalConfig = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
 
-    const [configuredTypes, passthroughKeys] = await Promise.all([
-      getConfiguredAuthTypes(),
-      getEmailDependentPassthroughKeys(),
-    ])
-    const filteredOAuth = filterOAuthByCredentials(
-      portalConfig.oauth,
-      configuredTypes,
-      passthroughKeys
-    )
-    const customProviderNames = await getCustomProviderNames(filteredOAuth, configuredTypes)
+    const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
-      oauth: filteredOAuth,
       features: portalConfig.features,
-      ...(customProviderNames && { customProviderNames }),
+      ...(oidcProviders.length > 0 && { oidcProviders }),
       ...(welcome && { welcomeCard: welcome }),
       portalAccess: {
         isPrivate: portalConfig.access?.visibility === 'private',
@@ -817,14 +767,9 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       configuredTypes,
       passthroughKeys
     )
-    const filteredPortalOAuth = filterOAuthByCredentials(
-      portalConfig.oauth,
-      configuredTypes,
-      passthroughKeys
-    )
-    // Only portal exposes generic-oauth providers, so display-name overrides
-    // are computed for the portal surface only.
-    const portalCustomNames = await getCustomProviderNames(filteredPortalOAuth, configuredTypes)
+    // Public OIDC buttons come from the identity_provider table (portal
+    // surface only); the static map supplies social providers only.
+    const portalOidcProviders = await getPublicOidcProviders()
 
     const brandingData: SettingsBrandingData = {
       name: org.name,
@@ -848,13 +793,13 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       publicAuthConfig: {
         oauth: filteredAuthOAuth,
         openSignup: authConfig.openSignup,
+        twoFactor: { required: authConfig.twoFactor?.required ?? false },
       },
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)
         return {
-          oauth: filteredPortalOAuth,
           features: portalConfig.features,
-          ...(portalCustomNames && { customProviderNames: portalCustomNames }),
+          ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
           ...(welcome && { welcomeCard: welcome }),
           portalAccess: {
             isPrivate: portalConfig.access?.visibility === 'private',
@@ -915,12 +860,6 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
  * Update feature flags (partial update, merges with existing)
  */
 export async function updateFeatureFlags(input: Partial<FeatureFlags>): Promise<FeatureFlags> {
-  // Per-key managed gate: only the keys declared in the config file
-  // are locked; every other flag stays UI-editable. Assert before any
-  // DB write so a partial update with one locked key fails atomically.
-  for (const key of Object.keys(input)) {
-    await assertNotManaged(`features.${key}`)
-  }
   // Tier gate: enabling AI feedback extraction is plan-entitled (Scale on
   // cloud). Checked only on enable so a downgrade can still switch it off.
   if (input.aiFeedbackExtraction === true) {

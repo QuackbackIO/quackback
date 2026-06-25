@@ -10,45 +10,15 @@
  * are handled by `savePlatformCredentials` already.
  */
 
-import {
-  getConfiguredIntegrationTypes,
-  getPlatformCredentials,
-} from '@/lib/server/domains/platform-credentials/platform-credential.service'
-import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
-import type { TierLimits } from '@/lib/server/domains/settings/tier-limits.types'
+import { getConfiguredIntegrationTypes } from '@/lib/server/domains/platform-credentials/platform-credential.service'
 
 export const SSO_CREDENTIAL_TYPE = 'auth_sso' as const
 
-/** Returns the SSO OIDC client secret from `platform_credentials`,
- *  or null when no row exists. Decrypts on every call — callers
- *  should be on the auth runtime path, not the hot UI status path. */
-export async function getSsoClientSecret(): Promise<string | null> {
-  const row = await getPlatformCredentials(SSO_CREDENTIAL_TYPE)
-  return row?.clientSecret ?? null
-}
-
-/** "Is the SSO secret available?" — used by the status row and the
- *  enforcement bootstrap precondition. Reads the cached configured-
- *  integration-types Set (1h TTL, invalidated on save/delete) so
- *  status-page renders don't decrypt the secret unnecessarily. */
+/** "Is the SSO secret available?" — backs the secret-presence gate that
+ *  blocks enabling SSO without a saved client secret. Reads the cached
+ *  configured-integration-types Set (1h TTL, invalidated on save/delete)
+ *  so callers don't decrypt the secret unnecessarily. */
 export async function hasSsoClientSecret(): Promise<boolean> {
   const types = await getConfiguredIntegrationTypes()
   return types.has(SSO_CREDENTIAL_TYPE)
-}
-
-/**
- * Predicate matching the conditions under which `auth/index.ts`
- * registers the SSO generic-OAuth provider. The login dispatcher and
- * the runtime registration filter both consult this so verified-
- * domain users are never redirected to a provider the auth instance
- * didn't register (tier downgrade, secret never saved, or any future
- * registration precondition added here).
- */
-export async function isSsoActuallyRegistered(
-  sso: AuthConfig['ssoOidc'],
-  tierLimits: Pick<TierLimits, 'features'>
-): Promise<boolean> {
-  if (!sso?.enabled) return false
-  if (!tierLimits.features.customOidcProvider) return false
-  return hasSsoClientSecret()
 }

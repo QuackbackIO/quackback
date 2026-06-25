@@ -127,3 +127,23 @@ describe('getPublicAuthConfig — magicLink passthrough', () => {
     expect(result?.oauth.github).toBeFalsy() // no auth_github credential
   })
 })
+
+describe('getPublicAuthConfig — twoFactor.required passthrough', () => {
+  it('exposes twoFactor.required=true when the workspace requires 2FA', async () => {
+    mockFindFirst.mockResolvedValueOnce({
+      ...baseSettingsRow,
+      authConfig: JSON.stringify({
+        oauth: { password: true },
+        openSignup: false,
+        twoFactor: { required: true },
+      }),
+    })
+    const result = await getPublicAuthConfig()
+    expect(result?.twoFactor?.required).toBe(true)
+  })
+
+  it('defaults twoFactor.required to false when absent', async () => {
+    const result = await getPublicAuthConfig()
+    expect(result?.twoFactor?.required).toBe(false)
+  })
+})

@@ -6,7 +6,7 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { isTeamMember } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
-import { signOut } from '@/lib/client/auth-client'
+import { signOut, authClient } from '@/lib/client/auth-client'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +18,6 @@ import {
 import { Avatar } from '@/components/ui/avatar'
 import { UserStatsBar } from '@/components/shared/user-stats'
 import {
-  ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   Cog6ToothIcon,
   ComputerDesktopIcon,
@@ -27,7 +26,7 @@ import {
   SunIcon,
 } from '@heroicons/react/24/solid'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { hasAnyPortalAuthMethod } from '@/components/auth/oauth-buttons'
+import { hasAnyPortalAuthMethod, resolveSoleOidcProvider } from '@/components/auth/oauth-buttons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getMyConversationsFn } from '@/lib/server/functions/chat'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
@@ -90,21 +89,26 @@ export function PortalHeader({
   })
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
-  // Team members can still reach /admin/login directly.
-  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicPortalConfig?.oauth ?? {}, {
-    ssoEnabled: registeredAuthProviders?.includes('sso') ?? false,
-    hasVerifiedDomain: (settings?.verifiedDomains ?? []).some((d) => d.verifiedAt !== null),
+  // Team members can still reach /admin/login directly. Counts any registered
+  // OIDC provider — including a routed-only one with no public button, which a
+  // domain user reaches by entering their email — not just the legacy `sso` id.
+  const portalAuthEnabled = hasAnyPortalAuthMethod(settings?.publicAuthConfig?.oauth ?? {}, {
+    registeredAuthProviders,
+    oidcProviders: settings?.publicPortalConfig?.oidcProviders,
   })
+
+  // When the ONLY sign-in method is a single OIDC provider, every sign-in goes
+  // through it — so "Log in" / "Sign up" redirect straight to the IdP and skip
+  // the email-entry dialog entirely.
+  const soleOidcProviderId = resolveSoleOidcProvider(
+    registeredAuthProviders,
+    settings?.publicAuthConfig?.oauth ?? {}
+  )
 
   const authPopover = useAuthPopoverSafe()
   const openAuthPopover = authPopover?.openAuthPopover
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  // True while a just-completed sign-in is being applied (router.invalidate
-  // refetches the session). Bridges the window where the old session is still
-  // logged-out so the header shows "Signing in…" instead of flashing the
-  // Log in / Sign up buttons.
-  const [signingIn, setSigningIn] = useState(false)
 
   // Avoid hydration mismatch for theme toggle
   useEffect(() => {
@@ -114,13 +118,11 @@ export function PortalHeader({
   // Listen for auth success to refetch session and role via router invalidation
   useAuthBroadcast({
     onSuccess: () => {
-      setSigningIn(true)
       // Invalidate user-scoped queries so reaction highlights and vote data refresh
       queryClient.invalidateQueries({ queryKey: ['portal', 'post'] })
       queryClient.invalidateQueries({ queryKey: ['votedPosts'] })
-      // Refetch loaders (includes session and userRole); clear the transitional
-      // state once the new session has loaded.
-      void router.invalidate().finally(() => setSigningIn(false))
+      // Refetch loaders (includes session and userRole) for the new session.
+      void router.invalidate()
     },
   })
 
@@ -149,6 +151,14 @@ export function PortalHeader({
 
   // Team members (admin, member) can access admin dashboard
   const canAccessAdmin = isLoggedIn && isTeamMember(userRole)
+
+  // Skip the sign-in dialog for a single-IdP workspace: go straight to the
+  // OIDC provider (same redirect the dialog's "Continue" path uses), returning
+  // to the current page afterwards.
+  const redirectToSoleProvider = () => {
+    if (!soleOidcProviderId) return
+    void authClient.signIn.oauth2({ providerId: soleOidcProviderId, callbackURL: pathname })
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -296,6 +306,14 @@ export function PortalHeader({
               <UserStatsBar />
             </div>
             <DropdownMenuSeparator />
+            {canAccessAdmin && (
+              <DropdownMenuItem asChild>
+                <Link to="/admin">
+                  <ShieldCheckIcon className="me-2 h-4 w-4" />
+                  <FormattedMessage id="portal.header.auth.admin" defaultMessage="Admin" />
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
               <Link to="/settings">
                 <Cog6ToothIcon className="me-2 h-4 w-4" />
@@ -308,23 +326,24 @@ export function PortalHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : signingIn ? (
-        // Sign-in just succeeded; the session refetch is in flight. Show a
-        // transitional state instead of flashing the Log in / Sign up buttons.
-        <div
-          className="flex items-center gap-2 px-3 text-sm text-muted-foreground"
-          aria-live="polite"
-        >
-          <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-          <FormattedMessage id="portal.auth.signingIn" defaultMessage="Signing in..." />
-        </div>
       ) : openAuthPopover && portalAuthEnabled ? (
         // Anonymous user with auth popover available - show login/signup buttons
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => openAuthPopover({ mode: 'login' })}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'login' })
+            }
+          >
             <FormattedMessage id="portal.header.auth.logIn" defaultMessage="Log in" />
           </Button>
-          <Button size="sm" onClick={() => openAuthPopover({ mode: 'signup' })}>
+          <Button
+            size="sm"
+            onClick={() =>
+              soleOidcProviderId ? redirectToSoleProvider() : openAuthPopover({ mode: 'signup' })
+            }
+          >
             <FormattedMessage id="portal.header.auth.signUp" defaultMessage="Sign up" />
           </Button>
         </div>

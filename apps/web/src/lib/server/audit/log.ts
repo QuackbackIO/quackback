@@ -35,6 +35,13 @@ export type AuditEventType =
   | 'sso.enforcement.domain.enabled'
   | 'sso.enforcement.domain.disabled'
   | 'sso.config.changed'
+  // Multi-provider identity-provider CRUD (Task 15)
+  | 'idp.created'
+  | 'idp.updated'
+  | 'idp.deleted'
+  | 'idp.credentials.changed'
+  | 'idp.domain.enforced'
+  | 'idp.domain.unenforced'
   | 'sso.recovery_codes.generated'
   | 'sso.recovery_codes.used'
   | 'sso.recovery_codes.invalidated'

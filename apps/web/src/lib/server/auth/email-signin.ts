@@ -29,10 +29,14 @@ export async function requestEmailSignin(opts: {
 
   // Failed verifies (token consumed by an email scanner, expired, etc.)
   // need to land on the right login page. Admin callbacks (`/admin/...`)
-  // bounce to /admin/login — that page is configured for team auth and
-  // can immediately request a replacement link. Portal callbacks fall
-  // back to /auth/login (the public signup/login screen).
-  const errorCallbackPath = opts.callbackURL.startsWith('/admin') ? '/admin/login' : '/auth/login'
+  // bounce to the unified login with a `/admin` callback so it renders
+  // the team break-glass form and can request a replacement link. Better-
+  // Auth merges its `error` param onto this URL via `URL.searchParams`,
+  // so the existing `?callbackUrl=` query survives (joined with `&`).
+  // Portal callbacks fall back to /auth/login (the public login screen).
+  const errorCallbackPath = opts.callbackURL.startsWith('/admin')
+    ? '/auth/login?callbackUrl=/admin'
+    : '/auth/login'
 
   const [{ url: signInUrl }, , settings] = await Promise.all([
     mintMagicLinkUrl({

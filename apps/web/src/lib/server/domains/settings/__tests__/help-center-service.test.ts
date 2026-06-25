@@ -53,6 +53,7 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
   settings: { id: 'id' },
   ssoVerifiedDomain: { id: 'id', createdAt: 'created_at' },
+  identityProvider: { id: 'id', createdAt: 'created_at' },
 }))
 
 // --- S3 mock ---

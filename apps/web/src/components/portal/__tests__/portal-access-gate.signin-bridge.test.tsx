@@ -23,8 +23,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 
-// GateCard subscribes without an `enabled` flag; the nested AuthDialog passes
-// one — use that to grab the gate's handler specifically.
+// GateCard subscribes without an `enabled` flag.
 vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   useAuthBroadcast: (opts: { onSuccess?: () => void; enabled?: boolean }) => {
     if (opts && !('enabled' in opts)) hoisted.gateOnSuccess = opts.onSuccess ?? null
@@ -33,7 +32,7 @@ vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
 
 vi.mock('@/lib/client/auth-client', () => ({ signOut: vi.fn() }))
 
-// The dialog body pulls in the full auth form (server fns, OTP, etc.); stub it.
+// The form body pulls in the full auth flow (server fns, OTP, etc.); stub it.
 vi.mock('@/components/auth/portal-auth-form-inline', () => ({
   PortalAuthFormInline: () => <div data-testid="auth-form-body" />,
 }))
@@ -56,7 +55,7 @@ function renderGate() {
   )
 }
 
-const cta = () => screen.queryByRole('button', { name: /sign in \/ register/i })
+const formBody = () => screen.queryByTestId('auth-form-body')
 
 describe('PortalAccessGate — post-sign-in bridge', () => {
   beforeEach(() => {
@@ -68,12 +67,12 @@ describe('PortalAccessGate — post-sign-in bridge', () => {
 
   // After a successful sign-in the _portal loader re-runs (router.invalidate).
   // While that refetch is in flight the gate stays mounted, so it must show a
-  // transitional state instead of flashing its "Sign in / Register" CTA back —
-  // mirrors the PortalHeader "Signing in…" bridge (#249).
-  it('swaps the Sign in / Register CTA for a Signing in… state during the post-login refetch', () => {
+  // transitional state instead of flashing the auth form back — mirrors the
+  // PortalHeader "Signing in…" bridge (#249).
+  it('swaps the auth form for a Signing in… state during the post-login refetch', () => {
     renderGate()
 
-    expect(cta()).toBeInTheDocument()
+    expect(formBody()).toBeInTheDocument()
     expect(screen.queryByText(/signing in/i)).not.toBeInTheDocument()
 
     expect(typeof hoisted.gateOnSuccess).toBe('function')
@@ -81,30 +80,28 @@ describe('PortalAccessGate — post-sign-in bridge', () => {
       hoisted.gateOnSuccess?.()
     })
 
-    expect(cta()).not.toBeInTheDocument()
+    expect(formBody()).not.toBeInTheDocument()
     expect(screen.getByText(/signing in/i)).toBeInTheDocument()
   })
 
-  // Regression: when the refetch *resolves*, the gate must not flash the CTA
+  // Regression: when the refetch *resolves*, the gate must not flash the form
   // back for a frame before it unmounts (access granted) or re-renders into the
   // unauthorized branch. The transitional state holds until the gate goes away.
-  it('does not flash the CTA back when the post-login refetch resolves', async () => {
+  it('does not flash the auth form back when the post-login refetch resolves', async () => {
     renderGate()
     expect(typeof hoisted.gateOnSuccess).toBe('function')
 
     act(() => {
       hoisted.gateOnSuccess?.()
     })
-    expect(cta()).not.toBeInTheDocument()
+    expect(formBody()).not.toBeInTheDocument()
 
-    // The loader finishes — drive the invalidate promise to resolution and let
-    // any resulting state updates flush.
     await act(async () => {
       hoisted.resolveInvalidate?.()
       await Promise.resolve()
     })
 
-    expect(cta()).not.toBeInTheDocument()
+    expect(formBody()).not.toBeInTheDocument()
     expect(screen.getByText(/signing in/i)).toBeInTheDocument()
   })
 })

@@ -107,15 +107,32 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
         throw new Error(`Unknown auth provider: ${data.credentialType}`)
       }
 
+      // Lockout guard: deleting these credentials disables the provider via the
+      // low-level updateAuthConfig below, which bypasses updateAuthConfigFn's
+      // wouldLeaveNoWorkingSignInMethod check. Enforce the invariant here BEFORE
+      // anything is deleted — only matters when this provider is currently the
+      // enabled method (disabling an already-off provider can't cause a lockout).
+      const { getAuthConfig, updateAuthConfig } =
+        await import('@/lib/server/domains/settings/settings.service')
+      const authConfig = await getAuthConfig()
+      const oauthConfig = (authConfig.oauth ?? {}) as Record<string, boolean | undefined>
+      if (oauthConfig[provider.id]) {
+        const { wouldLeaveNoWorkingSignInMethod } =
+          await import('@/lib/server/auth/sign-in-method-availability')
+        if (await wouldLeaveNoWorkingSignInMethod({ ...oauthConfig, [provider.id]: false })) {
+          const { ConflictError } = await import('@/lib/shared/errors')
+          throw new ConflictError(
+            'LAST_SIGN_IN_METHOD',
+            'Cannot remove the credentials for the only enabled sign-in method. Enable another method first.'
+          )
+        }
+      }
+
       await deletePlatformCredentials(data.credentialType)
 
-      // Disable this provider in portal config if it was enabled
-      const { getPortalConfig, updatePortalConfig } =
-        await import('@/lib/server/domains/settings/settings.service')
-      const portalConfig = await getPortalConfig()
-      const oauthConfig = portalConfig.oauth as Record<string, boolean | undefined>
+      // Disable this provider in the unified auth config if it was enabled
       if (oauthConfig[provider.id]) {
-        await updatePortalConfig({ oauth: { [provider.id]: false } })
+        await updateAuthConfig({ oauth: { [provider.id]: false } })
       }
 
       // Reset auth instance

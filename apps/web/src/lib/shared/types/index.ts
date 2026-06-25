@@ -61,7 +61,7 @@ export type { Webhook } from './webhooks'
 export type { ApiKey } from './api-keys'
 
 // Settings types
-export type { PortalAuthMethods, FeatureFlags } from './settings'
+export type { FeatureFlags } from './settings'
 export { FEATURE_FLAG_REGISTRY, LAB_SECTIONS } from './settings'
 
 // Import types

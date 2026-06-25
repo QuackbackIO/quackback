@@ -1,13 +1,15 @@
 /**
- * SSO Test sign-in callback handler. Invoked by the auth catch-all
- * (`SSO_OAUTH_CALLBACK_PATH`) before Better-Auth — a hit on the
+ * SSO Test sign-in callback handler. Invoked by the auth catch-all for any
+ * genericOAuth callback path before Better-Auth — a hit on the
  * `sso-test:<state>` Redis key dispatches the diagnostic handshake;
  * a miss falls through to a real OAuth sign-in.
  *
- * On a successful handshake this stamps `ssoOidc.lastSuccessfulTestAt`
- * (via `markSsoTestSucceeded`) to unlock the SSO gates, and does one
- * read of `user.email` to report whether the IdP identity matched the
- * admin who ran the test — informational only, not a gate.
+ * On a successful handshake this stamps the tested provider's
+ * `lastSuccessfulTestAt` (via `markTestSucceeded`) to unlock its enforcement
+ * gate. For the legacy `sso` provider it also stamps
+ * `ssoOidc.lastSuccessfulTestAt` (via `markSsoTestSucceeded`) for backward
+ * compatibility. Reports whether the IdP identity matched the admin —
+ * informational only, not a gate.
  */
 
 import { runHandshake } from '@/lib/server/auth/sso-test-handshake'
@@ -70,7 +72,13 @@ export async function handleSsoTestCallback(
     idpErrorDescription: input.errorDescription,
     expectedState: session.state,
     expectedNonce: session.nonce,
+    // Discovery providers re-resolve from the doc; manual-endpoint providers
+    // pass the endpoints resolved at start time (discoveryUrl is undefined).
     discoveryUrl: session.discoveryUrl,
+    tokenEndpoint: session.tokenEndpoint,
+    jwksUri: session.jwksUri,
+    issuer: session.issuer,
+    userinfoEndpoint: session.userinfoEndpoint,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,
@@ -90,13 +98,11 @@ export async function handleSsoTestCallback(
         steps: result.steps,
       }
 
-  // A successful test sign-in stamps `ssoOidc.lastSuccessfulTestAt`,
-  // which unlocks the SSO gates (enabling SSO + per-domain enforcement).
-  // The test ran a real end-to-end OIDC handshake against the
-  // workspace's IdP — that the handshake completed is the meaningful
-  // proof the connection works, regardless of which IdP account signed
-  // in. The gate logic compares the stamp against
-  // `ssoOidc.detailsChangedAt`, so a stale test (predating the last
+  // A successful test sign-in stamps the provider's `lastSuccessfulTestAt`,
+  // which unlocks its enforcement gate. The test ran a real end-to-end OIDC
+  // handshake — that it completed is the meaningful proof the connection
+  // works, regardless of which IdP account signed in. The gate logic compares
+  // the stamp against `detailsChangedAt`, so a stale test (predating the last
   // discoveryUrl / clientId / secret change) no longer counts.
   //
   // `identityMatched` is still computed — purely informational, shown
@@ -104,9 +110,39 @@ export async function handleSsoTestCallback(
   // but it does not gate anything.
   let identityMatched = false
   if (result.ok) {
-    const { markSsoTestSucceeded } = await import('@/lib/server/domains/settings/settings.service')
-    await markSsoTestSucceeded()
-    log.info({ admin_user_id: session.adminUserId }, 'sso test succeeded; sso gates unlocked')
+    const { listIdentityProviders, markTestSucceeded } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const providers = await listIdentityProviders()
+    const provider = providers.find((p) => p.registrationId === session.registrationId)
+    // Only stamp when the provider is UNCHANGED since the test started. If its
+    // connection details (clientId/endpoints/secret) were edited mid-test, the
+    // handshake exercised the OLD config — stamping would let a stale test
+    // unlock enforcement (lastSuccessfulTestAt > detailsChangedAt) for an
+    // untested new configuration. The admin must re-test after editing.
+    const unchanged = !!provider && provider.detailsChangedAt === session.detailsChangedAt
+
+    if (provider && unchanged) {
+      await markTestSucceeded(provider.id)
+
+      // For the legacy `sso` provider also stamp the JSON blob that the
+      // old single-provider gate still reads, keeping both paths in sync.
+      if (session.registrationId === 'sso') {
+        const { markSsoTestSucceeded } =
+          await import('@/lib/server/domains/settings/settings.service')
+        await markSsoTestSucceeded()
+      }
+    }
+
+    log.info(
+      {
+        admin_user_id: session.adminUserId,
+        registrationId: session.registrationId,
+        stamped: provider ? unchanged : false,
+      },
+      unchanged
+        ? 'sso test succeeded; provider gates unlocked'
+        : 'sso test succeeded but provider changed mid-test; not stamping'
+    )
 
     if (result.claims.email) {
       const { db, user, eq } = await import('@/lib/server/db')

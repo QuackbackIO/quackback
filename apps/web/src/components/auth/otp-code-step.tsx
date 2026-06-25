@@ -2,7 +2,7 @@ import { useIntl, FormattedMessage } from 'react-intl'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/shared/form-error'
 import { ArrowPathIcon } from '@heroicons/react/24/solid'
-import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { InputOTP, InputOTPSixSlots } from '@/components/ui/input-otp'
 
 interface OtpCodeStepProps {
   /** Email already submitted — only used in the inner header when shown. */
@@ -85,14 +85,7 @@ export function OtpCodeStep({
           })}
           aria-invalid={!!error || undefined}
         >
-          <InputOTPGroup>
-            <InputOTPSlot index={0} />
-            <InputOTPSlot index={1} />
-            <InputOTPSlot index={2} />
-            <InputOTPSlot index={3} />
-            <InputOTPSlot index={4} />
-            <InputOTPSlot index={5} />
-          </InputOTPGroup>
+          <InputOTPSixSlots />
         </InputOTP>
       </div>
 

@@ -73,4 +73,15 @@ function InputOTPSeparator({ ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator }
+/** The standard 6-slot group shared by every OTP / 2FA code input. */
+function InputOTPSixSlots() {
+  return (
+    <InputOTPGroup>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <InputOTPSlot key={i} index={i} />
+      ))}
+    </InputOTPGroup>
+  )
+}
+
+export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator, InputOTPSixSlots }

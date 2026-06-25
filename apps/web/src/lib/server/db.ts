@@ -122,6 +122,7 @@ export {
   sessionRelations,
   settings,
   settingsRelations,
+  identityProvider,
   ssoVerifiedDomain,
   twoFactor,
   user,
@@ -387,6 +388,7 @@ export type {
   WidgetProfileSupportDisplayRules,
   WidgetProfileTicketListScope,
   WidgetProfileTicketPriority,
+  IdentityProviderAttributeMapping
 } from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)

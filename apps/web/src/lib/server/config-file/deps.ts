@@ -1,7 +1,6 @@
 import { db, settings, eq } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { invalidateTierLimitsCache } from '@/lib/server/domains/settings/tier-limits.service'
-import { resetAuth } from '@/lib/server/auth/index'
 import { bumpAuthConfigVersionInTx } from '@/lib/server/auth/config-version'
 import { generateId } from '@quackback/ids'
 import type { ReconcileDeps, SettingsInsert, SettingsRow, SettingsUpdate } from './reconciler'
@@ -21,8 +20,6 @@ export function makeReconcileDeps(): ReconcileDeps {
         slug: row.slug,
         setupState: row.setupState,
         tierLimits: row.tierLimits,
-        featureFlags: row.featureFlags,
-        authConfig: row.authConfig ?? null,
         managedFieldPaths: (row.managedFieldPaths as string[] | null) ?? [],
       } satisfies SettingsRow
     },
@@ -64,8 +61,6 @@ export function makeReconcileDeps(): ReconcileDeps {
           createdAt: new Date(),
           setupState: insert.setupState,
           tierLimits: insert.tierLimits,
-          featureFlags: insert.featureFlags,
-          authConfig: insert.authConfig,
           managedFieldPaths: insert.managedFieldPaths,
           authConfigVersion: 1,
         })
@@ -76,9 +71,6 @@ export function makeReconcileDeps(): ReconcileDeps {
     },
     invalidateTierLimitsCache: async () => {
       invalidateTierLimitsCache()
-    },
-    resetAuth: async () => {
-      resetAuth()
     },
     reportStatus: makeReportStatus(),
   }
