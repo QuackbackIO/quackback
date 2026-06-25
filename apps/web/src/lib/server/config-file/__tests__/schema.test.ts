@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseQuackbackConfig, quackbackConfigSchema } from '../schema'
+import { getDeprecatedConfigKeys, parseQuackbackConfig, quackbackConfigSchema } from '../schema'
 
 describe('parseQuackbackConfig', () => {
   it('accepts a fully-populated valid config', () => {
@@ -15,7 +15,6 @@ describe('parseQuackbackConfig', () => {
           aiTokensPerMonth: 100000,
           features: { customDomain: true, integrations: false },
         },
-        features: { helpCenter: true, experimentalRichEditor: false },
       },
     })
     expect(result.success).toBe(true)
@@ -23,7 +22,6 @@ describe('parseQuackbackConfig', () => {
       expect(result.data.spec.workspace?.name).toBe('Acme')
       expect(result.data.spec.tierLimits?.maxBoards).toBe(10)
       expect(result.data.spec.tierLimits?.features?.customDomain).toBe(true)
-      expect(result.data.spec.features?.helpCenter).toBe(true)
     }
   })
 
@@ -68,86 +66,43 @@ describe('parseQuackbackConfig', () => {
     expect(result.success).toBe(false)
   })
 
-  it('accepts an auth block', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: { auth: { oauth: { google: true }, openSignup: false } },
-    })
-    expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.spec.auth?.oauth?.google).toBe(true)
-      expect(result.data.spec.auth?.openSignup).toBe(false)
-    }
-  })
-
-  it('rejects unknown OAuth provider keys in auth.oauth (v1 is google+github only)', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: { auth: { oauth: { discord: true } } },
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts an auth.ssoOidc block', () => {
+  it('accepts deprecated auth and features keys without treating them as schema errors', () => {
     const result = parseQuackbackConfig({
       apiVersion: 'quackback.io/v1',
       kind: 'QuackbackConfig',
       spec: {
+        workspace: { name: 'Acme', slug: 'acme' },
+        features: { helpCenter: true },
         auth: {
+          oauth: { google: true },
+          openSignup: false,
           ssoOidc: {
             enabled: true,
             discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
-            clientId: 'workspace-x',
-            autoCreateUsers: true,
+            clientId: 'client-id',
           },
         },
       },
     })
+
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.spec.auth?.ssoOidc?.enabled).toBe(true)
-      expect(result.data.spec.auth?.ssoOidc?.clientId).toBe('workspace-x')
-      expect(result.data.spec.auth?.ssoOidc?.autoCreateUsers).toBe(true)
+      expect(result.data.spec.workspace?.name).toBe('Acme')
+      expect(getDeprecatedConfigKeys(result.data.spec)).toEqual(['auth', 'features'])
     }
   })
 
-  it('rejects unknown keys inside auth.ssoOidc', () => {
+  it('reports no deprecated keys for a modern config', () => {
     const result = parseQuackbackConfig({
       apiVersion: 'quackback.io/v1',
       kind: 'QuackbackConfig',
-      spec: {
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-            clientId: 'x',
-            // Secrets must never be declared in the file — strict mode
-            // rejects an attempted clientSecret leak.
-            clientSecret: 'leak',
-          },
-        },
-      } as unknown as Record<string, unknown>,
+      spec: { workspace: { name: 'Acme' } },
     })
-    expect(result.success).toBe(false)
-  })
 
-  it('rejects an invalid discoveryUrl', () => {
-    const result = parseQuackbackConfig({
-      apiVersion: 'quackback.io/v1',
-      kind: 'QuackbackConfig',
-      spec: {
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'not-a-url',
-            clientId: 'x',
-          },
-        },
-      },
-    })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(getDeprecatedConfigKeys(result.data.spec)).toEqual([])
+    }
   })
 })
 

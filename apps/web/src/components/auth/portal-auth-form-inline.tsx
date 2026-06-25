@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { Input } from '@/components/ui/input'
@@ -17,25 +18,36 @@ import { AUTH_PROVIDER_ICON_MAP } from '@/components/icons/social-provider-icons
 import {
   getEnabledOAuthProviders,
   getOAuthRedirectUrl,
+  hasRoutableOidcProvider,
   type OAuthProviderEntry,
+  type OidcProviderEntry,
 } from '@/components/auth/oauth-buttons'
-import { openAuthPopup, usePopupTracker } from '@/lib/client/hooks/use-auth-broadcast'
-import { authClient } from '@/lib/client/auth-client'
-import { stashTwoFactorCallbackUrl } from '@/lib/server/auth/client'
 import {
-  lookupAuthMethodsFn,
-  SSO_UNAVAILABLE_MESSAGE,
-  type LookupAuthMethodsResult,
-} from '@/lib/server/functions/auth'
+  openAuthPopup,
+  usePopupTracker,
+  postAuthSuccess,
+} from '@/lib/client/hooks/use-auth-broadcast'
+import { authClient } from '@/lib/client/auth-client'
+import { isTeamCallback } from '@/lib/shared/routing'
+import { lookupAuthMethodsFn, type LookupAuthMethodsResult } from '@/lib/server/functions/auth'
 import { OtpCodeStep } from './otp-code-step'
 import { useEmailSignin } from './use-email-signin'
+import { TwoFactorEnrollSteps } from './two-factor-enroll-steps'
+import { TwoFactorChallengeStep } from './two-factor-challenge-step'
 import type { AuthFormStep } from './email-signin-types'
 
 interface OrgAuthConfig {
   found: boolean
   oauth: Record<string, boolean | undefined>
   openSignup?: boolean
-  customProviderNames?: Record<string, string>
+  /** Public OIDC sign-in buttons from the identity_provider list. */
+  oidcProviders?: OidcProviderEntry[]
+  /** All registered auth provider ids (OIDC registrationIds + social ids).
+   *  Lets the form show the email input for a routed-only IdP that has no
+   *  public button — a domain email is the only way to reach it. */
+  registeredAuthProviders?: string[]
+  /** Workspace requires 2FA — drives inline enrollment after password sign-in. */
+  twoFactorRequired?: boolean
 }
 
 interface InvitationInfo {
@@ -52,6 +64,7 @@ interface PortalAuthFormInlineProps {
   invitationId?: string | null
   /** Workspace display name shown in Stage 1 / Stage 2 copy. */
   workspaceName?: string
+  callbackUrl?: string
   onModeSwitch?: (mode: 'login' | 'signup') => void
   /** Lets the surrounding dialog adapt its header to the form's step. */
   onContextChange?: (ctx: { step: AuthFormStep; email: string }) => void
@@ -111,7 +124,7 @@ function OAuthButton({
 /**
  * Inline Portal Auth Form for use in dialogs/popovers.
  *
- * Email-first two-stage flow matching `<PortalAuthForm>`:
+ * Email-first two-stage flow:
  *
  *  Stage 1 (`email`): OAuth tiles + email field + Continue. OAuth tiles
  *    bypass Stage 2 entirely (popup-driven, not redirect-driven, since
@@ -122,7 +135,6 @@ function OAuthButton({
  *      (the dialog is closing anyway since the page navigates).
  *    - `sso-default`      → "Workspace uses SSO" card + escape hatch.
  *    - `methods`          → password + magic-link form, email locked.
- *    - `sso-unavailable`  → `SSO_UNAVAILABLE_MESSAGE`.
  *    - Special: signup-mode + unknown email + openSignup=false →
  *      "no account / signups closed" block.
  *
@@ -134,13 +146,17 @@ export function PortalAuthFormInline({
   authConfig,
   invitationId,
   workspaceName,
+  callbackUrl,
   onModeSwitch,
   onContextChange,
 }: PortalAuthFormInlineProps) {
   const intl = useIntl()
+  const effectiveCallbackUrl = callbackUrl ?? '/'
+  const showRecoveryLink = isTeamCallback(callbackUrl)
   const passwordEnabled = authConfig?.oauth?.password ?? true
   const magicLinkEnabled = authConfig?.oauth?.magicLink ?? false
   const openSignup = authConfig?.openSignup
+  const twoFactorRequired = authConfig?.twoFactorRequired ?? false
   const methodsDefaultStep: AuthFormStep =
     !passwordEnabled && magicLinkEnabled ? 'email' : 'credentials'
 
@@ -150,10 +166,11 @@ export function PortalAuthFormInline({
   type View =
     | { stage: 'email' }
     | { stage: 'methods-step'; step: AuthFormStep }
-    | { stage: 'sso-default' }
-    | { stage: 'sso-unavailable' }
+    | { stage: 'sso-default'; providerId: string }
     | { stage: 'closed-signup' }
     | { stage: 'sso-redirecting' }
+    | { stage: 'two-factor-challenge' }
+    | { stage: 'two-factor-enroll' }
 
   // Invitation flow: the email is server-known, so Stage 1 is moot.
   const [view, setView] = useState<View>(
@@ -172,9 +189,8 @@ export function PortalAuthFormInline({
   const lookupAuthMethods = useServerFn(lookupAuthMethodsFn)
 
   const emailSignin = useEmailSignin({
-    callbackUrl: '/',
-    onSuccess: async () => {
-      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
+    callbackUrl: effectiveCallbackUrl,
+    onSuccess: () => {
       postAuthSuccess()
     },
   })
@@ -238,7 +254,14 @@ export function PortalAuthFormInline({
   // `credentials` so the dialog renders the default Welcome / Create
   // header until the user lands inside the methods form.
   useEffect(() => {
-    const step: AuthFormStep = view.stage === 'methods-step' ? view.step : 'credentials'
+    const step: AuthFormStep =
+      view.stage === 'methods-step'
+        ? view.step
+        : view.stage === 'two-factor-enroll'
+          ? 'two-factor-enroll'
+          : view.stage === 'two-factor-challenge'
+            ? 'two-factor-challenge'
+            : 'credentials'
     onContextChange?.({ step, email })
   }, [view, email, onContextChange])
 
@@ -260,20 +283,19 @@ export function PortalAuthFormInline({
     setLoadingAction('continue')
     try {
       const result: LookupAuthMethodsResult = await lookupAuthMethods({
-        data: { email: trimmed, surface: 'portal' },
+        data: { email: trimmed },
       })
       if (result.kind === 'sso-redirect') {
         setView({ stage: 'sso-redirecting' })
         setLoadingAction('sso')
-        await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+        await authClient.signIn.oauth2({
+          providerId: result.providerId,
+          callbackURL: effectiveCallbackUrl,
+        })
         return
       }
       if (result.kind === 'sso-default') {
-        setView({ stage: 'sso-default' })
-        return
-      }
-      if (result.kind === 'sso-unavailable') {
-        setView({ stage: 'sso-unavailable' })
+        setView({ stage: 'sso-default', providerId: result.providerId })
         return
       }
       if (mode === 'signup' && openSignup === false) {
@@ -345,12 +367,6 @@ export function PortalAuthFormInline({
           )
         }
       } else {
-        // Stash the current page so the twoFactor client can splice it
-        // onto its `/auth/two-factor` redirect — the inline form lives
-        // inside a popover, so on challenge we want to land back here.
-        if (typeof window !== 'undefined') {
-          stashTwoFactorCallbackUrl(window.location.pathname + window.location.search)
-        }
         const result = await authClient.signIn.email({
           email,
           password,
@@ -364,8 +380,23 @@ export function PortalAuthFormInline({
               })
           )
         }
+        // better-auth's twoFactor plugin injects this field at runtime but
+        // the client type doesn't declare it — cast to surface it safely.
+        if (
+          (result.data as { twoFactorRedirect?: boolean } | null | undefined)?.twoFactorRedirect
+        ) {
+          setView({ stage: 'two-factor-challenge' })
+          setLoadingAction(null)
+          return
+        }
       }
-      const { postAuthSuccess } = await import('@/lib/client/hooks/use-auth-broadcast')
+      // A full session under a 2FA-required workspace can only mean the user
+      // is not enrolled (enrolled users get twoFactorRedirect, no session).
+      if (twoFactorRequired) {
+        setView({ stage: 'two-factor-enroll' })
+        setLoadingAction(null)
+        return
+      }
       postAuthSuccess()
     } catch (err) {
       setError(
@@ -526,14 +557,17 @@ export function PortalAuthFormInline({
   // Derive which auth methods are enabled
   const enabledProviders = getEnabledOAuthProviders(
     authConfig?.oauth ?? {},
-    authConfig?.customProviderNames
+    authConfig?.oidcProviders
   )
   const showOAuth = enabledProviders.length > 0
-  // Email entry (and the "or" divider + create-account link) only makes sense
-  // when a portal email method is enabled (password or magic-link); with both
-  // off it dead-ends at an empty Stage 2, so show only the OAuth tiles. Team
-  // members (incl. SSO) sign in at /admin/login, not here. (#231)
-  const emailEntryEnabled = passwordEnabled || magicLinkEnabled
+  // Email entry makes sense when a portal email method is enabled (password or
+  // magic-link), OR when a routed-only IdP exists — entering a domain email is
+  // the only way to reach a provider that renders no public button. Without
+  // either, Stage 2 would dead-end, so we show only the OAuth tiles. (#231)
+  const emailEntryEnabled =
+    passwordEnabled ||
+    magicLinkEnabled ||
+    hasRoutableOidcProvider(authConfig?.registeredAuthProviders, authConfig?.oidcProviders)
 
   // Loading invitation
   if (loadingInvitation) {
@@ -604,6 +638,22 @@ export function PortalAuthFormInline({
       </div>
     </div>
   )
+
+  // Break-glass for a team member whose only way in is SSO when SSO is down.
+  // Rendered ONLY in the SSO views (not the password/email forms, where a
+  // recovery code is irrelevant) and gated to team-bound sign-in via
+  // showRecoveryLink, so portal users never see it.
+  const recoveryLink = showRecoveryLink ? (
+    <p className="text-center text-sm text-muted-foreground">
+      <FormattedMessage id="portal.auth.ssoUnavailable" defaultMessage="SSO unavailable?" />{' '}
+      <Link
+        to="/auth/recovery"
+        className="font-medium text-foreground hover:underline underline-offset-4"
+      >
+        <FormattedMessage id="portal.auth.useRecoveryCode" defaultMessage="Use a recovery code" />
+      </Link>
+    </p>
+  ) : null
 
   // ============================================================
   // Stage 1 — email entry
@@ -722,6 +772,11 @@ export function PortalAuthFormInline({
           </>
         )}
 
+        {/* Break-glass only in the SSO-only Stage 1 — just the SSO button, no
+            email/password path in front of the admin. Elsewhere the recovery
+            link belongs in the SSO views, not this generic stage. */}
+        {showOAuth && !emailEntryEnabled && recoveryLink}
+
         {/* Misconfiguration safety net — updatePortalConfig blocks saving zero
             methods, but never strand the user on a blank card if it happens. */}
         {!showOAuth && !emailEntryEnabled && (
@@ -785,7 +840,10 @@ export function PortalAuthFormInline({
             setLoadingAction('sso')
             try {
               setView({ stage: 'sso-redirecting' })
-              await authClient.signIn.oauth2({ providerId: 'sso', callbackURL: '/' })
+              await authClient.signIn.oauth2({
+                providerId: view.providerId,
+                callbackURL: effectiveCallbackUrl,
+              })
             } catch (err) {
               setError(
                 (err as Error).message ||
@@ -794,7 +852,7 @@ export function PortalAuthFormInline({
                     defaultMessage: 'Could not start SSO sign-in.',
                   })
               )
-              setView({ stage: 'sso-default' })
+              setView({ stage: 'sso-default', providerId: view.providerId })
               setLoadingAction(null)
             }
           }}
@@ -820,21 +878,7 @@ export function PortalAuthFormInline({
         >
           <FormattedMessage id="portal.auth.sso.another" defaultMessage="Sign in another way" />
         </button>
-      </div>
-    )
-  }
-
-  // ============================================================
-  // Stage 2 — sso-unavailable branch
-  // ============================================================
-  if (view.stage === 'sso-unavailable') {
-    return (
-      <div className="space-y-4">
-        <BackToEmailLink onClick={backToEmail} />
-        <Alert variant="destructive">
-          <InformationCircleIcon className="h-4 w-4" />
-          <AlertDescription>{SSO_UNAVAILABLE_MESSAGE}</AlertDescription>
-        </Alert>
+        {recoveryLink}
       </div>
     )
   }
@@ -881,6 +925,47 @@ export function PortalAuthFormInline({
   }
 
   // ============================================================
+  // Stage 2 — two-factor challenge (enrolled user, better-auth returned
+  // twoFactorRedirect)
+  // ============================================================
+  if (view.stage === 'two-factor-challenge') {
+    return (
+      <TwoFactorChallengeStep
+        onComplete={postAuthSuccess}
+        onCancel={async () => {
+          try {
+            await authClient.signOut()
+          } finally {
+            setError('')
+            setView({ stage: 'methods-step', step: methodsDefaultStep })
+          }
+        }}
+      />
+    )
+  }
+
+  // ============================================================
+  // Stage 2 — two-factor enrollment (unenrolled user under a workspace
+  // that requires 2FA — enrolled users get twoFactorRedirect instead)
+  // ============================================================
+  if (view.stage === 'two-factor-enroll') {
+    return (
+      <TwoFactorEnrollSteps
+        password={password}
+        onComplete={postAuthSuccess}
+        onCancel={async () => {
+          try {
+            await authClient.signOut()
+          } finally {
+            setError('')
+            setView({ stage: 'methods-step', step: methodsDefaultStep })
+          }
+        }}
+      />
+    )
+  }
+
+  // ============================================================
   // Stage 2 — methods (password / magic link / forgot / reset / code)
   // ============================================================
   const step = view.step
@@ -891,22 +976,23 @@ export function PortalAuthFormInline({
       {invitationBanner}
 
       {(step === 'credentials' || step === 'email') && (
-        <>
-          {showBack && <BackToEmailLink onClick={backToEmail} />}
-          <div className="space-y-1 text-center">
-            <h2 className="text-lg font-semibold">
-              {mode === 'login' ? (
-                <FormattedMessage id="portal.auth.welcomeBack" defaultMessage="Welcome back" />
-              ) : (
-                <FormattedMessage
-                  id="portal.auth.createYourAccount"
-                  defaultMessage="Create your account"
-                />
-              )}
-            </h2>
-            {email && <p className="text-sm text-muted-foreground break-all">{email}</p>}
+        // Show the entered email as a filled, locked field (the dialog header
+        // already greets the user) — change it via "use a different email".
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="inline-email-locked">
+              <FormattedMessage id="portal.auth.email.label" defaultMessage="Email" />
+            </Label>
+            {showBack && <BackToEmailLink onClick={backToEmail} />}
           </div>
-        </>
+          <Input
+            id="inline-email-locked"
+            type="email"
+            value={email}
+            readOnly
+            className="bg-muted/40"
+          />
+        </div>
       )}
 
       {/* Password credentials form */}

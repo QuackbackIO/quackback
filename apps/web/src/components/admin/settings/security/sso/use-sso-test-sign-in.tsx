@@ -67,6 +67,10 @@ interface OpenOptions {
    *  with this as a confirmation banner (e.g. "Single sign-on is now
    *  enabled."). When omitted, the modal closes after onSuccess. */
   successMessage?: string
+  /** Provider registrationId — forwarded to `startSsoTestFn`. Defaults
+   *  to `'sso'` for the legacy single-provider gate prompts (Enable /
+   *  Require-SSO), which have no per-provider context. */
+  registrationId?: string
 }
 
 interface SsoTestSignInContextValue {
@@ -93,6 +97,9 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
   const successMessageRef = useRef<string | null>(null)
+  // Default to 'sso' for legacy gate prompts (Enable / Require-SSO) that
+  // open the modal without per-provider context.
+  const registrationIdRef = useRef<string>('sso')
   // Mirror "is a test actively in flight" in a ref so the popup / poll /
   // postMessage handlers read the latest value without re-attaching.
   // Gating on `=== 'testing'` (not `!== 'closed'`) is load-bearing: the
@@ -190,6 +197,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const open = useCallback((opts?: OpenOptions) => {
     onSuccessRef.current = opts?.onSuccess ?? null
     successMessageRef.current = opts?.successMessage ?? null
+    registrationIdRef.current = opts?.registrationId ?? 'sso'
     dispatch({ type: 'open', reason: opts?.reason })
   }, [])
 
@@ -197,7 +205,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'start' })
     let r: Awaited<ReturnType<typeof startTest>>
     try {
-      r = await startTest({ data: {} })
+      r = await startTest({ data: { registrationId: registrationIdRef.current } })
     } catch (err) {
       dispatch({
         type: 'failed',

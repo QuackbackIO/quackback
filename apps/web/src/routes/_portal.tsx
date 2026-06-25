@@ -5,7 +5,7 @@ import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
-import { DEFAULT_PORTAL_CONFIG } from '@/lib/shared/types/settings'
+import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
 import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
@@ -15,10 +15,38 @@ import {
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
+import { isSafeCallbackUrl } from '@/lib/shared/routing'
+import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
+import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 
 export const Route = createFileRoute('/_portal')({
-  loader: async ({ context }) => {
-    const { session, settings, userRole, baseUrl } = context
+  // Only type the auth-prompt keys; child routes receive their own params from
+  // the raw URL independently (TanStack Router does not chain parent
+  // validateSearch into child validateSearch).
+  //
+  // Return type uses optional keys (?: not T|undefined) so that `{}` satisfies
+  // the schema — TanStack Router's IsRequiredParams checks `{} extends TParams`
+  // and only makes `search` required when the schema has required keys.
+  validateSearch: (
+    search: Record<string, unknown>
+  ): {
+    auth?: string
+    callbackUrl?: string
+    error?: string
+  } => ({
+    auth:
+      search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
+    callbackUrl: isSafeCallbackUrl(search.callbackUrl) ? (search.callbackUrl as string) : undefined,
+    error: typeof search.error === 'string' ? search.error : undefined,
+  }),
+  loaderDeps: ({ search }) => ({
+    auth: search.auth,
+    callbackUrl: search.callbackUrl,
+    error: search.error,
+  }),
+  loader: async ({ context, deps, location }) => {
+    const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
 
     // Portal-level visibility gate — evaluated here in the loader (NOT
     // beforeLoad) so the post-sign-in router.invalidate() re-runs it and the
@@ -34,6 +62,9 @@ export const Route = createFileRoute('/_portal')({
     // visitor (defense in depth). The decision is computed server-side
     // (session + allowedDomains never leave the server); only it is returned.
     const accessResult = await evaluateMyPortalAccessFn()
+    // Parse the portal-route auth-prompt params (signin, prompt, callbackUrl)
+    // once; both the blocked-gate and the accessible branch below consume it.
+    const prompt = parseAuthPromptSearch(deps ?? {})
     if (!accessResult.granted) {
       // OWASP authz_fail — emit only for authenticated denials (anonymous
       // denials are too noisy). Best-effort, fire-and-forget.
@@ -48,6 +79,21 @@ export const Route = createFileRoute('/_portal')({
       const hasThemeConfig = brandingConfig.light || brandingConfig.dark
       // Locale so the gate's auth dialog renders under PortalIntlProvider.
       const locale = await getPortalLocaleFn().catch(() => DEFAULT_LOCALE)
+      // Instant-SSO: when the workspace's only sign-in method is a single OIDC
+      // provider, redirect anonymous visitors straight to the IdP. Skipped for
+      // 'unauthorized' (signed-in non-member) — they already have a session and
+      // a force-redirect would be wrong. Skipped when an `error` is present: an
+      // IdP-rejected sign-in bounces back to `?error=…`, and re-redirecting to
+      // the IdP would loop instead of surfacing the error. /auth/recovery is
+      // the standalone break-glass for an admin who can't use the IdP.
+      if (accessResult.reason === 'unauthenticated' && !prompt.error) {
+        const instant = await resolveInstantSsoRedirectFn({
+          // Fall back to the requested deep link so a sole-IdP redirect returns
+          // the user to the private route they asked for, not the portal root.
+          data: { callbackUrl: prompt.callbackUrl ?? location?.pathname },
+        })
+        if (instant) throw redirect({ href: instant.url })
+      }
       const gate: PortalAccessGateError = {
         type: 'portal-access-gate',
         reason: accessResult.reason,
@@ -59,18 +105,36 @@ export const Route = createFileRoute('/_portal')({
         // Only meaningful for 'unauthorized' — null for an anonymous visitor.
         // Lets the overlay say "you're signed in as alice@…, but…".
         userEmail: accessResult.reason === 'unauthorized' ? (session?.user?.email ?? null) : null,
+        callbackUrl: prompt.callbackUrl,
+        autoOpenSignin: prompt.mode,
         authConfig: {
           found: !!settings?.publicPortalConfig,
-          oauth: settings?.publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
-          customProviderNames: settings?.publicPortalConfig?.customProviderNames,
+          oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
+          oidcProviders: settings?.publicPortalConfig?.oidcProviders,
+          registeredAuthProviders,
+          twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
         },
       }
-      return { gate }
+      return { gate, prompt }
     }
 
     const org = settings?.settings
     if (!org) {
       throw redirect({ to: '/onboarding' })
+    }
+
+    // Sole-IdP shortcut: a sign-in request (?auth=signin/signup) on an
+    // accessible portal redirects straight to the only provider, server-side —
+    // no dialog. Skipped when an `error` is present so an IdP-rejected sign-in
+    // surfaces the error instead of looping back to the IdP. The fn no-ops for
+    // signed-in users and multi-method setups; /auth/recovery is the break-glass.
+    if (prompt.mode && !prompt.error) {
+      const instant = await resolveInstantSsoRedirectFn({
+        // Fall back to the current path so the IdP returns the user where they
+        // were, not the portal root.
+        data: { callbackUrl: prompt.callbackUrl ?? location.pathname },
+      })
+      if (instant) throw redirect({ href: instant.url })
     }
 
     // userRole comes from bootstrap data, avatar needs to be fetched
@@ -108,8 +172,10 @@ export const Route = createFileRoute('/_portal')({
 
     const authConfig = {
       found: true,
-      oauth: publicPortalConfig?.oauth ?? DEFAULT_PORTAL_CONFIG.oauth,
-      customProviderNames: publicPortalConfig?.customProviderNames,
+      oauth: settings?.publicAuthConfig?.oauth ?? DEFAULT_AUTH_CONFIG.oauth,
+      oidcProviders: publicPortalConfig?.oidcProviders,
+      registeredAuthProviders,
+      twoFactorRequired: settings?.publicAuthConfig?.twoFactor?.required ?? false,
     }
 
     const { locale, messages } = await loadPortalIntl()
@@ -129,6 +195,7 @@ export const Route = createFileRoute('/_portal')({
       authConfig,
       locale,
       messages,
+      prompt,
       gate: null,
     }
   },
@@ -187,6 +254,8 @@ function PortalLayout() {
         customCss={gate.customCss}
         userEmail={gate.userEmail ?? null}
         locale={gate.locale}
+        callbackUrl={gate.callbackUrl}
+        autoOpenSignin={gate.autoOpenSignin}
       />
     )
   }
@@ -194,6 +263,7 @@ function PortalLayout() {
   const {
     org,
     userRole,
+    session,
     brandingData,
     themeStyles,
     customCss,
@@ -203,11 +273,20 @@ function PortalLayout() {
     authConfig,
     locale,
     messages,
+    prompt,
   } = loaderData
+
+  const isAuthenticated = !!session?.user && session.user.principalType !== 'anonymous'
 
   return (
     <PortalIntlProvider locale={locale} messages={messages}>
       <AuthPopoverProvider>
+        <PortalAuthAutoOpen
+          mode={prompt.mode}
+          callbackUrl={prompt.callbackUrl}
+          error={prompt.error}
+          isAuthenticated={isAuthenticated}
+        />
         <div className="min-h-screen bg-background flex flex-col">
           {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
@@ -228,4 +307,15 @@ function PortalLayout() {
       </AuthPopoverProvider>
     </PortalIntlProvider>
   )
+}
+
+/** Mounts inside AuthPopoverProvider so the hook can access its context. */
+function PortalAuthAutoOpen(props: {
+  mode?: 'login' | 'signup'
+  callbackUrl?: string
+  error?: string
+  isAuthenticated: boolean
+}) {
+  useAutoOpenAuthDialog(props)
+  return null
 }

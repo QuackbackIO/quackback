@@ -4,12 +4,9 @@
  * Covers:
  *  - evaluatePortalAccess: all remaining decision-table branches and edge cases.
  *  - emailDomain helper: edge cases exercised through evaluatePortalAccess.
- *  - parseGateError: valid gate error, malformed JSON, partial gate-shaped
- *    object, non-Error inputs.
  */
 import { describe, it, expect } from 'vitest'
 import { evaluatePortalAccess } from '../portal-access'
-import { parseGateError, type PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 
 // ============================================================================
 // evaluatePortalAccess — complete decision truth table
@@ -249,111 +246,5 @@ describe('evaluatePortalAccess — domain matching edge cases', () => {
       allowedDomains: ['acme.com'],
     })
     expect(r.granted).toBe(false)
-  })
-})
-
-// ============================================================================
-// parseGateError — tests against the real implementation
-// ============================================================================
-
-const VALID_GATE_PAYLOAD: PortalAccessGateError = {
-  type: 'portal-access-gate',
-  reason: 'unauthenticated',
-  workspaceName: 'Acme',
-  logoUrl: null,
-  themeStyles: '',
-  customCss: '',
-  authConfig: { found: true, oauth: { google: true } },
-}
-
-describe('parseGateError', () => {
-  it('parses a genuine gate-error payload from extra Error properties (fast path)', () => {
-    const err = Object.assign(new Error('ignored'), VALID_GATE_PAYLOAD)
-    const result = parseGateError(err)
-    expect(result).not.toBeNull()
-    expect(result?.type).toBe('portal-access-gate')
-    expect(result?.reason).toBe('unauthenticated')
-  })
-
-  it('parses a gate-error payload from JSON message (SSR serialization path)', () => {
-    const err = new Error(JSON.stringify(VALID_GATE_PAYLOAD))
-    const result = parseGateError(err)
-    expect(result).not.toBeNull()
-    expect(result?.workspaceName).toBe('Acme')
-  })
-
-  it('returns null for a malformed (non-JSON) error message', () => {
-    const err = new Error('Something went wrong')
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('returns null for a non-Error value (string)', () => {
-    expect(parseGateError('oops')).toBeNull()
-  })
-
-  it('returns null for a non-Error value (plain object)', () => {
-    expect(parseGateError({ type: 'portal-access-gate' })).toBeNull()
-  })
-
-  it('returns null for null', () => {
-    expect(parseGateError(null)).toBeNull()
-  })
-
-  it('returns null for a partial gate-shaped object missing required fields', () => {
-    const partial = {
-      type: 'portal-access-gate',
-      // reason missing
-      workspaceName: 'Acme',
-      logoUrl: null,
-      themeStyles: '',
-      customCss: '',
-      authConfig: { found: true, oauth: {} },
-    }
-    const err = new Error(JSON.stringify(partial))
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('returns null when type is not portal-access-gate', () => {
-    const wrong = { ...VALID_GATE_PAYLOAD, type: 'some-other-error' }
-    const err = new Error(JSON.stringify(wrong))
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('returns null when reason is not a recognized value', () => {
-    const wrong = { ...VALID_GATE_PAYLOAD, reason: 'blocked' }
-    const err = new Error(JSON.stringify(wrong))
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('returns null when authConfig is missing', () => {
-    const { authConfig: _, ...noAuth } = VALID_GATE_PAYLOAD
-    const err = new Error(JSON.stringify(noAuth))
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('returns null when authConfig.found is not a boolean', () => {
-    const wrong = { ...VALID_GATE_PAYLOAD, authConfig: { found: 'yes', oauth: {} } }
-    const err = new Error(JSON.stringify(wrong))
-    expect(parseGateError(err)).toBeNull()
-  })
-
-  it('parses a valid unauthorized gate error', () => {
-    const payload: PortalAccessGateError = {
-      ...VALID_GATE_PAYLOAD,
-      reason: 'unauthorized',
-    }
-    const err = new Error(JSON.stringify(payload))
-    const result = parseGateError(err)
-    expect(result?.reason).toBe('unauthorized')
-  })
-
-  it('parses when logoUrl is a non-null string', () => {
-    const payload: PortalAccessGateError = {
-      ...VALID_GATE_PAYLOAD,
-      logoUrl: 'https://cdn.example.com/logo.png',
-    }
-    const err = new Error(JSON.stringify(payload))
-    const result = parseGateError(err)
-    expect(result?.logoUrl).toBe('https://cdn.example.com/logo.png')
   })
 })

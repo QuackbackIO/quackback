@@ -13,7 +13,6 @@
 export type {
   OAuthProviders,
   AuthConfig,
-  PortalAuthMethods,
   PortalFeatures,
   PortalConfig,
   PortalAccessConfig,

@@ -48,6 +48,9 @@ const hoisted = vi.hoisted(() => ({
   mockDeletePlatformCredentials: vi.fn(),
   mockHasSsoClientSecret: vi.fn(),
   mockGetTierLimits: vi.fn(),
+  mockListIdentityProviders: vi.fn(),
+  mockGetRegisteredOidcProviderIds: vi.fn(),
+  mockGetConfiguredIntegrationTypes: vi.fn(),
   mockIsEmailConfigured: vi.fn().mockReturnValue(true),
   mockCheckUrlSafety: vi.fn().mockResolvedValue({ safe: true }),
   mockSafeFetch: vi.fn(),
@@ -57,6 +60,7 @@ const hoisted = vi.hoisted(() => ({
   mockResetAuth: vi.fn(),
   mockDbTransaction: vi.fn(),
   mockDbUpdate: vi.fn(),
+  mockHasActiveRecoveryCodes: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -93,6 +97,21 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
 
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   deletePlatformCredentials: hoisted.mockDeletePlatformCredentials,
+  getConfiguredIntegrationTypes: hoisted.mockGetConfiguredIntegrationTypes,
+}))
+
+// Task 13: lookupAuthMethodsFn now routes via the identity-provider registry
+// (listIdentityProviders) and the canonical registration gate
+// (getRegisteredOidcProviderIds), instead of reading authConfig.ssoOidc +
+// verifiedDomains directly. The mocks below synthesize a single 'sso' provider
+// from the same getTenantSettings / tier / secret knobs the tests already
+// toggle, so the migrated single-provider scenarios stay green.
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: hoisted.mockListIdentityProviders,
+}))
+
+vi.mock('@/lib/server/auth/registered-providers', () => ({
+  getRegisteredOidcProviderIds: hoisted.mockGetRegisteredOidcProviderIds,
 }))
 
 vi.mock('@quackback/email', () => ({
@@ -124,6 +143,10 @@ vi.mock('@/lib/server/auth/config-version', () => ({
 
 vi.mock('@/lib/server/auth', () => ({
   resetAuth: hoisted.mockResetAuth,
+}))
+
+vi.mock('@/lib/server/auth/recovery-codes-status', () => ({
+  hasActiveRecoveryCodes: hoisted.mockHasActiveRecoveryCodes,
 }))
 
 vi.mock('@/lib/server/db', () => {
@@ -169,10 +192,46 @@ beforeEach(() => {
     user: { id: 'user_1' },
     principal: { id: 'principal_1', role: 'admin' },
   })
-  // Defaults: SSO is fully registered. Drift-specific cases override.
+  // Defaults: SSO is fully registered; recovery codes present. Drift-specific cases override.
   hoisted.mockHasSsoClientSecret.mockResolvedValue(true)
+  hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(true)
   hoisted.mockGetTierLimits.mockResolvedValue({
     features: { customOidcProvider: true },
+  })
+
+  // Synthesize the 'sso' provider + its registration/creds snapshot from the
+  // tenant/tier/secret knobs each test sets, mirroring how the real registry
+  // would derive them for a single migrated 'sso' provider.
+  hoisted.mockListIdentityProviders.mockImplementation(async () => {
+    const tenant = await hoisted.mockGetTenantSettings()
+    const sso = tenant?.authConfig?.ssoOidc
+    if (!sso) return []
+    return [
+      {
+        id: 'idp_sso',
+        registrationId: 'sso',
+        enabled: sso.enabled === true,
+        autoCreateUsers: sso.autoCreateUsers ?? true,
+        autoProvisionRole: sso.autoProvisionRole ?? null,
+        attributeMapping: sso.attributeMapping ?? null,
+        domains: tenant?.verifiedDomains ?? [],
+      },
+    ]
+  })
+  hoisted.mockGetRegisteredOidcProviderIds.mockImplementation(async () => {
+    const tenant = await hoisted.mockGetTenantSettings()
+    const sso = tenant?.authConfig?.ssoOidc
+    const tier = await hoisted.mockGetTierLimits()
+    const ids = new Set<string>()
+    if (!tier?.features?.customOidcProvider) return ids
+    if (sso?.enabled !== true) return ids
+    if (!(await hoisted.mockHasSsoClientSecret())) return ids
+    ids.add('sso')
+    return ids
+  })
+  hoisted.mockGetConfiguredIntegrationTypes.mockImplementation(async () => {
+    const has = await hoisted.mockHasSsoClientSecret()
+    return new Set<string>(has ? ['auth_sso'] : [])
   })
 })
 
@@ -196,22 +255,21 @@ const enforcedDomainRow = { ...verifiedDomainRow, enforced: true }
 
 // Load the SSO module ONCE and resolve handlers by their position in
 // the file. Order matches the export sequence in sso.ts:
-//   0: testSsoConnectionFn
-//   1: setVerifiedDomainEnforcedFn
-//   2: getSsoStatusFn
-//   3: setSsoClientSecretFn
-//   4: switchSsoProviderFn
-//   5: clearSsoClientSecretFn
-//   6: addVerifiedDomainFn
-//   7: removeVerifiedDomainFn
-//   8: verifyDomainFn
-//   9: getVerifiedDomainsFn
+//   0: clearSsoClientSecretFn
+//   1: removeVerifiedDomainFn
+//   2: getVerifiedDomainsFn
+//   3: listIdentityProvidersFn
+//   4: upsertIdentityProviderFn
+//   5: deleteIdentityProviderFn
+//   6: setProviderCredentialsFn
+//   7: addProviderDomainFn
+//   8: verifyProviderDomainFn
+//   9: setDomainEnforcedFn
 currentModule = 'sso'
 await import('../sso')
 const ssoHandlers = handlersByModule.get('sso')!
-const testSsoConnection = ssoHandlers[0]
-const switchSsoProvider = ssoHandlers[4]
-const clearSsoClientSecret = ssoHandlers[5]
+const clearSsoClientSecret = ssoHandlers[0]
+const setDomainEnforced = ssoHandlers[9]
 
 currentModule = 'auth'
 await import('../auth')
@@ -260,82 +318,6 @@ describe('clearSsoClientSecretFn refusals', () => {
   })
 })
 
-describe('switchSsoProviderFn', () => {
-  // The "Change provider" flow wipes the encrypted secret, the
-  // authConfig.ssoOidc block, AND any per-domain `enforced` flags in
-  // one transaction. The enforced flags get auto-disabled (not refused)
-  // so admins can switch providers without manually defanging each
-  // domain first — those users still have password/magic-link until
-  // the new IdP is set up.
-  beforeEach(() => {
-    hoisted.mockRequireSettings.mockResolvedValue({
-      id: 'settings_id',
-      authConfig: JSON.stringify({ ssoOidc: ssoConfig, oauth: { password: true } }),
-    })
-    mockSetVerifiedDomainEnforced.mockResolvedValue(undefined)
-  })
-
-  it('auto-disables enforcement on rows that have it on, then clears SSO', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [enforcedDomainRow],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: ['acme.com'] })
-    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith('domain_acme', false)
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockDbTransaction).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockBumpAuthConfigVersionInTx).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockResetAuth).toHaveBeenCalledTimes(1)
-    expect(hoisted.mockInvalidateSettingsCache).toHaveBeenCalledTimes(1)
-  })
-
-  it('skips the defang step when no domain is enforced', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [verifiedDomainRow],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: [] })
-    expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-  })
-
-  it('allows switching when no domains exist', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({ success: true, defangedDomains: [] })
-    expect(hoisted.mockDeletePlatformCredentials).toHaveBeenCalledTimes(1)
-  })
-
-  it('defangs multiple enforced domains in one call', async () => {
-    hoisted.mockGetTenantSettings.mockResolvedValue({
-      authConfig: { ssoOidc: ssoConfig },
-      verifiedDomains: [
-        enforcedDomainRow,
-        { ...enforcedDomainRow, id: 'domain_beta', name: 'beta.com' },
-      ],
-    })
-
-    const result = await switchSsoProvider({ data: {} })
-
-    expect(result).toEqual({
-      success: true,
-      defangedDomains: ['acme.com', 'beta.com'],
-    })
-    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledTimes(2)
-  })
-})
-
 describe('lookupAuthMethodsFn — no enumeration leak', () => {
   it('returns sso-redirect for verified-domain email when that domain row is enforced', async () => {
     hoisted.mockGetTenantSettings.mockResolvedValue({
@@ -345,7 +327,7 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-redirect' })
+    expect(result).toEqual({ kind: 'sso-redirect', providerId: 'sso' })
   })
 
   it('returns sso-default for verified-domain email when that domain row is not enforced', async () => {
@@ -358,6 +340,7 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
     expect(result).toEqual({
       kind: 'sso-default',
+      providerId: 'sso',
       authConfig: { password: false, google: true },
     })
   })
@@ -388,94 +371,14 @@ describe('lookupAuthMethodsFn — no enumeration leak', () => {
   })
 })
 
-describe('testSsoConnectionFn — SSRF-checks discovery endpoints', () => {
-  // A malicious or misconfigured discovery doc could return private-IP
-  // endpoints. authorization_endpoint is a browser redirect (no SSRF),
-  // but token_endpoint and jwks_uri are server-side fetches by Better-
-  // Auth at runtime — we must reject before save.
-  const validDiscovery = {
-    issuer: 'https://acme.idp',
-    authorization_endpoint: 'https://acme.idp/authorize',
-    token_endpoint: 'https://acme.idp/token',
-    jwks_uri: 'https://acme.idp/jwks',
-  }
-
-  const okFetchResponse = (body: object) =>
-    new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
-
-  it('rejects when token_endpoint resolves to a private address', async () => {
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.token_endpoint) return { safe: false, reason: 'ssrf-rejected' }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; error?: string }
-    expect(result).toEqual({ ok: false, error: 'unsafe_endpoint:token_endpoint' })
-  })
-
-  it('rejects when jwks_uri resolves to a private address', async () => {
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.jwks_uri) return { safe: false, reason: 'ssrf-rejected' }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; error?: string }
-    expect(result).toEqual({ ok: false, error: 'unsafe_endpoint:jwks_uri' })
-  })
-
-  it('passes when all SSRF-checked endpoints are safe', async () => {
-    hoisted.mockCheckUrlSafety.mockResolvedValue({ safe: true })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; issuer?: string }
-    expect(result).toEqual({ ok: true, issuer: validDiscovery.issuer })
-  })
-
-  it('does NOT SSRF-check authorization_endpoint (browser redirect only)', async () => {
-    // Even if the doc's authorization_endpoint resolves to a private
-    // address, that's a browser redirect — the user's browser fetches
-    // it from their network, not ours. Still validated for URL shape
-    // upstream, but not subject to checkUrlSafety.
-    hoisted.mockCheckUrlSafety.mockImplementation(async (url: string) => {
-      if (url === validDiscovery.authorization_endpoint) {
-        return { safe: false, reason: 'ssrf-rejected' }
-      }
-      return { safe: true }
-    })
-    hoisted.mockSafeFetch.mockResolvedValue(okFetchResponse(validDiscovery))
-
-    const result = (await testSsoConnection({
-      data: {
-        discoveryUrl: 'https://acme.idp/.well-known/openid-configuration',
-      },
-    })) as { ok: boolean; issuer?: string }
-    expect(result.ok).toBe(true)
-  })
-})
-
 describe('lookupAuthMethodsFn — SSO registration drift', () => {
-  // Verified-domain users would otherwise be redirected to a non-
-  // registered SSO provider. The runtime only registers SSO when the
-  // tier flag is on AND a client secret is present, so the lookup must
-  // mirror those preconditions.
-  it('returns sso-unavailable when tier flag is off (downgrade scenario)', async () => {
+  // The owning provider's liveness gate (`enabled && registered &&
+  // credsPresent`) decides routing. When the tier flag is off or the secret
+  // is missing, the provider isn't registered, so routing falls THROUGH to
+  // the methods form rather than dead-redirecting (or showing
+  // "sso-unavailable"). This matches `isHardBound`, which fails open — scoped
+  // to the owner — so password/magic-link stay usable when the IdP is dead.
+  it('falls through to methods when tier flag is off (downgrade scenario)', async () => {
     hoisted.mockGetTierLimits.mockResolvedValue({
       features: { customOidcProvider: false },
     })
@@ -486,10 +389,14 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-unavailable', reason: 'not-registered' })
+    expect(result).toEqual({
+      kind: 'methods',
+      authConfig: { password: false },
+      ssoEnabled: false,
+    })
   })
 
-  it('returns sso-unavailable when client secret is missing', async () => {
+  it('falls through to methods when client secret is missing', async () => {
     hoisted.mockHasSsoClientSecret.mockResolvedValue(false)
     hoisted.mockGetTenantSettings.mockResolvedValue({
       authConfig: { ssoOidc: ssoConfig },
@@ -498,7 +405,11 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-unavailable', reason: 'not-registered' })
+    expect(result).toEqual({
+      kind: 'methods',
+      authConfig: { password: false },
+      ssoEnabled: false,
+    })
   })
 
   it('still returns sso-redirect when all preconditions hold (enforced row)', async () => {
@@ -509,7 +420,7 @@ describe('lookupAuthMethodsFn — SSO registration drift', () => {
     })
 
     const result = await lookupAuthMethods({ data: { email: 'foo@acme.com' } })
-    expect(result).toEqual({ kind: 'sso-redirect' })
+    expect(result).toEqual({ kind: 'sso-redirect', providerId: 'sso' })
   })
 })
 
@@ -572,7 +483,7 @@ describe('lookupAuthMethodsFn — team magic-link toggle', () => {
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'a@external.com', surface: 'team' },
+      data: { email: 'a@external.com' },
     })
     expect(result).toEqual({
       kind: 'methods',
@@ -589,14 +500,14 @@ describe('lookupAuthMethodsFn — team magic-link toggle', () => {
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'a@external.com', surface: 'team' },
+      data: { email: 'a@external.com' },
     })
     expect(result).toMatchObject({ authConfig: { magicLink: true } })
   })
 })
 
 describe('lookupAuthMethodsFn — ssoOidc.required is inert (workspace-wide mode removed)', () => {
-  it('ignores ssoOidc.required for team surface (workspace-wide mode removed)', async () => {
+  it('ignores ssoOidc.required in the unified sign-in config (workspace-wide mode removed)', async () => {
     // The `required` flag is inert; team users at non-verified-domain
     // emails should fall through to the methods form, not `sso-redirect`.
     hoisted.mockGetTenantSettings.mockResolvedValue({
@@ -616,8 +527,53 @@ describe('lookupAuthMethodsFn — ssoOidc.required is inert (workspace-wide mode
     })
 
     const result = await lookupAuthMethods({
-      data: { email: 'newhire@example.com', surface: 'team' },
+      data: { email: 'newhire@example.com' },
     })
     expect((result as { kind: string }).kind).toBe('methods')
+  })
+})
+
+describe('setDomainEnforcedFn — recovery-code guard', () => {
+  // A provider with lastSuccessfulTestAt > detailsChangedAt so that
+  // isSsoEnforcementUnlocked (pure function, not mocked) returns true,
+  // letting us drive the hasActiveRecoveryCodes check in isolation.
+  const domainId = 'domain_acme' as `domain_${string}`
+  const testProvider = {
+    id: 'idp_sso',
+    lastSuccessfulTestAt: '2026-01-02T00:00:00Z',
+    detailsChangedAt: '2026-01-01T00:00:00Z',
+    domains: [{ id: domainId, enforced: false }],
+  }
+
+  beforeEach(() => {
+    hoisted.mockListIdentityProviders.mockResolvedValue([testProvider])
+    mockSetVerifiedDomainEnforced.mockResolvedValue(undefined)
+  })
+
+  it('throws recovery_codes_required when no active recovery codes exist', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(false)
+
+    await expect(setDomainEnforced({ data: { id: domainId, enforced: true } })).rejects.toThrow(
+      'recovery_codes_required'
+    )
+    expect(mockSetVerifiedDomainEnforced).not.toHaveBeenCalled()
+  })
+
+  it('allows enabling enforcement and does not throw on the recovery-code check when codes exist', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(true)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: true } })
+    ).resolves.not.toThrow()
+    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith(domainId, true)
+  })
+
+  it('skips the recovery-code check entirely when disabling enforcement', async () => {
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(false)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: false } })
+    ).resolves.not.toThrow()
+    expect(hoisted.mockHasActiveRecoveryCodes).not.toHaveBeenCalled()
   })
 })

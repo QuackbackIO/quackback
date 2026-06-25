@@ -6,10 +6,13 @@
  */
 
 import type { ComponentType } from 'react'
+import { cn } from '@/lib/shared/utils'
 
 interface IconProps {
   className?: string
 }
+
+type IdpKind = 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other'
 
 export function OktaIcon({ className }: IconProps) {
   return (
@@ -99,4 +102,42 @@ export const IDP_KIND_ICONS: Partial<
   keycloak: KeycloakIcon,
   entra: MicrosoftEntraIcon,
   google: GoogleWorkspaceIcon,
+}
+
+/** Brand tint for the monochrome marks. Entra + Google carry their own
+ *  multicolour fills; Keycloak + Custom OIDC stay on the foreground colour. */
+export const IDP_KIND_ICON_COLOR: Partial<Record<IdpKind, string>> = {
+  okta: 'text-[#007DC1]',
+  auth0: 'text-[#EB5424]',
+}
+
+/** Resolve the brand mark for a kind; `other` (and any unknown) gets the
+ *  generic OIDC glyph. */
+export function getIdpKindIcon(kind: IdpKind): ComponentType<IconProps> {
+  return IDP_KIND_ICONS[kind as keyof typeof IDP_KIND_ICONS] ?? GenericOidcIcon
+}
+
+/**
+ * Brand logo in a rounded tile — shared by the IdP shortcut picker and the
+ * provider list so a given IdP looks identical in both places. Size the tile
+ * via `className` and the glyph via `iconClassName`.
+ */
+export function IdpLogo({
+  kind,
+  className,
+  iconClassName,
+}: {
+  kind: IdpKind
+  className?: string
+  iconClassName?: string
+}) {
+  const Icon = getIdpKindIcon(kind)
+  return (
+    <span
+      className={cn('flex items-center justify-center rounded-lg bg-muted', className)}
+      aria-hidden
+    >
+      <Icon className={cn(IDP_KIND_ICON_COLOR[kind], iconClassName)} />
+    </span>
+  )
 }

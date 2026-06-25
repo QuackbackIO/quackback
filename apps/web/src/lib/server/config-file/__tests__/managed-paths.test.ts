@@ -22,10 +22,13 @@ describe('computeManagedPaths', () => {
     expect(computeManagedPaths({ tierLimits: { maxBoards: 5 } })).toEqual(['tierLimits'])
   })
 
-  it('emits per-key feature paths', () => {
+  it('does not emit managed paths for deprecated auth and features keys', () => {
     expect(
-      computeManagedPaths({ features: { helpCenter: true, experimentalRichEditor: false } })
-    ).toEqual(['features.helpCenter', 'features.experimentalRichEditor'])
+      computeManagedPaths({
+        auth: { oauth: { google: true } },
+        features: { helpCenter: true },
+      })
+    ).toEqual([])
   })
 
   it('combines all path types into one stable-ordered list', () => {
@@ -33,43 +36,8 @@ describe('computeManagedPaths', () => {
       computeManagedPaths({
         workspace: { name: 'X' },
         tierLimits: {},
-        features: { a: true },
       })
-    ).toEqual(['workspace.name', 'tierLimits', 'features.a'])
-  })
-
-  it('emits per-key auth.oauth paths and the auth.openSignup leaf', () => {
-    expect(
-      computeManagedPaths({
-        auth: { oauth: { google: true, github: false }, openSignup: false },
-      })
-    ).toEqual(['auth.oauth.google', 'auth.oauth.github', 'auth.openSignup'])
-  })
-
-  it('omits auth.openSignup when only oauth providers are declared', () => {
-    expect(computeManagedPaths({ auth: { oauth: { google: true } } })).toEqual([
-      'auth.oauth.google',
-    ])
-  })
-
-  it('emits per-key paths under auth.ssoOidc', () => {
-    expect(
-      computeManagedPaths({
-        auth: {
-          ssoOidc: {
-            enabled: true,
-            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
-            clientId: 'workspace-x',
-            autoCreateUsers: true,
-          },
-        },
-      })
-    ).toEqual([
-      'auth.ssoOidc.enabled',
-      'auth.ssoOidc.discoveryUrl',
-      'auth.ssoOidc.clientId',
-      'auth.ssoOidc.autoCreateUsers',
-    ])
+    ).toEqual(['workspace.name', 'tierLimits'])
   })
 })
 

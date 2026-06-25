@@ -83,56 +83,13 @@ const tierLimitsSchema = z
   })
   .strict()
 
-// `features` is per-key managed: each entry locks one feature flag
-// while leaving others UI-toggleable. Accepts any boolean key — the
-// FeatureFlags shape has its own zod schema that the reconciler
-// validates against; here the shape just needs to be string→boolean.
-const featuresSchema = z.record(z.string(), z.boolean())
-
-// Auth surface: OAuth provider toggles + openSignup + optional OIDC SSO.
-// Provider secrets are never declared here — both OAuth client secrets
-// (Google/GitHub/etc.) and the SSO OIDC client secret live encrypted
-// in the platform_credentials table.
-const oauthProvidersSchema = z
-  .object({
-    google: z.boolean().optional(),
-    github: z.boolean().optional(),
-    password: z.boolean().optional(),
-    // `magicLink` is the email-link sign-in option the team-login form
-    // surfaces alongside (or instead of) password. Defaults to false in
-    // PortalAuthForm's `?? false` fallback, so a managed-cloud control
-    // plane has to declare it explicitly to push magic-link as the
-    // primary admin auth surface. Self-host tenants keep the legacy
-    // default unless their declarative config opts in.
-    magicLink: z.boolean().optional(),
-  })
-  .strict()
-
-// OIDC SSO provider config. The file declares the non-secret config —
-// discoveryUrl + clientId + UX flags — while the client *secret* lives
-// in platform_credentials (auth_sso, encrypted). The admin login page
-// is email-first: typing an email at a verified domain auto-redirects
-// to the IdP, so there's no "default CTA" knob.
-const ssoOidcSchema = z
-  .object({
-    enabled: z.boolean(),
-    discoveryUrl: httpsUrl,
-    clientId: z.string().min(1),
-    /** Auto-create user records on first SSO sign-in. */
-    autoCreateUsers: z.boolean().default(true),
-  })
-  .strict()
-
-// SSO enforcement is per-domain (sso_verified_domain.enforced), not
-// declared here. A config-file shape for that can be added later.
-
-const authSchema = z
-  .object({
-    oauth: oauthProvidersSchema.optional(),
-    openSignup: z.boolean().optional(),
-    ssoOidc: ssoOidcSchema.optional(),
-  })
-  .strict()
+// Deprecated compatibility keys. `auth` and top-level `features` were managed
+// by older config files, but are now in-app only. Keep accepting them for one
+// release so old files do not make the whole watcher fail before supported
+// workspace/tier fields can reconcile. The reconciler deliberately ignores
+// both keys.
+const deprecatedFeaturesSchema = z.record(z.string(), z.boolean())
+const deprecatedAuthSchema = z.unknown()
 
 export const quackbackConfigSchema = z
   .object({
@@ -143,8 +100,8 @@ export const quackbackConfigSchema = z
       .object({
         workspace: workspaceSchema.optional(),
         tierLimits: tierLimitsSchema.optional(),
-        features: featuresSchema.optional(),
-        auth: authSchema.optional(),
+        features: deprecatedFeaturesSchema.optional(),
+        auth: deprecatedAuthSchema.optional(),
       })
       .strict(),
   })
@@ -152,6 +109,13 @@ export const quackbackConfigSchema = z
 
 export type QuackbackConfig = z.infer<typeof quackbackConfigSchema>
 export type QuackbackConfigSpec = QuackbackConfig['spec']
+
+export function getDeprecatedConfigKeys(spec: QuackbackConfigSpec): Array<'auth' | 'features'> {
+  const keys: Array<'auth' | 'features'> = []
+  if (Object.prototype.hasOwnProperty.call(spec, 'auth')) keys.push('auth')
+  if (Object.prototype.hasOwnProperty.call(spec, 'features')) keys.push('features')
+  return keys
+}
 
 export function parseQuackbackConfig(input: unknown): z.ZodSafeParseResult<QuackbackConfig> {
   return quackbackConfigSchema.safeParse(input)

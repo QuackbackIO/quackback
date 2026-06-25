@@ -29,7 +29,6 @@ const mockUserDeleteWhere = vi.fn(async () => undefined)
 const mockAccountDeleteWhere = vi.fn(async () => undefined)
 const mockPrincipalDeleteWhere = vi.fn(async () => undefined)
 const mockDeleteSessionCookie = vi.fn()
-const mockGetPublicPortalConfig = vi.fn()
 const mockHasPlatformCredentials = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
@@ -57,29 +56,32 @@ vi.mock('better-auth/cookies', () => ({
   deleteSessionCookie: (...a: unknown[]) => mockDeleteSessionCookie(...a),
 }))
 
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPublicPortalConfig: (...a: unknown[]) => mockGetPublicPortalConfig(...a),
-}))
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({}))
 
 vi.mock('@/lib/server/domains/platform-credentials/platform-credential.service', () => ({
   hasPlatformCredentials: (...a: unknown[]) => mockHasPlatformCredentials(...a),
 }))
 
-// Default mirrors production: registered iff admin enabled SSO. Tests
-// for tier-downgrade / missing-secret override.
-const mockIsSsoActuallyRegistered = vi.fn(
-  async (sso: { enabled?: boolean } | undefined, _tier: unknown) => sso?.enabled === true
-)
-vi.mock('@/lib/server/auth/sso-secret', () => ({
-  isSsoActuallyRegistered: (sso: { enabled?: boolean } | undefined, tier: unknown) =>
-    mockIsSsoActuallyRegistered(sso, tier),
-}))
-
-vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
-  getTierLimits: async () => ({ features: { customOidcProvider: true } }),
-}))
-
 const { handleCallbackPolicyCleanup } = await import('../hooks')
+
+// Task 12: handleCallbackPolicyCleanup now receives the provider registry
+// (providers + registered-OIDC set) as args instead of computing
+// isSsoActuallyRegistered internally. This wrapper derives the
+// single-provider regression baseline from the tenant's verified domains —
+// one owning provider 'sso' — so the existing call sites only change name.
+// Pass `{ ssoRegistered: false }` to exercise the owner-scoped fail-open.
+const cleanup = (
+  ctx: Parameters<typeof handleCallbackPolicyCleanup>[0],
+  tenant: Parameters<typeof handleCallbackPolicyCleanup>[1],
+  opts: { ssoRegistered?: boolean } = {}
+) => {
+  const domains = tenant?.verifiedDomains ?? []
+  const providers = [{ id: 'idp_sso', registrationId: 'sso', domains }] as unknown as Parameters<
+    typeof handleCallbackPolicyCleanup
+  >[2]
+  const registeredOidcIds = opts.ssoRegistered === false ? new Set<string>() : new Set(['sso'])
+  return handleCallbackPolicyCleanup(ctx, tenant, providers, registeredOidcIds)
+}
 
 const tenantSettings = (
   k: {
@@ -122,11 +124,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockPrincipalFindFirst.mockResolvedValue(null)
   mockUserFindFirst.mockResolvedValue(null)
-  mockGetPublicPortalConfig.mockResolvedValue({
-    oauth: { password: true, magicLink: false },
-  })
   mockHasPlatformCredentials.mockResolvedValue(true)
-  mockIsSsoActuallyRegistered.mockImplementation(async (sso) => sso?.enabled === true)
 })
 
 // ============================================================
@@ -136,7 +134,7 @@ beforeEach(() => {
 describe('handleCallbackPolicyCleanup — guards', () => {
   it('skips when path is not session-creating callback', async () => {
     const ctx = ctxFor({ path: '/sign-in/email', userId: 'user_1', token: 'tok' })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -147,7 +145,7 @@ describe('handleCallbackPolicyCleanup — guards', () => {
       providerParam: 'sso',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
   })
 
@@ -157,7 +155,7 @@ describe('handleCallbackPolicyCleanup — guards', () => {
       providerParam: 'sso',
       userId: 'user_1',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
   })
 
@@ -167,7 +165,7 @@ describe('handleCallbackPolicyCleanup — guards', () => {
       userId: 'user_1',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
   })
 
@@ -180,7 +178,7 @@ describe('handleCallbackPolicyCleanup — guards', () => {
       email: 'a@external.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     // 'a@external.com' is not at an enforced domain (none configured)
     // and no principal exists → return without running the
     // method-allowed gate.
@@ -203,7 +201,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'a@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -217,7 +215,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'a@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({}))
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
@@ -230,10 +228,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'staff@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -249,10 +244,7 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       email: 'staff@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
@@ -267,11 +259,8 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       token: 'tok',
     })
     await expect(
-      handleCallbackPolicyCleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-      )
-    ).rejects.toThrow(/\/auth\/login\?error=oauth_method_not_allowed/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
+    ).rejects.toThrow(/\/\?auth=signin&error=oauth_method_not_allowed/)
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
   })
 
@@ -288,11 +277,8 @@ describe('handleCallbackPolicyCleanup — SSO provider', () => {
       token: 'tok',
     })
     await expect(
-      handleCallbackPolicyCleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] })
-      )
-    ).rejects.toThrow(/\/auth\/login\?error=oauth_method_not_allowed/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', false)] }))
+    ).rejects.toThrow(/\/\?auth=signin&error=oauth_method_not_allowed/)
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
   })
 })
@@ -312,7 +298,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       email: 'a@external.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({ googleEnabled: true }))
+    await cleanup(ctx, tenantSettings({ googleEnabled: true }))
     expect(ctx.redirect).not.toHaveBeenCalled()
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
   })
@@ -330,9 +316,9 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(
-      handleCallbackPolicyCleanup(ctx, tenantSettings({ googleEnabled: false }))
-    ).rejects.toThrow(/\/admin\/login\?error=oauth_method_not_allowed/)
+    await expect(cleanup(ctx, tenantSettings({ googleEnabled: false }))).rejects.toThrow(
+      /\/\?auth=signin&callbackUrl=\/admin&error=oauth_method_not_allowed/
+    )
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -349,16 +335,13 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(
-      handleCallbackPolicyCleanup(ctx, tenantSettings({ googleEnabled: true }))
-    ).rejects.toThrow(/oauth_method_not_allowed/)
+    await expect(cleanup(ctx, tenantSettings({ googleEnabled: true }))).rejects.toThrow(
+      /oauth_method_not_allowed/
+    )
   })
 
-  it('passes for portal user + google when portalConfig.oauth.google=true', async () => {
+  it('passes for portal user + google when authConfig.oauth.google=true', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false, google: true },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -366,15 +349,12 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       email: 'a@external.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(ctx, tenantSettings({}))
+    await cleanup(ctx, tenantSettings({ googleEnabled: true }))
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
-  it('revokes for portal user + google when not enabled in portal config', async () => {
+  it('revokes for portal user + google when not enabled', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -383,17 +363,14 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(handleCallbackPolicyCleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /\/auth\/login\?error=oauth_method_not_allowed/
+    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(
+      /\/\?auth=signin&error=oauth_method_not_allowed/
     )
   })
 
   it('wipes brand-new shells when a method-blocked OAuth callback revokes a freshly-created user', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
     mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 5_000) })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false /* google not enabled */ },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -402,9 +379,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(handleCallbackPolicyCleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /oauth_method_not_allowed/
-    )
+    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(/oauth_method_not_allowed/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     // Brand-new sign-up via google was blocked — its shell rows
@@ -419,9 +394,6 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
   it('does NOT wipe shells for an existing user (>60s) whose OAuth method just got disabled', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
     mockUserFindFirst.mockResolvedValue({ createdAt: new Date(Date.now() - 60 * 60_000) })
-    mockGetPublicPortalConfig.mockResolvedValue({
-      oauth: { password: true, magicLink: false },
-    })
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -430,9 +402,7 @@ describe('handleCallbackPolicyCleanup — non-SSO OAuth', () => {
       token: 'tok',
     })
 
-    await expect(handleCallbackPolicyCleanup(ctx, tenantSettings({}))).rejects.toThrow(
-      /oauth_method_not_allowed/
-    )
+    await expect(cleanup(ctx, tenantSettings({}))).rejects.toThrow(/oauth_method_not_allowed/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockUserDeleteWhere).not.toHaveBeenCalled()
@@ -463,14 +433,14 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      handleCallbackPolicyCleanup(
+      cleanup(
         ctx,
         tenantSettings({
           googleEnabled: true,
           verifiedDomains: [makeVerifiedDomain('acme.com', true)],
         })
       )
-    ).rejects.toThrow(/\/admin\/login\?error=verified_domain_requires_sso/)
+    ).rejects.toThrow(/\/\?auth=signin&callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockDeleteSessionCookie).toHaveBeenCalled()
@@ -490,7 +460,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      handleCallbackPolicyCleanup(
+      cleanup(
         ctx,
         tenantSettings({
           googleEnabled: true,
@@ -517,7 +487,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      handleCallbackPolicyCleanup(
+      cleanup(
         ctx,
         tenantSettings({
           githubEnabled: true,
@@ -537,17 +507,13 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
       email: 'a@acme.com',
       token: 'tok',
     })
-    await handleCallbackPolicyCleanup(
-      ctx,
-      tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-    )
+    await cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
   })
 
   it('fails open: google at an enforced domain passes through when SSO is not actually registered', async () => {
     mockPrincipalFindFirst.mockResolvedValue({ role: 'admin' })
-    mockIsSsoActuallyRegistered.mockResolvedValue(false)
     const ctx = ctxFor({
       path: '/oauth2/callback/:providerId',
       providerParam: 'google',
@@ -556,14 +522,15 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
       token: 'tok',
     })
     // googleEnabled so the method-allowed fall-through also passes —
-    // the point is the hard-binding branch must NOT fire when SSO
-    // isn't viable (self-lockout guard).
-    await handleCallbackPolicyCleanup(
+    // the point is the hard-binding branch must NOT fire when the owning
+    // provider isn't registered (self-lockout guard, scoped to the owner).
+    await cleanup(
       ctx,
       tenantSettings({
         googleEnabled: true,
         verifiedDomains: [makeVerifiedDomain('acme.com', true)],
-      })
+      }),
+      { ssoRegistered: false }
     )
     expect(mockSessionDeleteWhere).not.toHaveBeenCalled()
     expect(ctx.redirect).not.toHaveBeenCalled()
@@ -582,11 +549,8 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      handleCallbackPolicyCleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-      )
-    ).rejects.toThrow(/\/admin\/login\?error=verified_domain_requires_sso/)
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
+    ).rejects.toThrow(/\/\?auth=signin&callbackUrl=\/admin&error=verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()
     expect(mockUserDeleteWhere).toHaveBeenCalled()
@@ -608,10 +572,7 @@ describe('handleCallbackPolicyCleanup — hard-binding branch (enforced verified
     })
 
     await expect(
-      handleCallbackPolicyCleanup(
-        ctx,
-        tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] })
-      )
+      cleanup(ctx, tenantSettings({ verifiedDomains: [makeVerifiedDomain('acme.com', true)] }))
     ).rejects.toThrow(/verified_domain_requires_sso/)
 
     expect(mockSessionDeleteWhere).toHaveBeenCalled()

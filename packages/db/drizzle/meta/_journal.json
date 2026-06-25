@@ -799,6 +799,34 @@
       "when": 1782432000000,
       "tag": "0113_integration_channelid_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1782691200000,
+      "tag": "0114_identity_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1782777600000,
+      "tag": "0115_identity_provider_backfill_sso",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1782864000000,
+      "tag": "0116_identity_provider_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0117_identity_provider_jwks_issuer",
+      "breakpoints": true
     }
   ]
 }

@@ -6,13 +6,9 @@ const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
 
 // Standalone routes (outside the portal layout) that render translated content
 // from their first paint. Everything NOT in this set and NOT under the portal
-// layout renders hard-coded English: the admin app, onboarding, the auth utility
-// pages like /auth/two-factor, and /admin/login (its AdminAuthShell heading and
-// email stage are English; only a later stage hands off to a translated form, so
-// the document stays English until that first-render copy is localized).
+// layout renders hard-coded English: the admin app, onboarding, and the auth
+// utility pages like /auth/two-factor and /admin/login.
 const LOCALIZED_ROUTE_IDS = new Set([
-  '/auth/login',
-  '/auth/signup',
   '/auth/recovery',
   '/auth/reset-password',
   '/widget',

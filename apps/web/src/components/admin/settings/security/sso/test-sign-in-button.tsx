@@ -10,10 +10,18 @@
 import { Button } from '@/components/ui/button'
 import { useSsoTestSignIn } from './use-sso-test-sign-in'
 
-export function TestSignInButton({ disabled }: { disabled?: boolean }) {
+export function TestSignInButton({
+  registrationId,
+  disabled,
+}: {
+  /** The provider's registrationId — forwarded to `startSsoTestFn` so the
+   *  test exercises THIS provider's credentials and stamps its own gate. */
+  registrationId: string
+  disabled?: boolean
+}) {
   const { open } = useSsoTestSignIn()
   return (
-    <Button onClick={() => open()} disabled={disabled} variant="outline">
+    <Button onClick={() => open({ registrationId })} disabled={disabled} variant="outline">
       Test sign-in
     </Button>
   )

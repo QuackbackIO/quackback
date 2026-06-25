@@ -3,6 +3,7 @@ import { CheckCircleIcon, ArrowRightIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { getSettings } from '@/lib/server/functions/workspace'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {
@@ -15,7 +16,7 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
     const state = await checkOnboardingState({ data: session.user.id })
 
     if (state.needsInvitation) {
-      throw redirect({ to: '/auth/login' })
+      throw redirect(buildSigninRedirect('/admin'))
     }
 
     if (!state.isOnboardingComplete) {

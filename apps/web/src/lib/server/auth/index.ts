@@ -15,6 +15,8 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { generateId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import type { GenericOAuthConfig } from './build-oauth-configs'
+import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
 const log = logger.child({ component: 'auth-config' })
 
@@ -49,7 +51,6 @@ const otpStash = makeStash<string>()
 
 export const storeMagicLinkToken = (email: string, token: string) =>
   magicLinkStash.set(email, token)
-export const getMagicLinkToken = (email: string) => magicLinkStash.take(email)
 export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
 export const getOTP = (email: string) => otpStash.take(email)
 
@@ -89,6 +90,9 @@ async function createAuth() {
   const { getAllAuthProviders } = await import('./auth-providers')
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const { listIdentityProviders, getIdentityProviderCredentials } =
+    await import('@/lib/server/domains/settings/identity-providers.service')
+  const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
 
   // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
   // OIDC IdPs. Pass it through so `user.locale` populates from sign-in
@@ -102,195 +106,88 @@ async function createAuth() {
     }
   }
 
+  // login_hint pre-selects the typed email in the IdP picker. Read from
+  // the `additionalData.loginHint` body field that the team-login /
+  // portal-auth forms pass when initiating an OIDC sign-in. When absent
+  // (e.g. a direct hit on /sign-in/oauth2 with no email context) the hint
+  // is omitted and the IdP shows its default account list. Carried to
+  // every OIDC provider since any of them may be domain-routed.
+  const buildLoginHintParams = (ctx: {
+    body?: { additionalData?: { loginHint?: string } }
+  }): Record<string, string> => {
+    const hint = ctx.body?.additionalData?.loginHint
+    const params: Record<string, string> = {}
+    if (hint) params.login_hint = hint
+    return params
+  }
+
   // Build socialProviders config from DB-stored credentials
   const socialProviders: Record<string, Record<string, unknown>> = {}
   const trustedProviders: string[] = []
-  const genericOAuthConfigs: Array<{
-    providerId: string
-    clientId: string
-    clientSecret: string
-    disableSignUp?: boolean
-    discoveryUrl?: string
-    pkce?: boolean
-    authorizationUrl?: string
-    tokenUrl?: string
-    scopes?: string[]
-    mapProfileToUser?: (profile: unknown) => Record<string, unknown>
-    // SSO-only: force the IdP account picker so admins notice when
-    // they're already signed in as a different identity.
-    prompt?:
-      | 'none'
-      | 'login'
-      | 'create'
-      | 'consent'
-      | 'select_account'
-      | 'select_account consent'
-      | 'login consent'
-    // SSO-only: emit `login_hint` to pre-select the typed email in
-    // the IdP picker. The ctx shape comes from Better-Auth's endpoint
-    // builder; we only read `body.additionalData.loginHint` so we
-    // accept a loose ctx type and narrow inside the function.
-    authorizationUrlParams?: (ctx: {
-      body?: { additionalData?: { loginHint?: string } }
-    }) => Record<string, string>
-  }> = []
+  const genericOAuthConfigs: GenericOAuthConfig[] = []
 
-  // Defense-in-depth: a workspace that configured SSO on a higher tier
-  // would still have OIDC creds in the DB after a downgrade. Skip
-  // generic-oauth providers when the tier flag is off so the login
-  // button never renders and the /sign-in/oauth2 callback path 404s
-  // on that providerId.
-  //
   // Tier limits + tenant settings are independent reads — fire them
   // together to avoid stacking Redis round-trips on every auth-instance
-  // rebuild. SSO config (non-secret fields on settings.authConfig.ssoOidc)
-  // lives in DB; the client secret lives in platform_credentials with
-  // type='auth_sso'. No env-var fallback — the platform vendor never
-  // has the customer's IdP secret, so env-driven SSO never made sense
-  // for managed-cloud and was a self-hosted-only quirk that's now gone.
+  // rebuild. tenantSettings still drives the social-provider surface
+  // filter below; OIDC config now comes from the identity_provider list.
   const [tierLimits, tenantSettings] = await Promise.all([getTierLimits(), getTenantSettings()])
-  const ssoFromDb = tenantSettings?.authConfig?.ssoOidc
 
-  // Registration condition is centralised in `isSsoActuallyRegistered`
-  // so the email-first login dispatcher (lookupAuthMethodsFn) can
-  // consult the same predicate — keeps registration and lookup from
-  // disagreeing on whether SSO is live.
-  const { getSsoClientSecret, isSsoActuallyRegistered } = await import('./sso-secret')
-  const ssoRegistered = await isSsoActuallyRegistered(ssoFromDb, tierLimits)
-
-  if (ssoFromDb?.enabled && tierLimits.features.customOidcProvider && !ssoRegistered) {
-    // SSO is enabled and tier-allowed in DB but the secret is missing
-    // (or got cleared). Skip registration; the rest of Better-Auth
-    // (password + magic-link + other OAuth) keeps working. UI shows a
-    // status banner asking the admin to paste the secret. Also warn
-    // explicitly when the legacy env-var is set so self-hosters
-    // upgrading from the env-fallback era have a breadcrumb.
-    log.error(
-      'sso enabled but no client secret in platform_credentials; set it via admin settings → security → authentication → single sign-on'
-    )
-    if (process.env.SSO_OIDC_CLIENT_SECRET) {
-      log.warn(
-        'sso client secret env var is set but no longer read at runtime; re-enter the secret via the admin ui to restore sso'
-      )
-    }
-  }
-
-  if (ssoRegistered) {
-    const cfg = ssoFromDb!
-    const clientSecret = await getSsoClientSecret()
-    // `isSsoActuallyRegistered` already confirmed the secret exists, but
-    // narrow the type for the push below.
-    if (clientSecret) {
-      genericOAuthConfigs.push({
-        providerId: 'sso',
-        clientId: cfg.clientId,
-        clientSecret,
-        discoveryUrl: cfg.discoveryUrl,
-        scopes: ['openid', 'email', 'profile'],
-        // PKCE on the authorization-code grant. OAuth 2.1 IdPs (e.g.
-        // Supabase Auth's OAuth server) REQUIRE code_challenge on every
-        // authorize request and reject without it; RFC 7636 §5 makes the
-        // params backwards-compatible — IdPs that don't support PKCE
-        // simply ignore them (Okta, Auth0, Entra, Keycloak all accept
-        // it). Better-Auth threads code_verifier through the token
-        // exchange when this flag is set.
-        pkce: true,
-        // Force the IdP to show the account-picker. Without this, an
-        // admin typing demo@example.com at the login form gets
-        // silently signed in as whoever the IdP already has a
-        // session for (e.g. james.morton@quackback.io) — the IdP
-        // re-uses its existing session because it has no reason to
-        // re-prompt. With select_account, the IdP always asks the
-        // user which account they want to sign in with so the
-        // identity is explicit.
-        prompt: 'select_account',
-        // login_hint pre-selects the typed email in the IdP picker.
-        // Read from the `additionalData.loginHint` body field that
-        // the team-login / portal-auth forms pass when initiating
-        // SSO. When the field is absent (e.g. a direct hit on
-        // /sign-in/oauth2 with no email context) we omit the hint
-        // and the IdP just shows its default account list.
-        authorizationUrlParams: (ctx) => {
-          const hint = ctx.body?.additionalData?.loginHint
-          const params: Record<string, string> = {}
-          if (hint) params.login_hint = hint
-          return params
-        },
-        // Better-Auth's built-in JIT block. When false, the upstream
-        // callback aborts in handleOAuthUserInfo BEFORE any user/
-        // session is created, then redirects with `?error=signup_disabled`.
-        // Existing users link via accountLinking.trustedProviders even
-        // with this on. Picked up by createAuth() rebuilds via
-        // resetAuth() / cross-pod invalidation when admins toggle it.
-        disableSignUp: cfg.autoCreateUsers === false,
-        mapProfileToUser: mapProfileLocale,
-      })
-      trustedProviders.push('sso')
-    }
-  }
+  // OIDC providers (single sign-on + portal custom OIDC) are registered
+  // from the identity_provider list — the single source of truth. Each
+  // provider keeps its own registrationId as the Better-Auth providerId
+  // (migrated rows preserve 'sso'/'custom-oidc'), so the OAuth redirect
+  // URI is stable and needs no IdP reconfiguration. Tier-gated inside
+  // buildGenericOAuthConfigs: a downgraded workspace stops registering
+  // OIDC even though the rows remain. The login_hint params are carried
+  // to every provider since any may be domain-routed.
+  const oidcConfigs = await buildGenericOAuthConfigs({
+    providers: await listIdentityProviders(),
+    creds: getIdentityProviderCredentials,
+    tierAllowsOidc: tierLimits.features.customOidcProvider,
+    mapProfileToUser: mapProfileLocale,
+    buildLoginHintParams,
+  })
+  genericOAuthConfigs.push(...oidcConfigs)
+  for (const c of oidcConfigs) trustedProviders.push(c.providerId)
 
   // Layer A registration filter: an OAuth provider is registered on
-  // the Better-Auth instance only if creds exist AND at least one
-  // surface (admin or portal) has it enabled. If both surfaces have
-  // turned it off, skip registration so the button stops rendering on
-  // every login page. Per-surface gating (admin vs portal) happens in
-  // hooks.before/after — Better-Auth's provider list is a global
-  // concept and can't be partitioned per-role at the auth-instance
-  // level. Password and magic-link aren't covered here (they're
-  // global Better-Auth features, not entries in AUTH_PROVIDERS).
-  const teamOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
+  // the Better-Auth instance only if creds exist AND `authConfig.oauth`
+  // has it enabled. If the admin hasn't opted in, skip registration so
+  // the button stops rendering on every login page. Per-flow gating
+  // (admin vs portal sign-in) happens in hooks.before/after —
+  // Better-Auth's provider list is a global concept and can't be
+  // partitioned per-role at the auth-instance level. Password and
+  // magic-link aren't covered here (they're global Better-Auth features,
+  // not entries in AUTH_PROVIDERS).
+  const unifiedOAuthConfig = (tenantSettings?.authConfig?.oauth ?? {}) as Record<
     string,
     boolean | undefined
   >
-  const portalOAuthConfig = (tenantSettings?.portalConfig?.oauth ?? {}) as Record<
-    string,
-    boolean | undefined
-  >
-  const isOAuthProviderEnabledForAnySurface = (id: string): boolean => {
-    return teamOAuthConfig[id] === true || portalOAuthConfig[id] === true
-  }
 
   for (const provider of getAllAuthProviders()) {
+    // OIDC providers are owned by the identity_provider list above. Skip
+    // them here so custom-oidc isn't re-registered as a (broken) social
+    // provider once the generic-oauth sub-branch is gone.
+    if (provider.type === 'generic-oauth') continue
+
     const creds = await getPlatformCredentials(provider.credentialType)
     if (!creds?.clientId || !creds?.clientSecret) continue
-    if (!isOAuthProviderEnabledForAnySurface(provider.id)) continue
+    if (!isSignInMethodEnabled(unifiedOAuthConfig, provider.id)) continue
 
-    if (provider.type === 'generic-oauth') {
-      if (!tierLimits.features.customOidcProvider) continue
-      // Generic OAuth providers use the genericOAuth plugin
-      const scopeStr = creds.scopes || 'openid email profile'
-      genericOAuthConfigs.push({
-        providerId: provider.id,
-        clientId: creds.clientId,
-        clientSecret: creds.clientSecret,
-        ...(creds.discoveryUrl && { discoveryUrl: creds.discoveryUrl }),
-        ...(creds.authorizationUrl && { authorizationUrl: creds.authorizationUrl }),
-        ...(creds.tokenUrl && { tokenUrl: creds.tokenUrl }),
-        scopes: scopeStr.split(/\s+/).filter(Boolean),
-        // PKCE on every generic-oauth provider too (portal Custom OIDC).
-        // Same rationale as the 'sso' provider above: OAuth 2.1 IdPs
-        // require code_challenge; RFC 7636 params are ignored by IdPs
-        // without PKCE support, so it is safe to send unconditionally.
-        pkce: true,
-        mapProfileToUser: mapProfileLocale,
-      })
-      trustedProviders.push(provider.id)
-    } else {
-      // Built-in social providers
-      const providerConfig: Record<string, unknown> = {
-        clientId: creds.clientId,
-        clientSecret: creds.clientSecret,
-        mapProfileToUser: mapProfileLocale,
-      }
-      // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
-      for (const field of provider.platformCredentials) {
-        if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
-          providerConfig[field.key] = creds[field.key]
-        }
-      }
-      socialProviders[provider.id] = providerConfig
-      trustedProviders.push(provider.id)
+    // Built-in social providers
+    const providerConfig: Record<string, unknown> = {
+      clientId: creds.clientId,
+      clientSecret: creds.clientSecret,
+      mapProfileToUser: mapProfileLocale,
     }
+    // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
+    for (const field of provider.platformCredentials) {
+      if (field.key !== 'clientId' && field.key !== 'clientSecret' && creds[field.key]) {
+        providerConfig[field.key] = creds[field.key]
+      }
+    }
+    socialProviders[provider.id] = providerConfig
+    trustedProviders.push(provider.id)
   }
 
   // BASE_URL is required for auth callbacks and redirects
@@ -768,17 +665,6 @@ export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 
 import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
-
-const levels: Record<Role, number> = {
-  admin: 3,
-  member: 2,
-  user: 1,
-}
-
-/** Check if role meets minimum level: hasRole('admin', 'member') → true */
-export function hasRole(role: Role, minimum: Role): boolean {
-  return levels[role] >= levels[minimum]
-}
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {
