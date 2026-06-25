@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const navigate = vi.fn()
@@ -10,7 +10,6 @@ vi.mock('@tanstack/react-router', async (orig) => ({
 }))
 
 // Capture only GateCard's broadcast onSuccess (no `enabled` prop).
-// AuthDialog also calls useAuthBroadcast but always passes `enabled`.
 let broadcastOnSuccess: (() => void) | undefined
 vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   useAuthBroadcast: (opts: { onSuccess?: () => void; enabled?: boolean }) => {
@@ -25,16 +24,13 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/lib/client/auth-client', () => ({ signOut: vi.fn() }))
 
+// Capture the props the gate hands the inline form (mode etc.).
+let formProps: Record<string, unknown> = {}
 vi.mock('@/components/auth/portal-auth-form-inline', () => ({
-  PortalAuthFormInline: () => null,
-}))
-
-const openAuthPopover = vi.fn()
-vi.mock('@/components/auth/auth-popover-context', async (orig) => ({
-  ...(await orig<typeof import('@/components/auth/auth-popover-context')>()),
-  // Pass-through wrapper so GateCard renders without a real context provider.
-  AuthPopoverProvider: ({ children }: { children: unknown }) => children,
-  useAuthPopover: () => ({ openAuthPopover }),
+  PortalAuthFormInline: (props: Record<string, unknown>) => {
+    formProps = props
+    return <div data-testid="auth-form-body">FORM_BODY</div>
+  },
 }))
 
 vi.mock('@/lib/client/post-auth-navigation', () => ({ navigateAfterAuth: vi.fn() }))
@@ -56,24 +52,45 @@ const baseProps = {
 beforeEach(() => {
   navigate.mockClear()
   invalidate.mockClear()
-  openAuthPopover.mockClear()
   vi.mocked(navigateAfterAuth).mockClear()
   broadcastOnSuccess = undefined
+  formProps = {}
 })
 
-describe('PortalAccessGate — autoOpenSignin guard', () => {
-  it('does NOT call openAuthPopover when reason is "unauthorized"', async () => {
-    await act(async () => {
-      render(<PortalAccessGate {...baseProps} reason="unauthorized" autoOpenSignin="login" />)
-    })
-    expect(openAuthPopover).not.toHaveBeenCalled()
+describe('PortalAccessGate — inline auth form', () => {
+  it('renders the auth form directly for an unauthenticated visitor, with no intermediate button', () => {
+    render(<PortalAccessGate {...baseProps} />)
+    expect(screen.getByTestId('auth-form-body')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign in \/ register/i })).not.toBeInTheDocument()
   })
 
-  it('DOES call openAuthPopover when reason is "unauthenticated"', async () => {
-    await act(async () => {
-      render(<PortalAccessGate {...baseProps} reason="unauthenticated" autoOpenSignin="login" />)
-    })
-    expect(openAuthPopover).toHaveBeenCalledWith(expect.objectContaining({ mode: 'login' }))
+  it('does NOT render the auth form for an unauthorized visitor', () => {
+    render(<PortalAccessGate {...baseProps} reason="unauthorized" userEmail="alice@example.com" />)
+    expect(screen.queryByTestId('auth-form-body')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+  })
+
+  it('seeds the form mode from autoOpenSignin', () => {
+    render(<PortalAccessGate {...baseProps} autoOpenSignin="signup" />)
+    expect(formProps.mode).toBe('signup')
+  })
+
+  it('defaults the form mode to login when autoOpenSignin is absent', () => {
+    render(<PortalAccessGate {...baseProps} />)
+    expect(formProps.mode).toBe('login')
+  })
+})
+
+describe('PortalAccessGate — decorative backdrop', () => {
+  it('renders an inert, screen-reader-hidden faux board (nothing focusable)', () => {
+    render(<PortalAccessGate {...baseProps} />)
+    const backdrop = screen.getByTestId('portal-gate-backdrop')
+    expect(backdrop).toHaveAttribute('aria-hidden', 'true')
+    // The fake board only exists to suggest a real portal sits behind the wall.
+    // It must never be tabbable or announced to assistive tech.
+    expect(
+      backdrop.querySelectorAll('button, a, input, select, textarea, [tabindex]')
+    ).toHaveLength(0)
   })
 })
 

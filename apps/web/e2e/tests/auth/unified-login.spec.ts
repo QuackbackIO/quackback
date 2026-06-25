@@ -7,9 +7,9 @@
  *     auto-opens ("Welcome back"); admin magic-link sign-in lands on /admin.
  *  2. Public portal, portal user reaching /admin → error toast (not_team_member);
  *     dialog remains open; user stays out of /admin.
- *  3. Private portal, unauth /admin → gate shows; dialog auto-opens; admin
- *     completes password sign-in in the gate dialog; loader re-evaluates and
- *     lands on /admin (proves #270 ① gate→sign-in→callbackUrl path end-to-end).
+ *  3. Private portal, unauth /admin → gate shows the inline auth form; admin
+ *     completes sign-in in the gate; loader re-evaluates and lands on /admin
+ *     (proves #270 ① gate→sign-in→callbackUrl path end-to-end).
  *  4. /?prompt=login escape hatch: shows the dialog with any seeded OIDC button +
  *     the break-glass recovery-code link. (The anonymous-/ → IdP redirect is
  *     deferred: it requires an OIDC discovery document at a live URL.)
@@ -145,9 +145,8 @@ test('(2) portal user reaching /admin gets not_team_member error toast', async (
 })
 
 // ── Journey 3 ────────────────────────────────────────────────────────────────
-// Private portal: unauth /admin → gate shows; dialog auto-opens from the
-// gate's autoOpenSignin='login'; admin completes sign-in → loader re-evaluates
-// → lands on /admin.
+// Private portal: unauth /admin → gate shows the inline auth form (seeded to
+// 'login'); admin completes sign-in → loader re-evaluates → lands on /admin.
 //
 // Regression proof for #270 ①: anonymous visitor on a private portal →
 // gate → sign-in → gate.useAuthBroadcast.onSuccess fires →
@@ -156,20 +155,20 @@ test('(2) portal user reaching /admin gets not_team_member error toast', async (
 // Approach (b): inject the stored admin session cookie + post an
 // 'auth-success' BroadcastChannel message to trigger the gate's
 // useAuthBroadcast.onSuccess handler directly. Approach (a) (password
-// credentials in the gate dialog) was attempted first: the portal is
-// currently configured in OTP/email-only mode in the gate dialog context
+// credentials in the gate form) was attempted first: the portal is
+// currently configured in OTP/email-only mode in the gate form context
 // (password auth is not presented), so interactive credential completion
 // is not available in this environment.
 //
 // Approach (b) still exercises the exact gate→broadcast→router.invalidate
 // →callbackUrl-navigation path that #270 ① is about:
-//   1. Gate renders + dialog auto-opens (anonymous user denied)
+//   1. Gate renders the inline auth form (anonymous user denied)
 //   2. Admin session injected (simulates post-sign-in state)
 //   3. BroadcastChannel 'auth-success' fires gate.onSuccess:
 //      router.invalidate() → loader re-runs → access granted →
 //      router.navigate({ to: '/admin' }).
 
-test('(3) private portal gate: sign-in in gate dialog lands on /admin', async ({ page }) => {
+test('(3) private portal gate: sign-in in the gate lands on /admin', async ({ page }) => {
   setPortalVisibility('private')
   try {
     // /admin redirects to /?auth=signin&callbackUrl=/admin; the _portal loader
@@ -181,9 +180,10 @@ test('(3) private portal gate: sign-in in gate dialog lands on /admin', async ({
     // Must land on portal root with auth=signin param.
     await expect(page).toHaveURL(/[?&]auth=signin/, { timeout: 15000 })
 
-    // Gate's autoOpenSignin fires immediately — dialog is visible.
-    // This proves the gate rendered and the auto-open callback fired.
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 })
+    // The gate renders the shared auth form inline (no modal). Its private-
+    // portal copy + the email field prove the gate rendered the form directly.
+    await expect(page.getByText(/this portal is private/i)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByLabel(/email/i)).toBeVisible({ timeout: 15000 })
 
     // ── Simulate post-sign-in: inject admin session + broadcast auth-success ──
     // Load the stored admin session (built by global-setup or refresh-admin-session.ts).
