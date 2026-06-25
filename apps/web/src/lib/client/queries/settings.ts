@@ -14,7 +14,7 @@ import {
   fetchWidgetSecret,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getVerifiedDomainsFn } from '@/lib/server/functions/sso'
+import { getVerifiedDomainsFn, listIdentityProvidersFn } from '@/lib/server/functions/sso'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
@@ -85,6 +85,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'verifiedDomains'],
       queryFn: () => getVerifiedDomainsFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  identityProviders: () =>
+    queryOptions({
+      queryKey: ['settings', 'identityProviders'],
+      queryFn: () => listIdentityProvidersFn(),
       staleTime: STALE_TIME_MEDIUM,
     }),
 

@@ -12,6 +12,17 @@
 
 export type IdpKind = 'okta' | 'auth0' | 'keycloak' | 'entra' | 'google' | 'other'
 
+/** Friendly display name per IdP kind — the picker tiles and the provider list
+ *  both render these, so they live here to stay in sync. */
+export const IDP_KIND_NAMES: Record<IdpKind, string> = {
+  okta: 'Okta',
+  auth0: 'Auth0',
+  entra: 'Microsoft Entra',
+  keycloak: 'Keycloak',
+  google: 'Google Workspace',
+  other: 'Custom OIDC',
+}
+
 export interface IdpShortcutField {
   /** Field key — used in the shortcut state shape and form input. */
   key: string
@@ -34,11 +45,6 @@ export interface IdpShortcutDef {
    *  values, so admins editing a saved config see the shortcut
    *  pre-filled. Returns null when the URL doesn't match the pattern. */
   parse: (discoveryUrl: string) => Record<string, string> | null
-  /** Vendor setup guide — what to register on the IdP side, where to
-   *  find client ID / secret, where the redirect URI goes. Linked
-   *  from the empty-state tile and from the configured form so
-   *  admins can context-switch to the right page in one click. */
-  docUrl?: string
 }
 
 const trim = (v: string) => (v || '').trim()
@@ -62,10 +68,9 @@ const OKTA: IdpShortcutDef = {
   parse: (url) => {
     const m = /^https:\/\/([^/]+)\/\.well-known\/openid-configuration$/.exec(url)
     if (!m) return null
-    if (!/\.okta\.com$|\.oktapreview\.com$/.test(m[1]) && !m[1].startsWith('auth.')) return null
+    if (!/\.okta\.com$|\.oktapreview\.com$/.test(m[1])) return null
     return { domain: m[1] }
   },
-  docUrl: 'https://developer.okta.com/docs/guides/sign-into-web-app-redirect/',
 }
 
 const AUTH0: IdpShortcutDef = {
@@ -90,7 +95,6 @@ const AUTH0: IdpShortcutDef = {
     if (!/\.auth0\.com$/.test(m[1])) return null
     return { domain: m[1] }
   },
-  docUrl: 'https://auth0.com/docs/get-started/applications',
 }
 
 const ENTRA: IdpShortcutDef = {
@@ -115,7 +119,6 @@ const ENTRA: IdpShortcutDef = {
     if (!m) return null
     return { tenant: decodeURIComponent(m[1]) }
   },
-  docUrl: 'https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app',
 }
 
 const KEYCLOAK: IdpShortcutDef = {
@@ -144,7 +147,6 @@ const KEYCLOAK: IdpShortcutDef = {
     if (!m) return null
     return { baseUrl: m[1], realm: decodeURIComponent(m[2]) }
   },
-  docUrl: 'https://www.keycloak.org/docs/latest/server_admin/#_oidc_clients',
 }
 
 const GOOGLE: IdpShortcutDef = {
@@ -156,7 +158,6 @@ const GOOGLE: IdpShortcutDef = {
   build: () => 'https://accounts.google.com/.well-known/openid-configuration',
   parse: (url) =>
     url === 'https://accounts.google.com/.well-known/openid-configuration' ? {} : null,
-  docUrl: 'https://support.google.com/cloud/answer/6158849',
 }
 
 const OTHER: IdpShortcutDef = {

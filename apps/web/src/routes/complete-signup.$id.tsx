@@ -204,7 +204,7 @@ function NotAuthenticatedContent({
           : 'Sign in to accept your invitation and get started with your team.'}
       </p>
       <div className="mt-6 flex flex-col gap-3">
-        <a href={`/admin/login?callbackUrl=/complete-signup/${invitationId}`}>
+        <a href={`/auth/login?callbackUrl=/complete-signup/${invitationId}`}>
           <Button className="w-full h-11">Sign in</Button>
         </a>
         <a
@@ -418,7 +418,7 @@ function ErrorContent({
                 <Button className="w-full h-11">Go to Dashboard</Button>
               </a>
             ) : kind === 'token' ? (
-              <a href={`/admin/login?callbackUrl=/complete-signup/${invitationId}`}>
+              <a href={`/auth/login?callbackUrl=/complete-signup/${invitationId}`}>
                 <Button className="w-full h-11">Sign in</Button>
               </a>
             ) : (

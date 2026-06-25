@@ -78,18 +78,20 @@ beforeEach(() => {
 })
 
 describe('portal-invite route loader — unauthenticated', () => {
-  it('redirects to /auth/login when session is null', async () => {
+  it('redirects to the sign-in dialog when session is null', async () => {
     const result = await runLoader('invite_1', null)
-    const r = result as { isRedirect?: boolean; to?: string }
+    const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
-    expect(r.to).toBe('/auth/login')
+    expect(r.to).toBe('/')
+    expect(r.search?.auth).toBe('signin')
   })
 
-  it('redirects to /auth/login when session has no user', async () => {
+  it('redirects to the sign-in dialog when session has no user', async () => {
     const result = await runLoader('invite_1', {})
-    const r = result as { isRedirect?: boolean; to?: string }
+    const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
-    expect(r.to).toBe('/auth/login')
+    expect(r.to).toBe('/')
+    expect(r.search?.auth).toBe('signin')
   })
 
   it('includes callbackUrl pointing back to the invite route', async () => {
@@ -100,12 +102,13 @@ describe('portal-invite route loader — unauthenticated', () => {
 })
 
 describe('portal-invite route loader — Authentication required error', () => {
-  it('redirects to /auth/login when acceptPortalInviteFn throws Authentication required', async () => {
+  it('redirects to the sign-in dialog when acceptPortalInviteFn throws Authentication required', async () => {
     mockAcceptPortalInviteFn.mockRejectedValue(new Error('Authentication required'))
     const result = await runLoader('invite_1', { user: { id: 'u1' } })
-    const r = result as { isRedirect?: boolean; to?: string }
+    const r = result as { isRedirect?: boolean; to?: string; search?: Record<string, string> }
     expect(r.isRedirect).toBe(true)
-    expect(r.to).toBe('/auth/login')
+    expect(r.to).toBe('/')
+    expect(r.search?.auth).toBe('signin')
   })
 })
 

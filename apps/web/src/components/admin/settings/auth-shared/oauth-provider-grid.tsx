@@ -17,7 +17,6 @@ export interface OAuthProviderGridProps {
   // True when disabling this provider would leave the surface with zero auth methods.
   // Parent computes this — the grid does not know about password/magic-link rows.
   isLastMethod: (providerId: string) => boolean
-  isManaged?: (providerId: string) => boolean
   // Provider ids hidden from this grid (e.g. providers the surface configures
   // elsewhere — generic OIDC for team lives in the Single sign-on panel).
   excludeProviderIds?: readonly AuthProviderId[]
@@ -30,7 +29,6 @@ export function OAuthProviderGrid({
   enabled,
   credentialStatus,
   isLastMethod,
-  isManaged,
   excludeProviderIds,
   saving = false,
   onToggle,
@@ -67,7 +65,6 @@ export function OAuthProviderGrid({
         {filteredProviders.map((provider) => {
           const isConfigured = credentialStatus[provider.id]
           const isEnabled = !!enabled[provider.id]
-          const managed = isManaged?.(provider.id) ?? false
           const lastMethod = isLastMethod(provider.id)
           const IconComponent = AUTH_PROVIDER_ICON_MAP[provider.id]
 
@@ -92,7 +89,6 @@ export function OAuthProviderGrid({
                 key={provider.id}
                 type="button"
                 onClick={() => onConfigure(provider)}
-                disabled={managed}
                 className="group flex items-center gap-3 rounded-lg border border-dashed border-border/40 bg-muted/10 p-3 text-left transition-all hover:border-border/60 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {icon}
@@ -129,18 +125,14 @@ export function OAuthProviderGrid({
                       Enabled
                     </Badge>
                   )}
-                  {(managed || lastMethod) && (
+                  {lastMethod && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <LockClosedIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>
-                            {managed
-                              ? 'Managed by your configuration file.'
-                              : 'At least one sign-in method must stay enabled.'}
-                          </p>
+                          <p>At least one sign-in method must stay enabled.</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -149,7 +141,6 @@ export function OAuthProviderGrid({
                 <button
                   type="button"
                   onClick={() => onConfigure(provider)}
-                  disabled={managed}
                   className="text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:no-underline"
                 >
                   Update credentials
@@ -159,7 +150,7 @@ export function OAuthProviderGrid({
                 id={`${provider.id}-toggle`}
                 checked={isEnabled}
                 onCheckedChange={(checked) => onToggle(provider.id, checked)}
-                disabled={saving || managed || lastMethod}
+                disabled={saving || lastMethod}
                 className="flex-shrink-0"
               />
             </div>

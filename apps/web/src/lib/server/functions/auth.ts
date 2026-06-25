@@ -2,10 +2,10 @@
  * Public-surface server function for the email-first login dispatcher.
  *
  * `lookupAuthMethodsFn` is shared by both `/admin/login` (team) and
- * `/auth/login` (portal). Given an email and a surface, it tells the
- * client whether to redirect to the configured SSO IdP (verified-
- * domain match — same hard-binding rule on both surfaces) or render
- * the methods form for that surface.
+ * `/auth/login` (portal). Given an email, it tells the client whether
+ * to redirect to the configured SSO IdP (verified-domain match) or
+ * render the methods form. Reads the single `publicAuthConfig.oauth`
+ * for both surfaces.
  *
  * Deliberately does NOT look up whether an account exists at the
  * supplied email — that would leak account presence to anyone who can
@@ -18,85 +18,76 @@ import { z } from 'zod'
 
 const lookupAuthMethodsInput = z.object({
   email: z.string().email().max(320),
-  surface: z.enum(['team', 'portal']).default('team'),
 })
 
 export type LookupAuthMethodsResult =
-  /** Verified-domain email AND enforcement is on — must use SSO, no escape. */
-  | { kind: 'sso-redirect' }
-  /** Verified-domain email AND enforcement is off — SSO is the default
-   *  CTA, but the methods form is available as a fallback so users can
-   *  pick password / magic-link / OAuth if they prefer. */
+  /** Verified-domain email AND enforcement is on — must use the owning
+   *  provider, no escape. `providerId` is that provider's registrationId
+   *  (Task 14 threads it to the client's `signIn.oauth2({ providerId })`). */
+  | { kind: 'sso-redirect'; providerId: string }
+  /** Verified-domain email AND enforcement is off — the owning provider is
+   *  the default CTA, but the methods form is available as a fallback so
+   *  users can pick password / magic-link / OAuth if they prefer.
+   *  `providerId` is the owning provider's registrationId. */
   | {
       kind: 'sso-default'
+      providerId: string
       authConfig: Record<string, boolean | undefined>
     }
-  | { kind: 'sso-unavailable'; reason: 'not-registered' }
   | {
       kind: 'methods'
       authConfig: Record<string, boolean | undefined>
       ssoEnabled: boolean
     }
 
-/** User-facing copy for the `sso-unavailable` branch. Centralised so
- *  every login surface renders the same wording when SSO is configured
- *  for a verified domain but isn't actually live at runtime. */
-export const SSO_UNAVAILABLE_MESSAGE =
-  'Single sign-on is configured for your domain but is not currently available. Contact your administrator.'
-
 export const lookupAuthMethodsFn = createServerFn({ method: 'POST' })
   .validator(lookupAuthMethodsInput)
   .handler(async ({ data }): Promise<LookupAuthMethodsResult> => {
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const { findVerifiedDomainForEmail, isSsoConfigured } =
-      await import('@/lib/server/auth/auth-restrictions')
+    const { listIdentityProviders } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+    const { resolveLoginRouting } = await import('./auth-routing')
 
     const tenant = await getTenantSettings()
-    const sso = tenant?.authConfig?.ssoOidc
-    const methodsConfig =
-      data.surface === 'portal'
-        ? (tenant?.publicPortalConfig?.oauth ?? {})
-        : (tenant?.publicAuthConfig?.oauth ?? {})
+    const methodsConfig = tenant?.publicAuthConfig?.oauth ?? {}
 
-    // Master switch: when SSO is disabled at the workspace level,
-    // every downstream toggle (workspace `required`, per-domain
-    // `enforced`) is dormant. Common state: admin configured SSO,
-    // verified a domain, then flipped `enabled` off (switching IdPs,
-    // pausing rollout, simplifying the login form). The verified-
-    // domain row + `required` flag outlive the master toggle, but the
-    // user-facing message should be "methods", not "sso unavailable" —
-    // the latter implies the admin needs to fix something.
-    if (!isSsoConfigured(sso)) {
+    // Build the liveness snapshot routing needs. `getRegisteredOidcProviderIds`
+    // already applies the full gate (enabled + credential present + tier) and
+    // internally consults the same configured-types Set, so membership in it is
+    // the single source of truth — reuse it rather than fetching configured
+    // types a second time here.
+    const providers = await listIdentityProviders()
+    const registeredIds = await getRegisteredOidcProviderIds(providers)
+    const routable = providers.map((p) => {
+      const registered = registeredIds.has(p.registrationId)
       return {
-        kind: 'methods',
-        authConfig: methodsConfig,
-        ssoEnabled: false,
+        registrationId: p.registrationId,
+        enabled: p.enabled,
+        registered,
+        // `registered` already implies a present credential, so mirror it
+        // instead of triggering a second configured-types lookup.
+        credsPresent: registered,
+        domains: p.domains,
       }
-    }
+    })
 
-    // Verified-domain routing applies to both surfaces. Confirm SSO is
-    // actually registered (creds present, tier flag on) before promising
-    // a redirect — otherwise the user would land on a non-existent
-    // provider. When the matching row also has `enforced=true`, the
-    // redirect is unconditional (sso-redirect); when off, SSO is the
-    // default but the methods form is offered as a fallback (sso-default).
-    const match = findVerifiedDomainForEmail(data.email, tenant?.verifiedDomains)
-    if (match) {
-      const { isSsoActuallyRegistered } = await import('@/lib/server/auth/sso-secret')
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const registered = await isSsoActuallyRegistered(sso, await getTierLimits())
-      if (!registered) {
-        return { kind: 'sso-unavailable', reason: 'not-registered' }
-      }
-      if (match.enforced) {
-        return { kind: 'sso-redirect' }
-      }
-      return { kind: 'sso-default', authConfig: methodsConfig }
+    // Route to the provider owning the email's verified domain. The
+    // liveness gate inside `resolveLoginRouting` falls a dead owner
+    // through to `methods` — a disabled / off-tier / secret-less IdP must
+    // not dead-redirect, mirroring the pre-registry master switch.
+    const routing = resolveLoginRouting(data.email, routable)
+    if (routing.kind === 'sso-redirect') {
+      return { kind: 'sso-redirect', providerId: routing.providerId }
+    }
+    if (routing.kind === 'sso-default') {
+      return { kind: 'sso-default', providerId: routing.providerId, authConfig: methodsConfig }
     }
 
     return {
       kind: 'methods',
       authConfig: methodsConfig,
-      ssoEnabled: true,
+      // SSO is "on" for the form when at least one OIDC provider is live.
+      ssoEnabled: registeredIds.size > 0,
     }
   })

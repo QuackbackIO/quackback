@@ -19,6 +19,7 @@ import {
   acceptPortalInviteFn,
   type AcceptPortalInviteResult,
 } from '@/lib/server/functions/portal-invites'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,10 +37,7 @@ export const Route = createFileRoute('/portal-invite/$inviteId')({
     const { session } = context
 
     if (!session?.user) {
-      throw redirect({
-        to: '/auth/login',
-        search: { callbackUrl: `/portal-invite/${inviteId}` },
-      })
+      throw redirect(buildSigninRedirect(`/portal-invite/${inviteId}`))
     }
 
     try {
@@ -58,13 +56,10 @@ export const Route = createFileRoute('/portal-invite/$inviteId')({
 
       const message = err instanceof Error ? err.message : ''
 
-      // Unauthenticated — redirect to login with a callback so the user lands
-      // back here after signing in.
+      // Unauthenticated — redirect to sign-in dialog with a callback so the
+      // user lands back here after signing in.
       if (message === 'Authentication required') {
-        throw redirect({
-          to: '/auth/login',
-          search: { callbackUrl: `/portal-invite/${inviteId}` },
-        })
+        throw redirect(buildSigninRedirect(`/portal-invite/${inviteId}`))
       }
 
       if (message === 'PORTAL_INVITE_NOT_FOUND') {

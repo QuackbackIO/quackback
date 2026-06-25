@@ -7,6 +7,7 @@ import { setupWorkspaceFn } from '@/lib/server/functions/onboarding'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { pickOnboardingStep } from './-onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 
 export const Route = createFileRoute('/onboarding/_layout/workspace')({
   loader: async ({ context }) => {
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
     const state = await checkOnboardingState({ data: session.user.id })
 
     if (state.needsInvitation) {
-      throw redirect({ to: '/auth/login' })
+      throw redirect(buildSigninRedirect('/admin'))
     }
 
     // Delegate to pickOnboardingStep when this step doesn't apply: useCase

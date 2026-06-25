@@ -12,6 +12,7 @@ import {
   getUseCaseLabel,
 } from '@/components/onboarding/default-boards'
 import { pickOnboardingStep } from './-onboarding-step'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 
 export const Route = createFileRoute('/onboarding/_layout/boards')({
   loader: async ({ context }) => {
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
     const state = await checkOnboardingState({ data: session.user.id })
 
     if (state.needsInvitation) {
-      throw redirect({ to: '/auth/login' })
+      throw redirect(buildSigninRedirect('/admin'))
     }
 
     // Delegate when boards step doesn't apply yet (earlier step missing).

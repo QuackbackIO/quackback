@@ -72,37 +72,38 @@ export function RecoveryCodesSection() {
   })
 
   return (
-    <section className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="flex items-center gap-2 text-base font-medium">
-            <KeyIcon className="size-4 text-muted-foreground" />
-            Recovery codes
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            One-time codes to sign in when SSO is unavailable. Generate a fresh batch any time.
+    <div className="mt-6 border-t border-border/50 pt-6">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+          <KeyIcon className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium">Recovery codes</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            One-time break-glass codes to sign in when single sign-on is unavailable.
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant={activeCount > 0 ? 'secondary' : 'destructive'}>
+              {activeCount} active
+            </Badge>
+            {latest ? (
+              <span className="text-muted-foreground">
+                Last generated {new Date(latest.createdAt).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">No codes generated yet.</span>
+            )}
+          </div>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => generate.mutate()}
           disabled={generate.isPending}
-          className="h-9"
+          className="h-9 shrink-0"
         >
           {generate.isPending ? 'Generating…' : 'Generate new codes'}
         </Button>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3 text-xs">
-        <Badge variant={activeCount > 0 ? 'secondary' : 'destructive'}>{activeCount} active</Badge>
-        {latest ? (
-          <span className="text-muted-foreground">
-            Last generated {new Date(latest.createdAt).toLocaleDateString()}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">No codes generated yet.</span>
-        )}
       </div>
 
       {/* Low-codes warning. Fires when fewer than 3 codes remain so
@@ -124,8 +125,12 @@ export function RecoveryCodesSection() {
       <Dialog
         open={revealedCodes !== null}
         onOpenChange={(open) => {
-          if (!open && acknowledged) {
+          // The X / Escape / backdrop always dismiss — codes can be regenerated,
+          // so never trap the admin behind the acknowledgement checkbox (which
+          // only gates the primary "Done" button).
+          if (!open) {
             setRevealedCodes(null)
+            setAcknowledged(false)
           }
         }}
       >
@@ -186,6 +191,6 @@ export function RecoveryCodesSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   )
 }

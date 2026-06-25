@@ -1,9 +1,9 @@
 /**
- * Audit-log wiring for setSsoClientSecretFn / clearSsoClientSecretFn.
+ * Audit-log wiring for clearSsoClientSecretFn.
  *
- * Records sso.config.changed for every set/clear (success or failure),
- * with the field name + action in metadata. The secret VALUE never
- * touches the audit row — we only log presence transitions.
+ * Records sso.config.changed for every clear (success or failure), with
+ * the field name + action in metadata. The secret VALUE never touches
+ * the audit row — we only log presence transitions.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -84,8 +84,6 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   listVerifiedDomains: vi.fn(),
   updateAuthConfig: vi.fn(),
   setSsoDomainSubtree: vi.fn(),
-  // setSsoClientSecretFn stamps detailsChangedAt after saving the secret.
-  markSsoDetailsChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/server/auth/sso-secret', () => ({
@@ -110,6 +108,12 @@ vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => new Headers(),
 }))
 
+// clearSsoClientSecretFn's last-method guard lists identity providers; with no
+// 'sso' provider row the guard is a no-op, keeping these audit tests unit-level.
+vi.mock('@/lib/server/domains/settings/identity-providers.service', () => ({
+  listIdentityProviders: vi.fn(async () => []),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.mockRequireAuth.mockResolvedValue({
@@ -129,35 +133,8 @@ beforeEach(() => {
 currentModule = 'sso'
 await import('../sso')
 const ssoHandlers = handlersByModule.get('sso')!
-// Index order: 0=testSsoConnection, 1=setVerifiedDomainEnforced, 2=getSsoStatus,
-//              3=setSsoClientSecret, 4=switchSsoProvider, 5=clearSsoClientSecret, ...
-const setSsoClientSecret = ssoHandlers[3]
-const clearSsoClientSecret = ssoHandlers[5]
-
-describe('setSsoClientSecretFn audit-log wiring', () => {
-  it('records sso.config.changed (set) on success', async () => {
-    await setSsoClientSecret({ data: { clientSecret: 'secret-value' } })
-
-    expect(hoisted.mockRecordAuditEvent).toHaveBeenCalledTimes(1)
-    const call = hoisted.mockRecordAuditEvent.mock.calls[0][0]
-    expect(call.event).toBe('sso.config.changed')
-    expect(call.outcome).toBe('success')
-    expect(call.metadata).toMatchObject({ field: 'clientSecret', action: 'set' })
-    // The secret value never appears in the audit row.
-    expect(JSON.stringify(call)).not.toContain('secret-value')
-  })
-
-  it('records a failure event when the underlying save throws', async () => {
-    hoisted.mockSavePlatformCredentials.mockRejectedValueOnce(new Error('db down'))
-
-    await expect(setSsoClientSecret({ data: { clientSecret: 'secret-value' } })).rejects.toThrow()
-
-    expect(hoisted.mockRecordAuditEvent).toHaveBeenCalledTimes(1)
-    const call = hoisted.mockRecordAuditEvent.mock.calls[0][0]
-    expect(call.event).toBe('sso.config.changed')
-    expect(call.outcome).toBe('failure')
-  })
-})
+// Index order: 0=clearSsoClientSecret, 1=removeVerifiedDomain, 2=getVerifiedDomains, ...
+const clearSsoClientSecret = ssoHandlers[0]
 
 describe('clearSsoClientSecretFn audit-log wiring', () => {
   it('records sso.config.changed (cleared) on success', async () => {
