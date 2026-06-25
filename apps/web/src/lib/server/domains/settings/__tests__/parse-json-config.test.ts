@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseJsonConfig } from '../settings.helpers'
 import {
+  DEFAULT_AUTH_CONFIG,
   DEFAULT_PORTAL_CONFIG,
   DEFAULT_WIDGET_CONFIG,
   workspaceAllowsAnonymous,
@@ -21,7 +22,6 @@ describe('PublicPortalConfig.portalAccess', () => {
   it('portalAccess shape includes widgetSignIn', () => {
     // Verify the type carries widgetSignIn (build-time type assertion via satisfies)
     const cfg = {
-      oauth: {},
       features: DEFAULT_PORTAL_CONFIG.features,
       portalAccess: { isPrivate: true, widgetSignIn: false },
     } satisfies PublicPortalConfig
@@ -31,7 +31,6 @@ describe('PublicPortalConfig.portalAccess', () => {
 
   it('portalAccess.widgetSignIn is boolean', () => {
     const cfg: PublicPortalConfig = {
-      oauth: {},
       features: DEFAULT_PORTAL_CONFIG.features,
       portalAccess: { isPrivate: false, widgetSignIn: true },
     }
@@ -52,34 +51,42 @@ describe('parseJsonConfig', () => {
   })
 
   it('deep merges nested objects instead of replacing them', () => {
-    // Stored config only has email enabled — password key is missing
+    // Stored authConfig only has email enabled — password key is missing
     const stored = JSON.stringify({
       oauth: { email: true },
     })
 
-    const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
+    const result = parseJsonConfig(stored, DEFAULT_AUTH_CONFIG)
 
     // password should be preserved from the default (true)
     expect(result.oauth.password).toBe(true)
     // email should come from stored config
     expect(result.oauth.email).toBe(true)
-    // features should be preserved from the default
-    expect(result.features).toEqual(DEFAULT_PORTAL_CONFIG.features)
+    // openSignup should be preserved from the default
+    expect(result.openSignup).toBe(DEFAULT_AUTH_CONFIG.openSignup)
   })
 
   it('stored values override defaults for nested keys', () => {
     const stored = JSON.stringify({
       oauth: { password: false, email: true },
-      features: { allowAnonymous: false },
     })
 
-    const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
+    const result = parseJsonConfig(stored, DEFAULT_AUTH_CONFIG)
 
     expect(result.oauth.password).toBe(false)
     expect(result.oauth.email).toBe(true)
     // google/github preserved from defaults
     expect(result.oauth.google).toBe(true)
     expect(result.oauth.github).toBe(true)
+  })
+
+  it('portalConfig deep merges nested features', () => {
+    const stored = JSON.stringify({
+      features: { allowAnonymous: false },
+    })
+
+    const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
+
     // Explicit override
     expect(result.features.allowAnonymous).toBe(false)
     // Rest of features preserved from defaults
@@ -95,15 +102,14 @@ describe('parseJsonConfig', () => {
     expect(result.identifyVerification).toBe(false)
   })
 
-  it('preserves default oauth.password when stored oauth omits it (bug fix)', () => {
+  it('preserves default authConfig.oauth.password when stored oauth omits it (bug fix)', () => {
     // This is the exact scenario that caused the bug:
     // DB stored oauth without password key, shallow merge lost the default
     const stored = JSON.stringify({
       oauth: { email: true, google: false, github: false },
-      features: DEFAULT_PORTAL_CONFIG.features,
     })
 
-    const result = parseJsonConfig(stored, DEFAULT_PORTAL_CONFIG)
+    const result = parseJsonConfig(stored, DEFAULT_AUTH_CONFIG)
 
     // password must be true from defaults — this is what the toggle displays
     expect(result.oauth.password).toBe(true)

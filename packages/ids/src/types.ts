@@ -217,6 +217,9 @@ export type AuditLogId = TypeId<'audit'>
 /** SSO recovery code ID - e.g., rcode_01h455vb4pex5vsknk084sn02q */
 export type SsoRecoveryCodeId = TypeId<'rcode'>
 
+/** Identity provider ID - e.g., idp_01h455vb4pex5vsknk084sn02q */
+export type IdentityProviderId = TypeId<'idp'>
+
 /** API key ID - e.g., api_key_01h455vb4pex5vsknk084sn02q */
 export type ApiKeyId = TypeId<'api_key'>
 
@@ -414,6 +417,7 @@ export interface EntityIdMap {
   two_factor: TwoFactorId
   audit_log: AuditLogId
   sso_recovery_code: SsoRecoveryCodeId
+  identity_provider: IdentityProviderId
   api_key: ApiKeyId
   webhook: WebhookId
   subscription: SubscriptionId

@@ -14,7 +14,7 @@
  *    prevent self-lockout.
  */
 import { describe, it, expect } from 'vitest'
-import { isHardBound, isSsoConfigured, type AuthProvider } from '../auth-restrictions'
+import { isHardBound, type AuthProvider } from '../auth-restrictions'
 import type { AuthConfig, VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 
 const baseConfig: AuthConfig = {
@@ -50,28 +50,29 @@ const enforcedDomain: VerifiedDomain = {
 
 const verifiedDomain: VerifiedDomain = { ...enforcedDomain, enforced: false }
 
+// Task 12 migrated isHardBound from
+//   (provider, email, role, authConfig, verifiedDomains, ssoActuallyRegistered)
+// to
+//   (provider, email, providers, registeredProviderIds).
+// This wrapper preserves the legacy single-provider call shape used
+// throughout this file by mapping the verified domains onto a single owning
+// provider 'sso' and the boolean onto that provider's registered-set
+// membership. Every case below therefore remains the migrated
+// single-provider regression baseline (role / authConfig are now inert).
 const callIsHardBound = (
   provider: AuthProvider | string,
   email: string | null | undefined,
-  role: 'admin' | 'member' | 'user',
-  authConfig: AuthConfig | undefined,
+  _role: 'admin' | 'member' | 'user',
+  _authConfig: AuthConfig | undefined,
   verifiedDomains: readonly VerifiedDomain[] | undefined,
   ssoRegistered = true
-) => isHardBound(provider, email, role, authConfig, verifiedDomains, ssoRegistered)
-
-describe('isSsoConfigured — master-switch helper', () => {
-  it('returns true when ssoOidc.enabled === true', () => {
-    expect(isSsoConfigured(baseSso)).toBe(true)
-  })
-
-  it('returns false when ssoOidc.enabled === false', () => {
-    expect(isSsoConfigured({ ...baseSso, enabled: false })).toBe(false)
-  })
-
-  it('returns false when ssoOidc is undefined (never configured)', () => {
-    expect(isSsoConfigured(undefined)).toBe(false)
-  })
-})
+) =>
+  isHardBound(
+    provider,
+    email,
+    [{ id: 'idp_sso', registrationId: 'sso', domains: verifiedDomains ?? [], showButton: false }],
+    ssoRegistered ? new Set(['sso']) : new Set<string>()
+  )
 
 describe('isHardBound — per-verified-domain branch', () => {
   it('blocks credential at an enforced verified domain', () => {

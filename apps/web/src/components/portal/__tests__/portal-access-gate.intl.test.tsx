@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, cleanup } from '@testing-library/react'
 
 // GateCard re-evaluates access via the router after sign-in.
 vi.mock('@tanstack/react-router', () => ({
@@ -12,19 +12,18 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 
-// GateCard + AuthDialog listen for cross-tab auth broadcasts.
+// GateCard listens for cross-tab auth broadcasts.
 vi.mock('@/lib/client/hooks/use-auth-broadcast', () => ({
   useAuthBroadcast: vi.fn(),
 }))
 
-// GateCard imports signOut for the "unauthorized" branch.
+// GateCard imports signOut for the "unauthorized" branch + 2FA-abandon revoke.
 vi.mock('@/lib/client/auth-client', () => ({
   signOut: vi.fn(),
 }))
 
-// The dialog body pulls in the full auth form (server fns, auth client, OTP).
-// The intl regression lives in AuthDialog's own header, so stub the body to a
-// trivial node that still proves the dialog opened.
+// The form body pulls in the full auth flow (server fns, auth client, OTP).
+// The intl regression lives in the gate's own header copy, so stub the body.
 vi.mock('@/components/auth/portal-auth-form-inline', () => ({
   PortalAuthFormInline: () => <div data-testid="auth-form-body" />,
 }))
@@ -52,18 +51,18 @@ describe('PortalAccessGate — IntlProvider regression', () => {
   afterEach(() => cleanup())
 
   // The private-portal gate renders on the route's *error* path (a beforeLoad
-  // throw), which skips the loader that mounts PortalIntlProvider. Opening the
-  // sign-in dialog therefore rendered <FormattedMessage> (AuthDialog's header)
-  // with no IntlProvider ancestor, throwing "Could not find required `intl`
-  // object" and crashing the whole gate. The gate must provide its own intl
-  // context so its auth dialog renders.
-  it('renders the sign-in dialog without an intl-provider crash', () => {
+  // throw), which skips the loader that mounts PortalIntlProvider. The inline
+  // auth form's header renders <FormattedMessage>, so without the gate's own
+  // intl context it would throw "Could not find required `intl` object" and
+  // crash the whole gate. The gate must provide its own intl context.
+  it('renders the inline form with localized private-portal copy and no intl crash', () => {
     renderGate()
 
-    fireEvent.click(screen.getByRole('button', { name: /sign in \/ register/i }))
-
-    // The localized dialog title (defaultMessage) proving useIntl() resolved.
-    expect(screen.getByText(/welcome back/i)).toBeInTheDocument()
+    // Private-portal framing (surface switch) proves useIntl() resolved.
+    expect(screen.getByText(/sign in to access acme corp/i)).toBeInTheDocument()
+    expect(screen.getByText(/this portal is private/i)).toBeInTheDocument()
+    // The form is shown directly — no intermediate "Sign in / Register" button.
     expect(screen.getByTestId('auth-form-body')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /sign in \/ register/i })).not.toBeInTheDocument()
   })
 })

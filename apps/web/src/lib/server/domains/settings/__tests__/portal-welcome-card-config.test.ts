@@ -53,7 +53,6 @@ describe('PortalWelcomeCard type', () => {
 
   it('is exposed on PublicPortalConfig so the portal SSR loader can read it', () => {
     const projection: PublicPortalConfig = {
-      oauth: { password: true },
       features: DEFAULT_PORTAL_CONFIG.features,
       welcomeCard: { enabled: true, title: 'x', body: { type: 'doc' } as never },
     }

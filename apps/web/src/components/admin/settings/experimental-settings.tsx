@@ -7,10 +7,9 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { FEATURE_FLAG_REGISTRY, LAB_SECTIONS, type FeatureFlags } from '@/lib/shared/types'
 import { DEFAULT_FEATURE_FLAGS } from '@/lib/server/domains/settings/settings.types'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
-import { isPathManagedFromBootstrap } from '@/lib/client/config-file'
 
 export function ExperimentalSettings() {
-  const { settings, managedFieldPaths } = useRouteContext({ from: '__root__' })
+  const { settings } = useRouteContext({ from: '__root__' })
   const flags = (settings?.featureFlags as FeatureFlags | undefined) ?? DEFAULT_FEATURE_FLAGS
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(flags)
   const queryClient = useQueryClient()
@@ -44,10 +43,6 @@ export function ExperimentalSettings() {
           <div className="divide-y divide-border/50">
             {section.flags.map((key) => {
               const meta = FEATURE_FLAG_REGISTRY[key]
-              const flagManaged = isPathManagedFromBootstrap(
-                `features.${key}`,
-                managedFieldPaths ?? []
-              )
               return (
                 <div
                   key={key}
@@ -58,17 +53,12 @@ export function ExperimentalSettings() {
                       {meta.label}
                     </Label>
                     <p className="text-xs text-muted-foreground">{meta.description}</p>
-                    {flagManaged && (
-                      <p className="text-xs text-muted-foreground italic">
-                        Managed by your administrator&apos;s config — edit there.
-                      </p>
-                    )}
                   </div>
                   <Switch
                     id={`flag-${key}`}
                     checked={localFlags[key]}
                     onCheckedChange={(checked) => handleToggle(key, checked)}
-                    disabled={mutation.isPending || flagManaged}
+                    disabled={mutation.isPending}
                   />
                 </div>
               )

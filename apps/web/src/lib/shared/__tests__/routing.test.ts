@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSafeCallbackUrl } from '../routing'
+import { isSafeCallbackUrl, isTeamCallback } from '../routing'
 
 describe('isSafeCallbackUrl', () => {
   // Accepted values
@@ -54,5 +54,37 @@ describe('isSafeCallbackUrl', () => {
 
   it('rejects a number', () => {
     expect(isSafeCallbackUrl(42)).toBe(false)
+  })
+
+  // Backslash open-redirect: some browsers normalise /\evil.com → //evil.com
+  it('rejects "/\\evil.com" (backslash redirect)', () => {
+    expect(isSafeCallbackUrl('/\\evil.com')).toBe(false)
+  })
+
+  it('rejects "/\\\\evil.com" (double-backslash redirect)', () => {
+    expect(isSafeCallbackUrl('/\\\\evil.com')).toBe(false)
+  })
+
+  it('still accepts "/admin" (regression)', () => {
+    expect(isSafeCallbackUrl('/admin')).toBe(true)
+  })
+})
+
+describe('isTeamCallback', () => {
+  it('is true for admin paths', () => {
+    expect(isTeamCallback('/admin')).toBe(true)
+    expect(isTeamCallback('/admin/feedback')).toBe(true)
+  })
+  it('is true for team-invitation callbacks', () => {
+    expect(isTeamCallback('/complete-signup/inv_123')).toBe(true)
+  })
+  it('is false for portal paths and undefined', () => {
+    expect(isTeamCallback('/')).toBe(false)
+    expect(isTeamCallback('/b/roadmap')).toBe(false)
+    expect(isTeamCallback('/auth/login')).toBe(false)
+    expect(isTeamCallback(undefined)).toBe(false)
+  })
+  it('is false for non-admin lookalikes', () => {
+    expect(isTeamCallback('/administrator-handbook')).toBe(false)
   })
 })

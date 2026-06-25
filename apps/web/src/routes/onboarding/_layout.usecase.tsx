@@ -8,6 +8,7 @@ import { UseCaseSelector } from '@/components/onboarding/use-case-selector'
 import type { UseCaseType } from '@/lib/shared/db-types'
 import { pickOnboardingStep } from './-onboarding-step'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
+import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 
 export const Route = createFileRoute('/onboarding/_layout/usecase')({
   loader: async ({ context }) => {
@@ -20,7 +21,7 @@ export const Route = createFileRoute('/onboarding/_layout/usecase')({
     const state = await checkOnboardingState({ data: session.user.id })
 
     if (state.needsInvitation) {
-      throw redirect({ to: '/auth/login' })
+      throw redirect(buildSigninRedirect('/admin'))
     }
 
     // If this step is no longer needed (useCase already chosen),

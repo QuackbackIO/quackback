@@ -15,7 +15,6 @@ const ACCESS_POLICY = {
 }
 
 const FULL_PORTAL_CONFIG: PortalConfig = {
-  oauth: { password: true },
   features: {
     allowAnonymous: true,
     allowEditAfterEngagement: false,
@@ -36,11 +35,10 @@ describe('redactSettingsForClient — parsed object portalConfig', () => {
     expect(result.portalConfig.access).not.toHaveProperty('widgetSignIn')
   })
 
-  it('leaves oauth, features, and moderationDefault intact', () => {
+  it('leaves features and moderationDefault intact', () => {
     const row = { portalConfig: FULL_PORTAL_CONFIG, name: 'Acme' }
     const result = redactSettingsForClient(row)
 
-    expect(result.portalConfig.oauth).toEqual(FULL_PORTAL_CONFIG.oauth)
     expect(result.portalConfig.features).toEqual(FULL_PORTAL_CONFIG.features)
     expect(result.portalConfig.moderationDefault).toEqual(FULL_PORTAL_CONFIG.moderationDefault)
   })
@@ -90,13 +88,12 @@ describe('redactSettingsForClient — JSON-string portalConfig (raw DB row)', ()
     const result = redactSettingsForClient(row)
 
     const parsed = JSON.parse(result.portalConfig as string) as PortalConfig
-    expect(parsed.oauth).toEqual(FULL_PORTAL_CONFIG.oauth)
     expect(parsed.features).toEqual(FULL_PORTAL_CONFIG.features)
     expect(parsed.moderationDefault).toEqual(FULL_PORTAL_CONFIG.moderationDefault)
   })
 
   it('passes through a JSON string with no access key unchanged', () => {
-    const noAccess = { oauth: { password: true }, features: FULL_PORTAL_CONFIG.features }
+    const noAccess = { features: FULL_PORTAL_CONFIG.features }
     const row = { name: 'Acme', portalConfig: JSON.stringify(noAccess) }
     const result = redactSettingsForClient(row)
 
@@ -115,7 +112,6 @@ describe('redactSettingsForClient — allowedSegmentIds redaction', () => {
   it('strips access.allowedSegmentIds from the parsed PortalConfig', () => {
     const row = {
       portalConfig: {
-        oauth: { password: true },
         features: FULL_PORTAL_CONFIG.features,
         moderationDefault: { requireApproval: 'none' as const },
         access: {

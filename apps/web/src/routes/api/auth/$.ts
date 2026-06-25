@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { SSO_OAUTH_CALLBACK_PATH } from '@/lib/shared/sso-test-keys'
 import { rewriteUrlToPublicBaseUrl } from '@/lib/server/public-url'
+import { SSO_OAUTH_CALLBACK_PREFIX } from '@/lib/shared/sso-test-keys'
 
 /**
  * Simple rate limiter for OAuth client registration.
@@ -68,7 +69,10 @@ export const Route = createFileRoute('/api/auth/$')({
        */
       GET: async ({ request }) => {
         const url = new URL(request.url)
-        if (url.pathname === SSO_OAUTH_CALLBACK_PATH) {
+        // Intercept any genericOAuth callback before Better-Auth: a hit on
+        // `sso-test:<state>` in Redis means this is an admin test sign-in;
+        // a miss returns null and falls through to the real OAuth handler.
+        if (url.pathname.startsWith(SSO_OAUTH_CALLBACK_PREFIX)) {
           const { handleSsoTestCallback, renderSsoTestCallbackHtml } =
             await import('@/lib/server/auth/sso-test-callback')
           const handled = await handleSsoTestCallback({

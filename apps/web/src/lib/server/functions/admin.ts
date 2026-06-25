@@ -558,19 +558,20 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
  * account-creation step can offer the one-click button instead of the
  * manual Jane-Doe form. Only non-secret signals are returned.
  *
- * `ssoEnabled` reflects the same registration check `createAuth()` runs:
- * `settings.authConfig.ssoOidc.enabled` AND a client secret exists in
- * `platform_credentials` (`auth_sso`) AND the `customOidcProvider`
- * tier flag is on. In practice this is rarely true at first-onboarding
- * time (no admin yet to configure SSO) — but a re-onboard against an
- * existing tenant DB will use SSO when the row is there.
+ * `ssoEnabled` reflects whether the `sso` provider is registered — the same
+ * `getRegisteredOidcProviderIds` gate the auth engine and enforcement use
+ * (enabled + credentials + `customOidcProvider` tier). It is scoped to `'sso'`
+ * specifically because the onboarding button hardcodes
+ * `signIn.oauth2({ providerId: 'sso' })`: a true here must mean *that* provider
+ * is callable, not merely that some other (`custom-oidc` / `oidc_*`) provider
+ * exists. Reading the registry (not the legacy `authConfig.ssoOidc` blob) means
+ * the legacy-config cleanup can run without breaking the button. In practice
+ * this is rarely true at first onboarding (no admin yet to configure SSO) — but
+ * a re-onboard against an existing tenant DB will use SSO when it's registered.
  */
 export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
-  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-  const { isSsoActuallyRegistered } = await import('@/lib/server/auth/sso-secret')
-  const [tenant, tierLimits] = await Promise.all([getTenantSettings(), getTierLimits()])
-  const ssoEnabled = await isSsoActuallyRegistered(tenant?.authConfig?.ssoOidc, tierLimits)
+  const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+  const ssoEnabled = (await getRegisteredOidcProviderIds()).has('sso')
   return { ssoEnabled }
 })
 

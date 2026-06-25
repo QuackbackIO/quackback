@@ -21,7 +21,6 @@ import {
   fetchAuthProviderStatusFn,
   fetchAuthProviderCredentialsMaskedFn,
 } from '@/lib/server/functions/auth-provider-credentials'
-import { getSsoStatusFn } from '@/lib/server/functions/sso'
 import { listAuditEventsFn } from '@/lib/server/functions/audit-log'
 import { listRecoveryCodesFn } from '@/lib/server/functions/recovery-codes'
 import { getModerationStatus } from '@/lib/server/functions/moderation'
@@ -429,16 +428,6 @@ export const adminQueries = {
       queryKey: ['admin', 'userAttributes'],
       queryFn: () => listUserAttributesFn(),
       staleTime: 60 * 1000,
-    }),
-
-  /**
-   * SSO health row for the admin auth settings page.
-   */
-  ssoStatus: () =>
-    queryOptions({
-      queryKey: ['admin', 'ssoStatus'],
-      queryFn: () => getSsoStatusFn(),
-      staleTime: 30 * 1000,
     }),
 
   /**

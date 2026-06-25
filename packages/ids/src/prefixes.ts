@@ -147,6 +147,7 @@ export const ID_PREFIXES = {
   // See audit_event comment for rationale.
   audit_log: 'audit',
   sso_recovery_code: 'rcode',
+  identity_provider: 'idp',
 
   // ============================================
   // Billing

@@ -5,11 +5,13 @@ type AuthMode = 'login' | 'signup'
 interface OpenAuthPopoverOptions {
   mode: AuthMode
   onSuccess?: () => void
+  callbackUrl?: string
 }
 
 interface AuthPopoverContextValue {
   isOpen: boolean
   mode: AuthMode
+  callbackUrl: string | undefined
   openAuthPopover: (options: OpenAuthPopoverOptions) => void
   closeAuthPopover: () => void
   setMode: (mode: AuthMode) => void
@@ -26,32 +28,35 @@ interface AuthPopoverProviderProps {
 export function AuthPopoverProvider({ children }: AuthPopoverProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [mode, setMode] = useState<AuthMode>('login')
+  const [callbackUrl, setCallbackUrl] = useState<string | undefined>(undefined)
   const onSuccessCallbackRef = useRef<(() => void) | null>(null)
 
   const openAuthPopover = useCallback((options: OpenAuthPopoverOptions) => {
     setMode(options.mode)
     onSuccessCallbackRef.current = options.onSuccess || null
+    setCallbackUrl(options.callbackUrl)
     setIsOpen(true)
   }, [])
 
-  const closeAuthPopover = useCallback(() => {
+  const reset = useCallback(() => {
     setIsOpen(false)
+    setCallbackUrl(undefined)
     onSuccessCallbackRef.current = null
   }, [])
 
+  const closeAuthPopover = reset
+
   const onAuthSuccess = useCallback(() => {
-    // Call the success callback if provided
     onSuccessCallbackRef.current?.()
-    // Close the popover
-    setIsOpen(false)
-    onSuccessCallbackRef.current = null
-  }, [])
+    reset()
+  }, [reset])
 
   return (
     <AuthPopoverContext.Provider
       value={{
         isOpen,
         mode,
+        callbackUrl,
         openAuthPopover,
         closeAuthPopover,
         setMode,

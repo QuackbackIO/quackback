@@ -46,7 +46,7 @@ const ONBOARDING_EXEMPT_PATHS = [
   '/widget',
 ]
 
-function isOnboardingExempt(pathname: string): boolean {
+export function isOnboardingExempt(pathname: string): boolean {
   return ONBOARDING_EXEMPT_PATHS.some((path) => pathname.startsWith(path))
 }
 
