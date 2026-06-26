@@ -17,7 +17,7 @@
  *    public button, so the toggle would be meaningless.
  *  - per-domain enforcement is a checkbox guarded by a precondition warning.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -73,6 +73,8 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { getIdpShortcut, inferIdpKind, IDP_KIND_NAMES, type IdpKind } from '../idp-shortcuts'
 import { TestSignInButton } from '../sso/test-sign-in-button'
+import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
+import { deriveClaimSuggestions, type ClaimSuggestions } from '@/lib/shared/claim-suggestions'
 
 type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<IdentityProvider['attributeMapping']>
@@ -469,7 +471,12 @@ export function ProviderEditor({
                     </p>
                   </div>
 
-                  <ClaimMappingEditor mapping={mapping} disabled={saving} onChange={setMapping} />
+                  <ClaimMappingEditor
+                    mapping={mapping}
+                    disabled={saving}
+                    registrationId={registrationId}
+                    onChange={setMapping}
+                  />
                 </div>
               )}
             </div>
@@ -1035,6 +1042,120 @@ function DomainRow({
   )
 }
 
+/** One observed claim value with a role picker + Add. Role state is local so
+ *  each row remembers its own choice until added. */
+function ClaimSuggestionRow({
+  value,
+  added,
+  disabled,
+  onAdd,
+}: {
+  value: string
+  added: boolean
+  disabled: boolean
+  onAdd: (role: Role) => void
+}) {
+  const [role, setRole] = useState<Role>('member')
+  return (
+    <div className="flex items-center gap-2">
+      <code className="min-w-0 flex-1 truncate rounded bg-muted/40 px-1.5 py-1 text-[11px]">
+        {value}
+      </code>
+      <span className="shrink-0 text-xs text-muted-foreground">→</span>
+      <Select value={role} onValueChange={(r) => setRole(r as Role)} disabled={disabled || added}>
+        <SelectTrigger className="h-7 w-28 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ROLES.map((r) => (
+            <SelectItem key={r} value={r}>
+              {r}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        size="sm"
+        variant={added ? 'ghost' : 'secondary'}
+        className="h-7"
+        disabled={disabled || added}
+        onClick={() => onAdd(role)}
+      >
+        {added ? 'Added' : 'Add'}
+      </Button>
+    </div>
+  )
+}
+
+/** "From your test sign-in" assist: lists the observed values at the active
+ *  claim path; clicking Add appends a rule and pins the claim path. */
+function ClaimSuggestionsBlock({
+  suggestions,
+  current,
+  disabled,
+  onChange,
+}: {
+  suggestions: ClaimSuggestions
+  current: Mapping
+  disabled: boolean
+  onChange: (mapping: Mapping) => void
+}) {
+  // The mapping holds one claim path. Default the active path to the mapping's
+  // own path when it is one of the observed ones, else the first observed path.
+  const activePath = suggestions.paths.includes(current.claimPath)
+    ? current.claimPath
+    : suggestions.paths[0]
+  const values = suggestions.valuesByPath[activePath] ?? []
+  const mapped = new Set(current.rules.map((r) => r.whenContains.toLowerCase()))
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/50 bg-muted/10 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs font-medium">From your test sign-in</Label>
+        {suggestions.paths.length > 1 && (
+          <Select
+            value={activePath}
+            onValueChange={(p) => onChange({ ...current, claimPath: p })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-7 w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {suggestions.paths.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {values.map((value) => (
+          <ClaimSuggestionRow
+            key={value}
+            value={value}
+            added={mapped.has(value.toLowerCase())}
+            disabled={disabled}
+            onAdd={(role) =>
+              onChange({
+                ...current,
+                claimPath: activePath,
+                rules: [...current.rules, { whenContains: value, role }],
+              })
+            }
+          />
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        From your last test sign-in. Run a test as another user to see their groups too.
+      </p>
+    </div>
+  )
+}
+
 /**
  * Claim-to-role mapping: an optional override on top of the provider's Default
  * role. With no rules everyone gets the default. Collapsed by default; auto-expands
@@ -1044,17 +1165,30 @@ function DomainRow({
 function ClaimMappingEditor({
   mapping,
   disabled,
+  registrationId,
   onChange,
 }: {
   mapping: Mapping | null
   disabled: boolean
+  registrationId: string
   onChange: (mapping: Mapping | null) => void
 }) {
   const ruleCount = mapping?.rules.length ?? 0
-  const hasConfig = ruleCount > 0 || mapping?.syncOnEverySignIn === true
-  const [open, setOpen] = useState(hasConfig)
+  const hasConfig = mapping !== null
   const current: Mapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
+
+  const { lastSuccess } = useSsoTestSignIn()
+  const suggestions =
+    lastSuccess && lastSuccess.registrationId === registrationId
+      ? deriveClaimSuggestions(lastSuccess.allClaims)
+      : null
+  const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
+
+  const [open, setOpen] = useState(hasConfig)
+  useEffect(() => {
+    if (hasSuggestions) setOpen(true)
+  }, [hasSuggestions])
 
   return (
     <div className="rounded-md border border-border/50 bg-muted/10">
@@ -1078,6 +1212,18 @@ function ClaimMappingEditor({
 
       {open && (
         <div className="space-y-4 border-t border-border/40 px-3 py-3">
+          {hasSuggestions && suggestions ? (
+            <ClaimSuggestionsBlock
+              suggestions={suggestions}
+              current={current}
+              disabled={disabled}
+              onChange={onChange}
+            />
+          ) : current.rules.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Run a test sign-in to map roles from the claims your IdP returns.
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Source the role from an IdP claim. Rules are first-match-wins; with no rules everyone
             gets the default role above.

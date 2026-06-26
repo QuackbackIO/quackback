@@ -22,6 +22,15 @@ const { upsertSpy } = vi.hoisted(() => ({
   ),
 }))
 
+const { ssoTestRef } = vi.hoisted(() => ({
+  ssoTestRef: {
+    current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
+  },
+}))
+vi.mock('../../sso/use-sso-test-sign-in', () => ({
+  useSsoTestSignIn: () => ({ open: vi.fn(), lastSuccess: ssoTestRef.current }),
+}))
+
 // useServerFn just unwraps the server fn in the browser — return it as-is so
 // the editor calls our spies directly.
 vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
@@ -96,6 +105,7 @@ function renderEditor(provider: IdentityProvider) {
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  ssoTestRef.current = null
 })
 
 describe('<ProviderEditor> provisioning consolidation', () => {
@@ -182,5 +192,45 @@ describe('<ProviderEditor> connection-test status', () => {
       })
     )
     expect(screen.getByText(/changed since the last test/)).toBeInTheDocument()
+  })
+})
+
+describe('<ProviderEditor> claim-mapping assist', () => {
+  it('shows suggestions from a matching test sign-in and adds a rule on click', async () => {
+    ssoTestRef.current = {
+      registrationId: 'oidc_x', // matches makeProvider().registrationId
+      allClaims: { groups: ['11111111-2222', 'feedback-admins'] },
+    }
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+
+    // The block is visible with the observed values (disclosure auto-opens).
+    expect(screen.getByText('From your test sign-in')).toBeInTheDocument()
+    expect(screen.getByText('11111111-2222')).toBeInTheDocument()
+
+    // Add the first value as a rule, then save and assert it was persisted.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const mapping = upsertSpy.mock.calls.at(-1)![0].data.attributeMapping as {
+      claimPath: string
+      rules: { whenContains: string; role: string }[]
+    }
+    expect(mapping.claimPath).toBe('groups')
+    expect(mapping.rules).toContainEqual({ whenContains: '11111111-2222', role: 'member' })
+  })
+
+  it('does not show the block for a test of a different provider', () => {
+    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { groups: ['x'] } }
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    expect(screen.queryByText('From your test sign-in')).not.toBeInTheDocument()
+  })
+
+  it('shows the run-a-test hint when there is no test result', () => {
+    ssoTestRef.current = null
+    renderEditor(
+      makeProvider({ autoCreateUsers: true, attributeMapping: { claimPath: 'groups', rules: [] } })
+    )
+    // Disclosure auto-opens because a mapping object exists; hint is shown.
+    expect(screen.getByText(/Run a test sign-in to map roles/)).toBeInTheDocument()
   })
 })
