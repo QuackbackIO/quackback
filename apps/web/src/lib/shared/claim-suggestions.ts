@@ -4,7 +4,7 @@
  * values. Array claims only -- scalar claims (e.g. Entra `tid`/`oid`) are not
  * roles, and standard identity claims are never mappable. Pure + client-safe.
  */
-import type { JsonValue } from '@/lib/server/audit/log'
+import type { JsonValue } from '@/lib/shared/json'
 
 export type ClaimSuggestions = {
   /** Dotted (or literal URL) claim paths whose value is a non-empty string[]. */
@@ -38,13 +38,18 @@ const STANDARD_CLAIMS = new Set([
   'rh',
   'uti',
   'aio',
+  // Auth-method/context claims: `amr` is a standard array (e.g. ['pwd','mfa'])
+  // that must not be offered as a role/group mapping.
+  'amr',
+  'acr',
+  'sid',
 ])
 
 function dedupeStrings(arr: JsonValue[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const v of arr) {
-    if (typeof v === 'string' && !seen.has(v)) {
+    if (typeof v === 'string' && v !== '' && !seen.has(v)) {
       seen.add(v)
       out.push(v)
     }

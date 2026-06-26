@@ -15,14 +15,10 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'audit' })
 
-/** A JSON-shaped value — fits into a Postgres jsonb column. */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: JsonValue }
-  | JsonValue[]
+/** A JSON-shaped value — fits into a Postgres jsonb column. Re-exported from the
+ *  shared module so client/shared code can reference it without importing from
+ *  `@/lib/server`. */
+export type { JsonValue } from '@/lib/shared/json'
 
 /**
  * Closed taxonomy of audit event types.

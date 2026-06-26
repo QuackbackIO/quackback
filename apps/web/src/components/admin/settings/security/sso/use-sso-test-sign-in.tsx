@@ -48,7 +48,7 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
-import type { JsonValue } from '@/lib/server/audit/log'
+import type { JsonValue } from '@/lib/shared/json'
 
 const POLL_INTERVAL_MS = 2000
 // 150 polls * 2s = 5 minutes. Redis test-session TTL is 10 minutes;

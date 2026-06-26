@@ -70,7 +70,10 @@ export interface AuthConfig {
      * Optional IdP-attribute → role mapping. When set, the SSO callback
      * resolves the user's role from a claim on the ID token instead of
      * falling back to `autoProvisionRole`. The mapping is first-match-
-     * wins against `rules`; nothing matches → `defaultRole`.
+     * wins against `rules`; when none matches, `resolveSsoRole` returns null
+     * and the caller falls back to the provider's `autoProvisionRole` (the
+     * per-provider model dropped this blob's `defaultRole`, kept here only for
+     * the legacy config shape).
      *
      * Resolved on every sign-in when `syncOnEverySignIn=true` so role
      * changes in the IdP propagate down. Default `false` keeps JIT

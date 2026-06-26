@@ -111,7 +111,7 @@ export function Autocomplete({
                   {suggestions.map((s) => (
                     <CommandItem
                       key={s.value}
-                      value={`${s.value} ${s.label ?? ''} ${s.description ?? ''}`}
+                      value={[s.value, s.label, s.description].filter(Boolean).join(' ')}
                       onSelect={() => commit(s.value)}
                     >
                       <CheckIcon

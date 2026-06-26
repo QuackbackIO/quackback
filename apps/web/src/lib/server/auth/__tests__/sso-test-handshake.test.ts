@@ -107,8 +107,8 @@ describe('runHandshake', () => {
 
     const issuer = 'https://idp.example'
     const idToken = await new SignJWT({
-      email: 'james.morton@quackback.io',
-      name: 'James Morton',
+      email: 'alice@idp.example',
+      name: 'Alice Example',
       nonce: 'nonce789',
       // The non-standard claim the curated `claims` view drops but admins need.
       groups: ['11111111-2222-3333-4444-555555555555', 'feedback-admins'],
@@ -147,7 +147,7 @@ describe('runHandshake', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
 
     // The curated subset still works for the friendly display + identity match.
-    expect(result.claims.email).toBe('james.morton@quackback.io')
+    expect(result.claims.email).toBe('alice@idp.example')
     // ...and the full payload is surfaced verbatim, including `groups`.
     expect(result.allClaims).toBeDefined()
     expect(result.allClaims?.groups).toEqual([

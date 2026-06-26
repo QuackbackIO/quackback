@@ -1082,7 +1082,9 @@ function ClaimMappingEditor({
     value: v,
   }))
 
-  const [open, setOpen] = useState(hasConfig)
+  // Initialize open with hasSuggestions too, so a matching test sign-in's
+  // suggestions don't cause a closed-then-open flash on mount.
+  const [open, setOpen] = useState(hasConfig || hasSuggestions)
   useEffect(() => {
     if (hasSuggestions) setOpen(true)
   }, [hasSuggestions])
