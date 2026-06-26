@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { getNestedClaim, resolveSsoRole } from '../resolve-sso-role'
-import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
+import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
 
 describe('getNestedClaim', () => {
   it('reads a dotted path', () => {
@@ -41,12 +41,10 @@ describe('getNestedClaim', () => {
 })
 
 const mapping = (
-  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>,
-  defaultRole: 'admin' | 'member' | 'user' = 'member'
-): NonNullable<AuthConfig['ssoOidc']>['attributeMapping'] => ({
+  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+): IdentityProviderAttributeMapping => ({
   claimPath: 'groups',
   rules,
-  defaultRole,
 })
 
 describe('resolveSsoRole', () => {
@@ -96,7 +94,6 @@ describe('resolveSsoRole', () => {
       {
         claimPath: 'https://acme.com/roles',
         rules: [{ whenContains: 'platform-admins', role: 'admin' }],
-        defaultRole: 'member',
       }
     )
     expect(role).toBe('admin')

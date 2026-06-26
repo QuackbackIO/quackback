@@ -14,10 +14,9 @@
  * the provider's default role (`autoProvisionRole`).
  */
 
-import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
+import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
 
 type Claims = Record<string, unknown>
-type AttributeMapping = NonNullable<NonNullable<AuthConfig['ssoOidc']>['attributeMapping']>
 type Role = 'admin' | 'member' | 'user'
 
 /** Resolve a claim by dotted path OR by literal URL-shaped key. */
@@ -52,7 +51,10 @@ function matchesRule(claim: unknown, whenContains: string): boolean {
  * when no rule matches or the workspace hasn't configured attribute
  * mapping — the caller falls back to the provider's autoProvisionRole.
  */
-export function resolveSsoRole(claims: Claims, mapping: AttributeMapping | undefined): Role | null {
+export function resolveSsoRole(
+  claims: Claims,
+  mapping: IdentityProviderAttributeMapping | undefined
+): Role | null {
   if (!mapping) return null
   const claim = getNestedClaim(claims, mapping.claimPath)
   for (const rule of mapping.rules) {

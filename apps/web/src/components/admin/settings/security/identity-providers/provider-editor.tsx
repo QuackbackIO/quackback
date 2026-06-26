@@ -984,8 +984,7 @@ function GroupMappingEditor({
   const ruleCount = mapping?.rules.length ?? 0
   const hasConfig = ruleCount > 0 || mapping?.syncOnEverySignIn === true
   const [open, setOpen] = useState(hasConfig)
-  // Vestigial defaultRole satisfies the Mapping type until Task 4 removes the field.
-  const current: Mapping = mapping ?? { claimPath: 'groups', rules: [], defaultRole: 'member' }
+  const current: Mapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
 
   return (

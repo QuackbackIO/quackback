@@ -157,7 +157,6 @@ const idpRole = z.enum(['admin', 'member', 'user'])
 const attributeMappingSchema = z.object({
   claimPath: z.string(),
   rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
-  defaultRole: idpRole,
   syncOnEverySignIn: z.boolean().optional(),
 })
 

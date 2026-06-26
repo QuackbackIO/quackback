@@ -58,7 +58,6 @@ type SsoOidc = {
   attributeMapping?: {
     claimPath: string
     rules: { whenContains: string; role: 'admin' | 'member' | 'user' }[]
-    defaultRole: 'admin' | 'member' | 'user'
     syncOnEverySignIn?: boolean
   }
 }
@@ -218,7 +217,6 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'member',
           syncOnEverySignIn: true,
         },
       },
@@ -230,16 +228,15 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     // With sync on, the resolved-from-claims role is authoritative on
-    // every sign-in. attributeMapping has no rules and defaultRole='user',
-    // so the IdP is effectively saying "this user has no team role". An
-    // existing admin gets demoted to portal-user.
+    // every sign-in. attributeMapping has no matching rules, so the resolver
+    // returns null and falls back to autoProvisionRole='user' — effectively
+    // saying "this user has no team role". An existing admin gets demoted.
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'user',
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'user',
           syncOnEverySignIn: true,
         },
       },
@@ -281,7 +278,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
       providerId: 'custom-oidc',
       registeredIds: new Set(['custom-oidc']),
       ssoOidc: {
-        attributeMapping: { claimPath: 'roles', rules: [], defaultRole: 'member' },
+        attributeMapping: { claimPath: 'roles', rules: [] },
       },
     })
     expect(mockEq).toHaveBeenCalledWith('account.providerId', 'custom-oidc')
@@ -297,7 +294,6 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'member',
         },
       },
     })
