@@ -185,6 +185,10 @@ export function ProviderEditor({
       toast.error('Client ID is required.')
       return
     }
+    // A group mapping with no rules and no sign-in sync does nothing, so persist
+    // null (the canonical "no mapping" state). A custom claim path alone is inert.
+    const mappingToSave =
+      mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true) ? mapping : null
     setSaving(true)
     try {
       const saved = await upsert({
@@ -209,7 +213,7 @@ export function ProviderEditor({
           // Role only applies when auto-create is on; null it out otherwise
           // so a stale role doesn't linger on a provisioning-off provider.
           autoProvisionRole: autoCreateUsers ? autoProvisionRole : null,
-          attributeMapping: mapping,
+          attributeMapping: mappingToSave,
           showButton,
         },
       })
@@ -393,19 +397,36 @@ export function ProviderEditor({
           <div className="space-y-4 border-t border-border/40 pt-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <Label className="font-medium">New users get role</Label>
+                <Label className="font-medium">Auto-create accounts on first sign-in</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Auto-create accounts on first sign-in with this role.
+                  Create an account the first time someone signs in through this provider.
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {autoCreateUsers && (
+              <Switch
+                checked={autoCreateUsers}
+                onCheckedChange={setAutoCreateUsers}
+                disabled={saving}
+                aria-label="Auto-create accounts on first sign-in"
+                className="mt-0.5 shrink-0"
+              />
+            </div>
+
+            {autoCreateUsers && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="idp-default-role" className="font-medium">
+                    Default role
+                  </Label>
                   <Select
                     value={autoProvisionRole}
                     onValueChange={(r) => setAutoProvisionRole(r as Role)}
                     disabled={saving}
                   >
-                    <SelectTrigger className="h-9 w-[160px] text-xs" aria-label="Default role">
+                    <SelectTrigger
+                      id="idp-default-role"
+                      className="w-[220px]"
+                      aria-label="Default role"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -414,17 +435,14 @@ export function ProviderEditor({
                       <SelectItem value="user">User (portal only)</SelectItem>
                     </SelectContent>
                   </Select>
-                )}
-                <Switch
-                  checked={autoCreateUsers}
-                  onCheckedChange={setAutoCreateUsers}
-                  disabled={saving}
-                  aria-label="Auto-create accounts on first sign-in"
-                />
-              </div>
-            </div>
+                  <p className="text-xs text-muted-foreground">
+                    New users get this role unless a rule below matches their IdP group.
+                  </p>
+                </div>
 
-            <AttributeMappingEditor mapping={mapping} disabled={saving} onChange={setMapping} />
+                <GroupMappingEditor mapping={mapping} disabled={saving} onChange={setMapping} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -949,12 +967,12 @@ function DomainRow({
 }
 
 /**
- * IdP-attribute → role mapping. Same shape as the single-SSO
- * `attribute-mapping-section`, but the draft is owned by the editor and
- * persisted in the parent `upsertIdentityProviderFn` call rather than via
- * `updateAuthConfigFn`.
+ * IdP-group → role mapping: an optional override on top of the provider's Default
+ * role. With no rules everyone gets the default. Collapsed by default; auto-expands
+ * when the provider already has rules or sign-in sync configured. The parent's
+ * handleSave persists null unless the mapping carries rules or sync.
  */
-function AttributeMappingEditor({
+function GroupMappingEditor({
   mapping,
   disabled,
   onChange,
@@ -963,55 +981,40 @@ function AttributeMappingEditor({
   disabled: boolean
   onChange: (mapping: Mapping | null) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const enabled = mapping !== null
+  const ruleCount = mapping?.rules.length ?? 0
+  const hasConfig = ruleCount > 0 || mapping?.syncOnEverySignIn === true
+  const [open, setOpen] = useState(hasConfig)
+  // Vestigial defaultRole satisfies the Mapping type until Task 4 removes the field.
   const current: Mapping = mapping ?? { claimPath: 'groups', rules: [], defaultRole: 'member' }
-
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-2">
-          <AdjustmentsHorizontalIcon className="mt-0.5 size-4 text-muted-foreground" />
-          <div>
-            <Label className="font-medium">Attribute → role</Label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Source the role from an IdP claim. Rules are first-match-wins.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {enabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => setOpen((o) => !o)}
-            >
-              {open ? 'Done' : 'Configure…'}
-            </Button>
+    <div className="rounded-md border border-border/50 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <AdjustmentsHorizontalIcon className="size-4 text-muted-foreground" />
+          Map roles from IdP groups
+          {ruleCount > 0 && (
+            <span className="text-xs font-normal text-muted-foreground">
+              · {ruleCount} rule{ruleCount === 1 ? '' : 's'}
+            </span>
           )}
-          <Switch
-            checked={enabled}
-            onCheckedChange={(v) => {
-              if (v) {
-                onChange(current)
-                setOpen(true)
-              } else {
-                onChange(null)
-                setOpen(false)
-              }
-            }}
-            disabled={disabled}
-            aria-label="Enable attribute mapping"
-          />
-        </div>
-      </div>
+        </span>
+        <span className="text-muted-foreground">{open ? '−' : '+'}</span>
+      </button>
 
-      {enabled && open && (
-        <div className="space-y-4 pl-6">
+      {open && (
+        <div className="space-y-4 border-t border-border/40 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            Source the role from an IdP claim. Rules are first-match-wins; with no rules everyone
+            gets the default role above.
+          </p>
+
           <div className="space-y-2">
             <Label htmlFor="idp-claim-path">Claim path</Label>
             <Input
@@ -1096,26 +1099,6 @@ function AttributeMappingEditor({
             </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="idp-default-role">Default role</Label>
-            <Select
-              value={current.defaultRole}
-              onValueChange={(r) => update({ defaultRole: r as Role })}
-              disabled={disabled}
-            >
-              <SelectTrigger id="idp-default-role" className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <label className="flex items-start gap-2 text-xs">
             <Switch
               checked={current.syncOnEverySignIn ?? false}
@@ -1124,8 +1107,8 @@ function AttributeMappingEditor({
               disabled={disabled}
             />
             <span>
-              <span className="font-medium">Sync on every sign-in.</span> Re-resolve the role on
-              each sign-in. Demotes members when their IdP group changes.
+              <span className="font-medium">Sync role on every sign-in.</span> Re-resolve the role
+              on each sign-in. Demotes members when their IdP group changes.
             </span>
           </label>
         </div>

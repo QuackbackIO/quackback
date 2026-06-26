@@ -17,7 +17,9 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import { ProviderEditor } from '../provider-editor'
 
 const { upsertSpy } = vi.hoisted(() => ({
-  upsertSpy: vi.fn(async (_args: { data: { kind: string | null } }) => undefined),
+  upsertSpy: vi.fn(
+    async (_args: { data: { kind: string | null; attributeMapping: unknown } }) => undefined
+  ),
 }))
 
 // useServerFn just unwraps the server fn in the browser — return it as-is so
@@ -94,6 +96,38 @@ function renderEditor(provider: IdentityProvider) {
 
 beforeEach(() => {
   upsertSpy.mockClear()
+})
+
+describe('<ProviderEditor> provisioning consolidation', () => {
+  it('shows a single Default role and a collapsed group-mapping disclosure when no rules', () => {
+    renderEditor(
+      makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', attributeMapping: null })
+    )
+    // One default-role control, bound to autoProvisionRole.
+    expect(screen.getByLabelText('Default role')).toBeInTheDocument()
+    // The group-mapping section is present but the rules are collapsed.
+    expect(screen.getByRole('button', { name: /Map roles from IdP groups/ })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    // No nested "default role" duplicate inside the mapping.
+    expect(screen.queryByText('No rules — everyone gets the default role.')).not.toBeInTheDocument()
+  })
+
+  it('hides the role controls entirely when auto-create is off', () => {
+    renderEditor(makeProvider({ autoCreateUsers: false }))
+    expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Map roles from IdP groups/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('persists attributeMapping=null when saved with no rules and sync off', async () => {
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.attributeMapping).toBeNull()
+  })
 })
 
 describe('<ProviderEditor> IdP shortcut persistence', () => {
