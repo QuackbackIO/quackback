@@ -1101,11 +1101,15 @@ function ClaimSuggestionsBlock({
   disabled: boolean
   onChange: (mapping: Mapping) => void
 }) {
-  // The mapping holds one claim path. Default the active path to the mapping's
-  // own path when it is one of the observed ones, else the first observed path.
-  const activePath = suggestions.paths.includes(current.claimPath)
+  // Once rules exist the claim path is locked to prevent orphaning them: if
+  // the admin switches paths while rules reference the old one, those rules
+  // silently never match at sign-in.
+  const locked = current.rules.length > 0
+  const activePath = locked
     ? current.claimPath
-    : suggestions.paths[0]
+    : suggestions.paths.includes(current.claimPath)
+      ? current.claimPath
+      : suggestions.paths[0]
   const values = suggestions.valuesByPath[activePath] ?? []
   const mapped = new Set(current.rules.map((r) => r.whenContains.toLowerCase()))
 
@@ -1114,22 +1118,29 @@ function ClaimSuggestionsBlock({
       <div className="flex items-center justify-between gap-2">
         <Label className="text-xs font-medium">From your test sign-in</Label>
         {suggestions.paths.length > 1 && (
-          <Select
-            value={activePath}
-            onValueChange={(p) => onChange({ ...current, claimPath: p })}
-            disabled={disabled}
-          >
-            <SelectTrigger className="h-7 w-[180px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {suggestions.paths.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col items-end gap-1">
+            <Select
+              value={activePath}
+              onValueChange={(p) => onChange({ ...current, claimPath: p })}
+              disabled={disabled || locked}
+            >
+              <SelectTrigger className="h-7 w-[180px] text-xs" aria-label="Claim to map">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {suggestions.paths.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {locked && (
+              <p className="text-[11px] text-muted-foreground">
+                Clear the rules to map a different claim.
+              </p>
+            )}
+          </div>
         )}
       </div>
       <div className="space-y-1.5">
@@ -1158,9 +1169,10 @@ function ClaimSuggestionsBlock({
 
 /**
  * Claim-to-role mapping: an optional override on top of the provider's Default
- * role. With no rules everyone gets the default. Collapsed by default; auto-expands
- * when the provider already has rules or sign-in sync configured. The parent's
- * handleSave persists null unless the mapping carries rules or sync.
+ * role. With no rules everyone gets the default. Opens when `mapping !== null`
+ * (the provider already has a mapping) or when a matching test sign-in produces
+ * suggestions. The parent's handleSave persists null unless the mapping carries
+ * rules or sync.
  */
 function ClaimMappingEditor({
   mapping,

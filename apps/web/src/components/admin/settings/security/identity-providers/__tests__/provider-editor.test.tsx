@@ -233,4 +233,22 @@ describe('<ProviderEditor> claim-mapping assist', () => {
     // Disclosure auto-opens because a mapping object exists; hint is shown.
     expect(screen.getByText(/Run a test sign-in to map roles/)).toBeInTheDocument()
   })
+
+  it('locks the claim-path selector once a rule is added', async () => {
+    ssoTestRef.current = {
+      registrationId: 'oidc_x',
+      allClaims: { groups: ['G1'], roles: ['R1'] },
+    }
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+
+    // Selector is enabled initially (no rules yet).
+    const selector = screen.getByRole('combobox', { name: 'Claim to map' })
+    expect(selector).not.toBeDisabled()
+
+    // Click the first Add button — this pins the claim path.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
+
+    // Selector is now locked.
+    expect(screen.getByRole('combobox', { name: 'Claim to map' })).toBeDisabled()
+  })
 })
