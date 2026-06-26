@@ -521,7 +521,7 @@ function TestResultPanel({
          *  wrong account, but the SSO connection itself is verified. */}
         {identityMatched === false && result.claims.email ? (
           <div className="rounded border border-muted bg-muted/30 p-2 text-xs text-muted-foreground">
-            Tested as {result.claims.email} — a different account than yours. The connection still
+            Tested as {result.claims.email}, a different account than yours. The connection still
             works.
           </div>
         ) : null}
@@ -530,7 +530,11 @@ function TestResultPanel({
             Show IdP response
           </summary>
           <pre className="mt-2 overflow-auto rounded bg-muted/30 p-2 font-mono text-[11px]">
-            {JSON.stringify({ claims: result.claims, tokenInfo: result.tokenInfo }, null, 2)}
+            {JSON.stringify(
+              { claims: result.allClaims ?? result.claims, tokenInfo: result.tokenInfo },
+              null,
+              2
+            )}
           </pre>
         </details>
       </div>
