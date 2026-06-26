@@ -74,7 +74,8 @@ import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.type
 import { getIdpShortcut, inferIdpKind, IDP_KIND_NAMES, type IdpKind } from '../idp-shortcuts'
 import { TestSignInButton } from '../sso/test-sign-in-button'
 import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
-import { deriveClaimSuggestions, type ClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import { Autocomplete } from '@/components/ui/autocomplete'
 
 type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<IdentityProvider['attributeMapping']>
@@ -1042,137 +1043,13 @@ function DomainRow({
   )
 }
 
-/** One observed claim value with a role picker + Add. Role state is local so
- *  each row remembers its own choice until added. */
-function ClaimSuggestionRow({
-  value,
-  added,
-  disabled,
-  onAdd,
-}: {
-  value: string
-  added: boolean
-  disabled: boolean
-  onAdd: (role: Role) => void
-}) {
-  const [role, setRole] = useState<Role>('member')
-  return (
-    <div className="flex items-center gap-2">
-      <code className="min-w-0 flex-1 truncate rounded bg-muted/40 px-1.5 py-1 text-[11px]">
-        {value}
-      </code>
-      <span className="shrink-0 text-xs text-muted-foreground">→</span>
-      <Select value={role} onValueChange={(r) => setRole(r as Role)} disabled={disabled || added}>
-        <SelectTrigger className="h-7 w-28 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ROLES.map((r) => (
-            <SelectItem key={r} value={r}>
-              {r}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        type="button"
-        size="sm"
-        variant={added ? 'ghost' : 'secondary'}
-        className="h-7"
-        disabled={disabled || added}
-        onClick={() => onAdd(role)}
-      >
-        {added ? 'Added' : 'Add'}
-      </Button>
-    </div>
-  )
-}
-
-/** "From your test sign-in" assist: lists the observed values at the active
- *  claim path; clicking Add appends a rule and pins the claim path. */
-function ClaimSuggestionsBlock({
-  suggestions,
-  current,
-  disabled,
-  onChange,
-}: {
-  suggestions: ClaimSuggestions
-  current: Mapping
-  disabled: boolean
-  onChange: (mapping: Mapping) => void
-}) {
-  // Once rules exist the claim path is locked to prevent orphaning them: if
-  // the admin switches paths while rules reference the old one, those rules
-  // silently never match at sign-in.
-  const locked = current.rules.length > 0
-  const activePath = locked
-    ? current.claimPath
-    : suggestions.paths.includes(current.claimPath)
-      ? current.claimPath
-      : suggestions.paths[0]
-  const values = suggestions.valuesByPath[activePath] ?? []
-  const mapped = new Set(current.rules.map((r) => r.whenContains.toLowerCase()))
-
-  return (
-    <div className="space-y-2 rounded-md border border-border/50 bg-muted/10 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs font-medium">From your test sign-in</Label>
-        {suggestions.paths.length > 1 && (
-          <div className="flex flex-col items-end gap-1">
-            <Select
-              value={activePath}
-              onValueChange={(p) => onChange({ ...current, claimPath: p })}
-              disabled={disabled || locked}
-            >
-              <SelectTrigger className="h-7 w-[180px] text-xs" aria-label="Claim to map">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {suggestions.paths.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {locked && (
-              <p className="text-[11px] text-muted-foreground">
-                Clear the rules to map a different claim.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        {values.map((value) => (
-          <ClaimSuggestionRow
-            key={value}
-            value={value}
-            added={mapped.has(value.toLowerCase())}
-            disabled={disabled}
-            onAdd={(role) =>
-              onChange({
-                ...current,
-                claimPath: activePath,
-                rules: [...current.rules, { whenContains: value, role }],
-              })
-            }
-          />
-        ))}
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        From your last test sign-in. Run a test as another user to see their groups too.
-      </p>
-    </div>
-  )
-}
-
 /**
  * Claim-to-role mapping: an optional override on top of the provider's Default
- * role. With no rules everyone gets the default. Opens when `mapping !== null`
- * (the provider already has a mapping) or when a matching test sign-in produces
- * suggestions. The parent's handleSave persists null unless the mapping carries
- * rules or sync.
+ * role. With no rules everyone gets the default. The Claim path and each rule
+ * value are creatable autocompletes sourced from the last matching test sign-in
+ * (free text still allowed). Opens when `mapping !== null` or when a matching
+ * test produced suggestions. The parent's handleSave persists null unless the
+ * mapping carries rules or sync.
  */
 function ClaimMappingEditor({
   mapping,
@@ -1196,11 +1073,26 @@ function ClaimMappingEditor({
       ? deriveClaimSuggestions(lastSuccess.allClaims)
       : null
   const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
+  const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
+  const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({
+    value: v,
+  }))
 
   const [open, setOpen] = useState(hasConfig)
   useEffect(() => {
     if (hasSuggestions) setOpen(true)
   }, [hasSuggestions])
+
+  // Auto-fill the claim path when the IdP returned exactly one array claim and
+  // the provider has no mapping yet. Only overrides the untouched `groups`
+  // default; never fights a value the admin chose. Self-settles: once filled,
+  // `mapping` is non-null so this no-ops.
+  const onlyPath = suggestions && suggestions.paths.length === 1 ? suggestions.paths[0] : null
+  useEffect(() => {
+    if (mapping === null && onlyPath && onlyPath !== 'groups') {
+      onChange({ claimPath: onlyPath, rules: [] })
+    }
+  }, [mapping, onlyPath, onChange])
 
   return (
     <div className="rounded-md border border-border/50 bg-muted/10">
@@ -1224,32 +1116,28 @@ function ClaimMappingEditor({
 
       {open && (
         <div className="space-y-4 border-t border-border/40 px-3 py-3">
-          {hasSuggestions && suggestions ? (
-            <ClaimSuggestionsBlock
-              suggestions={suggestions}
-              current={current}
-              disabled={disabled}
-              onChange={onChange}
-            />
-          ) : current.rules.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Run a test sign-in to map roles from the claims your IdP returns.
-            </p>
-          ) : null}
           <p className="text-xs text-muted-foreground">
             Source the role from an IdP claim. Rules are first-match-wins; with no rules everyone
             gets the default role above.
           </p>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="idp-claim-path">Claim path</Label>
-            <Input
-              id="idp-claim-path"
+            <Autocomplete
               value={current.claimPath}
-              onChange={(e) => update({ claimPath: e.target.value })}
+              onValueChange={(v) => update({ claimPath: v })}
+              suggestions={pathSuggestions}
+              ariaLabel="Claim path"
               placeholder="groups, realm_access.roles, https://acme.com/roles"
+              emptyHint="Run a test sign-in to autocomplete your IdP's claims."
               disabled={disabled}
+              className="w-full"
             />
+            {hasSuggestions && suggestions && (
+              <p className="text-xs text-muted-foreground">
+                From your test sign-in: {suggestions.paths.join(', ')}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -1262,17 +1150,21 @@ function ClaimMappingEditor({
             {current.rules.map((rule, index) => (
               <div key={index} className="flex items-center gap-2">
                 <span className="shrink-0 text-xs text-muted-foreground">contains</span>
-                <Input
+                <Autocomplete
                   value={rule.whenContains}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     update({
                       rules: current.rules.map((r, i) =>
-                        i === index ? { ...r, whenContains: e.target.value } : r
+                        i === index ? { ...r, whenContains: v } : r
                       ),
                     })
                   }
-                  placeholder="admins"
+                  suggestions={valueSuggestions}
+                  ariaLabel="Claim value to match"
+                  placeholder="value to match"
+                  emptyHint="No values seen yet. Type the value to match."
                   disabled={disabled}
+                  className="flex-1"
                 />
                 <span className="shrink-0 text-xs text-muted-foreground">→</span>
                 <Select

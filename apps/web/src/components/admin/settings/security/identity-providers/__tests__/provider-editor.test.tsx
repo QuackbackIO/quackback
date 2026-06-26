@@ -9,8 +9,15 @@
  * persisted, the editor must always reopen on the tile the admin selected, and
  * a save must carry that `kind` to the server.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+})
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -195,60 +202,33 @@ describe('<ProviderEditor> connection-test status', () => {
   })
 })
 
-describe('<ProviderEditor> claim-mapping assist', () => {
-  it('shows suggestions from a matching test sign-in and adds a rule on click', async () => {
+describe('<ProviderEditor> claim-mapping autocomplete', () => {
+  it('names the observed claims inline and drops the old assist block', () => {
     ssoTestRef.current = {
       registrationId: 'oidc_x', // matches makeProvider().registrationId
-      allClaims: { groups: ['11111111-2222', 'feedback-admins'] },
+      allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
     renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
-
-    // The block is visible with the observed values (disclosure auto-opens).
-    expect(screen.getByText('From your test sign-in')).toBeInTheDocument()
-    expect(screen.getByText('11111111-2222')).toBeInTheDocument()
-
-    // Add the first value as a rule, then save and assert it was persisted.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
-    const mapping = upsertSpy.mock.calls.at(-1)![0].data.attributeMapping as {
-      claimPath: string
-      rules: { whenContains: string; role: string }[]
-    }
-    expect(mapping.claimPath).toBe('groups')
-    expect(mapping.rules).toContainEqual({ whenContains: '11111111-2222', role: 'member' })
+    // Inline hint names the observed claims (disclosure auto-opens on suggestions).
+    expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
+    // The old batch-add block's caption is gone.
+    expect(screen.queryByText(/Run a test as another user/)).not.toBeInTheDocument()
+    // Claim path is now an autocomplete (combobox), not a plain textbox.
+    expect(screen.getByRole('combobox', { name: 'Claim path' })).toBeInTheDocument()
   })
 
-  it('does not show the block for a test of a different provider', () => {
-    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { groups: ['x'] } }
+  it('auto-fills the claim path when the test returned exactly one array claim', () => {
+    ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
     renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
-    expect(screen.queryByText('From your test sign-in')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
-  it('shows the run-a-test hint when there is no test result', () => {
-    ssoTestRef.current = null
+  it('shows no inline suggestions for a test of a different provider', () => {
+    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
     renderEditor(
       makeProvider({ autoCreateUsers: true, attributeMapping: { claimPath: 'groups', rules: [] } })
     )
-    // Disclosure auto-opens because a mapping object exists; hint is shown.
-    expect(screen.getByText(/Run a test sign-in to map roles/)).toBeInTheDocument()
-  })
-
-  it('locks the claim-path selector once a rule is added', async () => {
-    ssoTestRef.current = {
-      registrationId: 'oidc_x',
-      allClaims: { groups: ['G1'], roles: ['R1'] },
-    }
-    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
-
-    // Selector is enabled initially (no rules yet).
-    const selector = screen.getByRole('combobox', { name: 'Claim to map' })
-    expect(selector).not.toBeDisabled()
-
-    // Click the first Add button — this pins the claim path.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0])
-
-    // Selector is now locked.
-    expect(screen.getByRole('combobox', { name: 'Claim to map' })).toBeDisabled()
+    // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
+    expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()
   })
 })
