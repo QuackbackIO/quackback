@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronUpDownIcon, CheckIcon } from '@heroicons/react/24/solid'
 import {
   Command,
@@ -25,8 +25,9 @@ interface AutocompleteProps {
   placeholder?: string
   searchPlaceholder?: string
   ariaLabel?: string
-  /** Shown in the list when there are no suggestions (e.g. no test sign-in yet). */
-  emptyHint?: string
+  /** Shown in the list when there are no suggestions (e.g. no test sign-in yet).
+   *  A node so callers can include an action (e.g. a "Test sign-in" button). */
+  emptyHint?: ReactNode
   disabled?: boolean
   size?: 'default' | 'sm'
   className?: string

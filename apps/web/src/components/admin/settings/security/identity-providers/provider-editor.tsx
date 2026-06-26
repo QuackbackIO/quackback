@@ -476,6 +476,7 @@ export function ProviderEditor({
                     mapping={mapping}
                     disabled={saving}
                     registrationId={registrationId}
+                    canTest={!!provider}
                     onChange={setMapping}
                   />
                 </div>
@@ -1055,11 +1056,14 @@ function ClaimMappingEditor({
   mapping,
   disabled,
   registrationId,
+  canTest,
   onChange,
 }: {
   mapping: Mapping | null
   disabled: boolean
   registrationId: string
+  /** True once the provider is saved, so a test sign-in can actually run. */
+  canTest: boolean
   onChange: (mapping: Mapping | null) => void
 }) {
   const ruleCount = mapping?.rules.length ?? 0
@@ -1086,7 +1090,8 @@ function ClaimMappingEditor({
   // Auto-fill the claim path when the IdP returned exactly one array claim and
   // the provider has no mapping yet. Only overrides the untouched `groups`
   // default; never fights a value the admin chose. Self-settles: once filled,
-  // `mapping` is non-null so this no-ops.
+  // `mapping` is non-null so this no-ops (relies on `onChange` being the stable
+  // `setMapping` setter that flips `mapping` non-null).
   const onlyPath = suggestions && suggestions.paths.length === 1 ? suggestions.paths[0] : null
   useEffect(() => {
     if (mapping === null && onlyPath && onlyPath !== 'groups') {
@@ -1129,7 +1134,20 @@ function ClaimMappingEditor({
               suggestions={pathSuggestions}
               ariaLabel="Claim path"
               placeholder="groups, realm_access.roles, https://acme.com/roles"
-              emptyHint="Run a test sign-in to autocomplete your IdP's claims."
+              emptyHint={
+                <div className="space-y-2 px-1 py-3 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Run a test sign-in to discover your IdP&apos;s claims.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Or type a path like groups, realm_access.roles, or https://acme.com/roles.
+                  </p>
+                  <TestSignInButton
+                    registrationId={registrationId}
+                    disabled={disabled || !canTest}
+                  />
+                </div>
+              }
               disabled={disabled}
               className="w-full"
             />
@@ -1160,7 +1178,7 @@ function ClaimMappingEditor({
                     })
                   }
                   suggestions={valueSuggestions}
-                  ariaLabel="Claim value to match"
+                  ariaLabel={`Claim value to match (rule ${index + 1})`}
                   placeholder="value to match"
                   emptyHint="No values seen yet. Type the value to match."
                   disabled={disabled}

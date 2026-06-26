@@ -77,4 +77,18 @@ describe('Autocomplete', () => {
     fireEvent.click(screen.getByRole('combobox', { name: 'Claim path' }))
     expect(screen.getByText('Run a test sign-in.')).toBeInTheDocument()
   })
+
+  it('renders a node empty hint so callers can include an action', () => {
+    render(
+      <Autocomplete
+        value=""
+        onValueChange={vi.fn()}
+        ariaLabel="Claim path"
+        suggestions={[]}
+        emptyHint={<button type="button">Test sign-in</button>}
+      />
+    )
+    fireEvent.click(screen.getByRole('combobox', { name: 'Claim path' }))
+    expect(screen.getByRole('button', { name: 'Test sign-in' })).toBeInTheDocument()
+  })
 })
