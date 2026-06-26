@@ -834,6 +834,13 @@
       "when": 1783036800000,
       "tag": "0118_identity_provider_consolidate_default_role",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0119_changelog_display_date",
+      "breakpoints": true
     }
   ]
 }

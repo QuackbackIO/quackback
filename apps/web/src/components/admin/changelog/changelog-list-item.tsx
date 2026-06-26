@@ -1,3 +1,4 @@
+import { isSameDay } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -23,6 +24,7 @@ interface ChangelogListItemProps {
   content: string
   status: 'draft' | 'scheduled' | 'published'
   publishedAt: string | null
+  displayDate?: string | null
   createdAt: string
   author: {
     id: PrincipalId
@@ -50,6 +52,7 @@ export function ChangelogListItem({
   content,
   status,
   publishedAt,
+  displayDate,
   createdAt,
   author,
   linkedPosts,
@@ -58,6 +61,13 @@ export function ChangelogListItem({
 }: ChangelogListItemProps) {
   const config = STATUS_CONFIG[status]
   const contentPreview = stripMarkdownPreview(content, 150)
+  const portalDisplayDate =
+    status === 'published' &&
+    displayDate &&
+    publishedAt &&
+    !isSameDay(new Date(displayDate), new Date(publishedAt))
+      ? displayDate
+      : null
 
   return (
     <div
@@ -104,6 +114,19 @@ export function ChangelogListItem({
               </>
             )}
           </span>
+          {portalDisplayDate && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground/70">
+                Showing as{' '}
+                {new Date(portalDisplayDate).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            </>
+          )}
           {linkedPosts.length > 0 && (
             <span className="flex items-center gap-1 text-muted-foreground/50 ml-auto">
               <LinkIcon className="h-3.5 w-3.5" />

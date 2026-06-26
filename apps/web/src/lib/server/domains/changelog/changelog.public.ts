@@ -21,6 +21,8 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
 
+const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
+
 /**
  * Predicates that make a changelog entry publicly visible: not soft-deleted
  * and published at or before `now`. Shared by every public read path so the
@@ -47,10 +49,14 @@ export async function getPublicChangelogMetaById(
   const now = new Date()
   const entry = await db.query.changelogEntries.findFirst({
     where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
-    columns: { id: true, title: true, publishedAt: true },
+    columns: { id: true, title: true, publishedAt: true, displayDate: true },
   })
   if (!entry || !entry.publishedAt) return null
-  return { id: entry.id as ChangelogId, title: entry.title, publishedAt: entry.publishedAt }
+  return {
+    id: entry.id as ChangelogId,
+    title: entry.title,
+    publishedAt: entry.displayDate ?? entry.publishedAt,
+  }
 }
 
 /**
@@ -134,7 +140,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     title: entry.title,
     content: entry.content,
     contentJson: entry.contentJson,
-    publishedAt: entry.publishedAt,
+    publishedAt: entry.displayDate ?? entry.publishedAt,
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
       title: lp.postTitle,
@@ -169,14 +175,17 @@ export async function listPublicChangelogs(params: {
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
       where: eq(changelogEntries.id, cursor as ChangelogId),
-      columns: { publishedAt: true },
+      columns: { publishedAt: true, displayDate: true },
     })
-    if (cursorEntry?.publishedAt) {
+    const cursorEffective = cursorEntry?.publishedAt
+      ? (cursorEntry.displayDate ?? cursorEntry.publishedAt)
+      : null
+    if (cursorEffective) {
       conditions.push(
         or(
-          lt(changelogEntries.publishedAt, cursorEntry.publishedAt),
+          lt(effectiveDisplayDate, cursorEffective),
           and(
-            eq(changelogEntries.publishedAt, cursorEntry.publishedAt),
+            sql`${effectiveDisplayDate} = ${cursorEffective}`,
             lt(changelogEntries.id, cursor as ChangelogId)
           )
         )!
@@ -185,11 +194,12 @@ export async function listPublicChangelogs(params: {
   }
 
   // Fetch entries
-  const entries = await db.query.changelogEntries.findMany({
-    where: and(...conditions),
-    orderBy: [desc(changelogEntries.publishedAt), desc(changelogEntries.id)],
-    limit: limit + 1,
-  })
+  const entries = await db
+    .select()
+    .from(changelogEntries)
+    .where(and(...conditions))
+    .orderBy(desc(effectiveDisplayDate), desc(changelogEntries.id))
+    .limit(limit + 1)
 
   const hasMore = entries.length > limit
   const items = hasMore ? entries.slice(0, limit) : entries
@@ -256,7 +266,7 @@ export async function listPublicChangelogs(params: {
         title: entry.title,
         content: entry.content,
         contentJson: entry.contentJson,
-        publishedAt: entry.publishedAt!,
+        publishedAt: entry.displayDate ?? entry.publishedAt!,
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,
           title: lp.postTitle,

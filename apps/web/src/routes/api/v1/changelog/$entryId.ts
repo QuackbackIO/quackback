@@ -21,6 +21,7 @@ const updateChangelogSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  displayDate: z.string().datetime().nullable().optional(),
 })
 
 function formatChangelogResponse(entry: {
@@ -28,6 +29,7 @@ function formatChangelogResponse(entry: {
   title: string
   content: string
   publishedAt: Date | null
+  displayDate: Date | null
   createdAt: Date
   updatedAt: Date
 }) {
@@ -36,6 +38,7 @@ function formatChangelogResponse(entry: {
     title: entry.title,
     content: entry.content,
     publishedAt: entry.publishedAt?.toISOString() || null,
+    displayDate: entry.displayDate?.toISOString() || null,
     createdAt: entry.createdAt.toISOString(),
     updatedAt: entry.updatedAt.toISOString(),
   }
@@ -106,6 +109,10 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
             title: parsed.data.title,
             content: parsed.data.content,
             ...(publishState && { publishState }),
+            ...(parsed.data.displayDate !== undefined && {
+              displayDate:
+                parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
+            }),
           })
 
           return successResponse(formatChangelogResponse(updated))

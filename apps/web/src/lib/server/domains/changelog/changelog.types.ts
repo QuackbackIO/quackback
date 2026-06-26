@@ -23,6 +23,7 @@ export interface CreateChangelogInput {
   linkedPostIds?: PostId[]
   /** Publish state */
   publishState: PublishState
+  displayDate?: Date | null
 }
 
 /**
@@ -36,6 +37,7 @@ export interface UpdateChangelogInput {
   linkedPostIds?: PostId[]
   /** Publish state (if changing) */
   publishState?: PublishState
+  displayDate?: Date | null
 }
 
 /**
@@ -64,6 +66,7 @@ export interface ChangelogEntryWithDetails {
   contentJson: TiptapContent | null
   principalId: PrincipalId | null
   publishedAt: Date | null
+  displayDate: Date | null
   createdAt: Date
   updatedAt: Date
   /** Author information - only shown in admin views */

@@ -166,9 +166,39 @@ function chainResolving(rows: unknown[]): unknown {
   return chain
 }
 
+function entriesListChain(rows: unknown[]): unknown {
+  const chain: Record<string, unknown> = {}
+  chain.from = () => chain
+  chain.where = () => chain
+  chain.orderBy = () => chain
+  chain.limit = () => Promise.resolve(rows)
+  return chain
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockStatusesFindMany.mockResolvedValue([])
+})
+
+describe('getPublicChangelogById — effective display date', () => {
+  it('returns displayDate override as publishedAt for portal detail view', async () => {
+    const { getPublicChangelogById } = await import('../changelog.public')
+    const displayOverride = new Date('2024-01-15T09:00:00Z')
+    const publishedAt = new Date('2025-06-01T12:00:00Z')
+
+    mockEntryFindFirst.mockResolvedValueOnce({
+      id: 'cl_1' as ChangelogId,
+      title: 'Backdated release',
+      content: 'Body',
+      contentJson: null,
+      publishedAt,
+      displayDate: displayOverride,
+    })
+    mockSelect.mockReturnValueOnce(chainResolving([]))
+
+    const result = await getPublicChangelogById('cl_1' as ChangelogId)
+    expect(result.publishedAt).toEqual(displayOverride)
+  })
 })
 
 describe('getPublicChangelogById — moderation state filter', () => {
@@ -223,22 +253,24 @@ describe('getPublicChangelogById — moderation state filter', () => {
 describe('listPublicChangelogs — moderation state filter', () => {
   it('returns only published linked posts across all entries', async () => {
     const { listPublicChangelogs } = await import('../changelog.public')
-    mockEntryFindMany.mockResolvedValueOnce([
-      {
-        id: 'cl_1' as ChangelogId,
-        title: 'Release 1',
-        content: '',
-        contentJson: null,
-        publishedAt: new Date('2026-01-02'),
-      },
-      {
-        id: 'cl_2' as ChangelogId,
-        title: 'Release 2',
-        content: '',
-        contentJson: null,
-        publishedAt: new Date('2026-01-01'),
-      },
-    ])
+    mockSelect.mockReturnValueOnce(
+      entriesListChain([
+        {
+          id: 'cl_1' as ChangelogId,
+          title: 'Release 1',
+          content: '',
+          contentJson: null,
+          publishedAt: new Date('2026-01-02'),
+        },
+        {
+          id: 'cl_2' as ChangelogId,
+          title: 'Release 2',
+          content: '',
+          contentJson: null,
+          publishedAt: new Date('2026-01-01'),
+        },
+      ])
+    )
     const candidates = [
       candidateRow({ id: 'p_pub_1', moderationState: 'published', changelogEntryId: 'cl_1' }),
       candidateRow({ id: 'p_pen_1', moderationState: 'pending', changelogEntryId: 'cl_1' }),
@@ -297,15 +329,17 @@ describe('public changelog — board audience filter', () => {
 
   it('listPublicChangelogs: hides non-public-audience linked posts across entries', async () => {
     const { listPublicChangelogs } = await import('../changelog.public')
-    mockEntryFindMany.mockResolvedValueOnce([
-      {
-        id: 'cl_1' as ChangelogId,
-        title: 'Release 1',
-        content: '',
-        contentJson: null,
-        publishedAt: new Date('2026-01-02'),
-      },
-    ])
+    mockSelect.mockReturnValueOnce(
+      entriesListChain([
+        {
+          id: 'cl_1' as ChangelogId,
+          title: 'Release 1',
+          content: '',
+          contentJson: null,
+          publishedAt: new Date('2026-01-02'),
+        },
+      ])
+    )
     const candidates = [
       candidateRow({ id: 'p_pub', moderationState: 'published', changelogEntryId: 'cl_1' }),
       candidateRow({

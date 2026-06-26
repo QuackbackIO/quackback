@@ -29,6 +29,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
 
@@ -50,6 +51,32 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     [form]
   )
 
+  function handlePublishStateChange(state: PublishState) {
+    setPublishState(state)
+    if (state.type !== 'published') {
+      setDisplayDateOverride(undefined)
+    }
+  }
+
+  function handleDisplayDateChange(value: Date | undefined) {
+    if (value) {
+      setDisplayDateOverride(value)
+    }
+  }
+
+  function handleDisplayDateClear() {
+    setDisplayDateOverride(undefined)
+  }
+
+  function resetFormState() {
+    form.reset()
+    setContentJson(null)
+    setLinkedPostIds([])
+    setPublishState({ type: 'draft' })
+    setDisplayDateOverride(undefined)
+    createChangelogMutation.reset()
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
     createChangelogMutation.mutate(
       {
@@ -58,14 +85,13 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
+        ...(publishState.type === 'published' &&
+          displayDateOverride !== undefined && { displayDate: displayDateOverride }),
       },
       {
         onSuccess: () => {
           setOpen(false)
-          form.reset()
-          setContentJson(null)
-          setLinkedPostIds([])
-          setPublishState({ type: 'draft' })
+          resetFormState()
           onChangelogCreated?.()
         },
       }
@@ -75,11 +101,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   function handleOpenChange(isOpen: boolean) {
     setOpen(isOpen)
     if (!isOpen) {
-      form.reset()
-      setContentJson(null)
-      setLinkedPostIds([])
-      setPublishState({ type: 'draft' })
-      createChangelogMutation.reset()
+      resetFormState()
     }
   }
 
@@ -135,9 +157,12 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
               {/* Right: Metadata sidebar (desktop only) */}
               <ChangelogMetadataSidebar
                 publishState={publishState}
-                onPublishStateChange={setPublishState}
+                onPublishStateChange={handlePublishStateChange}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
+                displayDateValue={displayDateOverride}
+                onDisplayDateChange={handleDisplayDateChange}
+                onDisplayDateClear={handleDisplayDateClear}
               />
             </div>
 
@@ -162,9 +187,12 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                   <div className="py-4 overflow-y-auto">
                     <ChangelogMetadataSidebarContent
                       publishState={publishState}
-                      onPublishStateChange={setPublishState}
+                      onPublishStateChange={handlePublishStateChange}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
+                      displayDateValue={displayDateOverride}
+                      onDisplayDateChange={handleDisplayDateChange}
+                      onDisplayDateClear={handleDisplayDateClear}
                     />
                   </div>
                 </SheetContent>

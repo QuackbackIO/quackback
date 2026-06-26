@@ -18,6 +18,7 @@ export const changelogEntries = pgTable(
       onDelete: 'set null',
     }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    displayDate: timestamp('display_date', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support

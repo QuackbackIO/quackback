@@ -449,7 +449,14 @@ const updateChangelogSchema = {
     .string()
     .optional()
     .describe(
-      'ISO 8601 datetime to set as publish date (e.g. "2025-03-15T12:00:00Z"). Overrides publish flag. Past dates backdate, future dates schedule, null reverts to draft.'
+      'ISO 8601 datetime for publish/schedule lifecycle (e.g. "2025-03-15T12:00:00Z"). Future dates schedule; past dates publish immediately. For display-only backdating on published entries, use displayDate instead.'
+    ),
+  displayDate: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      'ISO 8601 portal display override for published entries. Null clears the override. Must not be in the future.'
     ),
   linkedPostIds: z
     .array(z.string())
@@ -684,6 +691,7 @@ type UpdateChangelogArgs = {
   content?: string
   publish?: boolean
   publishedAt?: string
+  displayDate?: string | null
   linkedPostIds?: string[]
 }
 
@@ -1247,7 +1255,8 @@ Examples:
 Examples:
 - Update title: update_changelog({ changelogId: "changelog_01abc...", title: "v2.0 Release" })
 - Publish: update_changelog({ changelogId: "changelog_01abc...", publish: true })
-- Backdate: update_changelog({ changelogId: "changelog_01abc...", publishedAt: "2025-03-15T12:00:00Z" })
+- Backdate display: update_changelog({ changelogId: "changelog_01abc...", displayDate: "2025-03-15T12:00:00Z" })
+- Clear display override: update_changelog({ changelogId: "changelog_01abc...", displayDate: null })
 - Link posts: update_changelog({ changelogId: "changelog_01abc...", linkedPostIds: ["post_01a...", "post_01b..."] })${CONTENT_FORMAT_BLOCK}`,
     updateChangelogSchema,
     WRITE,
@@ -1271,6 +1280,9 @@ Examples:
           content: args.content,
           linkedPostIds: args.linkedPostIds as PostId[] | undefined,
           publishState,
+          ...(args.displayDate !== undefined && {
+            displayDate: args.displayDate === null ? null : new Date(args.displayDate),
+          }),
         })
 
         return jsonResult({
@@ -1278,6 +1290,7 @@ Examples:
           title: result.title,
           status: result.status,
           publishedAt: result.publishedAt,
+          displayDate: result.displayDate,
           updatedAt: result.updatedAt,
         })
       } catch (err) {
@@ -2400,6 +2413,7 @@ async function searchChangelogs(args: SearchArgs): Promise<CallToolResult> {
         voteCount: p.voteCount,
       })),
       publishedAt: c.publishedAt,
+      displayDate: c.displayDate,
       createdAt: c.createdAt,
     })),
     nextCursor,
@@ -2521,6 +2535,7 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
       status: p.status,
     })),
     publishedAt: entry.publishedAt,
+    displayDate: entry.displayDate,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   })

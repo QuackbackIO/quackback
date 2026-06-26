@@ -25,6 +25,7 @@ export const createChangelogSchema = z.object({
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
+  displayDate: z.coerce.date().nullable().optional(),
 })
 
 /**
@@ -37,6 +38,7 @@ export const updateChangelogSchema = z.object({
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
+  displayDate: z.coerce.date().nullable().optional(),
 })
 
 /**

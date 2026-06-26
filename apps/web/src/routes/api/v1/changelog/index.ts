@@ -54,6 +54,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
               title: entry.title,
               content: entry.content,
               publishedAt: entry.publishedAt?.toISOString() || null,
+              displayDate: entry.displayDate?.toISOString() || null,
               createdAt: entry.createdAt.toISOString(),
               updatedAt: entry.updatedAt.toISOString(),
             })),
@@ -114,6 +115,7 @@ export const Route = createFileRoute('/api/v1/changelog/')({
             title: entry.title,
             content: entry.content,
             publishedAt: entry.publishedAt?.toISOString() || null,
+            displayDate: entry.displayDate?.toISOString() || null,
             createdAt: entry.createdAt.toISOString(),
             updatedAt: entry.updatedAt.toISOString(),
           })

@@ -37,6 +37,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
+  const [displayDateTouched, setDisplayDateTouched] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -66,6 +68,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       setContentJson(entry.contentJson as JSONContent | null)
       setLinkedPostIds(entry.linkedPosts.map((p) => p.id))
       setPublishState(toPublishState(entry.status, entry.publishedAt))
+      setDisplayDateOverride(entry.displayDate ? new Date(entry.displayDate) : undefined)
+      setDisplayDateTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -78,7 +82,25 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     [form]
   )
 
+  function handleDisplayDateChange(value: Date | undefined) {
+    if (value) {
+      setDisplayDateOverride(value)
+      setDisplayDateTouched(true)
+    }
+  }
+
+  function handleDisplayDateClear() {
+    setDisplayDateOverride(undefined)
+    setDisplayDateTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
+    const displayDatePayload = displayDateTouched
+      ? displayDateOverride === undefined
+        ? null
+        : displayDateOverride
+      : undefined
+
     updateChangelogMutation.mutate(
       {
         id: entryId,
@@ -87,6 +109,7 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
         publishState,
+        ...(displayDatePayload !== undefined && { displayDate: displayDatePayload }),
       },
       {
         onSuccess: () => {
@@ -152,6 +175,10 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             linkedPostIds={linkedPostIds}
             onLinkedPostsChange={setLinkedPostIds}
             authorName={entry?.author?.name}
+            publishedAt={entry?.publishedAt}
+            displayDateValue={displayDateOverride}
+            onDisplayDateChange={handleDisplayDateChange}
+            onDisplayDateClear={handleDisplayDateClear}
           />
         </div>
 
@@ -180,6 +207,10 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   linkedPostIds={linkedPostIds}
                   onLinkedPostsChange={setLinkedPostIds}
                   authorName={entry?.author?.name}
+                  publishedAt={entry?.publishedAt}
+                  displayDateValue={displayDateOverride}
+                  onDisplayDateChange={handleDisplayDateChange}
+                  onDisplayDateClear={handleDisplayDateClear}
                 />
               </div>
             </SheetContent>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { format } from 'date-fns'
 import {
   DocumentTextIcon,
   PlusIcon,
@@ -32,6 +33,10 @@ interface ChangelogMetadataSidebarContentProps {
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
   authorName?: string | null
+  publishedAt?: string | null
+  displayDateValue?: Date
+  onDisplayDateChange?: (value: Date | undefined) => void
+  onDisplayDateClear?: () => void
 }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
@@ -46,6 +51,10 @@ export function ChangelogMetadataSidebarContent({
   linkedPostIds,
   onLinkedPostsChange,
   authorName,
+  publishedAt,
+  displayDateValue,
+  onDisplayDateChange = () => {},
+  onDisplayDateClear = () => {},
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -60,6 +69,13 @@ export function ChangelogMetadataSidebarContent({
     tomorrow.setHours(9, 0, 0, 0)
     return tomorrow
   })
+
+  const displayPlaceholder =
+    publishedAt != null
+      ? format(new Date(publishedAt), 'MMM d, yyyy')
+      : publishState.type === 'published'
+        ? format(publishState.publishAt ?? new Date(), 'MMM d, yyyy')
+        : 'Pick a date'
 
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({
@@ -88,6 +104,12 @@ export function ChangelogMetadataSidebarContent({
       if (publishState.type === 'scheduled') {
         onPublishStateChange({ type: 'scheduled', publishAt: date })
       }
+    }
+  }
+
+  const handleDisplayDateChange = (date: Date | undefined) => {
+    if (date) {
+      onDisplayDateChange(date)
     }
   }
 
@@ -135,6 +157,22 @@ export function ChangelogMetadataSidebarContent({
             onChange={handleDateTimeChange}
             minDate={new Date()}
             className="h-7 text-xs"
+          />
+        </div>
+      )}
+
+      {/* Display date - only when published */}
+      {publishState.type === 'published' && (
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="text-sm text-muted-foreground shrink-0">Display date</span>
+          <DateTimePicker
+            value={displayDateValue}
+            onChange={handleDisplayDateChange}
+            onClear={displayDateValue !== undefined ? onDisplayDateClear : undefined}
+            maxDate={new Date()}
+            dateOnly
+            placeholder={displayPlaceholder}
+            className="h-7 min-w-0 max-w-[11rem] text-xs"
           />
         </div>
       )}

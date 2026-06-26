@@ -28,7 +28,7 @@ import { buildEventActor, dispatchChangelogPublished } from '@/lib/server/events
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'changelog' })
+import { isSameDay } from 'date-fns'
 import type {
   CreateChangelogInput,
   UpdateChangelogInput,
@@ -37,6 +37,8 @@ import type {
   ChangelogAuthor,
   ChangelogLinkedPost,
 } from './changelog.types'
+
+const log = logger.child({ component: 'changelog' })
 
 // ============================================================================
 // Create
@@ -70,6 +72,21 @@ export async function createChangelog(
   // Determine publishedAt based on publish state
   const publishedAt = getPublishedAtFromState(input.publishState)
 
+  if (input.displayDate != null) {
+    if (input.publishState.type !== 'published') {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Display date can only be set on published changelog entries'
+      )
+    }
+    validateDisplayDate(publishedAt, input.displayDate)
+  }
+
+  const displayDate =
+    input.displayDate != null && input.publishState.type === 'published'
+      ? normalizeDisplayDate(input.displayDate, publishedAt)
+      : null
+
   // Create the changelog entry
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -85,6 +102,7 @@ export async function createChangelog(
       contentJson,
       principalId: author.principalId,
       publishedAt,
+      ...(displayDate != null && { displayDate }),
     })
     .returning()
 
@@ -166,6 +184,15 @@ export async function updateChangelog(
       contentType: 'changelog',
       principalId: existing.principalId ?? undefined,
     })
+  }
+
+  if (input.displayDate !== undefined) {
+    validateDisplayDate(existing.publishedAt, input.displayDate)
+    const publishedAtRef =
+      input.publishState !== undefined
+        ? getPublishedAtFromState(input.publishState)
+        : existing.publishedAt
+    updateData.displayDate = normalizeDisplayDate(input.displayDate, publishedAtRef)
   }
 
   // Handle publish state change
@@ -332,6 +359,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     contentJson: entry.contentJson,
     principalId: entry.principalId,
     publishedAt: entry.publishedAt,
+    displayDate: entry.displayDate,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     author,
@@ -388,4 +416,22 @@ export function computeStatus(publishedAt: Date | null): 'draft' | 'scheduled' |
   if (!publishedAt) return 'draft'
   if (publishedAt > new Date()) return 'scheduled'
   return 'published'
+}
+
+function normalizeDisplayDate(displayDate: Date | null, publishedAt: Date | null): Date | null {
+  if (displayDate == null || publishedAt == null) return displayDate
+  return isSameDay(displayDate, publishedAt) ? null : displayDate
+}
+
+function validateDisplayDate(publishedAt: Date | null, displayDate: Date | null): void {
+  const now = new Date()
+  if (!publishedAt || publishedAt > now) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'Display date can only be set on published changelog entries'
+    )
+  }
+  if (displayDate !== null && displayDate > now) {
+    throw new ValidationError('VALIDATION_ERROR', 'Display date cannot be in the future')
+  }
 }

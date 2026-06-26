@@ -11,6 +11,10 @@ interface ChangelogMetadataSidebarProps {
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
   authorName?: string | null
+  publishedAt?: string | null
+  displayDateValue?: Date
+  onDisplayDateChange?: (value: Date | undefined) => void
+  onDisplayDateClear?: () => void
 }
 
 export function ChangelogMetadataSidebar({
@@ -19,6 +23,10 @@ export function ChangelogMetadataSidebar({
   linkedPostIds,
   onLinkedPostsChange,
   authorName,
+  publishedAt,
+  displayDateValue,
+  onDisplayDateChange,
+  onDisplayDateClear,
 }: ChangelogMetadataSidebarProps) {
   return (
     <SidebarContainer className="overflow-y-auto">
@@ -28,6 +36,10 @@ export function ChangelogMetadataSidebar({
         linkedPostIds={linkedPostIds}
         onLinkedPostsChange={onLinkedPostsChange}
         authorName={authorName}
+        publishedAt={publishedAt}
+        displayDateValue={displayDateValue}
+        onDisplayDateChange={onDisplayDateChange}
+        onDisplayDateClear={onDisplayDateClear}
       />
     </SidebarContainer>
   )

@@ -155,6 +155,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       contentJson: entry.contentJson,
       principalId: entry.principalId,
       publishedAt: entry.publishedAt,
+      displayDate: entry.displayDate,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,
