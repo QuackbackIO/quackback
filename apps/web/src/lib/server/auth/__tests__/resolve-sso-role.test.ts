@@ -69,17 +69,17 @@ describe('resolveSsoRole', () => {
     expect(role).toBe('admin')
   })
 
-  it('falls back to defaultRole when no rule matches', () => {
+  it('returns null when no rule matches (caller supplies the default)', () => {
     const role = resolveSsoRole(
       { groups: ['support'] },
-      mapping([{ whenContains: 'admins', role: 'admin' }], 'user')
+      mapping([{ whenContains: 'admins', role: 'admin' }])
     )
-    expect(role).toBe('user')
+    expect(role).toBeNull()
   })
 
-  it('falls back to defaultRole when the claim is missing', () => {
-    const role = resolveSsoRole({}, mapping([{ whenContains: 'admins', role: 'admin' }], 'member'))
-    expect(role).toBe('member')
+  it('returns null when the claim is missing', () => {
+    const role = resolveSsoRole({}, mapping([{ whenContains: 'admins', role: 'admin' }]))
+    expect(role).toBeNull()
   })
 
   it('is case-insensitive when matching', () => {
