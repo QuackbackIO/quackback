@@ -760,7 +760,7 @@ function DomainsSection({
             <WarningBox
               variant="warning"
               title="Before you enforce"
-              description="Enforcing requires email delivery (break-glass) + one successful sign-in through this provider first."
+              description="Run a successful test sign-in and generate recovery codes first — they're your break-glass if SSO ever breaks."
             />
           )}
 

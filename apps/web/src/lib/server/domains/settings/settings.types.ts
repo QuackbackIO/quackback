@@ -121,9 +121,9 @@ export interface AuthConfig {
  *    default on the login form.
  *  - `enforced: true` (with `verifiedAt: <ISO>`) — emails at this domain
  *    are hard-bound to SSO; password / magic-link / non-SSO OAuth are
- *    blocked. Toggling `enforced=true` requires the calling admin to
- *    have signed in via SSO within the bootstrap window (lockout guard)
- *    AND email-delivery configured (break-glass precondition).
+ *    blocked. Toggling `enforced=true` requires a successful test sign-in
+ *    through the owning provider (lockout guard) AND active recovery codes —
+ *    the break-glass to sign back in if the IdP is ever unavailable.
  */
 export interface VerifiedDomain {
   id: `domain_${string}`
