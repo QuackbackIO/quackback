@@ -105,21 +105,19 @@ describe('<ProviderEditor> provisioning consolidation', () => {
     )
     // One default-role control, bound to autoProvisionRole.
     expect(screen.getByLabelText('Default role')).toBeInTheDocument()
-    // The group-mapping section is present but the rules are collapsed.
-    expect(screen.getByRole('button', { name: /Map roles from IdP groups/ })).toHaveAttribute(
+    // The claim-mapping section is present but the rules are collapsed.
+    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toHaveAttribute(
       'aria-expanded',
       'false'
     )
     // No nested "default role" duplicate inside the mapping.
-    expect(screen.queryByText('No rules — everyone gets the default role.')).not.toBeInTheDocument()
+    expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
   })
 
   it('hides the role controls entirely when auto-create is off', () => {
     renderEditor(makeProvider({ autoCreateUsers: false }))
     expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: /Map roles from IdP groups/ })
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Map roles from claims/ })).not.toBeInTheDocument()
   })
 
   it('persists attributeMapping=null when saved with no rules and sync off', async () => {
@@ -160,5 +158,29 @@ describe('<ProviderEditor> IdP shortcut persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
     expect(upsertSpy.mock.calls.at(-1)![0].data.kind).toBe('auth0')
+  })
+})
+
+describe('<ProviderEditor> connection-test status', () => {
+  it('shows "Not tested yet" when the provider has no successful test', () => {
+    renderEditor(makeProvider({ lastSuccessfulTestAt: null }))
+    expect(screen.getByText(/Not tested yet/)).toBeInTheDocument()
+  })
+
+  it('shows the verified status (ready to enforce) for a fresh successful test', () => {
+    renderEditor(
+      makeProvider({ lastSuccessfulTestAt: '2026-05-02T00:00:00.000Z', detailsChangedAt: null })
+    )
+    expect(screen.getByText(/ready to enforce SSO/)).toBeInTheDocument()
+  })
+
+  it('shows the stale status when the connection changed since the last test', () => {
+    renderEditor(
+      makeProvider({
+        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
+        detailsChangedAt: '2026-05-02T00:00:00.000Z',
+      })
+    )
+    expect(screen.getByText(/changed since the last test/)).toBeInTheDocument()
   })
 })
