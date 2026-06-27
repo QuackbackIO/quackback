@@ -113,7 +113,7 @@ beforeEach(() => {
 describe('getPublicPortalConfig — oidcProviders buttons', () => {
   it('emits a button {id: registrationId, name: label} for a button-eligible provider (no verified domain)', async () => {
     mockListIdentityProviders.mockResolvedValue([
-      provider({ registrationId: 'custom-oidc', label: 'Okta' }),
+      provider({ registrationId: 'custom-oidc', label: 'Okta', showButton: true }),
     ])
     mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['custom-oidc']))
 
@@ -141,9 +141,19 @@ describe('getPublicPortalConfig — oidcProviders buttons', () => {
     expect(result?.oidcProviders ?? []).not.toContainEqual({ id: 'workos', name: 'WorkOS' })
   })
 
+  it('does NOT emit a button for a domain-less provider with showButton:false (hidden)', async () => {
+    mockListIdentityProviders.mockResolvedValue([
+      provider({ registrationId: 'parked', label: 'Parked', showButton: false }),
+    ])
+    mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set(['parked']))
+
+    const result = await getPublicPortalConfig()
+    expect(result?.oidcProviders ?? []).not.toContainEqual({ id: 'parked', name: 'Parked' })
+  })
+
   it('does NOT emit a button for a button-eligible provider that is not registered (would 404)', async () => {
     mockListIdentityProviders.mockResolvedValue([
-      provider({ registrationId: 'unwired', label: 'Unwired' }),
+      provider({ registrationId: 'unwired', label: 'Unwired', showButton: true }),
     ])
     mockGetRegisteredOidcProviderIds.mockResolvedValue(new Set<string>())
 

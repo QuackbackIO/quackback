@@ -11,10 +11,10 @@
  * `setProviderCredentialsFn`, `addProviderDomainFn`, `verifyProviderDomainFn`,
  * `setDomainEnforcedFn`).
  *
- * The domain→visibility rule (D5) shows up here twice:
- *  - the "Also show a 'Sign in with X' button" toggle renders ONLY when the
- *    provider has ≥1 verified domain — a domain-less provider is always a
- *    public button, so the toggle would be meaningless.
+ * Visibility and routing show up here:
+ *  - the "Show a 'Sign in with X' button" toggle always renders and is the
+ *    single switch for the provider's public button; off hides it (a routed
+ *    provider stays email-routed only, a domain-less one is parked).
  *  - per-domain enforcement is a checkbox guarded by a precondition warning.
  */
 import { useState, useEffect } from 'react'
@@ -193,7 +193,9 @@ export function ProviderEditor({
   const [autoProvisionRole, setAutoProvisionRole] = useState<Role>(
     provider?.autoProvisionRole ?? 'user'
   )
-  const [showButton, setShowButton] = useState(provider?.showButton ?? false)
+  // New providers default to showing a button (reachable out of the box); the
+  // admin can untick to hide. Existing providers keep their stored choice.
+  const [showButton, setShowButton] = useState(provider?.showButton ?? true)
   const [mapping, setMapping] = useState<Mapping | null>(provider?.attributeMapping ?? null)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -402,28 +404,30 @@ export function ProviderEditor({
             {/* Domains */}
             <DomainsSection provider={provider} disabled={saving} />
 
-            {/* Visibility — only meaningful once a verified domain routes by
-              default; a domain-less provider is always a public button. */}
-            {hasVerifiedDomain && (
-              <div className="space-y-2 border-t border-border/40 pt-5">
-                <Label className="font-medium">Visibility</Label>
-                <label className="flex items-start gap-2 text-sm">
-                  <Checkbox
-                    checked={showButton}
-                    onCheckedChange={(v) => setShowButton(v === true)}
-                    disabled={saving}
-                    aria-label="Also show a sign-in button"
-                    className="mt-0.5"
-                  />
-                  <span>
-                    Also show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      Off = routed only; hidden from the public portal.
-                    </span>
+            {/* Visibility — the single switch for whether this provider shows a
+              public sign-in button. Off hides it: a routed provider (verified
+              domain) stays email-routed only; a domain-less provider is parked
+              until the toggle is turned back on. */}
+            <div className="space-y-2 border-t border-border/40 pt-5">
+              <Label className="font-medium">Visibility</Label>
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={showButton}
+                  onCheckedChange={(v) => setShowButton(v === true)}
+                  disabled={saving}
+                  aria-label="Show a sign-in button"
+                  className="mt-0.5"
+                />
+                <span>
+                  Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {hasVerifiedDomain
+                      ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
+                      : 'Off hides it from the sign-in screen entirely.'}
                   </span>
-                </label>
-              </div>
-            )}
+                </span>
+              </label>
+            </div>
 
             {/* Provisioning */}
             <div className="space-y-4 border-t border-border/40 pt-5">
