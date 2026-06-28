@@ -17,8 +17,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockFindFirst = vi.fn()
 const mockAccountFindFirst = vi.fn()
+const mockUserFindFirst = vi.fn()
 const mockSet = vi.fn()
 const mockWhere = vi.fn()
+const mockInsertValues = vi.fn()
 const mockRecordAuditEvent = vi.fn()
 // Recordable so a test can assert `readSsoClaims` queries by the CALLBACK
 // provider id rather than a hardcoded 'sso'.
@@ -29,10 +31,13 @@ vi.mock('@/lib/server/db', () => ({
     query: {
       principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
       account: { findFirst: (...args: unknown[]) => mockAccountFindFirst(...args) },
+      user: { findFirst: (...args: unknown[]) => mockUserFindFirst(...args) },
     },
     update: () => ({ set: mockSet, where: mockWhere }),
+    insert: () => ({ values: (...args: unknown[]) => mockInsertValues(...args) }),
   },
   principal: { userId: 'user_id', role: 'role' },
+  user: { id: 'user.id' },
   account: { userId: 'account.userId', providerId: 'account.providerId' },
   and: vi.fn((...parts: unknown[]) => ({ op: 'and', parts })),
   eq: (...args: unknown[]) => mockEq(...args),
@@ -46,6 +51,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockSet.mockReturnValue({ where: mockWhere })
   mockWhere.mockResolvedValue(undefined)
+  mockInsertValues.mockResolvedValue(undefined)
+  mockUserFindFirst.mockResolvedValue({ name: 'Returning User', image: null })
   mockRecordAuditEvent.mockResolvedValue(undefined)
 })
 
@@ -58,7 +65,6 @@ type SsoOidc = {
   attributeMapping?: {
     claimPath: string
     rules: { whenContains: string; role: 'admin' | 'member' | 'user' }[]
-    defaultRole: 'admin' | 'member' | 'user'
     syncOnEverySignIn?: boolean
   }
 }
@@ -134,6 +140,13 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
 
 const callHandler = (autoProvisionRole?: 'admin' | 'member' | 'user') =>
   callHandlerWith({ ssoOidc: { autoProvisionRole } })
+
+// Stub the account row's id_token with a JWT whose payload carries `claims`,
+// so readSsoClaims (which base64url-decodes the middle segment) reads them.
+const mockIdTokenClaims = (claims: Record<string, unknown>) => {
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url')
+  mockAccountFindFirst.mockResolvedValue({ idToken: `h.${payload}.s` })
+}
 
 describe('handleAutoProvisionAfter -- role assignment', () => {
   it('uses autoProvisionRole=admin from config', async () => {
@@ -218,7 +231,6 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'member',
           syncOnEverySignIn: true,
         },
       },
@@ -230,16 +242,15 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     // With sync on, the resolved-from-claims role is authoritative on
-    // every sign-in. attributeMapping has no rules and defaultRole='user',
-    // so the IdP is effectively saying "this user has no team role". An
-    // existing admin gets demoted to portal-user.
+    // every sign-in. attributeMapping has no matching rules, so the resolver
+    // returns null and falls back to autoProvisionRole='user' — effectively
+    // saying "this user has no team role". An existing admin gets demoted.
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'user',
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'user',
           syncOnEverySignIn: true,
         },
       },
@@ -281,7 +292,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
       providerId: 'custom-oidc',
       registeredIds: new Set(['custom-oidc']),
       ssoOidc: {
-        attributeMapping: { claimPath: 'roles', rules: [], defaultRole: 'member' },
+        attributeMapping: { claimPath: 'roles', rules: [] },
       },
     })
     expect(mockEq).toHaveBeenCalledWith('account.providerId', 'custom-oidc')
@@ -297,7 +308,6 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
         attributeMapping: {
           claimPath: 'roles',
           rules: [],
-          defaultRole: 'member',
         },
       },
     })
@@ -307,5 +317,115 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
       metadata: Record<string, unknown>
     }
     expect(call.metadata.source).toBe('attribute_mapping')
+  })
+})
+
+describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-independent', () => {
+  it('provisions the claim-mapped role even when the email is NOT at a verified domain', async () => {
+    // The IdP asserts roles:["member"] and the provider maps it, but the
+    // user's email domain is not a verified domain on the provider. A
+    // per-user role claim is its own trust anchor (the IdP attesting THIS
+    // user's role), stronger than domain ownership, so the verified-domain
+    // gate must not block it. Mirrors WorkOS role assignment.
+    mockFindFirst.mockResolvedValue({ role: 'user' })
+    mockIdTokenClaims({ roles: ['member'] })
+    await callHandlerWith({
+      // Not at acme.com (the provider's only verified domain).
+      email: 'james@quackback.io',
+      ssoOidc: {
+        // Default role is the no-promote sentinel; ONLY the claim should drive
+        // promotion, proving the role came from the assertion, not the default.
+        autoProvisionRole: 'user',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [
+            { whenContains: 'admin', role: 'admin' },
+            { whenContains: 'member', role: 'member' },
+          ],
+        },
+      },
+    })
+    expect(mockSet).toHaveBeenCalledWith({ role: 'member' })
+  })
+
+  it('still gates the default-role fallback on the verified domain (no claim match)', async () => {
+    // No rule matches the claim, so the role falls back to the default. That
+    // path is NOT a per-user attestation, so it stays scoped to the provider's
+    // verified domains: an email off-domain must not be auto-provisioned.
+    mockFindFirst.mockResolvedValue({ role: 'user' })
+    mockIdTokenClaims({ roles: ['guest'] })
+    await callHandlerWith({
+      email: 'james@quackback.io',
+      ssoOidc: {
+        autoProvisionRole: 'member',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [{ whenContains: 'admin', role: 'admin' }],
+        },
+      },
+    })
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleAutoProvisionAfter -- returning user whose principal was soft-removed', () => {
+  it('recreates the principal with the claim-mapped role when no principal exists', async () => {
+    // "Remove from portal" deletes the principal but keeps the auth user, so a
+    // returning OIDC user has no principal when this hook runs. The resolved
+    // role must still land — create the principal in-band rather than silently
+    // updating zero rows (which would leave the lazy path to recreate 'user').
+    mockFindFirst.mockResolvedValue(undefined) // principal was soft-removed
+    mockIdTokenClaims({ roles: ['member'] })
+    await callHandlerWith({
+      email: 'james@quackback.io',
+      ssoOidc: {
+        autoProvisionRole: 'user',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [{ whenContains: 'member', role: 'member' }],
+        },
+      },
+    })
+    expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ role: 'member' }))
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+
+  it('recreates the principal with the default role for a returning user at a verified domain', async () => {
+    // No claim match → default role; the email is at the provider's verified
+    // domain (acme.com) so the fallback still provisions, and the missing
+    // principal must be created, not updated.
+    mockFindFirst.mockResolvedValue(undefined)
+    mockIdTokenClaims({ roles: ['unmatched'] })
+    await callHandlerWith({
+      ssoOidc: {
+        autoProvisionRole: 'member',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [{ whenContains: 'admin', role: 'admin' }],
+        },
+      },
+    })
+    expect(mockInsertValues).toHaveBeenCalledWith(expect.objectContaining({ role: 'member' }))
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+
+  it('does not provision a returning user with no claim match and no verified domain', async () => {
+    // Boundary: the default-role fallback stays domain-scoped even for a
+    // missing principal, so an off-domain user with no matching claim is left
+    // untouched (the lazy path recreates them as a plain portal 'user').
+    mockFindFirst.mockResolvedValue(undefined)
+    mockIdTokenClaims({ roles: ['unmatched'] })
+    await callHandlerWith({
+      email: 'james@quackback.io',
+      ssoOidc: {
+        autoProvisionRole: 'member',
+        attributeMapping: {
+          claimPath: 'roles',
+          rules: [{ whenContains: 'admin', role: 'admin' }],
+        },
+      },
+    })
+    expect(mockInsertValues).not.toHaveBeenCalled()
+    expect(mockSet).not.toHaveBeenCalled()
   })
 })

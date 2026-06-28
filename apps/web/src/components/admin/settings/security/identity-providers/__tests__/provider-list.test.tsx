@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
 /**
- * <IdentityProvidersSection> + <ProviderEditor> — the domain→visibility
- * rule (D5) made visible.
+ * <IdentityProvidersSection> + <ProviderEditor> — visibility and routing
+ * made visible.
  *
  * Core assertions:
- *  - A provider with NO verified domain is a public `button`; its editor
- *    hides the "also show a button" toggle (always-public, so meaningless)
- *    and has no per-domain enforcement control.
- *  - A provider WITH a verified domain is `routed`; its editor shows the
- *    visibility toggle AND the per-domain enforcement control.
+ *  - The "show a sign-in button" visibility toggle always renders so the admin
+ *    can hide the button on any provider, with or without a verified domain.
+ *  - Per-domain enforcement is domain-scoped: its control shows only for a
+ *    provider WITH a verified domain.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -178,19 +177,21 @@ describe('<IdentityProvidersSection>', () => {
     expect(screen.queryByText(/no domains/i)).toBeNull()
   })
 
-  it('hides the visibility toggle and enforcement control for a no-domain provider', async () => {
+  it('shows the visibility toggle but hides the enforcement control for a no-domain provider', async () => {
     renderSection()
     fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
     expect(await screen.findByText(/edit identity provider/i)).toBeInTheDocument()
-    // No verified domain -> always a public button -> the toggle is meaningless.
-    expect(screen.queryByText(/also show a/i)).toBeNull()
+    // The visibility toggle is always available so the admin can hide the
+    // button even without a verified domain.
+    expect(screen.getByLabelText(/show a sign-in button/i)).toBeInTheDocument()
+    // Enforcement is domain-scoped, so it stays hidden without a verified domain.
     expect(screen.queryByLabelText(/require sso/i)).toBeNull()
   })
 
   it('shows the visibility toggle and enforcement control for a verified-domain provider', async () => {
     renderSection()
     fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
-    expect(await screen.findByText(/also show a/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText(/show a sign-in button/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
   })
 })

@@ -576,4 +576,17 @@ describe('setDomainEnforcedFn — recovery-code guard', () => {
     ).resolves.not.toThrow()
     expect(hoisted.mockHasActiveRecoveryCodes).not.toHaveBeenCalled()
   })
+
+  it('allows enforcement without email delivery — recovery codes, not magic link, are the break-glass', async () => {
+    // Magic-link/password are hard-bound off for enforced-domain emails, so
+    // email delivery is NOT the break-glass; recovery codes are. Enforcement
+    // must not be gated on SMTP/Resend being configured.
+    hoisted.mockHasActiveRecoveryCodes.mockResolvedValue(true)
+    hoisted.mockIsEmailConfigured.mockReturnValue(false)
+
+    await expect(
+      setDomainEnforced({ data: { id: domainId, enforced: true } })
+    ).resolves.not.toThrow()
+    expect(mockSetVerifiedDomainEnforced).toHaveBeenCalledWith(domainId, true)
+  })
 })
