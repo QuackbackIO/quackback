@@ -158,7 +158,6 @@ const idpRole = z.enum(['admin', 'member', 'user'])
 const attributeMappingSchema = z.object({
   claimPath: z.string(),
   rules: z.array(z.object({ whenContains: z.string(), role: idpRole })),
-  defaultRole: idpRole,
   syncOnEverySignIn: z.boolean().optional(),
 })
 
@@ -444,7 +443,9 @@ const setDomainEnforcedInput = z.object({
  *     sign-in fallback) deliberately: `principal.lastSsoSignInAt` is
  *     provider-independent, so accepting it would let a sign-in via provider B
  *     unlock never-validated provider A.
- *  2. Magic-link delivery configured (break-glass for the rest of the team).
+ *  2. Active recovery codes generated — the break-glass to sign back in if the
+ *     IdP becomes unavailable. Password / magic-link are hard-bound off for
+ *     enforced-domain emails, so recovery codes are the only way back.
  * Disabling skips both.
  */
 export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
@@ -499,14 +500,6 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             throw new ForbiddenError(
               'SSO_TEST_REQUIRED',
               'Run a successful test sign-in before enabling enforcement.'
-            )
-          }
-
-          const { isEmailConfigured } = await import('@quackback/email')
-          if (!isEmailConfigured()) {
-            throw new ConflictError(
-              'SSO_NO_BREAKGLASS',
-              'Configure email delivery (SMTP/Resend) before requiring SSO. Magic-link is the only fallback when SSO breaks.'
             )
           }
 

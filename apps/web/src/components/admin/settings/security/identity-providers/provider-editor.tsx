@@ -11,13 +11,13 @@
  * `setProviderCredentialsFn`, `addProviderDomainFn`, `verifyProviderDomainFn`,
  * `setDomainEnforcedFn`).
  *
- * The domain→visibility rule (D5) shows up here twice:
- *  - the "Also show a 'Sign in with X' button" toggle renders ONLY when the
- *    provider has ≥1 verified domain — a domain-less provider is always a
- *    public button, so the toggle would be meaningless.
+ * Visibility and routing show up here:
+ *  - the "Show a 'Sign in with X' button" toggle always renders and is the
+ *    single switch for the provider's public button; off hides it (a routed
+ *    provider stays email-routed only, a domain-less one is parked).
  *  - per-domain enforcement is a checkbox guarded by a precondition warning.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -44,6 +44,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { WarningBox } from '@/components/shared/warning-box'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -72,6 +73,9 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { getIdpShortcut, inferIdpKind, IDP_KIND_NAMES, type IdpKind } from '../idp-shortcuts'
 import { TestSignInButton } from '../sso/test-sign-in-button'
+import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
+import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
+import { Autocomplete } from '@/components/ui/autocomplete'
 
 type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<IdentityProvider['attributeMapping']>
@@ -107,6 +111,27 @@ function redirectUriFor(baseUrl: string | undefined, registrationId: string): st
  *  migration; drives the redirect URI + `account.provider_id`). */
 function newRegistrationId(): string {
   return `oidc_${Math.random().toString(36).slice(2, 10)}`
+}
+
+/** Connection-test freshness from the provider's last successful test vs. its
+ *  last redirect-affecting change. Drives the connection status line and the
+ *  enforcement-unlock gate — only `verified` may turn enforcement on. Mirrors
+ *  the server-side `isSsoEnforcementUnlocked(provider, null)` predicate. */
+type ConnectionTestState =
+  | { kind: 'unsaved' | 'untested' | 'stale' }
+  | { kind: 'verified'; testedAt: string }
+
+function getConnectionTestState(provider: IdentityProvider | null): ConnectionTestState {
+  if (!provider) return { kind: 'unsaved' }
+  const testedMs = provider.lastSuccessfulTestAt
+    ? new Date(provider.lastSuccessfulTestAt).getTime()
+    : null
+  if (testedMs === null || Number.isNaN(testedMs)) return { kind: 'untested' }
+  const changedMs = provider.detailsChangedAt ? new Date(provider.detailsChangedAt).getTime() : null
+  if (changedMs !== null && !Number.isNaN(changedMs) && testedMs <= changedMs) {
+    return { kind: 'stale' }
+  }
+  return { kind: 'verified', testedAt: provider.lastSuccessfulTestAt! }
 }
 
 export function ProviderEditor({
@@ -168,7 +193,9 @@ export function ProviderEditor({
   const [autoProvisionRole, setAutoProvisionRole] = useState<Role>(
     provider?.autoProvisionRole ?? 'user'
   )
-  const [showButton, setShowButton] = useState(provider?.showButton ?? false)
+  // New providers default to showing a button (reachable out of the box); the
+  // admin can untick to hide. Existing providers keep their stored choice.
+  const [showButton, setShowButton] = useState(provider?.showButton ?? true)
   const [mapping, setMapping] = useState<Mapping | null>(provider?.attributeMapping ?? null)
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -185,6 +212,10 @@ export function ProviderEditor({
       toast.error('Client ID is required.')
       return
     }
+    // A claim mapping with no rules and no sign-in sync does nothing, so persist
+    // null (the canonical "no mapping" state). A custom claim path alone is inert.
+    const mappingToSave =
+      mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true) ? mapping : null
     setSaving(true)
     try {
       const saved = await upsert({
@@ -209,7 +240,7 @@ export function ProviderEditor({
           // Role only applies when auto-create is on; null it out otherwise
           // so a stale role doesn't linger on a provisioning-off provider.
           autoProvisionRole: autoCreateUsers ? autoProvisionRole : null,
-          attributeMapping: mapping,
+          attributeMapping: mappingToSave,
           showButton,
         },
       })
@@ -251,7 +282,7 @@ export function ProviderEditor({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (saving ? undefined : onOpenChange(o))}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 p-0">
+      <DialogContent className="flex h-[85vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/50 px-6 py-4">
           <DialogTitle>{provider ? 'Edit identity provider' : 'Add identity provider'}</DialogTitle>
           <DialogDescription>
@@ -259,94 +290,94 @@ export function ProviderEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-          {/* Display name */}
-          <div className="space-y-2">
-            <Label htmlFor="idp-label">Display name</Label>
-            <Input
-              id="idp-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Acme SSO"
-              disabled={saving}
-            />
-            {label.trim() && (
-              <p className="text-xs text-muted-foreground">
-                Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
-              </p>
-            )}
-          </div>
-
-          {/* Identity provider picker + discovery */}
-          <div className="space-y-3">
-            <Label>Identity provider</Label>
-            <RadioGroup
-              value={kind}
-              onValueChange={(v) => {
-                const next = v as IdpKind
-                setKind(next)
-                // Fixed-discovery kinds (Google) have no shortcut input — seed
-                // the canonical URL now so the saved row is well-formed without
-                // a render-time state write.
-                const def = getIdpShortcut(next)
-                if (next !== 'other' && def.fields.length === 0) {
-                  const url = def.build({})
-                  if (url) setDiscoveryUrl(url)
-                }
-              }}
-              className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
-            >
-              {IDP_KIND_OPTIONS.map((k) => (
-                <RadioGroupPrimitive.Item
-                  key={k}
-                  value={k}
-                  id={`idp-kind-${k}`}
-                  disabled={saving}
-                  className={cn(
-                    'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
-                    'hover:border-border hover:bg-accent/40',
-                    'focus-visible:ring-2 focus-visible:ring-ring/50',
-                    'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
-                    'disabled:cursor-not-allowed disabled:opacity-60'
-                  )}
-                >
-                  <IdpLogo
-                    kind={k}
-                    className="h-8 w-8 shrink-0"
-                    iconClassName="h-[18px] w-[18px]"
-                  />
-                  <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
-                </RadioGroupPrimitive.Item>
-              ))}
-            </RadioGroup>
-            <IdpDiscoveryFields
-              kind={kind}
-              discoveryUrl={discoveryUrl}
-              disabled={saving}
-              onChange={setDiscoveryUrl}
-            />
-            {kind === 'other' && (
-              <ManualEndpointsSection
-                values={manual}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-6 px-6 py-5">
+            {/* Display name */}
+            <div className="space-y-2">
+              <Label htmlFor="idp-label">Display name</Label>
+              <Input
+                id="idp-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Acme SSO"
                 disabled={saving}
-                onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
               />
-            )}
-          </div>
+              {label.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
+                </p>
+              )}
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="idp-client-id">Client ID</Label>
-            <Input
-              id="idp-client-id"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              disabled={saving}
-            />
-          </div>
+            {/* Identity provider picker + discovery */}
+            <div className="space-y-3">
+              <Label>Identity provider</Label>
+              <RadioGroup
+                value={kind}
+                onValueChange={(v) => {
+                  const next = v as IdpKind
+                  setKind(next)
+                  // Fixed-discovery kinds (Google) have no shortcut input — seed
+                  // the canonical URL now so the saved row is well-formed without
+                  // a render-time state write.
+                  const def = getIdpShortcut(next)
+                  if (next !== 'other' && def.fields.length === 0) {
+                    const url = def.build({})
+                    if (url) setDiscoveryUrl(url)
+                  }
+                }}
+                className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
+              >
+                {IDP_KIND_OPTIONS.map((k) => (
+                  <RadioGroupPrimitive.Item
+                    key={k}
+                    value={k}
+                    id={`idp-kind-${k}`}
+                    disabled={saving}
+                    className={cn(
+                      'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
+                      'hover:border-border hover:bg-accent/40',
+                      'focus-visible:ring-2 focus-visible:ring-ring/50',
+                      'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
+                      'disabled:cursor-not-allowed disabled:opacity-60'
+                    )}
+                  >
+                    <IdpLogo
+                      kind={k}
+                      className="h-8 w-8 shrink-0"
+                      iconClassName="h-[18px] w-[18px]"
+                    />
+                    <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
+                  </RadioGroupPrimitive.Item>
+                ))}
+              </RadioGroup>
+              <IdpDiscoveryFields
+                kind={kind}
+                discoveryUrl={discoveryUrl}
+                disabled={saving}
+                onChange={setDiscoveryUrl}
+              />
+              {kind === 'other' && (
+                <ManualEndpointsSection
+                  values={manual}
+                  disabled={saving}
+                  onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
+                />
+              )}
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="idp-client-secret">Client secret</Label>
-            <div className="flex items-center gap-2">
+            <div className="space-y-2">
+              <Label htmlFor="idp-client-id">Client ID</Label>
+              <Input
+                id="idp-client-id"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="idp-client-secret">Client secret</Label>
               <Input
                 id="idp-client-secret"
                 type="password"
@@ -357,18 +388,26 @@ export function ProviderEditor({
                 placeholder={provider ? 'Leave blank to keep the current secret' : ''}
                 disabled={saving}
               />
-              <TestSignInButton registrationId={registrationId} disabled={saving || !provider} />
             </div>
-          </div>
 
-          <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
+            <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
 
-          {/* Domains */}
-          <DomainsSection provider={provider} disabled={saving} />
+            {/* Connection test — the capstone of the connection block. A
+              successful test validates discovery + credentials + the registered
+              redirect URI, and is the precondition that unlocks enforcement. */}
+            <ConnectionTestRow
+              provider={provider}
+              registrationId={registrationId}
+              disabled={saving}
+            />
 
-          {/* Visibility — only meaningful once a verified domain routes by
-              default; a domain-less provider is always a public button. */}
-          {hasVerifiedDomain && (
+            {/* Domains */}
+            <DomainsSection provider={provider} disabled={saving} />
+
+            {/* Visibility — the single switch for whether this provider shows a
+              public sign-in button. Off hides it: a routed provider (verified
+              domain) stays email-routed only; a domain-less provider is parked
+              until the toggle is turned back on. */}
             <div className="space-y-2 border-t border-border/40 pt-5">
               <Label className="font-medium">Visibility</Label>
               <label className="flex items-start gap-2 text-sm">
@@ -376,64 +415,86 @@ export function ProviderEditor({
                   checked={showButton}
                   onCheckedChange={(v) => setShowButton(v === true)}
                   disabled={saving}
-                  aria-label="Also show a sign-in button"
+                  aria-label="Show a sign-in button"
                   className="mt-0.5"
                 />
                 <span>
-                  Also show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
+                  Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    Off = routed only; hidden from the public portal.
+                    {hasVerifiedDomain
+                      ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
+                      : 'Off hides it from the sign-in screen entirely.'}
                   </span>
                 </span>
               </label>
             </div>
-          )}
 
-          {/* Provisioning */}
-          <div className="space-y-4 border-t border-border/40 pt-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <Label className="font-medium">New users get role</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Auto-create accounts on first sign-in with this role.
-                </p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {autoCreateUsers && (
-                  <Select
-                    value={autoProvisionRole}
-                    onValueChange={(r) => setAutoProvisionRole(r as Role)}
-                    disabled={saving}
-                  >
-                    <SelectTrigger className="h-9 w-[160px] text-xs" aria-label="Default role">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="member">Member</SelectItem>
-                      <SelectItem value="user">User (portal only)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+            {/* Provisioning */}
+            <div className="space-y-4 border-t border-border/40 pt-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <Label className="font-medium">Auto-create accounts on first sign-in</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Create an account the first time someone signs in through this provider.
+                  </p>
+                </div>
                 <Switch
                   checked={autoCreateUsers}
                   onCheckedChange={setAutoCreateUsers}
                   disabled={saving}
                   aria-label="Auto-create accounts on first sign-in"
+                  className="mt-0.5 shrink-0"
                 />
               </div>
-            </div>
 
-            <AttributeMappingEditor mapping={mapping} disabled={saving} onChange={setMapping} />
+              {autoCreateUsers && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="idp-default-role" className="font-medium">
+                      Default role
+                    </Label>
+                    <Select
+                      value={autoProvisionRole}
+                      onValueChange={(r) => setAutoProvisionRole(r as Role)}
+                      disabled={saving}
+                    >
+                      <SelectTrigger
+                        id="idp-default-role"
+                        className="w-[220px]"
+                        aria-label="Default role"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="member">Member</SelectItem>
+                        <SelectItem value="user">User (portal only)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      New users get this role unless a rule below matches one of their claims.
+                    </p>
+                  </div>
+
+                  <ClaimMappingEditor
+                    mapping={mapping}
+                    disabled={saving}
+                    registrationId={registrationId}
+                    canTest={!!provider}
+                    onChange={setMapping}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter className="shrink-0 items-center border-t border-border/50 px-6 py-4 sm:justify-between">
           {provider ? (
             <span
               title={
                 isOnlyMethod
-                  ? 'This is the only enabled sign-in method — enable another before removing it.'
+                  ? 'This is the only enabled sign-in method. Enable another before removing it.'
                   : undefined
               }
             >
@@ -650,11 +711,62 @@ function RedirectUriCallout({ uri }: { uri: string }) {
 }
 
 /**
+ * Connection-test capstone for the connection block: one "Test sign-in" action
+ * plus a status line reflecting whether the connection is verified, never
+ * tested, or stale since the last config change. A fresh successful test is
+ * what unlocks SSO enforcement, so the row names that payoff.
+ */
+function ConnectionTestRow({
+  provider,
+  registrationId,
+  disabled,
+}: {
+  provider: IdentityProvider | null
+  registrationId: string
+  disabled: boolean
+}) {
+  const state = getConnectionTestState(provider)
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex-1">
+        <Label className="font-medium">Connection</Label>
+        <div className="mt-1 text-xs">
+          {state.kind === 'unsaved' && (
+            <span className="text-muted-foreground">
+              Save the provider first, then sign in through it to verify the connection.
+            </span>
+          )}
+          {state.kind === 'untested' && (
+            <span className="text-muted-foreground">
+              Not tested yet. Sign in through this provider to verify it. Required before you can
+              enforce SSO.
+            </span>
+          )}
+          {state.kind === 'verified' && (
+            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+              <CheckCircleIcon className="size-3.5 shrink-0" />
+              Verified <TimeAgo date={state.testedAt} />, ready to enforce SSO.
+            </span>
+          )}
+          {state.kind === 'stale' && (
+            <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+              <ClockIcon className="size-3.5 shrink-0" />
+              Connection changed since the last test. Re-test to enforce SSO.
+            </span>
+          )}
+        </div>
+      </div>
+      <TestSignInButton registrationId={registrationId} disabled={disabled || !provider} />
+    </div>
+  )
+}
+
+/**
  * Per-provider verified-domain list. Rewires `verified-domains-section` from
  * the workspace-wide single-SSO queries onto the provider's own `domains[]`
- * and the per-provider domain fns. No domains => the provider is a public
- * button; the precondition warning + enforce checkbox only matter once a
- * domain is verified.
+ * and the per-provider domain fns. A verified domain routes its users to this
+ * provider and can be enforced (SSO-only for that domain); the precondition
+ * warning + enforce checkbox only matter once a domain is verified.
  */
 function DomainsSection({
   provider,
@@ -671,21 +783,9 @@ function DomainsSection({
 
   const domains = provider?.domains ?? []
   const hasVerified = domains.some((d) => d.verifiedAt)
-  // Enforcement is available once the provider has a valid test sign-in that
-  // postdates the last connection-affecting change. Mirrors the server-side
-  // `isSsoEnforcementUnlocked(provider, null)` predicate (pure, no DB).
-  const enforceable = (() => {
-    if (!provider) return false
-    const testedMs = provider.lastSuccessfulTestAt
-      ? new Date(provider.lastSuccessfulTestAt).getTime()
-      : null
-    if (testedMs === null || Number.isNaN(testedMs)) return false
-    const changedMs = provider.detailsChangedAt
-      ? new Date(provider.detailsChangedAt).getTime()
-      : null
-    if (changedMs === null || Number.isNaN(changedMs)) return true
-    return testedMs > changedMs
-  })()
+  // Enforcement is available once the provider has a fresh test sign-in — same
+  // predicate that drives the connection status line (see getConnectionTestState).
+  const enforceable = getConnectionTestState(provider).kind === 'verified'
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: IDENTITY_PROVIDERS_KEY })
 
@@ -708,11 +808,11 @@ function DomainsSection({
   return (
     <div className="space-y-3 border-t border-border/40 pt-5">
       <div>
-        <Label className="font-medium">Domains</Label>
+        <Label className="font-medium">Verified domains</Label>
         <p className="mt-1 text-xs text-muted-foreground">
           {hasVerified
-            ? 'Users at a verified domain are routed here by default.'
-            : 'Optional. With no domains this shows as a public "Sign in with…" button.'}
+            ? 'Users at a verified domain are routed to this provider. Enforce a domain to require its users to sign in with SSO.'
+            : 'Verify a domain to route its users to this provider, and enforce SSO so they can only sign in this way.'}
         </p>
       </div>
 
@@ -742,7 +842,7 @@ function DomainsSection({
             <WarningBox
               variant="warning"
               title="Before you enforce"
-              description="Enforcing requires email delivery (break-glass) + one successful sign-in through this provider first."
+              description="Run a successful test sign-in and generate recovery codes first. They're your break-glass if SSO ever breaks."
             />
           )}
 
@@ -842,7 +942,7 @@ function DomainRow({
       const msg = err instanceof Error ? err.message : ''
       setEnforceError(
         msg === 'recovery_codes_required'
-          ? 'Generate recovery codes before enforcing SSO — they are the only break-glass way back in.'
+          ? 'Generate recovery codes before enforcing SSO. They are the only break-glass way back in.'
           : msg || 'Could not update enforcement.'
       )
     } finally {
@@ -949,101 +1049,146 @@ function DomainRow({
 }
 
 /**
- * IdP-attribute → role mapping. Same shape as the single-SSO
- * `attribute-mapping-section`, but the draft is owned by the editor and
- * persisted in the parent `upsertIdentityProviderFn` call rather than via
- * `updateAuthConfigFn`.
+ * Claim-to-role mapping: an optional override on top of the provider's Default
+ * role. With no rules everyone gets the default. The Claim path and each rule
+ * value are creatable autocompletes sourced from the last matching test sign-in
+ * (free text still allowed). Opens when `mapping !== null` or when a matching
+ * test produced suggestions. The parent's handleSave persists null unless the
+ * mapping carries rules or sync.
  */
-function AttributeMappingEditor({
+function ClaimMappingEditor({
   mapping,
   disabled,
+  registrationId,
+  canTest,
   onChange,
 }: {
   mapping: Mapping | null
   disabled: boolean
+  registrationId: string
+  /** True once the provider is saved, so a test sign-in can actually run. */
+  canTest: boolean
   onChange: (mapping: Mapping | null) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const enabled = mapping !== null
-  const current: Mapping = mapping ?? { claimPath: 'groups', rules: [], defaultRole: 'member' }
-
+  const ruleCount = mapping?.rules.length ?? 0
+  const hasConfig = mapping !== null
+  const current: Mapping = mapping ?? { claimPath: 'groups', rules: [] }
   const update = (patch: Partial<Mapping>) => onChange({ ...current, ...patch })
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-2">
-          <AdjustmentsHorizontalIcon className="mt-0.5 size-4 text-muted-foreground" />
-          <div>
-            <Label className="font-medium">Attribute → role</Label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Source the role from an IdP claim. Rules are first-match-wins.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {enabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => setOpen((o) => !o)}
-            >
-              {open ? 'Done' : 'Configure…'}
-            </Button>
-          )}
-          <Switch
-            checked={enabled}
-            onCheckedChange={(v) => {
-              if (v) {
-                onChange(current)
-                setOpen(true)
-              } else {
-                onChange(null)
-                setOpen(false)
-              }
-            }}
-            disabled={disabled}
-            aria-label="Enable attribute mapping"
-          />
-        </div>
-      </div>
+  const { lastSuccess } = useSsoTestSignIn()
+  const suggestions =
+    lastSuccess && lastSuccess.registrationId === registrationId
+      ? deriveClaimSuggestions(lastSuccess.allClaims)
+      : null
+  const hasSuggestions = (suggestions?.paths.length ?? 0) > 0
+  const pathSuggestions = (suggestions?.paths ?? []).map((p) => ({ value: p }))
+  const valueSuggestions = (suggestions?.valuesByPath[current.claimPath] ?? []).map((v) => ({
+    value: v,
+  }))
 
-      {enabled && open && (
-        <div className="space-y-4 pl-6">
-          <div className="space-y-2">
+  // Initialize open with hasSuggestions too, so a matching test sign-in's
+  // suggestions don't cause a closed-then-open flash on mount.
+  const [open, setOpen] = useState(hasConfig || hasSuggestions)
+  useEffect(() => {
+    if (hasSuggestions) setOpen(true)
+  }, [hasSuggestions])
+
+  // Auto-fill the claim path when the IdP returned exactly one array claim and
+  // the provider has no mapping yet. Only overrides the untouched `groups`
+  // default; never fights a value the admin chose. Self-settles: once filled,
+  // `mapping` is non-null so this no-ops (relies on `onChange` being the stable
+  // `setMapping` setter that flips `mapping` non-null).
+  const onlyPath = suggestions && suggestions.paths.length === 1 ? suggestions.paths[0] : null
+  useEffect(() => {
+    if (mapping === null && onlyPath && onlyPath !== 'groups') {
+      onChange({ claimPath: onlyPath, rules: [] })
+    }
+  }, [mapping, onlyPath, onChange])
+
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <AdjustmentsHorizontalIcon className="size-4 text-muted-foreground" />
+          Map roles from claims
+          {ruleCount > 0 && (
+            <span className="text-xs font-normal text-muted-foreground">
+              · {ruleCount} rule{ruleCount === 1 ? '' : 's'}
+            </span>
+          )}
+        </span>
+        <span className="text-muted-foreground">{open ? '−' : '+'}</span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-border/40 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            Source the role from an IdP claim. Rules are first-match-wins; with no rules everyone
+            gets the default role above.
+          </p>
+
+          <div className="space-y-1.5">
             <Label htmlFor="idp-claim-path">Claim path</Label>
-            <Input
-              id="idp-claim-path"
+            <Autocomplete
               value={current.claimPath}
-              onChange={(e) => update({ claimPath: e.target.value })}
+              onValueChange={(v) => update({ claimPath: v })}
+              suggestions={pathSuggestions}
+              ariaLabel="Claim path"
               placeholder="groups, realm_access.roles, https://acme.com/roles"
+              emptyHint={
+                <div className="space-y-2 px-1 py-3 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Run a test sign-in to discover your IdP&apos;s claims.
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Or type a path like groups, realm_access.roles, or https://acme.com/roles.
+                  </p>
+                  <TestSignInButton
+                    registrationId={registrationId}
+                    disabled={disabled || !canTest}
+                  />
+                </div>
+              }
               disabled={disabled}
+              className="w-full"
             />
+            {hasSuggestions && suggestions && (
+              <p className="text-xs text-muted-foreground">
+                From your test sign-in: {suggestions.paths.join(', ')}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>Rules</Label>
             {current.rules.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                No rules — everyone gets the default role.
+                No rules. Everyone gets the default role.
               </p>
             )}
             {current.rules.map((rule, index) => (
               <div key={index} className="flex items-center gap-2">
                 <span className="shrink-0 text-xs text-muted-foreground">contains</span>
-                <Input
+                <Autocomplete
                   value={rule.whenContains}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     update({
                       rules: current.rules.map((r, i) =>
-                        i === index ? { ...r, whenContains: e.target.value } : r
+                        i === index ? { ...r, whenContains: v } : r
                       ),
                     })
                   }
-                  placeholder="admins"
+                  suggestions={valueSuggestions}
+                  ariaLabel={`Claim value to match (rule ${index + 1})`}
+                  placeholder="value to match"
+                  emptyHint="No values seen yet. Type the value to match."
                   disabled={disabled}
+                  className="flex-1"
                 />
                 <span className="shrink-0 text-xs text-muted-foreground">→</span>
                 <Select
@@ -1096,26 +1241,6 @@ function AttributeMappingEditor({
             </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="idp-default-role">Default role</Label>
-            <Select
-              value={current.defaultRole}
-              onValueChange={(r) => update({ defaultRole: r as Role })}
-              disabled={disabled}
-            >
-              <SelectTrigger id="idp-default-role" className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <label className="flex items-start gap-2 text-xs">
             <Switch
               checked={current.syncOnEverySignIn ?? false}
@@ -1124,8 +1249,9 @@ function AttributeMappingEditor({
               disabled={disabled}
             />
             <span>
-              <span className="font-medium">Sync on every sign-in.</span> Re-resolve the role on
-              each sign-in. Demotes members when their IdP group changes.
+              <span className="font-medium">Sync role on every sign-in.</span> Re-applies the rules
+              so a role can be promoted or demoted when their claims change. Off: set once, on first
+              sign-in.
             </span>
           </label>
         </div>

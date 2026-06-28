@@ -355,8 +355,6 @@ export type IdentityProviderAttributeMapping = {
   claimPath: string
   /** First-match-wins role assignment from the resolved claim. */
   rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
-  /** Used when no rule matches. */
-  defaultRole: 'admin' | 'member' | 'user'
   /** When true, every sign-in re-resolves and may demote/promote. */
   syncOnEverySignIn?: boolean
 }

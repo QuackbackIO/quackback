@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
+  shouldRenderPublicButton,
   type ProviderWithDomains,
 } from '../provider-ids'
 import { isHardBound, isSsoBlockedForRole } from '../auth-restrictions'
@@ -68,6 +69,19 @@ describe('findProviderForDomainEmail', () => {
   })
 })
 
+describe('shouldRenderPublicButton — showButton is authoritative', () => {
+  it('shows a provider when showButton is true', () => {
+    expect(shouldRenderPublicButton({ showButton: true })).toBe(true)
+  })
+
+  it('hides a provider when showButton is false, regardless of verified domains', () => {
+    // The toggle is the single source of truth for button visibility: off
+    // parks a domain-less provider (reachable by nobody) and makes a routed
+    // provider email-routed-only — domains never override the admin's choice.
+    expect(shouldRenderPublicButton({ showButton: false })).toBe(false)
+  })
+})
+
 describe('isHardBound — C2 owning-provider rule', () => {
   it('C2 bypass blocked: a DIFFERENT registered OIDC provider B cannot satisfy A’s enforced domain', () => {
     // alice@acme.com is enforced & owned by A ('sso'). Provider B asserting
@@ -117,12 +131,12 @@ describe('isHardBound — C2 owning-provider rule', () => {
 })
 
 describe('isSsoBlockedForRole — portal eligibility', () => {
-  // A public, button-only provider has no verified domains.
+  // A public, button-only provider: no verified domains, button shown.
   const buttonOnly: ProviderWithDomains = {
     id: 'idp_pub',
     registrationId: 'custom-oidc',
     domains: [],
-    showButton: false,
+    showButton: true,
   }
   // A ROUTED provider (verified domain) the admin ALSO opted into a public
   // button via showButton — renders a button AND has a domain.
@@ -164,5 +178,18 @@ describe('isSsoBlockedForRole — portal eligibility', () => {
 
   it('blocks an unknown provider (fail closed for portal users)', () => {
     expect(isSsoBlockedForRole('user', 'x@x.com', 'oidc_unknown', all)).toBe(true)
+  })
+
+  it('blocks a portal user on a domain-less provider whose button is hidden (showButton=false)', () => {
+    // A parked provider (no verified domain, button hidden) is reachable by
+    // nobody — completing its callback must not pass the gate, or the brand-new
+    // shell cleanup would delete the account a stray OAuth start just created.
+    const hidden: ProviderWithDomains = {
+      id: 'idp_hidden',
+      registrationId: 'oidc_hidden',
+      domains: [],
+      showButton: false,
+    }
+    expect(isSsoBlockedForRole('user', 'anyone@anywhere.com', 'oidc_hidden', [hidden])).toBe(true)
   })
 })
