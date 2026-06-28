@@ -45,9 +45,10 @@ export interface ProviderWithDomains {
   id: string
   registrationId: string
   domains: readonly DomainLike[]
-  /** Admin opt-in to also show a public sign-in button for a routed provider.
-   *  Drives {@link shouldRenderPublicButton}; required so the enforcement gate
-   *  and the button-render decision share one predicate and can't drift. */
+  /** Master switch for the provider's public sign-in button. Drives
+   *  {@link shouldRenderPublicButton}; off hides the button regardless of
+   *  domains. Required so the enforcement gate and the button-render decision
+   *  share one predicate and can't drift. */
   showButton: boolean
 }
 
@@ -59,9 +60,11 @@ export function verifiedDomainCount(p: {
 }
 
 /**
- * Whether the provider is offered as a public sign-in button — button-only
- * providers (no verified domain) always show; a routed provider shows only
- * when the admin opts it back in via `showButton`.
+ * Whether the provider is offered as a public sign-in button. `showButton` is
+ * the single source of truth: the admin decides, per provider, whether it
+ * appears. Off hides it regardless of domains — a routed provider becomes
+ * email-routed-only, and a domain-less provider is parked (reachable by
+ * nobody until the toggle is turned back on).
  *
  * THE canonical predicate: shared by the public-button list
  * (`getPublicOidcProviders`), the admin UI, and the portal-eligibility gate
@@ -69,11 +72,8 @@ export function verifiedDomainCount(p: {
  * settings service — and so "what renders a button" and "who may sign in via
  * it" can never drift apart.
  */
-export function shouldRenderPublicButton(p: {
-  domains: readonly { verifiedAt: string | null }[]
-  showButton: boolean
-}): boolean {
-  return verifiedDomainCount(p) === 0 || p.showButton
+export function shouldRenderPublicButton(p: { showButton: boolean }): boolean {
+  return p.showButton
 }
 
 /** The owning provider of the email's matched verified domain. */

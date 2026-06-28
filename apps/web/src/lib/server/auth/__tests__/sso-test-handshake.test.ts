@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 import { runHandshake, type HandshakeInput } from '../sso-test-handshake'
 
 // runHandshake fetches discovery / token / JWKS / userinfo through
@@ -96,5 +97,64 @@ describe('runHandshake', () => {
     expect(result.stage).toBe('token-exchange')
     expect(result.errorCode).toBe('invalid_grant')
     expect(result.hint).toMatch(/PKCE|code reuse|expired|redirect URI/i)
+  })
+
+  it('surfaces the full ID token payload (allClaims) on success, including non-standard claims', async () => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
+    const publicJwk = await exportJWK(publicKey)
+    publicJwk.kid = 'test-key'
+    publicJwk.alg = 'RS256'
+
+    const issuer = 'https://idp.example'
+    const idToken = await new SignJWT({
+      email: 'alice@idp.example',
+      name: 'Alice Example',
+      nonce: 'nonce789',
+      // The non-standard claim the curated `claims` view drops but admins need.
+      groups: ['11111111-2222-3333-4444-555555555555', 'feedback-admins'],
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+      .setIssuer(issuer)
+      .setAudience('cid')
+      .setSubject('user-sub-123')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey)
+
+    // Fetch order: 1) discovery  2) token  3) JWKS.
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ issuer, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks` }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id_token: idToken,
+          access_token: 'at',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        }),
+        { status: 200 }
+      )
+    )
+    safeFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 })
+    )
+
+    const result = await runHandshake(baseInput)
+    if (!result.ok) throw new Error(`expected success, got ${result.stage}: ${result.hint}`)
+
+    // The curated subset still works for the friendly display + identity match.
+    expect(result.claims.email).toBe('alice@idp.example')
+    // ...and the full payload is surfaced verbatim, including `groups`.
+    expect(result.allClaims).toBeDefined()
+    expect(result.allClaims?.groups).toEqual([
+      '11111111-2222-3333-4444-555555555555',
+      'feedback-admins',
+    ])
+    expect(result.allClaims?.iss).toBe(issuer)
+    expect(result.allClaims?.sub).toBe('user-sub-123')
   })
 })
