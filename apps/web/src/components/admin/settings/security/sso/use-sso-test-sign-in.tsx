@@ -48,6 +48,7 @@ import {
   type WireResult,
   type SsoTestState,
 } from './sso-test-state'
+import type { JsonValue } from '@/lib/shared/json'
 
 const POLL_INTERVAL_MS = 2000
 // 150 polls * 2s = 5 minutes. Redis test-session TTL is 10 minutes;
@@ -75,6 +76,9 @@ interface OpenOptions {
 
 interface SsoTestSignInContextValue {
   open: (opts?: OpenOptions) => void
+  /** The most recent successful test sign-in, tagged with the provider it ran
+   *  against so a consumer only uses claims from a test of THAT provider. */
+  lastSuccess: { registrationId: string; allClaims: Record<string, JsonValue> } | null
 }
 
 const SsoTestSignInContext = createContext<SsoTestSignInContextValue | null>(null)
@@ -93,6 +97,10 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   const pollResult = useServerFn(getSsoTestResultFn)
   const [state, dispatch] = useReducer(ssoTestReducer, initialSsoTestState)
   const [applying, setApplying] = useState(false)
+  const [lastSuccess, setLastSuccess] = useState<{
+    registrationId: string
+    allClaims: Record<string, JsonValue>
+  } | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const onSuccessRef = useRef<OnSuccess | null>(null)
@@ -159,7 +167,13 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
       clearPoll()
       clearPopup()
       dispatch({ type: 'resolved', result, identityMatched })
-      if (result.ok) void runAutoApply()
+      if (result.ok) {
+        setLastSuccess({
+          registrationId: registrationIdRef.current,
+          allClaims: result.allClaims ?? {},
+        })
+        void runAutoApply()
+      }
     },
     [clearPoll, clearPopup, runAutoApply]
   )
@@ -257,7 +271,7 @@ export function SsoTestSignInProvider({ children }: { children: ReactNode }) {
   }, [startTest, pollResult, trackPopup, clearPoll, clearPopup, resolveTest])
 
   return (
-    <SsoTestSignInContext.Provider value={{ open }}>
+    <SsoTestSignInContext.Provider value={{ open, lastSuccess }}>
       {children}
       <SsoTestSignInModal
         state={state}
@@ -521,7 +535,7 @@ function TestResultPanel({
          *  wrong account, but the SSO connection itself is verified. */}
         {identityMatched === false && result.claims.email ? (
           <div className="rounded border border-muted bg-muted/30 p-2 text-xs text-muted-foreground">
-            Tested as {result.claims.email} — a different account than yours. The connection still
+            Tested as {result.claims.email}, a different account than yours. The connection still
             works.
           </div>
         ) : null}
@@ -530,7 +544,11 @@ function TestResultPanel({
             Show IdP response
           </summary>
           <pre className="mt-2 overflow-auto rounded bg-muted/30 p-2 font-mono text-[11px]">
-            {JSON.stringify({ claims: result.claims, tokenInfo: result.tokenInfo }, null, 2)}
+            {JSON.stringify(
+              { claims: result.allClaims ?? result.claims, tokenInfo: result.tokenInfo },
+              null,
+              2
+            )}
           </pre>
         </details>
       </div>

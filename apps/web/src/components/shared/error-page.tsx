@@ -28,13 +28,44 @@ export function FriendlyShell({ children, fullPage = true }: FriendlyShellProps)
   )
 }
 
-export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+/**
+ * True for the role-gate failures thrown by requireAuth / requireWorkspaceRole
+ * (e.g. "Access denied: Requires [admin], got member"). These are expected
+ * outcomes, not crashes, so they get a calm permission notice rather than the
+ * scary generic error treatment.
+ */
+export function isAuthorizationError(error: Error): boolean {
+  return /access denied/i.test(error.message)
+}
+
+export function PermissionDeniedPage({ fullPage = true }: { fullPage?: boolean }) {
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Quack! Something tripped us up.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">You don't have access to this page.</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        An unexpected error got in the way. Try again, or head back to the home page — usually one
-        of those does the trick.
+        This area is limited to workspace admins. If you think that's a mistake, ask an admin on
+        your team for access.
+      </p>
+
+      <div className="mt-6">
+        <Button variant="outline" asChild>
+          <a href="/">Go home</a>
+        </Button>
+      </div>
+    </FriendlyShell>
+  )
+}
+
+export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPageProps) {
+  if (isAuthorizationError(error)) {
+    return <PermissionDeniedPage fullPage={fullPage} />
+  }
+
+  return (
+    <FriendlyShell fullPage={fullPage}>
+      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong.</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        An unexpected error occurred. Try again, or return to the home page.
       </p>
 
       {error.message && (

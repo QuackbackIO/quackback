@@ -366,10 +366,14 @@ export async function listPortalUsers(
 }
 
 /**
- * Remove a portal user from an organization
+ * Remove a portal user from the portal (soft removal).
  *
- * Deletes the principal record with role='user'.
- * Since users are org-scoped, this also deletes the user record (CASCADE).
+ * Deletes the `principal` record (role='user') only — the Better-Auth `user`
+ * and `account` rows are intentionally retained so we still recognize the
+ * person if they return (and their re-join shows distinct "joined" vs
+ * "account created" dates). The FK is `principal.userId -> user` with
+ * onDelete cascade, so deleting the principal does NOT remove the user; a
+ * returning sign-in re-provisions a principal via the SSO hooks or lazily.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {

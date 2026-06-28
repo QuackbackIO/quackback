@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { getNestedClaim, resolveSsoRole } from '../resolve-sso-role'
-import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
+import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
 
 describe('getNestedClaim', () => {
   it('reads a dotted path', () => {
@@ -41,12 +41,10 @@ describe('getNestedClaim', () => {
 })
 
 const mapping = (
-  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>,
-  defaultRole: 'admin' | 'member' | 'user' = 'member'
-): NonNullable<AuthConfig['ssoOidc']>['attributeMapping'] => ({
+  rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+): IdentityProviderAttributeMapping => ({
   claimPath: 'groups',
   rules,
-  defaultRole,
 })
 
 describe('resolveSsoRole', () => {
@@ -69,17 +67,17 @@ describe('resolveSsoRole', () => {
     expect(role).toBe('admin')
   })
 
-  it('falls back to defaultRole when no rule matches', () => {
+  it('returns null when no rule matches (caller supplies the default)', () => {
     const role = resolveSsoRole(
       { groups: ['support'] },
-      mapping([{ whenContains: 'admins', role: 'admin' }], 'user')
+      mapping([{ whenContains: 'admins', role: 'admin' }])
     )
-    expect(role).toBe('user')
+    expect(role).toBeNull()
   })
 
-  it('falls back to defaultRole when the claim is missing', () => {
-    const role = resolveSsoRole({}, mapping([{ whenContains: 'admins', role: 'admin' }], 'member'))
-    expect(role).toBe('member')
+  it('returns null when the claim is missing', () => {
+    const role = resolveSsoRole({}, mapping([{ whenContains: 'admins', role: 'admin' }]))
+    expect(role).toBeNull()
   })
 
   it('is case-insensitive when matching', () => {
@@ -96,7 +94,6 @@ describe('resolveSsoRole', () => {
       {
         claimPath: 'https://acme.com/roles',
         rules: [{ whenContains: 'platform-admins', role: 'admin' }],
-        defaultRole: 'member',
       }
     )
     expect(role).toBe('admin')

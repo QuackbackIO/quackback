@@ -16,19 +16,16 @@ describe('identity providers visibility', () => {
       'routed'
     )
     // A mix of pending + verified still routes.
-    expect(
-      deriveVisibility({ domains: [{ verifiedAt: null }, { verifiedAt: 'x' }] as any })
-    ).toBe('routed')
+    expect(deriveVisibility({ domains: [{ verifiedAt: null }, { verifiedAt: 'x' }] as any })).toBe(
+      'routed'
+    )
   })
 
-  it('public button shows for button providers and routed+showButton', () => {
-    expect(shouldRenderPublicButton({ domains: [], showButton: false } as any)).toBe(true)
-    expect(shouldRenderPublicButton({ domains: [{ verifiedAt: 'x' }], showButton: false } as any)).toBe(
-      false
-    )
-    expect(shouldRenderPublicButton({ domains: [{ verifiedAt: 'x' }], showButton: true } as any)).toBe(
-      true
-    )
+  it('public button visibility is governed solely by showButton', () => {
+    // Off hides the provider even with no verified domain (parked); on shows
+    // it whether it is button-only or also routed by a verified domain.
+    expect(shouldRenderPublicButton({ showButton: false })).toBe(false)
+    expect(shouldRenderPublicButton({ showButton: true })).toBe(true)
   })
 
   it('verifiedDomainCount counts only domains with a truthy verifiedAt', () => {

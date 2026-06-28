@@ -9,15 +9,33 @@
  * persisted, the editor must always reopen on the tile the admin selected, and
  * a save must carry that `kind` to the server.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { ProviderEditor } from '../provider-editor'
 
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
+  Element.prototype.setPointerCapture = vi.fn()
+  Element.prototype.releasePointerCapture = vi.fn()
+})
+
 const { upsertSpy } = vi.hoisted(() => ({
-  upsertSpy: vi.fn(async (_args: { data: { kind: string | null } }) => undefined),
+  upsertSpy: vi.fn(
+    async (_args: { data: { kind: string | null; attributeMapping: unknown } }) => undefined
+  ),
+}))
+
+const { ssoTestRef } = vi.hoisted(() => ({
+  ssoTestRef: {
+    current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
+  },
+}))
+vi.mock('../../sso/use-sso-test-sign-in', () => ({
+  useSsoTestSignIn: () => ({ open: vi.fn(), lastSuccess: ssoTestRef.current }),
 }))
 
 // useServerFn just unwraps the server fn in the browser — return it as-is so
@@ -94,6 +112,37 @@ function renderEditor(provider: IdentityProvider) {
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  ssoTestRef.current = null
+})
+
+describe('<ProviderEditor> provisioning consolidation', () => {
+  it('shows a single Default role and a collapsed group-mapping disclosure when no rules', () => {
+    renderEditor(
+      makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', attributeMapping: null })
+    )
+    // One default-role control, bound to autoProvisionRole.
+    expect(screen.getByLabelText('Default role')).toBeInTheDocument()
+    // The claim-mapping section is present but the rules are collapsed.
+    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    // No nested "default role" duplicate inside the mapping.
+    expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
+  })
+
+  it('hides the role controls entirely when auto-create is off', () => {
+    renderEditor(makeProvider({ autoCreateUsers: false }))
+    expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Map roles from claims/ })).not.toBeInTheDocument()
+  })
+
+  it('persists attributeMapping=null when saved with no rules and sync off', async () => {
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.attributeMapping).toBeNull()
+  })
 })
 
 describe('<ProviderEditor> IdP shortcut persistence', () => {
@@ -126,5 +175,60 @@ describe('<ProviderEditor> IdP shortcut persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
     expect(upsertSpy.mock.calls.at(-1)![0].data.kind).toBe('auth0')
+  })
+})
+
+describe('<ProviderEditor> connection-test status', () => {
+  it('shows "Not tested yet" when the provider has no successful test', () => {
+    renderEditor(makeProvider({ lastSuccessfulTestAt: null }))
+    expect(screen.getByText(/Not tested yet/)).toBeInTheDocument()
+  })
+
+  it('shows the verified status (ready to enforce) for a fresh successful test', () => {
+    renderEditor(
+      makeProvider({ lastSuccessfulTestAt: '2026-05-02T00:00:00.000Z', detailsChangedAt: null })
+    )
+    expect(screen.getByText(/ready to enforce SSO/)).toBeInTheDocument()
+  })
+
+  it('shows the stale status when the connection changed since the last test', () => {
+    renderEditor(
+      makeProvider({
+        lastSuccessfulTestAt: '2026-05-01T00:00:00.000Z',
+        detailsChangedAt: '2026-05-02T00:00:00.000Z',
+      })
+    )
+    expect(screen.getByText(/changed since the last test/)).toBeInTheDocument()
+  })
+})
+
+describe('<ProviderEditor> claim-mapping autocomplete', () => {
+  it('names the observed claims inline and drops the old assist block', () => {
+    ssoTestRef.current = {
+      registrationId: 'oidc_x', // matches makeProvider().registrationId
+      allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
+    }
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    // Inline hint names the observed claims (disclosure auto-opens on suggestions).
+    expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
+    // The old batch-add block's caption is gone.
+    expect(screen.queryByText(/Run a test as another user/)).not.toBeInTheDocument()
+    // Claim path is now an autocomplete (combobox), not a plain textbox.
+    expect(screen.getByRole('combobox', { name: 'Claim path' })).toBeInTheDocument()
+  })
+
+  it('auto-fills the claim path when the test returned exactly one array claim', () => {
+    ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
+    renderEditor(makeProvider({ autoCreateUsers: true, attributeMapping: null }))
+    expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
+  })
+
+  it('shows no inline suggestions for a test of a different provider', () => {
+    ssoTestRef.current = { registrationId: 'oidc_other', allClaims: { roles: ['admin'] } }
+    renderEditor(
+      makeProvider({ autoCreateUsers: true, attributeMapping: { claimPath: 'groups', rules: [] } })
+    )
+    // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
+    expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()
   })
 })
