@@ -405,6 +405,19 @@ describe('createArticle slug generation (#285)', () => {
   })
 })
 
+describe('updateArticle slug generation (#285)', () => {
+  it('falls back to a generic slug when an explicit empty slug is given', async () => {
+    await updateArticle('article_1' as HelpCenterArticleId, { slug: '' })
+    expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('article')
+  })
+
+  it('keeps an explicit slug that only collides with the same article', async () => {
+    mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_1' })
+    await updateArticle('article_1' as HelpCenterArticleId, { slug: 'guide' })
+    expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('guide')
+  })
+})
+
 describe('publishArticle', () => {
   it('sets publishedAt to current date', async () => {
     mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'test', name: 'Test' })

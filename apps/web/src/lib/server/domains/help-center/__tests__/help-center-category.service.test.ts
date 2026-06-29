@@ -432,6 +432,27 @@ describe('createCategory slug generation (#285)', () => {
   })
 })
 
+describe('updateCategory slug generation (#285)', () => {
+  it('falls back to a generic slug when an explicit empty slug is given', async () => {
+    await updateCategory('category_1' as HelpCenterCategoryId, { slug: '' })
+    expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('category')
+  })
+
+  it('disambiguates an explicit slug that collides with another category', async () => {
+    mockCategoryFindFirst
+      .mockResolvedValueOnce({ id: 'category_other' })
+      .mockResolvedValueOnce(null)
+    await updateCategory('category_1' as HelpCenterCategoryId, { slug: 'faq' })
+    expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('faq-2')
+  })
+
+  it('keeps an explicit slug that only collides with the same category', async () => {
+    mockCategoryFindFirst.mockResolvedValueOnce({ id: 'category_1' })
+    await updateCategory('category_1' as HelpCenterCategoryId, { slug: 'faq' })
+    expect((updateSetCalls[0][0] as Record<string, unknown>).slug).toBe('faq')
+  })
+})
+
 describe('deleteCategory', () => {
   it('soft deletes the category', async () => {
     mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', parentId: null }])

@@ -17,6 +17,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
@@ -119,36 +120,15 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
   return resolveArticleWithCategory(article)
 }
 
-// Slug base for article titles that romanize to nothing (emoji- or
-// punctuation-only). slugify() transliterates CJK, but still returns ''
-// for those — an empty slug breaks the NOT NULL kb_articles_slug_idx
-// unique index and slug routing. Mirrors FALLBACK_BOARD_SLUG (#285).
+// Fallback slug base for article titles that romanize to nothing (see
+// uniqueHelpCenterSlug). 'article', 'article-2', ...
 const FALLBACK_ARTICLE_SLUG = 'article'
 
-/**
- * Build a unique article slug. Falls back to a generic base when the
- * desired slug is empty, then appends a numeric suffix until free.
- * `excludeId` skips the row being renamed so it doesn't collide with
- * itself. The unique index covers all rows (it is not filtered on
- * deleted_at), so collisions are probed against soft-deleted rows too.
- */
-async function uniqueArticleSlug(
-  desired: string,
-  excludeId?: HelpCenterArticleId
-): Promise<string> {
-  const base = desired || FALLBACK_ARTICLE_SLUG
-  let candidate = base
-  let counter = 2
-  while (true) {
-    const collision = await db.query.helpCenterArticles.findFirst({
-      where: eq(helpCenterArticles.slug, candidate),
-      columns: { id: true },
-    })
-    if (!collision || (excludeId && collision.id === excludeId)) return candidate
-    candidate = `${base}-${counter}`
-    counter++
-  }
-}
+const findArticleSlugConflict = (slug: string) =>
+  db.query.helpCenterArticles.findFirst({
+    where: eq(helpCenterArticles.slug, slug),
+    columns: { id: true },
+  })
 
 export async function createArticle(
   input: CreateArticleInput,
@@ -185,7 +165,11 @@ export async function createArticle(
     }
     effectivePrincipalId = principalId
   }
-  const slug = await uniqueArticleSlug(input.slug?.trim() || slugify(title))
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(title),
+    FALLBACK_ARTICLE_SLUG,
+    findArticleSlugConflict
+  )
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -235,7 +219,13 @@ export async function updateArticle(
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_ARTICLE_SLUG,
+      findArticleSlugConflict,
+      id
+    )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   const updated = await db.transaction(async (tx) => {

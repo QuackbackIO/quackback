@@ -81,6 +81,9 @@ export function stripMarkdownPreview(text: string, maxLength = 150): string {
  * supply their own fallback.
  */
 export function slugify(text: string): string {
+  // Guard nullish input: transliterate() coerces via String(), which would
+  // otherwise turn undefined/null into the literal slug "undefined"/"null".
+  if (!text) return ''
   return slugifyLib(transliterate(text), { lower: true, strict: true })
 }
 

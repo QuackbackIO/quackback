@@ -112,6 +112,14 @@ describe('board slug generation for non-Latin names (#285)', () => {
       expect(capturedInsert.slug).toBe('feature-requests')
     })
 
+    it('rejects an explicit slug that slugifies to nothing', async () => {
+      // The REST schema allows hyphen-only slugs like "---"; an explicit slug
+      // that romanizes to nothing is a caller error, not a fallback case.
+      await expect(createBoard({ name: 'Roadmap', slug: '---' })).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
+      })
+    })
+
     it('falls back to a generic base for emoji-only names', async () => {
       // Emoji romanize to nothing, so there is no name-derived slug — the
       // generic fallback keeps the board addressable.

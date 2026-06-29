@@ -13,6 +13,7 @@ import {
 import type { HelpCenterCategoryId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterCategory,
   HelpCenterCategoryWithCount,
@@ -214,42 +215,25 @@ export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterC
   return category
 }
 
-// Slug base for category names that romanize to nothing (emoji- or
-// punctuation-only). slugify() transliterates CJK, but still returns ''
-// for those — an empty slug breaks the NOT NULL kb_categories_slug_idx
-// unique index and slug routing. Mirrors FALLBACK_BOARD_SLUG (#285).
+// Fallback slug base for category names that romanize to nothing (see
+// uniqueHelpCenterSlug). 'category', 'category-2', ...
 const FALLBACK_CATEGORY_SLUG = 'category'
 
-/**
- * Build a unique category slug. Falls back to a generic base when the
- * desired slug is empty, then appends a numeric suffix until free.
- * `excludeId` skips the row being renamed so it doesn't collide with
- * itself. The unique index covers all rows (it is not filtered on
- * deleted_at), so collisions are probed against soft-deleted rows too.
- */
-async function uniqueCategorySlug(
-  desired: string,
-  excludeId?: HelpCenterCategoryId
-): Promise<string> {
-  const base = desired || FALLBACK_CATEGORY_SLUG
-  let candidate = base
-  let counter = 2
-  while (true) {
-    const collision = await db.query.helpCenterCategories.findFirst({
-      where: eq(helpCenterCategories.slug, candidate),
-      columns: { id: true },
-    })
-    if (!collision || (excludeId && collision.id === excludeId)) return candidate
-    candidate = `${base}-${counter}`
-    counter++
-  }
-}
+const findCategorySlugConflict = (slug: string) =>
+  db.query.helpCenterCategories.findFirst({
+    where: eq(helpCenterCategories.slug, slug),
+    columns: { id: true },
+  })
 
 export async function createCategory(input: CreateCategoryInput): Promise<HelpCenterCategory> {
   const name = input.name?.trim()
   if (!name) throw new ValidationError('VALIDATION_ERROR', 'Name is required')
 
-  const slug = await uniqueCategorySlug(input.slug?.trim() || slugify(name))
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(name),
+    FALLBACK_CATEGORY_SLUG,
+    findCategorySlugConflict
+  )
 
   if (input.parentId !== undefined && input.parentId !== null) {
     const flat = await db.query.helpCenterCategories.findMany({
@@ -285,7 +269,13 @@ export async function updateCategory(
 ): Promise<HelpCenterCategory> {
   const updateData: Partial<typeof helpCenterCategories.$inferInsert> = { updatedAt: new Date() }
   if (input.name !== undefined) updateData.name = input.name.trim()
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_CATEGORY_SLUG,
+      findCategorySlugConflict,
+      id
+    )
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
   if (input.position !== undefined) updateData.position = input.position

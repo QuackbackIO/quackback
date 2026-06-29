@@ -106,8 +106,19 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     },
   })
 
-  // Derive the slug from an explicit value or the name, never empty.
-  const baseSlug = (input.slug ? slugify(input.slug) : slugify(input.name)) || FALLBACK_BOARD_SLUG
+  // Derive the slug. An explicit slug that slugifies to nothing is a caller
+  // error worth rejecting (mirrors updateBoard, and avoids silently turning
+  // e.g. slug "---" into a generic "board"); only a name-derived slug falls
+  // back to a generic base so any-language name can still create a board.
+  let baseSlug: string
+  if (input.slug) {
+    baseSlug = slugify(input.slug)
+    if (!baseSlug) {
+      throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
+    }
+  } else {
+    baseSlug = slugify(input.name) || FALLBACK_BOARD_SLUG
+  }
 
   // Check for slug uniqueness and generate a unique one if needed
   let slug = baseSlug
