@@ -17,7 +17,8 @@ import {
   unpublishArticle,
   deleteArticle,
 } from '@/lib/server/domains/help-center/help-center.service'
-import { formatArticle } from './-serialize'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
@@ -29,6 +30,41 @@ const updateArticleBody = z.object({
   publishedAt: z.string().datetime().nullable().optional(),
   authorId: z.string().optional(),
 })
+
+function formatArticle(article: {
+  id: string
+  slug: string
+  title: string
+  description: string | null
+  content: string
+  contentJson: TiptapContent | null
+  publishedAt: Date | null
+  viewCount: number
+  helpfulCount: number
+  notHelpfulCount: number
+  createdAt: Date
+  updatedAt: Date
+  category: { id: string; slug: string; name: string }
+  author: { id: string; name: string; avatarUrl: string | null } | null
+}) {
+  return {
+    id: article.id,
+    slug: article.slug,
+    title: article.title,
+    description: article.description,
+    // Render markdown from the canonical contentJson so images survive; falls
+    // back to the stored column for legacy rows.
+    content: contentJsonToMarkdown(article.contentJson, article.content),
+    publishedAt: article.publishedAt?.toISOString() || null,
+    viewCount: article.viewCount,
+    helpfulCount: article.helpfulCount,
+    notHelpfulCount: article.notHelpfulCount,
+    createdAt: article.createdAt.toISOString(),
+    updatedAt: article.updatedAt.toISOString(),
+    category: article.category,
+    author: article.author,
+  }
+}
 
 export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')({
   server: {
