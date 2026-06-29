@@ -668,11 +668,11 @@ test.describe('Changelog - Admin/Public Publishing Pipeline', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 10000 })
 
-    const displayDateLabel = dialog.getByText('Display date', { exact: true })
+    const displayDateLabel = dialog.getByText('Published date', { exact: true })
     await expect(displayDateLabel).toBeVisible({ timeout: 5000 })
 
     const displayDateRow = dialog.locator('div').filter({
-      has: page.getByText('Display date', { exact: true }),
+      has: page.getByText('Published date', { exact: true }),
     })
     await displayDateRow.getByRole('button').first().click()
 
