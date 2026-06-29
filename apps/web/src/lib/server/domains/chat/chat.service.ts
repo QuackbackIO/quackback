@@ -261,6 +261,7 @@ export async function sendVisitorMessage(
         .insert(conversations)
         .values({
           visitorPrincipalId: author.principalId,
+          channel: 'messenger',
           status: 'open',
           subject: preview(content || fallbackLabel, attachments),
         })
@@ -439,6 +440,7 @@ export async function startAgentConversation(
       .insert(conversations)
       .values({
         visitorPrincipalId: input.targetPrincipalId,
+        channel: 'messenger',
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',

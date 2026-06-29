@@ -42,10 +42,11 @@ export const conversations = pgTable(
       'assigned_agent_principal_id'
     ).references(() => principal.id, { onDelete: 'set null' }),
     status: text('status', { enum: CONVERSATION_STATUSES }).notNull().default('open'),
-    // The inbound channel this conversation arrived on. Existing widget threads
-    // are 'messenger'; 'email' / 'web_form' are added in later phases so the
-    // inbox is one polymorphic conversation type rather than separate objects.
-    channel: text('channel', { enum: CHANNELS }).notNull().default('messenger'),
+    // The inbound channel this conversation arrived on. Required and set
+    // explicitly by every create path; no default, so a conversation on a new
+    // channel ('email' / 'web_form' / ...) can never be silently labeled
+    // messenger by an omitted insert (the NOT NULL makes an omission fail loud).
+    channel: text('channel', { enum: CHANNELS }).notNull(),
     // Agent-set triage priority. 'none' = unset (the default for every row).
     priority: text('priority', { enum: CONVERSATION_PRIORITIES }).notNull().default('none'),
     // Optional human-readable subject, derived from the first message for the
