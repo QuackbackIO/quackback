@@ -29,6 +29,7 @@ export interface RouterContext {
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
   themeCookie?: BootstrapData['themeCookie']
+  prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
@@ -59,6 +60,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       settings,
       userRole,
       themeCookie,
+      prefersColorScheme,
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
@@ -107,6 +109,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       settings: redactedSettings,
       userRole,
       themeCookie,
+      prefersColorScheme,
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
@@ -211,7 +214,8 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
+  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale } =
+    Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // structuralSharing keeps the array reference stable across store updates that
   // don't change the matched routes, so RootDocument doesn't re-render every tick.
@@ -239,7 +243,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // ...but the script can't color the very first canvas the browser paints
   // during load, so when the theme is known we also commit the class and
   // color-scheme on the SSR <html> — otherwise dark users get a white flash.
-  const { className: themeClass, colorScheme } = resolveDocumentTheme(defaultTheme)
+  // `system` is resolved from the Sec-CH-Prefers-Color-Scheme hint when the
+  // browser sent it, so even system users get a fully server-rendered theme.
+  const { className: themeClass, colorScheme } = resolveDocumentTheme(
+    defaultTheme,
+    prefersColorScheme
+  )
 
   // Advertise the rendered language on the document during SSR so non-English
   // visitors don't get an English `<html lang>` (and so RTL locales aren't laid
@@ -252,9 +261,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
   // suppressHydrationWarning stays: next-themes' inline script sets the theme
-  // class on <html> before React hydrates, and for `system` the server can't
-  // know the OS preference, so the SSR markup and the hydrated DOM differ by
-  // design. This silences that one expected mismatch (one element, one level).
+  // class on <html> before React hydrates, and for `system` without the client
+  // hint (Firefox/Safari) the server can't know the OS preference, so the SSR
+  // markup and the hydrated DOM differ by design. This silences that one
+  // expected mismatch (one element, one level).
   return (
     <html
       lang={lang}

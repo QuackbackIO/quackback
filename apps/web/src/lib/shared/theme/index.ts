@@ -27,22 +27,40 @@ export function setThemeCookie(themeValue: Theme): void {
 }
 
 /**
+ * Parse a `Sec-CH-Prefers-Color-Scheme` request header. The browser sends this
+ * (after we advertise `Accept-CH`) as the structured-field token `light` or
+ * `dark`, telling the server the OS preference so `system` can be resolved
+ * during SSR. Returns null when absent or unrecognized.
+ */
+export function parsePrefersColorScheme(value: string | null | undefined): 'light' | 'dark' | null {
+  if (!value) return null
+  const token = value.trim().replace(/^"|"$/g, '').toLowerCase()
+  return token === 'dark' || token === 'light' ? token : null
+}
+
+/**
  * Resolve the `class` and `color-scheme` to put on the SSR-rendered <html> so
  * the first paint already matches the chosen theme. Skipping this leaves the
  * browser painting its default (light) canvas during load — a white flash
  * before next-themes' inline script swaps in the dark class.
  *
  * For an explicit theme we commit to it (e.g. color-scheme:dark keeps the
- * canvas dark even on a light-mode OS). `system` can't be resolved server-side,
- * so we leave the class off (the inline script adds it) and let `light dark`
- * tell the browser to take the canvas from the OS preference.
+ * canvas dark even on a light-mode OS). `system` is resolved from the OS
+ * preference when the browser sent the `Sec-CH-Prefers-Color-Scheme` hint;
+ * without it (Firefox/Safari, or the first request before the hint is known)
+ * we leave the class off (the inline script adds it) and let `light dark` tell
+ * the browser to take the canvas from the OS preference.
  */
-export function resolveDocumentTheme(theme: Theme): {
+export function resolveDocumentTheme(
+  theme: Theme,
+  systemPreference?: 'light' | 'dark' | null
+): {
   className: string | undefined
   colorScheme: 'light' | 'dark' | 'light dark'
 } {
-  if (theme === 'dark') return { className: 'dark', colorScheme: 'dark' }
-  if (theme === 'light') return { className: 'light', colorScheme: 'light' }
+  const resolved = theme === 'system' ? systemPreference : theme
+  if (resolved === 'dark') return { className: 'dark', colorScheme: 'dark' }
+  if (resolved === 'light') return { className: 'light', colorScheme: 'light' }
   return { className: undefined, colorScheme: 'light dark' }
 }
 
