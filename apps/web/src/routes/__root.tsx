@@ -251,6 +251,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
   const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
+  // suppressHydrationWarning stays: next-themes' inline script sets the theme
+  // class on <html> before React hydrates, and for `system` the server can't
+  // know the OS preference, so the SSR markup and the hydrated DOM differ by
+  // design. This silences that one expected mismatch (one element, one level).
   return (
     <html
       lang={lang}
