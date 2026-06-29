@@ -862,6 +862,13 @@
       "when": 1783382400000,
       "tag": "0122_help_center_slug_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0123_csat_comment_subscription_backfill",
+      "breakpoints": true
     }
   ]
 }

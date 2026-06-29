@@ -58,17 +58,29 @@ vi.mock('@/lib/server/db', () => {
     c.where = () => c
     // loadConversationOr404 -> select().from().where().limit()
     c.limit = async () => [conversationRow]
+    // recordCsat -> select(...).for('update'): the locked pre-update snapshot.
+    c.for = async () => [conversationRow]
     // recordCsat -> update().set().where().returning(): echo the current row so
     // conversationToDTO/emit receive a plausible post-update conversation.
     c.returning = async () => [{ ...conversationRow }]
     return c
   }
+  const tx = { select: () => chain(), update: () => chain() }
   return {
-    db: { select: () => chain(), update: () => chain() },
+    db: {
+      select: () => chain(),
+      update: () => chain(),
+      transaction: async (cb: (t: typeof tx) => unknown) => cb(tx),
+    },
     eq: vi.fn(),
     and: vi.fn(),
     isNull: vi.fn(),
-    conversations: { __name: 'conversations', id: 'id' },
+    conversations: {
+      __name: 'conversations',
+      id: 'id',
+      csatRating: 'csat_rating',
+      csatComment: 'csat_comment',
+    },
   }
 })
 
