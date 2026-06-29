@@ -17,6 +17,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
@@ -119,6 +120,16 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
   return resolveArticleWithCategory(article)
 }
 
+// Fallback slug base for article titles that romanize to nothing (see
+// uniqueHelpCenterSlug). 'article', 'article-2', ...
+const FALLBACK_ARTICLE_SLUG = 'article'
+
+const findArticleSlugConflict = (slug: string) =>
+  db.query.helpCenterArticles.findFirst({
+    where: eq(helpCenterArticles.slug, slug),
+    columns: { id: true },
+  })
+
 export async function createArticle(
   input: CreateArticleInput,
   principalId: PrincipalId,
@@ -154,7 +165,11 @@ export async function createArticle(
     }
     effectivePrincipalId = principalId
   }
-  const slug = input.slug?.trim() || slugify(title)
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(title),
+    FALLBACK_ARTICLE_SLUG,
+    findArticleSlugConflict
+  )
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -204,7 +219,13 @@ export async function updateArticle(
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_ARTICLE_SLUG,
+      findArticleSlugConflict,
+      id
+    )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   const updated = await db.transaction(async (tx) => {

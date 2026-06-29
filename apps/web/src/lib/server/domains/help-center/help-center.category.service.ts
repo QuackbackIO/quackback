@@ -13,6 +13,7 @@ import {
 import type { HelpCenterCategoryId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterCategory,
   HelpCenterCategoryWithCount,
@@ -214,11 +215,25 @@ export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterC
   return category
 }
 
+// Fallback slug base for category names that romanize to nothing (see
+// uniqueHelpCenterSlug). 'category', 'category-2', ...
+const FALLBACK_CATEGORY_SLUG = 'category'
+
+const findCategorySlugConflict = (slug: string) =>
+  db.query.helpCenterCategories.findFirst({
+    where: eq(helpCenterCategories.slug, slug),
+    columns: { id: true },
+  })
+
 export async function createCategory(input: CreateCategoryInput): Promise<HelpCenterCategory> {
   const name = input.name?.trim()
   if (!name) throw new ValidationError('VALIDATION_ERROR', 'Name is required')
 
-  const slug = input.slug?.trim() || slugify(name)
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(name),
+    FALLBACK_CATEGORY_SLUG,
+    findCategorySlugConflict
+  )
 
   if (input.parentId !== undefined && input.parentId !== null) {
     const flat = await db.query.helpCenterCategories.findMany({
@@ -254,7 +269,13 @@ export async function updateCategory(
 ): Promise<HelpCenterCategory> {
   const updateData: Partial<typeof helpCenterCategories.$inferInsert> = { updatedAt: new Date() }
   if (input.name !== undefined) updateData.name = input.name.trim()
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_CATEGORY_SLUG,
+      findCategorySlugConflict,
+      id
+    )
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
   if (input.position !== undefined) updateData.position = input.position
