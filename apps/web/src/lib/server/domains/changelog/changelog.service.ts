@@ -25,7 +25,7 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import {
   buildEventActor,
@@ -105,7 +105,9 @@ export async function createChangelog(
     .insert(changelogEntries)
     .values({
       title,
-      content,
+      // Store the markdown projection of the canonical contentJson so every
+      // consumer of the `content` column (webhooks, notifications) sees images.
+      content: contentJsonToMarkdown(contentJson, content),
       contentJson,
       principalId: author.principalId,
       publishedAt,
@@ -180,13 +182,17 @@ export async function updateChangelog(
   }
 
   if (input.title !== undefined) updateData.title = input.title.trim()
-  if (input.content !== undefined) updateData.content = input.content.trim()
   if (input.contentJson !== undefined || input.content !== undefined) {
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'changelog',
       principalId: existing.principalId ?? undefined,
     })
+    updateData.contentJson = contentJson
+    updateData.content = contentJsonToMarkdown(
+      contentJson,
+      (input.content ?? existing.content).trim()
+    )
   }
 
   if (input.displayDate !== undefined) {

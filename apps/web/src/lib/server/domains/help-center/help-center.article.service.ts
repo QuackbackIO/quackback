@@ -14,7 +14,7 @@ import {
 import type { HelpCenterArticleId, HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
@@ -182,7 +182,9 @@ export async function createArticle(
     .values({
       categoryId: input.categoryId as HelpCenterCategoryId,
       title,
-      content,
+      // Store the markdown projection of the canonical contentJson so the
+      // article list endpoint (which omits contentJson) still serves images.
+      content: contentJsonToMarkdown(contentJson, content),
       contentJson,
       slug,
       principalId: effectivePrincipalId,
@@ -209,13 +211,19 @@ export async function updateArticle(
   const updateData: Partial<typeof helpCenterArticles.$inferInsert> = { updatedAt: new Date() }
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined || input.contentJson !== undefined) {
-    if (input.content !== undefined) {
-      updateData.content = input.content.trim()
-    }
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'help-center',
     })
+    updateData.contentJson = contentJson
+    if (input.content !== undefined) {
+      updateData.content = contentJsonToMarkdown(contentJson, input.content.trim())
+    } else {
+      // contentJson-only edit (no markdown source): refresh the stored column
+      // only when the tree carries images, else leave it as-is.
+      const regenerated = contentJsonToMarkdown(contentJson, '')
+      if (regenerated) updateData.content = regenerated
+    }
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId

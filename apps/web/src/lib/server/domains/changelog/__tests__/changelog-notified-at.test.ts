@@ -232,6 +232,28 @@ describe('createChangelog wiring', () => {
 
     expect(dispatchChangelogPublished).not.toHaveBeenCalled()
   })
+
+  it('stores the markdown projection of contentJson so images reach the content column', async () => {
+    // Write-time regen: the stored `content` column must carry the image even
+    // when the caller-supplied markdown would have, so downstream consumers
+    // that read the column directly (webhooks, notifications) get it too.
+    const { createChangelog } = await import('../changelog.service')
+
+    await createChangelog(
+      {
+        title: 'X',
+        content: '![Shot](https://cdn.example.com/shot.png)',
+        publishState: { type: 'draft' },
+      },
+      AUTHOR
+    )
+
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('![Shot](https://cdn.example.com/shot.png)'),
+      })
+    )
+  })
 })
 
 describe('updateChangelog wiring', () => {
