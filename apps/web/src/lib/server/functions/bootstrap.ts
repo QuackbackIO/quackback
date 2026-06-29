@@ -163,11 +163,15 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // with the hint attached, so even a first-time `system` visitor gets the
   // right theme server-rendered (one extra request, once per origin). Browsers
   // that don't support it (Firefox/Safari) ignore it and fall back to the
-  // `color-scheme: light dark` canvas. Vary stops a shared cache from handing a
-  // dark-resolved document to a light-mode client.
+  // `color-scheme: light dark` canvas.
   setResponseHeader('Accept-CH', 'Sec-CH-Prefers-Color-Scheme')
   setResponseHeader('Critical-CH', 'Sec-CH-Prefers-Color-Scheme')
-  setResponseHeader('Vary', 'Sec-CH-Prefers-Color-Scheme')
+  // This document is keyed on every input we render into it: the `theme` cookie
+  // (and the session/role embedded in the dehydrated context), Accept-Language
+  // for `<html lang>`/`dir`, and the color-scheme hint. List them all so a
+  // shared cache can never serve e.g. a dark-cookie document to a no-cookie
+  // visitor that happens to share the same hint.
+  setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme')
   const prefersColorScheme = parsePrefersColorScheme(headers.get('sec-ch-prefers-color-scheme'))
 
   return {
