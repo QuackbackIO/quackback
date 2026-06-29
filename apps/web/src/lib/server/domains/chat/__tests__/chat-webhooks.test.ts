@@ -34,7 +34,7 @@ const baseConversation = {
   visitorPrincipalId: 'principal_v',
   assignedAgentPrincipalId: null,
   status: 'open',
-  channel: 'live_chat',
+  channel: 'messenger',
   priority: 'none',
   subject: 'Hello',
   lastMessagePreview: null,
@@ -89,7 +89,7 @@ describe('chat.webhooks emit helpers', () => {
     expect(dataArg).toMatchObject({
       id: 'conversation_1',
       status: 'open',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
       visitorEmail: null,
       createdAt: '2026-06-05T00:00:00.000Z',
@@ -110,7 +110,7 @@ describe('chat.webhooks emit helpers', () => {
     expect(convRefArg).toEqual({
       id: 'conversation_1',
       status: 'open',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
     })
     expect(dispatch.dispatchMessageNoteCreated).not.toHaveBeenCalled()
@@ -188,7 +188,7 @@ describe('chat.webhooks emit helpers', () => {
     expect(ref).toEqual({
       id: 'conversation_1',
       status: 'closed',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
     })
     expect(previousStatus).toBe('open')
@@ -224,7 +224,7 @@ describe('chat.webhooks emit helpers', () => {
     expect(convRef).toEqual({
       id: 'conversation_1',
       status: 'open',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
     })
   })

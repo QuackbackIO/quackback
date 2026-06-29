@@ -120,7 +120,7 @@ const chatEvent = {
     conversation: {
       id: 'conversation_1',
       status: 'open',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
       subject: null,
       visitorPrincipalId: 'p',

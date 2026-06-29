@@ -48,10 +48,10 @@ describe('conversations schema', () => {
     expect(cols.status.default).toBe('open')
   })
 
-  it('channel enum matches CHANNELS and defaults to live_chat (not null)', () => {
+  it('channel enum matches CHANNELS and defaults to messenger (not null)', () => {
     const cols = getTableColumns(conversations)
     expect(cols.channel.enumValues).toEqual([...CHANNELS])
-    expect(cols.channel.default).toBe('live_chat')
+    expect(cols.channel.default).toBe('messenger')
     expect(cols.channel.notNull).toBe(true)
   })
 

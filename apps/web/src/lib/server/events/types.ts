@@ -162,7 +162,7 @@ export interface ChangelogPublishedPayload {
 export interface EventConversationRef {
   id: string
   status: 'open' | 'pending' | 'closed'
-  channel: 'live_chat' | 'email' | 'web_form'
+  channel: 'messenger' | 'email' | 'web_form'
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
 }
 

@@ -159,29 +159,29 @@ function ConversationsSettingsPage() {
       <PageHeader
         icon={ChatBubbleLeftRightIcon}
         title="Conversations"
-        description="How support conversations work: the live chat channel in the widget and how new conversations are routed to your team."
+        description="How support conversations work: the Messenger chat in the widget and how new conversations are routed to your team."
       />
 
       {!widgetEnabled && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
           The widget is currently disabled. Enable it under{' '}
-          <span className="font-medium">Widget</span> settings for live chat to appear.
+          <span className="font-medium">Widget</span> settings for Messenger to appear.
         </div>
       )}
 
       <SettingsCard
-        title="Live Chat"
-        description="Show a live chat tab in the widget so visitors can start a conversation with your team."
+        title="Messenger"
+        description="Show the Messenger in the widget so visitors can start a conversation with your team."
       >
         <div className="flex items-center justify-between py-1">
           <div className="pr-4">
             <Label htmlFor="chat-enabled" className="text-sm font-medium cursor-pointer">
-              Enable live chat
+              Enable Messenger
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Adds a live chat tab to the widget; conversations land in your support inbox. Turning
-              it off removes chat entirely — to pause outside working hours instead, set office
-              hours below.
+              Adds the Messenger tab to the widget; conversations land in your support inbox.
+              Turning it off removes Messenger entirely; to pause outside working hours instead, set
+              office hours below.
             </p>
           </div>
           <div className="flex items-center gap-2">

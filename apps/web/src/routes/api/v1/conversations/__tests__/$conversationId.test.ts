@@ -46,7 +46,7 @@ describe('GET /api/v1/conversations/:id', () => {
       id: CONV_ID,
       status: 'open',
       priority: 'none',
-      channel: 'live_chat',
+      channel: 'messenger',
       subject: null,
       lastMessageAt: '2026-06-05T00:00:00.000Z',
       createdAt: '2026-06-05T00:00:00.000Z',

@@ -759,7 +759,7 @@ export const FEATURE_FLAG_REGISTRY: Record<
   supportInbox: {
     label: 'Conversations',
     description:
-      'Let visitors start a live chat from the widget; messages land in a shared inbox your team works from.',
+      'Let visitors start a Messenger chat from the widget; messages land in a shared inbox your team works from.',
   },
   linkPreviews: {
     label: 'Link Previews',
@@ -780,7 +780,7 @@ export const LAB_SECTIONS: Array<{
 }> = [
   {
     title: 'Support',
-    description: 'Support your customers with live chat and a self-serve help center.',
+    description: 'Support your customers with Messenger and a self-serve help center.',
     flags: ['supportInbox', 'helpCenter', 'linkPreviews'],
   },
   {
