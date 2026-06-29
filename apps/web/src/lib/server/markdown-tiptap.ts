@@ -73,6 +73,40 @@ export function tiptapJsonToMarkdown(json: TiptapContent | JSONContent): string 
 }
 
 /**
+ * Render an entity's markdown for output (API / MCP responses), preferring the
+ * stored `content` column but restoring images from the canonical `contentJson`.
+ *
+ * The stored markdown is faithful for everything except images: the editor's
+ * resizable-image node has no markdown serializer, so client-computed markdown
+ * silently dropped them. `contentJson` keeps the images (with rehosted src), so
+ * only when it carries an image do we re-serialize it to put them back as
+ * `![alt](src)`. Image-free content returns the stored markdown verbatim — no
+ * reason to pay for, or risk reformatting from, a re-serialize.
+ *
+ * Falls back to the stored markdown when `contentJson` is absent (legacy rows,
+ * or list queries that omit it for performance) or can't be serialized — a read
+ * path must never fail over content shape.
+ */
+export function contentJsonToMarkdown(
+  contentJson: TiptapContent | JSONContent | null | undefined,
+  fallback: string
+): string {
+  if (!contentJson || !hasImageNode(contentJson)) return fallback
+  try {
+    const markdown = tiptapJsonToMarkdown(contentJson)
+    return markdown.trim() ? markdown : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/** Depth-first scan for an image node anywhere in a TipTap tree. */
+function hasImageNode(node: JSONContent): boolean {
+  if (node.type === 'image') return true
+  return node.content?.some(hasImageNode) ?? false
+}
+
+/**
  * Slim extension set for comments — no images, no tables, no YouTube.
  * Comments are short, dense, and inline; we want the safe subset only.
  */

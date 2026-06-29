@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest'
 import {
   markdownToTiptapJson,
   tiptapJsonToMarkdown,
+  contentJsonToMarkdown,
   commentMarkdownToTiptapJson,
 } from '../markdown-tiptap'
 
@@ -174,6 +175,60 @@ describe('tiptapJsonToMarkdown', () => {
     expect(roundTripped).toContain('**bold**')
     expect(roundTripped).toContain('Item 1')
     expect(roundTripped).toContain('Item 2')
+  })
+})
+
+describe('contentJsonToMarkdown', () => {
+  const imageDoc = {
+    type: 'doc' as const,
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Shipped a thing.' }] },
+      {
+        type: 'image',
+        attrs: { src: 'https://cdn.example.com/shot.png', alt: 'Screenshot', title: null },
+      },
+    ],
+  }
+
+  test('serializes image nodes the stored markdown dropped', () => {
+    // The reported bug: the API returned text-only markdown because the stored
+    // `content` column lost images. Deriving from contentJson restores them.
+    const result = contentJsonToMarkdown(imageDoc, 'Shipped a thing.')
+    expect(result).toContain('Shipped a thing.')
+    expect(result).toContain('![Screenshot](https://cdn.example.com/shot.png)')
+  })
+
+  test('returns the stored markdown verbatim for image-free content', () => {
+    // No images means the stored column is already faithful; don't re-serialize
+    // (and risk reformatting) what was correct.
+    const noImageDoc = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Just text' }] }],
+    }
+    expect(contentJsonToMarkdown(noImageDoc, '_Just_ text')).toBe('_Just_ text')
+  })
+
+  test.each([null, undefined])(
+    'falls back to stored markdown when contentJson is %s (legacy rows)',
+    (value) => {
+      expect(contentJsonToMarkdown(value, '# Legacy\n\nPlain markdown')).toBe(
+        '# Legacy\n\nPlain markdown'
+      )
+    }
+  )
+
+  test('falls back when contentJson has no real content', () => {
+    expect(contentJsonToMarkdown({ type: 'doc', content: [] }, 'fallback text')).toBe(
+      'fallback text'
+    )
+  })
+
+  test('falls back instead of throwing on malformed contentJson', () => {
+    // A corrupt/unexpected shape must never 500 a read endpoint.
+    const malformed = { not: 'a real doc' } as unknown as Parameters<
+      typeof contentJsonToMarkdown
+    >[0]
+    expect(contentJsonToMarkdown(malformed, 'safe fallback')).toBe('safe fallback')
   })
 })
 

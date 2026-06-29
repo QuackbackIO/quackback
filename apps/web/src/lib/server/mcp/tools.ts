@@ -94,6 +94,8 @@ import {
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { DomainException } from '@/lib/shared/errors'
 import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { McpAuthContext, McpScope } from './types'
 import type {
@@ -216,6 +218,7 @@ function articleResult(article: {
   slug: string
   title: string
   content: string
+  contentJson: TiptapContent | null
   description: string | null
   position: number | null
   category: { id: string; slug: string; name: string }
@@ -231,7 +234,7 @@ function articleResult(article: {
     id: article.id,
     slug: article.slug,
     title: article.title,
-    content: article.content,
+    content: contentJsonToMarkdown(article.contentJson, article.content),
     description: article.description,
     position: article.position,
     category: article.category,
@@ -2481,7 +2484,7 @@ async function getPostDetails(postId: PostId): Promise<CallToolResult> {
   return jsonResult({
     id: post.id,
     title: post.title,
-    content: post.content,
+    content: contentJsonToMarkdown(post.contentJson, post.content),
     voteCount: post.voteCount,
     commentCount: post.commentCount,
     boardId: post.boardId,
@@ -2525,7 +2528,7 @@ async function getChangelogDetails(changelogId: ChangelogId): Promise<CallToolRe
   return jsonResult({
     id: entry.id,
     title: entry.title,
-    content: entry.content,
+    content: contentJsonToMarkdown(entry.contentJson, entry.content),
     status: entry.status,
     authorName: entry.author?.name ?? null,
     linkedPosts: entry.linkedPosts.map((p) => ({

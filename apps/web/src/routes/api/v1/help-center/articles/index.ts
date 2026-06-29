@@ -12,6 +12,7 @@ import {
 import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
+import { formatArticle } from './-serialize'
 import type { PrincipalId } from '@quackback/ids'
 
 const createArticleBody = z.object({
@@ -22,38 +23,6 @@ const createArticleBody = z.object({
   description: z.string().max(300).optional(),
   authorId: z.string().optional(),
 })
-
-function formatArticle(article: {
-  id: string
-  slug: string
-  title: string
-  description: string | null
-  content: string
-  publishedAt: Date | null
-  viewCount: number
-  helpfulCount: number
-  notHelpfulCount: number
-  createdAt: Date
-  updatedAt: Date
-  category: { id: string; slug: string; name: string }
-  author: { id: string; name: string; avatarUrl: string | null } | null
-}) {
-  return {
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    description: article.description,
-    content: article.content,
-    publishedAt: article.publishedAt?.toISOString() || null,
-    viewCount: article.viewCount,
-    helpfulCount: article.helpfulCount,
-    notHelpfulCount: article.notHelpfulCount,
-    createdAt: article.createdAt.toISOString(),
-    updatedAt: article.updatedAt.toISOString(),
-    category: article.category,
-    author: article.author,
-  }
-}
 
 export const Route = createFileRoute('/api/v1/help-center/articles/')({
   server: {
@@ -100,7 +69,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
 
           const { authorId, ...articleData } = parsed.data
 
-          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(authorId, 'principal', 'author ID')
+          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+            authorId,
+            'principal',
+            'author ID'
+          )
 
           const article = await createArticle(
             articleData,

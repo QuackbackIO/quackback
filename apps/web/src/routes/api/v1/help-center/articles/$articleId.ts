@@ -17,6 +17,7 @@ import {
   unpublishArticle,
   deleteArticle,
 } from '@/lib/server/domains/help-center/help-center.service'
+import { formatArticle } from './-serialize'
 import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
@@ -28,38 +29,6 @@ const updateArticleBody = z.object({
   publishedAt: z.string().datetime().nullable().optional(),
   authorId: z.string().optional(),
 })
-
-function formatArticle(article: {
-  id: string
-  slug: string
-  title: string
-  description: string | null
-  content: string
-  publishedAt: Date | null
-  viewCount: number
-  helpfulCount: number
-  notHelpfulCount: number
-  createdAt: Date
-  updatedAt: Date
-  category: { id: string; slug: string; name: string }
-  author: { id: string; name: string; avatarUrl: string | null } | null
-}) {
-  return {
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    description: article.description,
-    content: article.content,
-    publishedAt: article.publishedAt?.toISOString() || null,
-    viewCount: article.viewCount,
-    helpfulCount: article.helpfulCount,
-    notHelpfulCount: article.notHelpfulCount,
-    createdAt: article.createdAt.toISOString(),
-    updatedAt: article.updatedAt.toISOString(),
-    category: article.category,
-    author: article.author,
-  }
-}
 
 export const Route = createFileRoute('/api/v1/help-center/articles/$articleId')({
   server: {

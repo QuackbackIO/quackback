@@ -13,6 +13,8 @@ import {
   updateChangelog,
   deleteChangelog,
 } from '@/lib/server/domains/changelog/changelog.service'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { ChangelogId } from '@quackback/ids'
 
@@ -28,6 +30,7 @@ function formatChangelogResponse(entry: {
   id: string
   title: string
   content: string
+  contentJson: TiptapContent | null
   publishedAt: Date | null
   displayDate: Date | null
   createdAt: Date
@@ -36,7 +39,7 @@ function formatChangelogResponse(entry: {
   return {
     id: entry.id,
     title: entry.title,
-    content: entry.content,
+    content: contentJsonToMarkdown(entry.contentJson, entry.content),
     publishedAt: entry.publishedAt?.toISOString() || null,
     displayDate: entry.displayDate?.toISOString() || null,
     createdAt: entry.createdAt.toISOString(),
