@@ -70,6 +70,7 @@ import {
   emitConversationAssigned,
   emitConversationPriorityChanged,
   emitConversationCsatSubmitted,
+  emitConversationCsatCommentAdded,
 } from './chat.webhooks'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { syncChatMessageMentions } from './sync-chat-mentions'
@@ -1056,10 +1057,13 @@ export async function recordCsat(
   // supplied, so a rating-only call can never null a comment that the follow-up
   // already saved (or that arrives in either order).
   const trimmedComment = comment?.trim() ? comment.trim().slice(0, 2000) : undefined
-  // A survey is a single satisfaction submission even though it arrives as two
-  // calls — fire the public webhook only on the first, so integrations don't
-  // double-count or re-trigger automations when the visitor adds a comment.
+  // The survey arrives as two unordered calls (rating, then an optional comment),
+  // so each public webhook fires on the single call that completes its meaning:
+  // csat_submitted on the first submission (the rating is banked instantly), and
+  // csat_comment_added when a comment first lands. That keeps each event once per
+  // survey so integrations never double-count or re-trigger automations.
   const isFirstSubmission = conversation.csatRating == null
+  const commentJustAdded = trimmedComment !== undefined && conversation.csatComment == null
   const [updated] = await db
     .update(conversations)
     .set({
@@ -1075,6 +1079,7 @@ export async function recordCsat(
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
   if (isFirstSubmission) void emitConversationCsatSubmitted(actor, updated)
+  if (commentJustAdded) void emitConversationCsatCommentAdded(actor, updated)
 }
 
 /**

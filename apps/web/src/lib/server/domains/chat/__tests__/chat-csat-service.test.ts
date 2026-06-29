@@ -1,10 +1,11 @@
 /**
- * recordCsat webhook de-duplication: the widget submits CSAT as two unordered
- * POSTs (the rating, then an optional comment). The public
- * conversation.csat_submitted webhook must fire exactly once per survey — on
- * the first submission — so integrations don't double-count a rating when the
- * visitor also leaves a comment. The live inbox update, by contrast, still
- * fires on every call so the agent sees the comment land.
+ * recordCsat webhook emission: the widget submits CSAT as two unordered POSTs
+ * (the rating, then an optional comment), so each public webhook fires once per
+ * survey on the call that completes its meaning — conversation.csat_submitted on
+ * the first submission (the rating), conversation.csat_comment_added when a
+ * comment first lands. Integrations therefore never double-count a rating, and
+ * the comment is still delivered as its own event. The live inbox update, by
+ * contrast, fires on every call so the agent sees the comment land.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
@@ -21,6 +22,7 @@ const emit = vi.hoisted(() => ({
   emitConversationAssigned: vi.fn(),
   emitConversationPriorityChanged: vi.fn(),
   emitConversationCsatSubmitted: vi.fn(),
+  emitConversationCsatCommentAdded: vi.fn(),
 }))
 vi.mock('../chat.webhooks', () => emit)
 
@@ -87,8 +89,8 @@ beforeEach(() => {
   conversationRow.csatSubmittedAt = null
 })
 
-describe('recordCsat webhook de-duplication', () => {
-  it('fires conversation.csat_submitted once across the rating-then-comment flow', async () => {
+describe('recordCsat webhook emission', () => {
+  it('fires submitted once on the rating and comment_added once on the comment', async () => {
     // POST 1: initial rating, no comment.
     await recordCsat(convId, 5, undefined, visitorActor)
     // The first submission persists before the comment POST lands.
@@ -98,11 +100,12 @@ describe('recordCsat webhook de-duplication', () => {
     await recordCsat(convId, 5, 'great support', visitorActor)
 
     expect(emit.emitConversationCsatSubmitted).toHaveBeenCalledTimes(1)
+    expect(emit.emitConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
     // The live inbox update still fires on both calls so the comment shows up.
     expect(publishConversationUpdate).toHaveBeenCalledTimes(2)
   })
 
-  it('fires once even when the comment POST lands before the rating POST', async () => {
+  it('still fires each once when the comment POST lands before the rating POST', async () => {
     // POST 1 (out of order): comment + rating together.
     await recordCsat(convId, 4, 'thanks', visitorActor)
     conversationRow.csatRating = 4
@@ -112,5 +115,13 @@ describe('recordCsat webhook de-duplication', () => {
     await recordCsat(convId, 4, undefined, visitorActor)
 
     expect(emit.emitConversationCsatSubmitted).toHaveBeenCalledTimes(1)
+    expect(emit.emitConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires submitted but no comment event for a rating-only survey', async () => {
+    await recordCsat(convId, 3, undefined, visitorActor)
+
+    expect(emit.emitConversationCsatSubmitted).toHaveBeenCalledTimes(1)
+    expect(emit.emitConversationCsatCommentAdded).not.toHaveBeenCalled()
   })
 })

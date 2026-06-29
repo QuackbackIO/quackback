@@ -365,6 +365,20 @@ export async function dispatchConversationCsatSubmitted(
   })
 }
 
+export async function dispatchConversationCsatCommentAdded(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  rating: number,
+  comment: string,
+  submittedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.csat_comment_added',
+    data: { conversation, rating, comment, submittedAt },
+  })
+}
+
 export async function dispatchMessageCreated(
   actor: EventActor,
   message: EventMessageData,

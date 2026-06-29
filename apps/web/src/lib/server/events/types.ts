@@ -24,6 +24,7 @@ export const EVENT_TYPES = [
   'conversation.assigned',
   'conversation.priority_changed',
   'conversation.csat_submitted',
+  'conversation.csat_comment_added',
   'message.created',
   'message.note_created',
   'message.deleted',
@@ -210,6 +211,12 @@ export interface ConversationCsatSubmittedPayload {
   comment: string | null
   submittedAt: string
 }
+export interface ConversationCsatCommentAddedPayload {
+  conversation: EventConversationRef
+  rating: number
+  comment: string
+  submittedAt: string
+}
 export interface MessageCreatedPayload {
   message: EventMessageData
   conversation: EventConversationRef
@@ -297,6 +304,9 @@ export interface ConversationPriorityChangedEvent extends EventBase<'conversatio
 export interface ConversationCsatSubmittedEvent extends EventBase<'conversation.csat_submitted'> {
   data: ConversationCsatSubmittedPayload
 }
+export interface ConversationCsatCommentAddedEvent extends EventBase<'conversation.csat_comment_added'> {
+  data: ConversationCsatCommentAddedPayload
+}
 export interface MessageCreatedEvent extends EventBase<'message.created'> {
   data: MessageCreatedPayload
 }
@@ -334,6 +344,7 @@ export type EventData =
   | ConversationAssignedEvent
   | ConversationPriorityChangedEvent
   | ConversationCsatSubmittedEvent
+  | ConversationCsatCommentAddedEvent
   | MessageCreatedEvent
   | MessageNoteCreatedEvent
   | MessageDeletedEvent
