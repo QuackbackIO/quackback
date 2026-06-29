@@ -69,6 +69,12 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'boards' })
 
+// Slug base for names that romanize to nothing even after transliteration
+// (emoji- or punctuation-only). The uniqueness loop disambiguates ("board",
+// "board-1", ...). Without it such names yield an empty slug, which breaks
+// the NOT NULL UNIQUE column and crashes slug-keyed <Select.Item> (#285).
+const FALLBACK_BOARD_SLUG = 'board'
+
 /**
  * Create a new board
  */
@@ -100,13 +106,8 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     },
   })
 
-  // Generate or validate slug
-  const baseSlug = input.slug ? slugify(input.slug) : slugify(input.name)
-
-  // Ensure slug is not empty after slugification
-  if (!baseSlug) {
-    throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
-  }
+  // Derive the slug from an explicit value or the name, never empty.
+  const baseSlug = (input.slug ? slugify(input.slug) : slugify(input.name)) || FALLBACK_BOARD_SLUG
 
   // Check for slug uniqueness and generate a unique one if needed
   let slug = baseSlug
@@ -194,8 +195,8 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
       }
     }
   } else if (input.name !== undefined) {
-    // Auto-update slug if name changes but slug is not explicitly provided
-    const newSlug = slugify(input.name)
+    // Auto-update slug when the name changes and no slug was given, never empty.
+    const newSlug = slugify(input.name) || FALLBACK_BOARD_SLUG
     if (newSlug !== existingBoard.slug) {
       const existingWithSlug = await db.query.boards.findFirst({
         where: eq(boards.slug, newSlug),
