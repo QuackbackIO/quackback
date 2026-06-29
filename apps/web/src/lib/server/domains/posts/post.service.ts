@@ -384,6 +384,10 @@ export async function updatePost(
       principalId: existingPost.principalId,
     })
     updateData.contentJson = contentJson
+    // Every content edit carries `input.content` (the API accepts only markdown;
+    // the editor emits markdown alongside contentJson), so the fallback reflects
+    // the new doc. `existingPost.content` is only a defensive default for a
+    // contentJson-only edit, which no caller makes.
     updateData.content = contentJsonToMarkdown(
       contentJson,
       (input.content ?? existingPost.content).trim()

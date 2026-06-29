@@ -80,6 +80,37 @@ export function tiptapJsonToMarkdown(json: TiptapContent | JSONContent): string 
 const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
 
 /**
+ * Node types this module can faithfully turn into markdown: the server
+ * manager's own nodes (see SERVER_EXTENSIONS) plus the two we normalize below
+ * (`resizableImage` -> `image`, `mention` -> text). Anything else — `youtube`,
+ * `quackbackEmbed`, `emoji`, future custom nodes — would be silently dropped by
+ * the narrower server manager, so a document containing one keeps its stored
+ * markdown (which the client serialized with full coverage) instead.
+ */
+const RESERIALIZABLE_NODE_TYPES = new Set([
+  'doc',
+  'paragraph',
+  'text',
+  'heading',
+  'blockquote',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'codeBlock',
+  'horizontalRule',
+  'hardBreak',
+  'taskList',
+  'taskItem',
+  'table',
+  'tableRow',
+  'tableCell',
+  'tableHeader',
+  'image',
+  'resizableImage',
+  'mention',
+])
+
+/**
  * Render an entity's markdown for output (API / MCP responses), preferring the
  * stored `content` column but restoring images from the canonical `contentJson`.
  *
@@ -90,17 +121,22 @@ const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
  * `![alt](src)`. Image-free content returns the stored markdown verbatim — no
  * reason to pay for, or risk reformatting from, a re-serialize.
  *
- * Falls back to the stored markdown when `contentJson` is absent (legacy rows,
- * or list queries that omit it for performance) or can't be serialized — a read
+ * Re-serialization runs through the narrower server manager, so we only do it
+ * when every node is representable (see {@link RESERIALIZABLE_NODE_TYPES}); a
+ * document mixing an image with, say, a YouTube embed keeps its stored markdown
+ * rather than dropping the embed. Also falls back when `contentJson` is absent
+ * (legacy rows / list queries that omit it) or can't be serialized — a read
  * path must never fail over content shape.
  */
 export function contentJsonToMarkdown(
   contentJson: TiptapContent | JSONContent | null | undefined,
   fallback: string
 ): string {
-  if (!contentJson || !hasImageNode(contentJson)) return fallback
+  if (!contentJson || !hasImageNode(contentJson) || !isReserializable(contentJson)) {
+    return fallback
+  }
   try {
-    const markdown = tiptapJsonToMarkdown(normalizeImageNodes(contentJson))
+    const markdown = tiptapJsonToMarkdown(normalizeForMarkdown(contentJson))
     return markdown.trim() ? markdown : fallback
   } catch {
     return fallback
@@ -118,14 +154,30 @@ function hasImageNode(node: JSONContent): boolean {
 }
 
 /**
- * Rewrite `resizableImage` nodes to plain `image` so @tiptap/markdown's Image
- * extension serializes them — the editor's resizable node shares the `src`/`alt`
- * attrs but has no markdown spec, so it would otherwise serialize to nothing.
+ * True only when every node in the tree can be re-serialized without loss. A
+ * single unknown node type makes this false so the caller keeps stored markdown.
+ * Total by the same contract as {@link hasImageNode}.
  */
-function normalizeImageNodes(node: JSONContent): JSONContent {
+function isReserializable(node: JSONContent): boolean {
+  if (typeof node.type === 'string' && !RESERIALIZABLE_NODE_TYPES.has(node.type)) return false
+  return Array.isArray(node.content) ? node.content.every(isReserializable) : true
+}
+
+/**
+ * Rewrite the editor's custom nodes into ones @tiptap/markdown can serialize:
+ * `resizableImage` -> `image` (shares src/alt but has no markdown spec) and
+ * `mention` -> the `@label` text the directive would otherwise hide. Only
+ * called once {@link isReserializable} has cleared the tree.
+ */
+function normalizeForMarkdown(node: JSONContent): JSONContent {
+  if (node.type === 'mention') {
+    const attrs = node.attrs ?? {}
+    const label = (attrs.label as string) || (attrs.id as string) || 'mention'
+    return { type: 'text', text: `@${label}` }
+  }
   const next = node.type === 'resizableImage' ? { ...node, type: 'image' } : node
   if (!Array.isArray(next.content)) return next
-  return { ...next, content: next.content.map(normalizeImageNodes) }
+  return { ...next, content: next.content.map(normalizeForMarkdown) }
 }
 
 /**

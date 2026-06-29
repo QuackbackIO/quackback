@@ -215,6 +215,42 @@ describe('contentJsonToMarkdown', () => {
     expect(result).toContain('![Resized](https://cdn.example.com/r.png)')
   })
 
+  test('keeps mentions (as @label) when restoring an image', () => {
+    // The server manager has no mention extension, so re-serializing must not
+    // drop it; normalize it to the @label text instead.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'cc ' },
+            { type: 'mention', attrs: { id: 'p1', label: 'Alice' } },
+          ],
+        },
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+      ],
+    }
+    const result = contentJsonToMarkdown(doc, 'cc @Alice')
+    expect(result).toContain('@Alice')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+  })
+
+  test('keeps stored markdown when an image coexists with an unsupported node', () => {
+    // A youtube embed has no server renderer; re-serializing would drop it, so
+    // the whole document keeps its stored markdown (image not re-derived) rather
+    // than losing the embed.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+        { type: 'youtube', attrs: { src: 'https://youtu.be/abc' } },
+      ],
+    }
+    const stored = 'stored markdown with :::youtube::: and no image'
+    expect(contentJsonToMarkdown(doc, stored)).toBe(stored)
+  })
+
   test('returns the stored markdown verbatim for image-free content', () => {
     // No images means the stored column is already faithful; don't re-serialize
     // (and risk reformatting) what was correct.

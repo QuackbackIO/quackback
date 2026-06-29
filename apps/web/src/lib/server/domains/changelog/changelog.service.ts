@@ -189,6 +189,10 @@ export async function updateChangelog(
       principalId: existing.principalId ?? undefined,
     })
     updateData.contentJson = contentJson
+    // Every content edit carries `input.content` (the API accepts only markdown;
+    // the editor emits markdown alongside contentJson), so the fallback reflects
+    // the new doc. `existing.content` is only a defensive default for a
+    // contentJson-only edit, which no caller makes.
     updateData.content = contentJsonToMarkdown(
       contentJson,
       (input.content ?? existing.content).trim()
