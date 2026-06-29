@@ -9,6 +9,7 @@ const dispatch = vi.hoisted(() => ({
   dispatchConversationAssigned: vi.fn().mockResolvedValue(undefined),
   dispatchConversationPriorityChanged: vi.fn().mockResolvedValue(undefined),
   dispatchConversationCsatSubmitted: vi.fn().mockResolvedValue(undefined),
+  dispatchConversationCsatCommentAdded: vi.fn().mockResolvedValue(undefined),
   dispatchMessageCreated: vi.fn().mockResolvedValue(undefined),
   dispatchMessageNoteCreated: vi.fn().mockResolvedValue(undefined),
   dispatchMessageDeleted: vi.fn().mockResolvedValue(undefined),
@@ -24,6 +25,7 @@ import {
   emitMessageNoteCreated,
   emitMessageDeleted,
   emitConversationCsatSubmitted,
+  emitConversationCsatCommentAdded,
 } from '../chat.webhooks'
 
 const now = new Date('2026-06-05T00:00:00.000Z')
@@ -148,6 +150,33 @@ describe('chat.webhooks emit helpers', () => {
     expect(rating).toBe(4)
     expect(comment).toBe('ok')
     expect(submittedAt).toBe('2026-06-05T02:00:00.000Z')
+  })
+
+  it('emitConversationCsatCommentAdded carries the comment, skips a comment-less row', async () => {
+    const withComment = {
+      ...baseConversation,
+      csatRating: 4,
+      csatComment: 'nice work',
+      csatSubmittedAt: new Date('2026-06-05T02:00:00.000Z'),
+    } as unknown as Conversation
+    await emitConversationCsatCommentAdded(visitorActor, withComment)
+    expect(dispatch.dispatchConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
+    const [, ref, rating, comment, submittedAt] =
+      dispatch.dispatchConversationCsatCommentAdded.mock.calls[0]
+    expect(ref.id).toBe('conversation_1')
+    expect(rating).toBe(4)
+    expect(comment).toBe('nice work')
+    expect(submittedAt).toBe('2026-06-05T02:00:00.000Z')
+
+    // A rating with no comment must not emit the comment event.
+    const noComment = {
+      ...baseConversation,
+      csatRating: 5,
+      csatComment: null,
+      csatSubmittedAt: new Date('2026-06-05T02:00:00.000Z'),
+    } as unknown as Conversation
+    await emitConversationCsatCommentAdded(visitorActor, noComment)
+    expect(dispatch.dispatchConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
   })
 
   it('emitConversationStatusChanged passes previous then new status', async () => {
