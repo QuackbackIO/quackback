@@ -119,6 +119,37 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
   return resolveArticleWithCategory(article)
 }
 
+// Slug base for article titles that romanize to nothing (emoji- or
+// punctuation-only). slugify() transliterates CJK, but still returns ''
+// for those — an empty slug breaks the NOT NULL kb_articles_slug_idx
+// unique index and slug routing. Mirrors FALLBACK_BOARD_SLUG (#285).
+const FALLBACK_ARTICLE_SLUG = 'article'
+
+/**
+ * Build a unique article slug. Falls back to a generic base when the
+ * desired slug is empty, then appends a numeric suffix until free.
+ * `excludeId` skips the row being renamed so it doesn't collide with
+ * itself. The unique index covers all rows (it is not filtered on
+ * deleted_at), so collisions are probed against soft-deleted rows too.
+ */
+async function uniqueArticleSlug(
+  desired: string,
+  excludeId?: HelpCenterArticleId
+): Promise<string> {
+  const base = desired || FALLBACK_ARTICLE_SLUG
+  let candidate = base
+  let counter = 2
+  while (true) {
+    const collision = await db.query.helpCenterArticles.findFirst({
+      where: eq(helpCenterArticles.slug, candidate),
+      columns: { id: true },
+    })
+    if (!collision || (excludeId && collision.id === excludeId)) return candidate
+    candidate = `${base}-${counter}`
+    counter++
+  }
+}
+
 export async function createArticle(
   input: CreateArticleInput,
   principalId: PrincipalId,
@@ -154,7 +185,7 @@ export async function createArticle(
     }
     effectivePrincipalId = principalId
   }
-  const slug = input.slug?.trim() || slugify(title)
+  const slug = await uniqueArticleSlug(input.slug?.trim() || slugify(title))
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {

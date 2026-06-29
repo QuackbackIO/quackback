@@ -412,6 +412,26 @@ describe('createCategory', () => {
   })
 })
 
+describe('createCategory slug generation (#285)', () => {
+  it('transliterates a Chinese name to a pinyin slug', async () => {
+    await createCategory({ name: '反馈' })
+    expect((insertValuesCalls[0][0] as Record<string, unknown>).slug).toBe('fan-kui')
+  })
+
+  it('falls back to a generic slug for an emoji-only name', async () => {
+    await createCategory({ name: '🎉🎉' })
+    expect((insertValuesCalls[0][0] as Record<string, unknown>).slug).toBe('category')
+  })
+
+  it('appends a counter when the derived slug collides', async () => {
+    mockCategoryFindFirst
+      .mockResolvedValueOnce({ id: 'category_other' })
+      .mockResolvedValueOnce(null)
+    await createCategory({ name: '反馈' })
+    expect((insertValuesCalls[0][0] as Record<string, unknown>).slug).toBe('fan-kui-2')
+  })
+})
+
 describe('deleteCategory', () => {
   it('soft deletes the category', async () => {
     mockCategoryFindMany.mockResolvedValue([{ id: 'category_1', parentId: null }])

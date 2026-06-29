@@ -272,7 +272,11 @@ describe('createArticle', () => {
   })
 
   it('throws ValidationError when authorId is a non-member principal', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user', type: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_portal',
+      role: 'user',
+      type: 'user',
+    })
     await expect(
       createArticle(
         { categoryId: 'category_1', title: 'Title', content: 'Content' },
@@ -283,7 +287,11 @@ describe('createArticle', () => {
   })
 
   it('throws ValidationError when authorId is a service principal', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_svc', role: 'admin', type: 'service' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_svc',
+      role: 'admin',
+      type: 'service',
+    })
     await expect(
       createArticle(
         { categoryId: 'category_1', title: 'Title', content: 'Content' },
@@ -294,21 +302,38 @@ describe('createArticle', () => {
   })
 
   it('accepts a member-role authorId', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member', type: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_member',
+      role: 'member',
+      type: 'user',
+    })
     mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', displayName: 'Jane', avatarUrl: null })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_member',
+      displayName: 'Jane',
+      avatarUrl: null,
+    })
 
     const { db } = await import('@/lib/server/db')
     const chain: Record<string, unknown> = {}
     chain.values = vi.fn(() => chain)
-    chain.returning = vi.fn().mockResolvedValue([{
-      id: 'article_new' as HelpCenterArticleId,
-      slug: 'title', title: 'Title', content: 'Content',
-      contentJson: null, categoryId: 'category_1',
-      principalId: 'principal_member', publishedAt: null,
-      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
-      createdAt: new Date(), updatedAt: new Date(),
-    }])
+    chain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'article_new' as HelpCenterArticleId,
+        slug: 'title',
+        title: 'Title',
+        content: 'Content',
+        contentJson: null,
+        categoryId: 'category_1',
+        principalId: 'principal_member',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
     vi.mocked(db.insert).mockReturnValueOnce(chain as never)
 
     await expect(
@@ -318,6 +343,65 @@ describe('createArticle', () => {
         'principal_member' as PrincipalId
       )
     ).resolves.toBeDefined()
+  })
+})
+
+describe('createArticle slug generation (#285)', () => {
+  beforeEach(async () => {
+    const { db } = await import('@/lib/server/db')
+    const chain: Record<string, unknown> = {}
+    chain.values = vi.fn((...args: unknown[]) => {
+      insertValuesCalls.push(args)
+      return chain
+    })
+    chain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'article_new1' as HelpCenterArticleId,
+        slug: 'placeholder',
+        title: 'placeholder',
+        content: 'Content',
+        contentJson: { type: 'doc', content: [] },
+        categoryId: 'category_1',
+        principalId: 'principal_1',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
+    vi.mocked(db.insert).mockReturnValue(chain as never)
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'category_1',
+      slug: 'getting-started',
+      name: 'Getting Started',
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      displayName: 'Author',
+      avatarUrl: null,
+      type: 'user',
+    })
+  })
+
+  const author = 'principal_1' as PrincipalId
+  const insertedSlug = () => (insertValuesCalls[0][0] as Record<string, unknown>).slug
+
+  it('transliterates a Chinese title to a pinyin slug', async () => {
+    await createArticle({ categoryId: 'category_1', title: '反馈', content: 'c' }, author)
+    expect(insertedSlug()).toBe('fan-kui')
+  })
+
+  it('falls back to a generic slug for an emoji-only title', async () => {
+    await createArticle({ categoryId: 'category_1', title: '🎉🎉', content: 'c' }, author)
+    expect(insertedSlug()).toBe('article')
+  })
+
+  it('appends a counter when the derived slug collides', async () => {
+    mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_other' }).mockResolvedValueOnce(null)
+    await createArticle({ categoryId: 'category_1', title: '反馈', content: 'c' }, author)
+    expect(insertedSlug()).toBe('fan-kui-2')
   })
 })
 
@@ -392,8 +476,17 @@ describe('createArticle with position and description', () => {
     ])
     vi.mocked(db.insert).mockReturnValueOnce(articleInsertChain as never)
 
-    mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'getting-started', name: 'Getting Started' })
-    mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_1', displayName: 'Author', avatarUrl: null, type: 'user' })
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'category_1',
+      slug: 'getting-started',
+      name: 'Getting Started',
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      displayName: 'Author',
+      avatarUrl: null,
+      type: 'user',
+    })
 
     const result = await createArticle(
       {
@@ -415,14 +508,22 @@ describe('createArticle with position and description', () => {
 
 describe('updateArticle authorId validation', () => {
   it('throws ValidationError when authorId is a non-member principal', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_portal', role: 'user', type: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_portal',
+      role: 'user',
+      type: 'user',
+    })
     await expect(
       updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_portal' as PrincipalId)
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })
 
   it('throws ValidationError when authorId is a service principal', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_svc', role: 'member', type: 'service' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_svc',
+      role: 'member',
+      type: 'service',
+    })
     await expect(
       updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_svc' as PrincipalId)
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
@@ -430,23 +531,40 @@ describe('updateArticle authorId validation', () => {
 
   it('allows re-asserting a former-member as author when they already own the article', async () => {
     mockArticleFindFirst.mockResolvedValueOnce({ id: 'article_1', principalId: 'principal_former' })
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', role: 'user', type: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_former',
+      role: 'user',
+      type: 'user',
+    })
 
     const { db } = await import('@/lib/server/db')
     const chain: Record<string, unknown> = {}
     chain.set = vi.fn(() => chain)
     chain.where = vi.fn(() => chain)
-    chain.returning = vi.fn().mockResolvedValue([{
-      id: 'article_1' as HelpCenterArticleId,
-      slug: 'test', title: 'Test', content: 'Content',
-      contentJson: null, categoryId: 'category_1',
-      principalId: 'principal_former', publishedAt: null,
-      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
-      createdAt: new Date(), updatedAt: new Date(),
-    }])
+    chain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'article_1' as HelpCenterArticleId,
+        slug: 'test',
+        title: 'Test',
+        content: 'Content',
+        contentJson: null,
+        categoryId: 'category_1',
+        principalId: 'principal_former',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
     vi.mocked(db.update).mockReturnValueOnce(chain as never)
     mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_former', displayName: 'Jane', avatarUrl: null })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_former',
+      displayName: 'Jane',
+      avatarUrl: null,
+    })
 
     await expect(
       updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_former' as PrincipalId)
@@ -454,23 +572,40 @@ describe('updateArticle authorId validation', () => {
   })
 
   it('accepts a member-role authorId in updateArticle', async () => {
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', role: 'member', type: 'user' })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_member',
+      role: 'member',
+      type: 'user',
+    })
 
     const { db } = await import('@/lib/server/db')
     const chain: Record<string, unknown> = {}
     chain.set = vi.fn(() => chain)
     chain.where = vi.fn(() => chain)
-    chain.returning = vi.fn().mockResolvedValue([{
-      id: 'article_1' as HelpCenterArticleId,
-      slug: 'test', title: 'Test', content: 'Content',
-      contentJson: null, categoryId: 'category_1',
-      principalId: 'principal_member', publishedAt: null,
-      viewCount: 0, helpfulCount: 0, notHelpfulCount: 0,
-      createdAt: new Date(), updatedAt: new Date(),
-    }])
+    chain.returning = vi.fn().mockResolvedValue([
+      {
+        id: 'article_1' as HelpCenterArticleId,
+        slug: 'test',
+        title: 'Test',
+        content: 'Content',
+        contentJson: null,
+        categoryId: 'category_1',
+        principalId: 'principal_member',
+        publishedAt: null,
+        viewCount: 0,
+        helpfulCount: 0,
+        notHelpfulCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ])
     vi.mocked(db.update).mockReturnValueOnce(chain as never)
     mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'cat', name: 'Cat' })
-    mockPrincipalFindFirst.mockResolvedValueOnce({ id: 'principal_member', displayName: 'Jane', avatarUrl: null })
+    mockPrincipalFindFirst.mockResolvedValueOnce({
+      id: 'principal_member',
+      displayName: 'Jane',
+      avatarUrl: null,
+    })
 
     await expect(
       updateArticle('article_1' as HelpCenterArticleId, {}, 'principal_member' as PrincipalId)
@@ -609,7 +744,11 @@ describe('restoreArticle', () => {
     const { db } = await import('@/lib/server/db')
     vi.mocked(db.update).mockReturnValueOnce(makeRestoredArticleChain(setCallsCapture) as never)
 
-    mockCategoryFindFirst.mockResolvedValue({ id: 'category_1', slug: 'getting-started', name: 'Getting Started' })
+    mockCategoryFindFirst.mockResolvedValue({
+      id: 'category_1',
+      slug: 'getting-started',
+      name: 'Getting Started',
+    })
     mockPrincipalFindFirst.mockResolvedValue(null)
 
     const result = await restoreArticle('article_1' as HelpCenterArticleId)
