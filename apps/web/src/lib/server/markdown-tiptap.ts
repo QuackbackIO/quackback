@@ -73,6 +73,13 @@ export function tiptapJsonToMarkdown(json: TiptapContent | JSONContent): string 
 }
 
 /**
+ * Image node types found in stored `contentJson`. The editor stores uploads as
+ * `resizableImage`; markdown parsed via {@link markdownToTiptapJson} yields the
+ * plain `image`. Mirrors `IMAGE_NODE_TYPES` in content/rehost-images.ts.
+ */
+const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
+
+/**
  * Render an entity's markdown for output (API / MCP responses), preferring the
  * stored `content` column but restoring images from the canonical `contentJson`.
  *
@@ -93,17 +100,28 @@ export function contentJsonToMarkdown(
 ): string {
   if (!contentJson || !hasImageNode(contentJson)) return fallback
   try {
-    const markdown = tiptapJsonToMarkdown(contentJson)
+    const markdown = tiptapJsonToMarkdown(normalizeImageNodes(contentJson))
     return markdown.trim() ? markdown : fallback
   } catch {
     return fallback
   }
 }
 
-/** Depth-first scan for an image node anywhere in a TipTap tree. */
+/** Depth-first scan for an image node (`image` or `resizableImage`) anywhere in a tree. */
 function hasImageNode(node: JSONContent): boolean {
-  if (node.type === 'image') return true
+  if (typeof node.type === 'string' && IMAGE_NODE_TYPES.has(node.type)) return true
   return node.content?.some(hasImageNode) ?? false
+}
+
+/**
+ * Rewrite `resizableImage` nodes to plain `image` so @tiptap/markdown's Image
+ * extension serializes them — the editor's resizable node shares the `src`/`alt`
+ * attrs but has no markdown spec, so it would otherwise serialize to nothing.
+ */
+function normalizeImageNodes(node: JSONContent): JSONContent {
+  const next = node.type === 'resizableImage' ? { ...node, type: 'image' } : node
+  if (!next.content) return next
+  return { ...next, content: next.content.map(normalizeImageNodes) }
 }
 
 /**

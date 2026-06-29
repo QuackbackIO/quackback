@@ -198,6 +198,23 @@ describe('contentJsonToMarkdown', () => {
     expect(result).toContain('![Screenshot](https://cdn.example.com/shot.png)')
   })
 
+  test('serializes resizableImage nodes (the type the editor actually stores)', () => {
+    // UI uploads are stored as `resizableImage`, which @tiptap/markdown's Image
+    // extension does not know — they must be normalized to `image` first.
+    const resizableDoc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Look:' }] },
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://cdn.example.com/r.png', alt: 'Resized', title: null, width: 400 },
+        },
+      ],
+    }
+    const result = contentJsonToMarkdown(resizableDoc, 'Look:')
+    expect(result).toContain('![Resized](https://cdn.example.com/r.png)')
+  })
+
   test('returns the stored markdown verbatim for image-free content', () => {
     // No images means the stored column is already faithful; don't re-serialize
     // (and risk reformatting) what was correct.
