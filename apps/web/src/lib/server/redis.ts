@@ -34,10 +34,7 @@ export function getRedis(): Redis {
 export const CACHE_KEYS = {
   TENANT_SETTINGS: 'settings:tenant',
   INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
-  // Versioned so a deploy that rewrites webhook subscription rows out of band
-  // (e.g. the 0123 csat_comment_added backfill migration) reads fresh from the
-  // DB instead of a stale cached `events` array left over from the old version.
-  ACTIVE_WEBHOOKS: 'hooks:webhooks-active:v2',
+  ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
   SLACK_CHANNELS: 'slack:channels',
   // Hot dependency of getTenantSettings; invalidated by save/delete in
   // platform-credential.service.ts.
