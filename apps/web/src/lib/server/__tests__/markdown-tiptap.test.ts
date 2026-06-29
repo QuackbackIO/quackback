@@ -247,6 +247,16 @@ describe('contentJsonToMarkdown', () => {
     >[0]
     expect(contentJsonToMarkdown(malformed, 'safe fallback')).toBe('safe fallback')
   })
+
+  test.each([
+    ['content is a string', { type: 'doc', content: 'oops' }],
+    ['content is an object', { type: 'doc', content: { bad: 1 } }],
+  ])('falls back when %s (image scan must not throw)', (_label, doc) => {
+    // The image scan runs before the serialize try/catch, so a row whose
+    // `content` is present but not an array must not throw a read into a 500.
+    const malformed = doc as unknown as Parameters<typeof contentJsonToMarkdown>[0]
+    expect(contentJsonToMarkdown(malformed, 'safe fallback')).toBe('safe fallback')
+  })
 })
 
 describe('commentMarkdownToTiptapJson', () => {

@@ -107,10 +107,14 @@ export function contentJsonToMarkdown(
   }
 }
 
-/** Depth-first scan for an image node (`image` or `resizableImage`) anywhere in a tree. */
+/**
+ * Depth-first scan for an image node (`image` or `resizableImage`) anywhere in a
+ * tree. Runs before the serialize try/catch, so it must stay total: a malformed
+ * row whose `content` is present but not an array must not throw.
+ */
 function hasImageNode(node: JSONContent): boolean {
   if (typeof node.type === 'string' && IMAGE_NODE_TYPES.has(node.type)) return true
-  return node.content?.some(hasImageNode) ?? false
+  return Array.isArray(node.content) ? node.content.some(hasImageNode) : false
 }
 
 /**
@@ -120,7 +124,7 @@ function hasImageNode(node: JSONContent): boolean {
  */
 function normalizeImageNodes(node: JSONContent): JSONContent {
   const next = node.type === 'resizableImage' ? { ...node, type: 'image' } : node
-  if (!next.content) return next
+  if (!Array.isArray(next.content)) return next
   return { ...next, content: next.content.map(normalizeImageNodes) }
 }
 
