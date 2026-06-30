@@ -10,6 +10,7 @@ import { useRemoveUsersFromSegment, useAssignUsersToSegment } from '@/lib/client
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { SegmentPickerList } from '@/components/admin/segments/segment-picker-list'
 
 interface SegmentBadgeProps {
   segment: UserSegmentSummary
@@ -143,24 +144,12 @@ export function UserSegmentBadges({
               Add
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-48 p-1" align="start">
-            <div className="space-y-0.5">
-              {availableManualSegments.map((seg) => (
-                <button
-                  key={seg.id}
-                  type="button"
-                  onClick={() => handleAssign(seg.id as SegmentId)}
-                  disabled={assignUsers.isPending}
-                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-[13px] hover:bg-muted/50 transition-colors disabled:opacity-50"
-                >
-                  <span
-                    className="h-2 w-2 rounded-full shrink-0 ring-1 ring-inset ring-black/10"
-                    style={{ backgroundColor: seg.color }}
-                  />
-                  <span className="truncate">{seg.name}</span>
-                </button>
-              ))}
-            </div>
+          <PopoverContent className="w-48 p-0" align="start">
+            <SegmentPickerList
+              segments={availableManualSegments}
+              onSelect={handleAssign}
+              disabled={assignUsers.isPending}
+            />
           </PopoverContent>
         </Popover>
       )}

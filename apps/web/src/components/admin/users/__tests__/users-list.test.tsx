@@ -140,7 +140,7 @@ describe('<UsersList> bulk segment selection', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 1' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 2' }))
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: /add to segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add to segment/i }))
     fireEvent.click(screen.getByText('Beta Testers'))
 
     await waitFor(() =>
@@ -158,7 +158,7 @@ describe('<UsersList> bulk segment selection', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 1' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 2' }))
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: /remove from segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove from segment/i }))
     fireEvent.click(screen.getByText('Beta Testers'))
 
     await waitFor(() =>
@@ -183,7 +183,7 @@ describe('<UsersList> bulk segment selection', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 1' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 2' }))
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: /remove from segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove from segment/i }))
     fireEvent.click(screen.getByText('Beta Testers'))
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
 
@@ -202,7 +202,7 @@ describe('<UsersList> bulk segment selection', () => {
   it('shows an error toast if the bulk Undo re-assign fails', async () => {
     renderList()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select User 1' }))
-    fireEvent.pointerDown(screen.getByRole('button', { name: /remove from segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove from segment/i }))
     fireEvent.click(screen.getByText('Beta Testers'))
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
 

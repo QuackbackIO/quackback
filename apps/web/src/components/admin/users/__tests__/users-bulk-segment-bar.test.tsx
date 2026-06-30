@@ -39,8 +39,7 @@ describe('<UsersBulkSegmentBar>', () => {
         onClear={vi.fn()}
       />
     )
-    // Radix DropdownMenuTrigger opens on pointerDown (not click).
-    fireEvent.pointerDown(screen.getByRole('button', { name: /add to segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add to segment/i }))
     fireEvent.click(screen.getByText('Enterprise'))
     expect(onAdd).toHaveBeenCalledWith('seg_ent')
   })
@@ -56,7 +55,7 @@ describe('<UsersBulkSegmentBar>', () => {
         onClear={vi.fn()}
       />
     )
-    fireEvent.pointerDown(screen.getByRole('button', { name: /remove from segment/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove from segment/i }))
     fireEvent.click(screen.getByText('Beta Testers'))
     expect(onRemove).toHaveBeenCalledWith('seg_beta')
   })
@@ -103,5 +102,24 @@ describe('<UsersBulkSegmentBar>', () => {
     )
     expect(screen.getByRole('button', { name: /add to segment/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /remove from segment/i })).toBeDisabled()
+  })
+
+  it('lets the admin search once there are enough segments to need it', () => {
+    const manySegments = Array.from({ length: 8 }, (_, i) => ({
+      id: `seg_${i}` as SegmentId,
+      name: `Segment ${i}`,
+      color: '#3b82f6',
+    }))
+    render(
+      <UsersBulkSegmentBar
+        selectedCount={1}
+        manualSegments={manySegments}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        onClear={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /add to segment/i }))
+    expect(screen.getByPlaceholderText('Search segments...')).toBeInTheDocument()
   })
 })

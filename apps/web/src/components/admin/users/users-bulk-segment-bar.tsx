@@ -1,13 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { TagIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SegmentPickerList } from '@/components/admin/segments/segment-picker-list'
 import type { SegmentId } from '@quackback/ids'
 
 interface ManualSegmentOption {
@@ -36,9 +33,11 @@ function SegmentDropdown({
   onSelect: (segmentId: SegmentId) => void
   disabled?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
           variant="outline"
           size="sm"
@@ -49,19 +48,18 @@ function SegmentDropdown({
           {label}
           <ChevronDownIcon className="h-3 w-3" />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {segments.map((seg) => (
-          <DropdownMenuItem key={seg.id} onClick={() => onSelect(seg.id)} className="text-xs gap-2">
-            <span
-              className="h-2 w-2 rounded-full shrink-0 ring-1 ring-inset ring-black/10"
-              style={{ backgroundColor: seg.color }}
-            />
-            {seg.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0" align="start">
+        <SegmentPickerList
+          segments={segments}
+          onSelect={(segmentId) => {
+            onSelect(segmentId)
+            setOpen(false)
+          }}
+          disabled={disabled}
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
 
