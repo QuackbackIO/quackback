@@ -16,6 +16,7 @@ import {
   MAX_FILE_SIZE,
 } from '../storage/s3'
 import { logger } from '@/lib/server/logger'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const log = logger.child({ component: 'uploads' })
 
@@ -62,7 +63,7 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
     )
     try {
       // Require admin or member authentication
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.POST_CREATE })
 
       // Check S3 is configured
       if (!isS3Configured()) {
@@ -108,7 +109,7 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
     )
     try {
       // Require admin authentication for changelog images
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
       // Check S3 is configured
       if (!isS3Configured()) {
@@ -153,7 +154,7 @@ export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
       'post image upload url requested'
     )
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.POST_CREATE })
 
       if (!isS3Configured()) {
         throw new Error('File storage is not configured. Contact your administrator.')
@@ -238,7 +239,7 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
       'logo upload url requested'
     )
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
         throw new Error('File storage is not configured. Contact your administrator.')
@@ -269,7 +270,7 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
       'favicon upload url requested'
     )
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
         throw new Error('File storage is not configured. Contact your administrator.')
@@ -300,7 +301,7 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
       'header logo upload url requested'
     )
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
         throw new Error('File storage is not configured. Contact your administrator.')

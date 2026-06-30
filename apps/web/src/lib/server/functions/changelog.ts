@@ -9,6 +9,7 @@ import type { BoardId, ChangelogId, PostId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { NotFoundError } from '@/lib/shared/errors'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { requireAuth } from './auth-helpers'
 import { resolvePortalAccessForRequest } from './portal-access'
 import {
@@ -49,7 +50,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ title: data.title, publish_state: data.publishState }, 'create changelog')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
       // Get author name from user via member
       const authorName = auth.user.name
@@ -90,7 +91,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'update changelog')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
       const entry = await updateChangelog(data.id as ChangelogId, {
         title: data.title,
@@ -123,7 +124,7 @@ export const deleteChangelogFn = createServerFn({ method: 'POST' })
     log.debug({ changelog_id: data.id }, 'delete changelog')
     try {
       // Soft delete (sets deletedAt) — safe for members to perform.
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
       await deleteChangelog(data.id as ChangelogId)
 
@@ -142,7 +143,7 @@ export const getChangelogFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ changelog_id: data.id }, 'get changelog')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_VIEW_DRAFT })
 
       const entry = await getChangelogById(data.id as ChangelogId)
 
@@ -167,7 +168,7 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ status: data.status, limit: data.limit }, 'list changelogs')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_VIEW_DRAFT })
 
       const result = await listChangelogs({
         status: data.status,
@@ -279,7 +280,7 @@ export const searchShippedPostsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ query: data.query, board_id: data.boardId }, 'search shipped posts')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
       return searchShippedPosts({
         query: data.query,

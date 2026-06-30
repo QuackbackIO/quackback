@@ -18,6 +18,7 @@ import {
 } from '@/lib/server/domains/boards/board.service'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { boardAccessSchema, boardPresetSchema, accessForPreset } from '@/lib/shared/schemas/boards'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
 // Re-export for back-compat: existing test imports `boardAccessSchema`
@@ -112,7 +113,7 @@ function serializeBoard(b: Awaited<ReturnType<typeof listBoards>>[number]) {
  */
 export const fetchBoardsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'fetch boards')
-  await requireAuth({ roles: ['admin', 'member'] })
+  await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
   const boards = await listBoards()
   log.debug({ count: boards.length }, 'fetch boards')
@@ -126,7 +127,7 @@ export const fetchBoardFn = createServerFn({ method: 'GET' })
   .validator(getBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'fetch board')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     const board = await getBoardById(data.id as BoardId)
     log.debug({ found: !!board }, 'fetch board')
@@ -144,7 +145,7 @@ export const createBoardFn = createServerFn({ method: 'POST' })
   .validator(createBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name, preset: data.preset }, 'create board')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     // Map the binary preset choice (Public/Private) into a BoardAccess
     // matrix via the shared helper. For finer-grained access (segments,
@@ -171,7 +172,7 @@ export const updateBoardFn = createServerFn({ method: 'POST' })
   .validator(updateBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'update board')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     const board = await updateBoard(data.id as BoardId, {
       name: data.name,
@@ -190,7 +191,7 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
   .validator(deleteBoardSchema)
   .handler(async ({ data }) => {
     log.debug({ board_id: data.id }, 'delete board')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     await deleteBoard(data.id as BoardId)
     log.info({ board_id: data.id }, 'board deleted')
@@ -214,7 +215,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
   .validator(createBoardsBatchSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.boards.length }, 'create boards batch')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     // Pre-flight against the tier limit so we never call createBoard
     // (which throws on overage) past capacity. This means the loop is
@@ -288,8 +289,7 @@ export const createBoardsBatchFn = createServerFn({ method: 'POST' })
 // v1 access controls — board access matrix
 // ============================================
 
-import { isAdmin } from '@/lib/shared/roles'
-import { ForbiddenError, NotFoundError } from '@/lib/shared/errors'
+import { NotFoundError } from '@/lib/shared/errors'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 
 const updateBoardAccessSchema = z.object({
@@ -309,10 +309,7 @@ const updateBoardAccessSchema = z.object({
 export const updateBoardAccessFn = createServerFn({ method: 'POST' })
   .validator(updateBoardAccessSchema.parse)
   .handler(async ({ data }) => {
-    const auth = await requireAuth()
-    if (!isAdmin(auth.principal.role)) {
-      throw new ForbiddenError('FORBIDDEN', 'Admin only')
-    }
+    const auth = await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
     const before = await db.query.boards.findFirst({
       where: eq(boards.id, data.boardId as BoardId),
     })

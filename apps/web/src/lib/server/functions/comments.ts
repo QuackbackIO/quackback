@@ -7,6 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
 import { isTeamMember } from '@/lib/shared/roles'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 
@@ -316,7 +317,7 @@ export const restoreCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'restore comment')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_MODERATE })
 
       await restoreComment(data.commentId as CommentId, {
         principalId: auth.principal.id,
@@ -352,7 +353,7 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'pin comment')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_MODERATE })
 
       const result = await pinComment(data.commentId as CommentId, {
         principalId: auth.principal.id,
@@ -379,7 +380,7 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.postId }, 'unpin comment')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_MODERATE })
 
       await unpinComment(data.postId as PostId, {
         principalId: auth.principal.id,

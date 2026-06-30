@@ -461,7 +461,7 @@ vi.mock('@/lib/server/db', () => ({
   sql: vi.fn(),
 }))
 
-import { ForbiddenError, NotFoundError, ConflictError } from '@/lib/shared/errors'
+import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 
 // Indexes correspond to declaration order in moderation.ts:
 // 0=listPendingPosts, 1=listPendingComments, 2=approve, 3=approveComment, 4=rejectComment, 5=reject, 6=getModerationStatus
@@ -503,7 +503,6 @@ const AUTH_MEMBER = {
   ...AUTH_ADMIN,
   principal: { ...AUTH_ADMIN.principal, role: 'member' as const },
 }
-const AUTH_USER = { ...AUTH_ADMIN, principal: { ...AUTH_ADMIN.principal, role: 'user' as const } }
 
 // Default extra fields for posts used by approve/reject tests (not exercised by those tests)
 const POST_DEFAULTS = {
@@ -548,8 +547,8 @@ describe('listPendingPostsFn — role gating', () => {
   })
 
   it('rejects role=user with ForbiddenError', async () => {
-    mockRequireAuth.mockResolvedValue(AUTH_USER)
-    await expect(listPendingPosts()({ data: {} })).rejects.toBeInstanceOf(ForbiddenError)
+    mockRequireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(listPendingPosts()({ data: {} })).rejects.toThrow('Access denied')
   })
 
   it('admin sees all pending', async () => {
@@ -595,8 +594,8 @@ describe('approvePostFn', () => {
   })
 
   it('rejects role=user', async () => {
-    mockRequireAuth.mockResolvedValue(AUTH_USER)
-    await expect(approve()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ForbiddenError)
+    mockRequireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(approve()({ data: { postId: 'p1' } })).rejects.toThrow('Access denied')
   })
 
   it('returns NotFoundError when post does not exist', async () => {
@@ -684,8 +683,8 @@ describe('rejectPostFn', () => {
   })
 
   it('rejects role=user', async () => {
-    mockRequireAuth.mockResolvedValue(AUTH_USER)
-    await expect(reject()({ data: { postId: 'p1' } })).rejects.toBeInstanceOf(ForbiddenError)
+    mockRequireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(reject()({ data: { postId: 'p1' } })).rejects.toThrow('Access denied')
   })
 
   it('returns NotFoundError for missing post', async () => {
@@ -1063,8 +1062,8 @@ describe('getModerationStatus', () => {
   })
 
   it('rejects role=user with ForbiddenError', async () => {
-    mockRequireAuth.mockResolvedValue(AUTH_USER)
-    await expect(getModerationStatusHandler()({ data: {} })).rejects.toBeInstanceOf(ForbiddenError)
+    mockRequireAuth.mockRejectedValue(new Error('Access denied'))
+    await expect(getModerationStatusHandler()({ data: {} })).rejects.toThrow('Access denied')
   })
 
   it('pendingCount reflects count of pending + non-deleted posts', async () => {

@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { TagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listTags,
   getTagById,
@@ -68,7 +69,7 @@ export type DeleteTagInput = z.infer<typeof deleteTagSchema>
 export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'fetch tags')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
     const tags = await listTags()
     log.debug({ count: tags.length }, 'fetch tags')
@@ -87,7 +88,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'fetch tag')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
       const tag = await getTagById(data.id as TagId)
       log.debug({ found: !!tag }, 'fetch tag')
@@ -110,7 +111,7 @@ export const createTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create tag')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
       const tag = await createTag({
         name: data.name,
@@ -133,7 +134,7 @@ export const updateTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'update tag')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
       const tag = await updateTag(data.id as TagId, {
         name: data.name,
@@ -156,7 +157,7 @@ export const deleteTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'delete tag')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
       await deleteTag(data.id as TagId)
       log.info({ tag_id: data.id }, 'tag deleted')

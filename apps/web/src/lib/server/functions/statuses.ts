@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { StatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listStatuses,
   getStatusById,
@@ -82,7 +83,7 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
 export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
     const statuses = await listStatuses()
     log.debug({ count: statuses.length }, 'fetch statuses count')
@@ -101,7 +102,7 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'fetch status')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
       const status = await getStatusById(data.id as StatusId)
       log.debug({ found: !!status }, 'fetch status result')
@@ -124,7 +125,7 @@ export const createStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ category: data.category }, 'create status')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       const status = await createStatus(data)
       log.info({ status_id: status.id }, 'status created')
@@ -143,7 +144,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'update status')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       const status = await updateStatus(data.id as StatusId, {
         name: data.name,
@@ -167,7 +168,7 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'delete status')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       await deleteStatus(data.id as StatusId)
       log.info({ status_id: data.id }, 'status deleted')
@@ -186,7 +187,7 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ count: data.statusIds.length }, 'reorder statuses')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       await reorderStatuses(data.statusIds as StatusId[])
       log.info({ count: data.statusIds.length }, 'statuses reordered')

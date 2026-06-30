@@ -13,6 +13,7 @@ import type {
 import { isTypeId } from '@quackback/ids'
 
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   db,
   eq,
@@ -95,7 +96,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
       { status: data.status, sort: data.sort, limit: data.limit, offset: data.offset },
       'fetch suggestions'
     )
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.SUGGESTION_VIEW })
 
     return listSuggestions({
       status: data.status ?? 'pending',
@@ -113,7 +114,7 @@ export const fetchSuggestions = createServerFn({ method: 'GET' })
  * Count pending and dismissed suggestions (for sidebar badge + toggle).
  */
 export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin', 'member'] })
+  await requireAuth({ permission: PERMISSIONS.SUGGESTION_VIEW })
 
   const typeFilter = inArray(feedbackSuggestions.suggestionType, ['create_post', 'vote_on_post'])
 
@@ -136,7 +137,7 @@ export const fetchIncomingSuggestionCount = createServerFn({ method: 'GET' }).ha
 
 export const fetchFeedbackSources = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch feedback sources')
-  await requireAuth({ roles: ['admin', 'member'] })
+  await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
 
   const sources = await db.query.feedbackSources.findMany({
     orderBy: [desc(feedbackSources.createdAt)],
@@ -168,7 +169,7 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id, swap_direction: data.swapDirection }, 'accept suggestion')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
       if (isTypeId(data.id, 'merge_sug')) {
@@ -228,7 +229,7 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id }, 'dismiss suggestion')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
       if (isTypeId(data.id, 'merge_sug')) {
@@ -255,7 +256,7 @@ export const restoreSuggestionFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id }, 'restore suggestion')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       // Handle post-to-post merge suggestions (TypeID prefix: merge_sug)
       if (isTypeId(data.id, 'merge_sug')) {
@@ -282,7 +283,7 @@ export const retryFailedItemFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ raw_item_id: data.rawItemId }, 'retry failed item')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       const { enqueueFeedbackAiJob } =
         await import('@/lib/server/domains/feedback/queues/feedback-ai-queue')
@@ -309,7 +310,7 @@ export const retryFailedItemFn = createServerFn({ method: 'POST' })
 export const retryAllFailedItemsFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.debug('retry all failed items')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
     const { enqueueFeedbackAiJob } =
       await import('@/lib/server/domains/feedback/queues/feedback-ai-queue')
@@ -352,7 +353,7 @@ export const createFeedbackSourceFn = createServerFn({ method: 'POST' })
       'create feedback source'
     )
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const [source] = await db
         .insert(feedbackSources)
@@ -376,7 +377,7 @@ export const updateFeedbackSourceFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ source_id: data.id }, 'update feedback source')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const updates: Record<string, unknown> = { updatedAt: new Date() }
       if (data.name !== undefined) updates.name = data.name
@@ -401,7 +402,7 @@ export const deleteFeedbackSourceFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ source_id: data.id }, 'delete feedback source')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       await db.delete(feedbackSources).where(eq(feedbackSources.id, data.id as FeedbackSourceId))
 

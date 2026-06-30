@@ -15,6 +15,7 @@ import {
   type UserId,
 } from '@quackback/ids'
 import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/posts'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
@@ -172,7 +173,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug('fetch inbox posts for admin')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const result = await listInboxPosts({
         boardIds: data.boardIds as BoardId[] | undefined,
@@ -218,7 +219,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post with details')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const postId = data.id as PostId
 
@@ -295,7 +296,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 export const fetchPostVotersFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
     const voters = await getPostVoters(data.id as PostId)
     return voters.map((v) => ({
       ...v,
@@ -309,7 +310,7 @@ export const fetchPostVotersFn = createServerFn({ method: 'GET' })
 export const fetchPostFeedbackSourceFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
     const source = await getPostFeedbackSource(data.id as PostId)
     if (!source) return null
     return {
@@ -330,7 +331,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ board_id: data.boardId }, 'create post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
       // Caller is always team — the policy gate inside createPost bypasses
       // approval for team via canCreatePost. We still build the actor to
       // pass through so audience checks are correct (e.g. a non-team API
@@ -400,7 +401,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'update post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       const result = await updatePost(
         data.id as PostId,
@@ -434,7 +435,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'delete post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
       const postId = data.id as PostId
 
       // Soft delete the post (always succeeds or throws; dispatches post.deleted event)
@@ -483,7 +484,7 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post external links')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
       const links = await getPostExternalLinks(data.id as PostId)
       log.debug({ count: links.length }, 'fetch post external links result')
       return links
@@ -501,7 +502,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, status_id: data.statusId }, 'change post status')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       const result = await changeStatus(data.id as PostId, data.statusId as StatusId, {
         principalId: auth.principal.id,
@@ -527,7 +528,7 @@ export const changePostBoardFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, board_id: data.boardId }, 'change post board')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
       const result = await changeBoard(data.id as PostId, data.boardId as BoardId, {
         principalId: auth.principal.id,
         userId: auth.user.id as UserId,
@@ -550,7 +551,7 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'restore post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
       log.info({ post_id: result.id }, 'post restored')
@@ -569,7 +570,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, tag_count: data.tagIds.length }, 'update post tags')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       await updatePost(
         data.id as PostId,
@@ -597,7 +598,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
 export const proxyVoteFn = createServerFn({ method: 'POST' })
   .validator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VOTE_ON_BEHALF })
     const postId = data.postId as PostId
     const voterPrincipalId = data.voterPrincipalId as PrincipalId
 
@@ -632,7 +633,7 @@ export const proxyVoteFn = createServerFn({ method: 'POST' })
 export const removeVoteFn = createServerFn({ method: 'POST' })
   .validator(z.object({ postId: z.string(), voterPrincipalId: z.string() }))
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VOTE_ON_BEHALF })
     const postId = data.postId as PostId
     const voterPrincipalId = data.voterPrincipalId as PrincipalId
 
@@ -662,7 +663,7 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, locked: data.locked }, 'toggle comments lock')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       await db
         .update(posts)

@@ -13,6 +13,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   addPostToRoadmap,
   createRoadmap,
@@ -103,7 +104,7 @@ export type GetRoadmapPostsInput = z.infer<typeof getRoadmapPostsSchema>
 export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list roadmaps')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
     const roadmaps = await listRoadmaps()
     // Serialize branded types to plain strings for turbo-stream
@@ -131,7 +132,7 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'get roadmap')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       const roadmap = await getRoadmap(data.id as RoadmapId)
       // Serialize branded types to plain strings for turbo-stream
@@ -163,7 +164,7 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ name: data.name, slug: data.slug }, 'create roadmap')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       const roadmap = await createRoadmap({
         name: data.name,
@@ -196,7 +197,7 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'update roadmap')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       const roadmap = await updateRoadmap(data.id as RoadmapId, {
         name: data.name,
@@ -228,7 +229,7 @@ export const deleteRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.id }, 'delete roadmap')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       await deleteRoadmap(data.id as RoadmapId)
       return { id: String(data.id) }
@@ -246,7 +247,7 @@ export const addPostToRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'add post to roadmap')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       await addPostToRoadmap(
         {
@@ -270,7 +271,7 @@ export const removePostFromRoadmapFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ roadmap_id: data.roadmapId, post_id: data.postId }, 'remove post from roadmap')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       await removePostFromRoadmap(
         data.postId as PostId,
@@ -292,7 +293,7 @@ export const reorderRoadmapsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ count: data.roadmapIds.length }, 'reorder roadmaps')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       await reorderRoadmaps(data.roadmapIds as RoadmapId[])
       return { success: true }
@@ -313,7 +314,7 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
       'get roadmap posts'
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
         statusId: data.statusId as StatusId | undefined,

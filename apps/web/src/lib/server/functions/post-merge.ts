@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { toIsoString } from '@/lib/shared/utils'
 import {
   mergePost,
@@ -71,7 +72,7 @@ export const mergePostFn = createServerFn({ method: 'POST' })
       { duplicate_post_id: data.duplicatePostId, canonical_post_id: data.canonicalPostId },
       'merge post'
     )
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
     const result = await mergePost(
       data.duplicatePostId as PostId,
@@ -95,7 +96,7 @@ export const unmergePostFn = createServerFn({ method: 'POST' })
   .validator(unmergePostSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'unmerge post')
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
     const result = await unmergePost(
       data.postId as PostId,
@@ -115,7 +116,7 @@ export const getMergedPostsFn = createServerFn({ method: 'GET' })
   .validator(getMergedPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ canonical_post_id: data.canonicalPostId }, 'get merged posts')
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
     const result = await getMergedPosts(data.canonicalPostId as PostId)
 
@@ -180,7 +181,7 @@ export const fetchMergePreviewFn = createServerFn({ method: 'GET' })
       { canonical_post_id: data.canonicalPostId, duplicate_post_id: data.duplicatePostId },
       'fetch merge preview'
     )
-    const auth = await requireAuth({ roles: ['admin', 'member'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
     const result = await previewMergedPost(
       data.canonicalPostId as PostId,

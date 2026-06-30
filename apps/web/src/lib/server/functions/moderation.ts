@@ -33,8 +33,8 @@ import {
 } from '@/lib/server/db'
 import { requireAuth } from '@/lib/server/functions/auth-helpers'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
-import { isTeamMember } from '@/lib/shared/roles'
-import { ForbiddenError, NotFoundError, ConflictError } from '@/lib/shared/errors'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { NotFoundError, ConflictError } from '@/lib/shared/errors'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { announcePublishedPost } from '@/lib/server/domains/posts/post.announce'
 import { announcePublishedComment } from '@/lib/server/domains/comments/comment.announce'
@@ -53,10 +53,7 @@ const RejectCommentInput = z.object({
  * and lives on the Settings page.
  */
 async function requireTeamAuth() {
-  const auth = await requireAuth()
-  if (!isTeamMember(auth.principal.role)) {
-    throw new ForbiddenError('FORBIDDEN', 'Team only')
-  }
+  const auth = await requireAuth({ permission: PERMISSIONS.POST_APPROVE })
   return auth
 }
 
