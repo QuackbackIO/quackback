@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   PlusIcon,
   PencilIcon,
@@ -36,7 +37,7 @@ import type { SegmentId } from '@quackback/ids'
 
 type SegmentItem = NonNullable<ReturnType<typeof useSegments>['data']>[number]
 
-function SegmentRow({
+export function SegmentRow({
   segment,
   onEdit,
   onDelete,
@@ -77,13 +78,17 @@ function SegmentRow({
         </div>
       </div>
 
-      {/* Member count */}
-      <span
-        className="text-sm text-muted-foreground shrink-0 tabular-nums cursor-help"
+      {/* Member count — links into the Users page filtered to this segment,
+       *  so the roster is reachable from the segment itself rather than
+       *  only discoverable by already knowing it lives on a different page. */}
+      <Link
+        to="/admin/users"
+        search={{ segments: segment.id }}
+        className="text-sm text-muted-foreground shrink-0 tabular-nums hover:text-foreground hover:underline"
         title="Counts people only. Team members and admins are excluded from segments."
       >
         {segment.memberCount} {segment.memberCount === 1 ? 'person' : 'people'}
-      </span>
+      </Link>
 
       {/* Actions */}
       <div className="flex items-center gap-1 shrink-0">
