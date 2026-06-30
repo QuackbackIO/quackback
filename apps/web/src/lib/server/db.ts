@@ -268,6 +268,21 @@ export {
   helpCenterArticleFeedbackRelations,
   // Schema tables - push devices
   pushDevices,
+  // Schema tables - RBAC
+  roles,
+  permissions,
+  rolePermissions,
+  principalRoleAssignments,
+  // RBAC permission catalogue (the code-authoritative contract)
+  PERMISSIONS,
+  ALL_PERMISSIONS,
+  PERMISSION_CATALOGUE,
+  PERMISSION_CATEGORIES,
+  WORKSPACE_ADMIN_PERMISSIONS,
+  SYSTEM_ROLES,
+  SYSTEM_ROLE_DEFS,
+  SYSTEM_ROLE_PERMISSIONS,
+  presetForLegacyRole,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
@@ -276,6 +291,7 @@ export {
 // Re-export schema types not covered by @quackback/db/types
 export type { ServiceMetadata } from '@quackback/db'
 export type { IdentityProviderAttributeMapping } from '@quackback/db'
+export type { PermissionKey, PermissionCategory, SystemRoleKey } from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)
 export * from '@quackback/db/types'

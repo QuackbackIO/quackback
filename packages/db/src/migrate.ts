@@ -6,7 +6,8 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
+import * as schema from './schema'
+import { seedSystemData } from './seed-system'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -27,7 +28,7 @@ async function runMigrations() {
 
   // Use a single connection for migrations
   const sql = postgres(connectionString, { max: 1 })
-  const db = drizzle(sql)
+  const db = drizzle(sql, { schema })
 
   try {
     // Ensure pgvector extension is available before running migrations
@@ -35,16 +36,12 @@ async function runMigrations() {
     await migrate(db, { migrationsFolder })
     console.log('✅ Migrations completed successfully!')
 
-    // Seed default post statuses if none exist. Cloud-provisioned tenants
-    // boot empty: the post.service requires an `open` default status to
-    // create posts, and without it the very first post submission throws
-    // "Default 'open' status not found." Idempotent — re-running on a
-    // pod with statuses already configured is a no-op.
-    const existing = await db.select({ id: postStatuses.id }).from(postStatuses).limit(1)
-    if (existing.length === 0) {
-      await db.insert(postStatuses).values(DEFAULT_STATUSES)
-      console.log(`✅ Seeded ${DEFAULT_STATUSES.length} default post statuses`)
-    }
+    // Seed the reference data every workspace needs (post statuses, the RBAC
+    // permission catalogue, the system-role presets and their bundles).
+    // Cloud-provisioned tenants boot empty; idempotent, so re-running on a
+    // pod that is already seeded is a no-op.
+    await seedSystemData(db)
+    console.log('✅ Seeded system data (statuses, roles, permissions)')
   } catch (error) {
     console.error('❌ Migration failed:', error)
     process.exit(1)

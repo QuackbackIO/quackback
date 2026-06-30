@@ -9,6 +9,8 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import * as schema from './schema'
+import { seedSystemData } from './seed-system'
 
 // Get the directory of this file to resolve the migrations folder
 const __filename = fileURLToPath(import.meta.url)
@@ -32,10 +34,13 @@ export async function runMigrations(connectionString?: string): Promise<void> {
 
   // Use a single connection for migrations
   const sql = postgres(connStr, { max: 1 })
-  const database = drizzle(sql)
+  const database = drizzle(sql, { schema })
 
   try {
     await migrate(database, { migrationsFolder: MIGRATIONS_FOLDER })
+    // Seed the reference data every workspace needs (statuses, roles,
+    // permissions). Idempotent — re-running on a seeded tenant is a no-op.
+    await seedSystemData(database)
   } finally {
     await sql.end()
   }

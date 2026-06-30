@@ -1,6 +1,7 @@
 // Better-auth tables (for Drizzle relational queries and joins)
 // These tables are managed by better-auth CLI, we define schema for type-safety
 export * from './auth'
+export * from './rbac'
 
 // Application schemas
 export * from './boards'

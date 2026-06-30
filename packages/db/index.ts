@@ -5,6 +5,9 @@ export type { Database, CreateDbOptions } from './src/client'
 // Schema
 export * from './src/schema'
 
+// RBAC permission catalogue (pure data; the code-authoritative contract)
+export * from './src/rbac-catalogue'
+
 // Types
 export * from './src/types'
 

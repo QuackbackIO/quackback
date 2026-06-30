@@ -111,6 +111,12 @@ export type SegmentId = TypeId<'segment'>
 /** User attribute definition ID - e.g., user_attr_01h455vb4pex5vsknk084sn02q */
 export type UserAttributeId = TypeId<'user_attr'>
 
+// RBAC
+export type RoleId = TypeId<'role'>
+export type PermissionId = TypeId<'perm'>
+export type RolePermissionId = TypeId<'role_perm'>
+export type RoleAssignmentId = TypeId<'role_asgn'>
+
 // ============================================
 // AI Entity IDs
 // ============================================
@@ -247,6 +253,10 @@ export interface EntityIdMap {
   note: NoteId
   segment: SegmentId
   user_attr: UserAttributeId
+  role: RoleId
+  permission: PermissionId
+  role_permission: RolePermissionId
+  role_assignment: RoleAssignmentId
   sentiment: SentimentId
   ai_usage: AiUsageLogId
   pipeline_log: PipelineLogId

@@ -56,6 +56,12 @@ export const ID_PREFIXES = {
   // Push devices (mobile agent app — APNs/FCM token registry)
   push_device: 'push_device',
 
+  // RBAC (roles + permissions)
+  role: 'role',
+  permission: 'perm',
+  role_permission: 'role_perm',
+  role_assignment: 'role_asgn',
+
   // Users
   segment: 'segment',
   user_attr: 'user_attr',
