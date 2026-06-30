@@ -10,6 +10,7 @@
  */
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import type { Role, PrincipalType } from '@/lib/shared/roles'
+import type { PermissionKey } from '@/lib/shared/permissions'
 
 export type { Role, PrincipalType }
 
@@ -20,6 +21,16 @@ export interface Actor {
   principalType: PrincipalType
   /** Segment memberships resolved once per request and threaded through policy. */
   segmentIds: ReadonlySet<SegmentId>
+  /**
+   * Resolved permission set (the role's preset bundle in v1; assignment-derived
+   * later), consumed via `can(actor, permission)` in policy/authorize.ts.
+   *
+   * Optional so the inline Actor fixtures in domain tests don't all churn at
+   * once; the per-domain Phase C PRs populate it as each gate converts. Every
+   * REAL request actor (the policyActorFromAuth / withApiKeyAuth / chat seams)
+   * always sets it, and `can` treats an absent set as no permissions.
+   */
+  permissions?: ReadonlySet<PermissionKey>
 }
 
 export type Decision = { allowed: true } | { allowed: false; reason: string }
@@ -55,4 +66,5 @@ export const ANONYMOUS_ACTOR: Actor = {
   role: null,
   principalType: 'anonymous',
   segmentIds: new Set(),
+  permissions: new Set(),
 }

@@ -11,7 +11,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
 import { db, principal, eq, type PermissionKey } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
-import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
+import { permissionsForLegacyRole, resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
@@ -250,5 +250,6 @@ export async function policyActorFromAuth(auth: AuthContext | null): Promise<Act
     role: auth.principal.role,
     principalType: normalizePrincipalType(auth.principal.type),
     segmentIds,
+    permissions: resolveActorPermissions(auth.principal.role),
   }
 }

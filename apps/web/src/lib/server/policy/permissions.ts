@@ -14,3 +14,14 @@ export function permissionsForLegacyRole(role: Role): ReadonlySet<PermissionKey>
   const preset = presetForLegacyRole(role)
   return new Set(preset ? SYSTEM_ROLE_PERMISSIONS[preset] : [])
 }
+
+/**
+ * Resolve an actor's permission set from its role. The seam every Actor
+ * construction site funnels through. v1 is the pure preset expansion above (no
+ * DB read); the custom-role era swaps the body for a
+ * `principal_role_assignments ⋈ role_permissions` join keyed on the principal,
+ * leaving every caller unchanged. A null role (anonymous) holds nothing.
+ */
+export function resolveActorPermissions(role: Role | null): ReadonlySet<PermissionKey> {
+  return role ? permissionsForLegacyRole(role) : new Set()
+}
