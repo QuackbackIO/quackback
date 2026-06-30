@@ -2,8 +2,13 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { InviteId, PrincipalId, UserId } from '@quackback/ids'
-import { generateId } from '@quackback/ids'
 import { db, invitation, principal, user, and, eq } from '@/lib/server/db'
+import { ROLE_RANK, type Role } from '@/lib/shared/roles'
+import {
+  createPrincipal,
+  setPrincipalRole,
+  syncPrincipalProfileById,
+} from '@/lib/server/domains/principals/principal.factory'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { logger } from '@/lib/server/logger'
@@ -202,7 +207,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
         )
       }
 
-      const role = claimed.role || 'member'
+      const role = (claimed.role || 'member') as Role
       const displayName = name?.trim() || undefined
 
       const existingPrincipal = await db.query.principal.findFirst({
@@ -210,30 +215,20 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
       })
 
       if (existingPrincipal) {
-        // Update existing principal's role if the invitation grants a higher role
-        const roleHierarchy = ['user', 'member', 'admin']
-        const existingRoleIndex = roleHierarchy.indexOf(existingPrincipal.role)
-        const newRoleIndex = roleHierarchy.indexOf(role)
-
-        const updates: Record<string, unknown> = {}
-        if (newRoleIndex > existingRoleIndex) updates.role = role
-        if (displayName) updates.displayName = displayName
-
-        if (Object.keys(updates).length > 0) {
-          await db
-            .update(principal)
-            .set(updates)
-            .where(eq(principal.id, existingPrincipal.id as PrincipalId))
+        // Promote only when the invite grants a strictly higher role. An
+        // unrankable stored role sorts lowest, so it always upgrades.
+        const existingRank = ROLE_RANK[existingPrincipal.role as Role] ?? -1
+        if (ROLE_RANK[role] > existingRank) {
+          await setPrincipalRole({ principalId: existingPrincipal.id as PrincipalId }, role)
+        }
+        if (displayName) {
+          await syncPrincipalProfileById(existingPrincipal.id as PrincipalId, { displayName })
         }
       } else {
-        // Create new principal record
-        await db.insert(principal).values({
-          id: generateId('principal'),
-          userId,
-          role,
-          displayName,
-          createdAt: new Date(),
-        })
+        // Create new principal (the user row already exists from magic-link).
+        // Plain create — NOT ensure — so a racing lazy 'user' create can't
+        // silently swallow the invited member/admin role.
+        await createPrincipal({ userId, role, displayName: displayName ?? null })
       }
 
       // Update user name if provided

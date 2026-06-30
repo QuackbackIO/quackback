@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { Role } from '@/lib/shared/roles'
 import Papa from 'papaparse'
 import type { ImportInput } from '@/lib/server/domains/import/types'
 import { REQUIRED_HEADERS } from '@/lib/shared/schemas/import'
@@ -20,7 +21,6 @@ export const Route = createFileRoute('/api/import/')({
       POST: async ({ request }) => {
         const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
         const { canAccess } = await import('@/lib/server/auth')
-        type Role = 'admin' | 'member' | 'user'
         const { processImport } = await import('@/lib/server/domains/import/import-service')
         const { getBoardById, listBoards } =
           await import('@/lib/server/domains/boards/board.service')
@@ -152,10 +152,7 @@ export const Route = createFileRoute('/api/import/')({
           // Process import inline (synchronous)
           const result = await processImport(importData)
 
-          log.info(
-            { imported: result.imported, skipped: result.skipped },
-            'csv import complete'
-          )
+          log.info({ imported: result.imported, skipped: result.skipped }, 'csv import complete')
           return Response.json({
             imported: result.imported,
             skipped: result.skipped,

@@ -3,6 +3,7 @@
  * and update portal access settings (admin only).
  */
 import { z } from 'zod'
+import type { Role } from '@/lib/shared/roles'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import type { UserId, PrincipalId, SegmentId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -73,7 +74,7 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
       // No session available; treat as anonymous.
     }
 
-    let role: 'admin' | 'member' | 'user' | null = null
+    let role: Role | null = null
     let userEmail: string | null = null
     let emailVerified = false
     let isAnonymousPrincipal = false
@@ -101,7 +102,7 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
         if (principalRecord?.type === 'anonymous') {
           isAnonymousPrincipal = true
         }
-        role = (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null
+        role = (principalRecord?.role as Role | null) ?? null
         resolvedPrincipalId = principalRecord?.id ?? null
       }
     }

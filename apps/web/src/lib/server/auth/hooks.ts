@@ -20,7 +20,7 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import { generateId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
 import {
   findProviderForDomainEmail,
   isRegisteredOidcProvider,
@@ -255,7 +255,7 @@ export async function handleSignInPreCheck(ctx: {
         columns: { role: true },
       })
     : null
-  const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+  const role = (principalRow?.role ?? 'user') as Role
 
   // Load the provider registry once: both the owning-provider resolution
   // for hard-binding and the per-method gate consult it. `registeredOidcIds`
@@ -362,10 +362,14 @@ export async function handleSsoCallbackAfter(
   const eligibleForBootstrap = shouldBootstrapPromote(email, callbackProvider)
 
   const { db, principal: principalTable, and, eq, sql } = await import('@/lib/server/db')
+  const { setPrincipalRole, updatePrincipalFields } =
+    await import('@/lib/server/domains/principals/principal.factory')
   // Cast through the typeid-branded type so Drizzle's eq() narrows.
   type UserId = `user_${string}`
   const userIdTyped = userId as UserId
 
+  // Captured inside the tx (only the role promotion busts), drained after commit.
+  let bootstrapCacheKeys: readonly string[] = []
   await db.transaction(async (tx) => {
     // Workspace-scoped advisory lock so concurrent first-SSO sign-ins
     // serialise. Hash key is stable across pods. Released on commit.
@@ -384,10 +388,10 @@ export async function handleSsoCallbackAfter(
         columns: { id: true },
       })
       if (!existingAdmin) {
-        await tx
-          .update(principalTable)
-          .set({ role: 'admin' })
-          .where(eq(principalTable.userId, userIdTyped))
+        const { cacheKeysToBust } = await setPrincipalRole({ userId: userIdTyped }, 'admin', {
+          executor: tx,
+        })
+        bootstrapCacheKeys = cacheKeysToBust
         log.info({ user_id: userId }, 'sso bootstrap admin promotion')
       }
     }
@@ -396,11 +400,17 @@ export async function handleSsoCallbackAfter(
     // Run in the same tx so the lock window covers both writes; the
     // promotion path needs the timestamp first so the same admin can
     // immediately enable enforcement.
-    await tx
-      .update(principalTable)
-      .set({ lastSsoSignInAt: new Date() })
-      .where(eq(principalTable.userId, userIdTyped))
+    await updatePrincipalFields(
+      { userId: userIdTyped },
+      { lastSsoSignInAt: new Date() },
+      { executor: tx }
+    )
   })
+
+  if (bootstrapCacheKeys.length) {
+    const { cacheDel } = await import('@/lib/server/redis')
+    await cacheDel(...bootstrapCacheKeys)
+  }
 }
 
 /**
@@ -490,6 +500,8 @@ export async function handleAutoProvisionAfter(
   if (!provider.autoCreateUsers) return
 
   const { db, principal: principalTable, user: userTable, eq } = await import('@/lib/server/db')
+  const { setPrincipalRole, ensurePrincipalForUser } =
+    await import('@/lib/server/domains/principals/principal.factory')
   type UserId = `user_${string}`
   const userIdTyped = userId as UserId
 
@@ -497,7 +509,7 @@ export async function handleAutoProvisionAfter(
   // check. An explicit claim match is the IdP attesting THIS user's role — a
   // per-user signal stronger than domain ownership — so it provisions even when
   // the email is not at one of the provider's verified domains.
-  let claimRole: 'admin' | 'member' | 'user' | null = null
+  let claimRole: Role | null = null
   if (provider.attributeMapping) {
     const claims = await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
@@ -510,8 +522,7 @@ export async function handleAutoProvisionAfter(
   // team membership. A claim-matched role bypasses this gate.
   if (claimRole === null && findProviderForDomainEmail(email, [provider]) === null) return
 
-  const targetRole: 'admin' | 'member' | 'user' =
-    claimRole ?? provider.autoProvisionRole ?? 'member'
+  const targetRole: Role = claimRole ?? provider.autoProvisionRole ?? 'member'
 
   const p = await db.query.principal.findFirst({
     where: eq(principalTable.userId, userIdTyped),
@@ -538,10 +549,8 @@ export async function handleAutoProvisionAfter(
   if (currentRole === targetRole) return // no-op, save the write
 
   if (p) {
-    await db
-      .update(principalTable)
-      .set({ role: targetRole })
-      .where(eq(principalTable.userId, userIdTyped))
+    // No tx -> the factory busts PRINCIPAL_BY_USER itself.
+    await setPrincipalRole({ userId: userIdTyped }, targetRole)
   } else {
     // Recreate the soft-removed principal in-band with the provisioned role.
     // Display fields come from the auth user so the rebuilt principal matches
@@ -550,18 +559,21 @@ export async function handleAutoProvisionAfter(
       where: eq(userTable.id, userIdTyped),
       columns: { name: true, image: true },
     })
-    await db.insert(principalTable).values({
-      id: generateId('principal'),
+    // ensurePrincipalForUser wins the documented race vs getOptionalAuth's lazy
+    // 'user' create. Stamp lastSsoSignInAt on the rebuilt row — the bootstrap
+    // UPDATE ran first and missed it while the principal didn't exist.
+    const { created, principal: rebuilt } = await ensurePrincipalForUser({
       userId: userIdTyped,
       role: targetRole,
       displayName: u?.name ?? null,
       avatarUrl: u?.image ?? null,
-      // This runs in the OIDC callback, so the user is signing in via SSO right
-      // now. Stamp lastSsoSignInAt on the rebuilt row — handleSsoCallbackAfter's
-      // UPDATE ran first and missed it while the principal didn't exist.
       lastSsoSignInAt: new Date(),
-      createdAt: new Date(),
     })
+    // If a concurrent lazy create won the race it seeded role 'user'; reapply the
+    // provisioned role so the SSO attestation isn't silently dropped.
+    if (!created && rebuilt.role !== targetRole) {
+      await setPrincipalRole({ userId: userIdTyped }, targetRole)
+    }
   }
 
   if (p?.role && p.role !== targetRole) {
@@ -706,7 +718,7 @@ export async function handleCallbackPolicyCleanup(
     where: eq(principalTable.userId, userId as UserId),
     columns: { role: true },
   })
-  const role = (principalRow?.role ?? 'user') as 'admin' | 'member' | 'user'
+  const role = (principalRow?.role ?? 'user') as Role
   const isTeamRole = role === 'admin' || role === 'member'
   // Team roles route to the unified login carrying a `/admin` callback
   // (the break-glass form); the error joins with `&` so it isn't lost

@@ -10,6 +10,7 @@
 
 import { db, eq, user, principal } from '@/lib/server/db'
 import { createId, type PrincipalId, type UserId } from '@quackback/ids'
+import { createPrincipals } from '@/lib/server/domains/principals/principal.factory'
 
 interface PendingUser {
   principalId: PrincipalId
@@ -100,14 +101,9 @@ export class ImportUserResolver {
         }))
       )
 
-      // Create principal records
-      await db.insert(principal).values(
-        chunk.map((u) => ({
-          id: u.principalId,
-          userId: u.userId,
-          role: 'user' as const,
-          createdAt: new Date(),
-        }))
+      // Create principal records (single multi-row insert, no N+1)
+      await createPrincipals(
+        chunk.map((u) => ({ id: u.principalId, userId: u.userId, role: 'user' as const }))
       )
     }
 

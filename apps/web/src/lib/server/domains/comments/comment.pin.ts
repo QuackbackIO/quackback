@@ -8,7 +8,7 @@
 import { db, eq, and, sql, comments, posts } from '@/lib/server/db'
 import { type CommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
 
@@ -23,7 +23,7 @@ const log = logger.child({ component: 'comment-pin' })
  */
 export async function restoreComment(
   commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ comment_id: commentId }, 'restore comment')
 
@@ -141,7 +141,7 @@ export async function canPinComment(commentId: CommentId): Promise<{
  */
 export async function pinComment(
   commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<{ postId: PostId }> {
   log.info({ comment_id: commentId }, 'pin comment')
   // Only team members can pin comments
@@ -183,7 +183,7 @@ export async function pinComment(
  */
 export async function unpinComment(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ post_id: postId }, 'unpin comment')
   // Only team members can unpin comments

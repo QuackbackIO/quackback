@@ -12,7 +12,7 @@ import {
 } from '@/lib/server/db'
 import { type CommentId, type PrincipalId, type StatusId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import {
   dispatchCommentUpdated,
@@ -61,7 +61,7 @@ export async function createComment(
     name?: string
     email?: string
     displayName?: string
-    role: 'admin' | 'member' | 'user'
+    role: Role
   },
   actor: Actor,
   options?: { skipDispatch?: boolean; headers?: Headers }
@@ -329,7 +329,7 @@ export async function createComment(
 export async function updateComment(
   id: CommentId,
   input: UpdateCommentInput,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
+  actor: { principalId: PrincipalId; role: Role; userId?: UserId }
 ): Promise<Comment> {
   log.info({ comment_id: id }, 'update comment')
   // Get existing comment with post and board in single query
@@ -422,7 +422,7 @@ export async function updateComment(
  */
 export async function deleteComment(
   id: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
+  actor: { principalId: PrincipalId; role: Role; userId?: UserId }
 ): Promise<void> {
   log.info({ comment_id: id }, 'delete comment')
   // Get existing comment with post and board in single query

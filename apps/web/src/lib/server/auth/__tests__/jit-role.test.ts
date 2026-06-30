@@ -34,7 +34,16 @@ vi.mock('@/lib/server/db', () => ({
       user: { findFirst: (...args: unknown[]) => mockUserFindFirst(...args) },
     },
     update: () => ({ set: mockSet, where: mockWhere }),
-    insert: () => ({ values: (...args: unknown[]) => mockInsertValues(...args) }),
+    insert: () => ({
+      values: (...args: unknown[]) => {
+        mockInsertValues(...args)
+        const chain = {
+          onConflictDoNothing: () => chain,
+          returning: async () => [args[0]],
+        }
+        return chain
+      },
+    }),
   },
   principal: { userId: 'user_id', role: 'role' },
   user: { id: 'user.id' },

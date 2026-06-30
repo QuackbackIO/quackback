@@ -3,6 +3,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
+import type { Role } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
 import { logger } from '@/lib/server/logger'
@@ -31,7 +32,7 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
  * Get current user's role if logged in
  */
 export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<'admin' | 'member' | 'user' | null> => {
+  async (): Promise<Role | null> => {
     log.debug('get current user role')
     try {
       const session = await getSession()
@@ -49,7 +50,7 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
         return null
       }
       log.debug({ role: principalRecord.role }, 'current user role')
-      return principalRecord.role as 'admin' | 'member' | 'user'
+      return principalRecord.role as Role
     } catch (error) {
       log.error({ err: error }, 'get current user role failed')
       throw error

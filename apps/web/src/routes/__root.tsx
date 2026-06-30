@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { Component, type ReactNode } from 'react'
+import type { Role } from '@/lib/shared/roles'
 import type { QueryClient } from '@tanstack/react-query'
 import {
   Outlet,
@@ -27,7 +28,7 @@ export interface RouterContext {
   baseUrl?: string
   session?: BootstrapData['session']
   settings?: TenantSettings | null
-  userRole?: 'admin' | 'member' | 'user' | null
+  userRole?: Role | null
   themeCookie?: BootstrapData['themeCookie']
   prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]

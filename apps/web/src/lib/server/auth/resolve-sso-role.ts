@@ -15,9 +15,9 @@
  */
 
 import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
+import type { Role } from '@/lib/shared/roles'
 
 type Claims = Record<string, unknown>
-type Role = 'admin' | 'member' | 'user'
 
 /** Resolve a claim by dotted path OR by literal URL-shaped key. */
 export function getNestedClaim(claims: Claims, path: string): unknown {

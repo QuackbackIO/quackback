@@ -3,10 +3,11 @@ import type { UserId, SessionId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth/index'
 import { db, principal as principalTable, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import type { PrincipalType } from '@/lib/shared/roles'
 
 const log = logger.child({ component: 'auth-session' })
 
-export type PrincipalType = 'user' | 'anonymous' | 'service'
+export type { PrincipalType }
 
 export interface SessionUser {
   id: UserId

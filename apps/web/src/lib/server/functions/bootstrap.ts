@@ -1,4 +1,5 @@
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
+import type { Role } from '@/lib/shared/roles'
 import { getThemeCookie, parsePrefersColorScheme, type Theme } from '@/lib/shared/theme'
 import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
@@ -12,7 +13,7 @@ export interface BootstrapData {
   baseUrl: string
   session: Session | null
   settings: TenantSettings | null
-  userRole: 'admin' | 'member' | 'user' | null
+  userRole: Role | null
   themeCookie: Theme
   /** OS color-scheme preference from the `Sec-CH-Prefers-Color-Scheme` client
    *  hint, used by the root document to resolve a `system` theme during SSR so
@@ -41,7 +42,7 @@ export interface BootstrapData {
 // page render for authenticated users.
 async function getSessionAndRole(): Promise<{
   session: Session | null
-  role: 'admin' | 'member' | 'user' | null
+  role: Role | null
 }> {
   // Fast-path for unauthenticated requests: if there's no Cookie header at
   // all the request can't possibly carry a session token, so we can skip
@@ -106,7 +107,7 @@ async function getSessionAndRole(): Promise<{
           updatedAt: session.user.updatedAt.toISOString(),
         },
       },
-      role: (principalRecord?.role as 'admin' | 'member' | 'user' | null) ?? null,
+      role: (principalRecord?.role as Role | null) ?? null,
     }
   } catch (error) {
     // During SSR, auth might fail due to env var issues

@@ -18,6 +18,7 @@
  *  - per-domain enforcement is a checkbox guarded by a precondition warning.
  */
 import { useState, useEffect } from 'react'
+import type { Role } from '@/lib/shared/roles'
 import { useServerFn } from '@tanstack/react-start'
 import { useRouteContext } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -77,7 +78,6 @@ import { useSsoTestSignIn } from '../sso/use-sso-test-sign-in'
 import { deriveClaimSuggestions } from '@/lib/shared/claim-suggestions'
 import { Autocomplete } from '@/components/ui/autocomplete'
 
-type Role = 'admin' | 'member' | 'user'
 type Mapping = NonNullable<IdentityProvider['attributeMapping']>
 
 const ROLES: Role[] = ['admin', 'member', 'user']

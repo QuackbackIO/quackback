@@ -10,7 +10,7 @@ import { db, posts, comments, eq, and, sql, isNull } from '@/lib/server/db'
 import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { DEFAULT_PORTAL_CONFIG, type PortalConfig } from '@/lib/server/domains/settings'
 import type { PermissionCheckResult } from './post.types'
 import { logger } from '@/lib/server/logger'
@@ -31,7 +31,7 @@ const log = logger.child({ component: 'post-permissions' })
  */
 export async function canEditPost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: Role },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
@@ -99,7 +99,7 @@ export async function canEditPost(
  */
 export async function canDeletePost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: Role },
   portalConfig?: PortalConfig
 ): Promise<PermissionCheckResult> {
   log.debug(
@@ -169,7 +169,7 @@ export async function canDeletePost(
  */
 export async function getPostPermissions(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<{
   canEdit: PermissionCheckResult
   canDelete: PermissionCheckResult

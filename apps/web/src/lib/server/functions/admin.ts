@@ -18,6 +18,13 @@ import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
 import { getSettings } from './workspace'
 import { db, invitation, principal, user, eq, and, gt } from '@/lib/server/db'
+import {
+  createPrincipal,
+  ensurePrincipalForUser,
+  setPrincipalRole,
+  syncPrincipalProfileById,
+} from '@/lib/server/domains/principals/principal.factory'
+import { isAdmin } from '@/lib/shared/roles'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -621,17 +628,17 @@ export const checkOnboardingState = createServerFn({ method: 'GET' })
           }
         }
 
-        // First user - create admin principal record
-        const [newPrincipal] = await db
-          .insert(principal)
-          .values({
-            id: generateId('principal'),
-            userId: userId as UserId,
-            role: 'admin',
-            createdAt: new Date(),
-          })
-          .returning()
-
+        // First user - create admin principal record (race-safe).
+        const { principal: newPrincipal, created } = await ensurePrincipalForUser({
+          userId: userId as UserId,
+          role: 'admin',
+        })
+        // A concurrent lazy create may have seeded role 'user'; promote so the
+        // first user still lands as admin.
+        if (!created && !isAdmin(newPrincipal.role)) {
+          await setPrincipalRole({ userId: userId as UserId }, 'admin')
+          newPrincipal.role = 'admin'
+        }
         principalRecord = newPrincipal
         log.info({ principal_id: principalRecord.id }, 'created admin principal')
       }
@@ -797,10 +804,9 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
 
       // Sync display name to principal if name changed
       if (data.name !== undefined) {
-        await db
-          .update(principal)
-          .set({ displayName: data.name.trim() })
-          .where(eq(principal.id, data.principalId as PrincipalId))
+        await syncPrincipalProfileById(data.principalId as PrincipalId, {
+          displayName: data.name.trim(),
+        })
       }
 
       log.info({ principal_id: data.principalId }, 'portal user updated')
@@ -853,12 +859,11 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
         updatedAt: new Date(),
       })
 
-      await db.insert(principal).values({
+      await createPrincipal({
         id: principalId,
         userId,
-        role: 'user' as const,
+        role: 'user',
         displayName: trimmedName,
-        createdAt: new Date(),
       })
 
       log.info({ principal_id: principalId }, 'portal user created')

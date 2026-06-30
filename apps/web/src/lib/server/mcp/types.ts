@@ -1,4 +1,5 @@
 import type { PrincipalId, UserId } from '@quackback/ids'
+import type { Role } from '@/lib/shared/roles'
 
 /** Known MCP scopes that gate tool access. */
 export type McpScope =
@@ -23,7 +24,7 @@ export interface McpAuthContext {
   name: string
   /** Null for service principals */
   email?: string
-  role: 'admin' | 'member' | 'user'
+  role: Role
   authMethod: 'oauth' | 'api-key'
   /** Granted scopes. OAuth tokens have limited scopes; API keys get all. */
   scopes: McpScope[]

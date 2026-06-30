@@ -9,9 +9,9 @@
  * always carries a machine-readable reason for logging and UI hints.
  */
 import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type { Role, PrincipalType } from '@/lib/shared/roles'
 
-export type Role = 'admin' | 'member' | 'user'
-export type PrincipalType = 'user' | 'anonymous' | 'service'
+export type { Role, PrincipalType }
 
 export interface Actor {
   principalId: PrincipalId | null

@@ -15,6 +15,7 @@ import {
   isNull,
   sql,
 } from '@/lib/server/db'
+import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -335,25 +336,13 @@ export const Route = createFileRoute('/api/widget/identify')({
 
         const userId = userRecord.id as UserId
 
-        // Ensure principal record exists
-        let principalRecord = await db.query.principal.findFirst({
-          where: eq(principal.userId, userId),
+        // Ensure principal record exists (read-first, race-safe).
+        const { principal: principalRecord } = await ensurePrincipalForUser({
+          userId,
+          role: 'user',
+          displayName: userRecord.name,
+          avatarUrl: userRecord.image ?? null,
         })
-
-        if (!principalRecord) {
-          const [created] = await db
-            .insert(principal)
-            .values({
-              id: generateId('principal'),
-              userId,
-              role: 'user',
-              displayName: userRecord.name,
-              avatarUrl: userRecord.image ?? null,
-              createdAt: new Date(),
-            })
-            .returning()
-          principalRecord = created
-        }
 
         const principalId = principalRecord.id as PrincipalId
 

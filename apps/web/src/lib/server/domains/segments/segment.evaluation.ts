@@ -293,11 +293,15 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
       ? conditionSqls.reduce((acc, c) => sql`${acc} AND ${c}`)
       : conditionSqls.reduce((acc, c) => sql`${acc} OR ${c}`)
 
+  // Audience = identified end-users: role 'user' on a human principal
+  // (type='user'). The type guard excludes anonymous visitors, who also carry
+  // role='user' but must not match segments.
   const rows = await db.execute(sql`
     SELECT p.id
     FROM principal p
     INNER JOIN "user" u ON u.id = p.user_id
     WHERE p.role = 'user'
+      AND p.type = 'user'
       AND p.user_id IS NOT NULL
       AND (${combinedWhere})
   `)

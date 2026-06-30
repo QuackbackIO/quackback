@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes'
 import { buildNavItems } from './portal-header-nav'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { Button } from '@/components/ui/button'
 import { signOut, authClient } from '@/lib/client/auth-client'
 import {
@@ -37,7 +37,7 @@ interface PortalHeaderProps {
   orgName: string
   orgLogo?: string | null
   /** User's role in the organization (passed from server) */
-  userRole?: 'admin' | 'member' | 'user' | null
+  userRole?: Role | null
   /** Initial user data for SSR (store values override these after hydration) */
   initialUserData?: {
     name: string | null

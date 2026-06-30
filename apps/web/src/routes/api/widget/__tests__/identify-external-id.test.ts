@@ -30,10 +30,12 @@ vi.mock('@/lib/server/db', () => ({
     insert: () => ({
       values: (v: unknown) => {
         insertValues(v)
-        return {
+        const chain = {
           returning: async () => [{ id: 'inserted' }],
           onConflictDoUpdate: async () => undefined,
+          onConflictDoNothing: () => chain,
         }
+        return chain
       },
     }),
     update: () => ({

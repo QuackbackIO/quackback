@@ -7,6 +7,7 @@
 
 import { db, eq, sql, user, principal, externalUserMappings } from '@/lib/server/db'
 import { createId, type PrincipalId } from '@quackback/ids'
+import { createPrincipal } from '@/lib/server/domains/principals/principal.factory'
 import type { FeedbackSourceType } from '@/lib/server/integrations/feedback-source-types'
 
 export type AuthorResolutionMethod =
@@ -104,12 +105,7 @@ async function resolveByEmail(
     updatedAt: new Date(),
   })
 
-  await db.insert(principal).values({
-    id: principalId,
-    userId,
-    role: 'user' as const,
-    createdAt: new Date(),
-  })
+  await createPrincipal({ id: principalId, userId, role: 'user' })
 
   return { principalId, created: true }
 }
@@ -164,12 +160,7 @@ async function resolveByExternalId(
     updatedAt: new Date(),
   })
 
-  await db.insert(principal).values({
-    id: principalId,
-    userId,
-    role: 'user' as const,
-    createdAt: new Date(),
-  })
+  await createPrincipal({ id: principalId, userId, role: 'user' })
 
   // Create mapping
   await db

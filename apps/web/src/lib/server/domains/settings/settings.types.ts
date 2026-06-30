@@ -6,6 +6,7 @@
  */
 
 import type { TiptapContent } from '@/lib/shared/db-types'
+import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/chat/types'
 
 // =============================================================================
@@ -46,7 +47,7 @@ export interface AuthConfig {
      * Only consulted when `autoCreateUsers` is true. Default 'member'.
      * 'user' means "do not promote" (portal user only).
      */
-    autoProvisionRole?: 'admin' | 'member' | 'user'
+    autoProvisionRole?: Role
     /**
      * ISO-8601 UTC. Server-stamped whenever a *connection-affecting*
      * field changes — `discoveryUrl`, `clientId`, or the client secret.
@@ -85,9 +86,9 @@ export interface AuthConfig {
       /** First-match-wins. `whenContains` matches when the resolved claim's
        *  array contains the literal (case-insensitive) or its scalar value
        *  equals it. */
-      rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
+      rules: Array<{ whenContains: string; role: Role }>
       /** Used when no rule matches. */
-      defaultRole: 'admin' | 'member' | 'user'
+      defaultRole: Role
       /** When true, every sign-in re-resolves and may demote/promote. */
       syncOnEverySignIn?: boolean
     }

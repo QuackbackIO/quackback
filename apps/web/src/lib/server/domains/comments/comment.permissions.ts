@@ -17,7 +17,7 @@ import {
 } from '@/lib/server/db'
 import { type CommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { dispatchCommentUpdated, buildEventActor } from '@/lib/server/events/dispatch'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
@@ -67,7 +67,7 @@ export async function hasTeamMemberReply(commentId: CommentId): Promise<boolean>
  */
 export async function canEditComment(
   commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<CommentPermissionCheckResult> {
   log.debug({ comment_id: commentId }, 'can edit comment check')
   // Get the comment
@@ -116,7 +116,7 @@ export async function canEditComment(
  */
 export async function canDeleteComment(
   commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<CommentPermissionCheckResult> {
   log.debug({ comment_id: commentId }, 'can delete comment check')
   // Get the comment
@@ -171,7 +171,7 @@ export async function canDeleteComment(
 export async function userEditComment(
   commentId: CommentId,
   content: string,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' },
+  actor: { principalId: PrincipalId; role: Role },
   options?: { contentJson?: TiptapContent | null }
 ): Promise<Comment> {
   log.debug({ comment_id: commentId }, 'user edit comment')
@@ -259,7 +259,7 @@ export async function userEditComment(
  */
 export async function softDeleteComment(
   commentId: CommentId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ comment_id: commentId }, 'soft delete comment')
   // Check permission first

@@ -8,6 +8,11 @@
 import { db, eq, and, principal, user } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
+import {
+  createPrincipal,
+  syncPrincipalProfile,
+  updatePrincipalFields,
+} from '@/lib/server/domains/principals/principal.factory'
 import { NotFoundError } from '@/lib/shared/errors'
 import type {
   IdentifyPortalUserInput,
@@ -75,12 +80,12 @@ export async function identifyPortalUser(
       await db.update(user).set(userUpdates).where(eq(user.id, record.id))
     }
 
-    // Sync principal displayName and avatarUrl if changed
-    const principalUpdates: Record<string, unknown> = {}
+    // Sync principal displayName and avatarUrl if changed (portal-user only)
+    const principalUpdates: { displayName?: string; avatarUrl?: string | null } = {}
     if (input.name !== undefined) principalUpdates.displayName = input.name
     if (input.image !== undefined) principalUpdates.avatarUrl = input.image
     if (Object.keys(principalUpdates).length > 0) {
-      await db.update(principal).set(principalUpdates).where(eq(principal.userId, record.id))
+      await syncPrincipalProfile(record.id, principalUpdates)
     }
 
     // Re-read to get updated values — record must exist since we just updated it
@@ -125,13 +130,11 @@ export async function identifyPortalUser(
         .returning()
       userRecord = newUser
 
-      await db.insert(principal).values({
-        id: generateId('principal'),
+      await createPrincipal({
         userId: newUser.id,
         role: 'user',
         displayName: defaultName,
         avatarUrl: input.image ?? null,
-        createdAt: new Date(),
       })
 
       created = true
@@ -238,11 +241,13 @@ export async function updatePortalUser(
     await db.update(user).set(userUpdates).where(eq(user.id, userId))
   }
 
-  const principalUpdates: Record<string, unknown> = {}
+  const principalUpdates: { displayName?: string; avatarUrl?: string | null } = {}
   if (input.name !== undefined) principalUpdates.displayName = input.name
   if (input.image !== undefined) principalUpdates.avatarUrl = input.image
   if (Object.keys(principalUpdates).length > 0) {
-    await db.update(principal).set(principalUpdates).where(eq(principal.id, principalId))
+    await updatePrincipalFields({ principalId }, principalUpdates, {
+      guards: { onlyRole: 'user' },
+    })
   }
 
   const updated = (await db.query.user.findFirst({

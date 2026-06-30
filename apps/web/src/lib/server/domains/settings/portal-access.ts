@@ -1,3 +1,4 @@
+import type { Role } from '@/lib/shared/roles'
 /**
  * Portal-level access evaluation.
  *
@@ -26,7 +27,7 @@ export interface PortalAccessContext {
    * Role of the current principal. `null` means anonymous (no session, or
    * the session's principalType is 'anonymous').
    */
-  role: 'admin' | 'member' | 'user' | null
+  role: Role | null
   /**
    * True when the visitor has a real (non-anonymous) authenticated session.
    * An anonymous Better Auth session counts as NOT authenticated.

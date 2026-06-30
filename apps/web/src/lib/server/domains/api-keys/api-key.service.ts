@@ -11,6 +11,11 @@ import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isAdmin } from '@/lib/shared/roles'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServicePrincipal } from '@/lib/server/domains/principals/principal.service'
+import {
+  setPrincipalRole,
+  updatePrincipalFields,
+  syncPrincipalProfileById,
+} from '@/lib/server/domains/principals/principal.factory'
 import type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult } from './api-key.types'
 export type { ApiKey, ApiKeyId, CreateApiKeyInput, CreateApiKeyResult }
 
@@ -112,10 +117,10 @@ export async function createApiKey(
     .returning()
 
   // Update service principal with the actual apiKeyId
-  await db
-    .update(principal)
-    .set({ serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } })
-    .where(eq(principal.id, servicePrincipal.id))
+  await updatePrincipalFields(
+    { principalId: servicePrincipal.id },
+    { serviceMetadata: { kind: 'api_key', apiKeyId: apiKey.id } }
+  )
 
   return { apiKey: toApiKey(apiKey), plainTextKey }
 }
@@ -219,17 +224,9 @@ export async function revokeApiKey(id: ApiKeyId): Promise<void> {
   // Downgrade the service principal so it no longer counts as admin/member
   const revokedKey = result[0]
   if (revokedKey.principalId) {
-    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, revokedKey.principalId))
-    // Service principals don't typically render SSR pages, but keep the
-    // PRINCIPAL_BY_USER cache consistent in case one ever does.
-    const p = await db.query.principal.findFirst({
-      where: eq(principal.id, revokedKey.principalId),
-      columns: { userId: true },
-    })
-    if (p?.userId) {
-      const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(p.userId))
-    }
+    // The factory resolves the row's userId and busts PRINCIPAL_BY_USER if set.
+    // A service principal has no userId, so this stays a no-op cache-wise, as before.
+    await setPrincipalRole({ principalId: revokedKey.principalId }, 'user')
   }
 }
 
@@ -282,10 +279,7 @@ export async function updateApiKeyName(id: ApiKeyId, name: string): Promise<ApiK
   }
 
   // Sync name to the service principal
-  await db
-    .update(principal)
-    .set({ displayName: name.trim() })
-    .where(eq(principal.id, updated.principalId))
+  await syncPrincipalProfileById(updated.principalId, { displayName: name.trim() })
 
   return toApiKey(updated)
 }

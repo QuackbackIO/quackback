@@ -11,9 +11,9 @@ import { checkRateLimit, getClientIp } from './rate-limit'
 import { UnauthorizedError, ForbiddenError, RateLimitError } from '@/lib/shared/errors'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-import { isAdmin, isTeamMember } from '@/lib/shared/roles'
+import { isAdmin, isTeamMember, type Role } from '@/lib/shared/roles'
 
-export type MemberRole = 'admin' | 'member' | 'user'
+export type MemberRole = Role
 
 export interface ApiAuthContext {
   /** The validated API key */

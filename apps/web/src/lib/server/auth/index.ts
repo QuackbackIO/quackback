@@ -93,6 +93,8 @@ async function createAuth() {
   const { listIdentityProviders, getIdentityProviderCredentials } =
     await import('@/lib/server/domains/settings/identity-providers.service')
   const { buildGenericOAuthConfigs } = await import('./build-oauth-configs')
+  const { ensurePrincipalForUser, updatePrincipalFields } =
+    await import('@/lib/server/domains/principals/principal.factory')
 
   // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
   // OIDC IdPs. Pass it through so `user.locale` populates from sign-in
@@ -329,30 +331,27 @@ async function createAuth() {
             // Cast user.id to the branded TypeID type for database operations
             const userId = user.id as ReturnType<typeof generateId<'user'>>
 
-            // Check if member already exists (in case of race conditions)
-            const existingPrincipal = await db.query.principal.findFirst({
-              where: eq(principalTable.userId, userId),
+            const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
+            const displayName = isAnonymous
+              ? await (async () => {
+                  const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
+                  return generateAnonymousName(user.id)
+                })()
+              : user.name
+            // Race-safe lazy create (the factory's onConflictDoNothing subsumes
+            // the prior explicit findFirst guard). Always 'user' — team access is
+            // via invitations only.
+            const { created } = await ensurePrincipalForUser({
+              userId,
+              role: 'user',
+              type: isAnonymous ? 'anonymous' : 'user',
+              displayName,
+              avatarUrl: isAnonymous ? null : (user.image ?? null),
+              avatarKey: isAnonymous
+                ? null
+                : ((user as Record<string, unknown>).imageKey as string | null),
             })
-
-            if (!existingPrincipal) {
-              const isAnonymous = (user as Record<string, unknown>).isAnonymous === true
-              await db.insert(principalTable).values({
-                id: generateId('principal'),
-                userId,
-                role: 'user', // Always 'user' - team access via invitations only
-                type: isAnonymous ? 'anonymous' : 'user',
-                displayName: isAnonymous
-                  ? await (async () => {
-                      const { generateAnonymousName } = await import('@/lib/shared/anonymous-names')
-                      return generateAnonymousName(user.id)
-                    })()
-                  : user.name,
-                avatarUrl: isAnonymous ? null : (user.image ?? null),
-                avatarKey: isAnonymous
-                  ? null
-                  : ((user as Record<string, unknown>).imageKey as string | null),
-                createdAt: new Date(),
-              })
+            if (created) {
               log.info(
                 { user_id: user.id, role: 'user', type: isAnonymous ? 'anonymous' : 'user' },
                 'created principal record'
@@ -509,6 +508,8 @@ async function createAuth() {
             const newImage =
               ((newUser.user as Record<string, unknown>).image as string | null) ?? null
 
+            // Captured inside the tx, busted after commit.
+            let cacheKeysToBust: readonly string[] = []
             await db.transaction(async (tx) => {
               // Move account+session refs to anon user (before deleting new user)
               await Promise.all([
@@ -527,7 +528,7 @@ async function createAuth() {
               }
               await tx.delete(userTable).where(eq(userTable.id, newUserId))
               // Update the anon user with real identity + upgrade principal
-              await Promise.all([
+              const [, fieldResult] = await Promise.all([
                 tx
                   .update(userTable)
                   .set({
@@ -538,21 +539,23 @@ async function createAuth() {
                     image: newImage,
                   })
                   .where(eq(userTable.id, anonUserId)),
-                tx
-                  .update(principalTable)
-                  .set({
+                updatePrincipalFields(
+                  { userId: anonUserId },
+                  {
                     type: 'user',
                     displayName: newUser.user.name || anonymousUser.user.name,
                     avatarUrl: newImage,
-                  })
-                  .where(eq(principalTable.userId, anonUserId)),
+                  },
+                  { executor: tx }
+                ),
               ])
+              cacheKeysToBust = fieldResult.cacheKeysToBust
             })
 
             // The principal's `type` flipped from 'anonymous' → 'user'; drop
             // any cached entry so the next SSR render reads the new value.
-            const { cacheDel, CACHE_KEYS } = await import('@/lib/server/redis')
-            await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(anonUserId))
+            const { cacheDel } = await import('@/lib/server/redis')
+            await cacheDel(...cacheKeysToBust)
 
             log.info(
               { anon_user_id: anonUserId, deleted_user_id: newUserId },

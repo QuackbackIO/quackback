@@ -25,11 +25,14 @@ function createSelectChain(rows: unknown[] = []) {
 
 function createInsertChain() {
   const chain: Record<string, unknown> = {}
+  let inserted: unknown[] = []
   chain.values = vi.fn((...args: unknown[]) => {
     mockInsertValues(...args)
+    inserted = Array.isArray(args[0]) ? (args[0] as unknown[]) : [args[0]]
     return chain
   })
-  chain.onConflictDoNothing = vi.fn().mockResolvedValue(undefined)
+  chain.onConflictDoNothing = vi.fn(() => chain)
+  chain.returning = vi.fn(() => Promise.resolve(inserted))
   return chain
 }
 

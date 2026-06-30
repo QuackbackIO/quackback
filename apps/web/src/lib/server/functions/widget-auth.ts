@@ -1,9 +1,9 @@
 import type { PrincipalId, UserId, WorkspaceId } from '@quackback/ids'
-import { generateId } from '@quackback/ids'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { db, session, principal, eq, and, gt } from '@/lib/server/db'
+import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
 
@@ -62,24 +62,12 @@ export async function getWidgetSession(opts?: {
     const appSettings = await getSettings()
     if (!appSettings) return null
 
-    let principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId),
+    const { principal: principalRecord } = await ensurePrincipalForUser({
+      userId,
+      role: 'user',
+      displayName: sessionRecord.user.name,
+      avatarUrl: sessionRecord.user.image ?? null,
     })
-
-    if (!principalRecord) {
-      const [created] = await db
-        .insert(principal)
-        .values({
-          id: generateId('principal'),
-          userId,
-          role: 'user',
-          displayName: sessionRecord.user.name,
-          avatarUrl: sessionRecord.user.image ?? null,
-          createdAt: new Date(),
-        })
-        .returning()
-      principalRecord = created
-    }
 
     // Roll the session's expiry forward on active use so a returning visitor
     // isn't cut off 7 days after their first mint. Gated to ≥24h since the last

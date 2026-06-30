@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { Role } from '@/lib/shared/roles'
 import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
@@ -84,7 +85,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             parsed.data.content,
             {
               principalId,
-              role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+              role: (principalRecord?.role as Role) ?? 'user',
             },
             {
               contentJson: (parsed.data.contentJson ?? undefined) as
@@ -134,7 +135,7 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
 
           await softDeleteComment(commentId, {
             principalId,
-            role: (principalRecord?.role as 'admin' | 'member' | 'user') ?? 'user',
+            role: (principalRecord?.role as Role) ?? 'user',
           })
 
           return noContentResponse()

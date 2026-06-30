@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Role } from '@/lib/shared/roles'
 import { createServerFn } from '@tanstack/react-start'
 import { type UserId, type PrincipalId } from '@quackback/ids'
 import { getSession } from '@/lib/server/auth/session'
@@ -274,7 +275,7 @@ export const saveAvatarKeyFn = createServerFn({ method: 'POST' })
  * Only requires authentication - returns null if user has no member record.
  */
 export const getUserRoleFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<{ role: 'admin' | 'member' | 'user' | null }> => {
+  async (): Promise<{ role: Role | null }> => {
     log.debug('get user role')
     try {
       const session = await getSession()

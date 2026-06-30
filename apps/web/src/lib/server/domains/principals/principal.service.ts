@@ -18,14 +18,13 @@ import {
   user,
   type Principal,
 } from '@/lib/server/db'
-import type { ServiceMetadata } from '@/lib/server/db'
 import type { PrincipalId, UserId } from '@quackback/ids'
 import { InternalError, ForbiddenError, NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, isAdmin } from '@/lib/shared/roles'
-import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { recordAuditEvent, type AuditActor } from '@/lib/server/audit/log'
 import type { TeamMember } from './principal.types'
 import { logger } from '@/lib/server/logger'
+import { setPrincipalRole } from './principal.factory'
 
 const log = logger.child({ component: 'principals' })
 
@@ -63,45 +62,15 @@ export async function getMemberById(principalId: PrincipalId): Promise<Principal
 }
 
 /**
- * Create a service principal (for API keys or integrations)
+ * Principal creation, the role writer, and the profile-sync helpers now live in
+ * the principal factory — the single owner of principal inserts and role writes.
+ * Re-exported here so existing importers are unchanged.
  */
-export async function createServicePrincipal(params: {
-  role: 'admin' | 'member'
-  displayName: string
-  serviceMetadata: ServiceMetadata
-}): Promise<Principal> {
-  const [created] = await db
-    .insert(principal)
-    .values({
-      userId: null,
-      type: 'service',
-      role: params.role,
-      displayName: params.displayName,
-      serviceMetadata: params.serviceMetadata,
-      createdAt: new Date(),
-    })
-    .returning()
-
-  return created
-}
-
-/**
- * Sync profile fields from user table to their principal record.
- * Called when a user changes their name or avatar.
- */
-export async function syncPrincipalProfile(
-  userId: UserId,
-  updates: {
-    displayName?: string
-    avatarUrl?: string | null
-    avatarKey?: string | null
-  }
-): Promise<void> {
-  await db
-    .update(principal)
-    .set(updates)
-    .where(and(eq(principal.userId, userId), eq(principal.type, 'user')))
-}
+export {
+  createServicePrincipal,
+  syncPrincipalProfile,
+  syncPrincipalProfileById,
+} from './principal.factory'
 
 /**
  * List all team members with user details
@@ -138,7 +107,10 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .leftJoin(lastSession, eq(lastSession.userId, user.id))
-      .where(eq(principal.type, 'user'))
+      // Teammates only: an identified human (type='user') with a teammate role
+      // (admin or member, i.e. role != 'user'). Without the role guard a portal
+      // end-user (role='user', type='user') leaks into the team roster.
+      .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
 
     // The `max()` aggregate comes back as a string from postgres-js
     // (Date mapping only fires on plain timestamp column selects);
@@ -256,11 +228,8 @@ export async function updateMemberRole(
 
     const previousRole = targetMember.role
 
-    // Update the role
-    await db.update(principal).set({ role: newRole }).where(eq(principal.id, principalId))
-    if (targetMember.userId) {
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
-    }
+    // Update the role (the factory busts PRINCIPAL_BY_USER from the row's userId)
+    await setPrincipalRole({ principalId }, newRole, { knownUserId: targetMember.userId })
 
     // Audit the role change. Already audited from the SSO/JIT path
     // (`auth/hooks.ts` emits user.role.changed there). Admin manual
@@ -332,10 +301,7 @@ export async function removeTeamMember(
     const previousRole = targetMember.role
 
     // Convert to portal user by setting role to 'user'
-    await db.update(principal).set({ role: 'user' }).where(eq(principal.id, principalId))
-    if (targetMember.userId) {
-      await cacheDel(CACHE_KEYS.PRINCIPAL_BY_USER(targetMember.userId))
-    }
+    await setPrincipalRole({ principalId }, 'user', { knownUserId: targetMember.userId })
 
     // Audit the removal. The audit-event taxonomy already reserves
     // `user.removed` for this exact action (audit/log.ts); without an

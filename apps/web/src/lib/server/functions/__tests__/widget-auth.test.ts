@@ -11,7 +11,10 @@ const mockSessionFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockInsert = vi.fn()
 const mockReturning = vi.fn()
-const mockValues = vi.fn(() => ({ returning: mockReturning }))
+const mockValues = vi.fn(() => {
+  const chain = { returning: mockReturning, onConflictDoNothing: () => chain }
+  return chain
+})
 
 vi.mock('@/lib/server/db', () => ({
   db: {

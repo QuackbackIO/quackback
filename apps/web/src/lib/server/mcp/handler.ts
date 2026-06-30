@@ -11,6 +11,7 @@
  */
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import type { Role } from '@/lib/shared/roles'
 import { verifyAccessToken } from 'better-auth/oauth2'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { DomainException, RateLimitError } from '@/lib/shared/errors'
@@ -97,7 +98,7 @@ async function resolveOAuthContext(token: string): Promise<McpAuthContext | null
       userId: sub as McpAuthContext['userId'],
       name: (payload.name as string) ?? 'Unknown',
       email: payload.email as string | undefined,
-      role: role as 'admin' | 'member' | 'user',
+      role: role as Role,
       authMethod: 'oauth',
       scopes,
     }
@@ -155,7 +156,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       return {
         principalId: authResult.principalId,
         name: principalRecord.displayName ?? authResult.apiKey.name,
-        role: authResult.role as 'admin' | 'member' | 'user',
+        role: authResult.role as Role,
         authMethod: 'api-key',
         scopes: ALL_SCOPES,
       }
@@ -167,7 +168,7 @@ export async function resolveAuthContext(request: Request): Promise<McpAuthConte
       userId: principalRecord.user?.id,
       name: principalRecord.displayName ?? principalRecord.user?.name ?? 'Unknown',
       email: principalRecord.user?.email ?? undefined,
-      role: authResult.role as 'admin' | 'member' | 'user',
+      role: authResult.role as Role,
       authMethod: 'api-key',
       scopes: ALL_SCOPES,
     }

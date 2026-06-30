@@ -5,12 +5,12 @@
  */
 
 import type { UserId, PrincipalId, WorkspaceId } from '@quackback/ids'
-import { generateId } from '@quackback/ids'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getSettings } from './workspace'
 import { db, principal, eq } from '@/lib/server/db'
+import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-helpers' })
@@ -165,26 +165,14 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       return null
     }
 
-    let principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId),
+    // Resolve (or lazily create) the caller's principal. The factory is
+    // read-first and race-safe against a concurrent first-touch.
+    const { principal: principalRecord } = await ensurePrincipalForUser({
+      userId,
+      role: 'user',
+      displayName: session.user.name,
+      avatarUrl: session.user.image ?? null,
     })
-
-    // Auto-create principal record for authenticated users without one
-    if (!principalRecord) {
-      const newPrincipalId = generateId('principal')
-      const [created] = await db
-        .insert(principal)
-        .values({
-          id: newPrincipalId,
-          userId,
-          role: 'user',
-          displayName: session.user.name,
-          avatarUrl: session.user.image ?? null,
-          createdAt: new Date(),
-        })
-        .returning()
-      principalRecord = created
-    }
 
     return {
       settings: {

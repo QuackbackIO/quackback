@@ -14,6 +14,7 @@
  * the pattern in `settings.service.ts` (verified-domain CRUD).
  */
 
+import type { Role } from '@/lib/shared/roles'
 import {
   db,
   eq,
@@ -73,7 +74,7 @@ export interface IdentityProvider {
    *  method — the "keep one method enabled" guard treats it as not counting. */
   configured: boolean
   autoCreateUsers: boolean
-  autoProvisionRole: 'admin' | 'member' | 'user' | null
+  autoProvisionRole: Role | null
   attributeMapping: IdentityProviderAttributeMapping | null
   showButton: boolean
   /** ISO-8601 UTC; null until a redirect-affecting detail changes. */
@@ -109,7 +110,7 @@ export interface UpsertIdentityProviderInput {
   scopes?: string | null
   enabled?: boolean
   autoCreateUsers?: boolean
-  autoProvisionRole?: 'admin' | 'member' | 'user' | null
+  autoProvisionRole?: Role | null
   attributeMapping?: IdentityProviderAttributeMapping | null
   showButton?: boolean
 }

@@ -7,6 +7,10 @@ import { isAdmin } from '@/lib/shared/roles'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
 import { syncPrincipalProfile } from '@/lib/server/domains/principals/principal.service'
+import {
+  ensurePrincipalForUser,
+  setPrincipalRole,
+} from '@/lib/server/domains/principals/principal.factory'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { db, settings, principal, user, postStatuses, eq, DEFAULT_STATUSES } from '@/lib/server/db'
 import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
@@ -23,20 +27,11 @@ const log = logger.child({ component: 'onboarding' })
  *  (saveUseCaseFn, setupWorkspaceFn). Same DB shape, same intent —
  *  insert when missing, upgrade when present-but-not-admin. */
 async function ensureAdminPrincipal(userId: UserId): Promise<void> {
-  const existing = await db.query.principal.findFirst({
-    where: eq(principal.userId, userId),
-  })
-  if (!existing) {
-    log.debug({ user_id: userId }, 'creating admin member')
-    await db.insert(principal).values({
-      id: generateId('principal'),
-      userId,
-      role: 'admin',
-      createdAt: new Date(),
-    })
-  } else if (!isAdmin(existing.role)) {
+  // Race-safe create (defaults aside); promote an existing non-admin principal.
+  const { created, principal: p } = await ensurePrincipalForUser({ userId, role: 'admin' })
+  if (!created && !isAdmin(p.role)) {
     log.debug({ user_id: userId }, 'upgrading user to admin')
-    await db.update(principal).set({ role: 'admin' }).where(eq(principal.userId, userId))
+    await setPrincipalRole({ userId }, 'admin')
   }
 }
 

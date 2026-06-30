@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import type { Role } from '@/lib/shared/roles'
 import { isValidTypeId, type BoardId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
@@ -39,7 +40,6 @@ export const Route = createFileRoute('/api/export')({
       GET: async ({ request }) => {
         const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
         const { canAccess } = await import('@/lib/server/auth')
-        type Role = 'admin' | 'member' | 'user'
         const { listPostsForExport } = await import('@/lib/server/domains/posts/post.export')
         const { getBoardById } = await import('@/lib/server/domains/boards/board.service')
 

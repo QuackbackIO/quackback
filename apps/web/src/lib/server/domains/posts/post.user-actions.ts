@@ -19,7 +19,7 @@ import {
 } from '@/lib/server/db'
 import { type PostId, type PrincipalId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
-import { isTeamMember } from '@/lib/shared/roles'
+import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import {
   dispatchPostDeleted,
@@ -102,12 +102,9 @@ async function getCommentCount(postId: PostId): Promise<number> {
 export async function userEditPost(
   postId: PostId,
   input: UserEditPostInput,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
+  actor: { principalId: PrincipalId; role: Role }
 ): Promise<Post> {
-  log.info(
-    { post_id: postId, principal_id: actor.principalId, role: actor.role },
-    'user edit post'
-  )
+  log.info({ post_id: postId, principal_id: actor.principalId, role: actor.role }, 'user edit post')
   // Validate input first (no DB needed)
   if (!input.title?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
@@ -214,7 +211,7 @@ export async function userEditPost(
  */
 export async function softDeletePost(
   postId: PostId,
-  actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user'; userId?: UserId }
+  actor: { principalId: PrincipalId; role: Role; userId?: UserId }
 ): Promise<void> {
   log.info(
     { post_id: postId, principal_id: actor.principalId, role: actor.role },
