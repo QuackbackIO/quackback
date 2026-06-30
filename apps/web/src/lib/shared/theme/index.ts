@@ -99,7 +99,7 @@ export {
   replaceCssVar,
   parseThemeConfig,
   serializeThemeConfig,
-  getGoogleFontsUrl,
+  normalizeFontSans,
 } from './generator'
 
 export type { ParsedCssVariables } from './css-parser'

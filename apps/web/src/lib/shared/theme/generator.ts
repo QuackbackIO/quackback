@@ -147,6 +147,22 @@ function variablesToCSS(vars: ThemeVariables): string {
   return declarations.join(' ')
 }
 
+// Maps a font family saved under an old name to the one now self-hosted in
+// globals.css. Geist self-hosts via @fontsource/geist-sans, whose @font-face
+// family is "Geist Sans", so a fontSans saved before that rename still resolves.
+const LEGACY_FONT_ALIASES: Record<string, string> = {
+  '"Geist"': '"Geist Sans"',
+}
+
+/** Rewrite legacy font-family names in a fontSans stack to their bundled equivalent. */
+export function normalizeFontSans(fontSans: string): string {
+  let normalized = fontSans
+  for (const [legacy, current] of Object.entries(LEGACY_FONT_ALIASES)) {
+    normalized = normalized.replaceAll(legacy, current)
+  }
+  return normalized
+}
+
 export function generateThemeCSS(config: ThemeConfig): string {
   if (!config) return ''
 
@@ -157,6 +173,8 @@ export function generateThemeCSS(config: ThemeConfig): string {
   const darkVars = config.dark
     ? expandTheme(config.dark as MinimalThemeVariables, { mode: 'dark' })
     : {}
+  if (lightVars.fontSans) lightVars.fontSans = normalizeFontSans(lightVars.fontSans)
+  if (darkVars.fontSans) darkVars.fontSans = normalizeFontSans(darkVars.fontSans)
 
   const parts: string[] = []
 
@@ -208,45 +226,4 @@ export function parseThemeConfig(json: string | null | undefined): ThemeConfig |
 
 export function serializeThemeConfig(config: ThemeConfig): string {
   return JSON.stringify(config)
-}
-
-const GOOGLE_FONT_MAP: Record<string, string> = {
-  '"Inter"': 'Inter',
-  '"Roboto"': 'Roboto',
-  '"Open Sans"': 'Open+Sans',
-  '"Lato"': 'Lato',
-  '"Montserrat"': 'Montserrat',
-  '"Poppins"': 'Poppins',
-  '"Nunito"': 'Nunito',
-  '"DM Sans"': 'DM+Sans',
-  '"Plus Jakarta Sans"': 'Plus+Jakarta+Sans',
-  '"Geist"': 'Geist',
-  '"Work Sans"': 'Work+Sans',
-  '"Raleway"': 'Raleway',
-  '"Source Sans 3"': 'Source+Sans+3',
-  '"Outfit"': 'Outfit',
-  '"Manrope"': 'Manrope',
-  '"Space Grotesk"': 'Space+Grotesk',
-  '"Playfair Display"': 'Playfair+Display',
-  '"Merriweather"': 'Merriweather',
-  '"Lora"': 'Lora',
-  '"Crimson Text"': 'Crimson+Text',
-  '"Fira Code"': 'Fira+Code',
-  '"JetBrains Mono"': 'JetBrains+Mono',
-}
-
-function extractGoogleFont(fontFamily: string | undefined): string | null {
-  if (!fontFamily) return null
-  for (const [cssName, googleName] of Object.entries(GOOGLE_FONT_MAP)) {
-    if (fontFamily.includes(cssName)) return googleName
-  }
-  return null
-}
-
-export function getGoogleFontsUrl(config: ThemeConfig): string | null {
-  if (!config) return null
-  const fontSans = config.light?.fontSans
-  const googleFont = extractGoogleFont(fontSans)
-  if (!googleFont) return null
-  return `https://fonts.googleapis.com/css2?family=${googleFont}:wght@400;500;600;700&display=swap`
 }
