@@ -25,6 +25,7 @@ import {
   syncPrincipalProfileById,
 } from '@/lib/server/domains/principals/principal.factory'
 import { isAdmin } from '@/lib/shared/roles'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listTags } from '@/lib/server/domains/tags/tag.service'
@@ -140,7 +141,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ sort: data.sort, cursor: data.cursor ?? 'none' }, 'fetch inbox posts')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const result = await listInboxPosts({
         boardIds: data.boardIds as BoardId[] | undefined,
@@ -184,7 +185,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
 export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch boards list')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     const result = await listBoards()
     log.debug({ count: result.length }, 'fetch boards list')
@@ -206,7 +207,7 @@ export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async (
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch tags list')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
     const result = await listTags()
     log.debug({ count: result.length }, 'fetch tags list')
@@ -223,7 +224,7 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses list')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
     const result = await listStatuses()
     log.debug({ count: result.length }, 'fetch statuses list')
@@ -240,7 +241,7 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch team members')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     const result = await listTeamMembers()
     log.debug({ count: result.length }, 'fetch team members')
@@ -259,7 +260,7 @@ const searchMembersSchema = z.object({
 export const searchMembersFn = createServerFn({ method: 'GET' })
   .validator(searchMembersSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
     return searchMembers(data)
   })
 
@@ -281,7 +282,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId, role: data.role }, 'update member role')
     try {
-      const auth = await requireAuth({ roles: ['admin'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
 
       await updateMemberRole(
@@ -319,7 +320,7 @@ const forceSignOutInput = z.object({
 export const forceSignOutUserFn = createServerFn({ method: 'POST' })
   .validator(forceSignOutInput)
   .handler(async ({ data }) => {
-    const auth = await requireAuth({ roles: ['admin'] })
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const targetUserId = data.userId as UserId
 
     const { db, session } = await import('@/lib/server/db')
@@ -351,7 +352,7 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'remove team member')
     try {
-      const auth = await requireAuth({ roles: ['admin'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
 
       await removeTeamMember(
@@ -375,7 +376,7 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch onboarding status')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     const [orgBoards, members] = await Promise.all([
       db.query.boards.findMany({
@@ -404,7 +405,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
 export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch boards for settings')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
 
     const orgBoards = await listBoards()
     log.debug({ count: orgBoards.length }, 'fetch boards for settings')
@@ -426,7 +427,7 @@ export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch integrations list')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
 
     const results = await db.query.integrations.findMany()
     log.debug({ count: results.length }, 'fetch integrations list')
@@ -459,7 +460,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ type: data.type }, 'fetch integration by type')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
 
       const { integrations } = await import('@/lib/server/db')
       const { getIntegration } = await import('@/lib/server/integrations')
@@ -683,7 +684,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug('list portal users')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
       const result = await listPortalUsers({
         search: data.search,
@@ -725,7 +726,7 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId }, 'get portal user')
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
       const result = await getPortalUserDetail(data.principalId as PrincipalId)
 
@@ -766,7 +767,7 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'update portal user')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       // Look up the principal to get userId
       const p = await db.query.principal.findFirst({
@@ -831,7 +832,7 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create portal user')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       // Check email uniqueness if provided
       if (data.email) {
@@ -886,7 +887,7 @@ export const deletePortalUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'delete portal user')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       await removePortalUser(data.principalId as PrincipalId)
 
@@ -925,7 +926,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ role: data.role }, 'send invitation')
     try {
-      const auth = await requireAuth({ roles: ['admin'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       // Tier-limit gate (no-op in OSS).
       const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
@@ -1022,7 +1023,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'cancel invitation')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       const invitationId = data.invitationId as InviteId
 
@@ -1083,7 +1084,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'resend invitation')
     try {
-      const auth = await requireAuth({ roles: ['admin'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       const invitationId = data.invitationId as InviteId
 
@@ -1288,7 +1289,7 @@ const fetchSegmentAttributeValuesSchema = z.object({
 export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
   .validator(fetchSegmentAttributeValuesSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_VIEW })
     const { getAttributeValueSuggestions } =
       await import('@/lib/server/domains/segments/segment-attribute-values')
     return { values: await getAttributeValueSuggestions(data.attribute, data.query, data.limit) }
@@ -1300,7 +1301,7 @@ export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
 export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list segments')
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_VIEW })
     const result = await listSegments()
     log.debug({ count: result.length }, 'list segments')
     return result.map((seg) => ({
@@ -1322,7 +1323,7 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create segment')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const segment = await createSegment(data as CreateSegmentInput)
 
       // Set up auto-evaluation schedule if configured
@@ -1353,7 +1354,7 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'update segment')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { segmentId, ...updates } = data
       const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
 
@@ -1391,7 +1392,7 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'delete segment')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
 
       await deleteSegment(data.segmentId as SegmentId)
       log.info({ segment_id: data.segmentId }, 'segment deleted')
@@ -1413,7 +1414,7 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
       'assign users to segment'
     )
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
       const { assigned } = await assignUsersToSegment(
         data.segmentId as SegmentId,
@@ -1440,7 +1441,7 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
       'remove users from segment'
     )
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member'] })
+      const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
       const { removed } = await removeUsersFromSegment(
         data.segmentId as SegmentId,
@@ -1464,7 +1465,7 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'evaluate segment')
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
       log.info({ added: result.added, removed: result.removed }, 'segment evaluated')
       return result
@@ -1480,7 +1481,7 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
 export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('evaluate all segments')
   try {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
     const results = await evaluateAllDynamicSegments()
     log.info({ count: results.length }, 'all segments evaluated')
     return results
@@ -1526,7 +1527,7 @@ const updateUserAttributeSchema = z.object({
  */
 export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_VIEW })
     return listUserAttributes()
   } catch (error) {
     log.error({ err: error }, 'list user attributes failed')
@@ -1541,7 +1542,7 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(createUserAttributeSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       return createUserAttribute({
         key: data.key,
         label: data.label,
@@ -1563,7 +1564,7 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(updateUserAttributeSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       return updateUserAttribute(data.id as UserAttributeId, {
         label: data.label,
         description: data.description,
@@ -1584,7 +1585,7 @@ export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(userAttributeIdSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin'] })
+      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       await deleteUserAttribute(data.id as UserAttributeId)
       return { deleted: true }
     } catch (error) {

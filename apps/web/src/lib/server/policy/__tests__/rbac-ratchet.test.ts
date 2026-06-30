@@ -7,7 +7,7 @@ import { join } from 'node:path'
 // converts to `requireAuth({ permission })`. Lower MAX after every conversion
 // PR; at the Phase C completion gate it reaches 0 and the `roles` option is
 // deleted outright (a compile error replaces this runtime ratchet).
-const MAX_LEGACY_ROLE_GATES = 95 // post-C4 (feedback/content converted)
+const MAX_LEGACY_ROLE_GATES = 61 // post-C5 (members/people/segments/attributes converted)
 
 const SRC = join(__dirname, '../../../..') // apps/web/src
 
