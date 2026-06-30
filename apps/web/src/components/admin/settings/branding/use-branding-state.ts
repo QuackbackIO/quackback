@@ -7,6 +7,7 @@ import {
   generateReadableCSS,
   parseCssToMinimal,
   replaceCssVar,
+  normalizeFontSans,
   type ThemeConfig,
   type MinimalThemeVariables,
   type ThemeMode,
@@ -14,126 +15,107 @@ import {
 } from '@/lib/shared/theme'
 import { useSaveBrandingTheme } from '@/lib/client/mutations/settings'
 
+// Each `value` family must be self-hosted in globals.css (matching the @fontsource
+// @font-face family name), or the selection falls back to the generic stack.
 export const FONT_OPTIONS = [
   {
     id: 'inter',
     name: 'Inter',
     value: '"Inter", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Inter',
   },
   {
     id: 'system',
     name: 'System UI',
     value: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
     category: 'System',
-    googleName: null,
   },
   {
     id: 'roboto',
     name: 'Roboto',
     value: '"Roboto", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Roboto',
   },
   {
     id: 'open-sans',
     name: 'Open Sans',
     value: '"Open Sans", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Open+Sans',
   },
   {
     id: 'lato',
     name: 'Lato',
     value: '"Lato", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Lato',
   },
   {
     id: 'poppins',
     name: 'Poppins',
     value: '"Poppins", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Poppins',
   },
   {
     id: 'dm-sans',
     name: 'DM Sans',
     value: '"DM Sans", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'DM+Sans',
   },
   {
     id: 'jakarta',
     name: 'Plus Jakarta Sans',
     value: '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Plus+Jakarta+Sans',
   },
   {
     id: 'geist',
     name: 'Geist',
-    value: '"Geist", ui-sans-serif, system-ui, sans-serif',
+    // @fontsource publishes Geist as the "Geist Sans" family (see globals.css).
+    value: '"Geist Sans", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Geist',
   },
   {
     id: 'manrope',
     name: 'Manrope',
     value: '"Manrope", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Manrope',
   },
   {
     id: 'space-grotesk',
     name: 'Space Grotesk',
     value: '"Space Grotesk", ui-sans-serif, system-ui, sans-serif',
     category: 'Sans Serif',
-    googleName: 'Space+Grotesk',
   },
   {
     id: 'playfair',
     name: 'Playfair Display',
     value: '"Playfair Display", ui-serif, Georgia, serif',
     category: 'Serif',
-    googleName: 'Playfair+Display',
   },
   {
     id: 'merriweather',
     name: 'Merriweather',
     value: '"Merriweather", ui-serif, Georgia, serif',
     category: 'Serif',
-    googleName: 'Merriweather',
   },
   {
     id: 'lora',
     name: 'Lora',
     value: '"Lora", ui-serif, Georgia, serif',
     category: 'Serif',
-    googleName: 'Lora',
   },
   {
     id: 'fira-code',
     name: 'Fira Code',
     value: '"Fira Code", ui-monospace, monospace',
     category: 'Monospace',
-    googleName: 'Fira+Code',
   },
   {
     id: 'jetbrains',
     name: 'JetBrains Mono',
     value: '"JetBrains Mono", ui-monospace, monospace',
     category: 'Monospace',
-    googleName: 'JetBrains+Mono',
   },
 ] as const
-
-export const ALL_FONTS_URL = `https://fonts.googleapis.com/css2?family=${FONT_OPTIONS.filter(
-  (f) => f.googleName
-)
-  .map((f) => f.googleName)
-  .join('&family=')}&display=swap`
 
 const DEFAULT_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif'
 const DEFAULT_RADIUS = 0.625
@@ -247,7 +229,7 @@ export function useBrandingState(options: UseBrandingStateOptions): BrandingStat
   )
 
   const currentFontId = useMemo(
-    () => FONT_OPTIONS.find((f) => f.value === font)?.id || 'inter',
+    () => FONT_OPTIONS.find((f) => f.value === normalizeFontSans(font))?.id || 'inter',
     [font]
   )
 
