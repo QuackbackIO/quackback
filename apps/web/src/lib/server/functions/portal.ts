@@ -501,7 +501,7 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
       // auth check at all — a textbook IDOR. Lock the lookup to the
       // caller's own principal unless they're team. Team-role actors
       // can read any principal's subscription (admin support flow).
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       const requestedPrincipalId = data.principalId as PrincipalId
       const isTeam = auth.principal.role === 'admin' || auth.principal.role === 'member'
       if (!isTeam && requestedPrincipalId !== auth.principal.id) {

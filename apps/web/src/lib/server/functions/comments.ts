@@ -92,7 +92,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
       if (!access.granted) {
         throw new Error('Portal access required')
       }
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
 
       // Block anonymous users unless the workspace master switch allows
       // anonymous interaction. Per-board comment tiers are still checked
@@ -156,7 +156,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
       if (!access.granted) {
         throw new Error('Portal access required')
       }
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       // The reaction service now runs canViewPost + isPrivate using
       // the actor; without that, an authenticated user could probe
       // commentIds on team-only / private comments.
@@ -185,7 +185,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
       if (!access.granted) {
         throw new Error('Portal access required')
       }
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       const actor = await policyActorFromAuth(auth)
       const result = await removeReaction(
         data.commentId as CommentId,

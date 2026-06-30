@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ChatTagId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listChatTags,
   listChatTagsWithCounts,
@@ -65,13 +66,13 @@ const removeConversationTagSchema = z.object({
 
 /** All conversation labels (for the picker). */
 export const fetchChatTagsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin', 'member'] })
+  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
   return listChatTags()
 })
 
 /** Conversation labels with their conversation counts (drives the inbox nav). */
 export const fetchChatTagsWithCountsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ roles: ['admin', 'member'] })
+  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
   return listChatTagsWithCounts()
 })
 
@@ -79,7 +80,7 @@ export const fetchChatTagsWithCountsFn = createServerFn({ method: 'GET' }).handl
 export const createChatTagFn = createServerFn({ method: 'POST' })
   .validator(createChatTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     const tag = await createChatTag({ name: data.name, color: data.color })
     return { id: tag.id, name: tag.name, color: tag.color }
   })
@@ -88,7 +89,7 @@ export const createChatTagFn = createServerFn({ method: 'POST' })
 export const updateChatTagFn = createServerFn({ method: 'POST' })
   .validator(updateChatTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     return updateChatTag(data.id as ChatTagId, { name: data.name, color: data.color })
   })
 
@@ -96,7 +97,7 @@ export const updateChatTagFn = createServerFn({ method: 'POST' })
 export const deleteChatTagFn = createServerFn({ method: 'POST' })
   .validator(deleteChatTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     await deleteChatTag(data.id as ChatTagId)
     return { id: data.id as ChatTagId }
   })
@@ -108,7 +109,7 @@ export const deleteChatTagFn = createServerFn({ method: 'POST' })
 export const addConversationTagFn = createServerFn({ method: 'POST' })
   .validator(addConversationTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     const conversationId = data.conversationId as ConversationId
     let tagId = data.tagId as ChatTagId | undefined
     if (data.name?.trim()) {
@@ -123,6 +124,6 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
 export const removeConversationTagFn = createServerFn({ method: 'POST' })
   .validator(removeConversationTagSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
     return detachTag(data.conversationId as ConversationId, data.tagId as ChatTagId)
   })

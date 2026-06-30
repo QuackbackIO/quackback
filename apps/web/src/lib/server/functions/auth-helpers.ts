@@ -91,9 +91,6 @@ export interface AuthContext {
  * // Permission gate (preferred)
  * const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
  *
- * // Legacy role gate (being phased out)
- * const auth = await requireAuth({ roles: ['admin', 'member'] })
- *
  * // Just require authentication (any role)
  * const auth = await requireAuth()
  */

@@ -199,7 +199,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
 export const fetchAuthProviderStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch auth provider status')
   try {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { getAllAuthProviders } = await import('@/lib/server/auth/auth-providers')
     const { isEmailConfigured } = await import('@quackback/email')

@@ -258,7 +258,7 @@ export const Route = createFileRoute('/api/widget/identify')({
         // that already backs a team principal (admin or member). The Bearer
         // the route hands out is a normal Better Auth session token — `bearer()`
         // is registered globally, so it satisfies `auth.api.getSession()` at
-        // every server function, including `requireAuth({ roles: ['admin'] })`.
+        // every server function, including admin-only permission gates.
         // Allowing this in the unverified path would turn "knowing an admin's
         // email" into full admin takeover. Customer-tier collisions (role='user')
         // remain allowed — that's the documented trust model for unverified

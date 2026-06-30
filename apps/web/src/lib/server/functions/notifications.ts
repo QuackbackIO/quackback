@@ -46,7 +46,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
       'get notifications'
     )
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       // Resolve the actor so audience-denied posts get their preview
       // hidden in the notification list.
       const actor = await policyActorFromAuth(auth)
@@ -98,7 +98,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
   try {
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+    const auth = await requireAuth()
     const count = await getUnreadCount(auth.principal.id)
     return { count }
   } catch (error) {
@@ -119,7 +119,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification marked read')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       await markAsRead(auth.principal.id, data.notificationId as NotificationId)
       return { success: true }
     } catch (error) {
@@ -134,7 +134,7 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
 export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info({}, 'all notifications marked read')
   try {
-    const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+    const auth = await requireAuth()
     await markAllAsRead(auth.principal.id)
     return { success: true }
   } catch (error) {
@@ -151,7 +151,7 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification archived')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
       return { success: true }
     } catch (error) {

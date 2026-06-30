@@ -5,6 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   getHelpCenterConfig,
   updateHelpCenterConfig,
@@ -21,21 +22,21 @@ import {
 export const getHelpCenterConfigFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     return getHelpCenterConfig()
   })
 
 export const updateHelpCenterConfigFn = createServerFn({ method: 'POST' })
   .validator(updateHelpCenterConfigSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     return updateHelpCenterConfig(data)
   })
 
 export const updateHelpCenterSeoFn = createServerFn({ method: 'POST' })
   .validator(updateHelpCenterSeoSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ roles: ['admin'] })
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const current = await getHelpCenterConfig()
     return updateHelpCenterConfig({
       seo: { ...current.seo, ...data },

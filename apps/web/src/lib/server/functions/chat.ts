@@ -39,6 +39,7 @@ import {
   type AuthContext,
 } from './auth-helpers'
 import { isTeamMember } from '@/lib/shared/roles'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat' })
@@ -189,7 +190,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
   .validator(sendMessageSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
 
       // Throttle per principal: bounds write/notify fanout and runaway
@@ -427,7 +428,7 @@ export const listChatMessagesFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { assertConversationViewable } = await import('@/lib/server/domains/chat/chat.service')
@@ -462,7 +463,7 @@ export const markChatReadFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       // The service derives the side from the actor's relationship to the
@@ -481,7 +482,7 @@ export const sendChatTypingFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       // Side derived in the service from conversation ownership, not role.
@@ -499,7 +500,7 @@ export const submitCsatFn = createServerFn({ method: 'POST' })
   .validator(csatSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { recordCsat } = await import('@/lib/server/domains/chat/chat.service')
@@ -518,7 +519,7 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
   .validator(agentAvailabilitySchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { setAgentAvailability } = await import('@/lib/server/realtime/presence')
       await setAgentAvailability(ctx.principal.id, data.availability)
       return { availability: data.availability }
@@ -531,7 +532,7 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
 /** Mint a short-lived token authorizing this principal's SSE stream. */
 export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+    const ctx = await requireAuth()
     await assertVisitorChatAccess(ctx.principal.role)
     const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
     return { token: mintStreamToken(ctx.principal.id) }
@@ -546,7 +547,7 @@ export const deleteChatMessageFn = createServerFn({ method: 'POST' })
   .validator(messageIdSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { deleteChatMessage } = await import('@/lib/server/domains/chat/chat.service')
@@ -573,7 +574,7 @@ function agentFromCtx(ctx: AuthContext) {
 /** Saved replies for the agent composer (team-gated; agent-only, not public). */
 export const getCannedRepliesFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
     const { getLiveChatConfig } = await import('@/lib/server/domains/settings/settings.widget')
     const chat = await getLiveChatConfig()
     return { cannedReplies: chat.cannedReplies ?? [] }
@@ -588,7 +589,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
   .validator(listConversationsSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
       return await listConversationsForAgent({
         status: data.status,
@@ -619,7 +620,7 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
   .validator(userConversationsSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
       return await listConversationsForAgent({
         visitorPrincipalId: data.principalId as PrincipalId,
@@ -637,7 +638,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { assertConversationViewable } = await import('@/lib/server/domains/chat/chat.service')
       const { conversationToDTO, listMessages, enrichMessagesForAgent } =
@@ -672,7 +673,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(agentSendSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const actor = await policyActorFromAuth(ctx)
       const { sendAgentMessage } = await import('@/lib/server/domains/chat/chat.service')
       return await sendAgentMessage(
@@ -702,7 +703,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
   .validator(startConversationSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
       if (!(await isFeatureEnabled('supportInbox'))) {
         throw new Error('Support inbox is not enabled')
@@ -732,7 +733,7 @@ export const addChatNoteFn = createServerFn({ method: 'POST' })
   .validator(agentNoteSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { addAgentNote } = await import('@/lib/server/domains/chat/chat.service')
       return await addAgentNote(
@@ -767,7 +768,7 @@ export const createPostFromConversationFn = createServerFn({ method: 'POST' })
   .validator(convertSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
       const actor = await policyActorFromAuth(ctx)
       const { createPostFromConversation } = await import('@/lib/server/domains/chat/chat.convert')
       const agent = agentFromCtx(ctx)
@@ -801,7 +802,7 @@ export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
   .validator(captureContactEmailSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { captureVisitorContactEmail } = await import('@/lib/server/domains/chat/chat.service')
       return await captureVisitorContactEmail(
@@ -825,7 +826,7 @@ export const sharePostFn = createServerFn({ method: 'POST' })
   .validator(sharePostSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const actor = await policyActorFromAuth(ctx)
       const { sharePost } = await import('@/lib/server/domains/chat/chat.cards')
       const agent = agentFromCtx(ctx)
@@ -847,7 +848,7 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { setConversationStatus } = await import('@/lib/server/domains/chat/chat.service')
       await setConversationStatus(data.conversationId as ConversationId, data.status, actor)
@@ -863,7 +864,7 @@ export const endConversationFn = createServerFn({ method: 'POST' })
   .validator(endConversationSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { endConversation } = await import('@/lib/server/domains/chat/chat.service')
       return await endConversation(
@@ -882,7 +883,7 @@ export const assignConversationFn = createServerFn({ method: 'POST' })
   .validator(assignSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_ASSIGN })
       const actor = await policyActorFromAuth(ctx)
       const { assignConversation } = await import('@/lib/server/domains/chat/chat.service')
       const assignTo: PrincipalId | null =
@@ -901,7 +902,7 @@ export const setConversationPriorityFn = createServerFn({ method: 'POST' })
   .validator(setPrioritySchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { setConversationPriority } = await import('@/lib/server/domains/chat/chat.service')
       await setConversationPriority(data.conversationId as ConversationId, data.priority, actor)
@@ -917,7 +918,7 @@ export const addMessageReactionFn = createServerFn({ method: 'POST' })
   .validator(messageReactionSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { addMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
       return await addMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
@@ -932,7 +933,7 @@ export const removeMessageReactionFn = createServerFn({ method: 'POST' })
   .validator(messageReactionSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { removeMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
       return await removeMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
@@ -947,7 +948,7 @@ export const setMessageFlagFn = createServerFn({ method: 'POST' })
   .validator(messageFlagSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { setMessageFlag } = await import('@/lib/server/domains/chat/message.actions')
       return await setMessageFlag(data.messageId as ChatMessageId, data.flagged, actor)
@@ -962,7 +963,7 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
   .validator(markUnreadFromMessageSchema)
   .handler(async ({ data }) => {
     try {
-      const ctx = await requireAuth({ roles: ['admin', 'member'] })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { markConversationUnreadFromMessage } =
         await import('@/lib/server/domains/chat/chat.service')
@@ -981,7 +982,7 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
 /** The caller's "Saved for later" feed — their flagged messages, newest first. */
 export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    const ctx = await requireAuth({ roles: ['admin', 'member'] })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const { listFlaggedMessages } = await import('@/lib/server/domains/chat/chat.query')
     return await listFlaggedMessages(ctx.principal.id)
   } catch (error) {
@@ -994,7 +995,7 @@ export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { getLinkedPostsForConversation } = await import('@/lib/server/domains/chat/chat.query')
       return await getLinkedPostsForConversation(data.conversationId as ConversationId)
     } catch (error) {
@@ -1007,7 +1008,7 @@ export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { getLinkedConversationsForPost } = await import('@/lib/server/domains/chat/chat.query')
       return await getLinkedConversationsForPost(data.postId as PostId)
     } catch (error) {

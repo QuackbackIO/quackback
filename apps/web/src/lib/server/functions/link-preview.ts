@@ -48,7 +48,7 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<LinkPreview | null> => {
     try {
       // 1. Auth
-      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const ctx = await requireAuth()
 
       // 2. Portal access gate for non-team callers
       if (!isTeamMember(ctx.principal.role)) {

@@ -10,6 +10,7 @@
  * ['admin', 'member']}) is invoked before tier limits are read.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 const hoisted = vi.hoisted(() => ({
   mockRequireAuth: vi.fn(),
@@ -58,7 +59,7 @@ describe('getPlanNotice — team-member gate', () => {
     await expect(getPlanNoticeHandler()).rejects.toThrow(/auth/i)
 
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith(
-      expect.objectContaining({ roles: expect.arrayContaining(['admin', 'member']) })
+      expect.objectContaining({ permission: PERMISSIONS.MEMBER_VIEW })
     )
     expect(hoisted.mockGetTierLimits).not.toHaveBeenCalled()
   })

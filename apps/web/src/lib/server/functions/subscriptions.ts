@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.service'
 import { db, votes, eq, and } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
@@ -42,7 +43,7 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'fetch subscription status')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       // Same gate as the write paths below. Without it, an authenticated
       // portal user could probe any postId to confirm existence and
       // learn their prior subscription level on team-only / segment-
@@ -88,7 +89,7 @@ export const subscribeToPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'subscribe to post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { subscribeToPost } =
@@ -109,7 +110,7 @@ export const unsubscribeFromPostFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'unsubscribe from post')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { unsubscribeFromPost } =
@@ -128,7 +129,7 @@ export const updateSubscriptionLevelFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId, level: data.level }, 'update subscription level')
     try {
-      const auth = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      const auth = await requireAuth()
       await gateSubscriptionWrite(data.postId as PostId, auth)
 
       const { updateSubscriptionLevel } =
@@ -163,7 +164,7 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
       'admin update voter subscription'
     )
     try {
-      await requireAuth({ roles: ['admin', 'member'] })
+      await requireAuth({ permission: PERMISSIONS.POST_MODERATE })
 
       const targetPrincipalId = data.principalId as PrincipalId
       const targetPostId = data.postId as PostId

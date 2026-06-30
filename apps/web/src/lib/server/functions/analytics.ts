@@ -25,6 +25,7 @@ import {
   boards,
 } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
@@ -32,7 +33,7 @@ import { toIsoDateOnly } from '@/lib/shared/utils/date'
 export const getAnalyticsData = createServerFn({ method: 'GET' })
   .validator(z.object({ period: z.enum(['7d', '30d', '90d', '12m']) }))
   .handler(async ({ data: { period } }) => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
 
     // -- Date ranges --
     const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365

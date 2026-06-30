@@ -6,12 +6,13 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listSegmentsWithConversationCounts } from '@/lib/server/domains/chat/chat-segment.service'
 
 /** Non-deleted segments with their open-conversation counts (drives the inbox nav). */
 export const fetchInboxSegmentsWithCountsFn = createServerFn({ method: 'GET' }).handler(
   async () => {
-    await requireAuth({ roles: ['admin', 'member'] })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     return listSegmentsWithConversationCounts()
   }
 )
