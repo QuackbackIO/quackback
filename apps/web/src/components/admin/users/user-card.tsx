@@ -5,6 +5,7 @@ import {
   HandThumbUpIcon,
 } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
+import { Checkbox } from '@/components/ui/checkbox'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
 import type { PortalUserListItemView } from '@/lib/shared/types'
@@ -14,9 +15,11 @@ interface UserCardProps {
   user: PortalUserListItemView
   isSelected: boolean
   onClick: () => void
+  checked: boolean
+  onToggleCheck: () => void
 }
 
-export function UserCard({ user, isSelected, onClick }: UserCardProps) {
+export function UserCard({ user, isSelected, onClick, checked, onToggleCheck }: UserCardProps) {
   const totalActivity = user.postCount + user.commentCount + user.voteCount
 
   return (
@@ -29,6 +32,15 @@ export function UserCard({ user, isSelected, onClick }: UserCardProps) {
       )}
       onClick={onClick}
     >
+      {/* Bulk-selection checkbox */}
+      <div className="flex items-center pt-2.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={checked}
+          onCheckedChange={onToggleCheck}
+          aria-label={`Select ${user.name || 'this user'}`}
+        />
+      </div>
+
       {/* Avatar */}
       <Avatar src={user.image} name={user.name} className="h-10 w-10 shrink-0" />
 
