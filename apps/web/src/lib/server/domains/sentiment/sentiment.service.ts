@@ -7,7 +7,7 @@
 
 import { db, postSentiment, posts, eq, and, gte, lte, sql, count, isNull } from '@/lib/server/db'
 import { createId, type PostId } from '@quackback/ids'
-import { getOpenAI } from '@/lib/server/domains/ai/config'
+import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
@@ -103,7 +103,7 @@ export async function analyzeSentiment(
         totalTokens: r.usage?.total_tokens ?? 0,
       })
     )
-    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}')
+    const parsed = JSON.parse(stripCodeFences(response.choices[0]?.message?.content || '{}'))
 
     if (!isValidSentiment(parsed.sentiment) || typeof parsed.confidence !== 'number') {
       log.error({ model_response_keys: Object.keys(parsed) }, 'invalid sentiment model response')
