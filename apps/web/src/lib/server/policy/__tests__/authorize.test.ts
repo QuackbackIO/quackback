@@ -21,14 +21,16 @@ describe('policy authorize', () => {
     expect(can(a, PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
   })
 
-  it('can() treats an absent permission set as no permissions', () => {
-    const noPerms: Actor = {
+  it('can() falls back to the role bundle when the permission set is absent', () => {
+    // No explicit permissions -> resolve from role. admin -> Owner (all perms).
+    const roleOnly: Actor = {
       principalId: null,
       role: 'admin',
       principalType: 'user',
       segmentIds: new Set(),
     }
-    expect(can(noPerms, PERMISSIONS.SETTINGS_MANAGE)).toBe(false)
+    expect(can(roleOnly, PERMISSIONS.SETTINGS_MANAGE)).toBe(true)
+    // A null role (anonymous) resolves to no permissions.
     expect(can(ANONYMOUS_ACTOR, PERMISSIONS.POST_CREATE)).toBe(false)
   })
 

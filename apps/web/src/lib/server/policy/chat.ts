@@ -6,7 +6,9 @@
  * reason. Conversations are owned by a single visitor principal; the support
  * team sees and acts on all of them.
  */
-import { allowDecision, denyDecision, isTeamActor, type Actor, type Decision } from './types'
+import { allowDecision, denyDecision, type Actor, type Decision } from './types'
+import { can } from './authorize'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PrincipalId } from '@quackback/ids'
 import type { ConversationStatus } from '@/lib/server/db'
 
@@ -21,7 +23,7 @@ export interface ConversationShape {
  * access chokepoint, which throws NotFound rather than Forbidden).
  */
 export function canViewConversation(actor: Actor, conv: ConversationShape): Decision {
-  if (isTeamActor(actor)) return allowDecision()
+  if (can(actor, PERMISSIONS.CONVERSATION_VIEW)) return allowDecision()
   if (actor.principalId && actor.principalId === conv.visitorPrincipalId) return allowDecision()
   return denyDecision('You do not have access to this conversation')
 }
@@ -51,7 +53,7 @@ export function canStartConversation(actor: Actor): Decision {
 
 /** Who may reply as a support agent or manage conversations: team members only. */
 export function canActAsAgent(actor: Actor): Decision {
-  if (isTeamActor(actor)) return allowDecision()
+  if (can(actor, PERMISSIONS.CONVERSATION_REPLY)) return allowDecision()
   return denyDecision('Only team members can act as a support agent')
 }
 
@@ -66,7 +68,7 @@ export function canDeleteMessage(
   message: { senderType: 'visitor' | 'agent'; authorPrincipalId: PrincipalId | null },
   conversation: ConversationShape
 ): Decision {
-  if (isTeamActor(actor)) return allowDecision()
+  if (can(actor, PERMISSIONS.CONVERSATION_MANAGE)) return allowDecision()
   if (
     actor.principalId &&
     actor.principalType !== 'service' &&

@@ -106,3 +106,67 @@ export const PERMISSION_CATEGORIES = [
 ] as const
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
+
+// --------------------------------------------------------------- presets ---
+// Mirrored from @quackback/db (the drift test enforces equality). The policy
+// layer resolves an actor's permissions from these, and the read-only Roles UI
+// renders them, so they must be client-safe.
+
+export const SYSTEM_ROLES = {
+  OWNER: 'owner',
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  CONTRIBUTOR: 'contributor',
+} as const
+
+export type SystemRoleKey = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES]
+
+export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
+  PERMISSIONS.SETTINGS_MANAGE,
+  PERMISSIONS.BILLING_MANAGE,
+  PERMISSIONS.MEMBER_MANAGE,
+  PERMISSIONS.ROLE_MANAGE,
+  PERMISSIONS.API_KEY_MANAGE,
+  PERMISSIONS.WEBHOOK_VIEW,
+  PERMISSIONS.WEBHOOK_MANAGE,
+  PERMISSIONS.AUTH_MANAGE,
+  PERMISSIONS.INTEGRATION_MANAGE,
+  PERMISSIONS.AUDIT_VIEW,
+]
+
+export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
+  owner: ALL_PERMISSIONS,
+  admin: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.BILLING_MANAGE),
+  manager: ALL_PERMISSIONS.filter((p) => !WORKSPACE_ADMIN_PERMISSIONS.includes(p)),
+  contributor: [
+    PERMISSIONS.POST_VIEW_PRIVATE,
+    PERMISSIONS.POST_CREATE,
+    PERMISSIONS.POST_MODERATE,
+    PERMISSIONS.POST_APPROVE,
+    PERMISSIONS.POST_VOTE_ON_BEHALF,
+    PERMISSIONS.COMMENT_MODERATE,
+    PERMISSIONS.CHANGELOG_VIEW_DRAFT,
+    PERMISSIONS.CONVERSATION_VIEW,
+    PERMISSIONS.CONVERSATION_REPLY,
+    PERMISSIONS.CONVERSATION_NOTE,
+    PERMISSIONS.CONVERSATION_ASSIGN,
+    PERMISSIONS.PEOPLE_VIEW,
+    PERMISSIONS.COMPANY_VIEW,
+    PERMISSIONS.MEMBER_VIEW,
+    PERMISSIONS.SEGMENT_VIEW,
+    PERMISSIONS.INTEGRATION_VIEW,
+    PERMISSIONS.ANALYTICS_VIEW,
+    PERMISSIONS.STATUS_VIEW,
+    PERMISSIONS.TAG_VIEW,
+    PERMISSIONS.SUGGESTION_VIEW,
+    PERMISSIONS.SUGGESTION_MANAGE,
+  ],
+}
+
+/** Legacy `principal.role` -> system role preset (admin -> Owner, member ->
+ *  Manager, everything else -> none). */
+export function presetForLegacyRole(role: string): SystemRoleKey | null {
+  if (role === 'admin') return SYSTEM_ROLES.OWNER
+  if (role === 'member') return SYSTEM_ROLES.MANAGER
+  return null
+}

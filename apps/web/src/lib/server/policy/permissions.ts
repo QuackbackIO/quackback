@@ -1,4 +1,8 @@
-import { SYSTEM_ROLE_PERMISSIONS, presetForLegacyRole, type PermissionKey } from '@/lib/server/db'
+import {
+  SYSTEM_ROLE_PERMISSIONS,
+  presetForLegacyRole,
+  type PermissionKey,
+} from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
 
 /**

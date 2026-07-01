@@ -25,10 +25,10 @@ export interface Actor {
    * Resolved permission set (the role's preset bundle in v1; assignment-derived
    * later), consumed via `can(actor, permission)` in policy/authorize.ts.
    *
-   * Optional so the inline Actor fixtures in domain tests don't all churn at
-   * once; the per-domain Phase C PRs populate it as each gate converts. Every
-   * REAL request actor (the policyActorFromAuth / withApiKeyAuth / chat seams)
-   * always sets it, and `can` treats an absent set as no permissions.
+   * Optional: real request actors set it (policyActorFromAuth), while the policy
+   * layer's inline Actor fixtures may omit it. `can` falls back to resolving from
+   * the actor's role when it is absent, which in v1 (permissions are a pure
+   * function of role) is equivalent.
    */
   permissions?: ReadonlySet<PermissionKey>
 }

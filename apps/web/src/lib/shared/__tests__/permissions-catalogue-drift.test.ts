@@ -5,6 +5,10 @@ import {
   PERMISSIONS as DB_PERMISSIONS,
   ALL_PERMISSIONS as DB_ALL_PERMISSIONS,
   PERMISSION_CATEGORIES as DB_PERMISSION_CATEGORIES,
+  SYSTEM_ROLES as DB_SYSTEM_ROLES,
+  SYSTEM_ROLE_PERMISSIONS as DB_SYSTEM_ROLE_PERMISSIONS,
+  WORKSPACE_ADMIN_PERMISSIONS as DB_WORKSPACE_ADMIN_PERMISSIONS,
+  presetForLegacyRole as dbPresetForLegacyRole,
 } from '@/lib/server/db'
 import * as mirror from '../permissions'
 
@@ -23,5 +27,20 @@ describe('permission catalogue mirror', () => {
 
   it('PERMISSION_CATEGORIES matches', () => {
     expect(new Set(mirror.PERMISSION_CATEGORIES)).toEqual(new Set(DB_PERMISSION_CATEGORIES))
+  })
+
+  it('the role presets match', () => {
+    expect(mirror.SYSTEM_ROLES).toEqual(DB_SYSTEM_ROLES)
+    expect(new Set(mirror.WORKSPACE_ADMIN_PERMISSIONS)).toEqual(
+      new Set(DB_WORKSPACE_ADMIN_PERMISSIONS)
+    )
+    for (const role of Object.values(DB_SYSTEM_ROLES)) {
+      expect(new Set(mirror.SYSTEM_ROLE_PERMISSIONS[role])).toEqual(
+        new Set(DB_SYSTEM_ROLE_PERMISSIONS[role])
+      )
+    }
+    for (const legacy of ['admin', 'member', 'user']) {
+      expect(mirror.presetForLegacyRole(legacy)).toBe(dbPresetForLegacyRole(legacy))
+    }
   })
 })
