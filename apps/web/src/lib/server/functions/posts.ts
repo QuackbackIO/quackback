@@ -109,7 +109,11 @@ const updatePostSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000).optional(),
   contentJson: tiptapContentSchema.optional(),
-  ownerId: z.string().nullable().optional(),
+})
+
+const setPostOwnerSchema = z.object({
+  id: z.string(),
+  ownerId: z.string().nullable(),
 })
 
 const deletePostSchema = z.object({
@@ -409,7 +413,6 @@ export const updatePostFn = createServerFn({ method: 'POST' })
           title: data.title,
           content: data.content,
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-          ownerPrincipalId: data.ownerId as PrincipalId | null | undefined,
         },
         {
           principalId: auth.principal.id,
@@ -422,6 +425,35 @@ export const updatePostFn = createServerFn({ method: 'POST' })
       return serializePostDates(result)
     } catch (error) {
       log.error({ err: error }, 'update post failed')
+      throw error
+    }
+  })
+
+/**
+ * Set a post's owner (assignee). Split out of updatePostFn so the assignee
+ * picker gates on the granular post.set_owner rather than the coarse edit path.
+ */
+export const setPostOwnerFn = createServerFn({ method: 'POST' })
+  .validator(setPostOwnerSchema)
+  .handler(async ({ data }) => {
+    log.info({ post_id: data.id }, 'set post owner')
+    try {
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_OWNER })
+
+      const result = await updatePost(
+        data.id as PostId,
+        { ownerPrincipalId: data.ownerId as PrincipalId | null },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
+      log.info({ post_id: result.id }, 'post owner set')
+      return serializePostDates(result)
+    } catch (error) {
+      log.error({ err: error }, 'set post owner failed')
       throw error
     }
   })

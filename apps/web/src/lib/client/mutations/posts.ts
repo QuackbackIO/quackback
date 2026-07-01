@@ -9,6 +9,7 @@ import {
   changePostStatusFn,
   changePostBoardFn,
   updatePostFn,
+  setPostOwnerFn,
   updatePostTagsFn,
   createPostFn,
   toggleCommentsLockFn,
@@ -154,7 +155,7 @@ export function useUpdatePostOwner() {
 
   return useMutation({
     mutationFn: ({ postId, ownerId }: { postId: PostId; ownerId: PrincipalId | null }) =>
-      updatePostFn({ data: { id: postId, ownerId } }),
+      setPostOwnerFn({ data: { id: postId, ownerId } }),
     onMutate: async ({ postId, ownerId }) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
       await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
