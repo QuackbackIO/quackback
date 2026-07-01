@@ -37,6 +37,17 @@ describe('RBAC permission catalogue', () => {
     for (const p of WORKSPACE_ADMIN_PERMISSIONS) expect(ALL_PERMISSIONS).toContain(p)
   })
 
+  it("every 'workspace' category key is in the admin boundary (Manager cannot silently gain one)", () => {
+    // The flagship invariant made STRUCTURAL: Manager = ALL minus WORKSPACE_ADMIN_PERMISSIONS, so a
+    // workspace-category key left out of the boundary would leak to Manager the moment it is enforced.
+    // Category and boundary must agree by construction, not by discipline.
+    for (const p of PERMISSION_CATALOGUE) {
+      if (p.category === 'workspace') {
+        expect(WORKSPACE_ADMIN_PERMISSIONS).toContain(p.key)
+      }
+    }
+  })
+
   it('Owner is the whole catalogue', () => {
     expect(asSet(SYSTEM_ROLE_PERMISSIONS.owner)).toEqual(asSet(ALL_PERMISSIONS))
   })

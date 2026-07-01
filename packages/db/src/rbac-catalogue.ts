@@ -579,6 +579,7 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.AUTH_MANAGE,
   PERMISSIONS.INTEGRATION_MANAGE,
   PERMISSIONS.AUDIT_VIEW,
+  PERMISSIONS.CUSTOM_FIELD_MANAGE, // defining custom fields is an admin-class schema action
   // support infrastructure config: SLA policies, routing rules, teams, inbox channels (admin-only)
   PERMISSIONS.SLA_MANAGE,
   PERMISSIONS.ROUTING_MANAGE,

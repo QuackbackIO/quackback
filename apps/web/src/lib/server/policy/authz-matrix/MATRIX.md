@@ -21,7 +21,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | webhook.manage | workspace | ✓ | · |
 | auth.manage | workspace | ✓ | · |
 | audit.view | workspace | ✓ | · |
-| custom_field.manage | workspace | ✓ | ✓ |
+| custom_field.manage | workspace | ✓ | · |
 | member.view | members | ✓ | ✓ |
 | member.manage | members | ✓ | · |
 | people.view | people | ✓ | ✓ |
